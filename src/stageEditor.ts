@@ -2,7 +2,7 @@ import { updateStageBand } from './view/stageBand'
 import { stagePlacement } from './game/stagePlacement'
 import { createStagePickTargets } from './view/stagePicking'
 import { BUILDINGS } from './game/catalog'
-import { Scene, Color, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, GridHelper, Raycaster, Vector2, Plane, Vector3, Group, Mesh, BoxGeometry, MeshBasicMaterial, MeshStandardMaterial } from 'three'
+import { Scene, Color, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, GridHelper, Raycaster, Vector2, Plane, Vector3, Group, Mesh, BoxGeometry, MeshBasicMaterial, MeshStandardMaterial, MOUSE } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { COMPONENTS, brandsFor, isTruss, GROUND_ONLY_KINDS, PHASE_NAMES, defaultStageDesign, stageDesignIssue, stageDetailSize, stageStats, removeStagePart, type StageDesign, type StagePart, type ComponentKind } from './game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from './view/stageModel'
@@ -24,8 +24,8 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   const panel=document.createElement('section');panel.className='stage-editor panel';panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Bühnenwerkstatt')
   panel.innerHTML=`<header class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 class="panel-header-title">Bühnenwerkstatt</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Bühneneditor schließen">×</button></header>
   <div class="stage-layout"><aside><label>Name<input data-name maxlength="60"></label><hr class="stage-divider"><label>Gespeicherte Bühnen<select data-template><option value="">Neue Bühne</option></select></label><div class="stage-actions"><button data-save>Bühne speichern</button><button data-load>Laden</button><button data-new>Neu</button></div>
-  <h3>Größe</h3><div class="stage-pair stage-triple"><label>Breite<input data-tiles-width type="number" min="1" max="8"></label><label>Tiefe<input data-tiles-depth type="number" min="1" max="8"></label><label>Höhe<input data-tiles-height type="number" min="1" max="8"></label></div><h3>Bauteile</h3><div class="stage-parts">${paletteEntries.map(({id,kind,label,icon,cost})=>`<div class="stage-component"><button data-part="${id}" aria-pressed="false" aria-expanded="false"><img class="stage-part-icon" src="/stage-icons/${icon}.png" alt=""><span>${label}<small data-part-brand="${id}">ab ${cost} € · Qualität ▾</small></span></button><div class="stage-quality panel" data-quality-menu="${id}" hidden>${Object.entries(brandsFor(kind)).map(([brand,info])=>`<button data-quality="${brand}" data-quality-part="${id}">${info.name}<small>${Math.round(cost*info.cost)} € · Wirkung ×${info.quality}</small></button>`).join('')}</div></div>`).join('')}</div><button data-audience aria-pressed="false">♟ Zuschauerfläche malen</button><small>Ganze Kartenfelder · vom Rand aus einen Zugang nach innen anlegen.</small><label>Bauteilfarbe<input data-color type="color" value="#e69759"></label><button data-erase aria-pressed="false">Entfernen</button><button data-undo>Rückgängig</button><p>Ein Klick wählt das Bauteil; im aufklappenden Menü kannst du die Qualität ändern. Traversen rasten in alle sechs Richtungen aneinander und an den Boden an; andere Bauteile hängen ebenso an Traversen — oben, unten, links, rechts, davor, dahinter. R / Rechtsklick dreht, Umschalt+R dreht zurück. Alt erzwingt Bodenmontage. Ziehen dreht die Kamera, Mausrad zoomt. Der Cube oben rechts im Bild zeigt die aktuelle Ausrichtung als Pfeil; ein Klick auf eine Seite legt die Richtung fest.</p></aside>
-  <div class="stage-center"><div data-viewport><div class="stage-placement-tools"><button data-rotate="-1" aria-label="Bauteil nach links drehen">↶</button><button data-rotate="1" aria-label="Bauteil nach rechts drehen"><span data-angle>0°</span> ↷ · R</button><span>Auto-Montage · Alt: Boden</span></div></div><p data-hint aria-live="polite">Wähle ein Bauteil und klicke auf einen Rasterplatz.</p><div data-stats class="stage-stats"></div></div>
+  <h3>Größe</h3><div class="stage-pair stage-triple"><label>Breite<input data-tiles-width type="number" min="1" max="8"></label><label>Tiefe<input data-tiles-depth type="number" min="1" max="8"></label><label>Höhe<input data-tiles-height type="number" min="1" max="8"></label></div><h3>Bauteile</h3><div class="stage-parts">${paletteEntries.map(({id,kind,label,icon,cost})=>`<div class="stage-component"><button data-part="${id}" aria-pressed="false" aria-expanded="false"><img class="stage-part-icon" src="/stage-icons/${icon}.png" alt=""><span>${label}<small data-part-brand="${id}">ab ${cost} € · Qualität ▾</small></span></button><div class="stage-quality panel" data-quality-menu="${id}" hidden>${Object.entries(brandsFor(kind)).map(([brand,info])=>`<button data-quality="${brand}" data-quality-part="${id}">${info.name}<small>${Math.round(cost*info.cost)} € · Wirkung ×${info.quality}</small></button>`).join('')}</div></div>`).join('')}</div><button data-audience aria-pressed="false">♟ Zuschauerfläche malen</button><small>Ganze Kartenfelder · vom Rand aus einen Zugang nach innen anlegen.</small><label>Bauteilfarbe<input data-color type="color" value="#e69759"></label><button data-erase aria-pressed="false">Entfernen</button><button data-undo>Rückgängig</button><p>Ein Klick wählt das Bauteil; im aufklappenden Menü kannst du die Qualität ändern. Traversen rasten in alle sechs Richtungen aneinander und an den Boden an; andere Bauteile hängen ebenso an Traversen — oben, unten, links, rechts, davor, dahinter. R / Rechtsklick dreht, Umschalt+R dreht zurück. Alt erzwingt Bodenmontage. Ziehen dreht die Kamera, Mausrad zoomt. Rechte Maustaste auf dem Hintergrund verschiebt stattdessen den Kamera-Drehpunkt. Der Cube oben rechts im Bild zeigt die aktuelle Ausrichtung als Pfeil; ein Klick auf eine Seite legt die Richtung fest.</p></aside>
+  <div class="stage-center"><div data-viewport><div class="stage-placement-tools"><span>Auto-Montage · Alt: Boden</span></div></div><p data-hint aria-live="polite">Wähle ein Bauteil und klicke auf einen Rasterplatz.</p><div data-stats class="stage-stats"></div></div>
   <aside><h3>Showpult</h3><div class="stage-phases">${PHASE_NAMES.map((p,i)=>`<button data-phase="${i}" aria-pressed="${i===0}">${p}</button>`).join('')}</div><label class="stage-check"><input data-linked type="checkbox">Alle Phasen gleich</label>${[['intensity','Lichtintensität'],['speed','Bewegung / Tempo'],['movement','Traversenhub'],['pyro','Feuerwerk / Funken'],['fog','Nebel'],['volume','Lautstärke']].map(([id,name])=>`<label>${name}<output data-value="${id}"></output><input data-slider="${id}" type="range" min="0" max="100"></label>`).join('')}<label>Lichtfarbe<input data-show-color type="color"></label><label class="stage-check"><input data-band-preview type="checkbox" checked>Bandvorschau (Indie)</label><button data-preview>Vorschau pausieren</button><p>Warm-up: erste 20 % · Main: bis 80 % · Finale: letzte 20 % des Auftritts. Effekte laufen auf der Karte nur bei aktiver, versorgter Bühne.</p><p>Leistungsfähigere Marken steigern Party- und Dekowerte, kosten aber mehr. Hohe Lautstärke erhöht die Wirkung und belastet die ruhige Umgebung.</p></aside></div>
   <footer><span data-cost></span><button data-build>Für Bühnenbau verwenden</button><button data-apply>Bühne umbauen</button></footer>`
   document.querySelector('.game-shell')!.append(panel)
@@ -60,7 +60,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     q('[data-cost]').textContent=stageId?`Umbau: ${Math.max(0,stats.cost-(base?stageStats(base).cost:0))} € · keine Erstattung beim Abbau`:`Neubau: ${BUILDINGS.stage.cost+stats.cost} € gesamt · Vorlage kostenlos`
     panel.querySelectorAll<HTMLButtonElement>('[data-phase]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.phase)===phase)))
     panel.querySelectorAll<HTMLButtonElement>('[data-part]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.part===part&&!erase&&!audienceMode)))
-    q('[data-audience]').setAttribute('aria-pressed',String(audienceMode));q('[data-angle]').textContent=directionLabel(rotation)
+    q('[data-audience]').setAttribute('aria-pressed',String(audienceMode))
     gizmo?.setDirection(rotation)
     q('[data-erase]').setAttribute('aria-pressed',String(erase));q<HTMLButtonElement>('[data-undo]').disabled=!history.length
   }
@@ -85,6 +85,10 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     renderer.domElement.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY}})
     renderer.domElement.addEventListener('pointercancel',e=>{touchIds.delete(e.pointerId);cameraGesture=true})
     renderer.domElement.addEventListener('pointermove',e=>{
+      // Right-drag rotates a part while over the stage, but pans the camera (its usual
+      // OrbitControls role) once the pointer is out over the empty background — decided here,
+      // continuously, since OrbitControls reads this only at the next right-button press.
+      controls!.mouseButtons.RIGHT=isOverStage(e.clientX,e.clientY)?null:MOUSE.PAN
       if(e.buttons&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>5){if(ghost)ghost.visible=false;return}
       const hit=gizmo!.hitTest(e.clientX,e.clientY,renderer!.domElement.getBoundingClientRect())
       gizmo!.setHover(hit.dir)
@@ -93,7 +97,11 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
       updateHover({x:e.clientX,y:e.clientY,alt:e.altKey})
     })
     renderer.domElement.addEventListener('pointerleave',()=>{pointer=null;if(ghost)ghost.visible=false;gizmo!.setHover(null)})
-    renderer.domElement.addEventListener('contextmenu',e=>{e.preventDefault();rotate(1)})
+    renderer.domElement.addEventListener('contextmenu',e=>{
+      e.preventDefault()
+      if(Math.hypot(e.clientX-down.x,e.clientY-down.y)>5)return // was a camera pan, not a click
+      if(isOverStage(e.clientX,e.clientY))rotate(1)
+    })
     renderer.domElement.addEventListener('pointerup',e=>{
       touchIds.delete(e.pointerId)
       if(e.pointerType==='touch'&&cameraGesture)return
@@ -116,6 +124,16 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   function hideQuality(){panel.querySelectorAll<HTMLElement>('[data-quality-menu]').forEach(m=>m.hidden=true);panel.querySelectorAll('[data-part]').forEach(b=>b.setAttribute('aria-expanded','false'))}
   function rotate(step:number){rotation=(rotation+step+4)%4;refresh();if(pointer)updateHover(pointer)}
   function clearGhost(){if(ghost){scene.remove(ghost);disposeStageModel(ghost);ghost=undefined}}
+  /** Whether a screen position falls over the buildable stage floor, as opposed to the empty background beyond it. */
+  function isOverStage(clientX:number,clientY:number):boolean{
+    if(!model||!renderer)return false
+    const rect=renderer.domElement.getBoundingClientRect(),ray=new Raycaster()
+    ray.setFromCamera(new Vector2((clientX-rect.left)/rect.width*2-1,-(clientY-rect.top)/rect.height*2+1),camera)
+    const floor=ray.ray.intersectPlane(new Plane(new Vector3(0,1,0),0),new Vector3())
+    if(!floor)return false
+    const local={x:floor.x/model.scale.x+design.width/2,z:floor.z/model.scale.z+design.depth/2}
+    return local.x>=0&&local.x<design.width&&local.z>=0&&local.z<design.depth
+  }
   function updateHover(p:{x:number;y:number;alt:boolean}){
     if(!model||!renderer)return
     pointer=p
@@ -171,7 +189,6 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     if(b.hasAttribute('data-close'))close()
     if(b.dataset.part){part=b.dataset.part as StagePart['kind'];erase=false;audienceMode=false;hideQuality();const menu=q(`[data-quality-menu=${part}]`),rect=b.getBoundingClientRect();menu.hidden=false;menu.style.left=`${Math.min(window.innerWidth-235,rect.right+8)}px`;menu.style.right='auto';menu.style.top=`${Math.max(10,Math.min(window.innerHeight-200,rect.top))}px`;b.setAttribute('aria-expanded','true');refresh();if(pointer)updateHover(pointer)}
     if(b.dataset.quality){const entryId=b.dataset.qualityPart! as StagePart['kind'];quality[entryId]=b.dataset.quality as StagePart['brand'];part=entryId;hideQuality();const brand=brandsFor(entryId)[quality[entryId]!];q(`[data-part-brand=${entryId}]`).textContent=`${Math.round(COMPONENTS[entryId].cost*brand.cost)} € · ${brand.name}`;refresh();if(pointer)updateHover(pointer)}
-    if(b.dataset.rotate)rotate(Number(b.dataset.rotate))
     if(b.hasAttribute('data-audience')){audienceMode=!audienceMode;erase=false;hideQuality();refresh();if(pointer)updateHover(pointer)}
     if(b.hasAttribute('data-erase')){erase=!erase;audienceMode=false;hideQuality();refresh();if(pointer)updateHover(pointer)}
     if(b.hasAttribute('data-undo')&&history.length){design=history.pop()!;rebuild()}
