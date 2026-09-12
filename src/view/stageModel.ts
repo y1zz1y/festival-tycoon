@@ -55,7 +55,7 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
   }
   let lights=0
   const effect=(kind:string,x:number,y:number,z:number,color:string,dir:{x:number;y:number;z:number})=>{
-    if(options.effects===false||effects.length>=32)return
+    if(options.effects===false)return
     const rig=new Group();rig.position.set(x,y,z);rig.userData.kind=kind;rig.userData.index=effects.length;rig.userData.dir=dir;rig.userData.base=rig.position.clone();rig.userData.length=kind==='laser'?Math.max(4,d.depth*.8):4
     if(kind==='fireworks'||kind==='sparks'){
       const points:number[]=[]
@@ -183,7 +183,7 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
           headDisc(.445,.095,.014,c), // bright lens
         ],true)
 
-        if(options.effects!==false&&effects.length<32){
+        if(options.effects!==false){
           // The beam is a child of the head, built pointing along local +Z (the lens's own
           // forward axis) so it stays perfectly aimed as the head pans and tilts.
           const beamGeo=new ConeGeometry(.85,4,16,1,true);beamGeo.rotateZ(Math.PI);beamGeo.translate(0,2,0);beamGeo.rotateX(Math.PI/2)
