@@ -6,6 +6,7 @@ import { Scene, Color, PerspectiveCamera, WebGLRenderer, AmbientLight, Direction
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { COMPONENTS, BRANDS, PHASE_NAMES, defaultStageDesign, stageDesignIssue, stageStats, removeStagePart, type StageDesign, type StagePart } from './game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from './view/stageModel'
+import { createOrientationGizmo, type OrientationGizmo } from './view/orientationGizmo'
 import type { GameState } from './game/GameState'
 import { makeDraggable, makeResizable } from './dragPanel'
 import { isTextEntryTarget } from './uiFocus'
@@ -15,7 +16,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   const panel=document.createElement('section');panel.className='stage-editor panel';panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Bühnenwerkstatt')
   panel.innerHTML=`<header class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 class="panel-header-title">Deine Bühne. Deine Show.</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Bühneneditor schließen">×</button></header>
   <div class="stage-layout"><aside><label>Vorlage<select data-template><option value="">Neue Bühne</option></select></label><button data-load>Vorlage laden</button><button data-standard>Standardbühne bauen</button><label>Name<input data-name maxlength="60"></label><div class="stage-pair"><label>Breite<input data-width type="number" min="4" max="12"></label><label>Tiefe<input data-depth type="number" min="4" max="12"></label></div><small>Detailraster für die Bauteile.</small>
-  <h3>Kartengrundfläche</h3><div class="stage-pair"><label>Breite (Felder)<input data-tiles-width type="number" min="1" max="8"></label><label>Tiefe (Felder)<input data-tiles-depth type="number" min="1" max="8"></label></div><h3>Bauteile</h3><div class="stage-parts">${Object.entries(COMPONENTS).map(([id,c])=>`<div class="stage-component"><button data-part="${id}" aria-pressed="false" aria-expanded="false">${c.name}<small data-part-brand="${id}">ab ${c.cost} € · Qualität ▾</small></button><div class="stage-quality panel" data-quality-menu="${id}" hidden>${Object.entries(BRANDS).map(([brand,info])=>`<button data-quality="${brand}" data-quality-part="${id}">${info.name}<small>${Math.round(c.cost*info.cost)} € · Wirkung ×${info.quality}</small></button>`).join('')}</div></div>`).join('')}</div><button data-audience aria-pressed="false">♟ Zuschauerfläche malen</button><small>Ganze Kartenfelder · vom Rand aus einen Zugang nach innen anlegen.</small><label>Bauteilfarbe<input data-color type="color" value="#e69759"></label><button data-erase aria-pressed="false">Entfernen</button><button data-undo>Rückgängig</button><p>Ein Klick wählt das Bauteil; im aufklappenden Menü kannst du die Qualität ändern. Über Traversen automatisch aufhängen, Boxen auf Boxen stapeln. R / Rechtsklick dreht, Umschalt+R dreht zurück. Alt erzwingt Bodenmontage. Ziehen dreht die Kamera, Mausrad zoomt.</p></aside>
+  <h3>Kartengrundfläche</h3><div class="stage-pair"><label>Breite (Felder)<input data-tiles-width type="number" min="1" max="8"></label><label>Tiefe (Felder)<input data-tiles-depth type="number" min="1" max="8"></label></div><h3>Bauteile</h3><div class="stage-parts">${Object.entries(COMPONENTS).map(([id,c])=>`<div class="stage-component"><button data-part="${id}" aria-pressed="false" aria-expanded="false">${c.name}<small data-part-brand="${id}">ab ${c.cost} € · Qualität ▾</small></button><div class="stage-quality panel" data-quality-menu="${id}" hidden>${Object.entries(BRANDS).map(([brand,info])=>`<button data-quality="${brand}" data-quality-part="${id}">${info.name}<small>${Math.round(c.cost*info.cost)} € · Wirkung ×${info.quality}</small></button>`).join('')}</div></div>`).join('')}</div><button data-audience aria-pressed="false">♟ Zuschauerfläche malen</button><small>Ganze Kartenfelder · vom Rand aus einen Zugang nach innen anlegen.</small><label>Bauteilfarbe<input data-color type="color" value="#e69759"></label><button data-erase aria-pressed="false">Entfernen</button><button data-undo>Rückgängig</button><p>Ein Klick wählt das Bauteil; im aufklappenden Menü kannst du die Qualität ändern. Über Traversen automatisch aufhängen, Boxen auf Boxen stapeln. R / Rechtsklick dreht, Umschalt+R dreht zurück. Alt erzwingt Bodenmontage. Ziehen dreht die Kamera, Mausrad zoomt. Der Cube oben rechts im Bild zeigt die aktuelle Ausrichtung als Pfeil; ein Klick auf eine Seite legt die Richtung für Lautsprecher, Laserfächer, Moving Head und Nebelmaschine fest.</p></aside>
   <div class="stage-center"><div data-viewport><div class="stage-placement-tools"><button data-rotate="-1" aria-label="Bauteil nach links drehen">↶</button><button data-rotate="1" aria-label="Bauteil nach rechts drehen"><span data-angle>0°</span> ↷ · R</button><span>Auto-Montage · Alt: Boden</span></div></div><p data-hint aria-live="polite">Wähle ein Bauteil und klicke auf einen Rasterplatz.</p><div data-stats class="stage-stats"></div></div>
   <aside><h3>Showpult</h3><div class="stage-phases">${PHASE_NAMES.map((p,i)=>`<button data-phase="${i}" aria-pressed="${i===0}">${p}</button>`).join('')}</div><label class="stage-check"><input data-linked type="checkbox">Alle Phasen gleich</label>${[['intensity','Lichtintensität'],['speed','Bewegung / Tempo'],['movement','Traversenhub'],['pyro','Feuerwerk / Funken'],['fog','Nebel'],['volume','Lautstärke']].map(([id,name])=>`<label>${name}<output data-value="${id}"></output><input data-slider="${id}" type="range" min="0" max="100"></label>`).join('')}<label>Lichtfarbe<input data-show-color type="color"></label><label class="stage-check"><input data-band-preview type="checkbox" checked>Bandvorschau (Indie)</label><button data-preview>Vorschau pausieren</button><p>Warm-up: erste 20 % · Main: bis 80 % · Finale: letzte 20 % des Auftritts. Effekte laufen auf der Karte nur bei aktiver, versorgter Bühne.</p><p>Leistungsfähigere Marken steigern Party- und Dekowerte, kosten aber mehr. Hohe Lautstärke erhöht die Wirkung und belastet die ruhige Umgebung.</p></aside></div>
   <footer><span data-cost></span><button data-save>Vorlage speichern</button><button data-build>Für Bühnenbau verwenden</button><button data-apply>Bühne umbauen</button></footer>`
@@ -36,7 +37,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   let pointer:{x:number;y:number;alt:boolean}|null=null
   const quality:Partial<Record<StagePart['kind'],StagePart['brand']>>={}
   let framedSize=''
-  let renderer:WebGLRenderer|undefined,controls:OrbitControls|undefined,scene:Scene,camera:PerspectiveCamera,model:Group|undefined
+  let renderer:WebGLRenderer|undefined,controls:OrbitControls|undefined,scene:Scene,camera:PerspectiveCamera,model:Group|undefined,gizmo:OrientationGizmo|undefined
   const viewport=q('[data-viewport]'),hint=q('[data-hint]')
   const remember=()=>{history.push(structuredClone(design));if(history.length>40)history.shift()}
   const phaseIndex=()=>design.linked?0:phase
@@ -52,6 +53,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     panel.querySelectorAll<HTMLButtonElement>('[data-phase]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.phase)===phase)))
     panel.querySelectorAll<HTMLButtonElement>('[data-part]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.part===part&&!erase&&!audienceMode)))
     q('[data-audience]').setAttribute('aria-pressed',String(audienceMode));q('[data-angle]').textContent=`${rotation*90}°`
+    gizmo?.setDirection(rotation)
     q('[data-erase]').setAttribute('aria-pressed',String(erase));q<HTMLButtonElement>('[data-undo]').disabled=!history.length
   }
   function rebuild(){if(!scene)return;revision++;ghostKey='';if(pickTargets)disposeStageModel(pickTargets);if(model){scene.remove(model);disposeStageModel(model)}model=createStageModel(design,{lightBudget:6});model.scale.set((design.tileWidth??1)*4/design.width,design.tileWidth ? 2 : 3.84/Math.max(design.width,design.depth),(design.tileDepth??1)*4/design.depth);scene.add(model);pickTargets=createStagePickTargets(design);pickTargets.scale.copy(model.scale);pickTargets.updateMatrixWorld(true);
@@ -63,6 +65,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     scene=new Scene();scene.background=new Color('#121b2b');camera=new PerspectiveCamera(42,1,.1,300);camera.position.set(11,10,13)
     controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1,0);controls.minDistance=5;controls.maxDistance=140;controls.maxPolarAngle=Math.PI*.48;controls.enableDamping=true;controls.mouseButtons.RIGHT=null
     scene.add(new AmbientLight(0xffffff,1));const sun=new DirectionalLight(0xffeddb,1.8);sun.position.set(4,10,8);scene.add(sun);const grid=new GridHelper(40,40,0x718197,0x344456);grid.position.y=-.01;scene.add(grid)
+    gizmo=createOrientationGizmo();gizmo.setDirection(rotation)
     let down={x:0,y:0}
     const touchIds=new Set<number>();let cameraGesture=false
     renderer.domElement.addEventListener('pointerdown',e=>{
@@ -72,13 +75,22 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     })
     renderer.domElement.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY}})
     renderer.domElement.addEventListener('pointercancel',e=>{touchIds.delete(e.pointerId);cameraGesture=true})
-    renderer.domElement.addEventListener('pointermove',e=>{if(e.buttons&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>5){if(ghost)ghost.visible=false;return}updateHover({x:e.clientX,y:e.clientY,alt:e.altKey})})
-    renderer.domElement.addEventListener('pointerleave',()=>{pointer=null;if(ghost)ghost.visible=false})
+    renderer.domElement.addEventListener('pointermove',e=>{
+      if(e.buttons&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>5){if(ghost)ghost.visible=false;return}
+      const hit=gizmo!.hitTest(e.clientX,e.clientY,renderer!.domElement.getBoundingClientRect())
+      gizmo!.setHover(hit.dir)
+      if(hit.inside){pointer=null;if(ghost)ghost.visible=false;renderer!.domElement.style.cursor=hit.dir!=null?'pointer':'default';return}
+      renderer!.domElement.style.cursor='default'
+      updateHover({x:e.clientX,y:e.clientY,alt:e.altKey})
+    })
+    renderer.domElement.addEventListener('pointerleave',()=>{pointer=null;if(ghost)ghost.visible=false;gizmo!.setHover(null)})
     renderer.domElement.addEventListener('contextmenu',e=>{e.preventDefault();rotate(1)})
     renderer.domElement.addEventListener('pointerup',e=>{
       touchIds.delete(e.pointerId)
       if(e.pointerType==='touch'&&cameraGesture)return
       if(e.button!==0||Math.hypot(e.clientX-down.x,e.clientY-down.y)>5)return
+      const gizmoHit=gizmo!.hitTest(e.clientX,e.clientY,renderer!.domElement.getBoundingClientRect())
+      if(gizmoHit.inside){if(gizmoHit.dir!=null&&gizmoHit.dir!==rotation){rotation=gizmoHit.dir;refresh();if(pointer)updateHover(pointer)}return}
       updateHover({x:e.clientX,y:e.clientY,alt:e.altKey});hideQuality()
       if(audienceMode){
         if(!audienceCell)return
@@ -130,7 +142,9 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   }
   function animate(now:number){if(panel.hidden)return;const dt=Math.min(.1,(now-last)/1000);last=now;if(preview)elapsed+=dt
     const w=viewport.clientWidth,h=viewport.clientHeight;if(renderer!.domElement.clientWidth!==w||renderer!.domElement.clientHeight!==h||renderer!.domElement.width!==Math.floor(w*.7)){renderer!.setSize(w,h);camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix()}
-    controls!.update();if(model){animateStageModel(model,design.phases[phaseIndex()],elapsed,true);updateStageBand(model,'meadow',elapsed,(q('[data-band-preview]') as HTMLInputElement).checked,design);}if(ghost)animateStageModel(ghost,design.phases[phaseIndex()],elapsed,true);if(pickTargets){animateStageModel(pickTargets,design.phases[phaseIndex()],elapsed,true);pickTargets.updateMatrixWorld(true);}renderer!.render(scene,camera);frame=requestAnimationFrame(animate)
+    controls!.update();if(model){animateStageModel(model,design.phases[phaseIndex()],elapsed,true);updateStageBand(model,'meadow',elapsed,(q('[data-band-preview]') as HTMLInputElement).checked,design);}if(ghost)animateStageModel(ghost,design.phases[phaseIndex()],elapsed,true);if(pickTargets){animateStageModel(pickTargets,design.phases[phaseIndex()],elapsed,true);pickTargets.updateMatrixWorld(true);}renderer!.render(scene,camera)
+    gizmo!.update(camera,controls!.target);gizmo!.render(renderer!)
+    frame=requestAnimationFrame(animate)
   }
   function syncOpenButton(){document.getElementById('open-stage-editor')?.setAttribute('aria-expanded',String(!panel.hidden))}
   function close(){panel.hidden=true;cancelAnimationFrame(frame);pointer=null;clearGhost();syncOpenButton()}
