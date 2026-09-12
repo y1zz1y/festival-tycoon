@@ -17,6 +17,8 @@ function stepLabel(step:{x:number;y:number;z:number}){
   if(step.x>0)return 'rechts';if(step.x<0)return 'links'
   return step.z>0?'davor':'dahinter'
 }
+/** Label for a StagePart's own facing (0-3 = 90° yaw steps, 4/5 = up/down), as picked via the orientation cube. */
+function directionLabel(rotation:number){return rotation===4?'oben':rotation===5?'unten':`${rotation*90}°`}
 export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:boolean)=>void){
   const paletteEntries=(Object.entries(COMPONENTS) as [ComponentKind,typeof COMPONENTS[ComponentKind]][]).map(([kind,c])=>({id:kind,kind,label:c.name,icon:kind,cost:c.cost}))
   const panel=document.createElement('section');panel.className='stage-editor panel';panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Bühnenwerkstatt')
@@ -58,7 +60,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     q('[data-cost]').textContent=stageId?`Umbau: ${Math.max(0,stats.cost-(base?stageStats(base).cost:0))} € · keine Erstattung beim Abbau`:`Neubau: ${BUILDINGS.stage.cost+stats.cost} € gesamt · Vorlage kostenlos`
     panel.querySelectorAll<HTMLButtonElement>('[data-phase]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.phase)===phase)))
     panel.querySelectorAll<HTMLButtonElement>('[data-part]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.part===part&&!erase&&!audienceMode)))
-    q('[data-audience]').setAttribute('aria-pressed',String(audienceMode));q('[data-angle]').textContent=`${rotation*90}°`
+    q('[data-audience]').setAttribute('aria-pressed',String(audienceMode));q('[data-angle]').textContent=directionLabel(rotation)
     gizmo?.setDirection(rotation)
     q('[data-erase]').setAttribute('aria-pressed',String(erase));q<HTMLButtonElement>('[data-undo]').disabled=!history.length
   }
@@ -152,7 +154,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     }
     if(ghost)ghost.visible=true
     const partLabel=COMPONENTS[part].name
-    hint.textContent=audienceMode?candidateIssue??`Zuschauerfeld ${audienceCell.x+1}, ${audienceCell.z+1} umschalten · Zugang vom Rand freihalten`:erase?(hitPart?`${COMPONENTS[hitPart.kind].name} mit allen getragenen Anbauteilen entfernen`:'Auf ein Bauteil zeigen'):candidateIssue??`${partLabel} · ${candidate.attachedTo?`an Traverse andocken (${stepLabel(hitStep??{x:0,y:-1,z:0})})`:'auf dem Boden'} · ${candidate.rotation*90}° · R dreht`
+    hint.textContent=audienceMode?candidateIssue??`Zuschauerfeld ${audienceCell.x+1}, ${audienceCell.z+1} umschalten · Zugang vom Rand freihalten`:erase?(hitPart?`${COMPONENTS[hitPart.kind].name} mit allen getragenen Anbauteilen entfernen`:'Auf ein Bauteil zeigen'):candidateIssue??`${partLabel} · ${candidate.attachedTo?`an Traverse andocken (${stepLabel(hitStep??{x:0,y:-1,z:0})})`:'auf dem Boden'} · ${directionLabel(candidate.rotation)} · R dreht`
   }
   function animate(now:number){if(panel.hidden)return;const dt=Math.min(.1,(now-last)/1000);last=now;if(preview)elapsed+=dt
     const w=viewport.clientWidth,h=viewport.clientHeight;if(renderer!.domElement.clientWidth!==w||renderer!.domElement.clientHeight!==h||renderer!.domElement.width!==Math.floor(w*.7)){renderer!.setSize(w,h);camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix()}

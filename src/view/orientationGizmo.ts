@@ -1,9 +1,15 @@
 import { Scene, OrthographicCamera, PerspectiveCamera, WebGLRenderer, Group, Mesh, BoxGeometry, ConeGeometry, MeshBasicMaterial, EdgesGeometry, LineSegments, LineBasicMaterial, Vector3, Vector2, Raycaster, Color } from 'three'
 
-/** Rotation 0..3 -> world-space facing, matching the convention used by stageModel/stagePicking (0=+Z, 1=+X, 2=-Z, 3=-X). */
-const FACE_DIRECTION = [1, 3, -1, -1, 0, 2] // BoxGeometry material groups: +X,-X,+Y,-Y,+Z,-Z
+/** Direction 0..5 -> world-space facing, matching the convention used by stageModel/stagePicking (0=+Z, 1=+X, 2=-Z, 3=-X, 4=+Y up, 5=-Y down). */
+const FACE_DIRECTION = [1, 3, 4, 5, 0, 2] // BoxGeometry material groups: +X,-X,+Y,-Y,+Z,-Z
+const DIR_NORMAL = [
+  new Vector3(0, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 0, -1),
+  new Vector3(-1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, -1, 0),
+]
+const FORWARD = new Vector3(0, 0, 1)
+const ARROW_OFFSET = 0.95
 
-const NEUTRAL = 0x2a3242, SIDE = 0x3d4759, HOVER = 0x55617a, ACTIVE = 0xe0a83c
+const SIDE = 0x3d4759, HOVER = 0x55617a, ACTIVE = 0xe0a83c
 
 export type OrientationGizmo = {
   setDirection(dir: number): void
@@ -16,28 +22,32 @@ export type OrientationGizmo = {
 export function createOrientationGizmo(size = 88, margin = 12): OrientationGizmo {
   const scene = new Scene()
   const camera = new OrthographicCamera(-1.8, 1.8, 1.8, -1.8, 0.1, 20)
-  const sideMaterials = [0, 1, 4, 5].map(() => new MeshBasicMaterial({ color: SIDE }))
-  const materials = [sideMaterials[0]!, sideMaterials[1]!, new MeshBasicMaterial({ color: NEUTRAL }), new MeshBasicMaterial({ color: NEUTRAL }), sideMaterials[2]!, sideMaterials[3]!]
+  // One material per BoxGeometry face group (+X,-X,+Y,-Y,+Z,-Z) — all six sides are selectable.
+  const materials = FACE_DIRECTION.map(() => new MeshBasicMaterial({ color: SIDE }))
   const cube = new Mesh(new BoxGeometry(1.5, 1.5, 1.5), materials)
   cube.add(new LineSegments(new EdgesGeometry(cube.geometry), new LineBasicMaterial({ color: 0x0b1018 })))
   const arrow = new Group()
   const shaftMat = new MeshBasicMaterial({ color: 0xf5f0e6 }), headMat = new MeshBasicMaterial({ color: 0xf5f0e6 })
   const shaft = new Mesh(new BoxGeometry(0.12, 0.08, 0.5), shaftMat); shaft.position.z = -0.12
   const head = new Mesh(new ConeGeometry(0.22, 0.4, 12), headMat); head.rotation.x = Math.PI / 2; head.position.z = 0.32
-  arrow.add(shaft, head); arrow.position.y = 0.82
+  arrow.add(shaft, head)
   scene.add(cube, arrow)
   const raycaster = new Raycaster()
-  let hoverDir: number | null = null, activeDir = 0
+  let hoverDir: number | null = null, activeDir = -1
   const applyColors = () => {
     FACE_DIRECTION.forEach((dir, i) => {
-      if (dir < 0) return
       const mat = materials[i]!
       mat.color.set(dir === activeDir ? ACTIVE : dir === hoverDir ? HOVER : SIDE)
     })
   }
-  applyColors()
+  const placeArrow = (dir: number) => {
+    const normal = DIR_NORMAL[dir]!
+    arrow.position.copy(normal).multiplyScalar(ARROW_OFFSET)
+    arrow.quaternion.setFromUnitVectors(FORWARD, normal)
+  }
+  placeArrow(0); activeDir = 0; applyColors()
   return {
-    setDirection(dir) { if (dir === activeDir) return; activeDir = dir; arrow.rotation.y = dir * Math.PI / 2; applyColors() },
+    setDirection(dir) { if (dir === activeDir) return; activeDir = dir; placeArrow(dir); applyColors() },
     setHover(dir) { if (dir === hoverDir) return; hoverDir = dir; applyColors() },
     hitTest(clientX, clientY, canvasRect) {
       const localX = clientX - canvasRect.left, localY = clientY - canvasRect.top
@@ -47,8 +57,8 @@ export function createOrientationGizmo(size = 88, margin = 12): OrientationGizmo
       raycaster.setFromCamera(new Vector2(nx, ny), camera)
       const hit = raycaster.intersectObject(cube, false)[0]
       if (!hit || hit.face == null) return { inside: true, dir: null }
-      const dir = FACE_DIRECTION[hit.face.materialIndex] ?? -1
-      return { inside: true, dir: dir < 0 ? null : dir }
+      const dir = FACE_DIRECTION[hit.face.materialIndex] ?? null
+      return { inside: true, dir }
     },
     update(mainCamera, target) {
       const dir = mainCamera.position.clone().sub(target).normalize()

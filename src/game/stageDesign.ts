@@ -67,7 +67,7 @@ export function stageDesignIssue(d:StageDesign):string|null {
   if(reachable.size!==audience.length)return 'Jede Zuschauerfläche braucht einen durchgehenden Zugang zum äußeren Rand'
   const ids=new Set<string>()
   for(const p of d.parts){
-    if(!p||typeof p.id!=='string'||p.id.length>80||ids.has(p.id)||!Object.hasOwn(COMPONENTS,p.kind)||!Object.hasOwn(brandsFor(p.kind),p.brand)||![p.x,p.y,p.z,p.rotation].every(Number.isInteger)||p.x<0||p.x>=d.width||p.y<0||p.y>=d.height||p.z<0||p.z>=d.depth||p.rotation<0||p.rotation>3||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.axis!==undefined&&!['x','y','z'].includes(p.axis)))return 'Ungültiges Bühnenelement'
+    if(!p||typeof p.id!=='string'||p.id.length>80||ids.has(p.id)||!Object.hasOwn(COMPONENTS,p.kind)||!Object.hasOwn(brandsFor(p.kind),p.brand)||![p.x,p.y,p.z,p.rotation].every(Number.isInteger)||p.x<0||p.x>=d.width||p.y<0||p.y>=d.height||p.z<0||p.z>=d.depth||p.rotation<0||p.rotation>5||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.axis!==undefined&&!['x','y','z'].includes(p.axis)))return 'Ungültiges Bühnenelement'
     ids.add(p.id)
     if(p.attachedTo===null){
       if(p.kind!=='truss'&&!GROUND_ONLY_KINDS.includes(p.kind))return 'Dieses Bauteil braucht eine Traverse als Träger'
