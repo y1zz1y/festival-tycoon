@@ -6,7 +6,7 @@ export const COMPONENTS = {
   spot: {name:'Moving Head',cost:180,party:5,beauty:2,power:.4},
   speaker: {name:'Lautsprecher',cost:260,party:9,beauty:-1,power:1.2},
   fog: {name:'Nebelmaschine',cost:160,party:4,beauty:1,power:.8},
-  laser: {name:'Laserfächer',cost:340,party:7,beauty:3,power:.6},
+  laser: {name:'Laser',cost:340,party:7,beauty:3,power:.6},
   screen: {name:'Pixel-LED-Wand',cost:420,party:5,beauty:5,power:1.5},
   banner: {name:'Themenbanner',cost:90,party:1,beauty:6,power:0},
   star: {name:'Deko-Stern',cost:70,party:1,beauty:4,power:0},
@@ -131,3 +131,8 @@ export function mountDirection(part:StagePart,host:StagePart|undefined):{x:numbe
   if(!host)return{x:0,y:1,z:0}
   return {x:part.x-host.x,y:part.y-host.y,z:part.z-host.z}
 }
+/** Unit vector for a part's own facing, as chosen with the orientation cube: 0=+Z,1=+X,2=-Z,3=-X,4=+Y (up),5=-Y (down). */
+export const ROTATION_DIRECTIONS:{x:number;y:number;z:number}[] = [
+  {x:0,y:0,z:1},{x:1,y:0,z:0},{x:0,y:0,z:-1},{x:-1,y:0,z:0},{x:0,y:1,z:0},{x:0,y:-1,z:0},
+]
+export function partFacing(part:StagePart):{x:number;y:number;z:number}{return ROTATION_DIRECTIONS[part.rotation] ?? {x:0,y:1,z:0}}

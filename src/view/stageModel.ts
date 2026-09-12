@@ -1,8 +1,11 @@
-import { Group, Mesh, BoxGeometry, ConeGeometry, SphereGeometry, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, SpotLight, Vector3, Quaternion, DoubleSide, MeshStandardMaterial, MeshBasicMaterial, AdditiveBlending } from 'three'
+import { Group, Mesh, BoxGeometry, CylinderGeometry, ConeGeometry, SphereGeometry, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, SpotLight, Vector3, Quaternion, DoubleSide, MeshStandardMaterial, MeshBasicMaterial, AdditiveBlending } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { isTruss, stageMotion, mountDirection, type StageDesign, type ShowPhase } from '../game/stageDesign'
+import { isTruss, stageMotion, mountDirection, partFacing, type StageDesign, type ShowPhase } from '../game/stageDesign'
 
 const unitX=new Vector3(1,0,0)
+const unitZ=new Vector3(0,0,1)
+/** Rotates a Y-axis CylinderGeometry to point along +Z, for lens/rim discs facing the fixture's own forward axis. */
+const CYL_TO_FORWARD=new Quaternion().setFromAxisAngle(unitX,Math.PI/2)
 /** For a truss's long axis, the two perpendicular unit vectors used to arrange its 3 chords. */
 const CROSS_AXES = {
   x: [{x:0,y:1,z:0},{x:0,y:0,z:1}],
@@ -64,10 +67,12 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         cloud.scale.set(Math.max(2,d.width*.42),.28+n*.07,Math.max(2,d.depth*.42));cloud.position.set(-x*.6+(n-1)*.3,.15+n*.18,-z*.6+(n-1)*.3);rig.add(cloud)
       }
     }else if(kind==='laser'){
-      const points:number[]=[]
-      for(let n=-5;n<=5;n++)points.push(0,0,0,n*.28,rig.userData.length,Math.abs(n)*.05)
+      // A flat wedge of beams fanning out from the lens, +Y the shared outward axis (see rig.quaternion below).
+      const rays=9,halfAngle=Math.PI*.32,points:number[]=[]
+      for(let n=-rays;n<=rays;n++){const angle=n/rays*halfAngle;points.push(0,0,0,Math.sin(angle)*rig.userData.length,Math.cos(angle)*rig.userData.length,0)}
       const geometry=new BufferGeometry();geometry.setAttribute('position',new Float32BufferAttribute(points,3))
-      rig.add(new LineSegments(geometry,new LineBasicMaterial({color,transparent:true,opacity:.7,blending:AdditiveBlending,depthWrite:false})))
+      rig.add(new LineSegments(geometry,new LineBasicMaterial({color,transparent:true,opacity:.75,blending:AdditiveBlending,depthWrite:false})))
+      rig.add(new Mesh(new SphereGeometry(.06,8,6),new MeshBasicMaterial({color,transparent:true,opacity:.9,depthWrite:false,blending:AdditiveBlending})))
     }else{
       // The cone's apex is at the actual lens. +Y is the outgoing beam axis.
       const cone=new ConeGeometry(.85,4,16,1,true);cone.rotateZ(Math.PI);cone.translate(0,2,0)
@@ -118,8 +123,41 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
       origin={x:ex,z:ez,rotation:p.rotation}
       if(p.kind==='speaker'){
         box(ex,ey+.4,ez,.65,.8,.5,'#171d28');for(const yy of [.2,.55]){box(ex,ey+yy,ez+.26,.43,.25,.04,'#414859');box(ex,ey+yy,ez+.29,.18,.12,.02,c)}
-      }else if(p.kind==='spot'||p.kind==='laser'){
+      }else if(p.kind==='spot'){
         box(ex,ey+.15,ez,.45,.3,.42,'#17202d');box(ex,ey+.33,ez,.27,.08,.3,c);effect(p.kind,ex,ey+.38,ez,c,dir)
+      }else if(p.kind==='laser'){
+        // Built facing local +Z, then rotated as a rigid body onto the cube gizmo's chosen
+        // world direction — independent of which side of the truss it is docked against.
+        const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
+        const facingQuat=new Quaternion().setFromUnitVectors(unitZ,facingVec)
+        const pivot=new Vector3(ex,ey+.16,ez)
+        const put=(lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string,localQuat?:Quaternion)=>{
+          const g=new BoxGeometry(w,h,depth)
+          if(localQuat)g.applyQuaternion(localQuat)
+          g.applyQuaternion(facingQuat)
+          const wp=new Vector3(lx,ly,lz).applyQuaternion(facingQuat).add(pivot)
+          g.translate(wp.x,wp.y,wp.z)
+          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+        }
+        const putLens=(lz:number,radius:number,height:number,color:string)=>{
+          const g=new CylinderGeometry(radius,radius,height,10)
+          g.applyQuaternion(CYL_TO_FORWARD);g.applyQuaternion(facingQuat)
+          const wp=new Vector3(0,0,lz).applyQuaternion(facingQuat).add(pivot)
+          g.translate(wp.x,wp.y,wp.z)
+          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+        }
+        const housing='#161d26',trim='#232d38',bezel='#0d1117',clampColor='#3a4551'
+        put(0,-.03,-.1,.24,.19,.16,clampColor) // mounting foot/clamp, toward the back
+        put(0,0,.02,.36,.26,.32,housing) // main housing
+        for(const fx of [-.1,0,.1])put(fx,.145,.02,.045,.03,.24,bezel) // heat-sink fins on top
+        for(const side of [-1,1])put(side*.18,0,.02,.02,.17,.28,trim) // side trim panels
+        put(0,0,.18,.3,.2,.04,bezel) // recessed front bezel
+        putLens(.205,.095,.02,bezel) // dark lens rim
+        putLens(.216,.075,.014,c) // bright round lens
+        put(.1,.085,.06,.028,.028,.028,'#8ef29b') // status LED
+        put(0,-.08,-.18,.05,.05,.045,bezel) // DMX/cable stub
+        const lens=new Vector3(0,0,.22).applyQuaternion(facingQuat).add(pivot)
+        effect('laser',lens.x,lens.y,lens.z,c,facing)
       }else if(p.kind==='fireworks'||p.kind==='sparks'){
         box(ex,ey+.15,ez,.65,.3,.65,'#303847');for(const dx of [-.18,.18])box(ex+dx,ey+.38,ez,.13,.25,.13,c);effect(p.kind,ex,ey+.5,ez,c,{x:0,y:1,z:0})
       }else if(p.kind==='fog'){
