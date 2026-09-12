@@ -1,4 +1,4 @@
-import { Group, Mesh, BoxGeometry, CylinderGeometry, ConeGeometry, SphereGeometry, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, SpotLight, Vector3, Quaternion, DoubleSide, MeshStandardMaterial, MeshBasicMaterial, AdditiveBlending } from 'three'
+import { Group, Mesh, BoxGeometry, CylinderGeometry, ConeGeometry, SphereGeometry, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, SpotLight, Vector3, Quaternion, Color, DoubleSide, MeshStandardMaterial, MeshBasicMaterial, AdditiveBlending } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { isTruss, stageMotion, mountDirection, partFacing, type StageDesign, type ShowPhase } from '../game/stageDesign'
 
@@ -73,13 +73,6 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
       const geometry=new BufferGeometry();geometry.setAttribute('position',new Float32BufferAttribute(points,3))
       rig.add(new LineSegments(geometry,new LineBasicMaterial({color,transparent:true,opacity:.75,blending:AdditiveBlending,depthWrite:false})))
       rig.add(new Mesh(new SphereGeometry(.06,8,6),new MeshBasicMaterial({color,transparent:true,opacity:.9,depthWrite:false,blending:AdditiveBlending})))
-    }else{
-      // The cone's apex is at the actual lens. +Y is the outgoing beam axis.
-      const cone=new ConeGeometry(.85,4,16,1,true);cone.rotateZ(Math.PI);cone.translate(0,2,0)
-      const beam=new Mesh(cone,new MeshBasicMaterial({color,transparent:true,opacity:.07,depthWrite:false,side:DoubleSide,blending:AdditiveBlending}));rig.add(beam)
-      if(lights<(options.lightBudget??0)){
-        const light=new SpotLight(color,0,40,Math.atan(.85/4),.45,1);light.castShadow=false;root.add(light,light.target);rig.userData.light=light;lights++
-      }
     }
     root.add(rig);effects.push(rig)
   }
@@ -124,7 +117,87 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
       if(p.kind==='speaker'){
         box(ex,ey+.4,ez,.65,.8,.5,'#171d28');for(const yy of [.2,.55]){box(ex,ey+yy,ez+.26,.43,.25,.04,'#414859');box(ex,ey+yy,ez+.29,.18,.12,.02,c)}
       }else if(p.kind==='spot'){
-        box(ex,ey+.15,ez,.45,.3,.42,'#17202d');box(ex,ey+.33,ez,.27,.08,.3,c);effect(p.kind,ex,ey+.38,ez,c,dir)
+        // A real moving head: the base sits flush against the truss (dir), so its two yoke
+        // arms always rise away from that same face — dir is therefore also the arms' pan
+        // axis, not world-up. The head, cradled between them, tilts to aim the lens — parented
+        // to it — exactly at the gizmo-chosen facing (see 'spot' in animateStageModel below).
+        const dirVec=new Vector3(dir.x,dir.y,dir.z)
+        const baseQuat=new Quaternion().setFromUnitVectors(unitZ,dirVec)
+        const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
+        const headRestQuat=baseQuat.clone().invert().multiply(new Quaternion().setFromUnitVectors(unitZ,facingVec))
+        const pivot=new Vector3(ex,ey+.16,ez)
+        const putBase=(lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string)=>{
+          const g=new BoxGeometry(w,h,depth);g.applyQuaternion(baseQuat)
+          const wp=new Vector3(lx,ly,lz).applyQuaternion(baseQuat).add(pivot)
+          g.translate(wp.x,wp.y,wp.z)
+          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+        }
+        putBase(0,-.02,-.12,.12,.09,.08,'#3a4551') // mounting clamp, bridging to the truss
+        putBase(0,0,0,.4,.3,.14,'#3a4551') // wide swivel base shell, flat against the truss (thin along dir)
+        putBase(0,.06,.08,.1,.05,.02,'#1c2b33') // control-panel screen, on the outward face
+
+        // Each moving part (arm, head) is its own merged, vertex-coloured mesh — one draw call
+        // per part regardless of how many little boxes make it up — so that live pan/tilt
+        // animation doesn't explode the scene's mesh count the way per-box materials would.
+        const tint=(geometry:BufferGeometry,color:string)=>{
+          const col=new Color(color),arr=new Float32Array(geometry.getAttribute('position').count*3)
+          for(let i=0;i<arr.length;i+=3)col.toArray(arr,i)
+          geometry.setAttribute('color',new Float32BufferAttribute(arr,3));geometry.deleteAttribute('uv')
+          return geometry
+        }
+        const merge=(group:Group,parts:BufferGeometry[],vertexColors:boolean,color?:string)=>{
+          const merged=mergeGeometries(parts);parts.forEach(g=>g.dispose())
+          if(!merged)return
+          const mesh=new Mesh(merged,new MeshStandardMaterial(vertexColors?{vertexColors:true,roughness:.85,flatShading:true}:{color,roughness:.85,flatShading:true}))
+          mesh.castShadow=mesh.receiveShadow=true;group.add(mesh)
+        }
+
+        // Live groups, driven every frame by animateStageModel — not baked into the static buckets.
+        const armGroup=new Group();armGroup.position.copy(pivot);armGroup.quaternion.copy(baseQuat)
+        armGroup.userData.baseQuat=baseQuat
+        root.add(armGroup)
+        const armStart=.08,armSide=.24,armReach=.3
+        const armBox=(x:number,y:number,z:number,w:number,h:number,depth:number)=>{const g=new BoxGeometry(w,h,depth);g.translate(x,y,z);return g}
+        merge(armGroup,[
+          ...[-1,1].flatMap(side=>[
+            armBox(side*armSide,0,armStart+armReach*.5,.1,.14,armReach), // arm post, rooted on the base's outward face
+            armBox(side*armSide,0,armStart+armReach,.16,.16,.08), // pivot boss cradling the head
+          ]),
+          armBox(0,0,armStart+.04,armSide*2+.14,.07,.08), // crossbar joining both arms, flush against the base
+        ],false,'#5b6873')
+
+        // The pivot sits roughly at the head's own midpoint (not its rear), so the arms reach
+        // further forward toward the lens instead of cradling only the back of the head.
+        const headPivotZ=armStart+armReach,headShift=.12
+        const headGroup=new Group();headGroup.position.set(0,0,headPivotZ);headGroup.quaternion.copy(headRestQuat)
+        armGroup.add(headGroup)
+        const headBox=(x:number,y:number,z:number,w:number,h:number,depth:number,color:string)=>tint(new BoxGeometry(w,h,depth).translate(x,y,z-headShift),color)
+        const headDisc=(z:number,radius:number,height:number,color:string)=>tint(new CylinderGeometry(radius,radius,height,12).rotateX(Math.PI/2).translate(0,0,z-headShift),color)
+        merge(headGroup,[
+          headBox(0,0,.16,.3,.3,.44,'#1a2129'), // elongated barrel, cradled between the arms
+          headBox(0,0,-.08,.26,.24,.12,'#1a2129'), // rounded rear counterweight
+          ...[.02,.14,.26].map(lz=>headBox(0,.14,lz,.26,.03,.05,'#11161c')), // top cooling ridges
+          headBox(0,-.13,.36,.2,.02,.02,'#eef3f2'), // LED accent strip
+          headBox(0,0,.4,.26,.26,.06,'#0d1117'), // front bezel
+          headDisc(.43,.12,.02,'#0d1117'), // dark lens rim
+          headDisc(.445,.095,.014,c), // bright lens
+        ],true)
+
+        if(options.effects!==false&&effects.length<32){
+          // The beam is a child of the head, built pointing along local +Z (the lens's own
+          // forward axis) so it stays perfectly aimed as the head pans and tilts.
+          const beamGeo=new ConeGeometry(.85,4,16,1,true);beamGeo.rotateZ(Math.PI);beamGeo.translate(0,2,0);beamGeo.rotateX(Math.PI/2)
+          const beamMat=new MeshBasicMaterial({color:c,transparent:true,opacity:.07,depthWrite:false,side:DoubleSide,blending:AdditiveBlending})
+          const beam=new Mesh(beamGeo,beamMat);beam.position.set(0,0,.46-headShift);headGroup.add(beam)
+          const glowMat=new MeshBasicMaterial({color:c,transparent:true,opacity:.85,depthWrite:false,blending:AdditiveBlending})
+          const glow=new Mesh(new SphereGeometry(.07,8,6),glowMat);glow.position.copy(beam.position);headGroup.add(glow)
+          let light:SpotLight|undefined
+          if(lights<(options.lightBudget??0)){
+            light=new SpotLight(c,0,40,Math.atan(.85/4),.45,1);light.castShadow=false;root.add(light,light.target);lights++
+          }
+          headGroup.userData={kind:'spot',id:p.id,index:effects.length,base:headGroup.position.clone(),armGroup,headRestQuat,beamMat,glowMat,light,length:4}
+          effects.push(headGroup)
+        }
       }else if(p.kind==='laser'){
         // Built facing local +Z, then rotated as a rigid body onto the cube gizmo's chosen
         // world direction — independent of which side of the truss it is docked against.
@@ -195,6 +268,21 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
       rays.scale.set(spread,burst?spread:1+strength*2,spread);rays.rotation.y=time*.25;rig.position.y+=burst?2+cycle*2:0;mat.color.set(phase.color);mat.opacity=burst?(1-cycle)*strength:strength*(.7+.3*Math.sin(time*17)**2)
     }else if(fog){
       rig.children.forEach((child,n)=>{const mesh=child as Mesh,mat=mesh.material as MeshBasicMaterial;mat.opacity=phase.fog/100*(.065+Math.sin(t*.25+n)*.015);mesh.position.y=.12+n*.18+Math.sin(t*.3+n)*.08;mesh.rotation.y=Math.sin(t*.1+n)*.12})
+    }else if(rig.userData.kind==='spot'){
+      // Pan spins the arm around its own mount-perpendicular axis (baseQuat's local Z, since
+      // the base sits flush against the truss and the arms always rise away from it); tilt
+      // nods the head (nested inside the arm) around the arm's local X. The beam is a child
+      // of the head, so it always fires straight out of the lens as both animate.
+      const armGroup=rig.userData.armGroup as Group,sweep=(phase.movement??0)/100
+      const baseQuat=armGroup.userData.baseQuat as Quaternion
+      const panWobble=new Quaternion().setFromAxisAngle(unitZ,sweep*.5*Math.sin(t*.9))
+      armGroup.quaternion.multiplyQuaternions(baseQuat,panWobble)
+      const tiltWobble=new Quaternion().setFromAxisAngle(unitX,sweep*.3*Math.sin(t*1.15+1.3))
+      rig.quaternion.multiplyQuaternions(tiltWobble,rig.userData.headRestQuat as Quaternion)
+      rig.updateWorldMatrix(true,false)
+      const beamMat=rig.userData.beamMat as MeshBasicMaterial,glowMat=rig.userData.glowMat as MeshBasicMaterial
+      beamMat.color.set(phase.color);beamMat.opacity=phase.intensity/100*.07
+      glowMat.color.set(phase.color);glowMat.opacity=phase.intensity/100*.85
     }else{
       const base=(rig.userData.dir as {x:number;y:number;z:number}|undefined)??{x:0,y:1,z:0}
       const direction=new Vector3(base.x+Math.sin(t)*.15,base.y+Math.cos(t*.83)*.15,base.z+Math.cos(t*.7)*.15).normalize()
@@ -202,7 +290,14 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
       for(const child of rig.children){const mat=(child as Mesh).material as MeshBasicMaterial;mat.color.set(phase.color);mat.opacity=phase.intensity/100*(rig.userData.kind==='laser'?.8:.035+phase.fog*.001)}
     }
     const light=rig.userData.light as SpotLight|undefined
-    if(light){light.position.copy(rig.position);light.target.position.copy(new Vector3(0,rig.userData.length,0).applyQuaternion(rig.quaternion).add(rig.position));light.color.set(phase.color);light.intensity=rig.visible?phase.intensity*1.8:0}
+    if(light){
+      if(rig.userData.kind==='spot'){
+        const worldPos=new Vector3();rig.getWorldPosition(worldPos)
+        light.position.copy(worldPos);light.target.position.copy(rig.localToWorld(new Vector3(0,0,rig.userData.length)));light.color.set(phase.color);light.intensity=rig.visible?phase.intensity*1.8:0
+      }else{
+        light.position.copy(rig.position);light.target.position.copy(new Vector3(0,rig.userData.length,0).applyQuaternion(rig.quaternion).add(rig.position));light.color.set(phase.color);light.intensity=rig.visible?phase.intensity*1.8:0
+      }
+    }
   }
 }
 /** A shared pool illuminates the whole map; beam meshes remain visible for every fixture. */
@@ -211,8 +306,8 @@ export function updateStageLightPool(models:Group[],pool:SpotLight[]){
   for(const root of models)for(const rig of (root.userData.effects??[]) as Group[]){if(rig.visible&&rig.userData.kind==='spot')candidates.push(rig)}
   pool.forEach((light,index)=>{
     const rig=candidates[Math.floor(index*candidates.length/pool.length)];if(!rig){light.intensity=0;return}
-    const material=(rig.children[0] as Mesh).material as MeshBasicMaterial
-    rig.getWorldPosition(light.position);light.target.position.copy(rig.localToWorld(new Vector3(0,rig.userData.length,0)));light.color.copy(material.color);light.intensity=45*rig.userData.intensity/100;light.distance=12
+    const material=rig.userData.beamMat as MeshBasicMaterial
+    rig.getWorldPosition(light.position);light.target.position.copy(rig.localToWorld(new Vector3(0,0,rig.userData.length)));light.color.copy(material.color);light.intensity=45*rig.userData.intensity/100;light.distance=12
   })
 }
 export function disposeStageModel(root:Group){root.traverse(o=>{if(o instanceof Mesh||o instanceof LineSegments){o.geometry.dispose();const m=Array.isArray(o.material)?o.material:[o.material];m.forEach(a=>a.dispose())}if(o instanceof SpotLight)o.dispose()})}

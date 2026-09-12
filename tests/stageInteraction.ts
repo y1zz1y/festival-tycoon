@@ -35,11 +35,12 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.ok(stageDesignIssue({...d,parts:[...d.parts,{...dupSide,id:'dupSide'}]}),'the same side cannot hold two speakers')
   assert.equal(removeStagePart(d,'post').parts.length,0,'removing the host removes everything docked onto it')
 
-  // Effects: direction is always just "away from the host truss", derived straight from the grid delta.
+  // Effects: beam direction follows the part's own facing (rotation, as chosen with the
+  // orientation cube), independent of which side of the host truss it happens to dock onto.
   const rig=defaultStageDesign();rig.parts.push({id:'truss',kind:'truss',axis:'x',brand:'budget',x:3,y:1,z:2,rotation:0,attachedTo:null,color:'#ffffff'})
-  const hanging=stagePlacement(rig,{...settings,kind:'spot'},{x:0,z:0},{id:'truss',step:{x:0,y:-1,z:0}});hanging.id='hanging';rig.parts.push(hanging)
+  const hanging=stagePlacement(rig,{...settings,kind:'spot',rotation:5},{x:0,z:0},{id:'truss',step:{x:0,y:-1,z:0}});hanging.id='hanging';rig.parts.push(hanging)
   assert.equal(hanging.attachedTo,'truss');assert.equal(stageDesignIssue(rig),null)
-  const above=stagePlacement(rig,{...settings,kind:'spot'},{x:0,z:0},{id:'truss',step:{x:0,y:1,z:0}});above.id='above';rig.parts.push(above)
+  const above=stagePlacement(rig,{...settings,kind:'spot',rotation:4},{x:0,z:0},{id:'truss',step:{x:0,y:1,z:0}});above.id='above';rig.parts.push(above)
   const laser=stagePlacement(rig,{...settings,kind:'laser'},{x:0,z:0},{id:'truss',step:{x:1,y:0,z:0}});laser.id='laser';rig.parts.push(laser)
   const fog=stagePlacement(rig,{kind:'fog',brand:'touring',rotation:0,color:'#ff88cc'},{x:1,z:4});fog.id='fog';rig.parts.push(fog)
   assert.equal(stageDesignIssue(rig),null,'a ground-only kind rests on the floor while everything else hangs off the truss')
@@ -48,7 +49,11 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   animateStageModel(model,phase,1,true)
   const spots=model.userData.effects.filter((p:any)=>p.userData.kind==='spot')
   assert.equal(spots.length,2)
-  for(const spot of spots){const direction=new Vector3(0,1,0).applyQuaternion(spot.quaternion);assert.equal(direction.y<0,spot.userData.dir.y<0,'a spot below the truss points down, one above points up');assert.ok(spot.userData.light instanceof SpotLight);assert.ok(spot.userData.light.intensity>0)}
+  const beamDirection=(spot:any)=>{const origin=new Vector3();spot.getWorldPosition(origin);return spot.localToWorld(new Vector3(0,0,1)).sub(origin)}
+  const downSpot=spots.find((s:any)=>s.userData.id==='hanging'),upSpot=spots.find((s:any)=>s.userData.id==='above')
+  assert.ok(beamDirection(downSpot).y<0,'a spot rotated to face down points down regardless of mount side')
+  assert.ok(beamDirection(upSpot).y>0,'a spot rotated to face up points up regardless of mount side')
+  for(const spot of spots){assert.ok(spot.userData.light instanceof SpotLight);assert.ok(spot.userData.light.intensity>0)}
   const laserRig=model.userData.effects.find((p:any)=>p.userData.kind==='laser');assert.ok(laserRig.children[0] instanceof LineSegments)
   const fogRig=model.userData.effects.find((p:any)=>p.userData.kind==='fog');assert.equal(fogRig.children.length,3);assert.ok(fogRig.children[0].scale.x>rig.width*.4)
   animateStageModel(model,phase,1,false);assert.ok(spots.every((p:any)=>p.userData.light.intensity===0));disposeStageModel(model)
