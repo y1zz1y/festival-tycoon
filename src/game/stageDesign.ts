@@ -25,7 +25,9 @@ export const TRUSS_BRANDS = {
 export function brandsFor(kind:ComponentKind){return kind==='truss'?TRUSS_BRANDS:BRANDS}
 export type ComponentKind = keyof typeof COMPONENTS
 /** Kinds that stand directly on the ground and never attach to a truss. */
-export const GROUND_ONLY_KINDS:ComponentKind[]=['deck','palm','fog','fireworks','sparks']
+export const GROUND_ONLY_KINDS:ComponentKind[]=['deck','palm','fireworks','sparks']
+/** Kinds that may either stand on the ground or dock onto a truss, unlike GROUND_ONLY_KINDS which can only ever do the former. */
+export const GROUND_OR_TRUSS_KINDS:ComponentKind[]=['fog']
 export type Axis='x'|'y'|'z'
 /** The 6 grid-adjacent cells a part can dock into around a truss (or, for a truss's own end-caps, keep extending a chain). Every attachment — side, top, end, corner — is the same operation: one of these steps. */
 export const NEIGHBOR_STEPS:{x:number;y:number;z:number}[]=[
@@ -70,7 +72,7 @@ export function stageDesignIssue(d:StageDesign):string|null {
     if(!p||typeof p.id!=='string'||p.id.length>80||ids.has(p.id)||!Object.hasOwn(COMPONENTS,p.kind)||!Object.hasOwn(brandsFor(p.kind),p.brand)||![p.x,p.y,p.z,p.rotation].every(Number.isInteger)||p.x<0||p.x>=d.width||p.y<0||p.y>=d.height||p.z<0||p.z>=d.depth||p.rotation<0||p.rotation>5||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.axis!==undefined&&!['x','y','z'].includes(p.axis)))return 'Ungültiges Bühnenelement'
     ids.add(p.id)
     if(p.attachedTo===null){
-      if(p.kind!=='truss'&&!GROUND_ONLY_KINDS.includes(p.kind))return 'Dieses Bauteil braucht eine Traverse als Träger'
+      if(p.kind!=='truss'&&!GROUND_ONLY_KINDS.includes(p.kind)&&!GROUND_OR_TRUSS_KINDS.includes(p.kind))return 'Dieses Bauteil braucht eine Traverse als Träger'
     }else{
       const host=d.parts.find(q=>q?.id===p.attachedTo&&isTruss(q.kind))
       if(!host)return 'Fehlende Trägertraverse'

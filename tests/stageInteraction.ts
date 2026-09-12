@@ -43,7 +43,9 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const above=stagePlacement(rig,{...settings,kind:'spot',rotation:4},{x:0,z:0},{id:'truss',step:{x:0,y:1,z:0}});above.id='above';rig.parts.push(above)
   const laser=stagePlacement(rig,{...settings,kind:'laser'},{x:0,z:0},{id:'truss',step:{x:1,y:0,z:0}});laser.id='laser';rig.parts.push(laser)
   const fog=stagePlacement(rig,{kind:'fog',brand:'touring',rotation:0,color:'#ff88cc'},{x:1,z:4});fog.id='fog';rig.parts.push(fog)
-  assert.equal(stageDesignIssue(rig),null,'a ground-only kind rests on the floor while everything else hangs off the truss')
+  assert.equal(stageDesignIssue(rig),null,'a ground-placed fog machine rests on the floor while everything else hangs off the truss')
+  const foggy=stagePlacement(rig,{kind:'fog',brand:'budget',rotation:2,color:'#88ccff'},{x:0,z:0},{id:'truss',step:{x:0,y:0,z:1}});foggy.id='foggy';rig.parts.push(foggy)
+  assert.equal(foggy.attachedTo,'truss');assert.equal(stageDesignIssue(rig),null,'a fog machine can also dock onto a truss like a spot or laser')
   assert.equal(removeStagePart(rig,'truss').parts.some(p=>p.id==='hanging'),false)
   const model=createStageModel(rig,{lightBudget:6}),phase={intensity:100,speed:60,fog:80,volume:100,color:'#ff55cc'}
   animateStageModel(model,phase,1,true)
@@ -55,7 +57,10 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.ok(beamDirection(upSpot).y>0,'a spot rotated to face up points up regardless of mount side')
   for(const spot of spots){assert.ok(spot.userData.light instanceof SpotLight);assert.ok(spot.userData.light.intensity>0)}
   const laserRig=model.userData.effects.find((p:any)=>p.userData.kind==='laser');assert.ok(laserRig.children[0] instanceof LineSegments)
-  const fogRig=model.userData.effects.find((p:any)=>p.userData.kind==='fog');assert.equal(fogRig.children.length,3);assert.ok(fogRig.children[0].scale.x>rig.width*.4)
+  const fogRig=model.userData.effects.find((p:any)=>p.userData.kind==='fog');assert.equal(fogRig.children.length,6)
+  assert.ok(fogRig.children[fogRig.children.length-1].scale.x>fogRig.children[0].scale.x,'fog puffs widen as they drift outward')
+  const mountedFog=model.userData.effects.find((p:any)=>p.userData.kind==='fog'&&p!==fogRig)
+  assert.ok(mountedFog,'the truss-mounted fog machine also gets its own drifting cloud')
   animateStageModel(model,phase,1,false);assert.ok(spots.every((p:any)=>p.userData.light.intensity===0));disposeStageModel(model)
 
   // A tower is just trusses stacked straight up; branches, chains and corners all reuse the exact same step mechanism.

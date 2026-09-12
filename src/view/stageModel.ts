@@ -1,6 +1,6 @@
 import { Group, Mesh, BoxGeometry, CylinderGeometry, ConeGeometry, SphereGeometry, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, SpotLight, Vector3, Quaternion, Color, DoubleSide, MeshStandardMaterial, MeshBasicMaterial, AdditiveBlending } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { isTruss, stageMotion, mountDirection, partFacing, type StageDesign, type ShowPhase } from '../game/stageDesign'
+import { isTruss, stageMotion, mountDirection, partFacing, STAGE_TILE_DETAIL, type StageDesign, type ShowPhase } from '../game/stageDesign'
 
 const unitX=new Vector3(1,0,0)
 const unitZ=new Vector3(0,0,1)
@@ -56,15 +56,28 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
   let lights=0
   const effect=(kind:string,x:number,y:number,z:number,color:string,dir:{x:number;y:number;z:number})=>{
     if(options.effects===false)return
-    const rig=new Group();rig.position.set(x,y,z);rig.userData.kind=kind;rig.userData.index=effects.length;rig.userData.dir=dir;rig.userData.base=rig.position.clone();rig.userData.length=kind==='laser'?Math.max(4,d.depth*.8):4
-    if(kind==='fireworks'||kind==='sparks'){
+    const rig=new Group();rig.position.set(x,y,z);rig.userData.kind=kind;rig.userData.index=effects.length;rig.userData.dir=dir;rig.userData.base=rig.position.clone()
+    rig.userData.length=kind==='laser'?Math.max(4,d.depth*.8):kind==='fog'?4*STAGE_TILE_DETAIL:kind==='sparks'?5*STAGE_TILE_DETAIL:4
+    if(kind==='fireworks'){
       const points:number[]=[]
       for(let n=0;n<40;n++){const angle=n*2.399963, height=(n+.5)/40, radius=Math.sqrt(1-height*height);points.push(radius*Math.cos(angle),height,radius*Math.sin(angle),radius*Math.cos(angle)*.87,height*.87,radius*Math.sin(angle)*.87)}
       const geometry=new BufferGeometry();geometry.setAttribute('position',new Float32BufferAttribute(points,3));rig.add(new LineSegments(geometry,new LineBasicMaterial({color,transparent:true,blending:AdditiveBlending,depthWrite:false})))
+    }else if(kind==='sparks'){
+      // A narrow cone of spark streaks shooting out to the requested 5-field reach, +Y the
+      // shared outward axis (see rig.quaternion in animateStageModel).
+      const rays=14,reach=rig.userData.length,points:number[]=[]
+      for(let n=0;n<rays;n++){const a=n*2.399963,ring=.08+(n%4)/4*.14,len=reach*(.55+(n*53)%7/7*.45);points.push(0,0,0,Math.cos(a)*ring,len,Math.sin(a)*ring)}
+      const geometry=new BufferGeometry();geometry.setAttribute('position',new Float32BufferAttribute(points,3))
+      rig.add(new LineSegments(geometry,new LineBasicMaterial({color,transparent:true,opacity:.85,blending:AdditiveBlending,depthWrite:false})))
     }else if(kind==='fog'){
-      for(let n=0;n<3;n++){
-        const cloud=new Mesh(new SphereGeometry(1,10,5),new MeshBasicMaterial({color:'#c9d6dd',transparent:true,opacity:.04,depthWrite:false}))
-        cloud.scale.set(Math.max(2,d.width*.42),.28+n*.07,Math.max(2,d.depth*.42));cloud.position.set(-x*.6+(n-1)*.3,.15+n*.18,-z*.6+(n-1)*.3);rig.add(cloud)
+      // A chain of puffs drifting out along the shared outward axis, widening as they
+      // disperse, reaching the requested 4-field length.
+      const puffs=6,reach=rig.userData.length
+      for(let n=0;n<puffs;n++){
+        const t=n/(puffs-1),spread=.55+t*1.6
+        const cloud=new Mesh(new SphereGeometry(1,10,5),new MeshBasicMaterial({color:'#c9d6dd',transparent:true,opacity:.05,depthWrite:false}))
+        cloud.scale.set(spread,spread*.65,spread);cloud.position.set(0,t*reach,0);cloud.userData.travel=t*reach
+        rig.add(cloud)
       }
     }else if(kind==='laser'){
       // A flat wedge of beams fanning out from the lens, +Y the shared outward axis (see rig.quaternion below).
@@ -231,10 +244,75 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         put(0,-.08,-.18,.05,.05,.045,bezel) // DMX/cable stub
         const lens=new Vector3(0,0,.22).applyQuaternion(facingQuat).add(pivot)
         effect('laser',lens.x,lens.y,lens.z,c,facing)
-      }else if(p.kind==='fireworks'||p.kind==='sparks'){
+      }else if(p.kind==='fireworks'){
         box(ex,ey+.15,ez,.65,.3,.65,'#303847');for(const dx of [-.18,.18])box(ex+dx,ey+.38,ez,.13,.25,.13,c);effect(p.kind,ex,ey+.5,ez,c,{x:0,y:1,z:0})
+      }else if(p.kind==='sparks'){
+        // A cold-spark fountain: rigid body built facing local +Z, rotated onto the gizmo's
+        // chosen world direction (ground-standing, so it never docks to a truss).
+        const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
+        const facingQuat=new Quaternion().setFromUnitVectors(unitZ,facingVec)
+        const pivot=new Vector3(ex,ey+.15,ez)
+        const put=(lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string)=>{
+          const g=new BoxGeometry(w,h,depth);g.applyQuaternion(facingQuat)
+          const wp=new Vector3(lx,ly,lz).applyQuaternion(facingQuat).add(pivot)
+          g.translate(wp.x,wp.y,wp.z)
+          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+        }
+        const putFunnel=(lz:number,topRadius:number,bottomRadius:number,height:number,color:string)=>{
+          const g=new CylinderGeometry(topRadius,bottomRadius,height,10)
+          g.applyQuaternion(CYL_TO_FORWARD);g.applyQuaternion(facingQuat)
+          const wp=new Vector3(0,0,lz).applyQuaternion(facingQuat).add(pivot)
+          g.translate(wp.x,wp.y,wp.z)
+          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+        }
+        const housing='#3a3d42',trim='#55595f',bezel='#1c1e21'
+        put(0,0,-.02,.3,.28,.26,housing) // hopper body
+        putFunnel(.2,.14,.08,.2,trim) // funnel neck flaring toward the mouth
+        putFunnel(.32,.02,.14,.03,bezel) // funnel rim
+        put(.14,.02,-.1,.09,.09,.04,bezel) // control box
+        put(.14,.02,-.08,.03,.03,.02,c) // indicator LED, tinted by the chosen colour
+        put(0,-.09,-.16,.06,.05,.05,bezel) // cable stub
+        for(const fx of [-.13,.13])for(const fz of [-.1,.1])put(fx,-.15,fz,.05,.03,.05,bezel) // feet
+        const mouth=new Vector3(0,0,.34).applyQuaternion(facingQuat).add(pivot)
+        effect('sparks',mouth.x,mouth.y,mouth.z,c,facing)
       }else if(p.kind==='fog'){
-        box(ex,ey+.15,ez,.6,.3,.4,'#727789');box(ex,ey+.18,ez+.24,.2,.12,.1,c);effect('fog',ex,ey+.1,ez,'#b9cbd6',{x:0,y:1,z:0})
+        // A hazer: rigid body built facing local +Z, rotated onto the gizmo's chosen world
+        // direction. Stands on the ground like before, but (unlike sparks/fireworks) can now
+        // also dock onto a truss exactly like a laser or moving head.
+        const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
+        const facingQuat=new Quaternion().setFromUnitVectors(unitZ,facingVec)
+        const pivot=new Vector3(ex,ey+.14,ez)
+        const put=(lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string)=>{
+          const g=new BoxGeometry(w,h,depth);g.applyQuaternion(facingQuat)
+          const wp=new Vector3(lx,ly,lz).applyQuaternion(facingQuat).add(pivot)
+          g.translate(wp.x,wp.y,wp.z)
+          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+        }
+        const putTopDisc=(ly:number,radius:number,height:number,color:string)=>{
+          const g=new CylinderGeometry(radius,radius,height,10);g.applyQuaternion(facingQuat)
+          const wp=new Vector3(0,ly,0).applyQuaternion(facingQuat).add(pivot)
+          g.translate(wp.x,wp.y,wp.z)
+          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+        }
+        const putSpout=(lz:number,radius:number,height:number,color:string)=>{
+          const g=new CylinderGeometry(radius,radius,height,10)
+          g.applyQuaternion(CYL_TO_FORWARD);g.applyQuaternion(facingQuat)
+          const wp=new Vector3(0,0,lz).applyQuaternion(facingQuat).add(pivot)
+          g.translate(wp.x,wp.y,wp.z)
+          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+        }
+        const housing='#5b6470',vent='#40474f',bezel='#23272c',foot='#2b2f33'
+        put(0,0,0,.4,.26,.3,housing) // main housing
+        for(const fx of [-.11,0,.11])put(fx,.14,-.03,.05,.03,.18,vent) // heating-element vent ridges
+        putTopDisc(.14,.06,.03,bezel) // fluid tank cap
+        put(0,-.03,.16,.18,.16,.06,bezel) // nozzle collar
+        putSpout(.26,.075,.14,c) // spout, tinted by the chosen colour
+        put(.13,.08,.14,.022,.022,.022,'#ff8a5c') // heat-ready LED
+        put(-.13,.08,.14,.022,.022,.022,'#79e07a') // power LED
+        put(0,-.1,-.16,.06,.05,.05,bezel) // cable stub
+        for(const fx of [-.16,.16])for(const fz of [-.12,.12])put(fx,-.14,fz,.05,.03,.05,foot) // feet
+        const nozzle=new Vector3(0,-.03,.33).applyQuaternion(facingQuat).add(pivot)
+        effect('fog',nozzle.x,nozzle.y,nozzle.z,'#c9d6dd',facing)
       }else if(p.kind==='screen'||p.kind==='banner'){
         box(ex,ey+.6,ez,.9,1.2,.1,'#141c29');for(let a=0;a<5;a++)for(let b=0;b<6;b++)box(ex+(a-2)*.16,ey+.15+b*.17,ez+.07,.14,.14,.03,(a+b)%3?c:'#f3dfb0')
       }else if(p.kind==='star'){
@@ -255,19 +333,31 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
   const offset=active?stageMotion(phase,time):0
   for(const part of root.userData.moving??[])part.position.y=part.userData.restY-offset
   for(const rig of (root.userData.effects??[]) as Group[]){
-    const pyro=['fireworks','sparks'].includes(rig.userData.kind)
+    const pyro=rig.userData.kind==='fireworks',sparks=rig.userData.kind==='sparks'
     rig.position.copy(rig.userData.base);if(rig.userData.moving)rig.position.y-=offset
     const fog=rig.userData.kind==='fog',t=time*(.2+phase.speed/45)+rig.userData.index
     rig.userData.intensity=phase.intensity
-    rig.visible=active&&(pyro?(phase.pyro??0)>0:fog?phase.fog>0:phase.intensity>0)
+    rig.visible=active&&(pyro||sparks?(phase.pyro??0)>0:fog?phase.fog>0:phase.intensity>0)
     if(pyro){
-      const strength=(phase.pyro??0)/100,burst=rig.userData.kind==='fireworks',cycle=((time*(.3+strength*.4)+rig.userData.index*.37)%1+1)%1
-      rig.visible=rig.visible&&(!burst||cycle<.72)
+      const strength=(phase.pyro??0)/100,cycle=((time*(.3+strength*.4)+rig.userData.index*.37)%1+1)%1
+      rig.visible=rig.visible&&cycle<.72
       const rays=rig.children[0] as LineSegments,mat=rays.material as LineBasicMaterial
-      const spread=burst?.2+cycle*3: .35+strength*.6
-      rays.scale.set(spread,burst?spread:1+strength*2,spread);rays.rotation.y=time*.25;rig.position.y+=burst?2+cycle*2:0;mat.color.set(phase.color);mat.opacity=burst?(1-cycle)*strength:strength*(.7+.3*Math.sin(time*17)**2)
+      const spread=.2+cycle*3
+      rays.scale.set(spread,spread,spread);rays.rotation.y=time*.25;rig.position.y+=2+cycle*2;mat.color.set(phase.color);mat.opacity=(1-cycle)*strength
+    }else if(sparks){
+      const base=(rig.userData.dir as {x:number;y:number;z:number}|undefined)??{x:0,y:1,z:0}
+      rig.quaternion.setFromUnitVectors(up,new Vector3(base.x,base.y,base.z))
+      const strength=(phase.pyro??0)/100,rays=rig.children[0] as LineSegments,mat=rays.material as LineBasicMaterial
+      mat.color.set(phase.color);mat.opacity=strength*(.7+.3*Math.sin(time*19+rig.userData.index)**2)
     }else if(fog){
-      rig.children.forEach((child,n)=>{const mesh=child as Mesh,mat=mesh.material as MeshBasicMaterial;mat.opacity=phase.fog/100*(.065+Math.sin(t*.25+n)*.015);mesh.position.y=.12+n*.18+Math.sin(t*.3+n)*.08;mesh.rotation.y=Math.sin(t*.1+n)*.12})
+      const base=(rig.userData.dir as {x:number;y:number;z:number}|undefined)??{x:0,y:1,z:0}
+      rig.quaternion.setFromUnitVectors(up,new Vector3(base.x,base.y,base.z))
+      rig.children.forEach((child,n)=>{
+        const mesh=child as Mesh,mat=mesh.material as MeshBasicMaterial
+        mat.opacity=phase.fog/100*(.05+Math.sin(t*.25+n)*.014)
+        mesh.position.y=mesh.userData.travel+Math.sin(t*.3+n)*.15
+        mesh.position.x=Math.sin(t*.22+n*1.3)*.5;mesh.position.z=Math.cos(t*.19+n*1.1)*.5
+      })
     }else if(rig.userData.kind==='spot'){
       // Pan spins the arm around its own mount-perpendicular axis (baseQuat's local Z, since
       // the base sits flush against the truss and the arms always rise away from it); tilt
@@ -287,7 +377,7 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
       const base=(rig.userData.dir as {x:number;y:number;z:number}|undefined)??{x:0,y:1,z:0}
       const direction=new Vector3(base.x+Math.sin(t)*.15,base.y+Math.cos(t*.83)*.15,base.z+Math.cos(t*.7)*.15).normalize()
       rig.quaternion.setFromUnitVectors(up,direction)
-      for(const child of rig.children){const mat=(child as Mesh).material as MeshBasicMaterial;mat.color.set(phase.color);mat.opacity=phase.intensity/100*(rig.userData.kind==='laser'?.8:.035+phase.fog*.001)}
+      for(const child of rig.children){const mat=(child as Mesh).material as MeshBasicMaterial;mat.color.set(phase.color);mat.opacity=phase.intensity/100*.8}
     }
     const light=rig.userData.light as SpotLight|undefined
     if(light){
