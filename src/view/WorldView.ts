@@ -11,6 +11,7 @@ import { activeBookings, showIssue } from '../game/festivalManagement'
 import { createEarthTexture, createTerrainBase, createTerrainMaterial, createTerrainSurface } from './terrainSurface'
 import { TerrainShape, terrainPads } from './terrainShape'
 import { FestivalLightsView } from './FestivalLightsView'
+import { createRoadDirectionArrowGeometry } from './roadDirectionArrow'
 import { wayTexture } from './wayTextures'
 import type { WayType } from '../game/wayTypes'
 import { wayInfo } from '../game/wayTypes'
@@ -417,6 +418,7 @@ export class WorldView {
   private onCellClick: CellHandler
   private onCellHover: HoverHandler
   private onStaffClick: VisitorHandler = () => {}
+  private onVehicleClick: VisitorHandler = () => {}
   private followedStaffId: string | null = null
   private staffPreview: PersonPreviewSlot | null = null
   private visitorPreview: PersonPreviewSlot | null = null
@@ -506,9 +508,11 @@ export class WorldView {
       transparent: true,
       opacity: 0.55,
       depthWrite: false,
+      side: DoubleSide,
     })
     this.preview = new Mesh(new BoxGeometry(0.94, 0.12, 0.94), previewMaterial)
-    this.previewArrow = new Mesh(new ConeGeometry(0.13, 0.32, 3), previewMaterial)
+    this.previewArrow = new Mesh(createRoadDirectionArrowGeometry(), previewMaterial)
+    this.previewArrow.renderOrder = 8
     this.constructionAnchor = new Mesh(
       new BoxGeometry(0.72, 0.18, 0.72),
       new MeshStandardMaterial({ color: 0x38c6ef, transparent: true, opacity: 0.72 }),
@@ -646,6 +650,8 @@ export class WorldView {
       (x, z) => { const g = groundInfo(snapshot, x, z); if (g.roadway) return wayInfo(snapshot, x, z, 'road').color; return !this.logisticsMode ? 0x50555a : g.surface === 'paved' ? 0x50555a : g.surface === 'gravel' ? 0x8f948b : 0x8b7551 },
       (x, z) => snapshot.festival.infrastructure.ground[`${x},${z}`]?.roadway,
       snapshot.speed === 0,
+      undefined,
+      snapshot.selectedTool === 'roadDirection',
     )
     const showPower =
       snapshot.selectedTool === 'powerCable' ||
@@ -893,6 +899,10 @@ export class WorldView {
   }
 
   setStaffClickHandler(handler: VisitorHandler): void { this.onStaffClick = handler }
+  setVehicleClickHandler(handler: VisitorHandler): void { this.onVehicleClick = handler }
+  setInspectedVehicle(id: string | null): void {
+    this.logisticsView.setInspectedVehicle(id)
+  }
   followStaff(id: string | null): void {
     this.followedStaffId = id
     if (id) {
@@ -2308,6 +2318,11 @@ export class WorldView {
     for (const batch of this.emotionInstances.values()) batch.count = 0
     let cartIndex = 0
     const hiddenMatrix = this.visitorHiddenMatrix
+    const hiddenPassengers = new Set<string>()
+    for (const vehicle of this.currentSnapshot?.logistics.roadVehicles ?? []) {
+      if (vehicle.state === 'parked') continue
+      for (const passengerId of vehicle.passengerIds) hiddenPassengers.add(passengerId)
+    }
 
     visitors.forEach((visitor, index) => {
       const previous = this.previousVisitorPositions.get(visitor.id)
@@ -2321,6 +2336,7 @@ export class WorldView {
         visitor.state !== 'vehicle-arrival' &&
         visitor.state !== 'bus-riding' &&
         visitor.state !== 'medical' &&
+        !hiddenPassengers.has(visitor.id) &&
         !(visitor.state === 'camping' && visitor.campingPhase === 'resting')
       if (!visible) {
         for (let meshIndex = 0; meshIndex < meshes.length; meshIndex += 1) {
@@ -2843,10 +2859,13 @@ export class WorldView {
         const staffHit = inspecting ? this.raycaster.intersectObjects([...(this.staffView.group.visible?this.staffView.group.children:[]),...this.supplyChainView.getStaffMeshes()],true)[0] : undefined
         const staffId = staffHit?.object.userData.staffId
         const visitorId = inspecting ? this.pickVisitor(event) : null
+        const vehicleId = inspecting ? this.pickVehicle() : null
         const scenery = inspecting || this.currentSnapshot?.selectedTool === 'bulldoze' ? this.pickScenery() : null
         if (typeof staffId === 'string') this.onStaffClick(staffId)
         else if (visitorId) {
           this.onVisitorClick(visitorId)
+        } else if (vehicleId) {
+          this.onVehicleClick(vehicleId)
         } else if (scenery) {
           this.onCellClick(scenery)
         } else if (this.hoveredCell) {
@@ -3026,6 +3045,19 @@ export class WorldView {
     if (!building || !isScenery(building.kind)) return null
     const position = sceneryTransform(building)
     return { x: building.x, z: building.z, localX: position.x, localZ: position.z, buildingId: building.id }
+  }
+
+  private pickVehicle(): string | null {
+    const hit = this.raycaster.intersectObject(
+      this.logisticsView.getVehiclePickRoot(),
+      true,
+    )[0]
+    let object: Object3D | null = hit?.object ?? null
+    while (object) {
+      if (typeof object.userData.vehicleId === 'string') return object.userData.vehicleId
+      object = object.parent
+    }
+    return null
   }
 
   private pickVisitor(event: PointerEvent): string | null {
@@ -3236,14 +3268,17 @@ export class WorldView {
     this.previewArrow.visible = showDirectionArrow
     if (showDirectionArrow) {
       const angle = this.currentSnapshot.buildRotation * (Math.PI / 2)
+      const directing = tool === 'roadDirection'
+      this.previewArrow.scale.setScalar(directing ? 1.15 : 0.72)
       this.previewArrow.position.set(
-        this.hoveredCell.x + 0.5 + Math.sin(angle) * 0.62,
-        elevation + 0.32,
-        this.hoveredCell.z + 0.5 + Math.cos(angle) * 0.62,
+        this.hoveredCell.x + 0.5 + Math.sin(angle) * (directing ? 0 : 0.22),
+        elevation + (directing ? 0.05 : 0.04),
+        this.hoveredCell.z + 0.5 + Math.cos(angle) * (directing ? 0 : 0.22),
       )
-      this.previewArrow.rotation.set(Math.PI / 2, angle, 0)
+      this.previewArrow.rotation.set(0, angle, 0)
       const arrowMaterial = this.previewArrow.material as MeshStandardMaterial
       arrowMaterial.color.copy(material.color)
+      arrowMaterial.opacity = directing ? 0.92 : 0.7
     }
   }
 

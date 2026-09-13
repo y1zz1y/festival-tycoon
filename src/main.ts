@@ -30,6 +30,11 @@ import type {
 } from './game/coasters'
 import { GameState } from './game/GameState'
 import type { PlacedBuilding } from './game/GameState'
+import {
+  describeRoadVehicleActivity,
+  describeRoadVehicleDestination,
+  ROAD_VEHICLE_KIND_LABELS,
+} from './game/logistics'
 import { groupVisitorsByThought } from './game/visitorThoughts'
 import { enableMultiplayerCommands } from './net/bind'
 import { MultiplayerSession } from './net/session'
@@ -1122,7 +1127,7 @@ let coasterEditIndex = -1
 let coasterAccessMode: 'entrance' | 'exit' | null = null
 let coasterTargetPitch = 0
 let coasterTargetBank = 0
-let selectedEntity: { type: 'building' | 'coaster'; id: string } | null = null
+let selectedEntity: { type: 'building' | 'coaster' | 'vehicle'; id: string } | null = null
 let entityTab: 'overview' | 'dynamics' = 'overview'
 let unsubscribe: () => void = () => {}
 let toastTimer = 0
@@ -1219,6 +1224,7 @@ const setFestivalWalk = (enabled: boolean): void => {
   }
   view.setWalkMode(enabled)
 }
+view.setVehicleClickHandler((vehicleId) => openEntityInfoForVehicle(vehicleId))
 view.setWalkModeListener(syncWalkModeUi)
 walkModeButton.addEventListener('click', () => setFestivalWalk(!view.isWalkMode()))
 {
@@ -1905,6 +1911,11 @@ function handleCellClick(cell: CellPosition): void {
 
   const tool = game.snapshot.selectedTool
   if (tool === 'inspect') {
+    const vehicle = game.getVehicleAt(cell.x, cell.z)
+    if (vehicle) {
+      openEntityInfoForVehicle(vehicle.id)
+      return
+    }
     const coaster = game.getCoasterAt(cell.x, cell.z)
     if (coaster) {
       if (!coaster.closed) {
@@ -2888,6 +2899,7 @@ function selectVisitor(visitorId: string): void {
   }
   selectedEntity = null
   entityPanel.hidden = true
+  view.setInspectedVehicle(null)
   staffDetails.close()
   view.setVisitorPreviewTarget(visitorId)
   view.setVisitorPreviewMode(visitorPreviewMode)
@@ -3140,6 +3152,7 @@ function openEntityInfoForBuilding(buildingId: string): void {
   selectedEntity = { type: 'building', id: buildingId }
   entityTab = 'overview'
   hideVisitorPanel()
+  view.setInspectedVehicle(null)
   entityPanel.hidden = false
   updateEntityPanel()
 }
@@ -3149,6 +3162,18 @@ function openEntityInfoForCoaster(coasterId: string): void {
   selectedEntity = { type: 'coaster', id: coasterId }
   entityTab = 'overview'
   hideVisitorPanel()
+  view.setInspectedVehicle(null)
+  entityPanel.hidden = false
+  updateEntityPanel()
+}
+
+function openEntityInfoForVehicle(vehicleId: string): void {
+  closeRideBuilder(false)
+  selectedEntity = { type: 'vehicle', id: vehicleId }
+  entityTab = 'overview'
+  hideVisitorPanel()
+  staffDetails.close()
+  view.setInspectedVehicle(vehicleId)
   entityPanel.hidden = false
   updateEntityPanel()
 }
@@ -3157,6 +3182,45 @@ function updateEntityPanel(): void {
   requireElement<HTMLElement>('#open-ride-construction').hidden=true
   editStageButton.hidden = true
   if (!selectedEntity) return
+  if (selectedEntity.type === 'vehicle') {
+    const vehicle = game.snapshot.logistics.roadVehicles.find(
+      (item) => item.id === selectedEntity?.id,
+    )
+    if (!vehicle) {
+      closeEntityPanel()
+      return
+    }
+    const kind = ROAD_VEHICLE_KIND_LABELS[vehicle.kind]
+    const destination = describeRoadVehicleDestination(vehicle)
+    entityIcon.textContent = kind.icon
+    entityType.textContent = kind.name
+    entityName.textContent = kind.name
+    entityStatus.textContent = describeRoadVehicleActivity(vehicle)
+    entityStats.innerHTML = `
+      <span>Status <b>${describeRoadVehicleActivity(vehicle)}</b></span>
+      ${destination ? `<span>Ziel <b>${destination}</b></span>` : ''}
+      <span>Route <b>${vehicle.route.length} Felder</b></span>
+      <span>Insassen <b>${vehicle.passengerIds.length}</b></span>
+      ${
+        vehicle.waitMinutes > 0
+          ? `<span>Wartet seit <b>${vehicle.waitMinutes.toFixed(1)} min</b></span>`
+          : ''
+      }
+      ${
+        vehicle.cargo > 0
+          ? `<span>Ladung <b>${vehicle.cargo}</b></span>`
+          : ''
+      }
+    `
+    entityTabs.classList.remove('visible')
+    entityOverview.hidden = false
+    entityDynamics.classList.remove('visible')
+    priceOptions.classList.remove('visible')
+    applyPriceToKindButton.hidden = true
+    securityOptions.classList.remove('visible')
+    coasterOptions.classList.remove('visible')
+    return
+  }
   if (selectedEntity.type === 'building') {
     const building = game.snapshot.buildings.find((item) => item.id === selectedEntity?.id)
     if (!building) {
@@ -3494,6 +3558,7 @@ function drawTelemetryChart(coaster: Coaster): void {
 function closeEntityPanel(): void {
   if (rideAccessPlacement) cancelRideAccessPlacement()
   selectedEntity = null
+  view.setInspectedVehicle(null)
   entityPanel.hidden = true
 }
 

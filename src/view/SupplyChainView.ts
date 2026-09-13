@@ -147,7 +147,15 @@ export class SupplyChainView {
       model.getObjectByName('load')!.visible = loaded && !truck
       model.getObjectByName('driver')!.visible = stuck
     }
-    for (const t of i.trucks) actor(t.id, true, t.x, getTerrainHeight(s.terrain, t.x, t.z), t.z, t.cargo > 0, t.stuck > 0)
+    const deliveryIds = new Set(
+      s.logistics.roadVehicles
+        .filter((vehicle) => vehicle.kind === 'deliveryTruck')
+        .flatMap((vehicle) => [vehicle.id, vehicle.deliveryId ?? '']),
+    )
+    for (const t of i.trucks) {
+      if (deliveryIds.has(t.id)) continue
+      actor(t.id, true, t.x, getTerrainHeight(s.terrain, t.x, t.z), t.z, t.cargo > 0, t.stuck > 0)
+    }
     for (const r of i.routes) actor(r.id, false, r.position.x, r.position.elevation, r.position.z, r.cargo > 0, false)
     for (const v of s.logistics.roadVehicles) if ((v.stuckMinutes ?? 0) > 0 && v.cell) {
       actor(`push-${v.id}`, false, v.cell.x, getTerrainHeight(s.terrain, v.cell.x, v.cell.z), v.cell.z, false, true)

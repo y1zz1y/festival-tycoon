@@ -3,12 +3,20 @@ import { wayTexture } from './wayTextures'
 import type { WayType } from '../game/wayTypes'
 import {
   BoxGeometry,
-  ConeGeometry,
+  BufferGeometry,
   CylinderGeometry,
   Group,
+  InstancedMesh,
+  Line,
+  LineBasicMaterial,
+  Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
+  DoubleSide,
   PlaneGeometry,
+  Quaternion,
+  Vector3,
 } from 'three'
 import type { Object3D } from 'three'
 import type {
@@ -24,6 +32,7 @@ import type {
   RoadVehicle,
 } from '../game/logistics'
 import { disposeObject3D } from './disposeObject3D'
+import { createRoadDirectionArrowGeometry } from './roadDirectionArrow'
 
 type FacilityLike = AmbulanceGarage | BusDepot | BusStop | WasteDepot | SpecialDepot
 type VehicleLike = RoadVehicle & {
@@ -109,6 +118,32 @@ function sharedMaterial(color: number, roughness = 0.8): MeshStandardMaterial {
   return material
 }
 
+const FLOW_ARROWS = 5
+const FLOW_UP = new Vector3(0, 1, 0)
+const flowArrowGeometry = createRoadDirectionArrowGeometry()
+const roadArrowGeometry = createRoadDirectionArrowGeometry()
+const flowMaterial = new MeshBasicMaterial({
+  color: 0xffe27a,
+  transparent: true,
+  opacity: 0.92,
+  depthWrite: false,
+  depthTest: false,
+  side: DoubleSide,
+})
+const roadArrowMaterial = new MeshStandardMaterial({
+  color: 0xf4f0de,
+  roughness: 0.82,
+  metalness: 0,
+  side: DoubleSide,
+})
+
+type DirectionFlowMark = {
+  x: number
+  z: number
+  y: number
+  direction: Direction
+}
+
 function addBox(
   parent: Group,
   size: readonly [number, number, number],
@@ -180,14 +215,36 @@ export class LogisticsView {
   private lastAnimationTime: number | null = null
   private movementFactor = 0
   private staticFingerprint = ''
+  private inspectedVehicleId: string | null = null
+  private inspectStamp = ''
+  private inspectRoute: Line | null = null
   private getGroundY: (x: number, z: number) => number = () => 0
+  private readonly flowGroup = new Group()
+  private flowMarks: DirectionFlowMark[] = []
+  private flowArrows: InstancedMesh | null = null
+  private flowPhase = 0
+  private facingFactor = 0
+  private readonly flowMatrix = new Matrix4()
+  private readonly flowPosition = new Vector3()
+  private readonly flowScale = new Vector3()
+  private readonly flowQuaternion = new Quaternion()
 
   constructor() {
-    this.group.add(this.staticGroup, this.vehicleGroup)
+    this.flowGroup.renderOrder = 6
+    this.group.add(this.staticGroup, this.vehicleGroup, this.flowGroup)
   }
 
   invalidate(): void {
     this.staticFingerprint = ''
+  }
+
+  setInspectedVehicle(id: string | null): void {
+    this.inspectedVehicleId = id
+    this.inspectStamp = ''
+  }
+
+  getVehiclePickRoot(): Group {
+    return this.vehicleGroup
   }
 
   update(
@@ -197,10 +254,12 @@ export class LogisticsView {
     roadSurface: (x: number, z: number) => WayType | undefined = () => undefined,
     paused = false,
     time = performance.now(),
+    showDirectionFlow = false,
   ): void {
     const seconds=this.lastAnimationTime===null?0:Math.min(.25,Math.max(0,(time-this.lastAnimationTime)/1000))
     this.lastAnimationTime=time
     this.movementFactor=paused?0:transportMotionFactor(seconds)
+    this.facingFactor=paused?0:1-Math.exp(-seconds/0.32)
     this.getGroundY = getGroundY
     this.roadColor = roadColor
     this.roadSurface = roadSurface
@@ -220,6 +279,12 @@ export class LogisticsView {
     }
     this.updateParkingOccupancy(logistics.parkingCells)
     this.updateVehicles(logistics.roadVehicles)
+    this.updateInspectRoute(logistics.roadVehicles)
+    this.flowGroup.visible = showDirectionFlow
+    if (showDirectionFlow) {
+      this.flowPhase += seconds * 0.42
+      this.updateDirectionFlow()
+    }
   }
 
   private groundY(x: number, z: number): number {
@@ -256,6 +321,7 @@ export class LogisticsView {
     logistics.busStops.forEach((stop) => {
       this.staticGroup.add(this.createBusStop(stop))
     })
+    this.rebuildDirectionFlow(logistics)
   }
 
   private createRoad(road: RoadCell, roadKeys: ReadonlySet<string>): Group {
@@ -320,15 +386,10 @@ export class LogisticsView {
       ? []
       : directionsFromMask(road.allowedDirections)
     ).forEach((direction) => {
-      const arrow = new Mesh(
-        new ConeGeometry(0.095, 0.24, 3),
-        new MeshStandardMaterial({ color: 0xf4f5ed, roughness: 0.8 }),
-      )
-      arrow.rotation.x = HALF_PI
+      const arrow = new Mesh(roadArrowGeometry, roadArrowMaterial)
       arrow.rotation.y = DIRECTION_ANGLE[direction]
+      arrow.position.y = 0.018
       arrow.scale.setScalar(0.72)
-      const [offsetX, offsetZ] = offsets[direction]
-      arrow.position.set(offsetX * 0.2, 0.036, offsetZ * 0.2)
       group.add(arrow)
     })
 
@@ -349,6 +410,78 @@ export class LogisticsView {
       }
     })
     return group
+  }
+
+  private rebuildDirectionFlow(logistics: Readonly<LogisticsSnapshot>): void {
+    this.flowMarks = logistics.roadCells.flatMap((road) => {
+      if (road.allowedDirections === null) return []
+      const y = this.groundY(road.x, road.z)
+      return directionsFromMask(road.allowedDirections).map((direction) => ({
+        x: road.x,
+        z: road.z,
+        y,
+        direction,
+      }))
+    })
+    const count = Math.max(1, this.flowMarks.length * FLOW_ARROWS)
+    if (this.flowArrows && this.flowArrows.instanceMatrix.count === count) {
+      this.updateDirectionFlow()
+      return
+    }
+    this.clearDirectionFlow()
+    this.flowArrows = new InstancedMesh(flowArrowGeometry, flowMaterial, count)
+    this.flowArrows.frustumCulled = false
+    this.flowArrows.renderOrder = 7
+    this.flowGroup.add(this.flowArrows)
+    this.updateDirectionFlow()
+  }
+
+  private clearDirectionFlow(): void {
+    this.flowArrows?.removeFromParent()
+    this.flowArrows?.dispose()
+    this.flowArrows = null
+  }
+
+  private updateDirectionFlow(): void {
+    if (!this.flowArrows) return
+    const offsets: Readonly<Record<Direction, readonly [number, number]>> = {
+      0: [0, 1],
+      1: [1, 0],
+      2: [0, -1],
+      3: [-1, 0],
+    }
+    let index = 0
+    this.flowMarks.forEach((mark) => {
+      const [offsetX, offsetZ] = offsets[mark.direction]
+      this.flowQuaternion.setFromAxisAngle(FLOW_UP, DIRECTION_ANGLE[mark.direction])
+      for (let step = 0; step < FLOW_ARROWS; step += 1) {
+        const travel = (this.flowPhase + step / FLOW_ARROWS) % 1
+        const along = (travel - 0.5) * 0.82
+        const edge = Math.min(travel, 1 - travel)
+        const appear = Math.min(1, edge / 0.14)
+        const size = 0.78 * appear
+        this.flowPosition.set(
+          mark.x + 0.5 + offsetX * along,
+          mark.y + 0.08,
+          mark.z + 0.5 + offsetZ * along,
+        )
+        this.flowScale.set(size, size, size)
+        this.flowMatrix.compose(
+          this.flowPosition,
+          this.flowQuaternion,
+          this.flowScale,
+        )
+        this.flowArrows!.setMatrixAt(index, this.flowMatrix)
+        index += 1
+      }
+    })
+    const hidden = this.flowMatrix.makeScale(0, 0, 0)
+    while (index < this.flowArrows.count) {
+      this.flowArrows.setMatrixAt(index, hidden)
+      index += 1
+    }
+    this.flowArrows.instanceMatrix.needsUpdate = true
+    this.flowArrows.count = this.flowMarks.length * FLOW_ARROWS
   }
 
   private updateParkingOccupancy(spaces: readonly ParkingCell[]): void {
@@ -467,25 +600,96 @@ export class LogisticsView {
       if (!model) {
         model = this.createVehicle(kind)
         model.userData.vehicleKind = kind
+        model.userData.vehicleId = vehicle.id
+        model.traverse((object) => {
+          object.userData.vehicleId = vehicle.id
+        })
         model.position.set(targetX, targetY, targetZ)
         model.rotation.y = this.vehicleFacing(vehicle, 0, 0)
         this.vehicleModels.set(vehicle.id, model)
         this.vehicleGroup.add(model)
       } else {
+        model.userData.vehicleId = vehicle.id
         const facing = this.vehicleFacing(
           vehicle,
           targetX - model.position.x,
           targetZ - model.position.z,
         )
-        model.position.x += (targetX - model.position.x) * this.movementFactor
-        model.position.y += (targetY - model.position.y) * this.movementFactor
-        model.position.z += (targetZ - model.position.z) * this.movementFactor
-        model.rotation.y += Math.atan2(
-          Math.sin(facing - model.rotation.y),
-          Math.cos(facing - model.rotation.y),
-        ) * this.movementFactor
+        if (vehicle.state === 'parked') {
+          model.position.set(targetX, targetY, targetZ)
+          model.rotation.y = facing
+        } else {
+          model.position.x += (targetX - model.position.x) * this.movementFactor
+          model.position.y += (targetY - model.position.y) * this.movementFactor
+          model.position.z += (targetZ - model.position.z) * this.movementFactor
+          model.rotation.y += Math.atan2(
+            Math.sin(facing - model.rotation.y),
+            Math.cos(facing - model.rotation.y),
+          ) * this.facingFactor
+        }
       }
     })
+  }
+
+  private updateInspectRoute(vehicles: readonly VehicleLike[]): void {
+    const vehicle = this.inspectedVehicleId
+      ? vehicles.find((candidate) => candidate.id === this.inspectedVehicleId)
+      : undefined
+    if (!vehicle) {
+      this.clearInspectRoute()
+      return
+    }
+    const cells: Array<{ x: number; z: number }> = [
+      vehicle.position,
+      ...vehicle.route,
+    ]
+    if (
+      vehicle.parkingCell &&
+      vehicle.state !== 'parked' &&
+      (cells.at(-1)?.x !== vehicle.parkingCell.x ||
+        cells.at(-1)?.z !== vehicle.parkingCell.z)
+    ) {
+      cells.push(vehicle.parkingCell)
+    }
+    const stamp = `${vehicle.id}:${vehicle.state}:${cells
+      .map((cell) => `${cell.x},${cell.z}`)
+      .join('>')}`
+    if (stamp === this.inspectStamp) return
+    this.inspectStamp = stamp
+    this.clearInspectRoute()
+    if (cells.length < 2) return
+    const points = cells.map(
+      (cell) =>
+        new Vector3(
+          cell.x + 0.5,
+          this.groundY(cell.x, cell.z) + 0.28,
+          cell.z + 0.5,
+        ),
+    )
+    const line = new Line(
+      new BufferGeometry().setFromPoints(points),
+      new LineBasicMaterial({
+        color: 0xf4d35e,
+        depthTest: false,
+      }),
+    )
+    line.userData.inspectRoute = true
+    this.inspectRoute = line
+    this.vehicleGroup.add(line)
+  }
+
+  private clearInspectRoute(): void {
+    if (!this.inspectRoute) {
+      this.inspectStamp = ''
+      return
+    }
+    this.vehicleGroup.remove(this.inspectRoute)
+    this.inspectRoute.geometry.dispose()
+    const material = this.inspectRoute.material
+    if (Array.isArray(material)) material.forEach((entry) => entry.dispose())
+    else material.dispose()
+    this.inspectRoute = null
+    this.inspectStamp = ''
   }
 
   private vehicleFacing(
@@ -510,6 +714,7 @@ export class LogisticsView {
     if (kind === 'ambulance') return this.createCar(0xf4f4ee, true)
     if (kind === 'bus') return this.createBus()
     if (kind === 'garbageTruck') return this.createGarbageTruck()
+    if (kind === 'deliveryTruck') return this.createDeliveryTruck()
     if (kind === 'sweeper') return this.createSweeper()
     return this.createCar(0x3479ad, false)
   }
@@ -556,6 +761,25 @@ export class LogisticsView {
           1,
           [0, 0, HALF_PI],
         )
+      })
+    })
+    return group
+  }
+
+  private createDeliveryTruck(): Group {
+    const group = new Group()
+    addSharedBox(group, [0.46, 0.36, 0.52], [0, 0.32, 0.08], 0xe1bb62, 0.55)
+    addSharedBox(group, [0.4, 0.28, 0.26], [0, 0.3, -0.32], 0x518fa0, 0.45)
+    addSharedBox(group, [0.3, 0.12, 0.02], [0, 0.34, -0.44], 0x86b4c7, 0.3)
+    ;[-0.2, 0.2].forEach((x) => {
+      ;[-0.3, 0.22].forEach((z) => {
+        const wheel = new Mesh(
+          sharedCylinderGeometry(0.09, 0.055),
+          sharedMaterial(0x202326, 1),
+        )
+        wheel.rotation.z = HALF_PI
+        wheel.position.set(x, 0.12, z)
+        group.add(wheel)
       })
     })
     return group

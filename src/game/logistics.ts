@@ -39,7 +39,7 @@ export type ArrivalGroup = {
   entryFeesPaid: boolean
 }
 
-export type RoadVehicleKind = 'visitorCar' | 'ambulance' | 'bus' | 'garbageTruck' | 'sweeper'
+export type RoadVehicleKind = 'visitorCar' | 'ambulance' | 'bus' | 'garbageTruck' | 'sweeper' | 'deliveryTruck'
 export type RoadVehicleState =
   | 'idle'
   | 'driving'
@@ -80,6 +80,97 @@ export type RoadVehicle = {
   nextStopIndex: number
   resumeState: RoadVehicleState | null
   cargo: number
+  deliveryId?: string | null
+}
+
+export const ROAD_VEHICLE_KIND_LABELS: Record<
+  RoadVehicleKind,
+  { icon: string; name: string }
+> = {
+  visitorCar: { icon: '🚗', name: 'Besucherauto' },
+  ambulance: { icon: '🚑', name: 'Krankenwagen' },
+  bus: { icon: '🚌', name: 'Bus' },
+  garbageTruck: { icon: '🚛', name: 'Müllfahrzeug' },
+  sweeper: { icon: '🧹', name: 'Saugreiniger' },
+  deliveryTruck: { icon: '🚚', name: 'Lieferfahrzeug' },
+}
+
+export function vehicleFacingDirection(facing: number): Direction {
+  return ((Math.round(facing / (Math.PI / 2)) % 4 + 4) % 4) as Direction
+}
+
+export function isVehicleReversing(vehicle: RoadVehicle): boolean {
+  const next = vehicle.route[0]
+  const here = vehicle.cell ?? vehicle.position
+  if (!next) return false
+  const move = directionFromDelta(next.x - here.x, next.z - here.z)
+  return (
+    move !== null &&
+    move === oppositeDirection(vehicleFacingDirection(vehicle.facing))
+  )
+}
+
+export function describeRoadVehicleActivity(vehicle: RoadVehicle): string {
+  if ((vehicle.stuckMinutes ?? 0) > 0) return 'Steckt im Schlamm fest'
+  if (isVehicleReversing(vehicle)) return 'Setzt zurück'
+  const queued =
+    vehicle.route.length > 0 &&
+    vehicle.waitMinutes > 0 &&
+    (vehicle.state === 'driving' ||
+      vehicle.state === 'responding' ||
+      vehicle.state === 'returning' ||
+      vehicle.state === 'parking')
+  if (queued) return 'Wartet, bis die Fahrbahn frei ist'
+  switch (vehicle.state) {
+    case 'parked':
+      return 'Steht auf dem Parkplatz'
+    case 'parking':
+      return 'Rangiert auf den Parkplatz'
+    case 'waiting':
+      return vehicle.resumeState
+        ? 'Wartet nach einem Zwischenfall'
+        : vehicle.parkingCell || vehicle.target?.kind === 'parking'
+          ? 'Wartet auf die Zufahrt zum Parkplatz'
+          : 'Wartet auf der Straße'
+    case 'driving':
+      if (vehicle.kind === 'deliveryTruck') return 'Fährt zur Anlieferung'
+      if (vehicle.target?.kind === 'parking') return 'Fährt zum Parkplatz'
+      if (vehicle.target?.kind === 'hold') return 'Sucht einen freien Parkplatz'
+      if (vehicle.target?.kind === 'cruise') {
+        return 'Fährt auf der Straße und sucht einen Parkplatz'
+      }
+      if (vehicle.target?.kind === 'busStop') return 'Fährt zur nächsten Haltestelle'
+      if (vehicle.target?.kind === 'wasteDump') return 'Fährt zur Müllkippe'
+      if (vehicle.target?.kind === 'depot') return 'Fährt zum Betriebshof'
+      if (vehicle.target?.kind === 'garage') return 'Fährt zur Garage'
+      if (vehicle.target?.kind === 'cell') return 'Fährt zum Ziel'
+      return 'Unterwegs'
+    case 'responding':
+      return 'Fährt zum Einsatz'
+    case 'returning':
+      return vehicle.kind === 'visitorCar' || vehicle.kind === 'deliveryTruck'
+        ? 'Fährt vom Gelände ab'
+        : 'Fährt zurück'
+    case 'at-stop':
+      return 'Hält an der Haltestelle'
+    case 'idle':
+      return 'Wartet auf den nächsten Auftrag'
+  }
+}
+
+export function describeRoadVehicleDestination(vehicle: RoadVehicle): string | null {
+  if (vehicle.parkingCell && vehicle.state !== 'parked') {
+    return `Parkplatz ${vehicle.parkingCell.x}, ${vehicle.parkingCell.z}`
+  }
+  if (vehicle.target?.kind === 'busStop') return 'Nächste Bushaltestelle'
+  if (vehicle.kind === 'deliveryTruck' && vehicle.target?.kind === 'depot') {
+    return 'Anlieferungsplatz'
+  }
+  if (vehicle.target?.kind === 'cell') {
+    return `Feld ${vehicle.target.x}, ${vehicle.target.z}`
+  }
+  const last = vehicle.route.at(-1)
+  return last ? `Feld ${last.x}, ${last.z}` : null
 }
 
 export type AmbulanceGarage = RoadPosition & {
@@ -175,6 +266,7 @@ const VEHICLE_KINDS: readonly RoadVehicleKind[] = [
   'bus',
   'garbageTruck',
   'sweeper',
+  'deliveryTruck',
 ]
 const VEHICLE_STATES: readonly RoadVehicleState[] = [
   'idle',
@@ -488,6 +580,7 @@ function normalizeRoadVehicle(value: unknown): RoadVehicle | null {
     nextStopIndex: Math.floor(nonNegativeNumber(source.nextStopIndex)),
     resumeState: memberOf(source.resumeState, VEHICLE_STATES) ?? null,
     cargo: nonNegativeNumber(source.cargo),
+    deliveryId: nullableString(source.deliveryId),
   }
 }
 

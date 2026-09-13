@@ -140,9 +140,12 @@ import {
   createDefaultLogisticsSnapshot,
   createRoadGraph,
   DIRECTION_OFFSETS,
+  DIRECTIONS,
   directionBit,
+  directionFromDelta,
   findRoadRoute,
   isRoadDirectionAllowed,
+  isVehicleReversing,
   normalizeLogisticsSnapshot,
   oppositeDirection,
 } from './logistics'
@@ -2609,6 +2612,11 @@ export class GameState {
         ? null
         : directionBit(direction)
     this.invalidateRoadGraph()
+    this.realignVehiclesOnRoad(
+      x,
+      z,
+      road.allowedDirections === null ? null : direction,
+    )
     this.emit()
     return {
       ok: true,
@@ -3579,7 +3587,7 @@ export class GameState {
 
   private createRoadVehicle(
     id: string,
-    kind: 'ambulance' | 'bus' | 'garbageTruck' | 'sweeper',
+    kind: RoadVehicle['kind'],
     position: RoadPosition,
   ): RoadVehicle {
     return {
@@ -3600,6 +3608,7 @@ export class GameState {
       nextStopIndex: 0,
       resumeState: null,
       cargo: 0,
+      deliveryId: null,
     }
   }
 
@@ -4282,6 +4291,7 @@ export class GameState {
   }
 
   private updateLogistics(minutes: number): void {
+    this.syncFreightToVehicles()
     this.claimedTentCellsCache = null
     this.visitorsOnCellsThisTick = null
     const logistics = this.state.logistics
@@ -4370,37 +4380,35 @@ export class GameState {
       if (vehicle.kind === 'garbageTruck') {
         if (vehicle.state === 'idle') this.dispatchGarbageTruck(vehicle)
         if (vehicle.state === 'waiting') {
-          vehicle.waitMinutes -= minutes
-          if (vehicle.waitMinutes <= 0) {
-            this.continueGarbageTruck(vehicle)
+          if (this.isAccidentVictimBlockingVehicle(vehicle)) return
+          if (this.resumeVehicleAfterIncident(vehicle)) {
+            // continue into movement below
+          } else {
+            vehicle.waitMinutes -= minutes
+            if (vehicle.waitMinutes <= 0) {
+              this.continueGarbageTruck(vehicle)
+            }
+            return
           }
-          return
         }
       }
       if (vehicle.kind === 'sweeper') {
         this.updateSweeper(vehicle, minutes)
         return
       }
+      if (vehicle.state === 'waiting' && this.isAccidentVictimBlockingVehicle(vehicle)) {
+        return
+      }
+      if (
+        vehicle.kind !== 'visitorCar' &&
+        vehicle.state === 'waiting' &&
+        this.resumeVehicleAfterIncident(vehicle)
+      ) {
+        // continue into movement below
+      }
       if (vehicle.kind === 'visitorCar' && vehicle.state === 'waiting') {
-        if (
-          this.state.visitors.some(
-            (visitor) =>
-              visitor.injuryVehicleId === vehicle.id &&
-              visitor.state === 'injured',
-          )
-        ) {
-          return
-        }
-        if (vehicle.route.length > 0) {
-          vehicle.state =
-            vehicle.resumeState === 'returning' ||
-            vehicle.resumeState === 'responding'
-              ? vehicle.resumeState
-              : vehicle.target?.kind === 'parking'
-                ? 'driving'
-                : vehicle.resumeState ?? 'driving'
-          vehicle.resumeState = null
-          vehicle.waitMinutes = 0
+        if (this.resumeVehicleAfterIncident(vehicle)) {
+          // continue into movement or parking pull-in
         } else if (vehicle.parkingCell && vehicle.target?.kind === 'parking') {
           vehicle.state = 'parking'
           vehicle.resumeState = null
@@ -4423,9 +4431,9 @@ export class GameState {
       if (
         vehicle.state !== 'driving' &&
         vehicle.state !== 'responding' &&
-        vehicle.state !== 'returning'
+        vehicle.state !== 'returning' &&
+        vehicle.state !== 'parking'
       ) {
-        if (vehicle.state === 'parking') this.finishVehicleParking(vehicle)
         return
       }
       const mudSlowdown = vehicle.cell && this.isMudTerrain(vehicle.cell.x, vehicle.cell.z)
@@ -4445,14 +4453,14 @@ export class GameState {
       const interval =
         SIMULATION_CONFIG.logistics.vehicleMoveIntervalMinutes *
         (30 / Math.min(currentRoad?.speedLimit ?? 30, vehicle.cell ? roadGroundLimit(this.state, vehicle.cell.x, vehicle.cell.z) : 30))
-      if (vehicle.speed < interval) return
-      vehicle.speed %= interval
       const next = vehicle.route[0]
       if (!next) {
         if (vehicle.kind === 'ambulance') {
           this.finishAmbulanceLeg(vehicle)
         } else if (vehicle.kind === 'garbageTruck') {
           this.finishGarbageTruckLeg(vehicle)
+        } else if (vehicle.kind === 'deliveryTruck') {
+          this.finishDeliveryTruckLeg(vehicle, removedVehicles)
         } else if (
           vehicle.kind === 'bus' &&
           vehicle.target?.kind === 'busStop'
@@ -4466,21 +4474,28 @@ export class GameState {
           removedVehicles.add(vehicle.id)
           if (vehicle.groupId) removedGroups.add(vehicle.groupId)
         } else if (vehicle.kind === 'visitorCar') {
-          if (vehicle.parkingCell) this.finishVehicleParking(vehicle)
-          else {
-            vehicle.state = 'waiting'
-            vehicle.route = []
-          }
+          this.completeVisitorCarArrival(vehicle)
         } else {
           vehicle.state = 'idle'
         }
         return
       }
       const nextKey = roadCellKey(next.x, next.z)
-      const truckBlocks = this.state.festival.infrastructure.trucks.some(t => t.x === next.x && t.z === next.z)
+      const truckBlocks = this.state.festival.infrastructure.trucks.some(
+        (truck) =>
+          !this.state.logistics.roadVehicles.some(
+            (candidate) =>
+              candidate.kind === 'deliveryTruck' &&
+              (candidate.deliveryId === truck.id || candidate.id === truck.id),
+          ) &&
+          truck.x === next.x &&
+          truck.z === next.z,
+      )
       const blocker = occupied.get(nextKey)
       if (truckBlocks || (blocker && blocker !== vehicle.id)) {
-        vehicle.speed = 0
+        if (this.replanOffMapDelivery(vehicle, occupied)) return
+        if (this.replanBlockedReverse(vehicle, occupied)) return
+        if (this.replanBlockedTurn(vehicle, occupied)) return
         vehicle.waitMinutes += minutes
         if (
           vehicle.waitMinutes >=
@@ -4499,7 +4514,6 @@ export class GameState {
           vehiclesById,
         )
       ) {
-        vehicle.speed = 0
         vehicle.waitMinutes += minutes
         return
       }
@@ -4518,26 +4532,33 @@ export class GameState {
       ) {
         const blockingInjured = pedestrians.some(
           (visitor) =>
-            visitor.state === 'injured' &&
-            visitor.injuryVehicleId === vehicle.id,
+            visitor.state === 'injured' ||
+            visitor.state === 'medical-transport',
         )
         const brakingChance = road?.crosswalk
           ? 1
           : SIMULATION_CONFIG.logistics.brakingChanceBySpeed[
               road?.speedLimit ?? 30
             ]
+        if (blockingInjured) {
+          vehicle.waitMinutes += minutes
+          if (
+            vehicle.waitMinutes >=
+            SIMULATION_CONFIG.logistics.vehicleUnstickMinutes
+          ) {
+            this.unstickVehicle(vehicle, occupied, removedVehicles, removedGroups, removedVisitors)
+          }
+          return
+        }
         if (
-          !blockingInjured &&
           vehicle.waitMinutes <
             SIMULATION_CONFIG.logistics.vehicleUnstickMinutes &&
           this.rng.next() < brakingChance
         ) {
-          vehicle.speed = 0
           vehicle.waitMinutes += minutes
           return
         }
         if (
-          !blockingInjured &&
           vehicle.waitMinutes <
             SIMULATION_CONFIG.logistics.vehicleUnstickMinutes
         ) {
@@ -4556,14 +4577,19 @@ export class GameState {
           return
         }
       }
+      if (vehicle.speed < interval) return
+      vehicle.speed %= interval
+      const reversing = isVehicleReversing(vehicle)
       if (vehicle.cell) {
         occupied.delete(roadCellKey(vehicle.cell.x, vehicle.cell.z))
       }
       vehicle.cell = { ...next }
-      vehicle.facing = Math.atan2(
-        next.x - vehicle.position.x,
-        next.z - vehicle.position.z,
-      )
+      if (!reversing) {
+        vehicle.facing = Math.atan2(
+          next.x - vehicle.position.x,
+          next.z - vehicle.position.z,
+        )
+      }
       vehicle.position = { ...next }
       vehicle.passengerIds.forEach((visitorId) => {
         const passenger = this.getVisitor(visitorId)
@@ -4583,10 +4609,8 @@ export class GameState {
           })
           removedVehicles.add(vehicle.id)
           if (vehicle.groupId) removedGroups.add(vehicle.groupId)
-        } else if (vehicle.parkingCell) {
-          this.finishVehicleParking(vehicle)
         } else {
-          vehicle.state = 'waiting'
+          this.completeVisitorCarArrival(vehicle)
         }
       }
     })
@@ -4607,6 +4631,7 @@ export class GameState {
     logistics.arrivalGroups = logistics.arrivalGroups.filter(
       (group) => !removedGroups.has(group.id),
     )
+    this.syncVehiclesToFreight()
   }
 
   private mustYieldToVehicleFromRight(
@@ -4644,6 +4669,36 @@ export class GameState {
   private getVehicleDirection(vehicle: RoadVehicle): Direction {
     return ((Math.round(vehicle.facing / (Math.PI / 2)) % 4 + 4) %
       4) as Direction
+  }
+
+  private isAccidentVictimBlockingVehicle(vehicle: RoadVehicle): boolean {
+    const here = vehicle.cell ?? vehicle.position
+    const next = vehicle.route[0]
+    return this.state.visitors.some((visitor) => {
+      if (
+        visitor.state !== 'injured' ||
+        visitor.injuryVehicleId !== vehicle.id
+      ) {
+        return false
+      }
+      if (visitor.cellX === here.x && visitor.cellZ === here.z) return true
+      return Boolean(next && visitor.cellX === next.x && visitor.cellZ === next.z)
+    })
+  }
+
+  private resumeVehicleAfterIncident(vehicle: RoadVehicle): boolean {
+    if (vehicle.state !== 'waiting' || vehicle.route.length === 0) return false
+    vehicle.state =
+      vehicle.resumeState === 'returning' ||
+      vehicle.resumeState === 'responding' ||
+      vehicle.resumeState === 'parking'
+        ? vehicle.resumeState
+        : vehicle.target?.kind === 'parking'
+          ? 'driving'
+          : vehicle.resumeState ?? 'driving'
+    vehicle.resumeState = null
+    vehicle.waitMinutes = 0
+    return true
   }
 
   private assignVisitorCarParking(
@@ -4828,7 +4883,7 @@ export class GameState {
         targets: holdTargets,
         initialDirection: this.getVehicleDirection(vehicle),
         blockedCells,
-        allowUTurn: true,
+        allowUTurn: false,
       })
       if (route && route.length) {
         const last = route.at(-1)!
@@ -4871,7 +4926,7 @@ export class GameState {
       targets: cruiseTargets,
       initialDirection: this.getVehicleDirection(vehicle),
       blockedCells,
-      allowUTurn: true,
+      allowUTurn: false,
     })
     if (!cruise?.length) return null
     return {
@@ -4886,18 +4941,30 @@ export class GameState {
   ): boolean {
     const start = vehicle.cell
     if (!start) return false
-    const next = [
-      { x: start.x, z: start.z + 1 },
-      { x: start.x + 1, z: start.z },
-      { x: start.x - 1, z: start.z },
-      { x: start.x, z: start.z - 1 },
-    ].find(
-      (cell) =>
-        Boolean(this.getRoadCellAt(cell.x, cell.z)) &&
-        !blockedCells?.has(roadCellKey(cell.x, cell.z)),
-    )
+    const here = this.getRoadCellAt(start.x, start.z)
+    if (!here) return false
+    const facing = this.getVehicleDirection(vehicle)
+    const order: Direction[] = [
+      facing,
+      ((facing + 1) % 4) as Direction,
+      ((facing + 3) % 4) as Direction,
+    ]
+    const next = order
+      .map((direction) => ({
+        direction,
+        cell: {
+          x: start.x + DIRECTION_OFFSETS[direction].x,
+          z: start.z + DIRECTION_OFFSETS[direction].z,
+        },
+      }))
+      .find(({ direction, cell }) => {
+        if (!this.getRoadCellAt(cell.x, cell.z)) return false
+        if (!isRoadDirectionAllowed(here, direction)) return false
+        if ((here.blockedEdges & directionBit(direction)) !== 0) return false
+        return !blockedCells?.has(roadCellKey(cell.x, cell.z))
+      })
     if (!next) return false
-    vehicle.route = [{ x: next.x, z: next.z }]
+    vehicle.route = [{ x: next.cell.x, z: next.cell.z }]
     if (vehicle.state === 'waiting') vehicle.state = 'driving'
     if (vehicle.kind === 'visitorCar' && !vehicle.target) vehicle.target = { kind: 'cruise' }
     vehicle.waitMinutes = 0
@@ -4911,22 +4978,12 @@ export class GameState {
     removedGroups: Set<string>,
     removedVisitors: Set<string>,
   ): void {
-    const blockedCells = new Set(
-      [...occupied.entries()]
-        .filter(([, id]) => id !== vehicle.id)
-        .map(([key]) => key),
-    )
+    const blockedCells = this.collectRouteBlockedCells(vehicle, occupied)
     if (vehicle.state === 'returning') {
-      const start = vehicle.cell ?? vehicle.position
-      const exit = this.findReachableRoadExit(
-        start,
-        this.getVehicleDirection(vehicle),
-        blockedCells,
-        true,
-      )
-      if (exit) {
-        vehicle.route = exit.route.map((cell) => ({ x: cell.x, z: cell.z }))
-        vehicle.waitMinutes = 0
+      if (
+        this.isQueueTail(vehicle, occupied) &&
+        this.reverseQueueTail(vehicle, occupied, blockedCells)
+      ) {
         return
       }
       if (
@@ -4938,73 +4995,603 @@ export class GameState {
         })
         removedVehicles.add(vehicle.id)
         if (vehicle.groupId) removedGroups.add(vehicle.groupId)
+        return
       }
+      if (!this.isQueueTail(vehicle, occupied)) vehicle.waitMinutes = 0
       return
     }
-    if (vehicle.kind === 'visitorCar') {
-      const reroute = this.findReachableParking(vehicle, blockedCells, true)
-      if (reroute) {
+    if (!this.isQueueTail(vehicle, occupied)) {
+      vehicle.waitMinutes = 0
+      return
+    }
+    if (this.reverseQueueTail(vehicle, occupied, blockedCells)) return
+    vehicle.waitMinutes = 0
+  }
+
+  private collectRouteBlockedCells(
+    vehicle: RoadVehicle,
+    occupied: ReadonlyMap<string, string>,
+    keepOpen: readonly RoadPosition[] = [],
+  ): Set<string> {
+    const blocked = new Set(
+      [...occupied.entries()]
+        .filter(([, id]) => id !== vehicle.id)
+        .map(([key]) => key),
+    )
+    this.state.festival.infrastructure.trucks.forEach((truck) => {
+      blocked.add(roadCellKey(truck.x, truck.z))
+    })
+    if (vehicle.cell) blocked.delete(roadCellKey(vehicle.cell.x, vehicle.cell.z))
+    keepOpen.forEach((cell) => blocked.delete(roadCellKey(cell.x, cell.z)))
+    return blocked
+  }
+
+  private isSideTurn(vehicle: RoadVehicle, next: RoadPosition): boolean {
+    const here = vehicle.cell
+    if (!here) return false
+    const move = directionFromDelta(next.x - here.x, next.z - here.z)
+    if (move === null) return false
+    const facing = this.getVehicleDirection(vehicle)
+    return move !== facing && move !== oppositeDirection(facing)
+  }
+
+  private adoptVehicleRoute(
+    vehicle: RoadVehicle,
+    route: readonly RoadPosition[],
+    blockedNext: RoadPosition,
+  ): boolean {
+    const here = vehicle.cell
+    const first = route[0]
+    if (!here || !first) return false
+    if (first.x === blockedNext.x && first.z === blockedNext.z) return false
+    const firstDir = directionFromDelta(first.x - here.x, first.z - here.z)
+    if (firstDir === oppositeDirection(this.getVehicleDirection(vehicle))) {
+      return false
+    }
+    vehicle.route = route.map((cell) => ({ x: cell.x, z: cell.z }))
+    if (vehicle.state === 'waiting') vehicle.state = 'driving'
+    vehicle.waitMinutes = 0
+    return true
+  }
+
+  private replanBlockedTurn(
+    vehicle: RoadVehicle,
+    occupied: ReadonlyMap<string, string>,
+  ): boolean {
+    const here = vehicle.cell
+    const next = vehicle.route[0]
+    if (!here || !next || !this.isSideTurn(vehicle, next)) return false
+    const destination = vehicle.route.at(-1)
+    const keepOpen =
+      destination &&
+      (destination.x !== next.x || destination.z !== next.z)
+        ? [destination]
+        : []
+    const blocked = this.collectRouteBlockedCells(vehicle, occupied, keepOpen)
+    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
+      const parking = this.findReachableParking(vehicle, blocked, false)
+      if (
+        parking &&
+        this.adoptVehicleRoute(
+          vehicle,
+          parking.route.map((cell) => ({ x: cell.x, z: cell.z })),
+          next,
+        )
+      ) {
         if (
           !vehicle.parkingCell ||
-          vehicle.parkingCell.x !== reroute.cell.x ||
-          vehicle.parkingCell.z !== reroute.cell.z
+          vehicle.parkingCell.x !== parking.cell.x ||
+          vehicle.parkingCell.z !== parking.cell.z
         ) {
           this.releaseVisitorCarParking(vehicle)
-          reroute.cell.occupiedBy = vehicle.id
-          vehicle.parkingCell = { x: reroute.cell.x, z: reroute.cell.z }
+          parking.cell.occupiedBy = vehicle.id
+          vehicle.parkingCell = { x: parking.cell.x, z: parking.cell.z }
           vehicle.target = {
             kind: 'parking',
             parkingCell: { ...vehicle.parkingCell },
           }
         }
-        vehicle.route = reroute.route.map((cell) => ({
-          x: cell.x,
-          z: cell.z,
-        }))
-        vehicle.state = vehicle.route.length > 0 ? 'driving' : 'parking'
-        vehicle.waitMinutes = 0
-        return
+        return true
       }
     }
-    const destination = vehicle.route.at(-1)
-    if (destination && vehicle.cell) {
+    if (vehicle.state === 'returning') {
+      const exit = this.findReachableRoadExit(
+        here,
+        this.getVehicleDirection(vehicle),
+        blocked,
+        false,
+      )
+      if (exit && this.adoptVehicleRoute(vehicle, exit.route, next)) return true
+    }
+    const targets = this.collectVehicleRouteTargets(vehicle)
+    const searchTargets = [
+      ...targets,
+      ...(destination &&
+      this.getRoadCellAt(destination.x, destination.z) &&
+      !targets.some(
+        (cell) => cell.x === destination.x && cell.z === destination.z,
+      )
+        ? [destination]
+        : []),
+    ]
+    if (searchTargets.length) {
       const rebuilt = findRoadRoute({
         roadCells: this.state.logistics.roadCells,
         graph: this.getRoadGraph(),
-        start: vehicle.cell,
-        targets: [destination],
+        start: here,
+        targets: searchTargets,
         initialDirection: this.getVehicleDirection(vehicle),
-        blockedCells,
-        allowUTurn: true,
+        blockedCells: blocked,
+        allowUTurn: false,
       })
-      if (rebuilt && rebuilt.length) {
-        vehicle.route = rebuilt.map((cell) => ({ x: cell.x, z: cell.z }))
-        vehicle.waitMinutes = 0
-        if (vehicle.state === 'waiting') vehicle.state = 'driving'
-        return
+      if (
+        rebuilt &&
+        this.adoptVehicleRoute(
+          vehicle,
+          rebuilt.map((cell) => ({ x: cell.x, z: cell.z })),
+          next,
+        )
+      ) {
+        return true
       }
     }
-    if (vehicle.kind === 'visitorCar' && this.sendVisitorCarCirculating(vehicle, blockedCells)) {
+    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
+      const plan = this.findVisitorCarCirculation(vehicle, blocked)
+      if (plan && this.adoptVehicleRoute(vehicle, plan.route, next)) {
+        vehicle.target = plan.target
+        return true
+      }
+    }
+    return false
+  }
+
+  private realignVehiclesOnRoad(
+    x: number,
+    z: number,
+    facing: Direction | null,
+  ): void {
+    this.state.logistics.roadVehicles.forEach((vehicle) => {
+      if (vehicle.state === 'parked') return
+      const here = vehicle.cell ?? vehicle.position
+      const truck =
+        vehicle.kind === 'deliveryTruck'
+          ? this.getDeliveryFreight(vehicle)
+          : undefined
+      const onTile =
+        (here.x === x && here.z === z) ||
+        Boolean(truck && truck.x === x && truck.z === z)
+      if (!onTile) return
+      if (facing !== null) vehicle.facing = facing * (Math.PI / 2)
+      this.rebuildVehicleRouteFromHere(vehicle)
+    })
+    this.state.festival.infrastructure.trucks.forEach((truck) => {
+      if (truck.x !== x || truck.z !== z) return
+      this.rebuildFreightTruckPath(truck)
+    })
+  }
+
+  private collectVehicleRouteTargets(vehicle: RoadVehicle): RoadPosition[] {
+    if (vehicle.kind === 'deliveryTruck') {
+      return this.collectDeliveryTruckTargets(vehicle)
+    }
+    const target = vehicle.target
+    if (!target) {
+      const last = vehicle.route.at(-1)
+      return last ? [last] : []
+    }
+    if (target.kind === 'cell' || target.kind === 'wasteDump') {
+      return [{ x: target.x, z: target.z }]
+    }
+    if (target.kind === 'parking' || target.kind === 'hold') {
+      const parking = target.parkingCell ?? vehicle.parkingCell
+      return parking ? this.getAdjacentRoadPositions(parking) : []
+    }
+    if (target.kind === 'cruise') {
+      const last = vehicle.route.at(-1)
+      return last ? [last] : []
+    }
+    if (target.kind === 'busStop') {
+      const stop = this.state.logistics.busStops.find(
+        (candidate) => candidate.id === target.stopId,
+      )
+      return stop ? [stop.roadCell] : []
+    }
+    if (target.kind === 'garage') {
+      const garage = this.state.logistics.ambulanceGarages.find(
+        (candidate) => candidate.id === target.garageId,
+      )
+      const access = garage
+        ? this.getLogisticsBuildingAccess(garage, 2)
+        : null
+      return access ? [access] : []
+    }
+    if (target.kind === 'depot') {
+      const depot =
+        this.state.logistics.wasteDepots.find(
+          (candidate) => candidate.id === target.depotId,
+        ) ??
+        this.state.logistics.busDepots.find(
+          (candidate) => candidate.id === target.depotId,
+        )
+      const access = depot
+        ? this.getLogisticsBuildingAccess(depot, 2)
+        : null
+      return access ? [access] : []
+    }
+    return []
+  }
+
+  private rebuildVehicleRouteFromHere(vehicle: RoadVehicle): void {
+    if (
+      vehicle.state === 'idle' ||
+      vehicle.state === 'parked' ||
+      vehicle.state === 'at-stop'
+    ) {
       return
     }
-    if (this.nudgeVehicleAlongRoad(vehicle, blockedCells)) return
-    if (destination && vehicle.cell) {
-      const open = findRoadRoute({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start: vehicle.cell,
-        targets: [destination],
-        initialDirection: this.getVehicleDirection(vehicle),
-        allowUTurn: true,
-      })
-      if (open && open.length) {
-        vehicle.route = open.map((cell) => ({ x: cell.x, z: cell.z }))
-        vehicle.waitMinutes = 0
-        if (vehicle.state === 'waiting') vehicle.state = 'driving'
+    const start = vehicle.cell ?? vehicle.position
+    const occupied = new Map(
+      this.state.logistics.roadVehicles
+        .filter(
+          (other) =>
+            other.id !== vehicle.id &&
+            other.cell &&
+            other.state !== 'parked',
+        )
+        .map((other) => [
+          roadCellKey(other.cell!.x, other.cell!.z),
+          other.id,
+        ]),
+    )
+    const blocked = this.collectRouteBlockedCells(vehicle, occupied)
+    const facing = this.getVehicleDirection(vehicle)
+    const applyRoute = (route: readonly RoadPosition[]): boolean => {
+      if (!route.length) return false
+      const first = route[0]!
+      const step = directionFromDelta(first.x - start.x, first.z - start.z)
+      if (step === oppositeDirection(facing)) {
+        if (
+          vehicle.kind !== 'deliveryTruck' &&
+          vehicle.kind !== 'garbageTruck'
+        ) {
+          return false
+        }
+        vehicle.facing = step * (Math.PI / 2)
+      }
+      vehicle.route = route.map((cell) => ({ x: cell.x, z: cell.z }))
+      vehicle.waitMinutes = 0
+      if (vehicle.state === 'waiting') {
+        vehicle.state = vehicle.resumeState ?? 'driving'
+        vehicle.resumeState = null
+      }
+      return true
+    }
+    if (vehicle.kind === 'visitorCar' && vehicle.state === 'returning') {
+      const exit =
+        this.findReachableRoadExit(start, facing, blocked, false) ??
+        this.findReachableRoadExit(start, facing, undefined, false)
+      if (exit && applyRoute(exit.route)) return
+    }
+    if (
+      vehicle.kind === 'visitorCar' &&
+      vehicle.state !== 'returning' &&
+      (vehicle.parkingCell || vehicle.target?.kind === 'parking')
+    ) {
+      const parking =
+        this.findReachableParking(vehicle, blocked, false) ??
+        this.findReachableParking(vehicle, undefined, false)
+      if (parking && applyRoute(parking.route)) {
+        if (
+          !vehicle.parkingCell ||
+          vehicle.parkingCell.x !== parking.cell.x ||
+          vehicle.parkingCell.z !== parking.cell.z
+        ) {
+          this.releaseVisitorCarParking(vehicle)
+          parking.cell.occupiedBy = vehicle.id
+          vehicle.parkingCell = { x: parking.cell.x, z: parking.cell.z }
+          vehicle.target = {
+            kind: 'parking',
+            parkingCell: { ...vehicle.parkingCell },
+          }
+        }
         return
       }
     }
+    const targets = this.collectVehicleRouteTargets(vehicle)
+    if (targets.length) {
+      const rebuilt =
+        findRoadRoute({
+          roadCells: this.state.logistics.roadCells,
+          graph: this.getRoadGraph(),
+          start,
+          targets,
+          initialDirection: facing,
+          blockedCells: blocked,
+          allowUTurn: false,
+        }) ??
+        findRoadRoute({
+          roadCells: this.state.logistics.roadCells,
+          graph: this.getRoadGraph(),
+          start,
+          targets,
+          initialDirection: facing,
+          allowUTurn: false,
+        }) ??
+        findRoadRoute({
+          roadCells: this.state.logistics.roadCells,
+          graph: this.getRoadGraph(),
+          start,
+          targets,
+          allowUTurn: false,
+        })
+      if (rebuilt && applyRoute(rebuilt)) return
+    }
+    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
+      if (this.sendVisitorCarCirculating(vehicle, blocked)) return
+    }
+    const next = vehicle.route[0]
+    if (!next) return
+    const step = directionFromDelta(next.x - start.x, next.z - start.z)
+    const here = this.getRoadCellAt(start.x, start.z)
+    if (
+      step !== null &&
+      here &&
+      !isRoadDirectionAllowed(here, step)
+    ) {
+      vehicle.route = []
+    }
+  }
+
+  private rebuildFreightTruckPath(truck: {
+    id?: string
+    x: number
+    z: number
+    path: Array<{ x: number; z: number }>
+    phase: 'inbound' | 'return'
+    depotId: string
+  }): void {
+    const northZ = -this.getWorldSize() / 2
+    const edges = this.state.logistics.roadCells.filter(
+      (road) => road.z === northZ,
+    )
+    const depot = this.state.festival.infrastructure.depots.find(
+      (candidate) => candidate.id === truck.depotId,
+    )
+    const targets =
+      truck.phase === 'return'
+        ? edges
+        : depot
+          ? this.getAdjacentRoadPositions(depot)
+          : []
+    if (!targets.length) return
+    const blocked = this.collectRouteBlockedCells(
+      {
+        id: `freight:${truck.x}:${truck.z}`,
+        cell: { x: truck.x, z: truck.z },
+      } as RoadVehicle,
+      new Map(
+        this.state.logistics.roadVehicles
+          .filter((vehicle) => vehicle.cell && vehicle.state !== 'parked')
+          .map((vehicle) => [
+            roadCellKey(vehicle.cell!.x, vehicle.cell!.z),
+            vehicle.id,
+          ]),
+      ),
+      targets,
+    )
+    const vehicle = this.state.logistics.roadVehicles.find(
+      (candidate) =>
+        candidate.kind === 'deliveryTruck' &&
+        (candidate.deliveryId === truck.id || candidate.id === truck.id),
+    )
+    if (vehicle) {
+      const rebuilt = this.findServiceVehicleRoute(vehicle, targets, blocked)
+      if (rebuilt?.length) {
+        this.adoptServiceRoute(vehicle, rebuilt)
+        if (vehicle.state === 'waiting') {
+          vehicle.state = vehicle.resumeState ?? 'driving'
+          vehicle.resumeState = null
+        }
+        truck.path = rebuilt.map((cell) => ({ x: cell.x, z: cell.z }))
+      }
+      return
+    }
+    const route =
+      findRoadRoute({
+        roadCells: this.state.logistics.roadCells,
+        graph: this.getRoadGraph(),
+        start: truck,
+        targets,
+        blockedCells: blocked,
+        allowUTurn: false,
+      }) ??
+      findRoadRoute({
+        roadCells: this.state.logistics.roadCells,
+        graph: this.getRoadGraph(),
+        start: truck,
+        targets,
+        allowUTurn: false,
+      })
+    if (route?.length) {
+      truck.path = route.map((cell) => ({ x: cell.x, z: cell.z }))
+    }
+  }
+
+  private cellBehindVehicle(vehicle: RoadVehicle): RoadPosition | null {
+    const here = vehicle.cell
+    if (!here) return null
+    const back = oppositeDirection(this.getVehicleDirection(vehicle))
+    return {
+      x: here.x + DIRECTION_OFFSETS[back].x,
+      z: here.z + DIRECTION_OFFSETS[back].z,
+    }
+  }
+
+  private isQueueTail(
+    vehicle: RoadVehicle,
+    occupied: ReadonlyMap<string, string>,
+  ): boolean {
+    const here = vehicle.cell
+    const next = vehicle.route[0]
+    if (!here || !next) return false
+    const blocker = occupied.get(roadCellKey(next.x, next.z))
+    if (!blocker || blocker === vehicle.id) return false
+    const behind = this.cellBehindVehicle(vehicle)
+    return !this.state.logistics.roadVehicles.some((other) => {
+      if (other.id === vehicle.id || other.state === 'parked') return false
+      if (other.route[0]?.x === here.x && other.route[0]?.z === here.z) {
+        return true
+      }
+      return Boolean(
+        behind &&
+          other.cell?.x === behind.x &&
+          other.cell?.z === behind.z,
+      )
+    })
+  }
+
+  private reverseQueueTail(
+    vehicle: RoadVehicle,
+    occupied: ReadonlyMap<string, string>,
+    blockedCells: ReadonlySet<string>,
+  ): boolean {
+    const here = vehicle.cell
+    if (!here) return false
+    const behind = this.cellBehindVehicle(vehicle)
+    if (!behind || !this.getRoadCellAt(behind.x, behind.z)) return false
+    if (occupied.has(roadCellKey(behind.x, behind.z))) return false
+    const searchBlocked = new Set(blockedCells)
+    searchBlocked.add(roadCellKey(here.x, here.z))
+    const fromBehind = {
+      ...vehicle,
+      cell: behind,
+      position: behind,
+    }
+    let continuation: RoadPosition[] = []
+    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
+      const parking = this.findReachableParking(fromBehind, searchBlocked, false)
+      if (parking?.route.length) {
+        if (
+          !vehicle.parkingCell ||
+          vehicle.parkingCell.x !== parking.cell.x ||
+          vehicle.parkingCell.z !== parking.cell.z
+        ) {
+          this.releaseVisitorCarParking(vehicle)
+          parking.cell.occupiedBy = vehicle.id
+          vehicle.parkingCell = { x: parking.cell.x, z: parking.cell.z }
+          vehicle.target = {
+            kind: 'parking',
+            parkingCell: { ...vehicle.parkingCell },
+          }
+        }
+        continuation = parking.route.map((cell) => ({
+          x: cell.x,
+          z: cell.z,
+        }))
+      }
+    }
+    if (!continuation.length && vehicle.state === 'returning') {
+      const exit = this.findReachableRoadExit(
+        behind,
+        this.getVehicleDirection(vehicle),
+        searchBlocked,
+        false,
+      )
+      if (exit?.route.length) {
+        continuation = exit.route.map((cell) => ({ x: cell.x, z: cell.z }))
+      }
+    }
+    if (!continuation.length) {
+      const destination = vehicle.route.at(-1)
+      if (destination) {
+        const rebuilt = findRoadRoute({
+          roadCells: this.state.logistics.roadCells,
+          graph: this.getRoadGraph(),
+          start: behind,
+          targets: [destination],
+          initialDirection: this.getVehicleDirection(vehicle),
+          blockedCells: searchBlocked,
+          allowUTurn: false,
+        })
+        if (rebuilt?.length) {
+          continuation = rebuilt.map((cell) => ({ x: cell.x, z: cell.z }))
+        }
+      }
+    }
+    if (
+      !continuation.length &&
+      vehicle.kind === 'visitorCar' &&
+      vehicle.state !== 'returning'
+    ) {
+      const plan = this.findVisitorCarCirculation(fromBehind, searchBlocked)
+      if (plan?.route.length) {
+        continuation = plan.route
+        vehicle.target = plan.target
+      }
+    }
+    const planned = [{ x: behind.x, z: behind.z }, ...continuation]
+    vehicle.route = this.roadRouteIsConnected(here, planned)
+      ? planned
+      : [{ x: behind.x, z: behind.z }]
+    if (vehicle.state === 'waiting') vehicle.state = 'driving'
     vehicle.waitMinutes = 0
+    return true
+  }
+
+  private roadRouteIsConnected(
+    start: RoadPosition,
+    route: readonly RoadPosition[],
+  ): boolean {
+    let previous = start
+    for (const cell of route) {
+      if (Math.abs(cell.x - previous.x) + Math.abs(cell.z - previous.z) !== 1) {
+        return false
+      }
+      previous = cell
+    }
+    return route.length > 0
+  }
+
+  private replanBlockedReverse(
+    vehicle: RoadVehicle,
+    occupied: ReadonlyMap<string, string>,
+  ): boolean {
+    if (!isVehicleReversing(vehicle)) return false
+    const here = vehicle.cell
+    const next = vehicle.route[0]
+    if (!here || !next) return false
+    const blocker = occupied.get(roadCellKey(next.x, next.z))
+    if (!blocker || blocker === vehicle.id) return false
+    const targets = this.collectVehicleRouteTargets(vehicle)
+    if (!targets.length) {
+      vehicle.route = []
+      vehicle.waitMinutes = 0
+      return true
+    }
+    const facing = this.getVehicleDirection(vehicle)
+    const blocked = this.collectRouteBlockedCells(vehicle, occupied)
+    const forward =
+      findRoadRoute({
+        roadCells: this.state.logistics.roadCells,
+        graph: this.getRoadGraph(),
+        start: here,
+        targets,
+        initialDirection: facing,
+        blockedCells: blocked,
+        allowUTurn: false,
+      }) ??
+      findRoadRoute({
+        roadCells: this.state.logistics.roadCells,
+        graph: this.getRoadGraph(),
+        start: here,
+        targets,
+        initialDirection: facing,
+        allowUTurn: false,
+      })
+    if (!forward?.length) return false
+    vehicle.route = forward.map((cell) => ({ x: cell.x, z: cell.z }))
+    vehicle.waitMinutes = 0
+    return true
   }
 
   private startParkedCarDeparture(
@@ -5176,34 +5763,297 @@ export class GameState {
     return accesses.sort((left, right) => right.dump.stored - left.dump.stored)
   }
 
+  private getDeliveryFreight(vehicle: RoadVehicle) {
+    return this.state.festival.infrastructure.trucks.find(
+      (truck) =>
+        truck.id === vehicle.deliveryId || truck.id === vehicle.id,
+    )
+  }
+
+  private collectDeliveryTruckTargets(vehicle: RoadVehicle): RoadPosition[] {
+    const truck = this.getDeliveryFreight(vehicle)
+    const northZ = -this.getWorldSize() / 2
+    const edges = this.state.logistics.roadCells.filter(
+      (road) => road.z === northZ,
+    )
+    if (vehicle.state === 'returning' || truck?.phase === 'return') {
+      return edges
+    }
+    const depot = this.state.festival.infrastructure.depots.find(
+      (candidate) => candidate.id === truck?.depotId,
+    )
+    return depot ? this.getAdjacentRoadPositions(depot) : []
+  }
+
+  private findServiceVehicleRoute(
+    vehicle: RoadVehicle,
+    targets: readonly RoadPosition[],
+    blockedCells?: ReadonlySet<string>,
+  ): RoadPosition[] | null {
+    if (targets.length === 0) return null
+    const northZ = -this.getWorldSize() / 2
+    let start = vehicle.cell ?? vehicle.position
+    const prefix: RoadPosition[] = []
+    if (start.z < northZ) {
+      prefix.push({ x: start.x, z: northZ })
+      start = { x: start.x, z: northZ }
+    }
+    if (!this.getRoadCellAt(start.x, start.z)) return null
+    const facing = this.getVehicleDirection(vehicle)
+    const hereRoad = this.getRoadCellAt(start.x, start.z)
+    const exits = hereRoad
+      ? DIRECTIONS.filter((direction) =>
+          isRoadDirectionAllowed(hereRoad, direction),
+        )
+      : []
+    const graph = this.getRoadGraph()
+    const search = (
+      blocked?: ReadonlySet<string>,
+      direction?: Direction,
+    ) =>
+      findRoadRoute({
+        roadCells: this.state.logistics.roadCells,
+        graph,
+        start,
+        targets,
+        blockedCells: blocked,
+        initialDirection: direction,
+        allowUTurn: false,
+      })
+    for (const direction of [facing, ...exits, undefined]) {
+      const route = search(blockedCells, direction) ?? search(undefined, direction)
+      if (!route?.length) continue
+      if (direction !== undefined && direction !== facing) {
+        vehicle.facing = direction * (Math.PI / 2)
+      }
+      return [
+        ...prefix,
+        ...route.map((cell) => ({ x: cell.x, z: cell.z })),
+      ]
+    }
+    return null
+  }
+
+  private adoptServiceRoute(
+    vehicle: RoadVehicle,
+    route: RoadPosition[],
+  ): void {
+    vehicle.route = route
+    const here = vehicle.cell ?? vehicle.position
+    const first = route[0]
+    const step = first
+      ? directionFromDelta(first.x - here.x, first.z - here.z)
+      : null
+    if (step !== null) vehicle.facing = step * (Math.PI / 2)
+    vehicle.waitMinutes = 0
+  }
+
+  private deliverySpawnFacing(truck: {
+    x: number
+    z: number
+    path: Array<{ x: number; z: number }>
+    phase: 'inbound' | 'return'
+  }): number {
+    const inbound = truck.phase === 'return' ? 2 : 0
+    const next = truck.path[0]
+    const step = next
+      ? directionFromDelta(next.x - truck.x, next.z - truck.z)
+      : null
+    if (step === inbound || step === oppositeDirection(inbound as Direction)) {
+      return step * (Math.PI / 2)
+    }
+    return inbound * (Math.PI / 2)
+  }
+
+  private syncFreightToVehicles(): void {
+    const trucks = this.state.festival.infrastructure.trucks
+    const vehicles = this.state.logistics.roadVehicles
+    const byId = new Map<string, RoadVehicle>()
+    for (const vehicle of vehicles) {
+      if (vehicle.kind !== 'deliveryTruck') continue
+      byId.set(vehicle.id, vehicle)
+      if (vehicle.deliveryId) byId.set(vehicle.deliveryId, vehicle)
+    }
+    const keep = new Set<string>()
+    for (const truck of trucks) {
+      let vehicle = byId.get(truck.id)
+      if (!vehicle) {
+        vehicle = this.createRoadVehicle(truck.id, 'deliveryTruck', {
+          x: truck.x,
+          z: truck.z,
+        })
+        vehicle.deliveryId = truck.id
+        vehicle.route = truck.path.map((cell) => ({ x: cell.x, z: cell.z }))
+        vehicle.cargo = truck.cargo
+        vehicle.stuckMinutes = truck.stuck
+        vehicle.testedGroundCell = truck.testedCell
+        vehicle.state = truck.phase === 'return' ? 'returning' : 'driving'
+        vehicle.target =
+          truck.phase === 'return'
+            ? {
+                kind: 'cell',
+                x: truck.path.at(-1)?.x ?? truck.x,
+                z: truck.path.at(-1)?.z ?? truck.z,
+              }
+            : { kind: 'depot', depotId: truck.depotId }
+        vehicle.facing = this.deliverySpawnFacing(truck)
+        vehicles.push(vehicle)
+      }
+      keep.add(vehicle.id)
+    }
+    this.state.logistics.roadVehicles = vehicles.filter(
+      (vehicle) =>
+        vehicle.kind !== 'deliveryTruck' || keep.has(vehicle.id),
+    )
+  }
+
+  private syncVehiclesToFreight(): void {
+    for (const vehicle of this.state.logistics.roadVehicles) {
+      if (vehicle.kind !== 'deliveryTruck') continue
+      const truck = this.getDeliveryFreight(vehicle)
+      if (!truck) continue
+      const here = vehicle.cell ?? vehicle.position
+      truck.x = here.x
+      truck.z = here.z
+      truck.path = vehicle.route.map((cell) => ({ x: cell.x, z: cell.z }))
+      truck.phase = vehicle.state === 'returning' ? 'return' : 'inbound'
+      truck.cargo = vehicle.cargo
+      truck.stuck = vehicle.stuckMinutes ?? 0
+      truck.testedCell = vehicle.testedGroundCell ?? ''
+      truck.progress = 0
+    }
+  }
+
+  private finishDeliveryTruckLeg(
+    vehicle: RoadVehicle,
+    removedVehicles: Set<string>,
+  ): void {
+    const truck = this.getDeliveryFreight(vehicle)
+    if (!truck) {
+      removedVehicles.add(vehicle.id)
+      return
+    }
+    const here = vehicle.cell ?? vehicle.position
+    truck.x = here.x
+    truck.z = here.z
+    const northZ = -this.getWorldSize() / 2
+    const edges = this.state.logistics.roadCells.filter(
+      (road) => road.z === northZ,
+    )
+    const depot = this.state.festival.infrastructure.depots.find(
+      (candidate) => candidate.id === truck.depotId,
+    )
+    const atBay = Boolean(
+      depot &&
+        this.getAdjacentRoadPositions(depot).some(
+          (cell) => cell.x === here.x && cell.z === here.z,
+        ),
+    )
+    const atEdge = edges.some((edge) => edge.x === here.x && edge.z === here.z)
+    const leaveMap = () => {
+      this.state.festival.infrastructure.trucks =
+        this.state.festival.infrastructure.trucks.filter(
+          (candidate) => candidate.id !== truck.id,
+        )
+      removedVehicles.add(vehicle.id)
+    }
+    if (vehicle.state === 'returning' || truck.phase === 'return') {
+      if (atEdge || here.z < northZ) {
+        leaveMap()
+        return
+      }
+      const route = this.findServiceVehicleRoute(vehicle, edges)
+      vehicle.state = 'returning'
+      truck.phase = 'return'
+      if (route?.length) {
+        this.adoptServiceRoute(vehicle, route)
+        vehicle.target = { kind: 'cell', ...(route.at(-1) ?? here) }
+        truck.path = route
+      } else if (atEdge) {
+        leaveMap()
+      }
+      return
+    }
+    if (depot && atBay) {
+      depot.stock[truck.kind] += truck.cargo
+      truck.cargo = 0
+      vehicle.cargo = 0
+      this.state.festival.deliveries = this.state.festival.deliveries.filter(
+        (delivery) => delivery.id !== truck.deliveryId,
+      )
+      truck.deliveryId = null
+      truck.phase = 'return'
+      this.state.festival.infrastructure.status =
+        'Ware im Depot entladen – Träger verteilen sie an die Stände'
+      vehicle.state = 'returning'
+      const route = this.findServiceVehicleRoute(vehicle, edges)
+      if (route?.length) {
+        this.adoptServiceRoute(vehicle, route)
+        vehicle.target = { kind: 'cell', ...(route.at(-1) ?? here) }
+        truck.path = route
+      }
+      return
+    }
+    const bays = depot ? this.getAdjacentRoadPositions(depot) : []
+    const route = this.findServiceVehicleRoute(vehicle, bays)
+    if (route?.length) {
+      this.adoptServiceRoute(vehicle, route)
+      vehicle.state = 'driving'
+      vehicle.target = { kind: 'depot', depotId: truck.depotId }
+      truck.path = route
+    }
+  }
+
+  private replanOffMapDelivery(
+    vehicle: RoadVehicle,
+    occupied: ReadonlyMap<string, string>,
+  ): boolean {
+    if (vehicle.kind !== 'deliveryTruck') return false
+    const northZ = -this.getWorldSize() / 2
+    const here = vehicle.cell ?? vehicle.position
+    if (here.z >= northZ) return false
+    const edges = this.state.logistics.roadCells.filter(
+      (road) => road.z === northZ,
+    )
+    const targets = this.collectDeliveryTruckTargets(vehicle)
+    if (!targets.length) return false
+    for (const edge of edges) {
+      if (occupied.has(roadCellKey(edge.x, edge.z))) continue
+      const rest = findRoadRoute({
+        roadCells: this.state.logistics.roadCells,
+        graph: this.getRoadGraph(),
+        start: edge,
+        targets,
+        initialDirection: 0,
+        allowUTurn: false,
+        blockedCells: this.collectRouteBlockedCells(vehicle, occupied, targets),
+      })
+      if (!rest) continue
+      vehicle.cell = { x: edge.x, z: northZ - 1 }
+      vehicle.position = { ...vehicle.cell }
+      vehicle.facing = 0
+      vehicle.route = [
+        { x: edge.x, z: edge.z },
+        ...rest.map((cell) => ({ x: cell.x, z: cell.z })),
+      ]
+      vehicle.waitMinutes = 0
+      const truck = this.getDeliveryFreight(vehicle)
+      if (truck) {
+        truck.x = vehicle.cell.x
+        truck.z = vehicle.cell.z
+        truck.path = vehicle.route.map((cell) => ({ x: cell.x, z: cell.z }))
+      }
+      return true
+    }
+    return false
+  }
+
   private findGarbageTruckRoute(
     vehicle: RoadVehicle,
     targets: readonly RoadPosition[],
     blockedCells?: ReadonlySet<string>,
   ): RoadPosition[] | null {
-    if (!vehicle.cell || targets.length === 0) return null
-    const graph = this.getRoadGraph()
-    const attempts: Array<{
-      initialDirection?: Direction
-      allowUTurn: boolean
-    }> = [
-      { initialDirection: this.getVehicleDirection(vehicle), allowUTurn: true },
-      { allowUTurn: true },
-      { initialDirection: this.getVehicleDirection(vehicle), allowUTurn: false },
-    ]
-    for (const attempt of attempts) {
-      const route = findRoadRoute({
-        roadCells: this.state.logistics.roadCells,
-        graph,
-        start: vehicle.cell,
-        targets,
-        blockedCells,
-        initialDirection: attempt.initialDirection,
-        allowUTurn: attempt.allowUTurn,
-      })
-      if (route) return route.map((cell) => ({ x: cell.x, z: cell.z }))
-    }
-    return null
+    return this.findServiceVehicleRoute(vehicle, targets, blockedCells)
   }
 
   private finishGarbageTruckLeg(vehicle: RoadVehicle): void {
@@ -6093,9 +6943,94 @@ export class GameState {
     ].filter((cell) => Boolean(this.getRoadCellAt(cell.x, cell.z)))
   }
 
+  private isVehicleOnItsParkingCell(vehicle: RoadVehicle): boolean {
+    if (!vehicle.parkingCell) return false
+    const here = vehicle.cell ?? vehicle.position
+    return here.x === vehicle.parkingCell.x && here.z === vehicle.parkingCell.z
+  }
+
+  private isVehicleAtParkingAccess(vehicle: RoadVehicle): boolean {
+    if (!vehicle.parkingCell) return false
+    const here = vehicle.cell ?? vehicle.position
+    return this.getAdjacentRoadPositions(vehicle.parkingCell).some(
+      (access) => access.x === here.x && access.z === here.z,
+    )
+  }
+
+  private beginVehiclePullIn(vehicle: RoadVehicle): void {
+    if (!vehicle.parkingCell) return
+    vehicle.route = [{ x: vehicle.parkingCell.x, z: vehicle.parkingCell.z }]
+    vehicle.state = 'parking'
+    vehicle.target = {
+      kind: 'parking',
+      parkingCell: { ...vehicle.parkingCell },
+    }
+    vehicle.waitMinutes = 0
+  }
+
+  private completeVisitorCarArrival(vehicle: RoadVehicle): void {
+    if (this.isVehicleOnItsParkingCell(vehicle)) {
+      this.finishVehicleParking(vehicle)
+      return
+    }
+    if (vehicle.parkingCell && this.isVehicleAtParkingAccess(vehicle)) {
+      this.beginVehiclePullIn(vehicle)
+      return
+    }
+    if (vehicle.parkingCell) {
+      const reroute = this.findReachableParking(vehicle, undefined, true)
+      if (reroute) {
+        if (
+          reroute.cell.x !== vehicle.parkingCell.x ||
+          reroute.cell.z !== vehicle.parkingCell.z
+        ) {
+          this.releaseVisitorCarParking(vehicle)
+          reroute.cell.occupiedBy = vehicle.id
+          vehicle.parkingCell = { x: reroute.cell.x, z: reroute.cell.z }
+          vehicle.target = {
+            kind: 'parking',
+            parkingCell: { ...vehicle.parkingCell },
+          }
+        }
+        vehicle.route = reroute.route.map((cell) => ({
+          x: cell.x,
+          z: cell.z,
+        }))
+        vehicle.state = vehicle.route.length > 0 ? 'driving' : 'parking'
+        vehicle.waitMinutes = 0
+        if (vehicle.state === 'parking') this.beginVehiclePullIn(vehicle)
+        return
+      }
+      this.releaseVisitorCarParking(vehicle)
+    }
+    vehicle.state = 'waiting'
+    vehicle.route = []
+  }
+
+  getVehicleAt(x: number, z: number): RoadVehicle | undefined {
+    return this.state.logistics.roadVehicles.find((vehicle) => {
+      if (vehicle.cell && vehicle.cell.x === x && vehicle.cell.z === z) return true
+      if (vehicle.position.x === x && vehicle.position.z === z) return true
+      return Boolean(
+        vehicle.state === 'parked' &&
+          vehicle.parkingCell &&
+          vehicle.parkingCell.x === x &&
+          vehicle.parkingCell.z === z,
+      )
+    })
+  }
+
   private finishVehicleParking(vehicle: RoadVehicle): void {
     if (!vehicle.parkingCell) {
       vehicle.state = 'waiting'
+      return
+    }
+    if (!this.isVehicleOnItsParkingCell(vehicle)) {
+      if (this.isVehicleAtParkingAccess(vehicle)) {
+        this.beginVehiclePullIn(vehicle)
+        return
+      }
+      this.completeVisitorCarArrival(vehicle)
       return
     }
     vehicle.state = 'parked'
