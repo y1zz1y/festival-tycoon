@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
-import { defaultStageDesign, stageDesignIssue, stageStats, stagePhase, stageDetailSize } from '../src/game/stageDesign'
+import { defaultStageDesign, stageDesignIssue, stageStats, stagePhase, stageDetailSize, stageSize } from '../src/game/stageDesign'
 import { createStageModel, disposeStageModel } from '../src/view/stageModel'
 import { Mesh } from 'three'
 export function testStageTickets(fixture:(count?:number)=>GameState){
@@ -75,5 +75,16 @@ export function testStageTickets(fixture:(count?:number)=>GameState){
   assert.deepEqual(GameState.fromJSON(JSON.stringify(bs))!.snapshot.buildings.find(b=>b.id===stage.id)!.stageDesign,design)
   assert.equal(stagePhase(design,.1),design.phases[0]);assert.equal(stagePhase(design,.5),design.phases[1]);assert.equal(stagePhase(design,.9),design.phases[2]);design.linked=true;assert.equal(stagePhase(design,.9),design.phases[0])
   const model=createStageModel(design);let meshes=0;model.traverse(o=>{if(o instanceof Mesh)meshes++});assert.ok(meshes<20,'stage geometry is batched by material');disposeStageModel(model)
+
+  // A stage straight out of the workshop, at whatever the default size is, has to be buildable on
+  // ground prepared to its own footprint — every cell of it, not just the one that was clicked.
+  const wide=fixture(0),ws=wide.snapshot as GameSnapshot;wide.addDebugMoney()
+  const wideDesign=defaultStageDesign()
+  assert.ok(wide.manageFestival({type:'stageDesign',design:wideDesign,saveTemplate:true,selectForBuild:true}).ok)
+  const footprint=stageSize(wideDesign,ws.buildRotation)
+  assert.equal(wide.canPlace('stage',6,-20).ok,false,'bare ground under the footprint is refused')
+  for(let x=6;x<6+footprint.width;x++)for(let z=-20;z<-20+footprint.depth;z++){wide.manageFestival({type:'ground',x,z,kind:'drain'});wide.manageFestival({type:'ground',x,z,kind:'compact'})}
+  const raised=wide.place('stage',6,-20)
+  assert.ok(raised.ok,`and goes up once the whole footprint is prepared: ${raised.message}`)
   console.log('PASS ticket admission limits, camping capacity, per-day counters, legacy saves, stage mounting, construction costs, templates, show phases and batched geometry')
 }
