@@ -19,7 +19,19 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const arm=performers.children[1].userData.arms[0],angle=arm.rotation.x
   updateStageBand(performanceStage,'meadow',.4,true,performerDesign);assert.equal(performanceStage.userData.band,performers);assert.notEqual(arm.rotation.x,angle)
   updateStageBand(performanceStage,'meadow',.4,false);assert.equal(performers.visible,false)
-  updateStageBand(performanceStage,'neon',1,true,performerDesign);assert.equal(performanceStage.userData.band.children.length,2);assert.equal(performers.parent,null)
+  // An electro act ('neon') brings a DJ booth instead of a line-up: one console, one DJ centred
+  // behind it, and cue buttons that blink on their own without the console itself moving.
+  updateStageBand(performanceStage,'neon',1,true,performerDesign);assert.equal(performers.parent,null)
+  const booth=performanceStage.userData.band
+  const console_=booth.children.find((c:any)=>c.userData.lights),dj=booth.children.find((c:any)=>c.userData.role==='dj')
+  assert.ok(console_&&dj,'an electro act plays a console with a DJ behind it')
+  assert.equal(booth.children.length,2,'and brings no band along with it')
+  assert.ok(Math.abs(console_.position.x-dj.position.x)<1e-6,'the DJ stands centred on the console')
+  assert.ok(dj.position.z<console_.position.z,'and behind it, with the console between them and the crowd')
+  const buttons=(console_.userData.lights as any).geometry.getAttribute('color')
+  const beforeBlink=Array.from(buttons.array as Float32Array)
+  updateStageBand(performanceStage,'neon',1.4,true,performerDesign)
+  assert.notDeepEqual(Array.from(buttons.array as Float32Array),beforeBlink,'its buttons blink over time')
   assert.ok(bandRoles('brass').includes('brass'));assert.ok(bandRoles('campfire').includes('guitar'))
   // A deck floor with one spectator tile (its cells: the left half, back half) and one cell taken
   // by a truss — musicians may use neither.
