@@ -49,3 +49,10 @@
 .stage-hotkeys{margin:9px 0 0;font-size:11px}.stage-hotkeys div{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid rgba(255,255,255,.08)}.stage-hotkeys dt{flex:none;color:#c8dccf;white-space:nowrap}.stage-hotkeys dd{margin:0;text-align:right;color:var(--muted)}.stage-hotkeys kbd{display:inline-block;padding:1px 5px;margin-right:2px;border:1px solid rgba(255,255,255,.25);border-radius:3px;background:rgba(255,255,255,.08);font:11px/1.4 inherit}
 
 .stage-quality{position:fixed;width:220px;max-width:calc(100vw - 24px);z-index:195}.stage-layout aside{overflow-x:hidden}
+
+.stage-section-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:9px 0}.stage-section-header h3{margin:0}
+.stage-icon-button{display:flex;align-items:center;justify-content:center;padding:4px 8px;font-size:19px;line-height:1}
+.stage-delete-confirm{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:8;max-width:260px;padding:10px 12px;text-align:center;background:rgba(23,40,33,.92)}
+.stage-delete-confirm p{margin:0;font-size:12px;line-height:1.4}
+.stage-delete-confirm-actions{display:flex;gap:8px;justify-content:center;margin-top:8px}
+.stage-delete-confirm-actions button{flex:1}

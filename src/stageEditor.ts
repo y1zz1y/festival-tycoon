@@ -19,13 +19,15 @@ function stepLabel(step:{x:number;y:number;z:number}){
 }
 /** Label for a StagePart's own facing (0-3 = 90° yaw steps, 4/5 = up/down), as picked via the orientation cube. */
 function directionLabel(rotation:number){return rotation===4?'oben':rotation===5?'unten':`${rotation*90}°`}
+/** Custom cursor for the delete tool: a small trash-can glyph rendered into an inline SVG data URI. */
+const ERASE_CURSOR=`url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><text y='22' font-size='22'>🗑️</text></svg>") 4 22, pointer`
 export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:boolean)=>void){
   const paletteEntries=(Object.entries(COMPONENTS) as [ComponentKind,typeof COMPONENTS[ComponentKind]][]).map(([kind,c])=>({id:kind,kind,label:c.name,icon:kind,cost:c.cost}))
   const panel=document.createElement('section');panel.className='stage-editor panel';panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Bühnenwerkstatt')
   panel.innerHTML=`<header class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 class="panel-header-title">Bühnenwerkstatt</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Bühneneditor schließen">×</button></header>
   <div class="stage-layout"><aside><label>Name<input data-name maxlength="60"></label><hr class="stage-divider"><label>Gespeicherte Bühnen<select data-template><option value="">Neue Bühne</option></select></label><div class="stage-actions"><button data-save>Bühne speichern</button><button data-load>Laden</button><button data-new>Neu</button></div>
-  <h3>Größe</h3><div class="stage-pair stage-triple"><label>Breite<input data-tiles-width type="number" min="1" max="8"></label><label>Tiefe<input data-tiles-depth type="number" min="1" max="8"></label><label>Höhe<input data-tiles-height type="number" min="1" max="8"></label></div><h3>Bauteile</h3><div class="stage-parts">${paletteEntries.map(({id,kind,label,icon,cost})=>`<div class="stage-component"><button data-part="${id}" aria-pressed="false" aria-expanded="false"><img class="stage-part-icon" src="/stage-icons/${icon}.png" alt=""><span>${label}<small data-part-brand="${id}">ab ${cost} € · Qualität ▾</small></span></button><div class="stage-quality panel" data-quality-menu="${id}" hidden>${Object.entries(brandsFor(kind)).map(([brand,info])=>`<button data-quality="${brand}" data-quality-part="${id}">${info.name}<small>${Math.round(cost*info.cost)} € · Wirkung ×${info.quality}</small></button>`).join('')}</div></div>`).join('')}</div><button data-audience aria-pressed="false">♟ Zuschauerfläche malen</button><small>Ganze Kartenfelder · vom Rand aus einen Zugang nach innen anlegen.</small><button data-erase aria-pressed="false">Entfernen</button><button data-undo>Rückgängig</button><dl class="stage-hotkeys"><div><dt><kbd>R</kbd></dt><dd>Bauteil drehen</dd></div><div><dt><kbd>⇧</kbd><kbd>R</kbd></dt><dd>Zurückdrehen</dd></div><div><dt><kbd>Alt</kbd></dt><dd>Bodenmontage erzwingen</dd></div><div><dt>Rechtsklick</dt><dd>auf Bauteil: drehen</dd></div><div><dt>Rechtsklick + Ziehen</dt><dd>auf Hintergrund: Kamera-Drehpunkt verschieben</dd></div><div><dt>Ziehen</dt><dd>Kamera drehen</dd></div><div><dt>Mausrad</dt><dd>Zoom</dd></div></dl></aside>
-  <div class="stage-center"><div data-viewport><label data-color-picker class="stage-color-picker" hidden title="Bauteilfarbe">Farbe<input data-color type="color" value="#e69759"></label></div><p data-hint aria-live="polite">Wähle ein Bauteil und klicke auf einen Rasterplatz.</p><div data-stats class="stage-stats"></div></div>
+  <h3>Größe</h3><div class="stage-pair stage-triple"><label>Breite<input data-tiles-width type="number" min="1" max="8"></label><label>Tiefe<input data-tiles-depth type="number" min="1" max="8"></label><label>Höhe<input data-tiles-height type="number" min="1" max="8"></label></div><div class="stage-section-header"><h3>Bauteile</h3><button data-erase aria-pressed="false" class="stage-icon-button" title="Löschen-Werkzeug" aria-label="Löschen-Werkzeug">🗑️</button></div><div class="stage-parts">${paletteEntries.map(({id,kind,label,icon,cost})=>`<div class="stage-component"><button data-part="${id}" aria-pressed="false" aria-expanded="false"><img class="stage-part-icon" src="/stage-icons/${icon}.png" alt=""><span>${label}<small data-part-brand="${id}">ab ${cost} € · Qualität ▾</small></span></button><div class="stage-quality panel" data-quality-menu="${id}" hidden>${Object.entries(brandsFor(kind)).map(([brand,info])=>`<button data-quality="${brand}" data-quality-part="${id}">${info.name}<small>${Math.round(cost*info.cost)} € · Wirkung ×${info.quality}</small></button>`).join('')}</div></div>`).join('')}</div><button data-audience aria-pressed="false">♟ Zuschauerfläche malen</button><small>Ganze Kartenfelder · vom Rand aus einen Zugang nach innen anlegen.</small><button data-undo>Rückgängig</button><dl class="stage-hotkeys"><div><dt><kbd>R</kbd></dt><dd>Bauteil drehen</dd></div><div><dt><kbd>⇧</kbd><kbd>R</kbd></dt><dd>Zurückdrehen</dd></div><div><dt><kbd>Alt</kbd></dt><dd>Bodenmontage erzwingen</dd></div><div><dt>Rechtsklick</dt><dd>auf Bauteil: drehen</dd></div><div><dt>Rechtsklick + Ziehen</dt><dd>auf Hintergrund: Kamera-Drehpunkt verschieben</dd></div><div><dt>Ziehen</dt><dd>Kamera drehen</dd></div><div><dt>Mausrad</dt><dd>Zoom</dd></div></dl></aside>
+  <div class="stage-center"><div data-viewport><label data-color-picker class="stage-color-picker" hidden title="Bauteilfarbe">Farbe<input data-color type="color" value="#e69759"></label><div data-erase-confirm class="stage-delete-confirm panel" hidden><p data-erase-confirm-text></p><div class="stage-delete-confirm-actions"><button data-confirm-delete>Entfernen</button><button data-cancel-delete>Abbrechen</button></div></div></div><p data-hint aria-live="polite">Wähle ein Bauteil und klicke auf einen Rasterplatz.</p><div data-stats class="stage-stats"></div></div>
   <aside><h3>Showpult</h3><div class="stage-phases">${PHASE_NAMES.map((p,i)=>`<button data-phase="${i}" aria-pressed="${i===0}">${p}</button>`).join('')}</div><label class="stage-check"><input data-linked type="checkbox">Alle Phasen gleich</label>${[['intensity','Lichtintensität'],['speed','Bewegung / Tempo'],['movement','Traversenhub'],['pyro','Feuerwerk / Funken'],['fog','Nebel'],['volume','Lautstärke']].map(([id,name])=>`<label>${name}<output data-value="${id}"></output><input data-slider="${id}" type="range" min="0" max="100"></label>`).join('')}<label>Lichtfarbe<input data-show-color type="color"></label><label class="stage-check"><input data-band-preview type="checkbox" checked>Bandvorschau (Indie)</label><button data-preview>Vorschau pausieren</button><p>Warm-up: erste 20 % · Main: bis 80 % · Finale: letzte 20 % des Auftritts. Effekte laufen auf der Karte nur bei aktiver, versorgter Bühne.</p><p>Leistungsfähigere Marken steigern Party- und Dekowerte, kosten aber mehr. Hohe Lautstärke erhöht die Wirkung und belastet die ruhige Umgebung.</p></aside></div>
   <footer><span data-cost></span><button data-build>Für Bühnenbau verwenden</button><button data-apply>Bühne umbauen</button></footer>`
   document.querySelector('.game-shell')!.append(panel)
@@ -42,6 +44,8 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   let design=defaultStageDesign(),stageId:string|undefined,part:StagePart['kind']='truss',erase=false,phase=0,history:StageDesign[]=[],preview=true,elapsed=0,last=0,frame=0,serial=0
   let rotation=0,audienceMode=false,candidate:StagePart|null=null,candidateIssue:string|null=null,hitId:string|undefined,hitStep:{x:number;y:number;z:number}|undefined
   let audienceCell:{x:number;z:number}|null=null,ghost:Group|undefined,pickTargets:Group|undefined,ghostKey='',revision=0
+  /** Truss id awaiting confirmation because removing it would cascade onto other docked parts. */
+  let pendingDelete:string|null=null
   let pointer:{x:number;y:number;alt:boolean}|null=null
   const quality:Partial<Record<string,StagePart['brand']>>={}
   let framedSize=''
@@ -64,7 +68,18 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     q('[data-color-picker]').hidden=erase||audienceMode||isTruss(part)
     gizmo?.setDirection(rotation)
     q('[data-erase]').setAttribute('aria-pressed',String(erase));q<HTMLButtonElement>('[data-undo]').disabled=!history.length
+    refreshDeleteConfirm()
   }
+  /** Shows/hides the "this truss carries other parts" confirmation over the viewport, in sync with `pendingDelete`. */
+  function refreshDeleteConfirm(){
+    const el=q('[data-erase-confirm]')
+    el.hidden=!pendingDelete
+    if(!pendingDelete)return
+    const doomed=design.parts.find(p=>p.id===pendingDelete)
+    const count=doomed?design.parts.length-removeStagePart(design,doomed.id).parts.length-1:0
+    q('[data-erase-confirm-text]').textContent=doomed?`${COMPONENTS[doomed.kind].name} entfernen? ${count===1?'1 weiteres Bauteil hängt':`${count} weitere Bauteile hängen`} daran und ${count===1?'wird':'werden'} mit entfernt.`:''
+  }
+  function cancelPendingDelete(){if(pendingDelete){pendingDelete=null;refreshDeleteConfirm()}}
   function rebuild(){if(!scene)return;revision++;ghostKey='';if(pickTargets)disposeStageModel(pickTargets);if(model){scene.remove(model);disposeStageModel(model)}model=createStageModel(design,{lightBudget:6})
     const scale=(design.tileWidth??1)*4/design.width;model.scale.set(scale,(design.tileHeight??1)*4/design.height,(design.tileDepth??1)*4/design.depth);scene.add(model);pickTargets=createStagePickTargets(design);pickTargets.scale.copy(model.scale);pickTargets.updateMatrixWorld(true)
     const sizeKey=`${design.tileWidth??1}:${design.tileDepth??1}:${design.tileHeight??1}`
@@ -94,7 +109,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
       const hit=gizmo!.hitTest(e.clientX,e.clientY,renderer!.domElement.getBoundingClientRect())
       gizmo!.setHover(hit.dir)
       if(hit.inside){pointer=null;if(ghost)ghost.visible=false;renderer!.domElement.style.cursor=hit.dir!=null?'pointer':'default';return}
-      renderer!.domElement.style.cursor='default'
+      renderer!.domElement.style.cursor=erase?ERASE_CURSOR:'default'
       updateHover({x:e.clientX,y:e.clientY,alt:e.altKey})
     })
     renderer.domElement.addEventListener('pointerleave',()=>{pointer=null;if(ghost)ghost.visible=false;gizmo!.setHover(null)})
@@ -116,7 +131,12 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
         next.audience=found?(next.audience??[]).filter(c=>c.x!==audienceCell!.x||c.z!==audienceCell!.z):[...(next.audience??[]),{...audienceCell}]
         const issue=stageDesignIssue(next);if(issue){hint.textContent=issue;return}remember();design=next;rebuild();return
       }
-      if(erase){if(!hitId){hint.textContent='Zum Entfernen direkt auf ein Bauteil zeigen.';return}remember();design=removeStagePart(design,hitId);rebuild();return}
+      if(erase){
+        if(pendingDelete)return
+        if(!hitId){hint.textContent='Zum Entfernen direkt auf ein Bauteil zeigen.';return}
+        if(isTruss(design.parts.find(p=>p.id===hitId)?.kind??'')&&design.parts.length-removeStagePart(design,hitId).parts.length>1){pendingDelete=hitId;refreshDeleteConfirm();return}
+        remember();design=removeStagePart(design,hitId);rebuild();return
+      }
       if(!candidate||candidateIssue){if(candidateIssue)hint.textContent=candidateIssue;return}
       while(design.parts.some(p=>p.id===`part-${serial+1}`))serial++
       remember();design.parts.push({...candidate,id:`part-${++serial}`});rebuild()
@@ -183,16 +203,18 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     frame=requestAnimationFrame(animate)
   }
   function syncOpenButton(){document.getElementById('open-stage-editor')?.setAttribute('aria-expanded',String(!panel.hidden))}
-  function close(){panel.hidden=true;cancelAnimationFrame(frame);pointer=null;clearGhost();syncOpenButton()}
-  panel.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape')close();if(isTextEntryTarget(e.target))return;if(e.key.toLowerCase()==='r'){e.preventDefault();rotate(e.shiftKey?-1:1)}})
+  function close(){panel.hidden=true;cancelAnimationFrame(frame);pointer=null;clearGhost();cancelPendingDelete();syncOpenButton()}
+  panel.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Escape'){if(pendingDelete)cancelPendingDelete();else close()}if(isTextEntryTarget(e.target))return;if(e.key.toLowerCase()==='r'){e.preventDefault();rotate(e.shiftKey?-1:1)}})
   panel.addEventListener('click',e=>{
     const b=(e.target as Element).closest<HTMLButtonElement>('button');if(!b)return
     if(b.hasAttribute('data-close'))close()
-    if(b.dataset.part){part=b.dataset.part as StagePart['kind'];erase=false;audienceMode=false;hideQuality();const menu=q(`[data-quality-menu=${part}]`),rect=b.getBoundingClientRect();menu.hidden=false;menu.style.left=`${Math.min(window.innerWidth-235,rect.right+8)}px`;menu.style.right='auto';menu.style.top=`${Math.max(10,Math.min(window.innerHeight-200,rect.top))}px`;b.setAttribute('aria-expanded','true');refresh();if(pointer)updateHover(pointer)}
+    if(b.hasAttribute('data-confirm-delete')&&pendingDelete){remember();design=removeStagePart(design,pendingDelete);pendingDelete=null;rebuild();return}
+    if(b.hasAttribute('data-cancel-delete')){cancelPendingDelete();return}
+    if(b.dataset.part){part=b.dataset.part as StagePart['kind'];erase=false;audienceMode=false;cancelPendingDelete();hideQuality();const menu=q(`[data-quality-menu=${part}]`),rect=b.getBoundingClientRect();menu.hidden=false;menu.style.left=`${Math.min(window.innerWidth-235,rect.right+8)}px`;menu.style.right='auto';menu.style.top=`${Math.max(10,Math.min(window.innerHeight-200,rect.top))}px`;b.setAttribute('aria-expanded','true');refresh();if(pointer)updateHover(pointer)}
     if(b.dataset.quality){const entryId=b.dataset.qualityPart! as StagePart['kind'];quality[entryId]=b.dataset.quality as StagePart['brand'];part=entryId;hideQuality();const brand=brandsFor(entryId)[quality[entryId]!];q(`[data-part-brand=${entryId}]`).textContent=`${Math.round(COMPONENTS[entryId].cost*brand.cost)} € · ${brand.name}`;refresh();if(pointer)updateHover(pointer)}
-    if(b.hasAttribute('data-audience')){audienceMode=!audienceMode;erase=false;hideQuality();refresh();if(pointer)updateHover(pointer)}
-    if(b.hasAttribute('data-erase')){erase=!erase;audienceMode=false;hideQuality();refresh();if(pointer)updateHover(pointer)}
-    if(b.hasAttribute('data-undo')&&history.length){design=history.pop()!;rebuild()}
+    if(b.hasAttribute('data-audience')){audienceMode=!audienceMode;erase=false;cancelPendingDelete();hideQuality();refresh();if(pointer)updateHover(pointer)}
+    if(b.hasAttribute('data-erase')){erase=!erase;audienceMode=false;cancelPendingDelete();hideQuality();refresh();if(renderer)renderer.domElement.style.cursor=erase?ERASE_CURSOR:'default';if(pointer)updateHover(pointer)}
+    if(b.hasAttribute('data-undo')&&history.length){cancelPendingDelete();design=history.pop()!;rebuild()}
     if(b.dataset.phase){phase=Number(b.dataset.phase);refresh()}
     if(b.hasAttribute('data-preview')){preview=!preview;b.textContent=preview?'Vorschau pausieren':'Vorschau abspielen'}
     if(b.hasAttribute('data-load')){remember();design=structuredClone(library().find(t=>t.name===q<HTMLSelectElement>('[data-template]').value)??defaultStageDesign());serial+=1000;while(design.parts.some(p=>p.id===`part-${serial+1}`))serial++;rebuild()}
@@ -213,5 +235,5 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     if(input.matches('[data-linked]')){remember();design.linked=input.checked;refresh()}
   })
   panel.addEventListener('input',e=>{const input=e.target as HTMLInputElement;if(input.matches('[data-tiles-width],[data-tiles-depth],[data-tiles-height]')&&input.value!==''&&Number.isInteger(Number(input.value))&&Number(input.value)>=Number(input.min)&&Number(input.value)<=Number(input.max)){input.dispatchEvent(new Event('change',{bubbles:true}))}if(input.dataset.slider){const key=input.dataset.slider as 'intensity';design.phases[phaseIndex()][key]=Number(input.value);q(`[data-value=${key}]`).textContent=input.value+' %'}if(input.matches('[data-show-color]'))design.phases[phaseIndex()].color=input.value;if(input.matches('[data-name]'))design.name=input.value})
-  return {isOpen:()=>!panel.hidden,close,open(id?:string){stageId=id;const existing=id?getGame().snapshot.buildings.find(b=>b.id===id)?.stageDesign:undefined;design=structuredClone(existing??defaultStageDesign());history=[];pointer=null;audienceMode=false;erase=false;hideQuality();serial+=1000;while(design.parts.some(p=>p.id===`part-${serial+1}`))serial++;phase=0;panel.hidden=false;q('[data-apply]').hidden=!id;refreshTemplates();if(!renderer)init();rebuild();last=performance.now();cancelAnimationFrame(frame);frame=requestAnimationFrame(animate);syncOpenButton();q<HTMLButtonElement>('[data-close]').focus()}}
+  return {isOpen:()=>!panel.hidden,close,open(id?:string){stageId=id;const existing=id?getGame().snapshot.buildings.find(b=>b.id===id)?.stageDesign:undefined;design=structuredClone(existing??defaultStageDesign());history=[];pointer=null;audienceMode=false;erase=false;pendingDelete=null;hideQuality();serial+=1000;while(design.parts.some(p=>p.id===`part-${serial+1}`))serial++;phase=0;panel.hidden=false;q('[data-apply]').hidden=!id;refreshTemplates();if(!renderer)init();rebuild();last=performance.now();cancelAnimationFrame(frame);frame=requestAnimationFrame(animate);syncOpenButton();q<HTMLButtonElement>('[data-close]').focus()}}
 }
