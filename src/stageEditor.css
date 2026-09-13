@@ -55,6 +55,8 @@
 .stage-section-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:9px 0}.stage-section-header h3{margin:0}
 .stage-heading-tight{margin:9px 0 0}
 .stage-icon-button{display:flex;align-items:center;justify-content:center;padding:4px 8px;font-size:19px;line-height:1}
+.stage-section-tools{display:flex;gap:6px}
+.stage-section-tools .stage-icon-button:disabled{opacity:.4}
 .stage-delete-confirm{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:8;max-width:260px;padding:10px 12px;text-align:center;background:rgba(23,40,33,.92)}
 .stage-delete-confirm p{margin:0;font-size:12px;line-height:1.4}
 .stage-delete-confirm-actions{display:flex;gap:8px;justify-content:center;margin-top:8px}

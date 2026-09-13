@@ -475,17 +475,20 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
 
         if(options.effects!==false){
           // The beam is a child of the head, built pointing along local +Z (the lens's own
-          // forward axis) so it stays perfectly aimed as the head pans and tilts.
+          // forward axis) so it stays perfectly aimed as the head pans and tilts. It lives in its
+          // own group: that is what switches off between shows, leaving the head itself on the
+          // truss where it belongs (see animateStageModel).
+          const beams=new Group();headGroup.add(beams)
           const beamGeo=new ConeGeometry(.85,4,16,1,true);beamGeo.rotateZ(Math.PI);beamGeo.translate(0,2,0);beamGeo.rotateX(Math.PI/2)
           const beamMat=new MeshBasicMaterial({color:c,transparent:true,opacity:.07,depthWrite:false,side:DoubleSide,blending:AdditiveBlending})
-          const beam=new Mesh(beamGeo,beamMat);beam.position.set(0,0,.46-headShift);headGroup.add(beam)
+          const beam=new Mesh(beamGeo,beamMat);beam.position.set(0,0,.46-headShift);beams.add(beam)
           const glowMat=new MeshBasicMaterial({color:c,transparent:true,opacity:.85,depthWrite:false,blending:AdditiveBlending})
-          const glow=new Mesh(new SphereGeometry(.07,8,6),glowMat);glow.position.copy(beam.position);headGroup.add(glow)
+          const glow=new Mesh(new SphereGeometry(.07,8,6),glowMat);glow.position.copy(beam.position);beams.add(glow)
           let light:SpotLight|undefined
           if(lights<(options.lightBudget??0)){
             light=new SpotLight(c,0,40,Math.atan(.85/4),.45,1);light.castShadow=false;root.add(light,light.target);lights++
           }
-          headGroup.userData={kind:'spot',id:p.id,index:effects.length,base:headGroup.position.clone(),armGroup,headRestQuat,beamMat,glowMat,light,length:4}
+          headGroup.userData={kind:'spot',id:p.id,index:effects.length,base:headGroup.position.clone(),armGroup,headRestQuat,beams,beamMat,glowMat,light,length:4}
           effects.push(headGroup)
         }
       }else if(p.kind==='laser'){
@@ -714,7 +717,13 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
     rig.position.copy(rig.userData.base);if(rig.userData.moving)rig.position.y-=offset
     const fog=rig.userData.kind==='fog',t=time*(.2+phase.speed/45)+rig.userData.index
     rig.userData.intensity=phase.intensity
-    rig.visible=active&&(pyro||sparks?(phase.pyro??0)>0:fog?phase.fog>0:phase.intensity>0)
+    // A moving head's rig carries the head itself, not only its beam — hiding it with the show
+    // would leave a headless yoke hanging on the truss. The fixture therefore stays put whatever
+    // the show is doing and only darkens (see the 'spot' branch below); every other rig *is* its
+    // effect and disappears with it.
+    const lit=active&&(pyro||sparks?(phase.pyro??0)>0:fog?phase.fog>0:phase.intensity>0)
+    rig.userData.lit=lit
+    rig.visible=rig.userData.kind==='spot'||lit
     if(pyro){
       const strength=(phase.pyro??0)/100,shots=rig.children[0] as LineSegments
       const mat=shots.material as LineBasicMaterial;mat.color.set(phase.color)
@@ -819,6 +828,7 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
       const tiltWobble=new Quaternion().setFromAxisAngle(unitX,sweep*.3*Math.sin(t*1.15+1.3))
       rig.quaternion.multiplyQuaternions(tiltWobble,rig.userData.headRestQuat as Quaternion)
       rig.updateWorldMatrix(true,false)
+      const beams=rig.userData.beams as Group|undefined;if(beams)beams.visible=lit // the beam goes out with the show, the head stays on the truss
       const beamMat=rig.userData.beamMat as MeshBasicMaterial,glowMat=rig.userData.glowMat as MeshBasicMaterial
       beamMat.color.set(phase.color);beamMat.opacity=phase.intensity/100*.07
       glowMat.color.set(phase.color);glowMat.opacity=phase.intensity/100*.85
@@ -848,9 +858,9 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
     if(light){
       if(rig.userData.kind==='spot'){
         const worldPos=new Vector3();rig.getWorldPosition(worldPos)
-        light.position.copy(worldPos);light.target.position.copy(rig.localToWorld(new Vector3(0,0,rig.userData.length)));light.color.set(phase.color);light.intensity=rig.visible?phase.intensity*1.8:0
+        light.position.copy(worldPos);light.target.position.copy(rig.localToWorld(new Vector3(0,0,rig.userData.length)));light.color.set(phase.color);light.intensity=lit?phase.intensity*1.8:0
       }else{
-        light.position.copy(rig.position);light.target.position.copy(new Vector3(0,rig.userData.length,0).applyQuaternion(rig.quaternion).add(rig.position));light.color.set(phase.color);light.intensity=rig.visible?phase.intensity*1.8:0
+        light.position.copy(rig.position);light.target.position.copy(new Vector3(0,rig.userData.length,0).applyQuaternion(rig.quaternion).add(rig.position));light.color.set(phase.color);light.intensity=lit?phase.intensity*1.8:0
       }
     }
   }
@@ -858,7 +868,7 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
 /** A shared pool illuminates the whole map; beam meshes remain visible for every fixture. */
 export function updateStageLightPool(models:Group[],pool:SpotLight[]){
   const candidates:Group[]=[]
-  for(const root of models)for(const rig of (root.userData.effects??[]) as Group[]){if(rig.visible&&rig.userData.kind==='spot')candidates.push(rig)}
+  for(const root of models)for(const rig of (root.userData.effects??[]) as Group[]){if(rig.userData.lit&&rig.userData.kind==='spot')candidates.push(rig)}
   pool.forEach((light,index)=>{
     const rig=candidates[Math.floor(index*candidates.length/pool.length)];if(!rig){light.intensity=0;return}
     const material=rig.userData.beamMat as MeshBasicMaterial
