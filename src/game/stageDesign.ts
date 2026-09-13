@@ -88,6 +88,15 @@ export function stageDesignIssue(d:StageDesign):string|null {
         // A subwoofer is a stable platform for anything that doesn't have to stand on the
         // ground itself — but only balanced on top, never hung underneath or bolted to a side.
         if(dx!==0||dz!==0||dy!==1)return 'Dieses Bauteil kann nur oben auf dem Subwoofer stehen'
+      }else if(p.kind==='screen'&&host.kind==='screen'){
+        // A Pixel-LED-Wand module only ever attaches to a truss directly (any of its six sides,
+        // handled above) to anchor the very first module of a wall — every further module grows
+        // the wall by docking onto an already-connected module instead, in any of the four
+        // directions that stay in the same flat plane (never front/back, which would stack
+        // modules into each other instead of tiling them side by side).
+        if(p.rotation!==host.rotation)return 'Ein Pixel-LED-Wand-Modul kann nur an ein gleich ausgerichtetes Modul anbauen'
+        const facing=partFacing(p)
+        if(dx*facing.x+dy*facing.y+dz*facing.z!==0)return 'Pixel-LED-Wand-Module wachsen nur seitlich und übereinander, nicht in die Tiefe'
       }else if(STACKABLE_KINDS.includes(p.kind)&&host.kind===p.kind){
         // Line arrays hang and extend downward, element by element; stacked speakers/subs grow upward instead.
         const downward=p.kind==='lineArray'
@@ -154,6 +163,16 @@ export const ROTATION_DIRECTIONS:{x:number;y:number;z:number}[] = [
   {x:0,y:0,z:1},{x:1,y:0,z:0},{x:0,y:0,z:-1},{x:-1,y:0,z:0},{x:0,y:1,z:0},{x:0,y:-1,z:0},
 ]
 export function partFacing(part:StagePart):{x:number;y:number;z:number}{return ROTATION_DIRECTIONS[part.rotation] ?? {x:0,y:1,z:0}}
+/**
+ * The rotation a Pixel-LED-Wand module has to take when it is bolted onto the given face of a
+ * truss: its LEDs always point away from the structure carrying them, never back into it — which
+ * is also what makes two walls meet cleanly around a corner. Undefined for a module docked below
+ * or above a truss, where the choice stays free because LEDs never point straight up or down.
+ */
+export function screenFacingRotation(step:{x:number;y:number;z:number}):number|undefined{
+  const index=ROTATION_DIRECTIONS.findIndex(r=>r.x===step.x&&r.y===step.y&&r.z===step.z)
+  return index>=0&&index<4?index:undefined
+}
 /** How many line-array elements are chained above this one (0 for the element docked straight onto the truss), for the per-element downward curvature. */
 export function lineArrayIndex(d:StageDesign,part:StagePart):number{
   let index=0,current=part
@@ -170,12 +189,21 @@ export function isLastLineArrayElement(d:StageDesign,part:StagePart):boolean{
 }
 /** Rewrites StagePart kinds removed from COMPONENTS since a design was saved, so old saves keep loading instead of failing validation. Logs when it actually changes something. */
 export function migrateStageDesign(d:StageDesign):StageDesign {
-  let changed=false
+  let changed=false,turned=false
+  /** The facing a module in a Pixel-LED-Wand must have: out along the truss face its wall is bolted to, resolved through however many modules the wall was grown by. */
+  const wallFacing=(part:StagePart):number|undefined=>{
+    const host=part.attachedTo?d.parts.find(q=>q?.id===part.attachedTo):undefined
+    if(!host)return undefined
+    return isTruss(host.kind)?screenFacingRotation(mountDirection(part,host)):host.kind==='screen'?wallFacing(host):undefined
+  }
   const parts=d.parts.map(p=>{
     if((p.kind as string)==='speaker'){changed=true;return {...p,kind:'fullRange' as ComponentKind}}
+    // Designs saved before the LEDs were forced to point away from their truss (see
+    // screenFacingRotation) can still hold a wall facing backwards into the structure.
+    if(p.kind==='screen'){const facing=wallFacing(p);if(facing!==undefined&&facing!==p.rotation){turned=true;return {...p,rotation:facing}}}
     return p
   })
-  if(!changed)return d
-  console.warn(`Bühnendesign "${d.name}": veraltetes Bauteil "speaker" auf "fullRange" migriert.`)
+  if(!changed&&!turned)return d
+  if(changed)console.warn(`Bühnendesign "${d.name}": veraltetes Bauteil "speaker" auf "fullRange" migriert.`)
   return {...d,parts}
 }

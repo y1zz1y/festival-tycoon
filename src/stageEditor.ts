@@ -165,7 +165,8 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     const canDockOnTruss=!!hitPart&&isTruss(hitPart.kind)&&!GROUND_ONLY_KINDS.includes(part)
     const canStack=!!hitPart&&hitPart.kind===part&&STACKABLE_KINDS.includes(part)
     const canStandOnSubwoofer=!!hitPart&&hitPart.kind==='subwoofer'&&part!=='subwoofer'&&!GROUND_ONLY_KINDS.includes(part)
-    const auto=!p.alt&&!audienceMode&&!erase&&(canDockOnTruss||canStack||canStandOnSubwoofer)
+    const canStandOnScreen=!!hitPart&&hitPart.kind==='screen'&&part==='screen'
+    const auto=!p.alt&&!audienceMode&&!erase&&(canDockOnTruss||canStack||canStandOnSubwoofer||canStandOnScreen)
     hitStep=undefined
     if(hit&&hitPart&&auto){
       if(canStack||canStandOnSubwoofer){
@@ -176,6 +177,19 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
         // the whole part is instead one hitbox for that single direction, which is much
         // easier to hit than a specific face — especially on a slim, hanging line array.
         hitStep=canStack&&part==='lineArray'?{x:0,y:-1,z:0}:{x:0,y:1,z:0}
+      }else if(canStandOnScreen){
+        // A Pixel-LED-Wand module is a thin, flat panel — its own front face (facing the
+        // audience) is by far its biggest hitbox, so picking a side purely by exact pointer
+        // position (as below) would almost always land on that face and reject the depth
+        // direction, rather than the four in-plane sides a wall actually grows in. Ignoring the
+        // depth axis entirely and choosing only between "sideways" and "up/down" — whichever the
+        // pointer sits closer to — makes every part of the panel a usable hitbox for all four.
+        const local=hit.object.worldToLocal(hit.point.clone())
+        const sidewaysAxis=hitPart!.rotation===0||hitPart!.rotation===2?'x':'z'
+        const sidewaysVal=sidewaysAxis==='x'?local.x:local.z
+        hitStep=Math.abs(sidewaysVal)>=Math.abs(local.y)
+          ?(sidewaysAxis==='x'?{x:Math.sign(sidewaysVal)||1,y:0,z:0}:{x:0,y:0,z:Math.sign(sidewaysVal)||1})
+          :{x:0,y:Math.sign(local.y)||1,z:0}
       }else{
         const local=hit.object.worldToLocal(hit.point.clone())
         const ax=Math.abs(local.x),ay=Math.abs(local.y),az=Math.abs(local.z)

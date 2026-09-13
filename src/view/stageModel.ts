@@ -16,9 +16,11 @@ const ALONG_AXES = {x:{x:1,y:0,z:0},y:{x:0,y:1,z:0},z:{x:0,y:0,z:1}} as const
 /** Colors used only by the floor slab/tiles, so its batched meshes can be found and hidden separately (e.g. when viewing from below). */
 const FLOOR_COLORS = new Set(['#75886a','#30394c','#485166','#515b70'])
 /** Half the height of each fixture's own body (matches its first box() call below), used to press it flush against a truss it is docked onto. */
-const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:.4,subwoofer:.45,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,screen:.6,banner:.6,star:.4}
+const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:.4,subwoofer:.45,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,banner:.6,star:.4}
 /** Top surface of a floor tile (the .24 base slab plus the .04 detail overlay from the floor loop below) — where a ground-standing fixture's own base belongs, matching stageBand.ts's world-map floor level. */
 const GROUND_Y=.28
+/** Thickness of a Pixel-LED-Wand module's backing plate — its LEDs sit on the front of it. */
+const SCREEN_DEPTH=.08
 /** Downward tilt each further line-array cabinet picks up once curving begins (see lineArrayCabinetTilt below). */
 const LINE_ARRAY_ANGLE_STEP=6*Math.PI/180
 /** How far a line array docked to the *side* of a truss hangs below it, bridged by a rigging arm — real arrays hang off a bridle rather than sitting flush at truss height. */
@@ -48,7 +50,32 @@ function resolveEquipmentBase(d:StageDesign,part:StagePart,cache:Map<string,{x:n
   const x=part.x-d.width/2+.5,z=part.z-d.depth/2+.5
   const host=part.attachedTo?d.parts.find(t=>t.id===part.attachedTo):undefined
   let pos:{x:number;y:number;z:number}
-  if(!host){
+  if(part.kind==='screen'){
+    // A Pixel-LED-Wand module is a plain 1x1 slab of LEDs (see the per-part loop below), and it
+    // always comes to rest on the boundary between the cell of whatever it is bolted to and its
+    // own. Grown off another module it simply lands one grid step from it, inheriting that
+    // module's position, so a whole wall stays one rigid, evenly spaced lattice.
+    const dir=host?mountDirection(part,host):undefined
+    if(!host||!dir){
+      pos={x,y:part.y,z}
+    }else if(isTruss(host.kind)){
+      const hc={x:host.x-d.width/2+.5,y:host.y+.5,z:host.z-d.depth/2+.5}
+      // How the module meets that boundary depends on which truss face it hangs from. Mounted
+      // flat onto the truss's front or rear face its own face is parallel to the boundary, so it
+      // lies right in it, half a cell out from the truss's centre. Docked below/above or beside
+      // the truss the boundary instead cuts across its face, so it butts its own edge against it
+      // — filling its own cell. Either way both a wall's plane and its edges land on cell
+      // boundaries, which is what lets two walls around a corner meet exactly instead of crossing
+      // through one another. What is left between truss and module is spanned by a short rigging
+      // arm (see the per-part loop below).
+      const depthAxis=part.rotation%2?'x':'z'
+      const reach=(dir.x?'x':dir.y?'y':'z')===depthAxis?.5:1
+      pos={x:hc.x+dir.x*reach,y:hc.y+dir.y*reach-.5,z:hc.z+dir.z*reach}
+    }else{
+      const b=resolveEquipmentBase(d,host,cache)
+      pos={x:b.x+dir.x,y:b.y+dir.y,z:b.z+dir.z}
+    }
+  }else if(!host){
     pos={x,y:GROUND_Y,z}
   }else{
     const dir=mountDirection(part,host)
@@ -94,10 +121,43 @@ function lineArrayTopAnchor(d:StageDesign,part:StagePart,baseCache:Map<string,{x
   topCache.set(part.id,top)
   return top
 }
+type ScreenGroupInfo={row:number;col:number}
+/**
+ * Groups every 'screen' part into its connected wall — same facing, grid-adjacent to at least one
+ * other screen in the group — and assigns each member a (row,col) position within that wall, in
+ * panel units. That gives the diagonal glow wave one consistent coordinate system across however
+ * many panels are joined together, so it reads as one ripple over the whole wall rather than
+ * restarting inside every module.
+ */
+function computeScreenGroups(d:StageDesign):Map<string,ScreenGroupInfo>{
+  const result=new Map<string,ScreenGroupInfo>()
+  const screens=d.parts.filter(p=>p.kind==='screen')
+  const visited=new Set<string>()
+  for(const start of screens){
+    if(visited.has(start.id))continue
+    const sidewaysAxis:'x'|'z'=start.rotation===0||start.rotation===2?'x':'z'
+    const depthAxis:'x'|'z'=sidewaysAxis==='x'?'z':'x'
+    const coordOf=new Map<string,{row:number;col:number}>([[start.id,{row:0,col:0}]])
+    visited.add(start.id)
+    const queue=[start]
+    while(queue.length){
+      const cur=queue.shift()!,curCoord=coordOf.get(cur.id)!
+      for(const cand of screens){
+        if(visited.has(cand.id)||cand.rotation!==cur.rotation||cand[depthAxis]!==cur[depthAxis])continue
+        const dCol=cand[sidewaysAxis]-cur[sidewaysAxis],dRow=cand.y-cur.y
+        if(Math.abs(dCol)+Math.abs(dRow)!==1)continue
+        visited.add(cand.id);coordOf.set(cand.id,{row:curCoord.row+dRow,col:curCoord.col+dCol});queue.push(cand)
+      }
+    }
+    for(const [id,coord] of coordOf)result.set(id,coord)
+  }
+  return result
+}
 export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:Set<string>;effects?:boolean;lightBudget?:number}={}):Group {
   const root=new Group(), buckets=new Map<string,BufferGeometry[]>(), effects:Group[]=[]
   const baseCache=new Map<string,{x:number;y:number;z:number}>()
   const lineArrayTopCache=new Map<string,Vector3>()
+  const screenGroups=computeScreenGroups(d)
   let origin: {x:number;z:number;rotation:number}|undefined
   const rotateAround=(x:number,z:number)=>{
     if(!origin)return{x,z}
@@ -293,12 +353,22 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
       }else if(p.kind==='spot'){
         // A real moving head: the base sits flush against the truss (dir), so its two yoke
         // arms always rise away from that same face — dir is therefore also the arms' pan
-        // axis, not world-up. The head, cradled between them, tilts to aim the lens — parented
-        // to it — exactly at the gizmo-chosen facing (see 'spot' in animateStageModel below).
+        // axis, not world-up.
         const dirVec=new Vector3(dir.x,dir.y,dir.z)
         const baseQuat=new Quaternion().setFromUnitVectors(unitZ,dirVec)
         const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
-        const headRestQuat=baseQuat.clone().invert().multiply(new Quaternion().setFromUnitVectors(unitZ,facingVec))
+        // Real yoke kinematics, and the only way the arms keep holding the head at its *sides*:
+        // the gizmo-chosen aim is reached by panning the whole yoke around the base's normal and
+        // then tilting the head around the line between the two arms. Twisting the head inside a
+        // fixed yoke instead would reach the same aim but swing the arms round to the head's
+        // front and back, with the lens staring straight at one of them.
+        const aim=facingVec.clone().applyQuaternion(baseQuat.clone().invert())
+        let tilt=Math.acos(Math.max(-1,Math.min(1,aim.z))),pan=Math.atan2(aim.x,-aim.y)
+        // Panning past a quarter turn reaches the same aim as the opposite pan with the head
+        // tilted back through vertical — that one keeps the head upright, so prefer it.
+        if(Math.abs(pan)>Math.PI/2){pan-=Math.sign(pan)*Math.PI;tilt=-tilt}
+        const armRestQuat=baseQuat.clone().multiply(new Quaternion().setFromAxisAngle(unitZ,pan))
+        const headRestQuat=new Quaternion().setFromAxisAngle(unitX,tilt)
         const pivot=new Vector3(ex,ey+.16,ez)
         const putBase=(lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string)=>{
           const g=new BoxGeometry(w,h,depth);g.applyQuaternion(baseQuat)
@@ -327,8 +397,8 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         }
 
         // Live groups, driven every frame by animateStageModel — not baked into the static buckets.
-        const armGroup=new Group();armGroup.position.copy(pivot);armGroup.quaternion.copy(baseQuat)
-        armGroup.userData.baseQuat=baseQuat
+        const armGroup=new Group();armGroup.position.copy(pivot);armGroup.quaternion.copy(armRestQuat)
+        armGroup.userData.armRestQuat=armRestQuat
         root.add(armGroup)
         const armStart=.08,armSide=.24,armReach=.3
         const armBox=(x:number,y:number,z:number,w:number,h:number,depth:number)=>{const g=new BoxGeometry(w,h,depth);g.translate(x,y,z);return g}
@@ -474,8 +544,62 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         for(const fx of [-.16,.16])for(const fz of [-.12,.12])put(fx,-.14,fz,.05,.03,.05,foot) // feet
         const nozzle=new Vector3(0,-.03,.33).applyQuaternion(facingQuat).add(pivot)
         effect('fog',nozzle.x,nozzle.y,nozzle.z,'#c9d6dd',facing)
-      }else if(p.kind==='screen'||p.kind==='banner'){
+      }else if(p.kind==='banner'){
         box(ex,ey+.6,ez,.9,1.2,.1,'#141c29');for(let a=0;a<5;a++)for(let b=0;b<6;b++)box(ex+(a-2)*.16,ey+.15+b*.17,ez+.07,.14,.14,.03,(a+b)%3?c:'#f3dfb0')
+      }else if(p.kind==='screen'){
+        // A borderless LED wall module: a plain 1x1 slab — one cell wide, one cell tall, thin in
+        // depth — carrying nothing but LEDs on a backing plate. No bezel, no corner clips,
+        // nothing that would interrupt the wall where two modules meet. Its pixels sit on a
+        // lattice of exactly a third of a cell, so the gap left between two neighbouring modules'
+        // edge pixels is the very same gap as between two pixels inside one module: the whole
+        // wall is one uniform lattice, no matter which module was the one on the truss and which
+        // were grown outwards from it.
+        const pixelsPerSide=3,pitch=1/pixelsPerSide,pixel=pitch*.85,mid=(pixelsPerSide-1)/2
+        box(ex,ey+.5,ez,1,1,SCREEN_DEPTH,'#12161c') // backing plate, spanning the full 1x1
+        if(host&&isTruss(host.kind)){
+          // The module itself stops on the edge of the truss's own cell (see resolveEquipmentBase),
+          // so a short arm spans what is left. It starts at the truss's centre — crossing its
+          // sparse 3-chord lattice rather than merely touching its outer radius, which reads as
+          // floating — and ends on the module's near surface: its thin back when it is mounted
+          // flat onto the truss, its own edge when it hangs below/above or beside it.
+          const depthAxis=p.rotation%2?'x':'z'
+          const armLen=(dir.x?'x':dir.y?'y':'z')===depthAxis?.5-SCREEN_DEPTH/2:.5
+          const hc={x:host.x-d.width/2+.5,y:host.y+.5,z:host.z-d.depth/2+.5}
+          const g=new BoxGeometry(dir.x?armLen:.09,dir.y?armLen:.09,dir.z?armLen:.09)
+          g.translate(hc.x+dir.x*armLen/2,hc.y+dir.y*armLen/2,hc.z+dir.z*armLen/2)
+          const list=buckets.get('#2a3038')??[];list.push(g);buckets.set('#2a3038',list)
+        }
+        // The pixel face is its own live, vertex-coloured mesh (one draw call for every LED) so a
+        // diagonal glow wave can sweep across it every frame. Every pixel's wave phase comes from
+        // its position in the *whole* connected wall (see computeScreenGroups) rather than just
+        // this module's own 3x3, so the wave reads as one continuous ripple across however many
+        // modules are joined together instead of restarting inside each one.
+        const screenGroup=screenGroups.get(p.id)
+        const tintPixel=(geometry:BufferGeometry,color:string)=>{
+          const col=new Color(color),arr=new Float32Array(geometry.getAttribute('position').count*3)
+          for(let i=0;i<arr.length;i+=3)col.toArray(arr,i)
+          geometry.setAttribute('color',new Float32BufferAttribute(arr,3));geometry.deleteAttribute('uv')
+          return geometry
+        }
+        const pixelGeoms:BufferGeometry[]=[],pixelCoords:{row:number;col:number}[]=[]
+        for(let a=0;a<pixelsPerSide;a++)for(let b=0;b<pixelsPerSide;b++){
+          const r=rotateAround(ex+(a-mid)*pitch,ez+SCREEN_DEPTH/2+.015)
+          let w=pixel,depth=.03
+          if(origin&&origin.rotation%2)[w,depth]=[depth,w]
+          const g=new BoxGeometry(w,pixel,depth);g.translate(r.x,ey+.5+(b-mid)*pitch,r.z)
+          pixelGeoms.push(tintPixel(g,(a+b)%3?c:'#f3dfb0'))
+          pixelCoords.push({row:(screenGroup?.row??0)*pixelsPerSide+b,col:(screenGroup?.col??0)*pixelsPerSide+a})
+        }
+        const mergedPixels=mergeGeometries(pixelGeoms);pixelGeoms.forEach(g=>g.dispose())
+        if(mergedPixels){
+          const mesh=new Mesh(mergedPixels,new MeshStandardMaterial({vertexColors:true,roughness:.8,flatShading:true}))
+          mesh.castShadow=mesh.receiveShadow=true
+          const rig=new Group();rig.add(mesh);root.add(rig)
+          if(options.effects!==false){
+            rig.userData={kind:'screen',id:p.id,index:effects.length,base:new Vector3(0,0,0),baseColor:new Color(c),glowColor:new Color('#fff6dd'),pixelCoords}
+            effects.push(rig)
+          }
+        }
       }else if(p.kind==='star'){
         box(ex,ey+.4,ez,.75,.22,.18,c);box(ex,ey+.4,ez,.22,.8,.18,c);box(ex,ey+.4,ez,.44,.44,.2,'#ffdd87')
       }else if(p.kind==='palm'){
@@ -520,20 +644,37 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
         mesh.position.x=Math.sin(t*.22+n*1.3)*.5;mesh.position.z=Math.cos(t*.19+n*1.1)*.5
       })
     }else if(rig.userData.kind==='spot'){
-      // Pan spins the arm around its own mount-perpendicular axis (baseQuat's local Z, since
+      // Pan spins the yoke further around its own mount-perpendicular axis (its local Z, since
       // the base sits flush against the truss and the arms always rise away from it); tilt
-      // nods the head (nested inside the arm) around the arm's local X. The beam is a child
-      // of the head, so it always fires straight out of the lens as both animate.
+      // nods the head (nested inside the yoke) further around the arm's local X. Both simply
+      // continue from the rest pose the aim was already resolved into (see 'spot' above). The
+      // beam is a child of the head, so it always fires straight out of the lens as both animate.
       const armGroup=rig.userData.armGroup as Group,sweep=(phase.movement??0)/100
-      const baseQuat=armGroup.userData.baseQuat as Quaternion
+      const armRest=armGroup.userData.armRestQuat as Quaternion
       const panWobble=new Quaternion().setFromAxisAngle(unitZ,sweep*.5*Math.sin(t*.9))
-      armGroup.quaternion.multiplyQuaternions(baseQuat,panWobble)
+      armGroup.quaternion.multiplyQuaternions(armRest,panWobble)
       const tiltWobble=new Quaternion().setFromAxisAngle(unitX,sweep*.3*Math.sin(t*1.15+1.3))
       rig.quaternion.multiplyQuaternions(tiltWobble,rig.userData.headRestQuat as Quaternion)
       rig.updateWorldMatrix(true,false)
       const beamMat=rig.userData.beamMat as MeshBasicMaterial,glowMat=rig.userData.glowMat as MeshBasicMaterial
       beamMat.color.set(phase.color);beamMat.opacity=phase.intensity/100*.07
       glowMat.color.set(phase.color);glowMat.opacity=phase.intensity/100*.85
+    }else if(rig.userData.kind==='screen'){
+      // A diagonal wave: pixels sharing the same row+col sit on the same anti-diagonal, so
+      // stepping that sum's phase forward over time sweeps a bright band across the whole
+      // matrix from corner to corner. Using plain `time` (not `t`, which folds in this rig's own
+      // index) keeps every panel in a connected wall on the exact same clock, so their shared
+      // pixelCoords line up into one continuous ripple instead of each panel waving on its own.
+      const wave=time*(.6+phase.speed/60)
+      const base=rig.userData.baseColor as Color,glow=rig.userData.glowColor as Color,strength=phase.intensity/100
+      const mesh=rig.children[0] as Mesh,colorAttr=mesh.geometry.getAttribute('color') as Float32BufferAttribute
+      const coords=rig.userData.pixelCoords as {row:number;col:number}[],tmp=new Color()
+      for(let i=0;i<coords.length;i++){
+        const glowAmt=Math.max(0,Math.sin((coords[i]!.row+coords[i]!.col)*.35-wave))**2*strength
+        tmp.copy(base).lerp(glow,glowAmt)
+        for(let v=i*24;v<i*24+24;v++)colorAttr.setXYZ(v,tmp.r,tmp.g,tmp.b)
+      }
+      colorAttr.needsUpdate=true
     }else{
       const base=(rig.userData.dir as {x:number;y:number;z:number}|undefined)??{x:0,y:1,z:0}
       const direction=new Vector3(base.x+Math.sin(t)*.15,base.y+Math.cos(t*.83)*.15,base.z+Math.cos(t*.7)*.15).normalize()

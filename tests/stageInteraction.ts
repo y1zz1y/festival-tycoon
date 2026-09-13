@@ -1,9 +1,9 @@
 import { bandPositions, bandRoles, updateStageBand } from '../src/view/stageBand'
 import assert from 'node:assert/strict'
-import { Vector3, LineSegments, SpotLight, Box3 } from 'three'
+import { Vector3, LineSegments, SpotLight, Box3, Quaternion } from 'three'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { stagePlacement } from '../src/game/stagePlacement'
-import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, lineArrayIndex, migrateStageDesign, NEIGHBOR_STEPS, type StagePart } from '../src/game/stageDesign'
+import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, lineArrayIndex, migrateStageDesign, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, type StagePart } from '../src/game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from '../src/view/stageModel'
 import { showIssue } from '../src/game/festivalManagement'
 export function testStageInteraction(fixture:(count?:number)=>GameState){
@@ -56,6 +56,23 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.ok(beamDirection(downSpot).y<0,'a spot rotated to face down points down regardless of mount side')
   assert.ok(beamDirection(upSpot).y>0,'a spot rotated to face up points up regardless of mount side')
   for(const spot of spots){assert.ok(spot.userData.light instanceof SpotLight);assert.ok(spot.userData.light.intensity>0)}
+  // A moving head's two arms cradle the head at its *sides*, so they must stand square to the
+  // lens for every mount side and every aim. Reaching an aim by twisting the head inside a fixed
+  // yoke would hit the same aim but swing the arms round to the head's front and back, leaving
+  // the lens staring into one of them — so the aim has to be split into a yoke pan and a tilt.
+  for(const step of NEIGHBOR_STEPS)for(let rotation=0;rotation<ROTATION_DIRECTIONS.length;rotation++){
+    const yokeDesign=defaultStageDesign()
+    yokeDesign.parts.push({id:'yokeBeam',kind:'truss',axis:'x',brand:'budget',x:2,y:2,z:2,rotation:0,attachedTo:null,color:'#ffffff'})
+    const head=stagePlacement(yokeDesign,{kind:'spot',brand:'budget',rotation,color:'#ffffff'},{x:0,z:0},{id:'yokeBeam',step});head.id='head';yokeDesign.parts.push(head)
+    const yokeModel=createStageModel(yokeDesign);yokeModel.updateMatrixWorld(true)
+    const headRig=yokeModel.userData.effects.find((r:any)=>r.userData.kind==='spot')
+    const armAxis=new Vector3(1,0,0).applyQuaternion((headRig.userData.armGroup as any).getWorldQuaternion(new Quaternion()))
+    const lensAxis=new Vector3(0,0,1).applyQuaternion(headRig.getWorldQuaternion(new Quaternion()))
+    const where=`mounted ${JSON.stringify(step)}, aimed ${rotation}`
+    assert.ok(Math.abs(armAxis.dot(lensAxis))<1e-6,`the yoke arms stand square to the lens (${where})`)
+    assert.ok(lensAxis.distanceTo(new Vector3().copy(ROTATION_DIRECTIONS[rotation]! as any))<1e-6,`and the head still aims exactly where the orientation cube points (${where})`)
+    disposeStageModel(yokeModel)
+  }
   const laserRig=model.userData.effects.find((p:any)=>p.userData.kind==='laser');assert.ok(laserRig.children[0] instanceof LineSegments)
   const fogRig=model.userData.effects.find((p:any)=>p.userData.kind==='fog');assert.equal(fogRig.children.length,6)
   assert.ok(fogRig.children[fogRig.children.length-1].scale.x>fogRig.children[0].scale.x,'fog puffs widen as they drift outward')
@@ -194,6 +211,101 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const besidePlatform=stagePlacement(podium,{kind:'fullRange',brand:'budget',rotation:0,color:'#334455'},{x:0,z:0},{id:'platform',step:{x:1,y:0,z:0}})
   assert.ok(stageDesignIssue({...podium,parts:[podium.parts[0]!,besidePlatform]}),'nothing can dock onto the side of a subwoofer, only its top')
 
+  // Pixel-LED-Wand screens: truss-only, and two docked side by side on the same run merge into
+  // one wider pixel matrix with a shared, synchronised diagonal glow wave.
+  const wall=defaultStageDesign();wall.parts.push({id:'beam',kind:'truss',brand:'budget',x:2,y:2,z:2,axis:'x',rotation:0,attachedTo:null,color:'#ffffff'})
+  const screenA=stagePlacement(wall,{kind:'screen',brand:'budget',rotation:0,color:'#3388ff'},{x:0,z:0},{id:'beam',step:{x:0,y:-1,z:0}});screenA.id='screenA';wall.parts.push(screenA)
+  assert.equal(stageDesignIssue(wall),null,'a screen can dock onto a truss')
+  const groundScreen=stagePlacement(wall,{kind:'screen',brand:'budget',rotation:0,color:'#3388ff'},{x:1,z:1})
+  assert.ok(stageDesignIssue({...wall,parts:[...wall.parts,groundScreen]}),'a screen cannot stand on the ground — it can only be mounted on a truss')
+  const soloModel=createStageModel(wall)
+  const soloRig=soloModel.userData.effects.find((r:any)=>r.userData.kind==='screen')
+  assert.equal((soloRig.children[0] as any).geometry.getAttribute('color').count,3*3*24,'a lone screen renders a plain 3x3 pixel grid')
+  // A module always comes to rest on the boundary between the truss's cell and its own. Docked
+  // below the truss that boundary cuts across its face, so it butts its top edge against it and
+  // fills its own cell exactly; a short rigging arm spans the rest of the way up into the truss.
+  const cellCentre={x:screenA.x-wall.width/2+.5,y:screenA.y+.5,z:screenA.z-wall.depth/2+.5}
+  const soloBox=new Box3().setFromObject(createStageModel(wall,{floor:false,effects:false,partIds:new Set(['screenA'])}))
+  const soloPixels=new Box3().setFromObject(soloRig.children[0]).getCenter(new Vector3())
+  assert.ok(Math.abs(soloPixels.x-cellCentre.x)<1e-6&&Math.abs(soloPixels.y-cellCentre.y)<1e-6,'a module docked below a truss fills its own cell, its top edge on the cell boundary')
+  assert.ok(Math.abs(soloBox.max.x-soloBox.min.x-1)<1e-6,'and is exactly one cell wide, so two modules meet with no border between them')
+  const beamBox=new Box3().setFromObject(createStageModel(wall,{floor:false,effects:false,partIds:new Set(['beam'])}))
+  assert.ok(soloBox.max.y>beamBox.min.y,'its rigging arm reaches into the truss instead of stopping short of it')
+  disposeStageModel(soloModel)
+  // Bolted to the *side* of a truss the module behaves the same way, rather than riding half a
+  // cell high on the truss's centre line the way small clamped-on fixtures do.
+  const mastDesign=defaultStageDesign()
+  mastDesign.parts.push({id:'mast',kind:'truss',brand:'budget',x:2,y:2,z:2,axis:'y',rotation:0,attachedTo:null,color:'#ffffff'})
+  const sideScreen=stagePlacement(mastDesign,{kind:'screen',brand:'budget',rotation:0,color:'#3388ff'},{x:0,z:0},{id:'mast',step:{x:1,y:0,z:0}});sideScreen.id='sideScreen';mastDesign.parts.push(sideScreen)
+  assert.equal(stageDesignIssue(mastDesign),null,'a module can be bolted to the side of a truss, not just under it')
+  const sideBox=new Box3().setFromObject(createStageModel(mastDesign,{floor:false,effects:false,partIds:new Set(['sideScreen'])}))
+  const mastBox=new Box3().setFromObject(createStageModel(mastDesign,{floor:false,effects:false,partIds:new Set(['mast'])}))
+  assert.ok(Math.abs(sideBox.min.y-sideScreen.y)<1e-6&&Math.abs(sideBox.max.y-(sideScreen.y+1))<1e-6,'a side-mounted module fills the full height of its own cell')
+  assert.ok(sideBox.min.x<mastBox.max.x,'and its arm reaches back into the truss rather than leaving it floating beside it')
+  // Two walls bolted to two different faces of the same truss. Because a module mounted flat onto
+  // a truss face lies *in* the boundary of that truss's cell while a wall's side edges land on
+  // cell boundaries too, the front wall's edge and the side wall's face meet on the very same
+  // cell corner — the corner closes instead of the two walls crossing through each other.
+  // Both are placed with the orientation gizmo deliberately pointing the wrong way, because a
+  // module bolted onto a truss face never gets to choose: its LEDs look out along that face.
+  const cornerDesign=defaultStageDesign()
+  cornerDesign.parts.push({id:'cornerPost',kind:'truss',brand:'budget',x:2,y:2,z:2,axis:'y',rotation:0,attachedTo:null,color:'#ffffff'})
+  const frontPanel=stagePlacement(cornerDesign,{kind:'screen',brand:'budget',rotation:2,color:'#3388ff'},{x:0,z:0},{id:'cornerPost',step:{x:0,y:0,z:1}});frontPanel.id='frontPanel';cornerDesign.parts.push(frontPanel)
+  const cornerPanel=stagePlacement(cornerDesign,{kind:'screen',brand:'budget',rotation:3,color:'#3388ff'},{x:0,z:0},{id:'cornerPost',step:{x:1,y:0,z:0}});cornerPanel.id='cornerPanel';cornerDesign.parts.push(cornerPanel)
+  assert.equal(frontPanel.rotation,0,'a module bolted to a truss face turns its LEDs away from the truss rather than into it')
+  assert.equal(cornerPanel.rotation,1,'whichever face it is bolted to')
+  assert.equal(stageDesignIssue(cornerDesign),null,'two walls can be bolted to two different faces of the same truss')
+  const cornerModel=createStageModel(cornerDesign)
+  const frontFace=new Box3().setFromObject(cornerModel.userData.effects.find((r:any)=>r.userData.id==='frontPanel').children[0])
+  const sideFace=new Box3().setFromObject(cornerModel.userData.effects.find((r:any)=>r.userData.id==='cornerPanel').children[0])
+  assert.ok(sideFace.min.x>frontFace.max.x&&sideFace.min.x-frontFace.max.x<.1,'the side wall begins exactly where the front wall ends, closing the corner')
+  assert.ok(frontFace.min.z>sideFace.max.z&&frontFace.min.z-sideFace.max.z<.1,'and the front wall begins exactly where the side wall ends')
+  disposeStageModel(cornerModel)
+  // A second truss segment chained beside the first, hosting its own screen directly below it —
+  // the two screens land in grid-adjacent cells, exactly like two panels bolted side by side.
+  const beam2=stagePlacement(wall,{kind:'truss',brand:'budget',rotation:0,color:'#ffffff'},{x:0,z:0},{id:'beam',step:{x:1,y:0,z:0}});beam2.id='beam2';wall.parts.push(beam2)
+  const screenB=stagePlacement(wall,{kind:'screen',brand:'budget',rotation:0,color:'#3388ff'},{x:0,z:0},{id:'beam2',step:{x:0,y:-1,z:0}});screenB.id='screenB';wall.parts.push(screenB)
+  assert.equal(stageDesignIssue(wall),null,'a second screen can dock beside the first, on the same truss run')
+  const wallModel=createStageModel(wall)
+  const rigA=wallModel.userData.effects.find((r:any)=>r.userData.id==='screenA'),rigB=wallModel.userData.effects.find((r:any)=>r.userData.id==='screenB')
+  assert.equal((rigA.children[0] as any).geometry.getAttribute('color').count,3*3*24,'neither panel needs extra seam pixels — every module stays a plain 3x3')
+  assert.equal((rigB.children[0] as any).geometry.getAttribute('color').count,3*3*24,'neither panel needs extra seam pixels — every module stays a plain 3x3')
+  assert.deepEqual(rigB.userData.pixelCoords[0],{row:0,col:3},'the second panel continues the first one\'s global pixel columns rather than restarting at 0')
+  // The whole point of sizing a module to exactly one cell with a 1/3-cell pixel lattice: the
+  // seam between two modules disappears into the lattice, because it is the same width as the
+  // gap between two pixels inside a single module.
+  const pixelsA=new Box3().setFromObject(rigA.children[0]),pixelsB=new Box3().setFromObject(rigB.children[0])
+  const pixelSize=pixelsA.max.x-pixelsA.min.x-2/3 // a module's pixel run spans two 1/3 pitches plus one whole pixel
+  assert.ok(Math.abs(pixelsB.min.x-pixelsA.max.x-(1/3-pixelSize))<1e-6,'the gap between two neighbouring modules is exactly the gap between two pixels inside one module')
+  animateStageModel(wallModel,{intensity:100,speed:60,fog:0,volume:0,color:'#ffffff'},0,true)
+  const colorA=(rigA.children[0] as any).geometry.getAttribute('color').clone()
+  animateStageModel(wallModel,{intensity:100,speed:60,fog:0,volume:0,color:'#ffffff'},1.4,true)
+  const movedA=(rigA.children[0] as any).geometry.getAttribute('color')
+  assert.notDeepEqual(Array.from(colorA.array),Array.from(movedA.array),'the diagonal glow wave animates over time')
+  disposeStageModel(wallModel)
+
+  // A wall can also grow by docking a new module directly onto an already-connected one, in any
+  // of the four in-plane directions (never front/back), and it stays evenly spaced — a full grid
+  // step away — exactly as if it had its own truss, so a mixed wall never looks unevenly gappy.
+  // (Straight above screenA is where its own host truss sits, so "below" exercises the same
+  // screen-onto-screen mechanism on an otherwise-free cell.)
+  const screenBelow=stagePlacement(wall,{kind:'screen',brand:'budget',rotation:0,color:'#3388ff'},{x:0,z:0},{id:'screenA',step:{x:0,y:-1,z:0}});screenBelow.id='screenBelow'
+  assert.equal(stageDesignIssue({...wall,parts:[...wall.parts,screenBelow]}),null,'a screen can dock directly onto another screen, growing the wall downward')
+  const screenBehind=stagePlacement(wall,{kind:'screen',brand:'budget',rotation:0,color:'#3388ff'},{x:0,z:0},{id:'screenA',step:{x:0,y:0,z:1}});screenBehind.id='screenBehind'
+  assert.ok(stageDesignIssue({...wall,parts:[...wall.parts,screenBehind]}),'a screen cannot dock onto the front/back of another screen, only in-plane')
+  const screenRotated=stagePlacement(wall,{kind:'screen',brand:'budget',rotation:1,color:'#3388ff'},{x:0,z:0},{id:'screenA',step:{x:0,y:-1,z:0}})
+  assert.equal(screenRotated.rotation,screenA.rotation,'a module extending a wall takes on its facing instead of being placed at odds with it')
+  assert.ok(stageDesignIssue({...wall,parts:[...wall.parts,{...screenRotated,id:'screenRotated',rotation:1}]}),'and a wall whose modules face different ways is rejected outright')
+  const withScreenBelow={...wall,parts:[...wall.parts,screenBelow]}
+  // Measured on the LED faces themselves rather than the parts' full bounding boxes, because the
+  // truss-mounted module also carries a rigging arm reaching up to its truss, which would skew
+  // its box upwards while saying nothing about where the wall's pixel lattice actually sits.
+  const chainModel=createStageModel(withScreenBelow)
+  const chainTop=new Box3().setFromObject(chainModel.userData.effects.find((r:any)=>r.userData.id==='screenA').children[0]).getCenter(new Vector3())
+  const chainBottom=new Box3().setFromObject(chainModel.userData.effects.find((r:any)=>r.userData.id==='screenBelow').children[0]).getCenter(new Vector3())
+  assert.ok(Math.abs(chainTop.y-chainBottom.y-1)<1e-6,'a screen chained onto another sits a full grid step away, so a wall keeps one even lattice however it was assembled')
+  disposeStageModel(chainModel)
+
   // Old saves that still carry the removed generic "speaker" kind keep loading: it silently
   // becomes a full-range speaker instead of failing validation.
   const legacyDesign=defaultStageDesign();legacyDesign.parts.push({id:'legacy',kind:'speaker' as any,brand:'budget',x:1,y:0,z:1,rotation:0,attachedTo:null,color:'#abcdef'})
@@ -201,6 +313,15 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const migrated=migrateStageDesign(legacyDesign)
   assert.equal(migrated.parts[0]!.kind,'fullRange');assert.equal(stageDesignIssue(migrated),null,'a migrated legacy design validates again')
   assert.equal(migrateStageDesign(migrated),migrated,'migration is a no-op once nothing needs rewriting')
+  // Likewise for saves made before a wall's LEDs were forced to face away from their truss: the
+  // whole wall is turned round on load, chained modules included, not just the module bolted on.
+  const backwardsDesign=defaultStageDesign()
+  backwardsDesign.parts.push({id:'backPost',kind:'truss',brand:'budget',x:2,y:2,z:2,axis:'y',rotation:0,attachedTo:null,color:'#ffffff'})
+  backwardsDesign.parts.push({id:'backPanel',kind:'screen',brand:'budget',x:3,y:2,z:2,rotation:3,attachedTo:'backPost',color:'#3388ff'})
+  backwardsDesign.parts.push({id:'backPanelDown',kind:'screen',brand:'budget',x:3,y:1,z:2,rotation:3,attachedTo:'backPanel',color:'#3388ff'})
+  const turnedDesign=migrateStageDesign(backwardsDesign)
+  assert.deepEqual(turnedDesign.parts.filter(p=>p.kind==='screen').map(p=>p.rotation),[1,1],'a wall saved facing into its truss is turned outwards, every module of it')
+  assert.equal(stageDesignIssue(turnedDesign),null,'and the turned wall still validates as one evenly facing wall')
 
   console.log('PASS six-directional truss docking, mid-tower branching, air chains, corners, free-floating structures, height limits, reachable stage audience courtyards, line-array curvature chains, speaker/sub stacking and legacy speaker migration')
 }
