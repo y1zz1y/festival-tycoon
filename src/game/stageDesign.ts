@@ -29,6 +29,8 @@ export type ComponentKind = keyof typeof COMPONENTS
 export const GROUND_ONLY_KINDS:ComponentKind[]=['deck','palm','fireworks','subwoofer']
 /** Kinds that may either stand on the ground or dock onto a truss, unlike GROUND_ONLY_KINDS which can only ever do the former. */
 export const GROUND_OR_TRUSS_KINDS:ComponentKind[]=['fog','sparks','fullRange']
+/** Kinds that only ever work straight upwards: the orientation cube gets no say over them, and they need open sky, since anything in the column above is something they would fire into. */
+export const SKYWARD_KINDS:ComponentKind[]=['fireworks','sparks']
 /** Kinds that may additionally dock directly onto another part of their own kind (stacked speakers, a hung line-array chain) instead of only a truss. */
 export const STACKABLE_KINDS:ComponentKind[]=['lineArray','fullRange','subwoofer']
 export type Axis='x'|'y'|'z'
@@ -50,7 +52,7 @@ export function stageDetailSize(tileWidth?:number,tileDepth?:number,tileHeight?:
   return {width:(tileWidth??1)*STAGE_TILE_DETAIL,depth:(tileDepth??1)*STAGE_TILE_DETAIL,height:(tileHeight??1)*STAGE_TILE_DETAIL}
 }
 export function defaultStageDesign():StageDesign {
-  const tileWidth=2,tileDepth=2,tileHeight=STAGE_TILE_HEIGHT
+  const tileWidth=5,tileDepth=2,tileHeight=STAGE_TILE_HEIGHT
   return {tileWidth,tileDepth,tileHeight,name:'Meine Traumbühne',...stageDetailSize(tileWidth,tileDepth,tileHeight),linked:false,parts:[],phases:[
     {movement:20,pyro:0,intensity:40,speed:25,fog:15,volume:50,color:'#ffc369'},
     {movement:55,pyro:35,intensity:75,speed:55,fog:40,volume:80,color:'#7f8cff'},
@@ -113,9 +115,9 @@ export function stageDesignIssue(d:StageDesign):string|null {
         return 'Dieses Bauteil kann nicht an diesem Trägerobjekt andocken'
       }
     }
-    // Fireworks shoot straight up and have to do so into open sky: anything standing in the same
-    // column above them — a truss most of all — is something their rockets would fire into.
-    if(p.kind==='fireworks'&&d.parts.some(q=>q!==p&&q.x===p.x&&q.z===p.z&&q.y>p.y))return 'Feuerwerk schießt nach oben und braucht freien Himmel — darüber darf nichts stehen'
+    // Anything that works straight up has to do so into open sky: a part standing in the same
+    // column above it — a truss most of all — is something it would fire into.
+    if(SKYWARD_KINDS.includes(p.kind)&&d.parts.some(q=>q!==p&&q.x===p.x&&q.z===p.z&&q.y>p.y))return `${COMPONENTS[p.kind].name} arbeitet nach oben und braucht freien Himmel — darüber darf nichts stehen`
     if(p.attachedTo===null&&p.y===0&&partOnAudience(d,p))return 'Zuschauerflächen bleiben frei von Bodenaufbauten'
     if(d.parts.some(q=>q!==p&&q.x===p.x&&q.y===p.y&&q.z===p.z))return 'Dieser Platz ist bereits belegt'
   }
@@ -234,6 +236,9 @@ export function migrateStageDesign(design:StageDesign):StageDesign {
   }
   const parts=d.parts.map(p=>{
     if((p.kind as string)==='speaker'){changed=true;return {...p,kind:'fullRange' as ComponentKind}}
+    // Saved before fireworks and spark machines were pinned to the sky (see SKYWARD_KINDS), a
+    // design can still hold one aimed sideways, which it can no longer be built as.
+    if(SKYWARD_KINDS.includes(p.kind)&&p.rotation!==UP_ROTATION){turned=true;return {...p,rotation:UP_ROTATION}}
     // Designs saved before the LEDs were forced to point away from their truss (see
     // screenFacingRotation) can still hold a wall facing backwards into the structure.
     if(p.kind==='screen'){const facing=wallFacing(p);if(facing!==undefined&&facing!==p.rotation){turned=true;return {...p,rotation:facing}}}

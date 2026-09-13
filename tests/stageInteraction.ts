@@ -86,26 +86,38 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
     assert.ok(lensAxis.distanceTo(new Vector3().copy(ROTATION_DIRECTIONS[rotation]! as any))<1e-6,`and the head still aims exactly where the orientation cube points (${where})`)
     disposeStageModel(yokeModel)
   }
-  // A spark fountain throws its plume along the direction the part was aimed, as far as its rated
-  // four tiles. The sparks fly ballistically and are recomputed from the show clock alone, so the
-  // plume is sampled across a whole run of frames to find how far the fastest of them get.
+  // A spark fountain works straight up into open sky, and the Feuerwerk/Funken fader drives how
+  // hard it runs — how many sparks fly and how far they are thrown — never how brightly they burn.
+  // The sparks fly ballistically and are recomputed from the show clock alone, so each setting is
+  // sampled across a run of frames to catch the plume at its fullest.
   const fountainDesign=defaultStageDesign()
-  fountainDesign.parts.push({id:'fountain',kind:'sparks',brand:'budget',x:1,y:0,z:1,rotation:4,attachedTo:null,color:'#ffd9a0'})
-  fountainDesign.parts.push({id:'sideways',kind:'sparks',brand:'budget',x:3,y:0,z:1,rotation:0,attachedTo:null,color:'#ffd9a0'})
+  const fountain=stagePlacement(fountainDesign,{kind:'sparks',brand:'budget',rotation:0,color:'#ffd9a0'},{x:1,z:1});fountain.id='fountain';fountainDesign.parts.push(fountain)
+  assert.equal(fountain.rotation,4,'a fountain is always aimed upwards, whichever way the orientation cube points')
+  assert.equal(stageDesignIssue(fountainDesign),null,'and stands happily under open sky')
+  const overFountain:StagePart={id:'overFountain',kind:'truss',brand:'budget',axis:'x',x:1,y:2,z:1,rotation:0,attachedTo:null,color:'#ffffff'}
+  assert.ok(stageDesignIssue({...fountainDesign,parts:[...fountainDesign.parts,overFountain]}),'but not with a truss standing over it')
   const fountainModel=createStageModel(fountainDesign),pyroPhase={intensity:100,speed:60,movement:0,pyro:100,fog:0,volume:0,color:'#ffcf8a'}
-  const plumeUp=fountainModel.userData.effects.find((r:any)=>r.userData.kind==='sparks'&&r.userData.dir.y===1)
-  const plumeSide=fountainModel.userData.effects.find((r:any)=>r.userData.kind==='sparks'&&r.userData.dir.z===1)
+  const plumeUp=fountainModel.userData.effects.find((r:any)=>r.userData.kind==='sparks')
   const throwRange=4*STAGE_TILE_DETAIL
-  let highest=0
-  for(let frame=0;frame<160;frame++){
-    animateStageModel(fountainModel,pyroPhase,frame*.02,true)
-    const points=(plumeUp.children[0] as any).geometry.getAttribute('position')
-    for(let v=0;v<points.count;v++)highest=Math.max(highest,points.getY(v))
+  const plume=(pyro:number)=>{
+    let lit=0,peak=0,highest=0
+    for(let frame=0;frame<160;frame++){
+      animateStageModel(fountainModel,{...pyroPhase,pyro},frame*.02,true)
+      const shade=(plumeUp.children[0] as any).geometry.getAttribute('color'),points=(plumeUp.children[0] as any).geometry.getAttribute('position')
+      lit=0
+      for(let v=1;v<shade.count;v+=2){const value=shade.getX(v);if(value>.001)lit++;peak=Math.max(peak,value)}
+      for(let v=0;v<points.count;v++)highest=Math.max(highest,points.getY(v))
+    }
+    return {lit,peak,highest}
   }
-  assert.ok(highest>throwRange*.75&&highest<=throwRange,`a fountain's sparks reach about its rated four tiles and never overshoot them (${highest.toFixed(2)} of ${throwRange})`)
-  assert.ok(new Vector3(0,1,0).applyQuaternion(plumeSide.quaternion).distanceTo(new Vector3(0,0,1))<1e-6,'and one aimed sideways sprays sideways rather than up')
+  const wideOpen=plume(100),turnedDown=plume(40)
+  assert.ok(wideOpen.highest>throwRange*.75&&wideOpen.highest<=throwRange,`wide open its sparks reach about the rated four tiles and never overshoot them (${wideOpen.highest.toFixed(2)} of ${throwRange})`)
+  assert.ok(turnedDown.lit>0&&turnedDown.lit<wideOpen.lit*.6,`turned down the plume thins out (${turnedDown.lit} of ${wideOpen.lit} streaks)`)
+  assert.ok(turnedDown.highest<wideOpen.highest*.55&&turnedDown.highest>wideOpen.highest*.25,`and is thrown lower with it (${turnedDown.highest.toFixed(2)} against ${wideOpen.highest.toFixed(2)})`)
+  assert.ok(turnedDown.peak>.9&&wideOpen.peak>.9,'while the sparks that do fly burn just as bright either way')
+  assert.equal(plume(0).lit,0,'and nothing is emitted at all at zero')
   animateStageModel(fountainModel,{...pyroPhase,pyro:0},1,true)
-  assert.equal(plumeUp.visible,false,'with the pyro fader down the fountain stops emitting altogether')
+  assert.equal(plumeUp.visible,false,'with the fader right down the fountain stops altogether')
   disposeStageModel(fountainModel)
   // Fireworks fire straight up into open sky: the orientation cube gets no say over where they
   // point, and nothing may stand in the column above them.
@@ -175,8 +187,9 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.equal(stageDesignIssue(tallDesign),null,'a tower can fill the entire configured height')
   const tooTall=stagePlacement(tallDesign,trussSettings,{x:0,z:0},{id:chainId,step:{x:0,y:1,z:0}})
   assert.ok(stageDesignIssue({...tallDesign,parts:[...tallDesign.parts,{...tooTall,id:'tooTall'}]}),'the grid height is a hard limit')
-  const taller={...defaultStageDesign(),tileHeight:4,...stageDetailSize(2,2,4)}
-  assert.equal(stageDesignIssue(taller),null,'a shorter stage simply has a lower ceiling')
+  const shorter={...defaultStageDesign(),tileHeight:4}
+  Object.assign(shorter,stageDetailSize(shorter.tileWidth,shorter.tileDepth,4))
+  assert.equal(stageDesignIssue(shorter),null,'a shorter stage simply has a lower ceiling')
 
   const audience=defaultStageDesign();Object.assign(audience,{tileWidth:3,tileDepth:3},stageDetailSize(3,3,audience.tileHeight));audience.audience=[{x:0,z:1},{x:1,z:1}]
   assert.equal(stageDesignIssue(audience),null)
@@ -392,11 +405,14 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const withoutBanner=migrateStageDesign(bannerDesign)
   assert.deepEqual(withoutBanner.parts.map(p=>p.id),['bannerTruss'],'migration takes the banner out and leaves the rest of the stage standing')
   assert.equal(stageDesignIssue(withoutBanner),null,'so a design saved with a banner still loads')
+  const skyward=migrateStageDesign({...defaultStageDesign(),parts:[{id:'oldFountain',kind:'sparks',brand:'budget',x:1,y:0,z:1,rotation:2,attachedTo:null,color:'#ffd9a0'}]})
+  assert.equal(skyward.parts[0]!.rotation,4,'a fountain saved aimed sideways is turned upright on load, since it can no longer be built that way')
+
   // A design saved while a map tile still held a different number of build cells is re-gridded on
   // load, rather than failing validation and quietly dropping out of the library.
   const legacyGrid:StagePart[]=[{id:'oldPost',kind:'truss',brand:'budget',axis:'y',x:4,y:0,z:4,rotation:0,attachedTo:null,color:'#ffffff'},
     {id:'oldLamp',kind:'spot',brand:'budget',x:5,y:0,z:4,rotation:0,attachedTo:'oldPost',color:'#ffffff'}]
-  const coarse={...defaultStageDesign(),tileHeight:2,width:6,depth:6,height:6,parts:legacyGrid}
+  const coarse={...defaultStageDesign(),tileWidth:2,tileDepth:2,tileHeight:2,width:6,depth:6,height:6,parts:legacyGrid}
   assert.ok(stageDesignIssue(coarse),'a design on the old grid does not validate as it stands')
   const regridded=migrateStageDesign(coarse)
   assert.deepEqual({width:regridded.width,depth:regridded.depth,height:regridded.height},stageDetailSize(2,2,2),'migration restates its size in current build cells')

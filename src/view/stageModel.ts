@@ -686,6 +686,8 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
 const up=new Vector3(0,1,0)
 /** Scratch values reused every frame by the spark fountains, which would otherwise allocate per fixture per frame. */
 const sparkPull=new Vector3(),sparkFrame=new Quaternion()
+/** Deterministic 0..1 noise over a pair of whole numbers — picks which of a firework's firing slots actually launch, the same way on every frame and in every client. */
+const pyroNoise=(a:number,b:number)=>{const v=Math.sin(a*127.1+b*311.7)*43758.5453;return v-Math.floor(v)}
 export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:boolean){
   const offset=active?stageMotion(phase,time):0
   for(const part of root.userData.moving??[])part.position.y=part.userData.restY-offset
@@ -706,20 +708,28 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
       for(let n=0;n<rockets.length;n++){
         const shot=rockets[n]!,slot=n*(1+embers.length)*2
         const age=((time/shot.period+shot.offset)%1+1)%1*shot.period
+        // The fader sets how *often* a rack fires, not how visible its rockets are: each tube has
+        // a slot every period, and the fader decides what share of those slots actually launch.
+        // Skipping whole slots rather than stretching the period keeps every rocket already in
+        // the air on its own trajectory while the fader is being dragged.
+        if(pyroNoise(n,Math.floor(time/shot.period+shot.offset))>=strength){
+          for(let vertex=slot;vertex<slot+(1+embers.length)*2;vertex++)dark(vertex,shot.x,shot.y,0)
+          continue
+        }
         if(age<FIREWORK_RISE){
           // Climbing: the rocket decelerates on the way up, so its trail shortens as it nears the
           // top — the pause before the burst reads as the fuse running out.
           const climb=age/FIREWORK_RISE,rise=shot.apex*(1-(1-climb)**2),trail=.15+.75*(1-climb)
           const x=shot.x+shot.driftX*climb,z=shot.driftZ*climb,y=shot.y+rise
-          position.setXYZ(slot,x,Math.max(shot.y,y-trail),z);shade.setXYZ(slot,strength*.25,strength*.25,strength*.25)
-          position.setXYZ(slot+1,x,y,z);shade.setXYZ(slot+1,strength,strength,strength)
+          position.setXYZ(slot,x,Math.max(shot.y,y-trail),z);shade.setXYZ(slot,.25,.25,.25)
+          position.setXYZ(slot+1,x,y,z);shade.setXYZ(slot+1,1,1,1)
           for(let k=0;k<embers.length;k++){const vertex=slot+2+k*2;dark(vertex,x,y,z);dark(vertex+1,x,y,z)}
         }else{
           const burn=(age-FIREWORK_RISE)/FIREWORK_BURST,fuse=age-FIREWORK_RISE
           const spread=shot.radius*(1-(1-burn)**3),sag=FIREWORK_SAG*.5*fuse*fuse
           // A hard flash the instant it goes off, then the embers hold their glow most of the way
           // down and only die back at the end, rather than dimming from the moment they part.
-          const glow=(burn<.08?1:Math.min(1,2.1*(1-burn)))*strength
+          const glow=burn<.08?1:Math.min(1,2.1*(1-burn))
           const cx=shot.x+shot.driftX,cy=shot.y+shot.apex-sag,cz=shot.driftZ,tail=.12+.45*(1-burn)
           dark(slot,cx,cy,cz);dark(slot+1,cx,cy,cz)
           for(let k=0;k<embers.length;k++){
@@ -743,18 +753,29 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
       const flights=rig.userData.sparks as {x:number;y:number;z:number;speed:number;life:number;offset:number}[]
       const position=streaks.geometry.getAttribute('position') as Float32BufferAttribute
       const shade=streaks.geometry.getAttribute('color') as Float32BufferAttribute
+      // The fader sets how hard the fountain runs, never how brightly it burns: at lower settings
+      // fewer sparks leave the nozzle and they are thrown less far, while every one that does fly
+      // is as bright as at full. The count is cut off the end of the list, whose launch angles run
+      // around the cone in golden-angle steps, so any share of them still fans out evenly instead
+      // of favouring one side. Throw scales with the square root because a spark's apex goes with
+      // the square of its launch speed — this way the plume's height follows the fader directly.
+      // Its lifetime is stretched to match, so a spark still burns out around its own apex rather
+      // than hanging around to fall back down the barrel.
+      const flying=Math.round(flights.length*strength),throwScale=Math.sqrt(strength)
       for(let n=0;n<flights.length;n++){
         const spark=flights[n]!
-        const age=((time/spark.life+spark.offset)%1+1)%1*spark.life,trail=Math.max(0,age-SPARK_TRAIL)
+        if(n>=flying){position.setXYZ(n*2,0,0,0);position.setXYZ(n*2+1,0,0,0);shade.setXYZ(n*2,0,0,0);shade.setXYZ(n*2+1,0,0,0);continue}
+        const life=spark.life*throwScale,speed=spark.speed*throwScale
+        const age=((time/life+spark.offset)%1+1)%1*life,trail=Math.max(0,age-SPARK_TRAIL*throwScale)
         for(const [vertex,at] of [[n*2,trail],[n*2+1,age]] as const){
-          position.setXYZ(vertex,spark.x*spark.speed*at+pull.x*.5*at*at,spark.y*spark.speed*at+pull.y*.5*at*at,spark.z*spark.speed*at+pull.z*.5*at*at)
+          position.setXYZ(vertex,spark.x*speed*at+pull.x*.5*at*at,spark.y*speed*at+pull.y*.5*at*at,spark.z*speed*at+pull.z*.5*at*at)
         }
         // A spark burns at full brightness for most of its flight and only dies back over the
         // last stretch, rather than dimming from the moment it leaves the nozzle — that is what
         // keeps the plume lit all the way up instead of fading out halfway. A fast twinkle rides
         // on top, and the trail end is always the dimmer one, which makes a streak read as a
         // direction rather than a floating dash.
-        const burn=Math.min(1,2.4*(1-age/spark.life))*strength*(.7+.3*Math.sin(time*29+n)**2)
+        const burn=Math.min(1,2.4*(1-age/life))*(.7+.3*Math.sin(time*29+n)**2)
         shade.setXYZ(n*2,burn*.3,burn*.3,burn*.3);shade.setXYZ(n*2+1,burn,burn,burn)
       }
       position.needsUpdate=true;shade.needsUpdate=true

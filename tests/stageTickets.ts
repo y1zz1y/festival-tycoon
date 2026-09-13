@@ -21,7 +21,9 @@ export function testStageTickets(fixture:(count?:number)=>GameState){
   assert.ok(legacy.manageFestival({type:'start'}).ok)
   assert.ok((legacy as any).spawnVisitorMember('day','legacy','pedestrian',false),'legacy saves keep arrivals')
   const build=fixture(0),bs=build.snapshot as GameSnapshot;build.addDebugMoney()
-  const design=defaultStageDesign()
+  // Pinned to a 2x2 footprint rather than the default one, so the expansion, rotation and
+  // shrinking steps below keep testing what they were written for whatever the default becomes.
+  const design=defaultStageDesign();Object.assign(design,{tileWidth:2,tileDepth:2},stageDetailSize(2,2,design.tileHeight))
   design.parts.push({id:'truss',kind:'truss',brand:'touring',x:2,y:0,z:1,axis:'y',rotation:0,attachedTo:null,color:'#abcdef'},
     {id:'light',kind:'spot',brand:'premium',x:3,y:0,z:1,rotation:0,attachedTo:'truss',color:'#abcdef'},
     {id:'sound',kind:'fullRange',brand:'touring',x:2,y:0,z:0,rotation:0,attachedTo:'truss',color:'#abcdef'})

@@ -1,4 +1,4 @@
-import { isTruss, screenFacingRotation, UP_ROTATION, type StageDesign, type StagePart, type Axis } from './stageDesign'
+import { isTruss, screenFacingRotation, SKYWARD_KINDS, UP_ROTATION, type StageDesign, type StagePart, type Axis } from './stageDesign'
 /**
  * Every placement is one of two things: docking against a specific neighbouring cell of an
  * existing part (`hit`), or dropping straight onto the ground plane. There is no other case —
@@ -20,8 +20,9 @@ export function stagePlacement(d:StageDesign,settings:Pick<StagePart,'kind'|'bra
     x=Math.floor(floorPoint.x);y=0;z=Math.floor(floorPoint.z);attachedTo=null
     axis=settings.kind==='truss'?'y':undefined
   }
-  // Fireworks fire straight up into the sky and nowhere else, so the orientation cube gets no say.
-  if(settings.kind==='fireworks')rotation=UP_ROTATION
+  // Fireworks and spark machines work straight up into the sky and nowhere else, so the
+  // orientation cube gets no say over them.
+  if(SKYWARD_KINDS.includes(settings.kind))rotation=UP_ROTATION
   let id='placement-preview';while(d.parts.some(p=>p.id===id))id+='-'
   return {...settings,id,x,y,z,rotation,attachedTo,axis}
 }
