@@ -1,5 +1,47 @@
 # Festival simulator: project rules for every coding agent
 
+## Documentation map (read and keep current)
+
+Important per-system facts live in `docs/*.md`, not only in this file. Start at
+`docs/README.md`, then open the topic file for the feature you touch.
+
+| When working on | Read |
+| --- | --- |
+| Ticks, speed, determinism | `docs/simulation.md` |
+| Pathfinding, crowding, caches | `docs/pathfinding.md` |
+| Visitors, needs, thoughts | `docs/visitors.md` |
+| Camping / gatherings | `docs/camping.md` |
+| Buildings, catalog, scenery | `docs/buildings.md` |
+| Terrain, ground, way types | `docs/terrain.md` |
+| Roads, depots, freight | `docs/logistics.md` |
+| Staff, medical, security | `docs/staff.md` |
+| Waste, incidents, panic | `docs/incidents.md` |
+| Festival weekend, bands, tickets | `docs/festival.md` |
+| Stage workshop / shows | `docs/stages.md` |
+| Coasters, rides, queues | `docs/attractions.md` |
+| Atmosphere, power, lights | `docs/atmosphere.md` |
+| Rendering / batching | `docs/rendering.md` |
+| UI / input | `docs/ui.md` |
+| Multiplayer commands / deltas | `docs/multiplayer.md` |
+| Saves / snapshot fields | `docs/saves.md` |
+| Tests / how to run checks | `docs/testing.md` |
+| Measured performance | `docs/performance.md` |
+| Layers / where to dock a feature | `docs/architecture.md` |
+
+A feature or fix is incomplete until the matching topic MD is updated:
+
+- Changed behaviour, files, invariants or tests → edit that topic MD.
+- New feature → extend an existing topic MD or add `docs/<topic>.md` and list it
+  in `docs/README.md` and in the table above.
+- New `GameCommand` or snapshot field → also update `docs/multiplayer.md` and
+  `docs/saves.md`.
+- New balancing key → `src/game/simulationConfig.ts` plus the topic MD.
+- Player-visible controls or rules → root `README.md`.
+
+Do not leave new modules, commands or kinds undocumented.
+
+## Hard invariants
+
 - Preserve existing gameplay, save compatibility and host-authoritative multiplayer.
 - Increment the package patch version for feature/fix batches; the visible version comes from package.json. Keep the lockfile in sync.
 - Simulation time is authoritative: fixed 100 ms ticks; speed indices 1/2/3 mean 1×/3×/8×. Rendering only interpolates. Never run decisions or mutate game state from render frames.
@@ -14,4 +56,4 @@
 - Before completing simulation/render changes run `npm test` and `npm run build`. Frame-partition determinism, camp multi-goal search, decision queues, cache refresh and asset draw-call bounds are covered by tests.
 - For performance work run `npm run test:performance -- rtest3 120` before/after and a longer 1200-tick run. Use `PROFILE_METHODS=1` for inclusive method timing (PowerShell: `$env:PROFILE_METHODS='1'`). Never commit/overwrite personal saves. The script accepts a save name or snapshot/slot JSON path.
 - Compare identical fixtures and distinguish CPU tick timing from actual browser FPS. Inspect 1×, 3× and 8× and report median/p95/max plus visitor counts; a long run can end the festival and empty the park.
-- See `docs/performance.md` for measured baseline, limits and reproduction. Update it when changing the scheduling or rendering architecture.
+- See `docs/performance.md` for measured baseline, limits and reproduction. Update it when changing the scheduling or rendering architecture. Update `docs/simulation.md` / `docs/rendering.md` when those architectures change.

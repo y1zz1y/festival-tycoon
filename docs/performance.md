@@ -1,5 +1,9 @@
 # Simulation and rendering performance
 
+Index of all system docs: `docs/README.md`. Tick rules: `docs/simulation.md`.
+Batching and lights: `docs/rendering.md`. How to run the suites: `docs/testing.md`.
+Update this file when changing scheduling or rendering architecture.
+
 Version 0.1.4, measured locally on 2026-09-11 using the saved `rtest3` scenario.
 The starting world contains 1,093 visitors, 335 camp installations, 435 buildings,
 41 staff and 361 incidents. Personal saves stay in the ignored `saves/` directory.

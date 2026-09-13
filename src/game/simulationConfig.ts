@@ -4,6 +4,7 @@
  * Hier stehen alle Werte, die das Tempo, die Wahrscheinlichkeit oder die
  * Stärke einer Simulation beeinflussen. Geometrie, IDs, Typen und Texte
  * bleiben in ihren jeweiligen Fachmodulen.
+ * Welche Config-Gruppe zu welchem System gehört: docs/README.md.
  */
 export const SIMULATION_CONFIG = {
   time: {

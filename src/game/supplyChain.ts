@@ -5,11 +5,10 @@ import { SIMULATION_CONFIG } from './simulationConfig'
 import type { ActionResult, GameSnapshot } from './GameState'
 import type { Supply } from './festivalManagement'
 import { SUPPLIES } from './festivalManagement'
-import { createRoadGraph, findRoadRoute } from './logistics'
+import { cellKey, createRoadGraph, findRoadRoute } from './logistics'
 import { getTerrainHeight } from './terrain'
-import { groundInfo, groundKey, prepareGround, prepareGroundArea, roadGroundLimit } from './ground'
+import { groundInfo, groundKey, prepareGround, prepareGroundArea } from './ground'
 import type { GroundCell, GroundWork } from './ground'
-import { hashStringSeed } from './rng'
 
 export type Point = { x: number; z: number; elevation: number }
 export type Stock = Record<Supply, number>
@@ -168,24 +167,46 @@ export function updateSupplyChain(s: GameSnapshot, routeWalk: PedestrianRouter, 
     }
   }
   const graph = createRoadGraph(s.logistics.roadCells, s.scenario.worldSize)
-  const roads = new Set(s.logistics.roadCells.map(p => groundKey(p.x, p.z)))
   const northZ = -s.scenario.worldSize / 2
   const edges = s.logistics.roadCells.filter(p => p.z === northZ)
   const near = (a: { x: number; z: number; elevation?: number }, b: { x: number; z: number; elevation?: number }) => Math.abs(a.x - b.x) + Math.abs(a.z - b.z) === 1 && Math.abs((a.elevation ?? getTerrainHeight(s.terrain, a.x, a.z)) - (b.elevation ?? getTerrainHeight(s.terrain, b.x, b.z))) < .51
   const roadBeside = (cell: { x: number; z: number }) => s.logistics.roadCells.filter(p => Math.abs(p.x - cell.x) + Math.abs(p.z - cell.z) === 1)
-  const atBay = (truck: { x: number; z: number }, depot: { x: number; z: number }) => roadBeside(depot).some(p => p.x === truck.x && p.z === truck.z)
-  const roadRoute = (start: { x: number; z: number }, targets: Array<{ x: number; z: number }>) => findRoadRoute({ roadCells: s.logistics.roadCells, graph, start, targets, allowUTurn: true, worldSize: s.scenario.worldSize })
-  const inboundPath = (start: { x: number; z: number }, targets: Array<{ x: number; z: number }>) => {
-    const gate = start.z < northZ ? { x: start.x, z: northZ } : start
-    const rest = roadRoute(gate, targets)
-    if (rest === null) return null
-    return start.z < northZ ? [gate, ...rest] : rest
-  }
   const occupied = new Set(s.logistics.roadVehicles.filter(v => v.cell && v.state !== 'parked').map(v => groundKey(v.cell!.x, v.cell!.z)))
   for (const truck of i.trucks) occupied.add(groundKey(truck.x, truck.z))
-  const crowds = new Map<string, number>()
-  for (const v of s.visitors) if (!['riding', 'bus-riding', 'vehicle-arrival'].includes(v.state)) {
-    const key = groundKey(v.cellX, v.cellZ); crowds.set(key, (crowds.get(key) ?? 0) + 1)
+  const routeBlocked = (
+    start: { x: number; z: number },
+    keepOpen: Array<{ x: number; z: number }> = [],
+  ) => {
+    const blocked = new Set<string>()
+    for (const vehicle of s.logistics.roadVehicles) {
+      if (vehicle.cell && vehicle.state !== 'parked') {
+        blocked.add(cellKey(vehicle.cell.x, vehicle.cell.z))
+      }
+    }
+    for (const truck of i.trucks) blocked.add(cellKey(truck.x, truck.z))
+    blocked.delete(cellKey(start.x, start.z))
+    keepOpen.forEach((cell) => blocked.delete(cellKey(cell.x, cell.z)))
+    return blocked
+  }
+  const roadRoute = (
+    start: { x: number; z: number },
+    targets: Array<{ x: number; z: number }>,
+    blockedCells?: ReadonlySet<string>,
+  ) => {
+    const options = {
+      roadCells: s.logistics.roadCells,
+      graph,
+      start,
+      targets,
+      allowUTurn: false,
+      initialDirection: 0 as const,
+      worldSize: s.scenario.worldSize,
+    }
+    if (blockedCells?.size) {
+      const clear = findRoadRoute({ ...options, blockedCells })
+      if (clear) return clear
+    }
+    return findRoadRoute(options)
   }
   for (const delivery of f.deliveries) {
     if (now < delivery.due || i.trucks.some(t => t.deliveryId === delivery.id)) continue
@@ -201,7 +222,7 @@ export function updateSupplyChain(s: GameSnapshot, routeWalk: PedestrianRouter, 
     let launched = false
     for (const edge of ranked) {
       if (stagingX.has(edge.x)) continue
-      const path = roadRoute(edge, bays)
+      const path = roadRoute(edge, bays, routeBlocked(edge, bays))
       if (path === null) continue
       const edgeBusy = occupied.has(groundKey(edge.x, edge.z))
       i.trucks.push({
@@ -214,63 +235,6 @@ export function updateSupplyChain(s: GameSnapshot, routeWalk: PedestrianRouter, 
     }
     if (!launched) i.status = 'Lieferung wartet: Zufahrt vom nördlichen Kartenrand zum Depot fehlt'
   }
-  const finished = new Set<string>()
-  for (const t of i.trucks) {
-    if (t.stuck > 0) { t.stuck = Math.max(0, t.stuck - dt); continue }
-    const g = groundInfo(s, t.x, t.z), key = groundKey(t.x, t.z)
-    if (t.testedCell !== key) {
-      t.testedCell = key
-      if (g.wet > .5 && hashStringSeed(`${t.id}:${key}`) % 100 < g.wet * wayInfo(s, t.x, t.z, 'road').stuck * 100) { t.stuck = 8; i.status = 'Fahrzeug steckt fest: Fahrer schiebt es frei (8 Spielminuten)'; continue }
-    }
-    const limit = s.logistics.roadCells.find(c => c.x === t.x && c.z === t.z)?.speedLimit ?? 30
-    t.progress += dt * wayInfo(s, t.x, t.z, 'road').speed * Math.min(limit, roadGroundLimit(s, t.x, t.z)) / 30
-    if (t.progress < .6) continue
-    t.progress = 0
-    const next = t.path[0]
-    if (next) {
-      const nextKey = groundKey(next.x, next.z)
-      if (!roads.has(nextKey)) { t.path = []; i.status = 'Frachtroute unterbrochen'; continue }
-      if (nextKey !== key && (occupied.has(nextKey) || (crowds.get(nextKey) ?? 0) >= 5)) {
-        i.status = t.z < northZ
-          ? 'Lieferwagen wartet vor der Zufahrt auf freie Einfahrt'
-          : 'Lieferwagen wartet auf Verkehr – bei Gegenverkehr eine Ausweichspur bauen'
-        if (Math.floor(now) % 5 === 0) {
-          const depot = i.depots.find(d => d.id === t.depotId)
-          const targets = t.phase === 'return' ? edges : depot ? roadBeside(depot) : []
-          if (t.z < northZ) {
-            for (const edge of edges) {
-              if (occupied.has(groundKey(edge.x, edge.z))) continue
-              const rest = roadRoute(edge, targets)
-              if (rest === null) continue
-              occupied.delete(key)
-              t.x = edge.x
-              t.path = [edge, ...rest]
-              occupied.add(groundKey(t.x, t.z))
-              break
-            }
-          } else {
-            const blockedCells = new Set(occupied); blockedCells.delete(key)
-            const alternate = findRoadRoute({ roadCells: s.logistics.roadCells, graph, start: t, targets, blockedCells, allowUTurn: true, worldSize: s.scenario.worldSize })
-            if (alternate) t.path = alternate
-          }
-        }
-        continue
-      }
-      occupied.delete(key); occupied.add(nextKey); t.x = next.x; t.z = next.z; t.path.shift(); continue
-    }
-    const depot = i.depots.find(d => d.id === t.depotId)
-    if (t.phase === 'inbound') {
-      if (!depot) continue
-      if (!atBay(t, depot)) { t.path = inboundPath(t, roadBeside(depot)) ?? []; continue }
-      depot.stock[t.kind] += t.cargo; t.cargo = 0
-      f.deliveries = f.deliveries.filter(d => d.id !== t.deliveryId)
-      t.deliveryId = null; t.phase = 'return'; i.status = 'Ware im Depot entladen – Träger verteilen sie an die Stände'
-    }
-    if (edges.some(e => e.x === t.x && e.z === t.z)) { finished.add(t.id); occupied.delete(key) }
-    else t.path = roadRoute(t, edges) ?? []
-  }
-  i.trucks = i.trucks.filter(t => !finished.has(t.id))
-
   const footKey = (p: Point) => `${p.x},${p.z},${p.elevation}`
   const footCrowds = new Map<string, number>()
   for (const visitor of s.visitors) {

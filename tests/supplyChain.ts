@@ -95,7 +95,11 @@ export function testSupplyChain(fixture: (count?: number) => GameState) {
   assert.ok(action({ type: 'order', depotId: depot.id, kind: 'food', quantity: 200, delay: 0 }).ok)
   const advance = (count: number, target = game) => {
     const snapshot = target.snapshot as GameSnapshot
-    for (let n = 0; n < count; n++) { snapshot.minute += 1; updateSupplyChain(snapshot, (a, b) => (target as any).findPath(a, b)) }
+    for (let n = 0; n < count; n++) {
+      snapshot.minute += 1
+      updateSupplyChain(snapshot, (a, b) => (target as any).findPath(a, b))
+      ;(target as any).updateLogistics(1)
+    }
   }
   advance(120)
   assert.equal(localStock(s, shop.id, 'food'), 0, 'no goods appear without a road to the depot')
@@ -104,6 +108,9 @@ export function testSupplyChain(fixture: (count?: number) => GameState) {
   for (let z = -s.scenario.worldSize / 2; z <= -20; z++) if (!s.logistics.roadCells.some(c => c.x === 0 && c.z === z)) { const result = game.designateRoad([{ x: 0, z }]); assert.ok(result.ok, `${z}: ${result.message}`) }
   advance(1)
   assert.equal(s.festival.infrastructure.trucks.length, 1, 'physical truck enters at map edge')
+  const launched = s.logistics.roadVehicles.find(vehicle => vehicle.kind === 'deliveryTruck')
+  assert.ok(launched, 'the delivery truck is a normal road vehicle')
+  assert.ok(launched!.route.length > 0, 'it keeps a planned road route')
   assert.equal(depot.stock.food, 0, 'dispatch does not credit depot stock')
   const copy = new Game(structuredClone(s))
   advance(60); advance(60, copy)
@@ -150,12 +157,53 @@ export function testSupplyChain(fixture: (count?: number) => GameState) {
     })
   }
   assert.ok(ingressGame.manageFestival({ type: 'order', kind: 'food', quantity: 50, delay: 0 }).ok)
-  for (let n = 0; n < 91; n++) { ingress.minute += 1; updateSupplyChain(ingress, (a, b) => (ingressGame as any).findPath(a, b)) }
+  for (let n = 0; n < 91; n++) {
+    ingress.minute += 1
+    updateSupplyChain(ingress, (a, b) => (ingressGame as any).findPath(a, b))
+  }
   const queued = ingress.festival.infrastructure.trucks.find(t => t.deliveryId)
   assert.ok(queued, 'occupied map-edge cells still spawn a delivery truck')
   assert.equal(queued!.z, edgeZ - 1, 'truck waits off-map instead of consuming the inbound lane')
   assert.ok(queued!.path.length > 0, 'off-map truck keeps a route onto the site')
   assert.equal(ingress.festival.infrastructure.depots[0]!.stock.food, 0)
+
+  const turnGame = fixture(0), turn = turnGame.snapshot as GameSnapshot
+  turnGame.addDebugMoney()
+  const turnEdge = -turn.scenario.worldSize / 2
+  for (const kind of ['drain', 'compact'] as const) assert.ok(turnGame.manageFestival({ type: 'ground', x: 1, z: -17, kind }).ok)
+  for (let z = turnEdge; z <= -16; z++) {
+    if (!turn.logistics.roadCells.some(cell => cell.x === 0 && cell.z === z)) {
+      assert.ok(turnGame.designateRoad([{ x: 0, z }]).ok)
+    }
+  }
+  for (const cell of [{ x: 1, z: -18 }, { x: 1, z: -16 }]) {
+    assert.ok(turnGame.designateRoad([cell]).ok)
+  }
+  assert.ok(turnGame.manageFestival({ type: 'depot', x: 1, z: -17 }).ok)
+  const turnDepot = turn.festival.infrastructure.depots[0]!
+  turn.festival.infrastructure.trucks.push(
+    {
+      id: 'parked-freight', deliveryId: null, depotId: turnDepot.id, x: 1, z: -18, path: [],
+      phase: 'inbound', progress: 0, stuck: 0, testedCell: '', cargo: 0, kind: 'food',
+    },
+    {
+      id: 'waiting-freight', deliveryId: 'd1', depotId: turnDepot.id, x: 0, z: -18,
+      path: [{ x: 1, z: -18 }, { x: 1, z: -17 }],
+      phase: 'inbound', progress: 0.6, stuck: 0, testedCell: '', cargo: 50, kind: 'food',
+    },
+  )
+  turn.festival.infrastructure.lastUpdate = turn.day * 1440 + turn.minute - 1
+  updateSupplyChain(turn, (a, b) => (turnGame as any).findPath(a, b))
+  ;(turnGame as any).updateLogistics(1)
+  const waitingFreight = turn.festival.infrastructure.trucks.find(truck => truck.id === 'waiting-freight')!
+  assert.equal(waitingFreight.x, 0)
+  assert.equal(waitingFreight.z, -18, 'the standing van stays on the starting road')
+  assert.ok(
+    waitingFreight.path[0] && (waitingFreight.path[0].x !== 1 || waitingFreight.path[0].z !== -18),
+    'a blocked turn is replanned the other way',
+  )
+  assert.equal(waitingFreight.path[0]?.x, 0)
+  assert.equal(waitingFreight.path[0]?.z, -17)
 
   assert.ok(game.place('wasteBin', 4, -16).ok)
   const bin = s.buildings.find(b => b.kind === 'wasteBin')!
@@ -190,7 +238,7 @@ export function testSupplyChain(fixture: (count?: number) => GameState) {
   let id = 'rain-0'
   for (let n = 0; hashStringSeed(`${id}:0,-24`) % 100 >= 35; n++) id = `rain-${n + 1}`
   rain.festival.infrastructure.trucks.push({ id, deliveryId: null, depotId: 'test', x: 0, z: -24, path: [{ x: 0, z: -23 }], phase: 'return', progress: 0, stuck: 0, testedCell: '', cargo: 0, kind: 'food' })
-  advance(2, rainGame)
+  advance(1, rainGame)
   const truck = rain.festival.infrastructure.trucks[0]!
   assert.equal(truck.stuck, 8, 'wet field road traps a susceptible vehicle')
   advance(7, rainGame)

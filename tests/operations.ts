@@ -20,6 +20,10 @@ import {
   visitorBubbleKind,
 } from '../src/game/visitorBubbles'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
+import {
+  describeRoadVehicleActivity,
+  describeRoadVehicleDestination,
+} from '../src/game/logistics'
 import { CrowdingSystem } from '../src/game/crowding'
 
 export function testOperations(fixture:(count?:number)=>GameState):void {
@@ -436,10 +440,296 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   }
   jammedState.logistics.roadVehicles.push(mover,stopper)
   ;(jammed as any).updateLogistics(1)
+  assert.equal(mover.route[0]?.x,0)
+  assert.equal(mover.route[0]?.z,-20,'the last car in a jam reverses after waiting')
+  assert.equal(mover.facing,0,'it keeps facing forward while reversing')
+  assert.equal(mover.cell?.z,-19)
+  ;(jammed as any).updateLogistics(1)
+  assert.equal(mover.cell?.z,-20,'it actually backs up one cell')
+  assert.equal(mover.facing,0,'the nose still points along the lane')
+
+  const queue=fixture(0), queueState=queue.snapshot as GameSnapshot
+  queue.addDebugMoney()
+  const queueEdge=-queueState.scenario.worldSize/2
+  for (let z=queueEdge+1; z<=-16; z+=1) {
+    if (!queueState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(queue.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  const tail={
+    id:'tail-car',kind:'visitorCar' as const,position:{x:0,z:-19},cell:{x:0,z:-19},
+    route:[{x:0,z:-18},{x:0,z:-17}],state:'driving' as const,speed:10,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cruise' as const},facing:0,waitMinutes:6,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  const middle={
+    id:'middle-car',kind:'visitorCar' as const,position:{x:0,z:-18},cell:{x:0,z:-18},
+    route:[{x:0,z:-17}],state:'driving' as const,speed:10,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cruise' as const},facing:0,waitMinutes:6,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  const front={
+    id:'front-car',kind:'visitorCar' as const,position:{x:0,z:-17},cell:{x:0,z:-17},
+    route:[],state:'waiting' as const,speed:0,passengerIds:[],groupId:null,
+    parkingCell:null,target:null,facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  queueState.logistics.roadVehicles.push(front,middle,tail)
+  ;(queue as any).updateLogistics(1)
+  assert.equal(middle.route[0]?.z,-17,'cars in the middle of a jam stay put')
+  assert.equal(middle.cell?.z,-18)
+  assert.equal(middle.facing,0)
+  assert.equal(tail.route[0]?.z,-20,'only the last car reverses')
+  assert.equal(tail.facing,0)
+
+  const detour=fixture(0), detourState=detour.snapshot as GameSnapshot
+  detour.addDebugMoney()
+  const detourEdge=-detourState.scenario.worldSize/2
+  for (let z=detourEdge+1; z<=-16; z+=1) {
+    if (!detourState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(detour.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  for (const cell of [{x:1,z:-18},{x:1,z:-17},{x:1,z:-16}]) {
+    assert.ok(detour.designateRoad([cell]).ok)
+  }
+  detourState.festival.infrastructure.trucks.push({
+    id:'bay-truck',deliveryId:null,depotId:'depot',x:1,z:-18,path:[],phase:'inbound',
+    progress:0,stuck:0,testedCell:'',cargo:0,kind:'food',
+  })
+  const turning={
+    id:'turning-car',kind:'visitorCar' as const,position:{x:0,z:-18},cell:{x:0,z:-18},
+    route:[{x:1,z:-18},{x:1,z:-17},{x:1,z:-16}],state:'driving' as const,speed:10,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cruise' as const},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  detourState.logistics.roadVehicles.push(turning)
+  ;(detour as any).updateLogistics(0.1)
+  assert.equal(turning.cell?.z,-18,'a standing car stays on the starting road')
+  assert.equal(turning.facing,0)
   assert.ok(
-    mover.route[0] && (mover.route[0].x!==0 || mover.route[0].z!==-18),
-    'cars blocked too long are put back on a clear route',
+    turning.route[0] && (turning.route[0].x!==1 || turning.route[0].z!==-18),
+    'a delivery truck on the turn makes it take the other direction',
   )
+  assert.equal(turning.route[0]?.x,0)
+  assert.equal(turning.route[0]?.z,-17)
+
+  const heading=fixture(0), headingState=heading.snapshot as GameSnapshot
+  heading.addDebugMoney()
+  const headingEdge=-headingState.scenario.worldSize/2
+  for (let z=headingEdge+1; z<=-16; z+=1) {
+    if (!headingState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(heading.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  const turned={
+    id:'heading-car',kind:'visitorCar' as const,position:{x:0,z:-18},cell:{x:0,z:-18},
+    route:[{x:0,z:-17},{x:0,z:-16}],state:'driving' as const,speed:10,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cruise' as const},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  headingState.logistics.roadVehicles.push(turned)
+  assert.ok(heading.setRoadDirection(0,-18,2).ok)
+  assert.ok(Math.abs(turned.facing-Math.PI)<1e-6,'cars on the tile turn into the new lane direction')
+  assert.equal(turned.route[0]?.z,-19,'they replan instead of driving against the new one-way')
+
+  const reverseBlock=fixture(0), reverseBlockState=reverseBlock.snapshot as GameSnapshot
+  reverseBlock.addDebugMoney()
+  const reverseBlockEdge=-reverseBlockState.scenario.worldSize/2
+  for (let z=reverseBlockEdge+1; z<=-16; z+=1) {
+    if (!reverseBlockState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(reverseBlock.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  const reverseTail={
+    id:'reverse-tail',kind:'visitorCar' as const,position:{x:0,z:-19},cell:{x:0,z:-19},
+    route:[{x:0,z:-20},{x:0,z:-16}],state:'driving' as const,speed:10,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cell' as const,x:0,z:-16},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  const reverseWall={
+    id:'reverse-wall',kind:'visitorCar' as const,position:{x:0,z:-20},cell:{x:0,z:-20},
+    route:[],state:'waiting' as const,speed:0,passengerIds:[],groupId:null,
+    parkingCell:null,target:null,facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  reverseBlockState.logistics.roadVehicles.push(reverseTail, reverseWall)
+  ;(reverseBlock as any).updateLogistics(0.1)
+  assert.equal(reverseTail.route[0]?.z,-18,'a blocked reverse is discarded for the normal driving direction')
+  assert.equal(reverseTail.facing,0)
+  assert.ok(
+    reverseTail.route.every((cell, index, route) => {
+      const previous = index === 0 ? reverseTail.cell! : route[index - 1]!
+      return Math.abs(cell.x - previous.x) + Math.abs(cell.z - previous.z) === 1
+    }),
+    'replanned routes stay on adjacent road cells',
+  )
+
+  const service=fixture(0), serviceState=service.snapshot as GameSnapshot
+  service.addDebugMoney()
+  const serviceEdge=-serviceState.scenario.worldSize/2
+  for (let z=serviceEdge+1; z<=-16; z+=1) {
+    if (!serviceState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(service.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  for (const cell of [{x:1,z:-18}]) assert.ok(service.designateRoad([cell]).ok)
+  serviceState.festival.infrastructure.depots.push({
+    id:'service-depot',x:1,z:-17,stock:{food:0,drinks:0,water:0},minimum:{food:0,drinks:0,water:0},
+  })
+  const van={
+    id:'service-van',kind:'deliveryTruck' as const,position:{x:0,z:-18},cell:{x:0,z:-18},
+    route:[],state:'returning' as const,speed:0,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cell' as const,x:0,z:serviceEdge},facing:Math.PI/2,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+    deliveryId:'service-freight',
+  }
+  serviceState.festival.infrastructure.trucks.push({
+    id:'service-freight',deliveryId:null,depotId:'service-depot',x:0,z:-18,path:[],
+    phase:'return',progress:0,stuck:0,testedCell:'',cargo:0,kind:'food',
+  })
+  serviceState.logistics.roadVehicles.push(van)
+  ;(service as any).updateLogistics(1)
+  assert.ok(van.route.length > 0, 'an unloaded delivery truck plans a connected exit')
+  assert.ok(Math.abs(van.facing - Math.PI / 2) > 0.2, 'it turns away from the depot to leave')
+  assert.ok(service.setRoadDirection(0,-18,2).ok)
+  assert.ok(Math.abs(van.facing-Math.PI)<1e-6,'delivery trucks follow a newly set lane arrow')
+  assert.equal(van.route[0]?.z,-19)
+
+  const garbage={
+    id:'service-garbage',kind:'garbageTruck' as const,position:{x:0,z:-17},cell:{x:0,z:-17},
+    route:[{x:0,z:-16}],state:'driving' as const,speed:10,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cell' as const,x:0,z:serviceEdge},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  serviceState.logistics.roadVehicles.push(garbage)
+  assert.ok(service.setRoadDirection(0,-17,2).ok)
+  assert.ok(Math.abs(garbage.facing-Math.PI)<1e-6,'garbage trucks follow the same lane arrows')
+  assert.equal(garbage.route[0]?.z,-18)
+
+  const crash=fixture(0), crashState=crash.snapshot as GameSnapshot
+  crash.addDebugMoney()
+  const crashEdge=-crashState.scenario.worldSize/2
+  for (let z=crashEdge+1; z<=-16; z+=1) {
+    if (!crashState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(crash.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  const victim=(crash as any).spawnVisitorMember('day','crash-group','pedestrian',false)
+  assert.ok(victim)
+  Object.assign(victim,{state:'injured',injuryVehicleId:'crash-car',cellX:0,cellZ:-18,x:0.5,z:-17.5,route:[]})
+  const crashed={
+    id:'crash-car',kind:'visitorCar' as const,position:{x:0,z:-19},cell:{x:0,z:-19},
+    route:[{x:0,z:-18},{x:0,z:-17}],state:'waiting' as const,speed:0,passengerIds:[],groupId:'crash-group',
+    parkingCell:null,target:{kind:'cruise' as const},facing:0,waitMinutes:0,resumeState:'driving' as const,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  crashState.logistics.arrivalGroups.push({
+    id:'crash-group',memberIds:[],vehicleId:crashed.id,mode:'car',state:'approaching',
+    arrivedMinute:0,parkingWaitMinutes:0,entryFeesPaid:true,
+  })
+  crashState.logistics.roadVehicles.push(crashed)
+  ;(crash as any).updateLogistics(0.2)
+  assert.equal(crashed.state,'waiting','the car waits while the injured guest is still on the road')
+  victim.cellX=4
+  victim.cellZ=-14
+  victim.x=4.5
+  victim.z=-13.5
+  ;(crash as any).updateLogistics(0.2)
+  assert.equal(crashed.state,'driving','once the guest is off the road the car continues')
+  assert.equal(crashed.route[0]?.z,-18,'it uses the route it already had')
+
+  const against=fixture(0), againstState=against.snapshot as GameSnapshot
+  against.addDebugMoney()
+  const againstEdge=-againstState.scenario.worldSize/2
+  for (let z=againstEdge+1; z<=-16; z+=1) {
+    if (!againstState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(against.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  againstState.logistics.roadCells.forEach((cell) => {
+    if (cell.x===0) cell.allowedDirections=1
+  })
+  ;(against as any).invalidateRoadGraph()
+  const oneway={
+    id:'oneway-car',kind:'visitorCar' as const,position:{x:0,z:-19},cell:{x:0,z:-19},
+    route:[{x:0,z:-18},{x:0,z:-17}],state:'driving' as const,speed:10,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cruise' as const},facing:0,waitMinutes:6,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  const jam={
+    id:'jam-car',kind:'visitorCar' as const,position:{x:0,z:-18},cell:{x:0,z:-18},
+    route:[{x:0,z:-17}],state:'driving' as const,speed:0,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cruise' as const},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  againstState.logistics.roadVehicles.push(oneway,jam)
+  ;(against as any).updateLogistics(1)
+  assert.equal(oneway.route[0]?.z,-20,'on a one-way it still reverses instead of turning around')
+  assert.equal(oneway.facing,0,'it does not flip and drive against the lane')
+  ;(against as any).updateLogistics(1)
+  assert.equal(oneway.cell?.z,-20)
+  assert.equal(oneway.facing,0)
+
+  const resume=fixture(0), resumeState=resume.snapshot as GameSnapshot
+  resume.addDebugMoney()
+  const resumeEdge=-resumeState.scenario.worldSize/2
+  for (let z=resumeEdge+1; z<=-16; z+=1) {
+    if (!resumeState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(resume.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  const queued={
+    id:'queued-car',kind:'visitorCar' as const,position:{x:0,z:-19},cell:{x:0,z:-19},
+    route:[{x:0,z:-18},{x:0,z:-17}],state:'driving' as const,speed:10,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cruise' as const},facing:0,waitMinutes:0.4,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  const blockerCar={
+    id:'brief-blocker',kind:'visitorCar' as const,position:{x:0,z:-18},cell:{x:0,z:-18},
+    route:[],state:'waiting' as const,speed:0,passengerIds:[],groupId:null,
+    parkingCell:null,target:null,facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  resumeState.logistics.roadVehicles.push(queued,blockerCar)
+  ;(resume as any).updateLogistics(0.1)
+  assert.equal(queued.cell?.z,-19,'a car keeps its place while the next cell is occupied')
+  assert.ok(queued.speed>=10,'waiting for another car does not dump the accumulated speed')
+  resumeState.logistics.roadVehicles = resumeState.logistics.roadVehicles.filter(vehicle=>vehicle.id!==blockerCar.id)
+  ;(resume as any).updateLogistics(0.1)
+  assert.equal(queued.cell?.z,-18,'after the other car leaves it continues immediately')
+  assert.equal(describeRoadVehicleActivity({
+    ...queued, state:'driving', waitMinutes:0.4, route:[{x:0,z:-17}], stuckMinutes:0,
+  }),'Wartet, bis die Fahrbahn frei ist')
+  assert.equal(describeRoadVehicleActivity({
+    ...queued, cell:{x:0,z:-19}, facing:0, route:[{x:0,z:-20}], waitMinutes:0, stuckMinutes:0,
+  }),'Setzt zurück')
+  assert.equal(
+    describeRoadVehicleDestination({
+      ...queued, parkingCell:{x:1,z:-16}, state:'driving',
+    }),
+    'Parkplatz 1, -16',
+  )
+
+  const arrival=fixture(0), arrivalState=arrival.snapshot as GameSnapshot
+  arrival.addDebugMoney()
+  const arrivalEdge=-arrivalState.scenario.worldSize/2
+  for (let z=arrivalEdge+1; z<=-16; z+=1) {
+    if (!arrivalState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(arrival.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  assert.ok(arrival.designateParkingArea([{x:1,z:-16}]).ok)
+  const rider=(arrival as any).spawnVisitorMember('day','car-group','car',true)
+  assert.ok(rider)
+  rider.state='vehicle-arrival'
+  const bay=arrivalState.logistics.parkingCells[0]!
+  bay.occupiedBy='arriving-car'
+  const arriving={
+    id:'arriving-car',kind:'visitorCar' as const,position:{x:0,z:-16},cell:{x:0,z:-16},
+    route:[],state:'driving' as const,speed:10,passengerIds:[rider.id],groupId:'car-group',
+    parkingCell:{x:1,z:-16},target:{kind:'parking' as const,parkingCell:{x:1,z:-16}},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  arrivalState.logistics.arrivalGroups.push({
+    id:'car-group',memberIds:[rider.id],vehicleId:arriving.id,mode:'car',state:'approaching',
+    arrivedMinute:0,parkingWaitMinutes:0,entryFeesPaid:true,
+  })
+  arrivalState.logistics.roadVehicles.push(arriving)
+  ;(arrival as any).completeVisitorCarArrival(arriving)
+  assert.equal(arriving.state,'parking','the car pulls into the bay before anyone gets out')
+  assert.equal(rider.state,'vehicle-arrival','passengers stay seated at the access road')
+  assert.deepEqual(arriving.route,[{x:1,z:-16}])
+  for (let n=0;n<8 && arriving.state!=='parked'; n+=1) (arrival as any).updateLogistics(1)
+  assert.equal(arriving.state,'parked')
+  assert.equal(arriving.position.x,1)
+  assert.equal(arriving.position.z,-16)
+  assert.notEqual(rider.state,'vehicle-arrival','guests leave only after the car is in the bay')
 
   const sweepGame=fixture(0)
   sweepGame.addDebugMoney()

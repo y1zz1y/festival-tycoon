@@ -96,7 +96,14 @@ Bodenarbeiten lassen sich mit gedrückter linker Maustaste als Rechteck aufziehe
 die Vorschau zeigt Kosten und geeignete Felder. Erst beim Loslassen wird gebaut.
 Bereits vorbereitete, ungeeignete oder nicht finanzierbare Felder werden übersprungen.
 Bodenmarkierungen und Straßenfarben erscheinen nur in der Logistikansicht;
-die normale Darstellung bleibt frei von diesen Planungsebenen.
+gesetzte Fahrtrichtungen liegen als weiße Fahrstreifenpfeile (wie im
+deutschen Straßenverkehr) auf der Straße. Mit dem Werkzeug
+**Fahrtrichtung** erscheint dieselbe Pfeilform groß in der Vorschau; auf
+bereits gesetzten Einbahnen laufen die Pfeile weich über die Fahrbahn.
+Die normale Darstellung bleibt frei von der Laufanimation.
+Eine nachträglich gesetzte Einbahn dreht alle Straßenfahrzeuge auf dieser
+Kachel — Autos, Busse, Liefer- und Müllwagen — und plant ihre Route neu.
+Fahrzeuge anklicken zeigt Status und die geplante Route.
 
 1. Ein freies Feld neben einer Zufahrt und einem Fußweg vorbereiten: Lehm zuerst
    entwässern, dann verdichten. Ein Depot kostet 400 € und belegt ein Feld.
@@ -115,7 +122,8 @@ die normale Darstellung bleibt frei von diesen Planungsebenen.
 Bestellungen benötigen zunächst 90 Spielminuten bis zum Kartenrand. Danach fährt
 ein sichtbarer Lastwagen zum Depot, entlädt dort und verlässt das Gelände wieder.
 Fehlende Straßen, Gegenverkehr und Besucher können ihn aufhalten. Bei Gegenverkehr
-helfen Ausweichspuren; Fahrzeuge können vorhandene freie Alternativen nutzen.
+helfen Ausweichspuren; nach längerem Warten nutzen Fahrzeuge eine freie,
+erlaubte Nebenrichtung oder das letzte Auto setzt zurück.
 Träger behalten ihre Ladung, wenn ein Weg abgerissen oder eine Ablage voll ist.
 Unterbrochene Trägerwege lassen sich durch Wiederherstellen der Verbindung reparieren.
 Laufende Transporte, Ladungen und Bestände werden gespeichert und vom Host synchronisiert.
@@ -395,6 +403,10 @@ Die Fahrphysik verwendet konfigurierbare SI-Parameter pro Achterbahntyp. Die Han
 - `src/main.ts`: UI, Eingaben und Verknüpfung der Systeme
 
 Die Simulation kennt Three.js nicht. Dadurch kann sie später unabhängig getestet, auf einem Server ausgeführt oder durch ein komplexeres Besucher- und Wegfindungssystem ersetzt werden.
+
+Agenten- und Entwicklerdoku (wo welche Funktion liegt, Invarianten, welche Datei
+bei neuen Features nachzuziehen ist): **[docs/README.md](docs/README.md)**.
+Verbindliche Simulationsregeln: [AGENTS.md](AGENTS.md).
 
 ## Sinnvolle nächste Ausbaustufen
 
