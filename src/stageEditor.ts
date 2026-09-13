@@ -4,7 +4,7 @@ import { createStagePickTargets } from './view/stagePicking'
 import { BUILDINGS } from './game/catalog'
 import { Scene, Color, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, GridHelper, Raycaster, Vector2, Plane, Vector3, Group, Mesh, BoxGeometry, MeshBasicMaterial, MeshStandardMaterial, MOUSE } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { COMPONENTS, brandsFor, isTruss, GROUND_ONLY_KINDS, PHASE_NAMES, defaultStageDesign, stageDesignIssue, stageDetailSize, stageStats, removeStagePart, type StageDesign, type StagePart, type ComponentKind } from './game/stageDesign'
+import { COMPONENTS, brandsFor, isTruss, GROUND_ONLY_KINDS, STACKABLE_KINDS, PHASE_NAMES, defaultStageDesign, stageDesignIssue, stageDetailSize, stageStats, removeStagePart, migrateStageDesign, type StageDesign, type StagePart, type ComponentKind } from './game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from './view/stageModel'
 import { createOrientationGizmo, type OrientationGizmo } from './view/orientationGizmo'
 import type { GameState } from './game/GameState'
@@ -36,7 +36,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   const templateKey='festival-stage-templates-v1'
   const library=():StageDesign[]=>{
     let local:StageDesign[]=[]
-    try{const saved=JSON.parse(localStorage.getItem(templateKey)??'[]');if(Array.isArray(saved))local=saved.slice(0,30).filter(d=>!stageDesignIssue(d))}catch{ /* The current save remains usable if browser storage is unavailable. */ }
+    try{const saved=JSON.parse(localStorage.getItem(templateKey)??'[]');if(Array.isArray(saved))local=saved.slice(0,30).map(migrateStageDesign).filter(d=>!stageDesignIssue(d))}catch{ /* The current save remains usable if browser storage is unavailable. */ }
     const merged=new Map(local.map(d=>[d.name,d]));for(const d of getGame().snapshot.festival.stageTemplates??[])merged.set(d.name,d)
     return [...merged.values()]
   }
@@ -162,12 +162,25 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     const floor=ray.ray.intersectPlane(new Plane(new Vector3(0,1,0),0),new Vector3())
     const hit=ray.intersectObjects(pickTargets?.children??[],false)[0];hitId=hit?.object.userData.partId
     const hitPart=design.parts.find(part=>part.id===hitId)
-    const auto=!p.alt&&!audienceMode&&!erase&&(!!hitPart&&isTruss(hitPart.kind)&&!GROUND_ONLY_KINDS.includes(part))
+    const canDockOnTruss=!!hitPart&&isTruss(hitPart.kind)&&!GROUND_ONLY_KINDS.includes(part)
+    const canStack=!!hitPart&&hitPart.kind===part&&STACKABLE_KINDS.includes(part)
+    const canStandOnSubwoofer=!!hitPart&&hitPart.kind==='subwoofer'&&part!=='subwoofer'&&!GROUND_ONLY_KINDS.includes(part)
+    const auto=!p.alt&&!audienceMode&&!erase&&(canDockOnTruss||canStack||canStandOnSubwoofer)
     hitStep=undefined
     if(hit&&hitPart&&auto){
-      const local=hit.object.worldToLocal(hit.point.clone())
-      const ax=Math.abs(local.x),ay=Math.abs(local.y),az=Math.abs(local.z)
-      hitStep=ax>=ay&&ax>=az?{x:Math.sign(local.x)||1,y:0,z:0}:ay>=az?{x:0,y:Math.sign(local.y)||1,z:0}:{x:0,y:0,z:Math.sign(local.z)||1}
+      if(canStack||canStandOnSubwoofer){
+        // Only one docking side is ever valid here (a line array chains straight down, a
+        // stacked speaker/sub or anything sat on a subwoofer goes straight up) — unlike a
+        // truss, which takes equipment on any of its six sides. Picking a side by exactly
+        // where the pointer lands only makes sense when several sides are possible, so here
+        // the whole part is instead one hitbox for that single direction, which is much
+        // easier to hit than a specific face — especially on a slim, hanging line array.
+        hitStep=canStack&&part==='lineArray'?{x:0,y:-1,z:0}:{x:0,y:1,z:0}
+      }else{
+        const local=hit.object.worldToLocal(hit.point.clone())
+        const ax=Math.abs(local.x),ay=Math.abs(local.y),az=Math.abs(local.z)
+        hitStep=ax>=ay&&ax>=az?{x:Math.sign(local.x)||1,y:0,z:0}:ay>=az?{x:0,y:Math.sign(local.y)||1,z:0}:{x:0,y:0,z:Math.sign(local.z)||1}
+      }
     }
     const point=auto?hit!.point:floor
     if(!point){candidate=null;audienceCell=null;ghostKey='';clearGhost();return}

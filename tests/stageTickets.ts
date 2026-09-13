@@ -24,7 +24,7 @@ export function testStageTickets(fixture:(count?:number)=>GameState){
   const design=defaultStageDesign()
   design.parts.push({id:'truss',kind:'truss',brand:'touring',x:2,y:0,z:2,axis:'y',rotation:0,attachedTo:null,color:'#abcdef'},
     {id:'light',kind:'spot',brand:'premium',x:3,y:0,z:2,rotation:0,attachedTo:'truss',color:'#abcdef'},
-    {id:'sound',kind:'speaker',brand:'touring',x:2,y:0,z:1,rotation:0,attachedTo:'truss',color:'#abcdef'})
+    {id:'sound',kind:'fullRange',brand:'touring',x:2,y:0,z:1,rotation:0,attachedTo:'truss',color:'#abcdef'})
   assert.equal(stageDesignIssue(design),null)
   const bad=structuredClone(design);bad.parts=bad.parts.filter(p=>p.kind!=='truss');assert.ok(stageDesignIssue(bad))
   const cost=stageStats(design).cost,money=bs.money

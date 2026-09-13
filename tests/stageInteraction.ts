@@ -1,9 +1,9 @@
 import { bandPositions, bandRoles, updateStageBand } from '../src/view/stageBand'
 import assert from 'node:assert/strict'
-import { Vector3, LineSegments, SpotLight } from 'three'
+import { Vector3, LineSegments, SpotLight, Box3 } from 'three'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { stagePlacement } from '../src/game/stagePlacement'
-import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, NEIGHBOR_STEPS, type StagePart } from '../src/game/stageDesign'
+import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, lineArrayIndex, migrateStageDesign, NEIGHBOR_STEPS, type StagePart } from '../src/game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from '../src/view/stageModel'
 import { showIssue } from '../src/game/festivalManagement'
 export function testStageInteraction(fixture:(count?:number)=>GameState){
@@ -23,16 +23,16 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.ok(bandRoles('brass').includes('brass'));assert.ok(bandRoles('campfire').includes('guitar'))
   const occupied=defaultStageDesign();occupied.tileWidth=2;occupied.tileDepth=2;occupied.audience=[{x:0,z:1}];occupied.parts=[{id:'motor',kind:'truss',axis:'x',x:5,y:0,z:4,rotation:0,attachedTo:null,brand:'budget',color:'#ffffff'}]
   for(const pos of bandPositions(occupied)){const x=pos.x+occupied.width/2-.5,z=pos.z+occupied.depth/2-.5;assert.ok(!(x<4&&z>=3));assert.ok(!(z===4&&Math.abs(x-5)<=1))}
-  occupied.parts=[];for(let x=0;x<occupied.width;x++)for(let z=0;z<occupied.depth;z++)occupied.parts.push({id:`${x}-${z}`,kind:'speaker',x,y:0,z,rotation:0,attachedTo:null,brand:'budget',color:'#ffffff'})
+  occupied.parts=[];for(let x=0;x<occupied.width;x++)for(let z=0;z<occupied.depth;z++)occupied.parts.push({id:`${x}-${z}`,kind:'fullRange',x,y:0,z,rotation:0,attachedTo:null,brand:'budget',color:'#ffffff'})
   assert.equal(bandPositions(occupied).length,0);disposeStageModel(performanceStage)
 
   // Every attachment — hanging, sitting on top, side-by-side — is the same operation now: dock onto one of a truss's six neighbouring cells.
-  const d=defaultStageDesign(),settings={kind:'speaker' as const,brand:'touring' as const,rotation:0,color:'#ff88cc'}
+  const d=defaultStageDesign(),settings={kind:'fullRange' as const,brand:'touring' as const,rotation:0,color:'#ff88cc'}
   const post:StagePart={id:'post',kind:'truss',brand:'budget',x:2,y:1,z:2,axis:'y',rotation:0,attachedTo:null,color:'#ffffff'};d.parts.push(post)
   let n=0
-  for(const step of NEIGHBOR_STEPS){const box=stagePlacement(d,settings,{x:0,z:0},{id:'post',step});box.id=`box${++n}`;d.parts.push(box);assert.equal(stageDesignIssue(d),null,'a speaker can dock onto any of the six sides of a truss')}
+  for(const step of NEIGHBOR_STEPS){const box=stagePlacement(d,settings,{x:0,z:0},{id:'post',step});box.id=`box${++n}`;d.parts.push(box);assert.equal(stageDesignIssue(d),null,'a full-range speaker can dock onto any of the six sides of a truss')}
   const dupSide=stagePlacement(d,settings,{x:0,z:0},{id:'post',step:NEIGHBOR_STEPS[0]!})
-  assert.ok(stageDesignIssue({...d,parts:[...d.parts,{...dupSide,id:'dupSide'}]}),'the same side cannot hold two speakers')
+  assert.ok(stageDesignIssue({...d,parts:[...d.parts,{...dupSide,id:'dupSide'}]}),'the same side cannot hold two full-range speakers')
   assert.equal(removeStagePart(d,'post').parts.length,0,'removing the host removes everything docked onto it')
 
   // Effects: beam direction follows the part's own facing (rotation, as chosen with the
@@ -129,5 +129,78 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const loaded=GameState.fromJSON(JSON.stringify(s))!
   assert.equal(loaded.snapshot.stageForecourtCells.filter(c=>c.stageId===stage.id).length,2,'load does not duplicate integrated audience cells')
   assert.ok(loaded.bulldoze(7,-19).ok);assert.equal(loaded.snapshot.stageForecourtCells.filter(c=>c.stageId===stage.id).length,0)
-  console.log('PASS six-directional truss docking, mid-tower branching, air chains, corners, free-floating structures, height limits and reachable stage audience courtyards')
+
+  // Line arrays: the first cabinet docks onto a truss like any other equipment; every further
+  // cabinet chains onto the one above it (never sideways, never upward), and each step down the
+  // chain adds one more increment of curvature.
+  const pa=defaultStageDesign();pa.parts.push({id:'rig',kind:'truss',brand:'budget',x:2,y:3,z:2,axis:'x',rotation:0,attachedTo:null,color:'#ffffff'})
+  const paTop=stagePlacement(pa,{kind:'lineArray',brand:'touring',rotation:0,color:'#dfe3e6'},{x:0,z:0},{id:'rig',step:{x:0,y:-1,z:0}});paTop.id='paTop';pa.parts.push(paTop)
+  assert.equal(lineArrayIndex(pa,paTop),0);assert.equal(stageDesignIssue(pa),null)
+  const paMid=stagePlacement(pa,{kind:'lineArray',brand:'touring',rotation:0,color:'#dfe3e6'},{x:0,z:0},{id:'paTop',step:{x:0,y:-1,z:0}});paMid.id='paMid';pa.parts.push(paMid)
+  assert.equal(lineArrayIndex(pa,paMid),1,'the second cabinet is one link below the truss-mounted one');assert.equal(stageDesignIssue(pa),null)
+  const paBottom=stagePlacement(pa,{kind:'lineArray',brand:'touring',rotation:0,color:'#dfe3e6'},{x:0,z:0},{id:'paMid',step:{x:0,y:-1,z:0}});paBottom.id='paBottom';pa.parts.push(paBottom)
+  assert.equal(lineArrayIndex(pa,paBottom),2,'curvature keeps increasing further down the chain');assert.equal(stageDesignIssue(pa),null)
+  const sideways=stagePlacement(pa,{kind:'lineArray',brand:'touring',rotation:0,color:'#dfe3e6'},{x:0,z:0},{id:'paTop',step:{x:1,y:0,z:0}});sideways.id='sideways'
+  assert.ok(stageDesignIssue({...pa,parts:[...pa.parts,sideways]}),'a line-array cabinet cannot dock onto the side of another one')
+  const upward=stagePlacement(pa,{kind:'lineArray',brand:'touring',rotation:0,color:'#dfe3e6'},{x:0,z:0},{id:'paTop',step:{x:0,y:1,z:0}});upward.id='upward'
+  assert.ok(stageDesignIssue({...pa,parts:[...pa.parts,upward]}),'a line-array cabinet cannot extend the chain upward')
+  assert.equal(removeStagePart(pa,'paTop').parts.some(p=>p.id==='paBottom'),false,'removing the truss-mounted cabinet takes the whole hung chain with it')
+  const paModel=createStageModel(pa,{effects:false});assert.ok(paModel.children.length>0);disposeStageModel(paModel)
+  // Each hung element's cabinets are threaded onto one continuous rigging rod that bends at every
+  // cabinet joint, so a chained element's own top must be found by walking down through its
+  // host's actual (already-tilted) cabinets — not a grid-cell-centre approximation — otherwise a
+  // gap opens between elements, and it would only get worse further down the chain. Edges (not an
+  // exact offset) are compared since curvature tilts each cabinet a little further, which skews
+  // the axis-aligned bounding box; a real gap would still show up as daylight between them.
+  const paMidBox=new Box3().setFromObject(createStageModel(pa,{floor:false,effects:false,partIds:new Set(['paMid'])}))
+  const paBottomBox=new Box3().setFromObject(createStageModel(pa,{floor:false,effects:false,partIds:new Set(['paBottom'])}))
+  assert.ok(paMidBox.min.y-paBottomBox.max.y<.1,'a chained line-array element hangs flush under the one above it, all the way down the chain')
+  // A truss is a sparse 3-chord lattice, not a solid rod, so a fixture merely tangent to its
+  // outer radius can still read as floating with daylight visible through the gap. The
+  // truss-mounted cabinet's own rigging bracket must physically overlap the truss above it.
+  const paTopBox=new Box3().setFromObject(createStageModel(pa,{floor:false,effects:false,partIds:new Set(['paTop'])}))
+  const trussBox=new Box3().setFromObject(createStageModel(pa,{floor:false,effects:false,partIds:new Set(['rig'])}))
+  assert.ok(paTopBox.max.y>trussBox.min.y,"the truss-mounted cabinet's rigging bracket overlaps the truss instead of merely touching its outer radius")
+
+  // Full-range speakers and subwoofers can stack straight up on top of each other (but never
+  // sideways), and — unlike a full-range speaker — a subwoofer can never dock onto a truss.
+  const stack=defaultStageDesign()
+  const woofer=stagePlacement(stack,{kind:'subwoofer',brand:'budget',rotation:0,color:'#334455'},{x:2,z:2});woofer.id='woofer';stack.parts.push(woofer)
+  assert.equal(stageDesignIssue(stack),null,'a subwoofer stands on the ground on its own')
+  const onTop=stagePlacement(stack,{kind:'subwoofer',brand:'budget',rotation:0,color:'#334455'},{x:0,z:0},{id:'woofer',step:{x:0,y:1,z:0}});onTop.id='onTop';stack.parts.push(onTop)
+  assert.equal(stageDesignIssue(stack),null,'a second subwoofer can stack directly on top of the first')
+  const beside=stagePlacement(stack,{kind:'subwoofer',brand:'budget',rotation:0,color:'#334455'},{x:0,z:0},{id:'woofer',step:{x:1,y:0,z:0}});beside.id='beside'
+  assert.ok(stageDesignIssue({...stack,parts:[...stack.parts,beside]}),'subwoofers cannot dock onto each other sideways')
+  const rigged=defaultStageDesign();rigged.parts.push({id:'truss',kind:'truss',brand:'budget',x:2,y:1,z:2,axis:'x',rotation:0,attachedTo:null,color:'#ffffff'})
+  const hungSub=stagePlacement(rigged,{kind:'subwoofer',brand:'budget',rotation:0,color:'#334455'},{x:0,z:0},{id:'truss',step:{x:0,y:-1,z:0}});hungSub.id='hungSub'
+  assert.ok(stageDesignIssue({...rigged,parts:[...rigged.parts,hungSub]}),'a subwoofer can never dock onto a truss')
+  const hungFullRange=stagePlacement(rigged,{kind:'fullRange',brand:'budget',rotation:0,color:'#334455'},{x:0,z:0},{id:'truss',step:{x:0,y:-1,z:0}});hungFullRange.id='hungFullRange'
+  assert.equal(stageDesignIssue({...rigged,parts:[...rigged.parts,hungFullRange]}),null,'unlike a subwoofer, a full-range speaker can still dock onto a truss')
+  const wooferCenter=new Box3().setFromObject(createStageModel(stack,{floor:false,effects:false,partIds:new Set(['woofer'])})).getCenter(new Vector3())
+  const onTopCenter=new Box3().setFromObject(createStageModel(stack,{floor:false,effects:false,partIds:new Set(['onTop'])})).getCenter(new Vector3())
+  assert.ok(Math.abs(onTopCenter.y-wooferCenter.y-.9)<.01,'a stacked subwoofer sits flush on the ground-standing one below it (2×.45 half-heights)')
+
+  // A subwoofer is also a stable platform: other equipment (full-range speakers, fog, lasers,
+  // moving heads, ...) can stand on top of one, but only on top — never hung underneath/beside.
+  const podium=defaultStageDesign()
+  const platform=stagePlacement(podium,{kind:'subwoofer',brand:'budget',rotation:0,color:'#334455'},{x:2,z:2});platform.id='platform';podium.parts.push(platform)
+  const perchedFullRange=stagePlacement(podium,{kind:'fullRange',brand:'budget',rotation:0,color:'#334455'},{x:0,z:0},{id:'platform',step:{x:0,y:1,z:0}});perchedFullRange.id='perchedFullRange';podium.parts.push(perchedFullRange)
+  assert.equal(stageDesignIssue(podium),null,'a full-range speaker can stand on top of a subwoofer')
+  const platformCenter=new Box3().setFromObject(createStageModel(podium,{floor:false,effects:false,partIds:new Set(['platform'])})).getCenter(new Vector3())
+  const perchedCenter=new Box3().setFromObject(createStageModel(podium,{floor:false,effects:false,partIds:new Set(['perchedFullRange'])})).getCenter(new Vector3())
+  assert.ok(Math.abs(perchedCenter.y-platformCenter.y-.85)<.01,'the perched speaker sits flush on the subwoofer (its own .45 plus the speaker\'s own .4 half-heights)')
+  const perchedFog=stagePlacement(podium,{kind:'fog',brand:'budget',rotation:0,color:'#334455'},{x:0,z:0},{id:'platform',step:{x:0,y:1,z:0}})
+  assert.equal(stageDesignIssue({...podium,parts:[podium.parts[0]!,perchedFog]}),null,'a fog machine, laser or moving head can likewise stand on a subwoofer')
+  const besidePlatform=stagePlacement(podium,{kind:'fullRange',brand:'budget',rotation:0,color:'#334455'},{x:0,z:0},{id:'platform',step:{x:1,y:0,z:0}})
+  assert.ok(stageDesignIssue({...podium,parts:[podium.parts[0]!,besidePlatform]}),'nothing can dock onto the side of a subwoofer, only its top')
+
+  // Old saves that still carry the removed generic "speaker" kind keep loading: it silently
+  // becomes a full-range speaker instead of failing validation.
+  const legacyDesign=defaultStageDesign();legacyDesign.parts.push({id:'legacy',kind:'speaker' as any,brand:'budget',x:1,y:0,z:1,rotation:0,attachedTo:null,color:'#abcdef'})
+  assert.ok(stageDesignIssue(legacyDesign),'the removed speaker kind is rejected before migration')
+  const migrated=migrateStageDesign(legacyDesign)
+  assert.equal(migrated.parts[0]!.kind,'fullRange');assert.equal(stageDesignIssue(migrated),null,'a migrated legacy design validates again')
+  assert.equal(migrateStageDesign(migrated),migrated,'migration is a no-op once nothing needs rewriting')
+
+  console.log('PASS six-directional truss docking, mid-tower branching, air chains, corners, free-floating structures, height limits, reachable stage audience courtyards, line-array curvature chains, speaker/sub stacking and legacy speaker migration')
 }

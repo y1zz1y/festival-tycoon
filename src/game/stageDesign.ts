@@ -4,7 +4,9 @@ export const COMPONENTS = {
   fireworks: {name:'Feuerwerksmodul',cost:850,party:12,beauty:6,power:.4},
   sparks: {name:'Funkenfontäne',cost:390,party:6,beauty:3,power:.5},
   spot: {name:'Moving Head',cost:180,party:5,beauty:2,power:.4},
-  speaker: {name:'Lautsprecher',cost:260,party:9,beauty:-1,power:1.2},
+  lineArray: {name:'Line Array',cost:230,party:8,beauty:2,power:.7},
+  fullRange: {name:'Full-Range-Lautsprecher',cost:260,party:9,beauty:-1,power:1.2},
+  subwoofer: {name:'Subwoofer',cost:340,party:11,beauty:-2,power:1.6},
   fog: {name:'Nebelmaschine',cost:160,party:4,beauty:1,power:.8},
   laser: {name:'Laser',cost:340,party:7,beauty:3,power:.6},
   screen: {name:'Pixel-LED-Wand',cost:420,party:5,beauty:5,power:1.5},
@@ -25,9 +27,11 @@ export const TRUSS_BRANDS = {
 export function brandsFor(kind:ComponentKind){return kind==='truss'?TRUSS_BRANDS:BRANDS}
 export type ComponentKind = keyof typeof COMPONENTS
 /** Kinds that stand directly on the ground and never attach to a truss. */
-export const GROUND_ONLY_KINDS:ComponentKind[]=['deck','palm','fireworks','sparks']
+export const GROUND_ONLY_KINDS:ComponentKind[]=['deck','palm','fireworks','sparks','subwoofer']
 /** Kinds that may either stand on the ground or dock onto a truss, unlike GROUND_ONLY_KINDS which can only ever do the former. */
-export const GROUND_OR_TRUSS_KINDS:ComponentKind[]=['fog']
+export const GROUND_OR_TRUSS_KINDS:ComponentKind[]=['fog','fullRange']
+/** Kinds that may additionally dock directly onto another part of their own kind (stacked speakers, a hung line-array chain) instead of only a truss. */
+export const STACKABLE_KINDS:ComponentKind[]=['lineArray','fullRange','subwoofer']
 export type Axis='x'|'y'|'z'
 /** The 6 grid-adjacent cells a part can dock into around a truss (or, for a truss's own end-caps, keep extending a chain). Every attachment — side, top, end, corner — is the same operation: one of these steps. */
 export const NEIGHBOR_STEPS:{x:number;y:number;z:number}[]=[
@@ -52,7 +56,7 @@ export function defaultStageDesign():StageDesign {
 }
 export function stageStats(d:StageDesign) {
   let cost=d.width*d.depth*12 + ((d.tileWidth??1)*(d.tileDepth??1)-1)*180,party=0,beauty=0,power=0,speakers=0
-  for(const p of d.parts){const c=COMPONENTS[p.kind],b=brandsFor(p.kind)[p.brand];cost+=c.cost*b.cost;party+=c.party*b.quality;beauty+=c.beauty*b.quality;power+=c.power;if(p.kind==='speaker')speakers++}
+  for(const p of d.parts){const c=COMPONENTS[p.kind],b=brandsFor(p.kind)[p.brand];cost+=c.cost*b.cost;party+=c.party*b.quality;beauty+=c.beauty*b.quality;power+=c.power;if(['lineArray','fullRange','subwoofer'].includes(p.kind))speakers++}
   return {cost:Math.round(cost),upkeep:Math.round(cost*.008*10)/10,party:Math.min(100,Math.round(party)),beauty:Math.min(100,Math.round(beauty)),power:Math.round(power*10)/10,speakers}
 }
 export function stageDesignIssue(d:StageDesign):string|null {
@@ -74,11 +78,23 @@ export function stageDesignIssue(d:StageDesign):string|null {
     if(p.attachedTo===null){
       if(p.kind!=='truss'&&!GROUND_ONLY_KINDS.includes(p.kind)&&!GROUND_OR_TRUSS_KINDS.includes(p.kind))return 'Dieses Bauteil braucht eine Traverse als Träger'
     }else{
-      const host=d.parts.find(q=>q?.id===p.attachedTo&&isTruss(q.kind))
+      const host=d.parts.find(q=>q?.id===p.attachedTo)
       if(!host)return 'Fehlende Trägertraverse'
       const dx=p.x-host.x,dy=p.y-host.y,dz=p.z-host.z
       if(!NEIGHBOR_STEPS.some(s=>s.x===dx&&s.y===dy&&s.z===dz))return 'Bauteile müssen direkt an ihrer Trägertraverse anliegen'
-      if(GROUND_ONLY_KINDS.includes(p.kind))return 'Dieses Bauteil steht auf dem Boden, nicht an einer Traverse'
+      if(isTruss(host.kind)){
+        if(GROUND_ONLY_KINDS.includes(p.kind))return 'Dieses Bauteil steht auf dem Boden, nicht an einer Traverse'
+      }else if(host.kind==='subwoofer'&&p.kind!=='subwoofer'&&!GROUND_ONLY_KINDS.includes(p.kind)){
+        // A subwoofer is a stable platform for anything that doesn't have to stand on the
+        // ground itself — but only balanced on top, never hung underneath or bolted to a side.
+        if(dx!==0||dz!==0||dy!==1)return 'Dieses Bauteil kann nur oben auf dem Subwoofer stehen'
+      }else if(STACKABLE_KINDS.includes(p.kind)&&host.kind===p.kind){
+        // Line arrays hang and extend downward, element by element; stacked speakers/subs grow upward instead.
+        const downward=p.kind==='lineArray'
+        if(dx!==0||dz!==0||dy!==(downward?-1:1))return downward?'Line-Array-Elemente docken nur unten am vorherigen Element an':'Dieses Bauteil kann nur oben auf dem vorherigen Element andocken'
+      }else{
+        return 'Dieses Bauteil kann nicht an diesem Trägerobjekt andocken'
+      }
     }
     if(p.attachedTo===null&&p.y===0&&partOnAudience(d,p))return 'Zuschauerflächen bleiben frei von Bodenaufbauten'
     if(d.parts.some(q=>q!==p&&q.x===p.x&&q.y===p.y&&q.z===p.z))return 'Dieser Platz ist bereits belegt'
@@ -138,3 +154,28 @@ export const ROTATION_DIRECTIONS:{x:number;y:number;z:number}[] = [
   {x:0,y:0,z:1},{x:1,y:0,z:0},{x:0,y:0,z:-1},{x:-1,y:0,z:0},{x:0,y:1,z:0},{x:0,y:-1,z:0},
 ]
 export function partFacing(part:StagePart):{x:number;y:number;z:number}{return ROTATION_DIRECTIONS[part.rotation] ?? {x:0,y:1,z:0}}
+/** How many line-array elements are chained above this one (0 for the element docked straight onto the truss), for the per-element downward curvature. */
+export function lineArrayIndex(d:StageDesign,part:StagePart):number{
+  let index=0,current=part
+  while(current.attachedTo){
+    const host=d.parts.find(q=>q.id===current.attachedTo)
+    if(!host||host.kind!=='lineArray')break
+    index++;current=host
+  }
+  return index
+}
+/** Whether this line-array element is the bottom-most one in its hung chain (nothing else docks onto it) — only this element's own cabinets pick up any downward curvature; every element above it hangs perfectly straight. */
+export function isLastLineArrayElement(d:StageDesign,part:StagePart):boolean{
+  return !d.parts.some(q=>q.attachedTo===part.id&&q.kind==='lineArray')
+}
+/** Rewrites StagePart kinds removed from COMPONENTS since a design was saved, so old saves keep loading instead of failing validation. Logs when it actually changes something. */
+export function migrateStageDesign(d:StageDesign):StageDesign {
+  let changed=false
+  const parts=d.parts.map(p=>{
+    if((p.kind as string)==='speaker'){changed=true;return {...p,kind:'fullRange' as ComponentKind}}
+    return p
+  })
+  if(!changed)return d
+  console.warn(`Bühnendesign "${d.name}": veraltetes Bauteil "speaker" auf "fullRange" migriert.`)
+  return {...d,parts}
+}

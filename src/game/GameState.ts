@@ -2,7 +2,7 @@ import { musicTaste, musicAppeal, type MusicGenre } from './musicTaste'
 import { isScenery, isEdgeScenery, sceneryOverlaps, sceneryTransform } from './scenery'
 import { syncStageAudience } from './stageAudience'
 import { stageSiteIssue } from './stageSite'
-import { isStageAudienceCell, stageDistance, stageSize, buildingFootprint, occupiesBuildingCell, stageDesignIssue, stageStats, type StageDesign } from './stageDesign'
+import { isStageAudienceCell, stageDistance, stageSize, buildingFootprint, occupiesBuildingCell, stageDesignIssue, stageStats, migrateStageDesign, type StageDesign } from './stageDesign'
 import { WAY_TYPES, wayInfo, wayIssue } from './wayTypes'
 import type { WayType } from './wayTypes'
 import { groundRectangle } from './ground'
@@ -6130,7 +6130,7 @@ export class GameState {
         ...data,
         version: 24,
         terrain: normalizeTerrain(data.terrain),
-        buildings: data.buildings,
+        buildings: data.buildings.map(b => b.stageDesign ? { ...b, stageDesign: migrateStageDesign(b.stageDesign) } : b),
         campingCells: Array.isArray(data.campingCells) ? data.campingCells : [],
         campInstallations: Array.isArray(data.campInstallations)
           ? data.campInstallations
@@ -6152,6 +6152,7 @@ export class GameState {
         coasters: Array.isArray(data.coasters) ? data.coasters : [],
         power: normalizePower(data.power),
       }
+      if (migrated.festival.stageTemplates) migrated.festival.stageTemplates = migrated.festival.stageTemplates.map(migrateStageDesign)
       return new GameState(migrated)
     } catch {
       return null

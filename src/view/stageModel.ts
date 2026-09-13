@@ -1,6 +1,6 @@
 import { Group, Mesh, BoxGeometry, CylinderGeometry, ConeGeometry, SphereGeometry, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, SpotLight, Vector3, Quaternion, Color, DoubleSide, MeshStandardMaterial, MeshBasicMaterial, AdditiveBlending } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { isTruss, stageMotion, mountDirection, partFacing, STAGE_TILE_DETAIL, type StageDesign, type ShowPhase } from '../game/stageDesign'
+import { isTruss, stageMotion, mountDirection, partFacing, isLastLineArrayElement, STAGE_TILE_DETAIL, type StageDesign, type StagePart, type ShowPhase } from '../game/stageDesign'
 
 const unitX=new Vector3(1,0,0)
 const unitZ=new Vector3(0,0,1)
@@ -16,11 +16,88 @@ const ALONG_AXES = {x:{x:1,y:0,z:0},y:{x:0,y:1,z:0},z:{x:0,y:0,z:1}} as const
 /** Colors used only by the floor slab/tiles, so its batched meshes can be found and hidden separately (e.g. when viewing from below). */
 const FLOOR_COLORS = new Set(['#75886a','#30394c','#485166','#515b70'])
 /** Half the height of each fixture's own body (matches its first box() call below), used to press it flush against a truss it is docked onto. */
-const EQUIPMENT_REACH:Partial<Record<string,number>> = {speaker:.4,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,screen:.6,banner:.6,star:.4}
+const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:.4,subwoofer:.45,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,screen:.6,banner:.6,star:.4}
 /** Top surface of a floor tile (the .24 base slab plus the .04 detail overlay from the floor loop below) — where a ground-standing fixture's own base belongs, matching stageBand.ts's world-map floor level. */
 const GROUND_Y=.28
+/** Downward tilt each further line-array cabinet picks up once curving begins (see lineArrayCabinetTilt below). */
+const LINE_ARRAY_ANGLE_STEP=6*Math.PI/180
+/** How far a line array docked to the *side* of a truss hangs below it, bridged by a rigging arm — real arrays hang off a bridle rather than sitting flush at truss height. */
+const LINE_ARRAY_SIDE_DROP=.4
+const LINE_ARRAY_CABINET_HEIGHT=.3
+const LINE_ARRAY_CABINET_PITCH=.33 // 3 cabinets + the gaps between them span .96, filling one grid cell
+/**
+ * Tilt (from vertical) of one cabinet (0/1/2 = top/middle/bottom within its own element). Only the
+ * bottom-most element of a hung chain (nothing docked below it) curves at all — its 3 cabinets
+ * pick up LINE_ARRAY_ANGLE_STEP, 2×that and 3×that respectively; every element above it, however
+ * long the chain, hangs perfectly straight. Real arrays are rigged the same way: most of the
+ * array stays near-vertical for throw distance, and only the last box or two angles down as
+ * near-field "end fill".
+ */
+function lineArrayCabinetTilt(localIndex:number,isLastElement:boolean):number{return isLastElement?(localIndex+1)*LINE_ARRAY_ANGLE_STEP:0}
+/**
+ * Recursively resolves a non-truss part's own rendered base (its "ex,ey,ez" — see the per-part
+ * loop below). A truss always renders exactly at its own grid-cell centre, so a part docked onto
+ * one can use that centre directly. A part docked onto *another part* (a hung line-array chain,
+ * stacked speakers, anything sat atop a subwoofer) cannot: that host's own base was itself already
+ * pulled away from its grid-cell centre by whatever it is docked to, so reusing the raw grid centre
+ * at every link would drift the chain apart. Resolving the host's actual base first keeps every
+ * link flush, however deep the chain.
+ */
+function resolveEquipmentBase(d:StageDesign,part:StagePart,cache:Map<string,{x:number;y:number;z:number}>):{x:number;y:number;z:number}{
+  const cached=cache.get(part.id);if(cached)return cached
+  const x=part.x-d.width/2+.5,z=part.z-d.depth/2+.5
+  const host=part.attachedTo?d.parts.find(t=>t.id===part.attachedTo):undefined
+  let pos:{x:number;y:number;z:number}
+  if(!host){
+    pos={x,y:GROUND_Y,z}
+  }else{
+    const dir=mountDirection(part,host)
+    // hc must be the host's own centre, not its base: a truss already renders centred on its
+    // grid cell, but another part's resolved base sits half its own height below that part's
+    // centre (see the base/pivot split in the per-part loop below), so it needs converting back.
+    const hc=isTruss(host.kind)?{x:host.x-d.width/2+.5,y:host.y+.5,z:host.z-d.depth/2+.5}:(()=>{const b=resolveEquipmentBase(d,host,cache);return {x:b.x,y:b.y+(EQUIPMENT_REACH[host.kind]??.3),z:b.z}})()
+    const reach=isTruss(host.kind)?(EQUIPMENT_REACH[part.kind]??.3)+.13:(EQUIPMENT_REACH[host.kind]??.3)+(EQUIPMENT_REACH[part.kind]??.3)
+    // A line array docked to the side of a truss (not straight below it) still hangs down off a
+    // rigging arm rather than sitting flush at truss height — see the arm drawn in the per-part
+    // loop below, which connects the truss to this same dropped position.
+    const sideHungArray=part.kind==='lineArray'&&isTruss(host.kind)&&!dir.y&&(dir.x||dir.z)
+    pos={
+      x:dir.x?hc.x+dir.x*reach:x,
+      y:dir.y?hc.y+dir.y*reach-(EQUIPMENT_REACH[part.kind]??.3):sideHungArray?hc.y-LINE_ARRAY_SIDE_DROP-(EQUIPMENT_REACH[part.kind]??.3):hc.y,
+      z:dir.z?hc.z+dir.z*reach:z,
+    }
+  }
+  cache.set(part.id,pos)
+  return pos
+}
+/**
+ * World position of the top of a line-array element's own run of 3 cabinets — where its rigging
+ * rod begins. For a chained element, this is found by walking down through its host's own 3
+ * cabinets — but a host always has something docked onto it here (namely `part` itself), so it is
+ * by definition never the bottom-most element of the chain, meaning its own 3 cabinets are
+ * guaranteed to hang perfectly straight (see lineArrayCabinetTilt) and the walk needs no tilt.
+ */
+function lineArrayTopAnchor(d:StageDesign,part:StagePart,baseCache:Map<string,{x:number;y:number;z:number}>,topCache:Map<string,Vector3>):Vector3{
+  const cached=topCache.get(part.id);if(cached)return cached
+  const host=d.parts.find(t=>t.id===part.attachedTo)!
+  let top:Vector3
+  if(isTruss(host.kind)){
+    const base=resolveEquipmentBase(d,part,baseCache)
+    top=new Vector3(base.x,base.y+2*(EQUIPMENT_REACH.lineArray??.48),base.z)
+  }else{
+    const hostTop=lineArrayTopAnchor(d,host,baseCache,topCache)
+    const hostFacing=partFacing(host)
+    const hostYaw=new Quaternion().setFromUnitVectors(unitZ,new Vector3(hostFacing.x,hostFacing.y,hostFacing.z))
+    const straightDown=new Vector3(0,-1,0).applyQuaternion(hostYaw)
+    top=hostTop.clone().addScaledVector(straightDown,3*LINE_ARRAY_CABINET_PITCH)
+  }
+  topCache.set(part.id,top)
+  return top
+}
 export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:Set<string>;effects?:boolean;lightBudget?:number}={}):Group {
   const root=new Group(), buckets=new Map<string,BufferGeometry[]>(), effects:Group[]=[]
+  const baseCache=new Map<string,{x:number;y:number;z:number}>()
+  const lineArrayTopCache=new Map<string,Vector3>()
   let origin: {x:number;z:number;rotation:number}|undefined
   const rotateAround=(x:number,z:number)=>{
     if(!origin)return{x,z}
@@ -31,6 +108,14 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
     const r=rotateAround(x,z);x=r.x;z=r.z
     if(origin&&origin.rotation%2)[w,depth]=[depth,w]
     const g=new BoxGeometry(w,h,depth);g.translate(x,y,z)
+    const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+  }
+  /** A forward-facing disc (a low-segment cylinder, chunky rather than perfectly smooth to match the game's pixel-art look) — for a round driver/membrane on an otherwise boxy fixture. */
+  const disc=(x:number,y:number,z:number,radius:number,height:number,color:string)=>{
+    const r=rotateAround(x,z);x=r.x;z=r.z
+    const g=new CylinderGeometry(radius,radius,height,8);g.rotateX(Math.PI/2)
+    if(origin)g.rotateY(origin.rotation*Math.PI/2)
+    g.translate(x,y,z)
     const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
   }
   /** A thin box spanning two points; used for the diagonal lattice bracing of 3-point trusses. */
@@ -120,21 +205,91 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
       // there (matching how each box() call above uses only positive offsets). Docked onto a
       // truss, that base is pulled out of the middle of the fixture's own cell and pressed up
       // against the truss's thin body instead, so there is no floating gap between them.
-      const reach=(EQUIPMENT_REACH[p.kind]??.3)+.13
-      let ex=x,ey=y,ez=z
-      if(host){
-        const hc={x:host.x-d.width/2+.5,y:host.y+.5,z:host.z-d.depth/2+.5}
-        if(dir.x)ex=hc.x+dir.x*reach
-        if(dir.z)ez=hc.z+dir.z*reach
-        if(dir.y)ey=hc.y+dir.y*reach-(EQUIPMENT_REACH[p.kind]??.3)
-      }else{
-        // No host truss: the fixture stands directly on the floor, so its base sits on the
-        // floor's own top surface rather than at the vertical centre of its grid cell.
-        ey=GROUND_Y
-      }
+      const base=resolveEquipmentBase(d,p,baseCache)
+      const ex=base.x,ey=base.y,ez=base.z
       origin={x:ex,z:ez,rotation:p.rotation}
-      if(p.kind==='speaker'){
-        box(ex,ey+.4,ez,.65,.8,.5,'#171d28');for(const yy of [.2,.55]){box(ex,ey+yy,ez+.26,.43,.25,.04,'#414859');box(ex,ey+yy,ez+.29,.18,.12,.02,c)}
+      if(p.kind==='fullRange'){
+        // A classic 2-way cabinet: housing, a small tweeter up top and a larger woofer below it.
+        box(ex,ey+.4,ez,.65,.8,.5,'#171d28')
+        box(ex,ey+.62,ez+.26,.16,.16,.03,'#414859');box(ex,ey+.62,ez+.29,.09,.09,.02,c)
+        box(ex,ey+.32,ez+.26,.4,.4,.04,'#414859');box(ex,ey+.32,ez+.29,.28,.28,.02,c)
+      }else if(p.kind==='subwoofer'){
+        // A big, plain box dominated by one large round driver membrane on the front.
+        box(ex,ey+.45,ez,.8,.9,.6,'#12161c')
+        box(ex,ey+.45,ez+.31,.62,.62,.04,'#23282f');disc(ex,ey+.45,ez+.345,.27,.03,c)
+      }else if(p.kind==='lineArray'){
+        // A line-array element facing local +Z (the gizmo's chosen horizontal aim). Its 3
+        // cabinets are simply threaded onto one continuous rigging rod that kinks by
+        // LINE_ARRAY_ANGLE_STEP at every cabinet joint — the cabinets don't tilt independently,
+        // they are carried along by whichever rod segment they sit on, so walking the rod IS
+        // walking the cabinets. That walk starts at lineArrayTopAnchor (this element's own
+        // attachment point, continuing on from every element already hung above it) and keeps
+        // going seamlessly across element boundaries, so the curve is one unbroken bend down the
+        // whole flown array rather than resetting at each element.
+        const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
+        const yawQuat=new Quaternion().setFromUnitVectors(unitZ,facingVec)
+        const cab='#20242b',trim='#3a4048',grille='#101318'
+        const cabinetHeight=LINE_ARRAY_CABINET_HEIGHT,cabinetPitch=LINE_ARRAY_CABINET_PITCH
+        const isLastElement=isLastLineArrayElement(d,p) // only the bottom-most element of the chain curves at all
+        const topAnchor=lineArrayTopAnchor(d,p,baseCache,lineArrayTopCache)
+        const cursor=topAnchor.clone()
+        for(let i=0;i<3;i++){
+          const segQuat=yawQuat.clone().multiply(new Quaternion().setFromAxisAngle(unitX,lineArrayCabinetTilt(i,isLastElement)))
+          const segDir=new Vector3(0,-1,0).applyQuaternion(segQuat)
+          const center=cursor.clone().addScaledVector(segDir,cabinetPitch/2)
+          const putCab=(lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string)=>{
+            const g=new BoxGeometry(w,h,depth);g.applyQuaternion(segQuat)
+            const wp=new Vector3(lx,ly,lz).applyQuaternion(segQuat).add(center)
+            g.translate(wp.x,wp.y,wp.z)
+            const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+          }
+          const putCabDisc=(lx:number,lz:number,radius:number,height:number,color:string)=>{
+            const g=new CylinderGeometry(radius,radius,height,10)
+            g.applyQuaternion(CYL_TO_FORWARD);g.applyQuaternion(segQuat)
+            const wp=new Vector3(lx,0,lz).applyQuaternion(segQuat).add(center)
+            g.translate(wp.x,wp.y,wp.z)
+            const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+          }
+          putCab(0,0,0,.62,cabinetHeight,.34,cab) // cabinet body
+          putCab(0,cabinetHeight/2-.03,-.15,.5,.03,.02,trim) // rigging rail, top edge
+          putCab(0,-cabinetHeight/2+.03,-.15,.5,.03,.02,trim) // rigging rail, bottom edge
+          for(const tx of [-.18,0,.18])putCabDisc(tx,.175,.05,.03,grille) // three tweeters, side by side
+          putCab(0,-cabinetHeight/2+.045,.175,.36,.035,.02,c) // brand strip, tinted by the chosen colour
+          // The rigging-rod segment spans the *full* pitch (not just the cabinet's own height),
+          // so consecutive segments — even the next element's first one — meet exactly at the
+          // joint, each kinked LINE_ARRAY_ANGLE_STEP from the last: one continuous bent rod.
+          putCab(.29,0,-.14,.045,cabinetPitch,.045,trim)
+          cursor.addScaledVector(segDir,cabinetPitch)
+        }
+        if(host&&isTruss(host.kind)){
+          if(!dir.x&&!dir.z){
+            // A truss's own body is a sparse 3-chord lattice, not a solid rod, so a fixture's flat
+            // top can land in the gap between chords and read as floating even though it is
+            // technically flush. A rigging bracket spanning exactly the truss's own cross-section
+            // (from the array's flush top up to the truss's own top surface, .13 above and below
+            // its centre) — wide enough to cross the lattice regardless of which side the nearest
+            // chord sits on — gives every array a visible physical link, without poking out above
+            // the truss like a stray block sitting on top of it.
+            const g=new BoxGeometry(.3,.26,.3);g.applyQuaternion(yawQuat)
+            g.translate(topAnchor.x,topAnchor.y+.13,topAnchor.z)
+            const list=buckets.get(trim)??[];list.push(g);buckets.set(trim,list)
+          }else{
+            // Docked to the *side* of a truss instead of straight below it, the array hangs off a
+            // rigging arm rather than sitting flush at truss height (see the matching drop in
+            // resolveEquipmentBase) — drawn here as a strut from the truss surface down to the
+            // top-centre of the array, the same way the truss's own lattice struts are built.
+            const hc={x:host.x-d.width/2+.5,y:host.y+.5,z:host.z-d.depth/2+.5}
+            const trussSurface=new Vector3(hc.x+dir.x*.13,hc.y,hc.z+dir.z*.13)
+            const armDelta=topAnchor.clone().sub(trussSurface),armLen=armDelta.length()
+            if(armLen>1e-4){
+              const g=new BoxGeometry(armLen,.07,.07)
+              g.applyQuaternion(new Quaternion().setFromUnitVectors(unitX,armDelta.clone().multiplyScalar(1/armLen)))
+              const mid=trussSurface.clone().add(topAnchor).multiplyScalar(.5)
+              g.translate(mid.x,mid.y,mid.z)
+              const list=buckets.get(trim)??[];list.push(g);buckets.set(trim,list)
+            }
+          }
+        }
       }else if(p.kind==='spot'){
         // A real moving head: the base sits flush against the truss (dir), so its two yoke
         // arms always rise away from that same face — dir is therefore also the arms' pan
