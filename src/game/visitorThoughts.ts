@@ -1,5 +1,5 @@
 export const CONCERT_TOPLESS_THOUGHT = 'Ich feiere oben frei – die Menge rast!'
-export const CONCERT_TOPLESS_CROWD_THOUGHT = 'Die zieht oben frei – die Stimmung explodiert!'
+export const CONCERT_TOPLESS_CROWD_THOUGHT = 'Da geht jemand oben ohne – die Stimmung explodiert!'
 
 export type ThoughtVisitor = {
   id: string

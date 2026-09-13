@@ -185,14 +185,23 @@ export class StaffSimulation {
       if (member.carryingWaste >= SIMULATION_CONFIG.waste.cleanerMaxCarry) {
         return null
       }
+      const binCapacity = SIMULATION_CONFIG.waste.binCapacity
+      const binDistance = (bin: { x: number; z: number }) =>
+        Math.abs(bin.x - member.cellX) + Math.abs(bin.z - member.cellZ)
       const bin = context.wasteBins
-        .filter((candidate) => candidate.stored > 0 && !claimed.has(candidate.id))
-        .sort(
-          (left, right) =>
-            Math.abs(left.x - member.cellX) +
-            Math.abs(left.z - member.cellZ) -
-            (Math.abs(right.x - member.cellX) + Math.abs(right.z - member.cellZ)),
-        )[0]
+        .filter(
+          (candidate) =>
+            candidate.stored >= binCapacity &&
+            !claimed.has(candidate.id) &&
+            member.carryingWaste + candidate.stored <=
+              SIMULATION_CONFIG.waste.cleanerMaxCarry,
+        )
+        .sort((left, right) => {
+          const leftFull = left.stored >= binCapacity
+          const rightFull = right.stored >= binCapacity
+          if (leftFull !== rightFull) return leftFull ? -1 : 1
+          return binDistance(left) - binDistance(right) || right.stored - left.stored
+        })[0]
       const incident = context.incidents
         .filter(
           (candidate) =>
@@ -233,7 +242,7 @@ export class StaffSimulation {
         .filter((job): job is NonNullable<typeof job> => Boolean(job))
         .sort((left, right) => left.distance - right.distance)
       const job = jobs[0]
-      if (bin && (!job || Math.abs(bin.x - member.cellX) + Math.abs(bin.z - member.cellZ) <= job.distance + 2)) {
+      if (bin && (!job || bin.stored >= binCapacity || binDistance(bin) <= job.distance + 2)) {
         return {
           id: bin.id,
           cell: { x: bin.x, z: bin.z, elevation: bin.elevation },
@@ -376,12 +385,12 @@ export class StaffSimulation {
       member.targetId &&
       context.wasteBins.some((candidate) => candidate.id === member.targetId)
     ) {
+      const targetBin = context.wasteBins.find(
+        (candidate) => candidate.id === member.targetId,
+      )
       const emptied = context.emptyBin(
         member.targetId,
-        Math.max(
-          0,
-          SIMULATION_CONFIG.waste.cleanerMaxCarry - member.carryingWaste,
-        ),
+        targetBin?.stored ?? SIMULATION_CONFIG.waste.binCapacity,
       )
       member.carryingWaste += emptied
       member.wasteFromBin = true
@@ -435,6 +444,12 @@ export class StaffSimulation {
     member.targetId = null
     if (member.carryingWaste <= 0) {
       this.reset(member)
+      return
+    }
+    const binsHaveRoom = context.wasteBins.some(
+      (bin) => bin.stored < SIMULATION_CONFIG.waste.binCapacity,
+    )
+    if (binsHaveRoom && !member.wasteFromBin && this.sendCleanerToDump(member, context)) {
       return
     }
     if (member.carryingWaste < SIMULATION_CONFIG.waste.cleanerTripCarry) {

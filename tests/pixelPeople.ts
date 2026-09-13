@@ -39,6 +39,15 @@ export function testPixelPeople(): void {
   assert.ok(femaleBody.boundingBox!.max.z > createPersonGeometry('body').boundingBox!.max.z, 'female torso keeps a visible bust')
   assert.notDeepEqual(femaleBody.getAttribute('position').array,createPersonGeometry('body').getAttribute('position').array,'distinct tailored silhouette')
   assert.notEqual(createPersonDetails(0), createPersonDetails(8), 'women do not reuse male facial hair')
+  for (let variant = 8; variant < PERSON_VARIANTS; variant++) {
+    for (const clothing of [true, false]) {
+      const details = createPersonDetails(variant, clothing)
+      details.computeBoundingBox()
+      const box = details.boundingBox!
+      assert.ok(box.max.y > 0.64, `female ${variant}: fringe stays on the forehead, not the lip`)
+      assert.ok(box.min.y > 0.15, `female ${variant}: outfit stays on the body, not as slabs under the feet`)
+    }
+  }
   assert.equal(new Set([...before.values()].map(s=>s.female)).size,2, 'guests keep ordinary female and male bodies')
   for (const id of ids) assert.equal(visitorIsFemale(id), visitorLooksFemale(id))
   for (const kind of ['breasts', 'bust', 'penis'] as const) {

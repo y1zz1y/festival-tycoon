@@ -53,6 +53,12 @@ type Source = {
   directional?: boolean
 }
 
+export type AtmosphereMobileSource = {
+  x: number
+  z: number
+  elevation: number
+}
+
 export type AtmosphereResult = {
   attractiveness: AtmosphereSnapshot
   partyMood: AtmosphereSnapshot
@@ -86,6 +92,7 @@ export class AtmosphereSystem {
     campInstallations: readonly CampInstallation[],
     wasteDumps: readonly WasteDumpCell[] = [],
     worldSize = WORLD_SIZE,
+    mobileSources: readonly AtmosphereMobileSource[] = [],
   ): AtmosphereResult {
     const sources = this.createSources(
       buildings,
@@ -93,6 +100,7 @@ export class AtmosphereSystem {
       visitors,
       campInstallations,
       wasteDumps,
+      mobileSources,
     )
     const beautyRaw = new Map<string, { x: number; z: number; elevation: number; positive: number; negative: number }>()
     const partyRaw = new Map<string, { x: number; z: number; elevation: number; positive: number; negative: number }>()
@@ -136,6 +144,7 @@ export class AtmosphereSystem {
     visitors: readonly AtmosphereVisitor[],
     campInstallations: readonly CampInstallation[],
     wasteDumps: readonly WasteDumpCell[],
+    mobileSources: readonly AtmosphereMobileSource[],
   ): Source[] {
     const sourceConfig = SIMULATION_CONFIG.atmosphere.sources
     const sources: Source[] = []
@@ -221,6 +230,14 @@ export class AtmosphereSystem {
           ...sourceConfig.campMusicBox,
         })
       })
+    mobileSources.forEach((source) => {
+      sources.push({
+        x: source.x,
+        z: source.z,
+        elevation: source.elevation,
+        ...sourceConfig.sweeperNoise,
+      })
+    })
     return sources
   }
 

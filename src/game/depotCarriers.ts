@@ -3,15 +3,32 @@ import type { GameSnapshot } from './GameState'
 import type { Point, CarryRoute, Depot } from './supplyChain'
 import { emptyStock } from './supplyChain'
 import type { Supply } from './festivalManagement'
-import { wayInfo } from './wayTypes'
+import { wayInfo, type WayType } from './wayTypes'
 
 export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from: Point, goals: Point[]) => Point[] | null, canStep: (from:Point,to:Point)=>boolean): void {
   const i = s.festival.infrastructure
   if (!i.routes.some(r=>r.automatic)) return
   const paths = s.buildings.filter(b => b.kind === 'path')
   const key = (p:Point) => `${p.x},${p.z},${p.elevation}`
-  const byCell = new Map(paths.map(p => [key(p),p]))
-  const access = (p:{x:number;z:number}) => paths.filter(b => Math.abs(b.x-p.x)+Math.abs(b.z-p.z) === 1 && b.elevation === getTerrainHeight(s.terrain,p.x,p.z)).map(b => ({x:b.x,z:b.z,elevation:b.elevation}))
+  const byCell = new Map<string, Point & { wayType?: WayType }>(
+    paths.map(p => [key(p), p]),
+  )
+  for (const cell of s.stageForecourtCells) {
+    const walk = { x: cell.x, z: cell.z, elevation: cell.elevation }
+    const walkKey = key(walk)
+    if (!byCell.has(walkKey)) byCell.set(walkKey, walk)
+  }
+  const access = (p:{x:number;z:number}) => {
+    const goals: Point[] = []
+    for (const [dx, dz] of [[0, 1], [1, 0], [0, -1], [-1, 0]] as const) {
+      const x = p.x + dx
+      const z = p.z + dz
+      const elevation = getTerrainHeight(s.terrain, x, z)
+      const walk = byCell.get(key({ x, z, elevation }))
+      if (walk) goals.push(walk)
+    }
+    return goals
+  }
   const occupancy = new Map<string,number>()
   for (const v of s.visitors) {
     if (['riding','bus-riding','vehicle-arrival'].includes(v.state)) continue
@@ -75,20 +92,37 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
       r.kind=kind;r.targetId=destination.id;r.path=route;r.phase='outbound';r.job={sourceId:source.id,destinationId:destination.id,destinationKind,quantity,phase:'pickup'};r.status='Hole Waren ab'
       return true
     }
+    const nearer=(a:{x:number;z:number},b:{x:number;z:number})=>Math.abs(a.x-home.x)+Math.abs(a.z-home.z)-Math.abs(b.x-home.x)-Math.abs(b.z-home.z)
+    const supplyShops=()=>{
+      const shops=s.buildings.filter(b=>['food','alcohol','toilet'].includes(b.kind)&&inside(b)).sort(nearer)
+      for(const shop of shops) {
+        const kind:Supply=shop.kind==='food'?'food':shop.kind==='alcohol'?'drinks':'water'
+        const need=40-(i.shops[shop.id]?.[kind]??0)-reserved(shop.id,kind)
+        if(assign(home,shop,'shop',kind,need)) return true
+      }
+      return false
+    }
+    if (home.role === 'delivery') {
+      if (!supplyShops()) {
+        const storages=i.depots.filter(d=>d.id!==home.id && d.role!=='delivery' && inside(d)).sort(nearer)
+        outer: for (const kind of ['food','drinks','water'] as Supply[]) {
+          if(home.stock[kind]-reserved(home.id,kind,true,r)<=0) continue
+          for(const storage of storages) {
+            const need=storage.minimum[kind]-storage.stock[kind]-reserved(storage.id,kind)
+            if(need>0 && assign(home,storage,'depot',kind,need)) break outer
+          }
+        }
+      }
+      continue
+    }
     let assigned=false
     for(const kind of ['food','drinks','water'] as Supply[]) {
       const need=home.minimum[kind]-home.stock[kind]-reserved(home.id,kind)
       if(need<=0) continue
-      const sources=i.depots.filter(d=>d.id!==home.id && inside(d) && (d.role==='delivery'||d.distribution==='relay')).sort((a,b)=>Math.abs(a.x-home.x)+Math.abs(a.z-home.z)-Math.abs(b.x-home.x)-Math.abs(b.z-home.z))
+      const sources=i.depots.filter(d=>d.id!==home.id && inside(d) && (d.role==='delivery'||d.distribution==='relay')).sort(nearer)
       for(const source of sources) if(assign(source,home,'depot',kind,need)) {assigned=true;break}
       if(assigned) break
     }
-    if(assigned || home.role==='delivery') continue
-    const shops=s.buildings.filter(b=>['food','alcohol','toilet'].includes(b.kind)&&inside(b)).sort((a,b)=>Math.abs(a.x-home.x)+Math.abs(a.z-home.z)-Math.abs(b.x-home.x)-Math.abs(b.z-home.z))
-    for(const shop of shops) {
-      const kind:Supply=shop.kind==='food'?'food':shop.kind==='alcohol'?'drinks':'water'
-      const need=40-(i.shops[shop.id]?.[kind]??0)-reserved(shop.id,kind)
-      if(assign(home,shop,'shop',kind,need)) break
-    }
+    if(!assigned) supplyShops()
   }
 }

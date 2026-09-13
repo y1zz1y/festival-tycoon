@@ -780,6 +780,7 @@ Object.values(BUILDINGS).forEach((building, index) => {
       : building.kind === 'busStop' ||
           building.kind === 'busDepot' ||
           building.kind === 'wasteDepot' ||
+          building.kind === 'specialDepot' ||
           building.kind === 'wasteBin'
         ? logisticsTools
       : building.kind === 'ride'
@@ -1411,6 +1412,7 @@ function bindGameState(nextGame: GameState): void {
                         'busStop',
                         'busDepot',
                         'wasteDepot',
+                        'specialDepot',
                         'wasteBin',
                         'wasteDump',
                       ].includes(snapshot.selectedTool)
@@ -1652,6 +1654,7 @@ function updateLogisticsPanel(force = false): void {
     logistics.ambulanceGarages.map((garage) => garage.bays),
     logistics.busDepots.map((depot) => depot.busIds),
     (logistics.wasteDepots ?? []).map((depot) => depot.truckIds),
+    (logistics.specialDepots ?? []).map((depot) => depot.vehicleIds),
     logistics.busStops.map((stop) => stop.id),
     logistics.busLines.map((line) => [
       line.id,
@@ -1676,6 +1679,7 @@ function updateLogisticsPanel(force = false): void {
       <span><small>Autos auf Parkplatzsuche</small><b>${waitingCars}</b></span>
       <span><small>Krankenwagen</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'ambulance').length}</b></span>
       <span><small>Müllfahrzeuge</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'garbageTruck').length}</b></span>
+      <span><small>Saugreiniger</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'sweeper').length}</b></span>
       <span><small>Busse</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'bus').length}</b></span>
       <span><small>Aktive Linien</small><b>${logistics.busLines.filter((line) => line.active).length}</b></span>
   </div>
@@ -1696,6 +1700,12 @@ function updateLogisticsPanel(force = false): void {
         .map(
           (depot) =>
             `<span>Mülldepot ${depot.id.slice(-4)} · ${depot.truckIds.length}/2 LKW <button data-buy-garbage="${depot.id}">Müllfahrzeug kaufen</button>${depot.truckIds.length > 0 ? ` <button data-sell-garbage="${depot.id}">LKW verkaufen</button>` : ''}</span>`,
+        )
+        .join('')}
+      ${(logistics.specialDepots ?? [])
+        .map(
+          (depot) =>
+            `<span>Betriebshof ${depot.id.slice(-4)} · ${depot.vehicleIds.length}/4 <button data-buy-sweeper="${depot.id}">Saugreiniger kaufen</button>${depot.vehicleIds.length > 0 ? ` <button data-sell-sweeper="${depot.id}">Saugreiniger verkaufen</button>` : ''}</span>`,
         )
         .join('')}
     </div>`
@@ -3970,6 +3980,8 @@ logisticsOverview.addEventListener('click', (event) => {
   const sellDepotId = button.dataset.sellBus
   const garbageDepotId = button.dataset.buyGarbage
   const sellGarbageId = button.dataset.sellGarbage
+  const sweeperDepotId = button.dataset.buySweeper
+  const sellSweeperId = button.dataset.sellSweeper
   const result = garageId
     ? game.buyAmbulance(garageId)
     : depotId
@@ -3980,6 +3992,10 @@ logisticsOverview.addEventListener('click', (event) => {
         ? game.buyGarbageTruck(garbageDepotId)
       : sellGarbageId
         ? game.sellGarbageTruck(sellGarbageId)
+      : sweeperDepotId
+        ? game.buySweeper(sweeperDepotId)
+      : sellSweeperId
+        ? game.sellSweeper(sellSweeperId)
       : null
   if (result) showToast(result.message, !result.ok)
 })

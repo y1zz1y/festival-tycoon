@@ -256,12 +256,12 @@ export function testFestival(fixture: (count?: number) => GameState): void {
   ;(show as any).updateVisitors(1)
   assert.equal(earlyGuest.concertId, null, 'guests leave after the last song')
 
-  const femaleId = Array.from({ length: 80 }, (_, index) => `concert-fan-${index}`).find(visitorLooksFemale)
-  assert.ok(femaleId)
-  assert.equal(visitorIsFemale(femaleId), true)
+  const maleId = Array.from({ length: 80 }, (_, index) => `concert-fan-${index}`).find((id) => !visitorLooksFemale(id))
+  assert.ok(maleId)
+  assert.equal(visitorIsFemale(maleId), false)
   const dancer = ss.visitors[1]!
   const neighbor = ss.visitors[2]!
-  dancer.id = femaleId
+  dancer.id = maleId
   dancer.audience = 'music'
   dancer.musicTaste = 'indie'
   dancer.state = 'partying'
@@ -287,8 +287,8 @@ export function testFestival(fixture: (count?: number) => GameState): void {
   ss.minute = 850
   ss.parkOpen = true
   const neighborFun = neighbor.needs.fun
-  for (let n = 0; n < 40 && dancer.toplessMinutes <= 0; n += 1) (show as any).updateVisitors(1)
-  assert.ok(dancer.toplessMinutes > 0, 'female guests may go topless during a live set')
+  for (let n = 0; n < 80 && dancer.toplessMinutes <= 0; n += 1) (show as any).updateVisitors(1)
+  assert.ok(dancer.toplessMinutes > 0, 'any guest may take their shirt off during a live set')
   ;(show as any).updateVisitors(1)
   assert.equal(dancer.thought, CONCERT_TOPLESS_THOUGHT)
   assert.ok(neighbor.needs.fun > neighborFun, 'nearby guests enjoy the topless cheer')
