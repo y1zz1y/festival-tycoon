@@ -16,7 +16,7 @@ const ALONG_AXES = {x:{x:1,y:0,z:0},y:{x:0,y:1,z:0},z:{x:0,y:0,z:1}} as const
 /** Colors used only by the floor slab/tiles, so its batched meshes can be found and hidden separately (e.g. when viewing from below). */
 const FLOOR_COLORS = new Set(['#75886a','#30394c','#485166','#515b70'])
 /** Half the height of each fixture's own body (matches its first box() call below), used to press it flush against a truss it is docked onto. */
-const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:.4,subwoofer:.45,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,star:.4}
+const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:.4,subwoofer:.45,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,star:.4,discoBall:.36}
 /** Top surface of a floor tile (the .24 base slab plus the .04 detail overlay from the floor loop below) — where a ground-standing fixture's own base belongs, matching stageBand.ts's world-map floor level. */
 const GROUND_Y=.28
 /** Thickness of a Pixel-LED-Wand module's backing plate — its LEDs sit on the front of it. */
@@ -168,7 +168,7 @@ function computeScreenGroups(d:StageDesign):Map<string,ScreenGroupInfo>{
   return result
 }
 export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:Set<string>;effects?:boolean;lightBudget?:number}={}):Group {
-  const root=new Group(), buckets=new Map<string,BufferGeometry[]>(), effects:Group[]=[]
+  const root=new Group(), buckets=new Map<string,BufferGeometry[]>(), glowBuckets=new Map<string,BufferGeometry[]>(), effects:Group[]=[]
   const baseCache=new Map<string,{x:number;y:number;z:number}>()
   const lineArrayTopCache=new Map<string,Vector3>()
   const screenGroups=computeScreenGroups(d)
@@ -178,29 +178,45 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
     const angle=origin.rotation*Math.PI/2,dx=x-origin.x,dz=z-origin.z
     return {x:origin.x+dx*Math.cos(angle)+dz*Math.sin(angle),z:origin.z-dx*Math.sin(angle)+dz*Math.cos(angle)}
   }
-  const box=(x:number,y:number,z:number,w:number,h:number,depth:number,color:string)=>{
+  /**
+   * While a part is collecting its own lamps, `lit` geometry lands here with the position it holds
+   * in the chase instead of in the shared glow batch — that is what lets a star or a palm run a
+   * pattern across its own bulbs rather than being merged into one mesh with every lamp on stage.
+   */
+  let litSink:{geometry:BufferGeometry;order:number;color:string}[]|undefined,litOrder=0
+  /**
+   * Anything passed `lit` goes into a separate batch that is drawn unlit, at its full colour,
+   * instead of being shaded like the housing around it — that is what makes a lamp, a tube or a
+   * bulb actually read as switched on rather than as a brightly painted block.
+   */
+  const stash=(color:string,geometry:BufferGeometry,lit?:boolean)=>{
+    if(lit&&litSink){litSink.push({geometry,order:litOrder,color});return}
+    const target=lit?glowBuckets:buckets,list=target.get(color)??[]
+    list.push(geometry);target.set(color,list)
+  }
+  const box=(x:number,y:number,z:number,w:number,h:number,depth:number,color:string,lit?:boolean)=>{
     const r=rotateAround(x,z);x=r.x;z=r.z
     if(origin&&origin.rotation%2)[w,depth]=[depth,w]
     const g=new BoxGeometry(w,h,depth);g.translate(x,y,z)
-    const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+    stash(color,g,lit)
   }
   /** A forward-facing disc (a low-segment cylinder, chunky rather than perfectly smooth to match the game's pixel-art look) — for a round driver/membrane on an otherwise boxy fixture. */
-  const disc=(x:number,y:number,z:number,radius:number,height:number,color:string)=>{
+  const disc=(x:number,y:number,z:number,radius:number,height:number,color:string,lit?:boolean)=>{
     const r=rotateAround(x,z);x=r.x;z=r.z
     const g=new CylinderGeometry(radius,radius,height,8);g.rotateX(Math.PI/2)
     if(origin)g.rotateY(origin.rotation*Math.PI/2)
     g.translate(x,y,z)
-    const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+    stash(color,g,lit)
   }
   /** A thin box spanning two points; used for the diagonal lattice bracing of 3-point trusses. */
-  const strut=(x1:number,y1:number,z1:number,x2:number,y2:number,z2:number,thickness:number,color:string)=>{
+  const strut=(x1:number,y1:number,z1:number,x2:number,y2:number,z2:number,thickness:number,color:string,lit?:boolean)=>{
     const r1=rotateAround(x1,z1),r2=rotateAround(x2,z2)
     const dx=r2.x-r1.x,dy=y2-y1,dz=r2.z-r1.z,len=Math.hypot(dx,dy,dz)
     if(len<1e-4)return
     const g=new BoxGeometry(len,thickness,thickness)
     g.applyQuaternion(new Quaternion().setFromUnitVectors(unitX,new Vector3(dx,dy,dz).multiplyScalar(1/len)))
     g.translate((r1.x+r2.x)/2,(y1+y2)/2,(r1.z+r2.z)/2)
-    const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+    stash(color,g,lit)
   }
   if(options.floor!==false){
     const w=d.tileWidth??1,h=d.tileDepth??1,cellWidth=d.width/w,cellDepth=d.depth/h
@@ -215,6 +231,33 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
     }
   }
   let lights=0
+  /**
+   * Collects the lamps a decoration has just built into one unlit, vertex-coloured mesh that
+   * animateStageModel can run a pattern over. Each lamp keeps the span of vertices it owns and the
+   * place it holds in the loop, so a chase can walk them one after another; `steps` is how many
+   * places that loop has. Without effects — icons, build ghosts — they simply join the static glow
+   * batch instead, so the decoration still looks switched on.
+   */
+  const decoLights=(lamps:{geometry:BufferGeometry;order:number;color:string}[],steps:number,spin?:Vector3)=>{
+    if(!lamps.length)return
+    if(options.effects===false){for(const {geometry,color} of lamps)stash(color,geometry,true);return}
+    const spans:{start:number;count:number;order:number;tint:Color}[]=[]
+    let start=0
+    for(const {geometry,order,color} of lamps){
+      // A spinning decoration's lamps are re-centred on the point it turns about, so the rig can
+      // simply be rotated rather than every facet being recomputed.
+      if(spin)geometry.translate(-spin.x,-spin.y,-spin.z)
+      const count=geometry.getAttribute('position').count
+      spans.push({start,count,order,tint:new Color(color)});start+=count
+    }
+    const merged=mergeGeometries(lamps.map(l=>l.geometry));lamps.forEach(l=>l.geometry.dispose())
+    if(!merged)return
+    merged.setAttribute('color',new Float32BufferAttribute(new Float32Array(start*3),3))
+    const rig=new Group();rig.add(new Mesh(merged,new MeshBasicMaterial({vertexColors:true})));root.add(rig)
+    rig.userData={kind:'deco',index:effects.length,base:spin?spin.clone():new Vector3(0,0,0),spans,steps,spin:!!spin}
+    effects.push(rig)
+    return rig
+  }
   const effect=(kind:string,x:number,y:number,z:number,color:string,dir:{x:number;y:number;z:number})=>{
     if(options.effects===false)return
     const rig=new Group();rig.position.set(x,y,z);rig.userData.kind=kind;rig.userData.index=effects.length;rig.userData.dir=dir;rig.userData.base=rig.position.clone()
@@ -674,9 +717,101 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
           }
         }
       }else if(p.kind==='star'){
-        box(ex,ey+.4,ez,.75,.22,.18,c);box(ex,ey+.4,ez,.22,.8,.18,c);box(ex,ey+.4,ez,.44,.44,.2,'#ffdd87')
+        // A fairground light star: a five-pointed outline of glowing tube in the chosen colour,
+        // stood off a darker frame behind it so it has real depth rather than reading as a decal,
+        // a lamp at every point, and a yoke reaching back into the truss it hangs on.
+        const frame='#2a3038',lamp='#fff6dd',cx=ex,cy=ey+.4,cz=ez
+        const points=Array.from({length:10},(_,n)=>{
+          const angle=-Math.PI/2+n*Math.PI/5,radius=n%2?.17:.4
+          return {x:cx+Math.cos(angle)*radius,y:cy-Math.sin(angle)*radius}
+        })
+        const starLamps:{geometry:BufferGeometry;order:number;color:string}[]=[];litSink=starLamps
+        for(let n=0;n<points.length;n++){
+          const from=points[n]!,to=points[(n+1)%points.length]!
+          litSink=undefined;strut(from.x,from.y,cz-.05,to.x,to.y,cz-.05,.06,frame);litSink=starLamps // frame behind the tube
+          litOrder=n;strut(from.x,from.y,cz+.02,to.x,to.y,cz+.02,.045,c,true) // the lit tube, one step of the chase
+        }
+        for(let n=0;n<points.length;n+=2){litOrder=n;disc(points[n]!.x,points[n]!.y,cz+.05,.05,.035,lamp,true)} // lamp at each point
+        litSink=undefined;disc(cx,cy,cz-.045,.14,.07,frame);litSink=starLamps
+        litOrder=-1;disc(cx,cy,cz+.035,.08,.03,c,true) // hub, lit in the same colour and never switched out of the pattern
+        litSink=undefined
+        decoLights(starLamps,points.length)
+        box(cx,cy-.23,cz-.06,.11,.11,.07,frame) // cable box tucked into the notch between the bottom points
+        if(host&&isTruss(host.kind)){
+          // Built straight in world space — the yoke reaches out to the truss's own centre, which
+          // must not be swung around with the star when the prop itself is rotated.
+          const hc={x:host.x-d.width/2+.5,y:host.y+.5,z:host.z-d.depth/2+.5},spun=origin
+          origin=undefined
+          strut(hc.x,hc.y,hc.z,cx,cy,cz-.06,.07,frame)
+          origin=spun
+        }
       }else if(p.kind==='palm'){
-        box(ex,ey+.6,ez,.15,1.2,.15,'#9c7353');box(ex,ey+1.2,ez,1,.15,.3,c);box(ex,ey+1.3,ez,.3,.15,1,c)
+        // A pixel palm: chunky trunk blocks leaning out of a planter, a crown of drooping fronds
+        // with coconuts tucked under it, and a festoon of bulbs wound up the trunk. The bulbs and
+        // the little uplight at the foot carry the chosen colour — the palm itself stays green.
+        const bark='#8b6544',barkDark='#6d4f36',frond='#4f8f4a',frondDark='#3c6f3a'
+        const segments=6,trunkAt=(t:number)=>({x:ex+Math.sin(t*1.6)*.2,y:ey+.16+t*1.2,z:ez+Math.cos(t*2.2)*.06-.06})
+        box(ex,ey+.07,ez,.66,.14,.66,'#2f3a33') // planter
+        box(ex,ey+.16,ez,.52,.06,.52,'#3d4a41') // soil
+        for(let n=0;n<segments;n++){
+          const t=n/segments,seg=trunkAt(t),width=.24-t*.07
+          box(seg.x,seg.y+.1,seg.z,width,.21,width,n%2?bark:barkDark) // stacked trunk block
+        }
+        const top=trunkAt(1)
+        box(top.x,top.y+.04,top.z,.24,.14,.24,barkDark) // crown collar the fronds spring from
+        for(let n=0;n<6;n++){
+          const angle=n*Math.PI/3,reach=Math.cos(angle),drift=Math.sin(angle)
+          let px=top.x,py=top.y+.12,pz=top.z
+          for(const [step,leg] of [{run:.24,rise:.12},{run:.26,rise:-.03},{run:.22,rise:-.18}].entries()){
+            const nx=px+reach*leg.run,ny=py+leg.rise,nz=pz+drift*leg.run
+            strut(px,py,pz,nx,ny,nz,.1-step*.025,step%2?frondDark:frond) // frond, arching over and drooping
+            px=nx;py=ny;pz=nz
+          }
+        }
+        for(let n=0;n<3;n++)box(top.x+Math.cos(n*2.1)*.11,top.y-.02,top.z+Math.sin(n*2.1)*.11,.1,.1,.1,'#5d4632') // coconuts
+        const palmLamps:{geometry:BufferGeometry;order:number;color:string}[]=[];litSink=palmLamps
+        for(let n=1;n<=8;n++){
+          const t=n/9,seg=trunkAt(t),angle=t*7.5
+          litOrder=n-1 // the chase climbs the trunk
+          box(seg.x+Math.cos(angle)*.15,seg.y+.1,seg.z+Math.sin(angle)*.15,.07,.07,.07,c,true) // festoon bulb
+        }
+        litSink=undefined;box(ex+.24,ey+.2,ez+.2,.14,.1,.14,'#20262e');litSink=palmLamps
+        litOrder=-1;box(ex+.24,ey+.255,ez+.2,.09,.02,.09,c,true) // uplight washing the crown, always on
+        litSink=undefined
+        decoLights(palmLamps,8)
+      }else if(p.kind==='discoBall'){
+        // A mirror ball on a short drop: rod, hanger plate and the motor that spins it, then the
+        // ball itself — a dark core studded with facets. The facets are grouped into wedges around
+        // the ball, so a chase sweeps a highlight around it while sparkle makes it glitter.
+        const steel='#8d949c',shell='#2a3038',mirror='#b9c6d2',wedges=12,facets=40,radius=.2
+        box(ex,ey+.665,ez,.05,.11,.05,steel) // drop rod up to the truss
+        box(ex,ey+.6,ez,.11,.04,.11,steel) // hanger plate
+        box(ex,ey+.53,ez,.22,.12,.22,shell) // motor housing
+        box(ex,ey+.53,ez+.116,.1,.04,.02,'#6aa6b3') // its indicator window
+        box(ex,ey+.45,ez,.06,.07,.06,steel) // spindle down into the ball
+        const core=new SphereGeometry(radius*.94,12,8);core.translate(ex,ey+.24,ez);stash(shell,core)
+        const ballLamps:{geometry:BufferGeometry;order:number;color:string}[]=[];litSink=ballLamps
+        for(let n=0;n<facets;n++){
+          const height=1-2*(n+.5)/facets,ring=Math.sqrt(1-height*height),angle=n*2.399963
+          litOrder=Math.floor((((angle%(Math.PI*2))+Math.PI*2)%(Math.PI*2))/(Math.PI*2)*wedges)
+          box(ex+Math.cos(angle)*ring*radius,ey+.24+height*radius,ez+Math.sin(angle)*ring*radius,.08,.08,.08,n%4?mirror:c,true) // mirror facet
+        }
+        litSink=undefined
+        const ballRig=decoLights(ballLamps,wedges,new Vector3(ex,ey+.24,ez)) // turns on its motor's axis
+        if(ballRig){
+          // What a mirror ball is for: the light thrown back off it. The rays sit in the ball's own
+          // rig, so they sweep the room as it turns, and they only appear while something is
+          // actually aimed at the ball (see the reflection pass in animateStageModel).
+          const rays=32,points:number[]=[]
+          for(let n=0;n<rays;n++){
+            const height=1-2*(n+.5)/rays,ring=Math.sqrt(1-height*height),angle=n*2.399963
+            const dx=Math.cos(angle)*ring,dz=Math.sin(angle)*ring,far=radius+.75+(n%5)*.32
+            points.push(dx*radius,height*radius,dz*radius,dx*far,height*far,dz*far)
+          }
+          const geometry=new BufferGeometry();geometry.setAttribute('position',new Float32BufferAttribute(points,3))
+          const beams=new LineSegments(geometry,new LineBasicMaterial({color:c,transparent:true,opacity:0,blending:AdditiveBlending,depthWrite:false}))
+          beams.visible=false;ballRig.add(beams);ballRig.userData.rays=beams
+        }
       }else if(p.kind==='deck'){
         // A real stage riser: an anti-slip top set into an aluminium frame, standing on four
         // telescopic legs with adjustable feet and cross-braced underneath, with coupling plates
@@ -700,6 +835,7 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
   }
   const floorMeshes:Mesh[]=[]
   for(const [color,geometries] of buckets){const merged=mergeGeometries(geometries);geometries.forEach(g=>g.dispose());if(merged){const mesh=new Mesh(merged,new MeshStandardMaterial({color,roughness:.85,flatShading:true}));mesh.receiveShadow=true;root.add(mesh);if(FLOOR_COLORS.has(color))floorMeshes.push(mesh)}}
+  for(const [color,geometries] of glowBuckets){const merged=mergeGeometries(geometries);geometries.forEach(g=>g.dispose());if(merged)root.add(new Mesh(merged,new MeshBasicMaterial({color})))}
   root.userData.effects=effects
   root.userData.floorMeshes=floorMeshes
   return root
@@ -707,6 +843,8 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
 const up=new Vector3(0,1,0)
 /** Scratch values reused every frame by the spark fountains, which would otherwise allocate per fixture per frame. */
 const sparkPull=new Vector3(),sparkFrame=new Quaternion()
+/** Scratch values for the mirror-ball reflection pass, reused across every ball and beam on the stage. */
+const mirrorCentre=new Vector3(),mirrorFrom=new Vector3(),mirrorAim=new Vector3(),mirrorReach=new Vector3(),mirrorTurn=new Quaternion(),glowTint=new Color()
 /** Deterministic 0..1 noise over a pair of whole numbers — picks which of a firework's firing slots actually launch, the same way on every frame and in every client. */
 const pyroNoise=(a:number,b:number)=>{const v=Math.sin(a*127.1+b*311.7)*43758.5453;return v-Math.floor(v)}
 export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:boolean){
@@ -721,9 +859,10 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
     // would leave a headless yoke hanging on the truss. The fixture therefore stays put whatever
     // the show is doing and only darkens (see the 'spot' branch below); every other rig *is* its
     // effect and disappears with it.
-    const lit=active&&(pyro||sparks?(phase.pyro??0)>0:fog?phase.fog>0:phase.intensity>0)
+    const deco=rig.userData.kind==='deco'
+    const lit=active&&(pyro||sparks?(phase.pyro??0)>0:fog?phase.fog>0:deco?true:phase.intensity>0)
     rig.userData.lit=lit
-    rig.visible=rig.userData.kind==='spot'||lit
+    rig.visible=rig.userData.kind==='spot'||deco||lit
     if(pyro){
       const strength=(phase.pyro??0)/100,shots=rig.children[0] as LineSegments
       const mat=shots.material as LineBasicMaterial;mat.color.set(phase.color)
@@ -832,6 +971,29 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
       const beamMat=rig.userData.beamMat as MeshBasicMaterial,glowMat=rig.userData.glowMat as MeshBasicMaterial
       beamMat.color.set(phase.color);beamMat.opacity=phase.intensity/100*.07
       glowMat.color.set(phase.color);glowMat.opacity=phase.intensity/100*.85
+    }else if(deco){
+      // Decoration lamps run whichever pattern the show desk is set to, at the phase's own tempo.
+      // With no show on they hold a low, even resting glow instead of going dark — a palm's fairy
+      // lights are part of the scenery, not part of the set.
+      const spans=rig.userData.spans as {start:number;count:number;order:number;tint:Color}[]
+      const steps=rig.userData.steps as number,pattern=phase.deco??'chase'
+      const shade=(rig.children[0] as Mesh).geometry.getAttribute('color') as Float32BufferAttribute
+      const beat=time*(.35+phase.speed/70),tmp=new Color()
+      if(rig.userData.spin)rig.rotation.y=active?time*(.35+phase.speed/140):0 // a mirror ball turns on its motor while the show runs
+      // How hard something was shining on it, worked out at the end of the previous frame — a
+      // lit-up mirror ball burns brighter than any pattern and takes on the beam's own colour.
+      const beamHit=(rig.userData.hit as number|undefined)??0,beamTint=beamHit?glowTint.set(phase.color):undefined
+      for(const span of spans){
+        // order -1 marks a lamp that is never part of the pattern, like a star's hub.
+        const level=!active?.45:span.order<0||pattern==='static'?1
+          :pattern==='pulse'?.3+.7*(.5+.5*Math.sin(beat*3))
+          :pattern==='sparkle'?(pyroNoise(span.order,Math.floor(beat*5))<.45?1:.12)
+          :.12+.88*Math.max(0,Math.cos((((span.order/steps-beat)%1+1)%1)*Math.PI*2))**3
+        tmp.copy(span.tint).multiplyScalar(Math.max(level,beamHit))
+        if(beamTint)tmp.lerp(beamTint,beamHit*.55)
+        for(let v=span.start;v<span.start+span.count;v++)shade.setXYZ(v,tmp.r,tmp.g,tmp.b)
+      }
+      shade.needsUpdate=true
     }else if(rig.userData.kind==='screen'){
       // A diagonal wave: pixels sharing the same row+col sit on the same anti-diagonal, so
       // stepping that sum's phase forward over time sweeps a bright band across the whole
@@ -863,6 +1025,44 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
         light.position.copy(rig.position);light.target.position.copy(new Vector3(0,rig.userData.length,0).applyQuaternion(rig.quaternion).add(rig.position));light.color.set(phase.color);light.intensity=lit?phase.intensity*1.8:0
       }
     }
+  }
+  reflectOntoMirrorBalls(root,phase,active)
+}
+/**
+ * What makes a mirror ball a mirror ball: it throws back whatever is aimed at it. Every lit moving
+ * head and laser on the stage is tested against every ball — is the ball inside the beam's cone,
+ * and within its throw — and the closest hit to the middle of the beam decides how hard the ball
+ * flares and how brightly its rays come out. Run after the main pass, once every fixture has been
+ * pointed for this frame, so a ball reacts to where the beams are now rather than where they were.
+ */
+function reflectOntoMirrorBalls(root:Group,phase:ShowPhase,active:boolean){
+  const rigs=(root.userData.effects??[]) as Group[]
+  const balls=rigs.filter(rig=>rig.userData.rays)
+  if(!balls.length)return
+  const sources=active?rigs.filter(rig=>rig.userData.lit&&(rig.userData.kind==='spot'||rig.userData.kind==='laser')):[]
+  for(const ball of balls){
+    const centre=ball.getWorldPosition(mirrorCentre)
+    let hit=0
+    for(const source of sources){
+      const from=source.getWorldPosition(mirrorFrom)
+      // A moving head fires along its lens (+Z); a laser fans out along its own outward axis (+Y).
+      const aim=mirrorAim.set(0,source.userData.kind==='laser'?1:0,source.userData.kind==='laser'?0:1).applyQuaternion(source.getWorldQuaternion(mirrorTurn))
+      const throwLength=source.userData.length??4
+      const toBall=mirrorReach.copy(centre).sub(from),distance=toBall.length()
+      // A little past the nominal throw still counts: the beam does not stop dead at its last
+      // metre, and a ball sitting exactly at that range would otherwise blink out on a rounding error.
+      if(distance<.05||distance>throwLength*1.15)continue
+      const spread=source.userData.kind==='laser'?.985:.96
+      const aligned=toBall.divideScalar(distance).dot(aim)
+      if(aligned<spread)continue
+      // Brightest dead centre in the beam and close to the fixture, but a ball out at the end of
+      // the throw still catches plenty — a beam does not simply stop being light at its last metre.
+      hit=Math.max(hit,(aligned-spread)/(1-spread)*(1-.6*distance/throwLength)*(phase.intensity/100))
+    }
+    ball.userData.hit=hit
+    const rays=ball.userData.rays as LineSegments,material=rays.material as LineBasicMaterial
+    rays.visible=hit>.01
+    material.color.set(phase.color);material.opacity=Math.min(.85,hit*.9)
   }
 }
 /** A shared pool illuminates the whole map; beam meshes remain visible for every fixture. */

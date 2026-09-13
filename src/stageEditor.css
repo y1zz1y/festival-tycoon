@@ -24,6 +24,9 @@
 .stage-part-icon{width:34px;height:34px;flex:none;object-fit:contain}
 .stage-phases{display:flex;gap:3px}
 .stage-phases button{padding:6px;font-size:11px}
+.stage-field-label{display:block;margin:9px 0 4px;font-size:11px}
+.stage-deco{display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.stage-deco button{padding:6px 2px;font-size:11px}
 .stage-center{display:flex;flex-direction:column;min-height:0;min-width:0;background:#172333;color:#e7eadc}
 .stage-center [data-viewport]{flex:1;min-height:180px;overflow:hidden;position:relative}
 .stage-center canvas{display:block;image-rendering:pixelated}

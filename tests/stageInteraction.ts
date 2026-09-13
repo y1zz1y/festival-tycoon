@@ -98,6 +98,49 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
     assert.ok(lensAxis.distanceTo(new Vector3().copy(ROTATION_DIRECTIONS[rotation]! as any))<1e-6,`and the head still aims exactly where the orientation cube points (${where})`)
     disposeStageModel(yokeModel)
   }
+  // A mirror ball hangs under a truss and nowhere else, and its facets — like a star's tubes and a
+  // palm's festoon — run whichever pattern the show desk's Deko-Licht setting is on.
+  const discoDesign=defaultStageDesign()
+  discoDesign.parts.push({id:'discoBeam',kind:'truss',brand:'budget',axis:'x',x:2,y:2,z:2,rotation:0,attachedTo:null,color:'#ffffff'})
+  const ball=stagePlacement(discoDesign,{kind:'discoBall',brand:'budget',rotation:0,color:'#ff5aa8'},{x:0,z:0},{id:'discoBeam',step:{x:0,y:-1,z:0}});ball.id='ball';discoDesign.parts.push(ball)
+  assert.equal(stageDesignIssue(discoDesign),null,'a mirror ball hangs under a truss')
+  const besideBeam=stagePlacement(discoDesign,{kind:'discoBall',brand:'budget',rotation:0,color:'#ff5aa8'},{x:0,z:0},{id:'discoBeam',step:{x:1,y:0,z:0}})
+  assert.ok(stageDesignIssue({...discoDesign,parts:[...discoDesign.parts,{...besideBeam,id:'besideBeam'}]}),'but never beside one — it hangs off its motor')
+  const discoModel=createStageModel(discoDesign)
+  const facets=discoModel.userData.effects.find((r:any)=>r.userData.kind==='deco')
+  assert.ok(facets,'its facets are their own animated rig')
+  const litLevels=(pattern:string,time:number)=>{
+    animateStageModel(discoModel,{intensity:80,speed:60,movement:0,pyro:0,deco:pattern as any,fog:0,volume:0,color:'#ffffff'},time,true)
+    const shade=(facets.children[0] as any).geometry.getAttribute('color')
+    return (facets.userData.spans as any[]).map(s=>Number(shade.getX(s.start).toFixed(3)))
+  }
+  const total=(levels:number[])=>levels.reduce((sum,level)=>sum+level,0)
+  const evenly=litLevels('static',1),chasing=litLevels('chase',1),later=litLevels('chase',1.7)
+  assert.ok(new Set(chasing).size>2,'a chase lights its facets to different degrees at any one moment')
+  assert.notDeepEqual(chasing,later,'and moves on over time')
+  assert.notDeepEqual(litLevels('sparkle',1),chasing,'the patterns differ from one another')
+  assert.ok(total(evenly)>total(chasing)&&total(evenly)>total(litLevels('pulse',1)),'and none of them is as bright as leaving the lamps on')
+  animateStageModel(discoModel,{intensity:80,speed:60,movement:0,pyro:0,deco:'chase',fog:0,volume:0,color:'#ffffff'},1,false)
+  assert.ok(facets.visible,'with the show off the lamps hold a resting glow rather than vanishing')
+  disposeStageModel(discoModel)
+  // And the point of a mirror ball: a moving head aimed at it comes back off it as light.
+  const mirrorDesign=defaultStageDesign()
+  mirrorDesign.parts.push({id:'mirrorBeam',kind:'truss',brand:'budget',axis:'x',x:2,y:2,z:2,rotation:0,attachedTo:null,color:'#ffffff'})
+  for(let x=3;x<=5;x++)mirrorDesign.parts.push({id:`mirrorBeam${x}`,kind:'truss',brand:'budget',axis:'x',x,y:2,z:2,rotation:0,attachedTo:x===3?'mirrorBeam':`mirrorBeam${x-1}`,color:'#ffffff'})
+  mirrorDesign.parts.push({id:'aimed',kind:'spot',brand:'touring',x:2,y:1,z:2,rotation:1,attachedTo:'mirrorBeam',color:'#ffd27f'}) // rotation 1 points it along +X, at the ball
+  mirrorDesign.parts.push({id:'mirror',kind:'discoBall',brand:'touring',x:5,y:1,z:2,rotation:0,attachedTo:'mirrorBeam5',color:'#dfe7ef'})
+  assert.equal(stageDesignIssue(mirrorDesign),null)
+  const mirrorModel=createStageModel(mirrorDesign,{lightBudget:2})
+  const mirror=mirrorModel.userData.effects.find((r:any)=>r.userData.rays)
+  const showPhase={intensity:100,speed:40,movement:0,pyro:0,deco:'chase' as const,fog:0,volume:0,color:'#ffd27f'}
+  animateStageModel(mirrorModel,showPhase,1.2,true)
+  assert.ok(mirror.userData.hit>0&&mirror.userData.rays.visible,`a head aimed at the ball makes it throw light back (${mirror.userData.hit})`)
+  const aimedAway=mirrorModel.userData.effects.find((r:any)=>r.userData.kind==='spot')
+  aimedAway.userData.headRestQuat=new Quaternion().setFromAxisAngle(new Vector3(0,1,0),Math.PI) // swing the head round to face away
+  animateStageModel(mirrorModel,showPhase,1.2,true)
+  assert.ok(mirror.userData.hit===0&&!mirror.userData.rays.visible,'turn the head away and the reflection stops')
+  disposeStageModel(mirrorModel)
+
   // A spark fountain works straight up into open sky, and the Feuerwerk/Funken fader drives how
   // hard it runs — how many sparks fly and how far they are thrown — never how brightly they burn.
   // The sparks fly ballistically and are recomputed from the show clock alone, so each setting is

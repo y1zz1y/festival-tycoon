@@ -10,6 +10,7 @@ export const COMPONENTS = {
   fog: {name:'Nebelmaschine',cost:160,party:4,beauty:1,power:.8},
   laser: {name:'Laser',cost:340,party:7,beauty:3,power:.6},
   screen: {name:'Pixel-LED-Wand',cost:420,party:5,beauty:5,power:1.5},
+  discoBall: {name:'Diskokugel',cost:150,party:4,beauty:5,power:.1},
   star: {name:'Deko-Stern',cost:70,party:1,beauty:4,power:0},
   palm: {name:'Pixel-Palme',cost:120,party:1,beauty:7,power:0},
 } as const
@@ -41,7 +42,11 @@ export const NEIGHBOR_STEPS:{x:number;y:number;z:number}[]=[
   {x:0,y:0,z:1},{x:0,y:0,z:-1},
 ]
 export type StagePart = {id:string;kind:ComponentKind;brand:keyof typeof BRANDS;x:number;y:number;z:number;axis?:Axis;rotation:number;attachedTo:string|null;color:string}
-export type ShowPhase = {movement?:number;pyro?:number;intensity:number;speed:number;fog:number;volume:number;color:string}
+/** How the decoration lamps — a star's tubes, a palm's festoon — behave during a phase. Their tempo follows the phase's own speed fader. */
+export const DECO_PATTERNS = ['chase','sparkle','pulse','static'] as const
+export type DecoPattern = typeof DECO_PATTERNS[number]
+export const DECO_PATTERN_NAMES:Record<DecoPattern,string> = {chase:'Lauflicht',sparkle:'Funkeln',pulse:'Puls',static:'Dauerlicht'}
+export type ShowPhase = {movement?:number;pyro?:number;deco?:DecoPattern;intensity:number;speed:number;fog:number;volume:number;color:string}
 export type StageDesign = {audience?:Array<{x:number;z:number}>;tileWidth?:number;tileDepth?:number;tileHeight?:number;name:string;width:number;depth:number;height:number;parts:StagePart[];linked:boolean;phases:[ShowPhase,ShowPhase,ShowPhase]}
 export const PHASE_NAMES = ['Warm-up','Main','Finale'] as const
 /** Build cells per map tile, in each axis. Every part fills one cell, so this is also what sets how large the equipment reads against the rest of the world. */
@@ -54,9 +59,9 @@ export function stageDetailSize(tileWidth?:number,tileDepth?:number,tileHeight?:
 export function defaultStageDesign():StageDesign {
   const tileWidth=5,tileDepth=2,tileHeight=STAGE_TILE_HEIGHT
   return {tileWidth,tileDepth,tileHeight,name:'Meine Traumbühne',...stageDetailSize(tileWidth,tileDepth,tileHeight),linked:false,parts:[],phases:[
-    {movement:20,pyro:0,intensity:40,speed:25,fog:15,volume:50,color:'#ffc369'},
-    {movement:55,pyro:35,intensity:75,speed:55,fog:40,volume:80,color:'#7f8cff'},
-    {movement:100,pyro:100,intensity:100,speed:85,fog:65,volume:100,color:'#ef66cd'}]}
+    {movement:20,pyro:0,deco:'pulse',intensity:40,speed:25,fog:15,volume:50,color:'#ffc369'},
+    {movement:55,pyro:35,deco:'chase',intensity:75,speed:55,fog:40,volume:80,color:'#7f8cff'},
+    {movement:100,pyro:100,deco:'sparkle',intensity:100,speed:85,fog:65,volume:100,color:'#ef66cd'}]}
 }
 /**
  * What a design costs and what it is worth on stage. The stage floor itself is free — however
@@ -94,6 +99,8 @@ export function stageDesignIssue(d:StageDesign):string|null {
       if(!NEIGHBOR_STEPS.some(s=>s.x===dx&&s.y===dy&&s.z===dz))return 'Bauteile müssen direkt an ihrer Trägertraverse anliegen'
       if(isTruss(host.kind)){
         if(GROUND_ONLY_KINDS.includes(p.kind))return 'Dieses Bauteil steht auf dem Boden, nicht an einer Traverse'
+        // A mirror ball hangs off its motor, so it only ever goes under the truss, never beside it.
+        if(p.kind==='discoBall'&&(dx!==0||dz!==0||dy!==-1))return 'Eine Diskokugel hängt nur unter einer Traverse'
       }else if(host.kind==='subwoofer'&&p.kind!=='subwoofer'&&!GROUND_ONLY_KINDS.includes(p.kind)){
         // A subwoofer is a stable platform for anything that doesn't have to stand on the
         // ground itself — but only balanced on top, never hung underneath or bolted to a side.
@@ -121,7 +128,7 @@ export function stageDesignIssue(d:StageDesign):string|null {
     if(p.attachedTo===null&&p.y===0&&partOnAudience(d,p))return 'Zuschauerflächen bleiben frei von Bodenaufbauten'
     if(d.parts.some(q=>q!==p&&q.x===p.x&&q.y===p.y&&q.z===p.z))return 'Dieser Platz ist bereits belegt'
   }
-  if(!Array.isArray(d.phases)||d.phases.length!==3||d.phases.some(p=>!p||![p.intensity,p.speed,p.fog,p.volume,p.movement??0,p.pyro??0].every(n=>Number.isFinite(n)&&n>=0&&n<=100)||!/^#[0-9a-f]{6}$/i.test(p.color)))return 'Ungültige Showregler'
+  if(!Array.isArray(d.phases)||d.phases.length!==3||d.phases.some(p=>!p||![p.intensity,p.speed,p.fog,p.volume,p.movement??0,p.pyro??0].every(n=>Number.isFinite(n)&&n>=0&&n<=100)||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.deco!==undefined&&!DECO_PATTERNS.includes(p.deco))))return 'Ungültige Showregler'
   return null
 }
 export function stagePhase(d:StageDesign,progress:number):ShowPhase {return d.phases[d.linked?0:progress<.2?0:progress<.8?1:2]}

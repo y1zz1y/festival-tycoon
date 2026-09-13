@@ -4,7 +4,7 @@ import { createStagePickTargets } from './view/stagePicking'
 import { BUILDINGS } from './game/catalog'
 import { Scene, Color, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, GridHelper, Raycaster, Vector2, Plane, Vector3, Group, Mesh, BoxGeometry, MeshBasicMaterial, MeshStandardMaterial, MOUSE } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { COMPONENTS, brandsFor, isTruss, GROUND_ONLY_KINDS, STACKABLE_KINDS, PHASE_NAMES, STAGE_TILE_HEIGHT, defaultStageDesign, stageDesignIssue, stageDetailSize, stageStats, removeStagePart, migrateStageDesign, type StageDesign, type StagePart, type ComponentKind } from './game/stageDesign'
+import { COMPONENTS, brandsFor, isTruss, GROUND_ONLY_KINDS, STACKABLE_KINDS, PHASE_NAMES, DECO_PATTERNS, DECO_PATTERN_NAMES, STAGE_TILE_HEIGHT, defaultStageDesign, stageDesignIssue, stageDetailSize, stageStats, removeStagePart, migrateStageDesign, type StageDesign, type StagePart, type ComponentKind, type DecoPattern } from './game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from './view/stageModel'
 import { createOrientationGizmo, type OrientationGizmo } from './view/orientationGizmo'
 import type { GameState } from './game/GameState'
@@ -28,7 +28,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   <div class="stage-layout"><aside><label>Name<input data-name maxlength="60"></label><hr class="stage-divider"><label>Gespeicherte Bühnen<select data-template><option value="">Neue Bühne</option></select></label><div class="stage-actions"><button data-save>Bühne speichern</button><button data-load>Laden</button><button data-new>Neu</button></div>
   <h3 class="stage-heading-tight">Größe</h3><div class="stage-pair"><label>Breite<input data-tiles-width type="number" min="1" max="8"></label><label>Tiefe<input data-tiles-depth type="number" min="1" max="8"></label></div><div class="stage-section-header"><h3>Bauteile</h3><div class="stage-section-tools"><button data-undo class="stage-icon-button" title="Rückgängig" aria-label="Rückgängig">↩</button><button data-erase aria-pressed="false" class="stage-icon-button" title="Löschen-Werkzeug" aria-label="Löschen-Werkzeug">🗑️</button></div></div><div class="stage-parts">${paletteEntries.map(({id,kind,label,icon,cost})=>`<div class="stage-component"><button data-part="${id}" aria-pressed="false" aria-expanded="false"><img class="stage-part-icon" src="/stage-icons/${icon}.png" alt=""><span>${label}<small data-part-brand="${id}">ab ${cost} € · Qualität ▾</small></span></button><div class="stage-quality panel" data-quality-menu="${id}" hidden>${Object.entries(brandsFor(kind)).map(([brand,info])=>`<button data-quality="${brand}" data-quality-part="${id}">${info.name}<small>${Math.round(cost*info.cost)} € · Wirkung ×${info.quality}</small></button>`).join('')}</div></div>`).join('')}</div><button data-audience aria-pressed="false">♟ Zuschauerfläche malen</button><small>Ganze Kartenfelder · vom Rand aus einen Zugang nach innen anlegen.</small><dl class="stage-hotkeys"><div><dt><kbd>R</kbd></dt><dd>Bauteil drehen</dd></div><div><dt><kbd>⇧</kbd><kbd>R</kbd></dt><dd>Zurückdrehen</dd></div><div><dt><kbd>Alt</kbd></dt><dd>Bodenmontage erzwingen</dd></div><div><dt>Rechtsklick</dt><dd>auf Bauteil: drehen</dd></div><div><dt>Rechtsklick + Ziehen</dt><dd>auf Hintergrund: Kamera-Drehpunkt verschieben</dd></div><div><dt>Ziehen</dt><dd>Kamera drehen</dd></div><div><dt>Mausrad</dt><dd>Zoom</dd></div></dl></aside>
   <div class="stage-center"><div data-viewport><div class="stage-readout"><dl data-stats></dl><p data-hint aria-live="polite">Wähle ein Bauteil und klicke auf einen Rasterplatz.</p></div><label data-color-picker class="stage-color-picker" hidden title="Bauteilfarbe">Farbe<input data-color type="color" value="#e69759"></label><div data-erase-confirm class="stage-delete-confirm panel" hidden><p data-erase-confirm-text></p><div class="stage-delete-confirm-actions"><button data-confirm-delete>Entfernen</button><button data-cancel-delete>Abbrechen</button></div></div></div></div>
-  <aside><h3>Showpult</h3><div class="stage-phases">${PHASE_NAMES.map((p,i)=>`<button data-phase="${i}" aria-pressed="${i===0}">${p}</button>`).join('')}</div><label class="stage-check"><input data-linked type="checkbox">Alle Phasen gleich</label>${[['intensity','Lichtintensität'],['speed','Bewegung / Tempo'],['movement','Traversenhub'],['pyro','Feuerwerk / Funken'],['fog','Nebel'],['volume','Lautstärke']].map(([id,name])=>`<label>${name}<output data-value="${id}"></output><input data-slider="${id}" type="range" min="0" max="100"></label>`).join('')}<label>Lichtfarbe<input data-show-color type="color"></label><label class="stage-check"><input data-band-preview type="checkbox" checked>Auftrittsvorschau</label><div class="stage-pair"><button data-preview>Vorschau pausieren</button><button data-dj aria-pressed="false">DJ Modus</button></div><p>Warm-up: erste 20 % · Main: bis 80 % · Finale: letzte 20 % des Auftritts. Effekte laufen auf der Karte nur bei aktiver, versorgter Bühne.</p><p>Leistungsfähigere Marken steigern Party- und Dekowerte, kosten aber mehr. Hohe Lautstärke erhöht die Wirkung und belastet die ruhige Umgebung.</p></aside></div>
+  <aside><h3>Showpult</h3><div class="stage-phases">${PHASE_NAMES.map((p,i)=>`<button data-phase="${i}" aria-pressed="${i===0}">${p}</button>`).join('')}</div><label class="stage-check"><input data-linked type="checkbox">Alle Phasen gleich</label>${[['intensity','Lichtintensität'],['speed','Bewegung / Tempo'],['movement','Traversenhub'],['pyro','Feuerwerk / Funken'],['fog','Nebel'],['volume','Lautstärke']].map(([id,name])=>`<label>${name}<output data-value="${id}"></output><input data-slider="${id}" type="range" min="0" max="100"></label>`).join('')}<label>Lichtfarbe<input data-show-color type="color"></label><span class="stage-field-label">Deko-Licht</span><div class="stage-deco">${DECO_PATTERNS.map(pattern=>`<button data-deco="${pattern}" aria-pressed="false">${DECO_PATTERN_NAMES[pattern]}</button>`).join('')}</div><label class="stage-check"><input data-band-preview type="checkbox" checked>Auftrittsvorschau</label><div class="stage-pair"><button data-preview>Vorschau pausieren</button><button data-dj aria-pressed="false">DJ Modus</button></div><p>Warm-up: erste 20 % · Main: bis 80 % · Finale: letzte 20 % des Auftritts. Effekte laufen auf der Karte nur bei aktiver, versorgter Bühne.</p><p>Leistungsfähigere Marken steigern Party- und Dekowerte, kosten aber mehr. Hohe Lautstärke erhöht die Wirkung und belastet die ruhige Umgebung.</p></aside></div>
   <footer><span data-cost></span><button data-build>Für Bühnenbau verwenden</button><button data-apply>Bühne umbauen</button></footer>`
   document.querySelector('.game-shell')!.append(panel)
   makeDraggable(panel.querySelector<HTMLElement>('.panel-header')!, panel)
@@ -41,7 +41,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     return [...merged.values()]
   }
   const q=<T extends HTMLElement=HTMLElement>(s:string)=>panel.querySelector<T>(s)!
-  let design=defaultStageDesign(),stageId:string|undefined,part:StagePart['kind']='truss',erase=false,phase=0,history:StageDesign[]=[],preview=true,elapsed=0,last=0,frame=0,serial=0
+  let design=defaultStageDesign(),stageId:string|undefined,part:StagePart['kind']|null='truss',erase=false,phase=0,history:StageDesign[]=[],preview=true,elapsed=0,last=0,frame=0,serial=0
   let rotation=0,audienceMode=false,candidate:StagePart|null=null,candidateIssue:string|null=null,hitId:string|undefined,hitStep:{x:number;y:number;z:number}|undefined
   /** Which act the preview stands in for: an indie line-up, or an electro booking's DJ booth. */
   let djPreview=false
@@ -61,13 +61,14 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     const p=design.phases[phaseIndex()]
     panel.querySelectorAll<HTMLInputElement>('[data-slider]').forEach(input=>{const key=input.dataset.slider as 'intensity';input.value=String(p[key]??0);q(`[data-value=${key}]`).textContent=`${p[key]??0} %`})
     q<HTMLInputElement>('[data-show-color]').value=p.color
+    panel.querySelectorAll<HTMLButtonElement>('[data-deco]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.deco===(p.deco??'chase'))))
     const stats=stageStats(design),base=stageId?getGame().snapshot.buildings.find(b=>b.id===stageId)?.stageDesign:undefined
     q('[data-stats]').innerHTML=[['Baupreis',`${stats.cost} €`],['Unterhalt',`${stats.upkeep} €/h`],['Strom',`${stats.power} kW`],['Party',String(stats.party)],['Umgebung',String(stats.beauty)],['Elemente',String(design.parts.length)]].map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')
     q('[data-cost]').textContent=stageId?`Umbau: ${Math.max(0,stats.cost-(base?stageStats(base).cost:0))} € · keine Erstattung beim Abbau`:`Neubau: ${BUILDINGS.stage.cost+stats.cost} € gesamt · Vorlage kostenlos`
     panel.querySelectorAll<HTMLButtonElement>('[data-phase]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.phase)===phase)))
     panel.querySelectorAll<HTMLButtonElement>('[data-part]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.part===part&&!erase&&!audienceMode)))
     q('[data-audience]').setAttribute('aria-pressed',String(audienceMode))
-    q('[data-color-picker]').hidden=erase||audienceMode||isTruss(part)
+    q('[data-color-picker]').hidden=erase||audienceMode||!part||isTruss(part)
     gizmo?.setDirection(rotation)
     q('[data-erase]').setAttribute('aria-pressed',String(erase));q<HTMLButtonElement>('[data-undo]').disabled=!history.length
     refreshDeleteConfirm()
@@ -167,10 +168,18 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     const floor=ray.ray.intersectPlane(new Plane(new Vector3(0,1,0),0),new Vector3())
     const hit=ray.intersectObjects(pickTargets?.children??[],false)[0];hitId=hit?.object.userData.partId
     const hitPart=design.parts.find(part=>part.id===hitId)
-    const canDockOnTruss=!!hitPart&&isTruss(hitPart.kind)&&!GROUND_ONLY_KINDS.includes(part)
-    const canStack=!!hitPart&&hitPart.kind===part&&STACKABLE_KINDS.includes(part)
-    const canStandOnSubwoofer=!!hitPart&&hitPart.kind==='subwoofer'&&part!=='subwoofer'&&!GROUND_ONLY_KINDS.includes(part)
-    const canStandOnScreen=!!hitPart&&hitPart.kind==='screen'&&part==='screen'
+    const kind=part
+    // Nothing to build and no tool running: the pointer just looks around, so no ghost follows it
+    // and a click lands on nothing (see the placement handler, which needs a candidate).
+    if(!kind&&!erase&&!audienceMode){
+      candidate=null;candidateIssue=null;hitStep=undefined;audienceCell=null;ghostKey='';clearGhost()
+      hint.textContent=hitPart?COMPONENTS[hitPart.kind].name:'Kein Bauteil gewählt · links eines wählen, um zu bauen'
+      return
+    }
+    const canDockOnTruss=!!hitPart&&!!kind&&isTruss(hitPart.kind)&&!GROUND_ONLY_KINDS.includes(kind)
+    const canStack=!!hitPart&&!!kind&&hitPart.kind===kind&&STACKABLE_KINDS.includes(kind)
+    const canStandOnSubwoofer=!!hitPart&&!!kind&&hitPart.kind==='subwoofer'&&kind!=='subwoofer'&&!GROUND_ONLY_KINDS.includes(kind)
+    const canStandOnScreen=!!hitPart&&hitPart.kind==='screen'&&kind==='screen'
     const auto=!p.alt&&!audienceMode&&!erase&&(canDockOnTruss||canStack||canStandOnSubwoofer||canStandOnScreen)
     hitStep=undefined
     if(hit&&hitPart&&auto){
@@ -181,7 +190,11 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
         // where the pointer lands only makes sense when several sides are possible, so here
         // the whole part is instead one hitbox for that single direction, which is much
         // easier to hit than a specific face — especially on a slim, hanging line array.
-        hitStep=canStack&&part==='lineArray'?{x:0,y:-1,z:0}:{x:0,y:1,z:0}
+        hitStep=canStack&&kind==='lineArray'?{x:0,y:-1,z:0}:{x:0,y:1,z:0}
+      }else if(kind==='discoBall'){
+        // Same single-direction case: a mirror ball only ever hangs under the truss, so the whole
+        // truss is its hitbox rather than just the underside.
+        hitStep={x:0,y:-1,z:0}
       }else if(canStandOnScreen){
         // A Pixel-LED-Wand module is a thin, flat panel — its own front face (facing the
         // audience) is by far its biggest hitbox, so picking a side purely by exact pointer
@@ -206,9 +219,9 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     const local={x:point.x/model.scale.x+design.width/2,z:point.z/model.scale.z+design.depth/2}
     if(local.x<0||local.x>=design.width||local.z<0||local.z>=design.depth){candidate=null;audienceCell=null;ghostKey='';clearGhost();return}
     audienceCell={x:Math.floor(local.x*(design.tileWidth??1)/design.width),z:Math.floor(local.z*(design.tileDepth??1)/design.depth)}
-    candidate=stagePlacement(design,{kind:part,brand:quality[part]??'budget',rotation,color:q<HTMLInputElement>('[data-color]').value},local,auto&&hitId&&hitStep?{id:hitId,step:hitStep}:undefined)
-    const next={...design,parts:[...design.parts,candidate]}
-    candidateIssue=stageDesignIssue(next)
+    candidate=kind?stagePlacement(design,{kind,brand:quality[kind]??'budget',rotation,color:q<HTMLInputElement>('[data-color]').value},local,auto&&hitId&&hitStep?{id:hitId,step:hitStep}:undefined):null
+    const next=candidate?{...design,parts:[...design.parts,candidate]}:design
+    candidateIssue=candidate?stageDesignIssue(next):null
     if(audienceMode){const found=design.audience?.some(c=>c.x===audienceCell!.x&&c.z===audienceCell!.z);candidateIssue=stageDesignIssue({...design,audience:found?(design.audience??[]).filter(c=>c.x!==audienceCell!.x||c.z!==audienceCell!.z):[...(design.audience??[]),{...audienceCell}]})}
     const key=`${revision}:${audienceMode}:${erase}:${hitId}:${JSON.stringify(audienceCell)}:${JSON.stringify(candidate)}`
     if(key!==ghostKey){
@@ -217,15 +230,15 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
         ghost=new Group();const w=design.width/(design.tileWidth??1),h=design.depth/(design.tileDepth??1)
         const mesh=new Mesh(new BoxGeometry(w,.05,h),new MeshBasicMaterial({color:candidateIssue?0xec706b:0x9be1a5,transparent:true,opacity:.6,depthWrite:false}));mesh.position.set((audienceCell.x+.5)*w-design.width/2,.32,(audienceCell.z+.5)*h-design.depth/2);ghost.add(mesh)
       }else if(erase&&hitPart){ghost=createStageModel(design,{floor:false,partIds:new Set([hitPart.id]),effects:false})}
-      else if(!erase){ghost=createStageModel(next,{floor:false,partIds:new Set([candidate.id]),effects:false})}
+      else if(!erase&&candidate){ghost=createStageModel(next,{floor:false,partIds:new Set([candidate.id]),effects:false})}
       if(ghost){
         if(!audienceMode)ghost.traverse(o=>{if(o instanceof Mesh){const mat=o.material as MeshStandardMaterial;if(mat.vertexColors){mat.vertexColors=false;mat.needsUpdate=true}mat.color.set(erase||candidateIssue?'#ec706b':'#a3efd0');mat.transparent=true;mat.opacity=.48;mat.depthWrite=false}})
         ghost.scale.copy(model.scale);scene.add(ghost)
       }
     }
     if(ghost)ghost.visible=true
-    const partLabel=COMPONENTS[part].name
-    hint.textContent=audienceMode?candidateIssue??`Zuschauerfeld ${audienceCell.x+1}, ${audienceCell.z+1} umschalten · Zugang vom Rand freihalten`:erase?(hitPart?`${COMPONENTS[hitPart.kind].name} mit allen getragenen Anbauteilen entfernen`:'Auf ein Bauteil zeigen'):candidateIssue??`${partLabel} · ${candidate.attachedTo?`an Traverse andocken (${stepLabel(hitStep??{x:0,y:-1,z:0})})`:'auf dem Boden'} · ${directionLabel(candidate.rotation)} · R dreht`
+    const partLabel=kind?COMPONENTS[kind].name:''
+    hint.textContent=audienceMode?candidateIssue??`Zuschauerfeld ${audienceCell.x+1}, ${audienceCell.z+1} umschalten · Zugang vom Rand freihalten`:erase?(hitPart?`${COMPONENTS[hitPart.kind].name} mit allen getragenen Anbauteilen entfernen`:'Auf ein Bauteil zeigen'):candidateIssue??(candidate?`${partLabel} · ${candidate.attachedTo?`an Traverse andocken (${stepLabel(hitStep??{x:0,y:-1,z:0})})`:'auf dem Boden'} · ${directionLabel(candidate.rotation)} · R dreht`:'')
   }
   /**
    * The workshop is a build view, not a playback of the show: a pyro fixture would otherwise
@@ -249,12 +262,24 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     if(b.hasAttribute('data-close'))close()
     if(b.hasAttribute('data-confirm-delete')&&pendingDelete){remember();design=removeStagePart(design,pendingDelete);pendingDelete=null;rebuild();return}
     if(b.hasAttribute('data-cancel-delete')){cancelPendingDelete();return}
-    if(b.dataset.part){part=b.dataset.part as StagePart['kind'];erase=false;audienceMode=false;cancelPendingDelete();hideQuality();const menu=q(`[data-quality-menu=${part}]`),rect=b.getBoundingClientRect();menu.hidden=false;menu.style.left=`${Math.min(window.innerWidth-235,rect.right+8)}px`;menu.style.right='auto';menu.style.top=`${Math.max(10,Math.min(window.innerHeight-200,rect.top))}px`;b.setAttribute('aria-expanded','true');refresh();if(pointer)updateHover(pointer)}
+    if(b.dataset.part){
+      // Clicking the part that is already selected puts the tool down again, so the pointer can
+      // look around the stage without a ghost trailing it and without a stray click building.
+      const clicked=b.dataset.part as StagePart['kind'],drop=clicked===part&&!erase&&!audienceMode
+      part=drop?null:clicked;erase=false;audienceMode=false;cancelPendingDelete();hideQuality()
+      if(!drop){
+        const menu=q(`[data-quality-menu=${clicked}]`),rect=b.getBoundingClientRect()
+        menu.hidden=false;menu.style.left=`${Math.min(window.innerWidth-235,rect.right+8)}px`;menu.style.right='auto';menu.style.top=`${Math.max(10,Math.min(window.innerHeight-200,rect.top))}px`
+        b.setAttribute('aria-expanded','true')
+      }
+      refresh();if(pointer)updateHover(pointer)
+    }
     if(b.dataset.quality){const entryId=b.dataset.qualityPart! as StagePart['kind'];quality[entryId]=b.dataset.quality as StagePart['brand'];part=entryId;hideQuality();const brand=brandsFor(entryId)[quality[entryId]!];q(`[data-part-brand=${entryId}]`).textContent=`${Math.round(COMPONENTS[entryId].cost*brand.cost)} € · ${brand.name}`;refresh();if(pointer)updateHover(pointer)}
     if(b.hasAttribute('data-audience')){audienceMode=!audienceMode;erase=false;cancelPendingDelete();hideQuality();refresh();if(pointer)updateHover(pointer)}
     if(b.hasAttribute('data-erase')){erase=!erase;audienceMode=false;cancelPendingDelete();hideQuality();refresh();if(renderer)renderer.domElement.style.cursor=erase?ERASE_CURSOR:'default';if(pointer)updateHover(pointer)}
     if(b.hasAttribute('data-undo')&&history.length){cancelPendingDelete();design=history.pop()!;rebuild()}
     if(b.dataset.phase){phase=Number(b.dataset.phase);refresh()}
+    if(b.dataset.deco){design.phases[phaseIndex()].deco=b.dataset.deco as DecoPattern;refresh()}
     if(b.hasAttribute('data-preview')){preview=!preview;b.textContent=preview?'Vorschau pausieren':'Vorschau abspielen'}
     if(b.hasAttribute('data-dj')){djPreview=!djPreview;b.setAttribute('aria-pressed',String(djPreview))}
     if(b.hasAttribute('data-load')){remember();design=structuredClone(library().find(t=>t.name===q<HTMLSelectElement>('[data-template]').value)??defaultStageDesign());serial+=1000;while(design.parts.some(p=>p.id===`part-${serial+1}`))serial++;rebuild()}
