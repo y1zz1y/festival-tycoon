@@ -21,6 +21,20 @@ const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:
 const GROUND_Y=.28
 /** Thickness of a Pixel-LED-Wand module's backing plate — its LEDs sit on the front of it. */
 const SCREEN_DEPTH=.08
+/** The mortar tubes of a firework rack: where each sits across the case and how far it stands above the deck. Shared by the rack's model and by the rockets that climb out of those same tubes. */
+const MORTAR_TUBES=[{x:-.24,height:.42},{x:0,height:.54},{x:.24,height:.42}]
+/** Seconds a rocket climbs before it bursts, and how long the star of embers then burns. */
+const FIREWORK_RISE=.95,FIREWORK_BURST=1.5
+/** Embers thrown by one burst, spread evenly over a sphere. */
+const FIREWORK_EMBERS=26
+/** How hard a burst's embers sag as they drift, in units per second squared — enough to bend the star into a falling willow without dragging it out of the sky. */
+const FIREWORK_SAG=3.4
+/** Individual spark streaks in a fountain's plume — enough for a dense core without a per-frame cost that scales with the stage. */
+const SPARK_STREAKS=120
+/** Seconds a fountain's fastest sparks take to reach the top of their arc, which is what fixes how hard they are thrown: the rest follows from the rated throw. */
+const SPARK_APEX_TIME=.75
+/** How long a spark's streak is, in seconds of its own travel: the trail is simply where it was this much earlier, so it stretches while the spark is fast and shortens as it slows near the top. */
+const SPARK_TRAIL=.045
 /** Downward tilt each further line-array cabinet picks up once curving begins (see lineArrayCabinetTilt below). */
 const LINE_ARRAY_ANGLE_STEP=6*Math.PI/180
 /** How far a line array docked to the *side* of a truss hangs below it, bridged by a rigging arm — real arrays hang off a bridle rather than sitting flush at truss height. */
@@ -204,18 +218,50 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
   const effect=(kind:string,x:number,y:number,z:number,color:string,dir:{x:number;y:number;z:number})=>{
     if(options.effects===false)return
     const rig=new Group();rig.position.set(x,y,z);rig.userData.kind=kind;rig.userData.index=effects.length;rig.userData.dir=dir;rig.userData.base=rig.position.clone()
-    rig.userData.length=kind==='laser'?Math.max(4,d.depth*.8):kind==='fog'?4*STAGE_TILE_DETAIL:kind==='sparks'?5*STAGE_TILE_DETAIL:4
+    rig.userData.length=kind==='laser'?Math.max(4,d.depth*.8):kind==='fog'||kind==='sparks'?4*STAGE_TILE_DETAIL:4
     if(kind==='fireworks'){
-      const points:number[]=[]
-      for(let n=0;n<40;n++){const angle=n*2.399963, height=(n+.5)/40, radius=Math.sqrt(1-height*height);points.push(radius*Math.cos(angle),height,radius*Math.sin(angle),radius*Math.cos(angle)*.87,height*.87,radius*Math.sin(angle)*.87)}
-      const geometry=new BufferGeometry();geometry.setAttribute('position',new Float32BufferAttribute(points,3));rig.add(new LineSegments(geometry,new LineBasicMaterial({color,transparent:true,blending:AdditiveBlending,depthWrite:false})))
+      // One rocket per mortar tube, each on its own firing cycle: it climbs out of its tube,
+      // slowing as it goes, and at the top bursts into a star of embers that fly apart and sag.
+      // Every rocket owns a run of the buffer — one segment for the climbing rocket's trail, the
+      // rest for its embers — and whichever of the two is not currently flying is collapsed to
+      // nothing. animateStageModel derives all of it from the show clock, so nothing is kept
+      // between frames and the same clock always shows the same sky.
+      rig.userData.rockets=MORTAR_TUBES.map((tube,n)=>({
+        x:tube.x,y:tube.height,
+        apex:6+n*.9,driftX:(n-1)*.5,driftZ:n===1?.55:-.3,radius:2.4+n*.45,
+        period:FIREWORK_RISE+FIREWORK_BURST+.6+n*.3,offset:n/MORTAR_TUBES.length,
+      }))
+      rig.userData.embers=Array.from({length:FIREWORK_EMBERS},(_,k)=>{
+        const y=1-2*(k+.5)/FIREWORK_EMBERS,ring=Math.sqrt(1-y*y),angle=k*2.399963
+        return {x:Math.cos(angle)*ring,y,z:Math.sin(angle)*ring}
+      })
+      const segments=MORTAR_TUBES.length*(1+FIREWORK_EMBERS)
+      const geometry=new BufferGeometry()
+      geometry.setAttribute('position',new Float32BufferAttribute(new Float32Array(segments*6),3))
+      geometry.setAttribute('color',new Float32BufferAttribute(new Float32Array(segments*6),3))
+      rig.add(new LineSegments(geometry,new LineBasicMaterial({vertexColors:true,transparent:true,blending:AdditiveBlending,depthWrite:false})))
     }else if(kind==='sparks'){
-      // A narrow cone of spark streaks shooting out to the requested 5-field reach, +Y the
-      // shared outward axis (see rig.quaternion in animateStageModel).
-      const rays=14,reach=rig.userData.length,points:number[]=[]
-      for(let n=0;n<rays;n++){const a=n*2.399963,ring=.08+(n%4)/4*.14,len=reach*(.55+(n*53)%7/7*.45);points.push(0,0,0,Math.cos(a)*ring,len,Math.sin(a)*ring)}
-      const geometry=new BufferGeometry();geometry.setAttribute('position',new Float32BufferAttribute(points,3))
-      rig.add(new LineSegments(geometry,new LineBasicMaterial({color,transparent:true,opacity:.85,blending:AdditiveBlending,depthWrite:false})))
+      // Every spark is launched out of the nozzle along the rig's own +Y (see rig.quaternion in
+      // animateStageModel) inside a narrow cone, then simply left to fly ballistically: they all
+      // start at the same speed range but keep their own launch angle and lifetime, so the plume
+      // tapers towards the top and its outermost sparks peel away and drop, the way a real
+      // fountain's do. The fastest ones just reach the fixture's rated throw at the top of their
+      // arc. Nothing is kept between frames — animateStageModel recomputes each spark's flight
+      // from the show clock alone, so the same clock always yields the same plume.
+      const reach=rig.userData.length as number
+      const launchSpeed=2*reach/SPARK_APEX_TIME,gravity=launchSpeed/SPARK_APEX_TIME
+      const scatter=(n:number,salt:number)=>{const v=Math.sin(n*12.9898+salt*78.233)*43758.5453;return v-Math.floor(v)}
+      rig.userData.gravity=gravity
+      rig.userData.sparks=Array.from({length:SPARK_STREAKS},(_,n)=>{
+        const azimuth=n*2.399963,spread=.05+scatter(n,1)*.13,speed=launchSpeed*(.55+scatter(n,2)*.45)
+        const aim=Math.hypot(spread,1)
+        // life runs a little past the spark's own apex, so it is still lit as it tips over
+        return {x:Math.cos(azimuth)*spread/aim,y:1/aim,z:Math.sin(azimuth)*spread/aim,speed,life:1.3*speed/gravity,offset:scatter(n,3)}
+      })
+      const geometry=new BufferGeometry()
+      geometry.setAttribute('position',new Float32BufferAttribute(new Float32Array(SPARK_STREAKS*6),3))
+      geometry.setAttribute('color',new Float32BufferAttribute(new Float32Array(SPARK_STREAKS*6),3))
+      rig.add(new LineSegments(geometry,new LineBasicMaterial({vertexColors:true,transparent:true,blending:AdditiveBlending,depthWrite:false})))
     }else if(kind==='fog'){
       // A chain of puffs drifting out along the shared outward axis, widening as they
       // disperse, reaching the requested 4-field length.
@@ -476,10 +522,36 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         const lens=new Vector3(0,0,.22).applyQuaternion(facingQuat).add(pivot)
         effect('laser',lens.x,lens.y,lens.z,c,facing)
       }else if(p.kind==='fireworks'){
-        box(ex,ey+.15,ez,.65,.3,.65,'#303847');for(const dx of [-.18,.18])box(ex+dx,ey+.38,ez,.13,.25,.13,c);effect(p.kind,ex,ey+.5,ez,c,{x:0,y:1,z:0})
+        // A mortar rack on a road case: three tubes of staggered height sitting in a steel cradle,
+        // with the firing controller on the front. It only ever points at the sky (see
+        // UP_ROTATION in stagePlacement), so unlike the other fixtures it needs no facing maths.
+        const shell='#2b3038',trim='#454b55',bezel='#14171c',steel='#6d7580',warn='#d8a33a'
+        const tube=(lx:number,ly:number,radius:number,height:number,color:string)=>{
+          const g=new CylinderGeometry(radius,radius,height,10);g.translate(ex+lx,ey+ly,ez)
+          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+        }
+        box(ex,ey+.09,ez,.86,.18,.68,shell) // road-case chassis
+        box(ex,ey+.2,ez,.9,.05,.72,trim) // deck plate, overhanging the case as a lip
+        for(const fx of [-.37,.37])for(const fz of [-.28,.28])box(ex+fx,ey+.03,ez+fz,.1,.06,.1,bezel) // castors
+        for(const fx of [-.34,.34])box(ex+fx,ey+.33,ez,.05,.22,.46,steel) // cradle uprights
+        for(const fz of [-.19,.19])box(ex,ey+.4,ez+fz,.74,.045,.045,steel) // cradle rails holding the tubes
+        MORTAR_TUBES.forEach(({x:lx,height})=>{
+          tube(lx,.23+height/2,.1,height,bezel) // mortar tube
+          tube(lx,.23+height,.115,.04,trim) // reinforced muzzle ring
+          tube(lx,.23+height-.015,.072,.02,c) // charge glowing in the muzzle, tinted by the chosen colour
+        })
+        box(ex+.28,ey+.31,ez+.3,.24,.17,.09,bezel) // firing controller
+        box(ex+.28,ey+.33,ez+.348,.14,.075,.012,'#6aa6b3') // its display
+        box(ex+.21,ey+.26,ez+.348,.03,.03,.012,'#8ef29b') // armed lamp
+        box(ex+.35,ey+.26,ez+.348,.03,.03,.012,'#d8564f') // fire lamp
+        box(ex-.17,ey+.2,ez+.35,.44,.055,.025,warn) // hazard stripe along the front lip
+        box(ex-.3,ey+.11,ez-.35,.07,.06,.06,bezel) // firing-cable stub at the back
+        effect(p.kind,ex,ey+.23,ez,c,{x:0,y:1,z:0})
       }else if(p.kind==='sparks'){
         // A cold-spark fountain: rigid body built facing local +Z, rotated onto the gizmo's
-        // chosen world direction (ground-standing, so it never docks to a truss).
+        // chosen world direction. Stands on the ground or docks onto a truss like a laser or
+        // moving head — hung ones fire their plume wherever the gizmo aims them, downwards
+        // included.
         const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
         const facingQuat=new Quaternion().setFromUnitVectors(unitZ,facingVec)
         const pivot=new Vector3(ex,ey+.15,ez)
@@ -500,6 +572,7 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         put(0,0,-.02,.3,.28,.26,housing) // hopper body
         putFunnel(.2,.14,.08,.2,trim) // funnel neck flaring toward the mouth
         putFunnel(.32,.02,.14,.03,bezel) // funnel rim
+        putFunnel(.345,.055,.055,.014,c) // charge glowing right at the mouth, tinted by the chosen colour
         put(.14,.02,-.1,.09,.09,.04,bezel) // control box
         put(.14,.02,-.08,.03,.03,.02,c) // indicator LED, tinted by the chosen colour
         put(0,-.09,-.16,.06,.05,.05,bezel) // cable stub
@@ -508,8 +581,7 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         effect('sparks',mouth.x,mouth.y,mouth.z,c,facing)
       }else if(p.kind==='fog'){
         // A hazer: rigid body built facing local +Z, rotated onto the gizmo's chosen world
-        // direction. Stands on the ground like before, but (unlike sparks/fireworks) can now
-        // also dock onto a truss exactly like a laser or moving head.
+        // direction. Stands on the ground or docks onto a truss like a laser or moving head.
         const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
         const facingQuat=new Quaternion().setFromUnitVectors(unitZ,facingVec)
         const pivot=new Vector3(ex,ey+.14,ez)
@@ -612,6 +684,8 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
   return root
 }
 const up=new Vector3(0,1,0)
+/** Scratch values reused every frame by the spark fountains, which would otherwise allocate per fixture per frame. */
+const sparkPull=new Vector3(),sparkFrame=new Quaternion()
 export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:boolean){
   const offset=active?stageMotion(phase,time):0
   for(const part of root.userData.moving??[])part.position.y=part.userData.restY-offset
@@ -622,16 +696,68 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
     rig.userData.intensity=phase.intensity
     rig.visible=active&&(pyro||sparks?(phase.pyro??0)>0:fog?phase.fog>0:phase.intensity>0)
     if(pyro){
-      const strength=(phase.pyro??0)/100,cycle=((time*(.3+strength*.4)+rig.userData.index*.37)%1+1)%1
-      rig.visible=rig.visible&&cycle<.72
-      const rays=rig.children[0] as LineSegments,mat=rays.material as LineBasicMaterial
-      const spread=.2+cycle*3
-      rays.scale.set(spread,spread,spread);rays.rotation.y=time*.25;rig.position.y+=2+cycle*2;mat.color.set(phase.color);mat.opacity=(1-cycle)*strength
+      const strength=(phase.pyro??0)/100,shots=rig.children[0] as LineSegments
+      const mat=shots.material as LineBasicMaterial;mat.color.set(phase.color)
+      const position=shots.geometry.getAttribute('position') as Float32BufferAttribute
+      const shade=shots.geometry.getAttribute('color') as Float32BufferAttribute
+      const rockets=rig.userData.rockets as {x:number;y:number;apex:number;driftX:number;driftZ:number;radius:number;period:number;offset:number}[]
+      const embers=rig.userData.embers as {x:number;y:number;z:number}[]
+      const dark=(vertex:number,x:number,y:number,z:number)=>{position.setXYZ(vertex,x,y,z);shade.setXYZ(vertex,0,0,0)}
+      for(let n=0;n<rockets.length;n++){
+        const shot=rockets[n]!,slot=n*(1+embers.length)*2
+        const age=((time/shot.period+shot.offset)%1+1)%1*shot.period
+        if(age<FIREWORK_RISE){
+          // Climbing: the rocket decelerates on the way up, so its trail shortens as it nears the
+          // top — the pause before the burst reads as the fuse running out.
+          const climb=age/FIREWORK_RISE,rise=shot.apex*(1-(1-climb)**2),trail=.15+.75*(1-climb)
+          const x=shot.x+shot.driftX*climb,z=shot.driftZ*climb,y=shot.y+rise
+          position.setXYZ(slot,x,Math.max(shot.y,y-trail),z);shade.setXYZ(slot,strength*.25,strength*.25,strength*.25)
+          position.setXYZ(slot+1,x,y,z);shade.setXYZ(slot+1,strength,strength,strength)
+          for(let k=0;k<embers.length;k++){const vertex=slot+2+k*2;dark(vertex,x,y,z);dark(vertex+1,x,y,z)}
+        }else{
+          const burn=(age-FIREWORK_RISE)/FIREWORK_BURST,fuse=age-FIREWORK_RISE
+          const spread=shot.radius*(1-(1-burn)**3),sag=FIREWORK_SAG*.5*fuse*fuse
+          // A hard flash the instant it goes off, then the embers hold their glow most of the way
+          // down and only die back at the end, rather than dimming from the moment they part.
+          const glow=(burn<.08?1:Math.min(1,2.1*(1-burn)))*strength
+          const cx=shot.x+shot.driftX,cy=shot.y+shot.apex-sag,cz=shot.driftZ,tail=.12+.45*(1-burn)
+          dark(slot,cx,cy,cz);dark(slot+1,cx,cy,cz)
+          for(let k=0;k<embers.length;k++){
+            const ember=embers[k]!,vertex=slot+2+k*2
+            const x=cx+ember.x*spread,y=cy+ember.y*spread,z=cz+ember.z*spread
+            position.setXYZ(vertex,x-ember.x*tail,y-ember.y*tail,z-ember.z*tail);shade.setXYZ(vertex,glow*.25,glow*.25,glow*.25)
+            position.setXYZ(vertex+1,x,y,z);shade.setXYZ(vertex+1,glow,glow,glow)
+          }
+        }
+      }
+      position.needsUpdate=true;shade.needsUpdate=true
     }else if(sparks){
       const base=(rig.userData.dir as {x:number;y:number;z:number}|undefined)??{x:0,y:1,z:0}
       rig.quaternion.setFromUnitVectors(up,new Vector3(base.x,base.y,base.z))
-      const strength=(phase.pyro??0)/100,rays=rig.children[0] as LineSegments,mat=rays.material as LineBasicMaterial
-      mat.color.set(phase.color);mat.opacity=strength*(.7+.3*Math.sin(time*19+rig.userData.index)**2)
+      const strength=(phase.pyro??0)/100,streaks=rig.children[0] as LineSegments
+      const mat=streaks.material as LineBasicMaterial;mat.color.set(phase.color)
+      // Sparks fly in the rig's own frame, but they fall towards the *world's* floor — so a
+      // fountain angled sideways throws a real arc instead of sucking its sparks back down its
+      // own barrel. Rotating world-down into the rig is all that takes.
+      const pull=sparkPull.set(0,-(rig.userData.gravity as number),0).applyQuaternion(sparkFrame.copy(rig.quaternion).invert())
+      const flights=rig.userData.sparks as {x:number;y:number;z:number;speed:number;life:number;offset:number}[]
+      const position=streaks.geometry.getAttribute('position') as Float32BufferAttribute
+      const shade=streaks.geometry.getAttribute('color') as Float32BufferAttribute
+      for(let n=0;n<flights.length;n++){
+        const spark=flights[n]!
+        const age=((time/spark.life+spark.offset)%1+1)%1*spark.life,trail=Math.max(0,age-SPARK_TRAIL)
+        for(const [vertex,at] of [[n*2,trail],[n*2+1,age]] as const){
+          position.setXYZ(vertex,spark.x*spark.speed*at+pull.x*.5*at*at,spark.y*spark.speed*at+pull.y*.5*at*at,spark.z*spark.speed*at+pull.z*.5*at*at)
+        }
+        // A spark burns at full brightness for most of its flight and only dies back over the
+        // last stretch, rather than dimming from the moment it leaves the nozzle — that is what
+        // keeps the plume lit all the way up instead of fading out halfway. A fast twinkle rides
+        // on top, and the trail end is always the dimmer one, which makes a streak read as a
+        // direction rather than a floating dash.
+        const burn=Math.min(1,2.4*(1-age/spark.life))*strength*(.7+.3*Math.sin(time*29+n)**2)
+        shade.setXYZ(n*2,burn*.3,burn*.3,burn*.3);shade.setXYZ(n*2+1,burn,burn,burn)
+      }
+      position.needsUpdate=true;shade.needsUpdate=true
     }else if(fog){
       const base=(rig.userData.dir as {x:number;y:number;z:number}|undefined)??{x:0,y:1,z:0}
       rig.quaternion.setFromUnitVectors(up,new Vector3(base.x,base.y,base.z))

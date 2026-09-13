@@ -1,8 +1,8 @@
 export const COMPONENTS = {
   deck: {name:'Bühnenpodest',cost:80,party:0,beauty:1,power:0},
   truss: {name:'Traversensystem',cost:110,party:0,beauty:1,power:0},
-  fireworks: {name:'Feuerwerksmodul',cost:850,party:12,beauty:6,power:.4},
-  sparks: {name:'Funkenfontäne',cost:390,party:6,beauty:3,power:.5},
+  fireworks: {name:'Feuerwerk',cost:850,party:12,beauty:6,power:.4},
+  sparks: {name:'Funkensprüher',cost:390,party:6,beauty:3,power:.5},
   spot: {name:'Moving Head',cost:180,party:5,beauty:2,power:.4},
   lineArray: {name:'Line Array',cost:230,party:8,beauty:2,power:.7},
   fullRange: {name:'Full-Range-Lautsprecher',cost:260,party:9,beauty:-1,power:1.2},
@@ -26,9 +26,9 @@ export const TRUSS_BRANDS = {
 export function brandsFor(kind:ComponentKind){return kind==='truss'?TRUSS_BRANDS:BRANDS}
 export type ComponentKind = keyof typeof COMPONENTS
 /** Kinds that stand directly on the ground and never attach to a truss. */
-export const GROUND_ONLY_KINDS:ComponentKind[]=['deck','palm','fireworks','sparks','subwoofer']
+export const GROUND_ONLY_KINDS:ComponentKind[]=['deck','palm','fireworks','subwoofer']
 /** Kinds that may either stand on the ground or dock onto a truss, unlike GROUND_ONLY_KINDS which can only ever do the former. */
-export const GROUND_OR_TRUSS_KINDS:ComponentKind[]=['fog','fullRange']
+export const GROUND_OR_TRUSS_KINDS:ComponentKind[]=['fog','sparks','fullRange']
 /** Kinds that may additionally dock directly onto another part of their own kind (stacked speakers, a hung line-array chain) instead of only a truss. */
 export const STACKABLE_KINDS:ComponentKind[]=['lineArray','fullRange','subwoofer']
 export type Axis='x'|'y'|'z'
@@ -53,10 +53,15 @@ export function defaultStageDesign():StageDesign {
     {movement:55,pyro:35,intensity:75,speed:55,fog:40,volume:80,color:'#7f8cff'},
     {movement:100,pyro:100,intensity:100,speed:85,fog:65,volume:100,color:'#ef66cd'}]}
 }
+/**
+ * What a design costs and what it is worth on stage. The stage floor itself is free — however
+ * large the platform is, the bill is only ever the equipment standing on it — and neither the
+ * party nor the beauty it radiates is capped, so a bigger rig keeps counting for more.
+ */
 export function stageStats(d:StageDesign) {
-  let cost=d.width*d.depth*12 + ((d.tileWidth??1)*(d.tileDepth??1)-1)*180,party=0,beauty=0,power=0,speakers=0
+  let cost=0,party=0,beauty=0,power=0,speakers=0
   for(const p of d.parts){const c=COMPONENTS[p.kind],b=brandsFor(p.kind)[p.brand];cost+=c.cost*b.cost;party+=c.party*b.quality;beauty+=c.beauty*b.quality;power+=c.power;if(['lineArray','fullRange','subwoofer'].includes(p.kind))speakers++}
-  return {cost:Math.round(cost),upkeep:Math.round(cost*.008*10)/10,party:Math.min(100,Math.round(party)),beauty:Math.min(100,Math.round(beauty)),power:Math.round(power*10)/10,speakers}
+  return {cost:Math.round(cost),upkeep:Math.round(cost*.008*10)/10,party:Math.round(party),beauty:Math.round(beauty),power:Math.round(power*10)/10,speakers}
 }
 export function stageDesignIssue(d:StageDesign):string|null {
   if(!d || typeof d.name!=='string'||d.name.length>60||typeof d.linked!=='boolean'||!Array.isArray(d.parts)||d.parts.length>96) return 'Name und höchstens 96 Elemente wählen'
@@ -104,6 +109,9 @@ export function stageDesignIssue(d:StageDesign):string|null {
         return 'Dieses Bauteil kann nicht an diesem Trägerobjekt andocken'
       }
     }
+    // Fireworks shoot straight up and have to do so into open sky: anything standing in the same
+    // column above them — a truss most of all — is something their rockets would fire into.
+    if(p.kind==='fireworks'&&d.parts.some(q=>q!==p&&q.x===p.x&&q.z===p.z&&q.y>p.y))return 'Feuerwerk schießt nach oben und braucht freien Himmel — darüber darf nichts stehen'
     if(p.attachedTo===null&&p.y===0&&partOnAudience(d,p))return 'Zuschauerflächen bleiben frei von Bodenaufbauten'
     if(d.parts.some(q=>q!==p&&q.x===p.x&&q.y===p.y&&q.z===p.z))return 'Dieser Platz ist bereits belegt'
   }
@@ -162,6 +170,8 @@ export const ROTATION_DIRECTIONS:{x:number;y:number;z:number}[] = [
   {x:0,y:0,z:1},{x:1,y:0,z:0},{x:0,y:0,z:-1},{x:-1,y:0,z:0},{x:0,y:1,z:0},{x:0,y:-1,z:0},
 ]
 export function partFacing(part:StagePart):{x:number;y:number;z:number}{return ROTATION_DIRECTIONS[part.rotation] ?? {x:0,y:1,z:0}}
+/** The one rotation that aims a part straight up, for parts that only ever point that way. */
+export const UP_ROTATION=4
 /**
  * The rotation a Pixel-LED-Wand module has to take when it is bolted onto the given face of a
  * truss: its LEDs always point away from the structure carrying them, never back into it — which

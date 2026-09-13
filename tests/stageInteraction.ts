@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { Vector3, LineSegments, SpotLight, Box3, Quaternion } from 'three'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { stagePlacement } from '../src/game/stagePlacement'
-import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, lineArrayIndex, migrateStageDesign, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, type StagePart } from '../src/game/stageDesign'
+import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, lineArrayIndex, migrateStageDesign, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, STAGE_TILE_DETAIL, type StagePart } from '../src/game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from '../src/view/stageModel'
 import { showIssue } from '../src/game/festivalManagement'
 export function testStageInteraction(fixture:(count?:number)=>GameState){
@@ -46,6 +46,10 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.equal(stageDesignIssue(rig),null,'a ground-placed fog machine rests on the floor while everything else hangs off the truss')
   const foggy=stagePlacement(rig,{kind:'fog',brand:'budget',rotation:2,color:'#88ccff'},{x:0,z:0},{id:'truss',step:{x:0,y:0,z:1}});foggy.id='foggy';rig.parts.push(foggy)
   assert.equal(foggy.attachedTo,'truss');assert.equal(stageDesignIssue(rig),null,'a fog machine can also dock onto a truss like a spot or laser')
+  const trussSparks=stagePlacement(rig,{kind:'sparks',brand:'budget',rotation:4,color:'#ffd9a0'},{x:0,z:0},{id:'truss',step:{x:0,y:0,z:-1}});trussSparks.id='trussSparks';rig.parts.push(trussSparks)
+  assert.equal(trussSparks.attachedTo,'truss');assert.equal(stageDesignIssue(rig),null,'a spark fountain hangs off a truss the same way')
+  const groundSparks=stagePlacement(rig,{kind:'sparks',brand:'budget',rotation:4,color:'#ffd9a0'},{x:2,z:5});groundSparks.id='groundSparks';rig.parts.push(groundSparks)
+  assert.equal(stageDesignIssue(rig),null,'and still stands on the floor on its own, like the fog machine')
   assert.equal(removeStagePart(rig,'truss').parts.some(p=>p.id==='hanging'),false)
   const model=createStageModel(rig,{lightBudget:6}),phase={intensity:100,speed:60,fog:80,volume:100,color:'#ff55cc'}
   animateStageModel(model,phase,1,true)
@@ -73,6 +77,48 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
     assert.ok(lensAxis.distanceTo(new Vector3().copy(ROTATION_DIRECTIONS[rotation]! as any))<1e-6,`and the head still aims exactly where the orientation cube points (${where})`)
     disposeStageModel(yokeModel)
   }
+  // A spark fountain throws its plume along the direction the part was aimed, as far as its rated
+  // four tiles. The sparks fly ballistically and are recomputed from the show clock alone, so the
+  // plume is sampled across a whole run of frames to find how far the fastest of them get.
+  const fountainDesign=defaultStageDesign()
+  fountainDesign.parts.push({id:'fountain',kind:'sparks',brand:'budget',x:1,y:0,z:1,rotation:4,attachedTo:null,color:'#ffd9a0'})
+  fountainDesign.parts.push({id:'sideways',kind:'sparks',brand:'budget',x:4,y:0,z:1,rotation:0,attachedTo:null,color:'#ffd9a0'})
+  const fountainModel=createStageModel(fountainDesign),pyroPhase={intensity:100,speed:60,movement:0,pyro:100,fog:0,volume:0,color:'#ffcf8a'}
+  const plumeUp=fountainModel.userData.effects.find((r:any)=>r.userData.kind==='sparks'&&r.userData.dir.y===1)
+  const plumeSide=fountainModel.userData.effects.find((r:any)=>r.userData.kind==='sparks'&&r.userData.dir.z===1)
+  const throwRange=4*STAGE_TILE_DETAIL
+  let highest=0
+  for(let frame=0;frame<160;frame++){
+    animateStageModel(fountainModel,pyroPhase,frame*.02,true)
+    const points=(plumeUp.children[0] as any).geometry.getAttribute('position')
+    for(let v=0;v<points.count;v++)highest=Math.max(highest,points.getY(v))
+  }
+  assert.ok(highest>throwRange*.75&&highest<=throwRange,`a fountain's sparks reach about its rated four tiles and never overshoot them (${highest.toFixed(2)} of ${throwRange})`)
+  assert.ok(new Vector3(0,1,0).applyQuaternion(plumeSide.quaternion).distanceTo(new Vector3(0,0,1))<1e-6,'and one aimed sideways sprays sideways rather than up')
+  animateStageModel(fountainModel,{...pyroPhase,pyro:0},1,true)
+  assert.equal(plumeUp.visible,false,'with the pyro fader down the fountain stops emitting altogether')
+  disposeStageModel(fountainModel)
+  // Fireworks fire straight up into open sky: the orientation cube gets no say over where they
+  // point, and nothing may stand in the column above them.
+  const skyDesign=defaultStageDesign()
+  const rack=stagePlacement(skyDesign,{kind:'fireworks',brand:'budget',rotation:1,color:'#ffb45c'},{x:2,z:2});rack.id='rack';skyDesign.parts.push(rack)
+  assert.equal(rack.rotation,4,'a firework rack is always aimed upwards, whichever way the orientation cube points')
+  assert.equal(stageDesignIssue(skyDesign),null,'and stands happily under open sky')
+  const overheadTruss:StagePart={id:'overheadTruss',kind:'truss',brand:'budget',axis:'x',x:2,y:2,z:2,rotation:0,attachedTo:null,color:'#ffffff'}
+  assert.ok(stageDesignIssue({...skyDesign,parts:[...skyDesign.parts,overheadTruss]}),'but not with a truss hanging over it, however far above')
+  assert.equal(stageDesignIssue({...skyDesign,parts:[...skyDesign.parts,{...overheadTruss,x:3}]}),null,'while a truss in the next column along is no obstacle')
+  // Its rockets climb well clear of the rack before bursting, rather than the whole effect simply
+  // flashing in place the way the old one did.
+  const skyModel=createStageModel(skyDesign)
+  const rocketRig=skyModel.userData.effects.find((r:any)=>r.userData.kind==='fireworks')
+  let peak=0
+  for(let frame=0;frame<200;frame++){
+    animateStageModel(skyModel,{intensity:100,speed:60,movement:0,pyro:100,fog:0,volume:0,color:'#ffcf8a'},frame*.03,true)
+    const points=(rocketRig.children[0] as any).geometry.getAttribute('position')
+    for(let v=0;v<points.count;v++)peak=Math.max(peak,points.getY(v))
+  }
+  assert.ok(peak>5,`its rockets burst high above the rack rather than at deck level (${peak.toFixed(1)})`)
+  disposeStageModel(skyModel)
   const laserRig=model.userData.effects.find((p:any)=>p.userData.kind==='laser');assert.ok(laserRig.children[0] instanceof LineSegments)
   const fogRig=model.userData.effects.find((p:any)=>p.userData.kind==='fog');assert.equal(fogRig.children.length,6)
   assert.ok(fogRig.children[fogRig.children.length-1].scale.x>fogRig.children[0].scale.x,'fog puffs widen as they drift outward')
