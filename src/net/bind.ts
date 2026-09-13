@@ -160,6 +160,14 @@ export function enableMultiplayerCommands(game: GameState): void {
     type: 'sellGarbageTruck',
     depotId,
   }))
+  game.buySweeper = wrap(game, game.buySweeper, (depotId) => ({
+    type: 'buySweeper',
+    depotId,
+  }))
+  game.sellSweeper = wrap(game, game.sellSweeper, (depotId) => ({
+    type: 'sellSweeper',
+    depotId,
+  }))
   game.createBusLine = wrap(
     game,
     game.createBusLine,

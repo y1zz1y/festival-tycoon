@@ -159,6 +159,11 @@ test('transport rendering moves between cells smoothly and respects pause', () =
   assert.equal(model.position.x,paused,'pause freezes visual movement')
   view.animate(false,300)
   assert.ok(model.position.x>paused)
+  snapshot.festival.infrastructure.depots.push({id:'fill-depot',x:2,z:-18,role:'storage',distribution:'shops',stock:{food:150,drinks:0,water:50},minimum:{food:200,drinks:200,water:200}})
+  view.update(snapshot,false)
+  const bars=(view as any).stockModels.get('fill-depot')
+  assert.equal(bars.children.length,6,'depots and receiving bays show three fill planks')
+  assert.ok(bars.children[1].scale.x>bars.children[3].scale.x,'fuller supplies read as longer planks')
   let at60=0,at144=0
   for(let n=0;n<60;n++)at60+=(1-at60)*transportMotionFactor(1/60)
   for(let n=0;n<144;n++)at144+=(1-at144)*transportMotionFactor(1/144)

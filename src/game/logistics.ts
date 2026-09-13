@@ -39,7 +39,7 @@ export type ArrivalGroup = {
   entryFeesPaid: boolean
 }
 
-export type RoadVehicleKind = 'visitorCar' | 'ambulance' | 'bus' | 'garbageTruck'
+export type RoadVehicleKind = 'visitorCar' | 'ambulance' | 'bus' | 'garbageTruck' | 'sweeper'
 export type RoadVehicleState =
   | 'idle'
   | 'driving'
@@ -53,6 +53,8 @@ export type RoadVehicleState =
 export type RoadVehicleTarget =
   | (RoadPosition & { kind: 'cell' })
   | { kind: 'parking'; parkingCell: RoadPosition }
+  | { kind: 'hold'; parkingCell?: RoadPosition }
+  | { kind: 'cruise' }
   | { kind: 'busStop'; stopId: string }
   | { kind: 'garage'; garageId: string }
   | { kind: 'depot'; depotId: string }
@@ -101,6 +103,11 @@ export type WasteDepot = RoadPosition & {
   truckIds: string[]
 }
 
+export type SpecialDepot = RoadPosition & {
+  id: string
+  vehicleIds: string[]
+}
+
 export type BusLine = {
   id: string
   name: string
@@ -122,6 +129,7 @@ export type LogisticsSnapshot = {
   busDepots: BusDepot[]
   busLines: BusLine[]
   wasteDepots: WasteDepot[]
+  specialDepots: SpecialDepot[]
 }
 
 export type RoadGraph = {
@@ -166,6 +174,7 @@ const VEHICLE_KINDS: readonly RoadVehicleKind[] = [
   'ambulance',
   'bus',
   'garbageTruck',
+  'sweeper',
 ]
 const VEHICLE_STATES: readonly RoadVehicleState[] = [
   'idle',
@@ -190,6 +199,7 @@ export function createDefaultLogisticsSnapshot(): LogisticsSnapshot {
     busDepots: [],
     busLines: [],
     wasteDepots: [],
+    specialDepots: [],
   }
 }
 
@@ -403,6 +413,9 @@ export function normalizeLogisticsSnapshot(value: unknown): LogisticsSnapshot {
     wasteDepots: asArray(source?.wasteDepots)
       .map(normalizeWasteDepot)
       .filter(isDefined),
+    specialDepots: asArray(source?.specialDepots)
+      .map(normalizeSpecialDepot)
+      .filter(isDefined),
   }
 }
 
@@ -519,6 +532,13 @@ function normalizeWasteDepot(value: unknown): WasteDepot | null {
   return { ...position, id: source.id, truckIds: stringArray(source.truckIds) }
 }
 
+function normalizeSpecialDepot(value: unknown): SpecialDepot | null {
+  const source = asRecord(value)
+  const position = normalizePosition(source)
+  if (!source || !position || typeof source.id !== 'string') return null
+  return { ...position, id: source.id, vehicleIds: stringArray(source.vehicleIds) }
+}
+
 function normalizeBusLine(value: unknown): BusLine | null {
   const source = asRecord(value)
   if (!source || typeof source.id !== 'string') return null
@@ -545,6 +565,11 @@ function normalizeVehicleTarget(value: unknown): RoadVehicleTarget | null {
     const parkingCell = normalizePosition(source.parkingCell)
     return parkingCell ? { kind: 'parking', parkingCell } : null
   }
+  if (source.kind === 'hold') {
+    const parkingCell = normalizePosition(source.parkingCell)
+    return parkingCell ? { kind: 'hold', parkingCell } : { kind: 'hold' }
+  }
+  if (source.kind === 'cruise') return { kind: 'cruise' }
   if (source.kind === 'busStop' && typeof source.stopId === 'string') {
     return { kind: 'busStop', stopId: source.stopId }
   }

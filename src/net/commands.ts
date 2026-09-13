@@ -80,6 +80,10 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.buyGarbageTruck(command.depotId)
     case 'sellGarbageTruck':
       return game.sellGarbageTruck(command.depotId)
+    case 'buySweeper':
+      return game.buySweeper(command.depotId)
+    case 'sellSweeper':
+      return game.sellSweeper(command.depotId)
     case 'createBusLine':
       return game.createBusLine(
         command.name,

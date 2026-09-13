@@ -46,6 +46,7 @@ const CONSUMER_PRIORITY: Record<string, number> = {
   ambulanceGarage: 30,
   busDepot: 25,
   wasteDepot: 22,
+  specialDepot: 26,
 }
 
 export function createEmptyPower(): PowerSnapshot {

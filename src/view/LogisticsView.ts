@@ -16,6 +16,7 @@ import type {
   BusDepot,
   BusStop,
   WasteDepot,
+  SpecialDepot,
   Direction,
   LogisticsSnapshot,
   ParkingCell,
@@ -24,7 +25,7 @@ import type {
 } from '../game/logistics'
 import { disposeObject3D } from './disposeObject3D'
 
-type FacilityLike = AmbulanceGarage | BusDepot | BusStop | WasteDepot
+type FacilityLike = AmbulanceGarage | BusDepot | BusStop | WasteDepot | SpecialDepot
 type VehicleLike = RoadVehicle & {
   facing?: number
 }
@@ -70,6 +71,7 @@ function structureFingerprint(logistics: Readonly<LogisticsSnapshot>): string {
     itemPart('g', logistics.ambulanceGarages),
     itemPart('d', logistics.busDepots),
     itemPart('w', logistics.wasteDepots),
+    itemPart('y', logistics.specialDepots ?? []),
     itemPart('s', logistics.busStops),
   ].join('#')
 }
@@ -139,6 +141,25 @@ function addSharedBox(
   return mesh
 }
 
+function addSharedCylinder(
+  parent: Group,
+  radius: number,
+  height: number,
+  position: readonly [number, number, number],
+  color: number,
+  roughness = 0.8,
+  rotation?: readonly [number, number, number],
+): Mesh {
+  const mesh = new Mesh(
+    sharedCylinderGeometry(radius, height),
+    sharedMaterial(color, roughness),
+  )
+  mesh.position.set(...position)
+  if (rotation) mesh.rotation.set(...rotation)
+  parent.add(mesh)
+  return mesh
+}
+
 function markShadows(root: Object3D): void {
   root.traverse((object) => {
     if (object instanceof Mesh) {
@@ -189,6 +210,7 @@ export class LogisticsView {
       ...logistics.ambulanceGarages.map((cell) => getGroundY(cell.x, cell.z)),
       ...logistics.busDepots.map((cell) => getGroundY(cell.x, cell.z)),
       ...logistics.wasteDepots.map((cell) => getGroundY(cell.x, cell.z)),
+      ...(logistics.specialDepots ?? []).map((cell) => getGroundY(cell.x, cell.z)),
       ...logistics.busStops.map((cell) => getGroundY(cell.x, cell.z)),
     ].join(',')
     const fingerprint = `${structureFingerprint(logistics)}#${heightPart}#${logistics.roadCells.map(c => roadColor(c.x, c.z)).join()}`
@@ -227,6 +249,9 @@ export class LogisticsView {
     })
     logistics.wasteDepots.forEach((depot) => {
       this.staticGroup.add(this.createFacility(depot, 'waste'))
+    })
+    ;(logistics.specialDepots ?? []).forEach((depot) => {
+      this.staticGroup.add(this.createFacility(depot, 'special'))
     })
     logistics.busStops.forEach((stop) => {
       this.staticGroup.add(this.createBusStop(stop))
@@ -358,18 +383,36 @@ export class LogisticsView {
 
   private createFacility(
     facility: FacilityLike,
-    kind: 'garage' | 'depot' | 'waste',
+    kind: 'garage' | 'depot' | 'waste' | 'special',
   ): Group {
     const group = new Group()
-    const size = kind === 'depot' ? 3 : 2
+    const size = kind === 'depot' || kind === 'special' ? 3 : 2
     const color =
-      kind === 'garage' ? 0x52718c : kind === 'waste' ? 0x4a5a3a : 0x9b7445
+      kind === 'garage'
+        ? 0x52718c
+        : kind === 'waste'
+          ? 0x4a5a3a
+          : kind === 'special'
+            ? 0x5a6a72
+            : 0x9b7445
     group.position.set(
       facility.x + size / 2,
       this.groundY(facility.x, facility.z),
       facility.z + size / 2,
     )
     addBox(group, [size - 0.12, 0.13, size - 0.12], [0, 0.065, 0], 0x3c4247)
+    if (kind === 'special') {
+      addBox(group, [size - 0.18, 0.08, size - 0.18], [0, 0.08, 0], 0x4d555b)
+      addBox(group, [0.9, 0.62, 0.72], [0, 0.42, -size / 2 + 0.46], color)
+      addBox(group, [1.02, 0.1, 0.84], [0, 0.78, -size / 2 + 0.46], 0x2c3236)
+      ;[-0.9, -0.3, 0.3, 0.9].forEach((offset) => {
+        addBox(group, [0.42, 0.03, 0.72], [offset, 0.09, 0.28], 0xd7b45b)
+        addBox(group, [0.04, 0.05, 0.72], [offset - 0.2, 0.1, 0.28], 0xf0d27a)
+        addBox(group, [0.04, 0.05, 0.72], [offset + 0.2, 0.1, 0.28], 0xf0d27a)
+      })
+      markShadows(group)
+      return group
+    }
     addBox(group, [size - 0.3, 0.78, size - 0.4], [0, 0.52, 0.1], color)
     addBox(group, [size - 0.55, 0.58, 0.04], [0, 0.4, size / 2 - 0.185], 0x30373c)
     const roof = addBox(group, [size, 0.14, size], [0, 0.98, 0], 0x252a2e)
@@ -467,7 +510,55 @@ export class LogisticsView {
     if (kind === 'ambulance') return this.createCar(0xf4f4ee, true)
     if (kind === 'bus') return this.createBus()
     if (kind === 'garbageTruck') return this.createGarbageTruck()
+    if (kind === 'sweeper') return this.createSweeper()
     return this.createCar(0x3479ad, false)
+  }
+
+  private createSweeper(): Group {
+    const group = new Group()
+    addSharedBox(group, [0.4, 0.08, 0.46], [0, 0.12, -0.02], 0x1a1c1e, 0.85)
+    addSharedBox(group, [0.36, 0.26, 0.34], [0, 0.29, -0.04], 0xf2f4f0, 0.45)
+    addSharedBox(group, [0.38, 0.035, 0.36], [0, 0.438, -0.04], 0x3cb54a, 0.5)
+    addSharedBox(group, [0.02, 0.16, 0.3], [-0.19, 0.3, -0.04], 0x3cb54a, 0.5)
+    addSharedBox(group, [0.02, 0.16, 0.3], [0.19, 0.3, -0.04], 0x3cb54a, 0.5)
+    addSharedBox(group, [0.3, 0.16, 0.018], [0, 0.33, 0.14], 0x6a8ea0, 0.25)
+    addSharedBox(group, [0.22, 0.1, 0.018], [0, 0.32, -0.21], 0x6a8ea0, 0.3)
+    addSharedBox(group, [0.38, 0.06, 0.06], [0, 0.13, 0.2], 0x141618, 0.8)
+    addSharedBox(group, [0.04, 0.04, 0.04], [0.08, 0.48, 0.04], 0xf0b020, 0.35)
+    addSharedBox(group, [0.03, 0.04, 0.02], [-0.23, 0.36, 0.08], 0x202326, 0.7)
+    addSharedBox(group, [0.03, 0.04, 0.02], [0.23, 0.36, 0.08], 0x202326, 0.7)
+    addSharedCylinder(group, 0.018, 0.14, [-0.1, 0.52, -0.12], 0x2a2c2e, 0.7)
+    addSharedCylinder(
+      group,
+      0.018,
+      0.1,
+      [-0.1, 0.57, -0.18],
+      0x2a2c2e,
+      0.7,
+      [HALF_PI, 0, 0],
+    )
+    ;[
+      [-0.16, 0.28],
+      [0.16, 0.28],
+      [0, 0.38],
+    ].forEach(([x, z]) => {
+      addSharedCylinder(group, 0.1, 0.03, [x, 0.05, z], 0x1c2430, 1)
+      addSharedCylinder(group, 0.028, 0.05, [x, 0.08, z], 0x2a3038, 0.75)
+    })
+    ;[-0.16, 0.16].forEach((x) => {
+      ;[-0.16, 0.08].forEach((z) => {
+        addSharedCylinder(
+          group,
+          0.07,
+          0.045,
+          [x, 0.09, z],
+          0x202326,
+          1,
+          [0, 0, HALF_PI],
+        )
+      })
+    })
+    return group
   }
 
   private createGarbageTruck(): Group {

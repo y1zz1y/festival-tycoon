@@ -110,6 +110,20 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.equal(i.shops[stand.id]?.food,40,'workers automatically supply a stand')
   assert.equal(depot.stock.food,80,'workers restore depot minimum without over-delivery')
   assert.equal(source.stock.food,80)
+  const bounce=fixture(0), bounceState=bounce.snapshot as GameSnapshot, bounceInfra=bounceState.festival.infrastructure
+  bounce.addDebugMoney()
+  const padA={id:'pad-a',x:1,z:-20,role:'delivery' as const,distribution:'shops' as const,stock:{food:200,drinks:0,water:0},minimum:{food:200,drinks:0,water:0}}
+  const padB={id:'pad-b',x:5,z:-20,role:'delivery' as const,distribution:'shops' as const,stock:emptyStock(),minimum:{food:200,drinks:0,water:0}}
+  bounceInfra.depots.push(padA,padB)
+  assert.ok(bounce.place('food',5,-16).ok)
+  const bounceStand=bounceState.buildings.find(b=>b.kind==='food')!
+  assert.ok(bounce.manageFestival({type:'depotSettings',depotId:padA.id,distribution:'shops',workers:1}).ok)
+  assert.ok(bounce.manageFestival({type:'depotSettings',depotId:padB.id,distribution:'shops',workers:1}).ok)
+  const bounceWalk=(a:any,goals:any)=>(bounce as any).findPath(a,goals,false,false,false,false,false,undefined,true)
+  for(let n=0;n<180;n++) updateDepotCarriers(bounceState,1,bounceWalk,()=>true)
+  assert.equal(padB.stock.food,0,'delivery pads do not shuttle goods between receiving bays')
+  assert.equal(bounceInfra.shops[bounceStand.id]?.food,40,'delivery workers take surplus to shops')
+
   assert.ok(orderGoods(s,'food',50,0,depot.id).ok)
   assert.equal(s.festival.deliveries.at(-1)?.depotId,source.id,'trucks deliver to the designated receiving point')
   const clone=GameState.fromJSON(JSON.stringify(s))!
@@ -131,8 +145,8 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   for (const workZones of [undefined, [], [zoneKey(1,0), zoneKey(3,0)]]) {
     const worker=createStaffMember('free-cleaner','cleaner',{x:0,z:0,elevation:0})
     worker.workZones=workZones
-    const blocked={id:'blocked-bin',x:1,z:0,elevation:0,stored:5}
-    const reachable={id:'reachable-bin',x:3,z:0,elevation:0,stored:5}
+    const blocked={id:'blocked-bin',x:1,z:0,elevation:0,stored:SIMULATION_CONFIG.waste.binCapacity}
+    const reachable={id:'reachable-bin',x:3,z:0,elevation:0,stored:SIMULATION_CONFIG.waste.binCapacity}
     staff.update({...context,staff:[worker],wasteBins:[blocked,reachable],
       findPath:(_a:any,goals:any[])=>goals[0].x===1?null:goals},.1)
     assert.equal(worker.targetId,reachable.id,'workers find reachable work with no zones, empty zones, or explicit zones')
@@ -146,6 +160,52 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   restricted.workZones=[zoneKey(9,9)]
   staff.update({...context,staff:[restricted],wasteBins:[{...bin,stored:5}]},.1)
   assert.equal(restricted.targetId,null,'assigned zones still restrict work')
+  const picker=createStaffMember('priority-cleaner','cleaner',{x:0,z:0,elevation:0})
+  const nearly={id:'near-bin',x:1,z:0,elevation:0,stored:4}
+  const overflowing={id:'full-bin',x:8,z:0,elevation:0,stored:SIMULATION_CONFIG.waste.binCapacity}
+  staff.update({
+    ...context,
+    staff:[picker],
+    wasteBins:[nearly,overflowing],
+    incidents:[{id:'nearby-litter',kind:'litter',x:0,z:1,elevation:0,severity:1,ageMinutes:0}],
+  },.1)
+  assert.equal(picker.targetId,overflowing.id,'full bins are emptied before nearer half-full bins or litter')
+  const hauled=createStaffMember('bin-hauler','cleaner',{x:0,z:0,elevation:0})
+  const fullBin={id:'haul-bin',x:1,z:0,elevation:0,stored:SIMULATION_CONFIG.waste.binCapacity}
+  const haulDump={x:2,z:0,elevation:0,stored:0}
+  const haulContext={
+    ...context,
+    staff:[hauled],
+    wasteBins:[fullBin],
+    wasteDumps:[haulDump],
+    emptyBin:(_id:string,n:number)=>{const amount=Math.min(n,fullBin.stored);fullBin.stored-=amount;return amount},
+    depositWaste:(_x:number,_z:number,n:number)=>{haulDump.stored+=n;return n},
+  }
+  hauled.targetId=fullBin.id
+  hauled.state='working'
+  ;(staff as any).finishWork(hauled,haulContext)
+  assert.equal(fullBin.stored,0,'a cleaner empties the whole bin in one lift')
+  assert.equal(hauled.carryingWaste,SIMULATION_CONFIG.waste.binCapacity)
+  assert.equal(hauled.wasteFromBin,true)
+  assert.ok(String(hauled.targetId).startsWith('dump:'),'the full bin goes to the dump, not back into another bin')
+  hauled.route=[]
+  ;(staff as any).finishArrival(hauled,haulContext)
+  assert.equal(haulDump.stored,SIMULATION_CONFIG.waste.binCapacity)
+  assert.equal(hauled.carryingWaste,0)
+  const dropper=createStaffMember('dropper','cleaner',{x:0,z:0,elevation:0})
+  const roomy={id:'roomy-bin',x:1,z:0,elevation:0,stored:2}
+  const street=[{id:'street-litter',kind:'litter' as const,x:0,z:1,elevation:0,severity:1,ageMinutes:0}]
+  dropper.targetId='street-litter'
+  dropper.state='working'
+  ;(staff as any).finishWork(dropper,{
+    ...context,
+    staff:[dropper],
+    wasteBins:[roomy],
+    incidents:street,
+    removeIncident:(id:string)=>{const i=street.findIndex(item=>item.id===id);if(i>=0)street.splice(i,1)},
+    fillBin:(_id:string,n:number)=>{const added=Math.min(n,SIMULATION_CONFIG.waste.binCapacity-roomy.stored);roomy.stored+=added;return added},
+  })
+  assert.equal(dropper.targetId,'deposit-bin:roomy-bin','litter is dropped into a bin that still has room')
   s.staff.push(cleaner)
   assert.ok(game.manageFestival({type:'staffArea',staffId:cleaner.id,from:{x:2,z:-20},to:{x:4,z:-16}}).ok)
   assert.deepEqual(cleaner.workArea,{minX:2,maxX:4,minZ:-20,maxZ:-16})
@@ -296,6 +356,7 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   const haul = {
     ...context,
     staff: [scavenger],
+    wasteBins: [{ ...bin, stored: SIMULATION_CONFIG.waste.binCapacity }],
     incidents: litter,
     findPath: (_a: any, goals: any[]) => goals.map((point) => ({ ...point })),
     removeIncident: (id: string) => {
@@ -322,6 +383,237 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.ok(
     scavenger.targetId === 'deposit-bin:bin-1' || scavenger.targetId?.startsWith('dump:'),
     'a full armful goes to disposal',
+  )
+
+  const cars=fixture(0), carState=cars.snapshot as GameSnapshot
+  cars.addDebugMoney()
+  const edgeZ=-carState.scenario.worldSize/2
+  for (let z=edgeZ+1; z<=-16; z+=1) {
+    if (!carState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(cars.designateRoad([{x:0,z}]).ok, `road 0,${z}`)
+    }
+  }
+  assert.ok(cars.designateParkingArea([{x:1,z:-16}]).ok)
+  carState.logistics.parkingCells[0]!.occupiedBy='parked-car'
+  const inbound={
+    id:'inbound-car',kind:'visitorCar' as const,position:{x:0,z:edgeZ},cell:{x:0,z:edgeZ},
+    route:[],state:'waiting' as const,speed:0,passengerIds:[],groupId:'inbound-group',
+    parkingCell:null,target:null,facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  carState.logistics.arrivalGroups.push({
+    id:'inbound-group',memberIds:[],vehicleId:inbound.id,mode:'car',state:'approaching',
+    arrivedMinute:0,parkingWaitMinutes:0,entryFeesPaid:true,
+  })
+  carState.logistics.roadVehicles.push(inbound)
+  ;(cars as any).assignVisitorCarParking(inbound,1,new Set(),new Set(),new Set(),true)
+  assert.ok(inbound.state==='driving' && inbound.route.length>0,'cars without a free bay leave the entrance')
+  assert.notEqual(inbound.route.at(-1)?.z,edgeZ,'they drive inland or wait in front of parking')
+  for (let n=0;n<40 && inbound.cell?.z===edgeZ; n+=1) (cars as any).updateLogistics(1)
+  assert.notEqual(inbound.cell?.z,edgeZ,'incoming cars do not stay parked on the entry lane')
+  assert.ok(
+    inbound.state==='driving' || cars['isVisitorCarHoldingNearParking'](inbound),
+    'without a bay they circulate or queue in front of parking',
+  )
+
+  const jammed=fixture(0), jammedState=jammed.snapshot as GameSnapshot
+  jammed.addDebugMoney()
+  const jammedEdge=-jammedState.scenario.worldSize/2
+  for (let z=jammedEdge+1; z<=-16; z+=1) {
+    if (!jammedState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(jammed.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  assert.ok(jammed.designateRoad([{x:1,z:-18}]).ok)
+  const mover={
+    id:'blocked-car',kind:'visitorCar' as const,position:{x:0,z:-19},cell:{x:0,z:-19},
+    route:[{x:0,z:-18},{x:0,z:-17}],state:'driving' as const,speed:10,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cruise' as const},facing:0,waitMinutes:6,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  const stopper={
+    id:'stopper-car',kind:'visitorCar' as const,position:{x:0,z:-18},cell:{x:0,z:-18},
+    route:[],state:'waiting' as const,speed:0,passengerIds:[],groupId:null,
+    parkingCell:null,target:null,facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  jammedState.logistics.roadVehicles.push(mover,stopper)
+  ;(jammed as any).updateLogistics(1)
+  assert.ok(
+    mover.route[0] && (mover.route[0].x!==0 || mover.route[0].z!==-18),
+    'cars blocked too long are put back on a clear route',
+  )
+
+  const sweepGame=fixture(0)
+  sweepGame.addDebugMoney()
+  const sweep=sweepGame.snapshot as GameSnapshot
+  const owner=(sweepGame as any).spawnVisitorMember('day','tent-owner','pedestrian',false)
+  assert.ok(owner)
+  owner.state='sleeping'
+  owner.pendingWaste=0
+  owner.cellX=18
+  owner.cellZ=8
+  owner.x=18.5
+  owner.z=8.5
+  owner.route=[]
+  const onFootpath=(x:number,z:number)=>sweep.buildings.some(building=>building.kind==='path'&&building.x===x&&building.z===z)
+  const yard=sweepGame.place('specialDepot',5,-22)
+  assert.ok(yard.ok, yard.message)
+  const special=sweep.logistics.specialDepots[0]!
+  const bought=sweepGame.buySweeper(special.id)
+  assert.ok(bought.ok, bought.message)
+  const sweeper=sweep.logistics.roadVehicles.find(vehicle=>vehicle.kind==='sweeper')
+  assert.ok(sweeper)
+  assert.ok(sweeper.cell && onFootpath(sweeper.cell.x,sweeper.cell.z),'the sweeper starts on a footpath')
+  assert.ok(sweepGame.place('wasteBin',5,-18).ok)
+  const leftBin=sweep.buildings.find(building=>building.kind==='wasteBin')!
+  leftBin.wasteFill=7
+  assert.ok(sweepGame.designateWasteDump([{x:5,z:-14}]).ok)
+  sweep.incidents.push({
+    id:'path-litter',kind:'litter',x:1,z:-16,elevation:0,severity:4,ageMinutes:0,
+  })
+  for (const x of [2,3,4]) {
+    sweep.campInstallations.push({
+      id:`path-tent-${x}`,
+      cell:{x,z:-17,elevation:0},
+      kind:'tent',
+      ownerId:owner.id,
+      contributorIds:[],
+    })
+  }
+  for (let n=0;n<80;n+=1) sweepGame.tick(0.25)
+  assert.ok(sweeper.cell && onFootpath(sweeper.cell.x,sweeper.cell.z),'the sweeper stays on footpaths')
+  assert.ok(
+    !sweep.logistics.roadCells.some(cell=>cell.x===sweeper.cell?.x && cell.z===sweeper.cell?.z),
+    'the sweeper does not drive on roads',
+  )
+  assert.ok(
+    !sweeper.cell || sweeper.cell.z!==-17,
+    'the sweeper does not drive through claimed tents',
+  )
+  assert.ok(
+    sweep.incidents.some(incident=>incident.id==='path-litter' && incident.severity>0),
+    'dirt behind a claimed tent stays',
+  )
+  assert.ok(leftBin.wasteFill>0,'the sweeper does not empty bins')
+  sweep.campInstallations.forEach((item) => {
+    if (!item.id.startsWith('path-tent-')) return
+    item.ownerId=''
+    item.contributorIds=[]
+  })
+  const binBeforeSweep=leftBin.wasteFill??0
+  for (let n=0;n<200;n+=1) sweepGame.tick(0.25)
+  assert.ok(sweeper.cell && onFootpath(sweeper.cell.x,sweeper.cell.z),'after cleaning it is still on a path')
+  assert.equal(
+    sweep.incidents.some(incident=>incident.id==='path-litter' && incident.severity>0),
+    false,
+    'after the tent is abandoned the sweeper cleans the area beside the path',
+  )
+  assert.ok(
+    (leftBin.wasteFill??0)>=binBeforeSweep,
+    'bins stay untouched while the sweeper works',
+  )
+  sweeper.cargo=SIMULATION_CONFIG.logistics.sweeperCapacity
+  sweeper.state='idle'
+  sweeper.route=[]
+  for (let n=0;n<160;n+=1) sweepGame.tick(0.25)
+  assert.ok(
+    sweep.wasteDumpCells.some(cell=>cell.stored>=SIMULATION_CONFIG.logistics.sweeperCapacity),
+    'a full sweeper unloads onto the waste dump',
+  )
+
+  const blockGame=fixture(0)
+  blockGame.addDebugMoney()
+  const block=blockGame.snapshot as GameSnapshot
+  assert.ok(blockGame.place('specialDepot',5,-22).ok)
+  assert.ok(blockGame.buySweeper(block.logistics.specialDepots[0]!.id).ok)
+  const machine=block.logistics.roadVehicles.find(vehicle=>vehicle.kind==='sweeper')!
+  machine.cell={x:3,z:-20}
+  machine.position={x:3,z:-20}
+  machine.route=[{x:3,z:-19},{x:3,z:-18}]
+  machine.state='responding'
+  machine.speed=0
+  machine.cargo=0
+  const blocker=(blockGame as any).spawnVisitorMember('day','sweeper-block','pedestrian',false)
+  assert.ok(blocker)
+  blocker.cellX=3
+  blocker.cellZ=-19
+  blocker.cellElevation=0
+  blocker.x=3.5
+  blocker.z=-19.5
+  blocker.route=[]
+  blocker.state='relaxing'
+  for (let n=0;n<4;n+=1) (blockGame as any).updateLogistics(2)
+  assert.equal(machine.cell?.z,-20,'the sweeper waits instead of driving through visitors')
+  blocker.cellZ=-14
+  blocker.z=-13.5
+  block.staff.push(createStaffMember('path-staff','cleaner',{x:3,z:-19,elevation:0}))
+  ;(blockGame as any).updateLogistics(2)
+  assert.equal(machine.cell?.z,-19,'staff on the path does not block the sweeper')
+
+  const noiseGame=fixture(0)
+  noiseGame.addDebugMoney()
+  assert.ok(noiseGame.place('tree',6,-18).ok)
+  ;(noiseGame as any).updateAtmosphere()
+  const quiet=noiseGame.snapshot.attractiveness.cells.find(cell=>cell.x===6 && cell.z===-18)
+  assert.ok(quiet)
+  noiseGame.snapshot.logistics.roadVehicles.push({
+    id:'noise-sweeper',kind:'sweeper',position:{x:6,z:-18},cell:{x:6,z:-18},
+    route:[{x:6,z:-17}],state:'responding',speed:0,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cell',x:6,z:-17},facing:0,waitMinutes:0,resumeState:null,
+    lineId:null,nextStopIndex:0,cargo:0,
+  })
+  ;(noiseGame as any).updateAtmosphere()
+  const noisy=noiseGame.snapshot.attractiveness.cells.find(cell=>cell.x===6 && cell.z===-18)
+  assert.ok(noisy)
+  assert.ok(noisy.value<quiet.value,'a moving sweeper lowers nearby attractiveness')
+  noiseGame.snapshot.logistics.roadVehicles[0]!.state='idle'
+  noiseGame.snapshot.logistics.roadVehicles[0]!.route=[]
+  ;(noiseGame as any).updateAtmosphere()
+  const parked=noiseGame.snapshot.attractiveness.cells.find(cell=>cell.x===6 && cell.z===-18)
+  assert.ok(parked)
+  assert.ok(Math.abs(parked.value-quiet.value)<0.01,'an idle sweeper does not make driving noise')
+
+  const plaza=fixture(0)
+  plaza.addDebugMoney()
+  assert.ok(plaza.designateStageForecourt([{x:5,z:-18},{x:6,z:-18},{x:7,z:-18}]).ok)
+  plaza.snapshot.incidents.push({
+    id:'dance-litter',kind:'litter',x:7,z:-18,elevation:0,severity:2,ageMinutes:0,
+  })
+  const guestWalk=(plaza as any).findPath({x:4,z:-18,elevation:0},[{x:7,z:-18,elevation:0}])
+  assert.equal(guestWalk,null,'guests do not cut across the dance floor')
+  const cleanerWalk=(plaza as any).findPath(
+    {x:4,z:-18,elevation:0},[{x:7,z:-18,elevation:0}],false,true,true,false,true,undefined,true,
+  )
+  assert.ok(cleanerWalk,'cleaners can walk onto the festival forecourt')
+  assert.ok(cleanerWalk.some((cell:{x:number})=>cell.x>=5),'the cleaner route uses the dance floor')
+  const plazaSweeper={
+    id:'plaza-sweeper',kind:'sweeper' as const,position:{x:4,z:-18},cell:{x:4,z:-18},
+    route:[],state:'idle' as const,speed:0,passengerIds:[],groupId:null,parkingCell:null,
+    target:null,facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  const plazaAccesses=(plaza as any).getSweeperDirtAccesses() as Array<{path:{x:number;z:number}}>
+  assert.ok(
+    plazaAccesses.some(access=>access.path.x>=5 && access.path.z===-18),
+    'the sweeper treats the dance floor as a driving surface',
+  )
+  const plazaRoute=(plaza as any).findSweeperRoute(plazaSweeper,plazaAccesses.map(access=>access.path))
+  assert.ok(plazaRoute,'the sweeper can route onto the festival forecourt')
+  assert.ok(plazaRoute.some((cell:{x:number})=>cell.x>=5),'the sweeper drives across the dance floor')
+
+  const plazaShop=fixture(0)
+  plazaShop.addDebugMoney()
+  const plazaState=plazaShop.snapshot as GameSnapshot
+  assert.ok(plazaShop.designateStageForecourt([{x:5,z:-16},{x:6,z:-16}]).ok)
+  assert.ok(plazaShop.place('food',7,-16).ok)
+  const remoteStand=plazaState.buildings.find(building=>building.kind==='food')!
+  plazaState.festival.infrastructure.depots.push({
+    id:'plaza-pad',x:1,z:-20,role:'delivery',distribution:'shops',
+    stock:{food:80,drinks:0,water:0},minimum:{food:80,drinks:0,water:0},
+  })
+  assert.ok(plazaShop.manageFestival({type:'depotSettings',depotId:'plaza-pad',distribution:'shops',workers:1}).ok)
+  const plazaWalk=(start:any,goals:any)=>(plazaShop as any).findPath(start,goals,false,false,false,false,true,undefined,true)
+  for (let n=0;n<200;n+=1) updateDepotCarriers(plazaState,1,plazaWalk,(from,to)=>(plazaShop as any).canCarrierStep(from,to))
+  assert.ok(
+    (plazaState.festival.infrastructure.shops[remoteStand.id]?.food??0)>0,
+    'delivery workers take goods across the dance floor to a stall without a path edge',
   )
 
   console.log('PASS planned festival start, stand clearance, staff gates, automatic depot delivery, stock conservation and cleaning chain')

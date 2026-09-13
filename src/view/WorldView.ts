@@ -141,7 +141,7 @@ const WALK_LOOK_SENSITIVITY = 0.0024
 const WALK_BLOCKED_KINDS = new Set<string>([
   'food', 'toilet', 'ride', 'alcohol', 'securityGate', 'tree', 'hedge', 'shrub', 'rock', 'statue',
   'picnicTable', 'parasol', 'fence', 'stage', 'directionalSpeaker', 'omniSpeaker', 'ambulanceGarage',
-  'busStop', 'busDepot', 'wasteDepot', 'generator', 'backupGenerator', 'foh', 'delayTower',
+  'busStop', 'busDepot', 'wasteDepot', 'specialDepot', 'generator', 'backupGenerator', 'foh', 'delayTower',
   'videoWall', 'laserShow', 'fireworkBattery',
 ])
 export type PersonPreviewMode = 'map' | 'front'
@@ -1414,6 +1414,7 @@ export class WorldView {
         item.kind === 'ambulanceGarage' ||
         item.kind === 'busDepot' ||
         item.kind === 'wasteDepot' ||
+        item.kind === 'specialDepot' ||
         item.kind === 'busStop'
       ) {
         return

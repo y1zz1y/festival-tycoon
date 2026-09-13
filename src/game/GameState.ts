@@ -47,6 +47,7 @@ import {
   abandonVisitorCamp,
   CampingSystem,
   decayUnclaimedInstallations,
+  installationIsClaimed,
   isCollectibleCamp,
 } from './camping'
 import type {
@@ -138,6 +139,7 @@ import {
   cellKey as roadCellKey,
   createDefaultLogisticsSnapshot,
   createRoadGraph,
+  DIRECTION_OFFSETS,
   directionBit,
   findRoadRoute,
   isRoadDirectionAllowed,
@@ -458,6 +460,7 @@ const PEDESTRIAN_SOLID_KINDS = new Set<BuildingKind>([
   'ambulanceGarage',
   'busDepot',
   'wasteDepot',
+  'specialDepot',
   'generator',
   'backupGenerator',
   'foh',
@@ -630,6 +633,7 @@ export class GameState {
   private readonly neighborScratch: Cell[] = []
   private readonly neighborSeen = new Set<number>()
   private readonly pedestrianPathScratch = createPathScratch<Cell>()
+  private readonly sweeperPathScratch = createPathScratch<Cell>()
   private readonly pedestrianPathCache = new Map<string, { path: readonly Cell[] | null; expires: number }>()
   private pedestrianNav = new Map<number, PedestrianNavNode>()
   private pedestrianNavKey = ''
@@ -683,6 +687,8 @@ export class GameState {
   private turnHashes = new Map<number, number>()
   private optimisticCommandSequence = 0
   private optimisticCommands = new Map<string, GameCommand>()
+  private claimedTentCellsCache: Set<string> | null = null
+  private visitorsOnCellsThisTick: Set<string> | null = null
 
   constructor(snapshot?: GameSnapshot) {
     this.state = snapshot
@@ -763,6 +769,7 @@ export class GameState {
       this.state.logistics,
     )
     this.state.logistics.wasteDepots ??= []
+    this.state.logistics.specialDepots ??= []
     this.state.terrain = normalizeTerrain(this.state.terrain)
     this.state.power = normalizePower(this.state.power)
     this.rebuildTerrainCache()
@@ -2987,6 +2994,7 @@ export class GameState {
     }
     if (kind === 'busDepot') return this.placeBusDepot(x, z)
     if (kind === 'wasteDepot') return this.placeWasteDepot(x, z)
+    if (kind === 'specialDepot') return this.placeSpecialDepot(x, z)
     if (kind === 'busStop') return this.placeBusStop(x, z)
     const result = this.canPlace(kind, x, z, decorationSlot)
     if (!result.ok) return result
@@ -3107,6 +3115,32 @@ export class GameState {
     return { ok: true, message: '2×2-Mülldepot gebaut' }
   }
 
+  private placeSpecialDepot(x: number, z: number): ActionResult {
+    const footprint = this.createFootprint(x, z, 3)
+    const result = this.canPlaceLogisticsFootprint(
+      footprint,
+      BUILDINGS.specialDepot.cost,
+      'path',
+    )
+    if (!result.ok) return result
+    footprint.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
+    const id = this.nextId('special-depot')
+    this.state.money -= BUILDINGS.specialDepot.cost
+    this.state.logistics.specialDepots.push({ id, x, z, vehicleIds: [] })
+    this.state.buildings.push({
+      id,
+      kind: 'specialDepot',
+      x,
+      z,
+      rotation: this.state.buildRotation,
+      elevation: 0,
+      price: 0,
+    })
+    this.refreshPower()
+    this.emit()
+    return { ok: true, message: '3×3-Betriebshof gebaut. Saugreiniger fahren von hier auf den Wegen, halten vor Besuchern und machen beim Fahren Lärm.' }
+  }
+
   private placeBusStop(x: number, z: number): ActionResult {
     const sidewalk = this.getPathAt(x, z, 0)
     if (
@@ -3183,6 +3217,13 @@ export class GameState {
           x < depot.x + 2 &&
           z >= depot.z &&
           z < depot.z + 2,
+      ) ||
+      this.state.logistics.specialDepots.some(
+        (depot) =>
+          x >= depot.x &&
+          x < depot.x + 3 &&
+          z >= depot.z &&
+          z < depot.z + 3,
       )
     )
   }
@@ -3190,6 +3231,7 @@ export class GameState {
   private canPlaceLogisticsFootprint(
     footprint: readonly RoadPosition[],
     cost: number,
+    access: 'road' | 'path' = 'road',
   ): ActionResult {
     const clearCost = footprint.reduce(
       (total, cell) => total + this.getTreeClearCost(cell.x, cell.z, 0, 1),
@@ -3221,17 +3263,33 @@ export class GameState {
     ) {
       return { ok: false, message: 'Die gesamte Fläche muss frei sein' }
     }
-    const adjacentRoad = footprint.some((cell) =>
+    const adjacentAccess = footprint.some((cell) =>
       [
         [0, 1],
         [1, 0],
         [0, -1],
         [-1, 0],
-      ].some(([dx, dz]) => this.getRoadCellAt(cell.x + dx!, cell.z + dz!)),
+      ].some(([dx, dz]) => {
+        const x = cell.x + dx!
+        const z = cell.z + dz!
+        if (access === 'path') {
+          const path =
+            this.getPathAt(x, z, this.getTerrainHeight(x, z)) ??
+            this.getPathAt(x, z)
+          return Boolean(path && path.pathType === 'normal')
+        }
+        return Boolean(this.getRoadCellAt(x, z))
+      }),
     )
-    return adjacentRoad
+    return adjacentAccess
       ? { ok: true, message: 'Bau möglich' }
-      : { ok: false, message: 'Das Gebäude benötigt einen Straßenanschluss' }
+      : {
+          ok: false,
+          message:
+            access === 'path'
+              ? 'Das Gebäude benötigt einen Wegeanschluss'
+              : 'Das Gebäude benötigt einen Straßenanschluss',
+        }
   }
 
   buyAmbulance(garageId: string): ActionResult {
@@ -3324,6 +3382,53 @@ export class GameState {
     )
     this.emit()
     return { ok: true, message: 'Müllfahrzeug verkauft' }
+  }
+
+  buySweeper(depotId: string): ActionResult {
+    const depot = this.state.logistics.specialDepots.find(
+      (candidate) => candidate.id === depotId,
+    )
+    if (!depot) return { ok: false, message: 'Betriebshof nicht gefunden' }
+    if (depot.vehicleIds.length >= 4) {
+      return { ok: false, message: 'In diesem Betriebshof stehen bereits vier Spezialfahrzeuge' }
+    }
+    if (this.state.money < SIMULATION_CONFIG.logistics.sweeperCost) {
+      return { ok: false, message: 'Nicht genug Geld für den Saugreiniger' }
+    }
+    const access = this.getLogisticsPathAccess(depot, 3)
+    if (!access) return { ok: false, message: 'Der Betriebshof hat keinen Wegeanschluss' }
+    const id = this.nextId('sweeper')
+    this.state.money -= SIMULATION_CONFIG.logistics.sweeperCost
+    depot.vehicleIds.push(id)
+    this.state.logistics.roadVehicles.push(
+      this.createRoadVehicle(id, 'sweeper', access),
+    )
+    this.emit()
+    return { ok: true, message: `Saugreiniger ${depot.vehicleIds.length} gekauft` }
+  }
+
+  sellSweeper(depotId: string): ActionResult {
+    const depot = this.state.logistics.specialDepots.find(
+      (candidate) => candidate.id === depotId,
+    )
+    if (!depot) return { ok: false, message: 'Betriebshof nicht gefunden' }
+    const vehicleId = depot.vehicleIds.at(-1)
+    if (!vehicleId) return { ok: false, message: 'Hier steht kein Spezialfahrzeug' }
+    const sweeper = this.state.logistics.roadVehicles.find(
+      (vehicle) => vehicle.id === vehicleId && vehicle.kind === 'sweeper',
+    )
+    if (!sweeper || sweeper.state !== 'idle' || sweeper.cargo > 0) {
+      return { ok: false, message: 'Der Saugreiniger ist unterwegs oder noch beladen' }
+    }
+    depot.vehicleIds = depot.vehicleIds.filter((id) => id !== vehicleId)
+    this.state.logistics.roadVehicles =
+      this.state.logistics.roadVehicles.filter((vehicle) => vehicle.id !== vehicleId)
+    this.state.money += Math.floor(
+      SIMULATION_CONFIG.logistics.sweeperCost *
+        SIMULATION_CONFIG.logistics.busResaleFraction,
+    )
+    this.emit()
+    return { ok: true, message: 'Saugreiniger verkauft' }
   }
 
   sellBus(depotId: string): ActionResult {
@@ -3474,7 +3579,7 @@ export class GameState {
 
   private createRoadVehicle(
     id: string,
-    kind: 'ambulance' | 'bus' | 'garbageTruck',
+    kind: 'ambulance' | 'bus' | 'garbageTruck' | 'sweeper',
     position: RoadPosition,
   ): RoadVehicle {
     return {
@@ -3504,6 +3609,94 @@ export class GameState {
   ): RoadPosition | null {
     return this.createFootprint(building.x, building.z, size)
       .flatMap((cell) => this.getAdjacentRoadPositions(cell))[0] ?? null
+  }
+
+  private getLogisticsPathAccess(
+    building: RoadPosition,
+    size: number,
+  ): Cell | null {
+    return (
+      this.createFootprint(building.x, building.z, size)
+        .flatMap((cell) => this.getAdjacentPathCells(cell))[0] ?? null
+    )
+  }
+
+  private getAdjacentPathCells(cell: { x: number; z: number }): Cell[] {
+    const cells: Cell[] = []
+    for (const [dx, dz] of [
+      [0, 1],
+      [1, 0],
+      [0, -1],
+      [-1, 0],
+    ] as const) {
+      const x = cell.x + dx
+      const z = cell.z + dz
+      const path =
+        this.getPathAt(x, z, this.getTerrainHeight(x, z)) ?? this.getPathAt(x, z)
+      if (path && path.pathType === 'normal') {
+        cells.push({ x: path.x, z: path.z, elevation: path.elevation })
+      }
+    }
+    return cells
+  }
+
+  private isSweeperDriveCell(x: number, z: number, elevation?: number): boolean {
+    if (this.claimedTentCellKeys().has(roadCellKey(x, z))) return false
+    if (this.getStageForecourtCellAt(x, z)) return true
+    const path =
+      elevation === undefined
+        ? this.getPathAt(x, z, this.getTerrainHeight(x, z)) ?? this.getPathAt(x, z)
+        : this.getPathAt(x, z, elevation) ?? this.getPathAt(x, z)
+    return Boolean(path && path.pathType === 'normal')
+  }
+
+  private getSweeperAccessCells(cell: { x: number; z: number; elevation?: number }): Cell[] {
+    const cells: Cell[] = []
+    const seen = new Set<string>()
+    const add = (x: number, z: number, elevation: number) => {
+      if (!this.isSweeperDriveCell(x, z, elevation)) return
+      const key = `${x}:${z}:${elevation}`
+      if (seen.has(key)) return
+      seen.add(key)
+      cells.push({ x, z, elevation })
+    }
+    const here =
+      cell.elevation ??
+      this.getPathAt(cell.x, cell.z, this.getTerrainHeight(cell.x, cell.z))?.elevation ??
+      this.getTerrainHeight(cell.x, cell.z)
+    add(cell.x, cell.z, here)
+    for (const [dx, dz] of [
+      [0, 1],
+      [1, 0],
+      [0, -1],
+      [-1, 0],
+    ] as const) {
+      const x = cell.x + dx
+      const z = cell.z + dz
+      const path =
+        this.getPathAt(x, z, this.getTerrainHeight(x, z)) ?? this.getPathAt(x, z)
+      add(x, z, path?.elevation ?? this.getTerrainHeight(x, z))
+    }
+    return cells
+  }
+
+  private canCarrierStep(
+    from: { x: number; z: number; elevation: number },
+    to: { x: number; z: number; elevation: number },
+  ): boolean {
+    if (this.isPedestrianEdgeBlocked(from, to)) return false
+    if (this.isPedestrianSolidAt(to.x, to.z, to.elevation)) return false
+    const toPath = this.getPathAt(to.x, to.z, to.elevation)
+    if (toPath) {
+      return this.canTraversePath(
+        this.getPathAt(from.x, from.z, from.elevation),
+        toPath,
+        from.x,
+        from.z,
+        false,
+      )
+    }
+    return Boolean(this.getStageForecourtCellAt(to.x, to.z))
   }
 
   placePathSegment(
@@ -3872,6 +4065,18 @@ export class GameState {
           (candidate) => candidate.id !== building.id,
         )
     }
+    if (building.kind === 'specialDepot') {
+      const depot = this.state.logistics.specialDepots.find(
+        (candidate) => candidate.id === building.id,
+      )
+      if (depot?.vehicleIds.length) {
+        return { ok: false, message: 'Vor dem Abriss müssen alle Spezialfahrzeuge entfernt werden' }
+      }
+      this.state.logistics.specialDepots =
+        this.state.logistics.specialDepots.filter(
+          (candidate) => candidate.id !== building.id,
+        )
+    }
     this.state.buildings = this.state.buildings.filter((item) => item.id !== building.id)
     if(building.stageDesign)syncStageAudience(this.state)
     if (
@@ -3980,7 +4185,7 @@ export class GameState {
     }
     this.enforceDayPlan()
     updateFestival(this.state)
-    updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, false, undefined, true), (a, b) => !this.isPedestrianEdgeBlocked(a, b) && !this.isPedestrianSolidAt(b.x, b.z, b.elevation) && this.canTraversePath(this.getPathAt(a.x, a.z, a.elevation), this.getPathAt(b.x, b.z, b.elevation)!, a.x, a.z, false))
+    updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, true, undefined, true), (a, b) => this.canCarrierStep(a, b))
 
     while (this.spawnMinutes >= VISITOR_SPAWN_INTERVAL_MINUTES) {
       this.spawnMinutes -= VISITOR_SPAWN_INTERVAL_MINUTES
@@ -4077,6 +4282,8 @@ export class GameState {
   }
 
   private updateLogistics(minutes: number): void {
+    this.claimedTentCellsCache = null
+    this.visitorsOnCellsThisTick = null
     const logistics = this.state.logistics
     const occupied = new Map<string, string>()
     const removedVehicles = new Set<string>()
@@ -4110,6 +4317,7 @@ export class GameState {
       pedestrians.push(visitor)
       pedestriansByCell.set(key, pedestrians)
     })
+    this.visitorsOnCellsThisTick = new Set(pedestriansByCell.keys())
     logistics.parkingCells.forEach((parking) => {
       if (parking.occupiedBy && !vehicleIds.has(parking.occupiedBy)) {
         parking.occupiedBy = null
@@ -4142,7 +4350,7 @@ export class GameState {
           }
         }
       }
-      if (vehicle.cell && vehicle.state !== 'parked') {
+      if (vehicle.cell && vehicle.state !== 'parked' && vehicle.kind !== 'sweeper') {
         occupied.set(
           roadCellKey(vehicle.cell.x, vehicle.cell.z),
           vehicle.id,
@@ -4169,6 +4377,10 @@ export class GameState {
           return
         }
       }
+      if (vehicle.kind === 'sweeper') {
+        this.updateSweeper(vehicle, minutes)
+        return
+      }
       if (vehicle.kind === 'visitorCar' && vehicle.state === 'waiting') {
         if (
           this.state.visitors.some(
@@ -4194,22 +4406,17 @@ export class GameState {
           vehicle.resumeState = null
           vehicle.waitMinutes = 0
         } else {
+          const canSearch = parkingSearches < 2
           this.assignVisitorCarParking(
             vehicle,
             minutes,
             removedVisitors,
             removedGroups,
             removedVehicles,
-            parkingSearches < 1,
+            canSearch,
           )
-          if (
-            vehicle.state === 'waiting' &&
-            !vehicle.parkingCell &&
-            parkingSearches < 1
-          ) {
-            parkingSearches += 1
-          }
-          return
+          if (canSearch) parkingSearches += 1
+          if (vehicle.state === 'waiting') return
         }
       }
 
@@ -4259,16 +4466,20 @@ export class GameState {
           removedVehicles.add(vehicle.id)
           if (vehicle.groupId) removedGroups.add(vehicle.groupId)
         } else if (vehicle.kind === 'visitorCar') {
-          this.finishVehicleParking(vehicle)
+          if (vehicle.parkingCell) this.finishVehicleParking(vehicle)
+          else {
+            vehicle.state = 'waiting'
+            vehicle.route = []
+          }
         } else {
           vehicle.state = 'idle'
         }
         return
       }
       const nextKey = roadCellKey(next.x, next.z)
-      if (this.state.festival.infrastructure.trucks.some(t => t.x === next.x && t.z === next.z)) return
+      const truckBlocks = this.state.festival.infrastructure.trucks.some(t => t.x === next.x && t.z === next.z)
       const blocker = occupied.get(nextKey)
-      if (blocker && blocker !== vehicle.id) {
+      if (truckBlocks || (blocker && blocker !== vehicle.id)) {
         vehicle.speed = 0
         vehicle.waitMinutes += minutes
         if (
@@ -4372,8 +4583,10 @@ export class GameState {
           })
           removedVehicles.add(vehicle.id)
           if (vehicle.groupId) removedGroups.add(vehicle.groupId)
-        } else {
+        } else if (vehicle.parkingCell) {
           this.finishVehicleParking(vehicle)
+        } else {
+          vehicle.state = 'waiting'
         }
       }
     })
@@ -4448,7 +4661,12 @@ export class GameState {
       removedVehicles.add(vehicle.id)
       return
     }
-    if (!canSearch) return
+    if (!canSearch) {
+      if (this.isVisitorCarOnIngress(vehicle) && vehicle.route.length === 0) {
+        this.sendVisitorCarCirculating(vehicle)
+      }
+      return
+    }
     if (group.state === 'waiting-for-parking') {
       group.parkingWaitMinutes += minutes
       vehicle.waitMinutes += minutes
@@ -4504,9 +4722,186 @@ export class GameState {
           0,
           visitor.motivation - minutes * 0.018,
         )
-        visitor.thought = 'Wir finden einfach keinen freien Parkplatz.'
+        visitor.thought = this.isVisitorCarHoldingNearParking(vehicle)
+          ? 'Wir warten vor dem Parkplatz, bis einer frei wird.'
+          : 'Wir fahren erstmal weiter und suchen einen freien Parkplatz.'
       }
     })
+    if (
+      this.isVisitorCarOnIngress(vehicle) ||
+      !this.isVisitorCarHoldingNearParking(vehicle)
+    ) {
+      this.sendVisitorCarCirculating(vehicle)
+    }
+  }
+
+  private dispatchIncomingVisitorCar(vehicle: RoadVehicle): void {
+    const unused = new Set<string>()
+    this.assignVisitorCarParking(vehicle, 0, unused, unused, unused, true)
+    if (vehicle.state === 'waiting' && vehicle.route.length === 0) {
+      this.sendVisitorCarCirculating(vehicle)
+    }
+  }
+
+  private isVisitorCarOnIngress(vehicle: RoadVehicle): boolean {
+    const cell = vehicle.cell ?? vehicle.position
+    return cell.z === -this.getWorldSize() / 2 && cell.x >= -3 && cell.x <= 2
+  }
+
+  private isVisitorCarHoldingNearParking(vehicle: RoadVehicle): boolean {
+    const cell = vehicle.cell ?? vehicle.position
+    return this.state.logistics.parkingCells.some((parking) =>
+      this.getAdjacentRoadPositions(parking).some(
+        (approach) => approach.x === cell.x && approach.z === cell.z,
+      ),
+    )
+  }
+
+  private releaseVisitorCarParking(vehicle: RoadVehicle): void {
+    if (!vehicle.parkingCell) return
+    const parking = this.state.logistics.parkingCells.find(
+      (cell) =>
+        cell.x === vehicle.parkingCell?.x &&
+        cell.z === vehicle.parkingCell?.z &&
+        cell.occupiedBy === vehicle.id,
+    )
+    if (parking) parking.occupiedBy = null
+    vehicle.parkingCell = null
+    if (vehicle.target?.kind === 'parking') vehicle.target = null
+  }
+
+  private sendVisitorCarCirculating(
+    vehicle: RoadVehicle,
+    blockedCells?: ReadonlySet<string>,
+  ): boolean {
+    const plan = this.findVisitorCarCirculation(vehicle, blockedCells)
+    if (plan) {
+      vehicle.route = plan.route
+      vehicle.target = plan.target
+      vehicle.state = plan.route.length > 0 ? 'driving' : 'waiting'
+      vehicle.waitMinutes = 0
+      return plan.route.length > 0 || vehicle.state === 'waiting'
+    }
+    return this.nudgeVehicleAlongRoad(vehicle, blockedCells)
+  }
+
+  private findVisitorCarCirculation(
+    vehicle: RoadVehicle,
+    blockedCells?: ReadonlySet<string>,
+  ): { route: RoadPosition[]; target: NonNullable<RoadVehicle['target']> } | null {
+    const start = vehicle.cell ?? vehicle.position
+    const edgeZ = -this.getWorldSize() / 2
+    const taken = new Set(
+      this.state.logistics.roadVehicles
+        .filter(
+          (other) =>
+            other.id !== vehicle.id &&
+            other.cell &&
+            other.state !== 'parked',
+        )
+        .map((other) => roadCellKey(other.cell!.x, other.cell!.z)),
+    )
+    blockedCells?.forEach((key) => taken.add(key))
+    const holdFor = new Map<string, { x: number; z: number }>()
+    const holds: RoadPosition[] = []
+    for (const parking of this.state.logistics.parkingCells) {
+      for (const approach of this.getAdjacentRoadPositions(parking)) {
+        const key = roadCellKey(approach.x, approach.z)
+        if (approach.x === start.x && approach.z === start.z) continue
+        if (taken.has(key) || holdFor.has(key)) continue
+        holdFor.set(key, { x: parking.x, z: parking.z })
+        holds.push(approach)
+      }
+    }
+    holds.sort(
+      (left, right) =>
+        Math.abs(left.x - start.x) +
+        Math.abs(left.z - start.z) -
+        (Math.abs(right.x - start.x) + Math.abs(right.z - start.z)),
+    )
+    const holdTargets = holds.slice(0, 8)
+    if (holdTargets.length) {
+      const route = findRoadRoute({
+        roadCells: this.state.logistics.roadCells,
+        graph: this.getRoadGraph(),
+        start,
+        targets: holdTargets,
+        initialDirection: this.getVehicleDirection(vehicle),
+        blockedCells,
+        allowUTurn: true,
+      })
+      if (route && route.length) {
+        const last = route.at(-1)!
+        const parking = holdFor.get(roadCellKey(last.x, last.z))
+        return {
+          route: route.map((cell) => ({ x: cell.x, z: cell.z })),
+          target: parking
+            ? { kind: 'hold', parkingCell: { ...parking } }
+            : { kind: 'cruise' },
+        }
+      }
+    }
+    const inland = this.state.logistics.roadCells
+      .filter((cell) => {
+        if (cell.x === start.x && cell.z === start.z) return false
+        const distance = Math.abs(cell.x - start.x) + Math.abs(cell.z - start.z)
+        return cell.z >= edgeZ + 2 && distance >= 3 && !taken.has(roadCellKey(cell.x, cell.z))
+      })
+      .sort(
+        (left, right) =>
+          right.z - left.z ||
+          Math.abs(left.x - start.x) +
+            Math.abs(left.z - start.z) -
+            (Math.abs(right.x - start.x) + Math.abs(right.z - start.z)),
+      )
+      .slice(0, 8)
+    const cruiseTargets = inland.length
+      ? inland
+      : this.state.logistics.roadCells
+          .filter(
+            (cell) =>
+              !(cell.x === start.x && cell.z === start.z) && cell.z > edgeZ,
+          )
+          .slice(0, 8)
+    if (!cruiseTargets.length) return null
+    const cruise = findRoadRoute({
+      roadCells: this.state.logistics.roadCells,
+      graph: this.getRoadGraph(),
+      start,
+      targets: cruiseTargets,
+      initialDirection: this.getVehicleDirection(vehicle),
+      blockedCells,
+      allowUTurn: true,
+    })
+    if (!cruise?.length) return null
+    return {
+      route: cruise.map((cell) => ({ x: cell.x, z: cell.z })),
+      target: { kind: 'cruise' },
+    }
+  }
+
+  private nudgeVehicleAlongRoad(
+    vehicle: RoadVehicle,
+    blockedCells?: ReadonlySet<string>,
+  ): boolean {
+    const start = vehicle.cell
+    if (!start) return false
+    const next = [
+      { x: start.x, z: start.z + 1 },
+      { x: start.x + 1, z: start.z },
+      { x: start.x - 1, z: start.z },
+      { x: start.x, z: start.z - 1 },
+    ].find(
+      (cell) =>
+        Boolean(this.getRoadCellAt(cell.x, cell.z)) &&
+        !blockedCells?.has(roadCellKey(cell.x, cell.z)),
+    )
+    if (!next) return false
+    vehicle.route = [{ x: next.x, z: next.z }]
+    if (vehicle.state === 'waiting') vehicle.state = 'driving'
+    if (vehicle.kind === 'visitorCar' && !vehicle.target) vehicle.target = { kind: 'cruise' }
+    vehicle.waitMinutes = 0
+    return true
   }
 
   private unstickVehicle(
@@ -4546,20 +4941,15 @@ export class GameState {
       }
       return
     }
-    if (vehicle.kind === 'visitorCar' && vehicle.parkingCell) {
+    if (vehicle.kind === 'visitorCar') {
       const reroute = this.findReachableParking(vehicle, blockedCells, true)
       if (reroute) {
         if (
+          !vehicle.parkingCell ||
           vehicle.parkingCell.x !== reroute.cell.x ||
           vehicle.parkingCell.z !== reroute.cell.z
         ) {
-          const previous = this.state.logistics.parkingCells.find(
-            (cell) =>
-              cell.x === vehicle.parkingCell?.x &&
-              cell.z === vehicle.parkingCell?.z &&
-              cell.occupiedBy === vehicle.id,
-          )
-          if (previous) previous.occupiedBy = null
+          this.releaseVisitorCarParking(vehicle)
           reroute.cell.occupiedBy = vehicle.id
           vehicle.parkingCell = { x: reroute.cell.x, z: reroute.cell.z }
           vehicle.target = {
@@ -4571,7 +4961,46 @@ export class GameState {
           x: cell.x,
           z: cell.z,
         }))
+        vehicle.state = vehicle.route.length > 0 ? 'driving' : 'parking'
         vehicle.waitMinutes = 0
+        return
+      }
+    }
+    const destination = vehicle.route.at(-1)
+    if (destination && vehicle.cell) {
+      const rebuilt = findRoadRoute({
+        roadCells: this.state.logistics.roadCells,
+        graph: this.getRoadGraph(),
+        start: vehicle.cell,
+        targets: [destination],
+        initialDirection: this.getVehicleDirection(vehicle),
+        blockedCells,
+        allowUTurn: true,
+      })
+      if (rebuilt && rebuilt.length) {
+        vehicle.route = rebuilt.map((cell) => ({ x: cell.x, z: cell.z }))
+        vehicle.waitMinutes = 0
+        if (vehicle.state === 'waiting') vehicle.state = 'driving'
+        return
+      }
+    }
+    if (vehicle.kind === 'visitorCar' && this.sendVisitorCarCirculating(vehicle, blockedCells)) {
+      return
+    }
+    if (this.nudgeVehicleAlongRoad(vehicle, blockedCells)) return
+    if (destination && vehicle.cell) {
+      const open = findRoadRoute({
+        roadCells: this.state.logistics.roadCells,
+        graph: this.getRoadGraph(),
+        start: vehicle.cell,
+        targets: [destination],
+        initialDirection: this.getVehicleDirection(vehicle),
+        allowUTurn: true,
+      })
+      if (open && open.length) {
+        vehicle.route = open.map((cell) => ({ x: cell.x, z: cell.z }))
+        vehicle.waitMinutes = 0
+        if (vehicle.state === 'waiting') vehicle.state = 'driving'
         return
       }
     }
@@ -4750,6 +5179,7 @@ export class GameState {
   private findGarbageTruckRoute(
     vehicle: RoadVehicle,
     targets: readonly RoadPosition[],
+    blockedCells?: ReadonlySet<string>,
   ): RoadPosition[] | null {
     if (!vehicle.cell || targets.length === 0) return null
     const graph = this.getRoadGraph()
@@ -4767,6 +5197,7 @@ export class GameState {
         graph,
         start: vehicle.cell,
         targets,
+        blockedCells,
         initialDirection: attempt.initialDirection,
         allowUTurn: attempt.allowUTurn,
       })
@@ -4930,6 +5361,429 @@ export class GameState {
     vehicle.route = route ?? []
     vehicle.state = route ? 'returning' : 'idle'
     vehicle.resumeState = null
+  }
+
+  private claimedTentCellKeys(): Set<string> {
+    if (this.claimedTentCellsCache) return this.claimedTentCellsCache
+    const living = new Set(this.state.visitors.map((visitor) => visitor.id))
+    const keys = new Set<string>()
+    this.state.campInstallations.forEach((installation) => {
+      if (installation.kind !== 'tent') return
+      if (!installationIsClaimed(installation, living)) return
+      keys.add(roadCellKey(installation.cell.x, installation.cell.z))
+    })
+    this.claimedTentCellsCache = keys
+    return keys
+  }
+
+  private updateSweeper(vehicle: RoadVehicle, minutes: number): void {
+    if (vehicle.state === 'waiting') {
+      vehicle.waitMinutes -= minutes
+      if (vehicle.waitMinutes <= 0) this.continueSweeper(vehicle)
+      return
+    }
+    if (vehicle.state === 'idle') this.dispatchSweeper(vehicle)
+    if (!vehicle.route.length) {
+      if (vehicle.state !== 'idle') this.finishSweeperLeg(vehicle)
+      return
+    }
+    const path = vehicle.cell
+      ? this.getPathAt(
+          vehicle.cell.x,
+          vehicle.cell.z,
+          this.getTerrainHeight(vehicle.cell.x, vehicle.cell.z),
+        ) ?? this.getPathAt(vehicle.cell.x, vehicle.cell.z)
+      : undefined
+    const mudSlowdown =
+      vehicle.cell && this.isMudTerrain(vehicle.cell.x, vehicle.cell.z)
+        ? SIMULATION_CONFIG.terrain.mudMoveMultiplier
+        : 1
+    const footSpeed = vehicle.cell
+      ? wayInfo(
+          this.state,
+          vehicle.cell.x,
+          vehicle.cell.z,
+          'foot',
+          path?.wayType,
+        ).speed
+      : 1
+    vehicle.speed += minutes * mudSlowdown * Math.min(1, footSpeed)
+    const interval = SIMULATION_CONFIG.logistics.sweeperMoveIntervalMinutes
+    if (vehicle.speed < interval) return
+    vehicle.speed %= interval
+    const next = vehicle.route[0]
+    if (!next) {
+      this.finishSweeperLeg(vehicle)
+      return
+    }
+    if (this.claimedTentCellKeys().has(roadCellKey(next.x, next.z))) {
+      vehicle.route = []
+      vehicle.state = 'idle'
+      this.dispatchSweeper(vehicle)
+      return
+    }
+    if (this.visitorsOnCellsThisTick?.has(roadCellKey(next.x, next.z))) {
+      vehicle.speed = 0
+      return
+    }
+    const nextPath =
+      this.getPathAt(next.x, next.z, this.getTerrainHeight(next.x, next.z)) ??
+      this.getPathAt(next.x, next.z)
+    if (!nextPath || nextPath.pathType === 'queue') {
+      vehicle.route = []
+      return
+    }
+    vehicle.facing = Math.atan2(
+      next.x - (vehicle.cell?.x ?? vehicle.position.x),
+      next.z - (vehicle.cell?.z ?? vehicle.position.z),
+    )
+    vehicle.cell = { x: next.x, z: next.z }
+    vehicle.position = { x: next.x, z: next.z }
+    vehicle.route.shift()
+    vehicle.waitMinutes = 0
+    this.sweepAround(vehicle)
+    if (vehicle.cargo >= SIMULATION_CONFIG.logistics.sweeperCapacity) {
+      vehicle.route = []
+      this.sendSweeperToDump(vehicle)
+    }
+  }
+
+  private sweeperCell(vehicle: RoadVehicle): Cell {
+    const x = vehicle.cell?.x ?? vehicle.position.x
+    const z = vehicle.cell?.z ?? vehicle.position.z
+    const path =
+      this.getPathAt(x, z, this.getTerrainHeight(x, z)) ?? this.getPathAt(x, z)
+    return { x, z, elevation: path?.elevation ?? 0 }
+  }
+
+  private findSweeperRoute(
+    vehicle: RoadVehicle,
+    goals: readonly Cell[],
+  ): RoadPosition[] | null {
+    const start = this.sweeperCell(vehicle)
+    const usable = goals.filter(
+      (goal) => !this.claimedTentCellKeys().has(roadCellKey(goal.x, goal.z)),
+    )
+    if (usable.length === 0) return null
+    this.ensurePedestrianNav(this.lastNavRevision !== this.worldRevision)
+    const goalKeys = new Set(usable.map((goal) => this.packCell(goal)))
+    const path = findWeightedPath(
+      {
+        start,
+        key: (cell) => this.packCell(cell),
+        isGoal: (cell) => goalKeys.has(this.packCell(cell)),
+        maxVisited: 4000,
+        neighbors: (cell) =>
+          this.getPedestrianNeighbors(cell, {
+            allowQueue: false,
+            allowCamping: true,
+            allowMedical: true,
+            allowFestival: true,
+            allowGrass: false,
+            allowStaff: true,
+          }).filter((next) => this.isSweeperDriveCell(next.x, next.z, next.elevation)),
+        movementCost: (_from, to) =>
+          this.pedestrianNav.get(this.packCell(to))?.cost ??
+          this.getPedestrianSurfaceCost(to),
+        heuristic: (cell) => {
+          let nearest = Number.POSITIVE_INFINITY
+          for (const goal of usable) {
+            const distance =
+              Math.abs(goal.x - cell.x) + Math.abs(goal.z - cell.z)
+            if (distance < nearest) nearest = distance
+          }
+          return nearest
+        },
+      },
+      this.sweeperPathScratch,
+    )
+    if (!path?.length) return null
+    return path.map((cell) => ({ x: cell.x, z: cell.z }))
+  }
+
+  private dispatchSweeper(vehicle: RoadVehicle): void {
+    if (!vehicle.cell) return
+    if (vehicle.cargo >= SIMULATION_CONFIG.logistics.sweeperCapacity) {
+      this.sendSweeperToDump(vehicle)
+      return
+    }
+    const accesses = this.getSweeperDirtAccesses()
+    if (accesses.length === 0) {
+      if (vehicle.cargo > 0) {
+        this.sendSweeperToDump(vehicle)
+        return
+      }
+      this.sendSweeperToDepot(vehicle)
+      return
+    }
+    const here = accesses.find(
+      (access) =>
+        access.path.x === vehicle.cell?.x && access.path.z === vehicle.cell?.z,
+    )
+    if (here) {
+      vehicle.target = { kind: 'cell', x: here.dirt.x, z: here.dirt.z }
+      vehicle.route = []
+      vehicle.state = 'responding'
+      return
+    }
+    const route = this.findSweeperRoute(
+      vehicle,
+      accesses.map((access) => access.path),
+    )
+    if (!route?.length) return
+    const last = route.at(-1) ?? vehicle.cell
+    const dirt =
+      accesses.find(
+        (access) => access.path.x === last.x && access.path.z === last.z,
+      )?.dirt ?? accesses[0]?.dirt
+    if (!dirt) return
+    vehicle.target = { kind: 'cell', x: dirt.x, z: dirt.z }
+    vehicle.route = route
+    vehicle.state = 'responding'
+  }
+
+  private getSweeperDirtAccesses(): Array<{
+    dirt: { x: number; z: number }
+    path: Cell
+  }> {
+    const blocked = this.claimedTentCellKeys()
+    const accesses: Array<{ dirt: { x: number; z: number }; path: Cell }> = []
+    const seen = new Set<string>()
+    this.state.incidents.forEach((incident) => {
+      if (incident.kind !== 'litter' && incident.kind !== 'vomit') return
+      if (incident.severity <= 0) return
+      if (blocked.has(roadCellKey(incident.x, incident.z))) return
+      const paths: Cell[] = []
+      this.getSweeperAccessCells(incident).forEach((path) => {
+        if (!blocked.has(roadCellKey(path.x, path.z))) paths.push(path)
+      })
+      paths.forEach((path) => {
+        const key = `${path.x}:${path.z}:${incident.x}:${incident.z}`
+        if (seen.has(key)) return
+        seen.add(key)
+        accesses.push({ dirt: { x: incident.x, z: incident.z }, path })
+      })
+    })
+    return accesses
+  }
+
+  private finishSweeperLeg(vehicle: RoadVehicle): void {
+    if (vehicle.state === 'responding') {
+      if (vehicle.cell && vehicle.target?.kind === 'cell') {
+        vehicle.facing = Math.atan2(
+          vehicle.target.x - vehicle.cell.x,
+          vehicle.target.z - vehicle.cell.z,
+        )
+      }
+      this.sweepAround(vehicle)
+      if (vehicle.cargo >= SIMULATION_CONFIG.logistics.sweeperCapacity) {
+        this.sendSweeperToDump(vehicle)
+        return
+      }
+      const remaining = this.getSweeperDirtAccesses().filter(
+        (access) =>
+          access.path.x !== vehicle.cell?.x || access.path.z !== vehicle.cell?.z,
+      )
+      if (remaining.length > 0) {
+        const route = this.findSweeperRoute(
+          vehicle,
+          remaining.map((access) => access.path),
+        )
+        if (route?.length) {
+          const last = route.at(-1) ?? vehicle.cell
+          const dirt = last
+            ? remaining.find(
+                (access) =>
+                  access.path.x === last.x && access.path.z === last.z,
+              )?.dirt
+            : undefined
+          if (dirt) {
+            vehicle.target = { kind: 'cell', x: dirt.x, z: dirt.z }
+            vehicle.route = route
+            vehicle.state = 'responding'
+            return
+          }
+        }
+      }
+      if (vehicle.cargo > 0) {
+        this.sendSweeperToDump(vehicle)
+        return
+      }
+      this.sendSweeperToDepot(vehicle)
+      return
+    }
+    if (vehicle.state === 'returning' && vehicle.cargo > 0) {
+      this.depositSweeperCargo(vehicle)
+      vehicle.state = 'waiting'
+      vehicle.waitMinutes = SIMULATION_CONFIG.waste.truckUnloadMinutes
+      vehicle.resumeState = 'idle'
+      return
+    }
+    if (vehicle.target?.kind === 'depot') {
+      vehicle.state = 'idle'
+      vehicle.route = []
+      vehicle.resumeState = null
+      return
+    }
+    vehicle.state = 'idle'
+    vehicle.target = null
+    vehicle.route = []
+    vehicle.resumeState = null
+  }
+
+  private continueSweeper(vehicle: RoadVehicle): void {
+    if (!vehicle.cell) {
+      vehicle.state = 'idle'
+      return
+    }
+    if (vehicle.cargo > 0) {
+      this.sendSweeperToDump(vehicle)
+      return
+    }
+    if (this.getSweeperDirtAccesses().length > 0) {
+      vehicle.state = 'idle'
+      this.dispatchSweeper(vehicle)
+      return
+    }
+    this.sendSweeperToDepot(vehicle)
+  }
+
+  private sendSweeperToDump(vehicle: RoadVehicle): void {
+    if (!vehicle.cell) return
+    const accesses = this.getWasteDumpPathAccesses()
+    if (accesses.length === 0) {
+      vehicle.state = 'idle'
+      vehicle.route = []
+      return
+    }
+    const here = accesses.find(
+      (access) =>
+        access.path.x === vehicle.cell?.x && access.path.z === vehicle.cell?.z,
+    )
+    if (here) {
+      vehicle.target = { kind: 'wasteDump', x: here.dump.x, z: here.dump.z }
+      vehicle.route = []
+      vehicle.state = 'returning'
+      return
+    }
+    const route = this.findSweeperRoute(
+      vehicle,
+      accesses.map((access) => access.path),
+    )
+    if (!route?.length) {
+      vehicle.state = 'idle'
+      return
+    }
+    const last = route.at(-1) ?? vehicle.cell
+    const dump =
+      accesses.find(
+        (access) => access.path.x === last.x && access.path.z === last.z,
+      )?.dump ?? accesses[0]?.dump
+    if (!dump) return
+    vehicle.target = { kind: 'wasteDump', x: dump.x, z: dump.z }
+    vehicle.route = route
+    vehicle.state = 'returning'
+    vehicle.resumeState = null
+  }
+
+  private getWasteDumpPathAccesses(): Array<{
+    dump: WasteDumpCell
+    path: Cell
+  }> {
+    const seen = new Set<string>()
+    const accesses: Array<{ dump: WasteDumpCell; path: Cell }> = []
+    this.state.wasteDumpCells.forEach((dump) => {
+      this.getSweeperAccessCells(dump).forEach((path) => {
+        const key = `${path.x}:${path.z}:${path.elevation}`
+        if (seen.has(key)) return
+        seen.add(key)
+        accesses.push({ dump, path })
+      })
+    })
+    return accesses
+  }
+
+  private sendSweeperToDepot(vehicle: RoadVehicle): void {
+    if (!vehicle.cell) {
+      vehicle.state = 'idle'
+      return
+    }
+    const depot = this.state.logistics.specialDepots.find((candidate) =>
+      candidate.vehicleIds.includes(vehicle.id),
+    )
+    const access = depot ? this.getLogisticsPathAccess(depot, 3) : null
+    if (!depot || !access) {
+      vehicle.state = 'idle'
+      vehicle.target = null
+      vehicle.route = []
+      return
+    }
+    if (access.x === vehicle.cell.x && access.z === vehicle.cell.z) {
+      vehicle.state = 'idle'
+      vehicle.target = { kind: 'depot', depotId: depot.id }
+      vehicle.route = []
+      vehicle.resumeState = null
+      return
+    }
+    const route = this.findSweeperRoute(vehicle, [access])
+    if (!route?.length) {
+      vehicle.state = 'idle'
+      return
+    }
+    vehicle.route = route
+    vehicle.target = { kind: 'depot', depotId: depot.id }
+    vehicle.state = 'returning'
+    vehicle.resumeState = null
+  }
+
+  private depositSweeperCargo(vehicle: RoadVehicle): void {
+    if (vehicle.cargo <= 0) return
+    const truck = vehicle.cell ?? vehicle.position
+    const dump = [...this.state.wasteDumpCells].sort((left, right) => {
+      return (
+        Math.abs(left.x - truck.x) +
+        Math.abs(left.z - truck.z) -
+        (Math.abs(right.x - truck.x) + Math.abs(right.z - truck.z))
+      )
+    })[0]
+    if (!dump) return
+    dump.stored += vehicle.cargo
+    vehicle.cargo = 0
+  }
+
+  private sweepAround(vehicle: RoadVehicle): void {
+    if (!vehicle.cell) return
+    const blocked = this.claimedTentCellKeys()
+    const direction = this.getVehicleDirection(vehicle)
+    const forward = DIRECTION_OFFSETS[direction]
+    const right = DIRECTION_OFFSETS[(((direction + 1) % 4) as Direction)]
+    const width = SIMULATION_CONFIG.logistics.sweeperCleanWidth
+    const depth = SIMULATION_CONFIG.logistics.sweeperCleanDepth
+    const half = Math.floor(width / 2)
+    const cells = new Set<string>()
+    for (let step = 0; step <= depth; step += 1) {
+      for (let lateral = -half; lateral <= half; lateral += 1) {
+        const x = vehicle.cell.x + forward.x * step + right.x * lateral
+        const z = vehicle.cell.z + forward.z * step + right.z * lateral
+        if (blocked.has(roadCellKey(x, z))) continue
+        cells.add(roadCellKey(x, z))
+      }
+    }
+    const room = () =>
+      Math.max(0, SIMULATION_CONFIG.logistics.sweeperCapacity - vehicle.cargo)
+    this.state.incidents.forEach((incident) => {
+      if (incident.kind !== 'litter' && incident.kind !== 'vomit') return
+      if (!cells.has(roadCellKey(incident.x, incident.z))) return
+      const taken = Math.min(incident.severity, room())
+      if (taken <= 0) return
+      incident.severity -= taken
+      vehicle.cargo += taken
+    })
+    this.state.incidents = this.state.incidents.filter(
+      (incident) =>
+        (incident.kind !== 'litter' && incident.kind !== 'vomit') ||
+        incident.severity > 0,
+    )
   }
 
   private getWorldSouthEdge(): number {
@@ -5479,6 +6333,20 @@ export class GameState {
       this.state.campInstallations,
       this.state.wasteDumpCells,
       this.getWorldSize(),
+      this.state.logistics.roadVehicles
+        .filter(
+          (vehicle) =>
+            vehicle.kind === 'sweeper' &&
+            (vehicle.state === 'responding' || vehicle.state === 'returning'),
+        )
+        .map((vehicle) => {
+          const x = vehicle.cell?.x ?? vehicle.position.x
+          const z = vehicle.cell?.z ?? vehicle.position.z
+          const path =
+            this.getPathAt(x, z, this.getTerrainHeight(x, z)) ??
+            this.getPathAt(x, z)
+          return { x, z, elevation: path?.elevation ?? 0 }
+        }),
     )
     this.state.attractiveness = result.attractiveness
     this.state.partyMood = result.partyMood
@@ -6215,8 +7083,11 @@ export class GameState {
       }
       group.vehicleId = vehicle.id
       this.state.logistics.roadVehicles.push(vehicle)
+      this.dispatchIncomingVisitorCar(vehicle)
       members.forEach((visitor) => {
-        visitor.thought = 'Wir suchen mit dem Auto einen Parkplatz.'
+        visitor.thought = vehicle.parkingCell
+          ? 'Wir suchen mit dem Auto einen Parkplatz.'
+          : 'Kein freier Parkplatz – wir fahren erstmal weiter.'
       })
     }
   }
@@ -8996,7 +9867,7 @@ export class GameState {
       this.spreadConcertToplessFun(visitor, minutes)
       return
     }
-    if (visitor.audience === 'family' || !visitorLooksFemale(visitor.id)) return
+    if (visitor.audience === 'family') return
     if (this.rng.next() >= Math.min(1, minutes * atmosphere.concertToplessChancePerMinute)) return
     visitor.toplessMinutes = remaining
     visitor.needs.fun = Math.min(
@@ -10474,6 +11345,7 @@ export class GameState {
     const allowQueue = options.allowQueue ?? false
     const allowCamping = Boolean(options.allowCamping)
     const allowMedical = Boolean(options.allowMedical)
+    const allowFestival = Boolean(options.allowFestival)
     const allowGrass = options.allowGrass ?? true
     const ignoreDirectional = options.ignoreDirectionalRestrictions ?? false
     const campingHere = (node.flags & NAV_CAMPING) !== 0
@@ -10487,6 +11359,13 @@ export class GameState {
       if ((dest.flags & NAV_WATER) !== 0 && (dest.flags & NAV_PATH) === 0) continue
       if (!allowCamping && (dest.flags & NAV_CAMPING) !== 0) continue
       if (!allowMedical && (dest.flags & NAV_MEDICAL) !== 0) continue
+      if (
+        !allowFestival &&
+        (dest.flags & NAV_FORECOURT) !== 0 &&
+        (dest.flags & NAV_PATH) === 0
+      ) {
+        continue
+      }
       if (!allowGrass && (dest.flags & NAV_PAVED) === 0) continue
       if (campingHere && Math.abs(dest.cell.elevation - node.cell.elevation) >= 0.01) {
         continue
@@ -10755,6 +11634,9 @@ export class GameState {
         : roadCost
     }
     if (path) {
+      return mud ? SIMULATION_CONFIG.terrain.mudPavedCostMultiplier : 1
+    }
+    if (this.getStageForecourtCellAt(cell.x, cell.z)) {
       return mud ? SIMULATION_CONFIG.terrain.mudPavedCostMultiplier : 1
     }
     if (this.hasParkingAt(cell.x, cell.z)) {

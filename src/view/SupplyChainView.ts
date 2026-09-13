@@ -42,6 +42,11 @@ export class SupplyChainView {
       }
     }
     const stockIds=new Set<string>()
+    const paintBar=(model:Group,index:number,ratio:number,y:number)=>{
+      const fill=model.children[index] as Mesh
+      fill.scale.x=Math.max(.025,ratio);fill.position.set(-(1-ratio)*.32,y,.01)
+      ;(fill.material as MeshStandardMaterial).color.setHex(ratio<=0?0xe86e53:ratio<.25?0xe4b557:0x70c481)
+    }
     for(const b of s.buildings) {
       const kind=b.kind==='food'?'food':b.kind==='alcohol'?'drinks':b.kind==='toilet'?'water':null
       if(!kind) continue
@@ -49,10 +54,27 @@ export class SupplyChainView {
       let model=this.stockModels.get(b.id)
       if(!model) {model=new Group();this.box(model,[.68,.09,.05],[0,0,0],0x292d29);this.box(model,[.64,.065,.065],[0,0,.01],0x70c481);this.group.add(model);this.stockModels.set(b.id,model)}
       model.position.set(b.x+.5,b.elevation+1.1,b.z+.06)
-      const ratio=Math.min(1,(i.shops[b.id]?.[kind]??0)/40)
-      const fill=model.children[1] as Mesh
-      fill.scale.x=Math.max(.025,ratio);fill.position.x=-(1-ratio)*.32
-      ;(fill.material as MeshStandardMaterial).color.setHex(ratio<=0?0xe86e53:ratio<.25?0xe4b557:0x70c481)
+      paintBar(model,1,Math.min(1,(i.shops[b.id]?.[kind]??0)/40),0)
+    }
+    const supplies=['food','drinks','water'] as const
+    for(const depot of i.depots) {
+      stockIds.add(depot.id)
+      let model=this.stockModels.get(depot.id)
+      if(!model) {
+        const created=new Group()
+        supplies.forEach((_,index)=>{
+          const y=(1-index)*.12
+          this.box(created,[.68,.09,.05],[0,y,0],0x292d29)
+          this.box(created,[.64,.065,.065],[0,y,.01],0x70c481)
+        })
+        this.group.add(created);this.stockModels.set(depot.id,created)
+        model=created
+      }
+      model.position.set(depot.x+.5,getTerrainHeight(s.terrain,depot.x,depot.z)+1.25,depot.z+.06)
+      supplies.forEach((kind,index)=>{
+        const capacity=Math.max(depot.minimum[kind],200)
+        paintBar(model,index*2+1,Math.min(1,depot.stock[kind]/capacity),(1-index)*.12)
+      })
     }
     for(const [id,model] of this.stockModels) if(!stockIds.has(id)){disposeChildren(model);this.group.remove(model);this.stockModels.delete(id)}
     const stamp = `${planning}:${s.scenario.environment}:${s.scenario.worldSize}:${JSON.stringify(i.ground)}:${JSON.stringify(s.terrain.heights)}`

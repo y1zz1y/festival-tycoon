@@ -26,6 +26,7 @@ export const BUILDING_KINDS = [
   'busStop',
   'busDepot',
   'wasteDepot',
+  'specialDepot',
   'wasteBin',
   'generator',
   'backupGenerator',
@@ -216,6 +217,14 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
     height: 1.65,
     color: 0x4a5a3a,
     icon: '🚛',
+  },
+  specialDepot: {
+    kind: 'specialDepot',
+    name: 'Betriebshof',
+    ...SIMULATION_CONFIG.economy.buildings.specialDepot,
+    height: 1.7,
+    color: 0x5a6a72,
+    icon: '🧹',
   },
   wasteBin: {
     kind: 'wasteBin',

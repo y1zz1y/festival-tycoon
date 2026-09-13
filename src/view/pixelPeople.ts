@@ -28,15 +28,14 @@ export function createPersonGeometry(part: 'body' | 'femaleBody' | 'head' | 'leg
   if (cached) return cached
   const k = new ModelKit(), white = 0xffffff
   if (part === 'femaleBody') {
-    // Narrow waist, wider hips and a forward bust still read at crowd scale.
-    k.box(0, -.018, 0, .108, .092, .092, white)
-    k.box(0, .062, .016, .148, .078, .118, white)
-    for (const x of [-.042, .042]) k.box(x, .052, .08, .078, .066, .07, white)
-    for (const x of [-.088, .088]) k.box(x, .07, .004, .038, .058, .086, white)
-    k.box(0, -.098, .006, .188, .072, .124, white)
-    for (const x of [-.078, .078]) k.box(x, -.078, .02, .052, .042, .088, white)
-    k.box(0, .122, .01, .046, .02, .054, 0x77767c)
-    k.box(0, -.058, .008, .092, .012, .08, 0x6a5550)
+    // Hourglass: narrow waist, modest bust, hips without extra side pads.
+    k.box(0, -.025, 0, .112, .105, .098, white)
+    k.box(0, .065, .006, .148, .078, .106, white)
+    for (const x of [-.034, .034]) k.box(x, .048, .056, .054, .046, .042, white)
+    for (const x of [-.09, .09]) k.box(x, .066, 0, .038, .062, .086, white)
+    k.box(0, -.095, 0, .168, .062, .114, white)
+    k.box(0, .116, .008, .05, .012, .057, 0x77767c)
+    k.box(0, -.064, .003, .12, .014, .1, 0x70747b)
   } else if (part === 'body') {
     k.box(0, -.035, 0, .145, .18, .105, white)
     k.box(0, .063, 0, .183, .10, .115, white)
@@ -49,7 +48,7 @@ export function createPersonGeometry(part: 'body' | 'femaleBody' | 'head' | 'leg
     for (const x of [-.061, .061]) k.box(x, -.008, 0, .014, .032, .03, white)
     k.box(0, -.004, .061, .022, .026, .023, white)
     for (const x of [-.028, .028]) k.box(x, .018, .055, .012, .014, .007, 0x25272d)
-    k.box(0, -.038, .056, .027, .007, .007, 0x87554a)
+    k.box(0, -.046, .056, .022, .005, .006, 0xc4897a)
   } else if (part === 'leg') {
     k.box(0, -.114, 0, .056, .228, .063, white)
     k.box(0, -.226, 0, .058, .025, .065, 0x707680)
@@ -69,11 +68,11 @@ export function createNudeAnatomy(kind: 'breasts' | 'bust' | 'penis') {
   if (cached) return cached
   const k = new ModelKit(), skin = 0xffffff, tip = 0xc48a78
   if (kind === 'breasts' || kind === 'bust') {
-    for (const x of [-.043, .043]) {
-      k.box(x, .05, .086, .08, .068, .072, skin)
-      if (kind === 'breasts') k.box(x, .056, .12, .02, .018, .018, tip)
+    for (const x of [-.032, .032]) {
+      k.box(x, .046, .06, .052, .044, .044, skin)
+      if (kind === 'breasts') k.box(x, .05, .08, .012, .01, .01, tip)
     }
-    if (kind === 'bust') k.box(0, .046, .07, .05, .04, .05, skin)
+    if (kind === 'bust') k.box(0, .044, .05, .036, .03, .032, skin)
   } else {
     k.box(0, -.112, .046, .024, .052, .04, skin)
     k.box(0, -.142, .054, .018, .024, .03, skin)
@@ -92,7 +91,7 @@ export function createPersonDetails(variant: number, clothing = true) {
   if (female) {
     k.box(0, .686, 0, .138, .052, .126, hair)
     k.box(0, .624, -.058, .134, .118, .03, hair)
-    k.box(0, .598, .052, .086, .028, .02, hair)
+    k.box(0, .662, .058, .08, .022, .02, hair)
     if (variant === 1 || variant === 5) {
       k.box(0, .684, -.073, .073, .065, .055, hair)
       if (variant === 1) k.box(0, .587, -.087, .048, .15, .047, hair)
@@ -104,7 +103,6 @@ export function createPersonDetails(variant: number, clothing = true) {
     }
     if (variant === 4) for (const x of [-.027, 0, .027]) k.box(x, .697, .036, .021, .022, .024, 0xe9c682)
     for (const x of [-.058, .058]) k.box(x, .598, .042, .012, .016, .012, 0xe2c26b)
-    k.box(0, .548, .054, .046, .014, .016, variant % 2 ? 0x2b2430 : 0xe2c26b)
     if (clothing) {
       const neon = [0xce4d7a, 0x3c8f8a, 0xc45b2e, 0x6b4d93, 0xd4a24a, 0x2f6d9a, 0xb83d5a, 0x4a9b6e][variant]!
       const dark = 0x241c22
@@ -128,18 +126,10 @@ export function createPersonDetails(variant: number, clothing = true) {
         k.box(0, .458, .02, .142, .048, .112, neon)
         k.box(0, .428, .026, .108, .018, .092, neon)
       }
-      for (const x of [-.044, .044]) {
-        k.box(x, .062, .022, .074, .08, .11, dark)
-        k.box(x, .028, .036, .08, .028, .12, 0xe2c26b)
-      }
     } else {
       k.beam([-.055, .47, .08], [.055, .34, .086], .007, 0xe2c26b)
       k.beam([.055, .47, .08], [-.055, .34, .086], .007, 0xe2c26b)
       k.box(0, .34, .09, .02, .02, .012, 0xe2c26b)
-      for (const x of [-.044, .044]) {
-        k.box(x, .058, .024, .076, .086, .114, 0x1e1820)
-        k.box(x, .022, .04, .082, .026, .122, 0xe2c26b)
-      }
     }
   } else {
     k.box(0, .674, -.008, .12, .035, .115, hair)

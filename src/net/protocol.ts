@@ -71,6 +71,8 @@ type GameCommandAction =
   | { type: 'sellBus'; depotId: string }
   | { type: 'buyGarbageTruck'; depotId: string }
   | { type: 'sellGarbageTruck'; depotId: string }
+  | { type: 'buySweeper'; depotId: string }
+  | { type: 'sellSweeper'; depotId: string }
   | {
       type: 'createBusLine'
       name: string

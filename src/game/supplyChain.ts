@@ -160,7 +160,9 @@ export function updateSupplyChain(s: GameSnapshot, routeWalk: PedestrianRouter, 
   if (now - i.automaticAt >= 10) {
     i.automaticAt = now
     for (const depot of i.depots) for (const kind of Object.keys(SUPPLIES) as Supply[]) {
-      const pending = f.deliveries.filter(d => d.kind === kind).reduce((sum, d) => sum + d.quantity, 0) + i.depots.filter(d => d.id !== depot.id && (d.role === 'delivery' || d.distribution === 'relay')).reduce((sum,d) => sum+d.stock[kind],0) + i.routes.filter(r => r.automatic && r.kind === kind && r.job?.destinationId === depot.id).reduce((sum,r) => sum+r.cargo,0)
+      const inbound = f.deliveries.filter(d => d.kind === kind && (depot.role !== 'delivery' || d.depotId === depot.id)).reduce((sum, d) => sum + d.quantity, 0)
+      const fetchable = depot.role === 'delivery' ? 0 : i.depots.filter(d => d.id !== depot.id && (d.role === 'delivery' || d.distribution === 'relay')).reduce((sum,d) => sum+d.stock[kind],0)
+      const pending = inbound + fetchable + i.routes.filter(r => r.automatic && r.kind === kind && r.job?.destinationId === depot.id).reduce((sum,r) => sum+r.cargo,0)
       const need = depot.minimum[kind] - depot.stock[kind] - pending
       if (need > 0) { const result = orderGoods(s, kind, Math.max(50, Math.ceil(need)), 0, depot.id); if (!result.ok) i.status = result.message }
     }

@@ -3,6 +3,8 @@ import { GameState } from '../src/game/GameState'
 import { TRACK_PITCHES, createTrackPiece, computeTrackFrame, sampleCoasterTrack, type Coaster, type TrackAnchor } from '../src/game/coasters'
 import { campingBoundary } from '../src/view/campingGround'
 import { bungeeDrop, createBungeeModel, animateBungee, setBungeeJumper } from '../src/view/bungee'
+import { IncidentView, litterGroundOffset } from '../src/view/IncidentView'
+import { Box3, Mesh, Vector3 } from 'three'
 import { rollsBungeeNude, visitorLooksFemale } from '../src/game/rng'
 import { applyGameCommand } from '../src/net/commands'
 import { enableMultiplayerCommands } from '../src/net/bind'
@@ -119,7 +121,8 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
   const maleId = Array.from({ length: 40 }, (_, index) => `guest-${index}`).find((id) => !visitorLooksFemale(id))
   assert.equal(rollsBungeeNude(femaleId!, 0.05, 0.1), true)
   assert.equal(rollsBungeeNude(femaleId!, 0.5, 0.1), false)
-  assert.equal(rollsBungeeNude(maleId!, 0, 1), false)
+  assert.equal(rollsBungeeNude(maleId!, 0.05, 0.1), true)
+  assert.equal(rollsBungeeNude(maleId!, 0, 1), true)
 
   s.incidents.push({id:'debug-trash',kind:'litter',x:0,z:0} as any, {id:'debug-fire',kind:'fire',x:1,z:1} as any)
   s.campInstallations.push({id:'old',ownerId:'missing',contributorIds:[],kind:'tent',cell:{x:1,z:1},decay:0} as any)
@@ -137,5 +140,27 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
   client.placeBungee(14,0,24)
   assert.equal(sent.length,1); assert.equal(sent[0]!.type,'placeBungee')
   assert.equal(client.snapshot.buildings.at(-1)!.bungeeHeight,24)
+  const firstScrap=litterGroundOffset('pile-a',0)
+  assert.deepEqual(litterGroundOffset('pile-a',0),firstScrap,'litter offsets stay fixed for the same scrap')
+  assert.notDeepEqual(litterGroundOffset('pile-a',3),firstScrap,'later scraps land elsewhere on the tile')
+  assert.ok(Math.hypot(firstScrap.x,firstScrap.z)<0.42,'scraps stay on their cell')
+  const litterView=new IncidentView()
+  const pile={id:'pile-a',kind:'litter' as const,x:2,z:3,elevation:0,severity:1,ageMinutes:0}
+  litterView.update([pile])
+  let litterMeshes=0
+  litterView.group.traverse((object)=>{if(object instanceof Mesh)litterMeshes+=1})
+  assert.equal(litterMeshes,1,'one draw call per litter pile')
+  const light=new Box3().setFromObject(litterView.group.children[0]!)
+  litterView.update([{...pile,severity:8}])
+  litterMeshes=0
+  litterView.group.traverse((object)=>{if(object instanceof Mesh)litterMeshes+=1})
+  assert.equal(litterMeshes,1,'heavy litter still shares one mesh')
+  const heavy=new Box3().setFromObject(litterView.group.children[0]!)
+  const lightSize=light.getSize(new Vector3())
+  const heavySize=heavy.getSize(new Vector3())
+  assert.ok(
+    heavySize.x>lightSize.x+0.12 || heavySize.z>lightSize.z+0.12,
+    'heavy litter spreads across the tile instead of stacking',
+  )
   console.log('PASS grid-aligned coaster slopes and inversions, track cache edits, camping perimeter, scenery lines, bungee operation/save/multiplayer and debug cleanup')
 }
