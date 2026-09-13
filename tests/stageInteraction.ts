@@ -313,6 +313,15 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const migrated=migrateStageDesign(legacyDesign)
   assert.equal(migrated.parts[0]!.kind,'fullRange');assert.equal(stageDesignIssue(migrated),null,'a migrated legacy design validates again')
   assert.equal(migrateStageDesign(migrated),migrated,'migration is a no-op once nothing needs rewriting')
+  // The Themenbanner was dropped from the catalogue without a successor, so an old save simply
+  // loses it — the rest of the stage keeps loading rather than failing validation as a whole.
+  const bannerDesign=defaultStageDesign()
+  bannerDesign.parts.push({id:'bannerTruss',kind:'truss',axis:'y',brand:'budget',x:1,y:0,z:1,rotation:0,attachedTo:null,color:'#ffffff'})
+  bannerDesign.parts.push({id:'bannerPart',kind:'banner' as any,brand:'budget',x:1,y:1,z:1,rotation:0,attachedTo:'bannerTruss',color:'#abcdef'})
+  assert.ok(stageDesignIssue(bannerDesign),'the removed banner kind is rejected before migration')
+  const withoutBanner=migrateStageDesign(bannerDesign)
+  assert.deepEqual(withoutBanner.parts.map(p=>p.id),['bannerTruss'],'migration takes the banner out and leaves the rest of the stage standing')
+  assert.equal(stageDesignIssue(withoutBanner),null,'so a design saved with a banner still loads')
   // Likewise for saves made before a wall's LEDs were forced to face away from their truss: the
   // whole wall is turned round on load, chained modules included, not just the module bolted on.
   const backwardsDesign=defaultStageDesign()

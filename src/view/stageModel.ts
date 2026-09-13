@@ -16,7 +16,7 @@ const ALONG_AXES = {x:{x:1,y:0,z:0},y:{x:0,y:1,z:0},z:{x:0,y:0,z:1}} as const
 /** Colors used only by the floor slab/tiles, so its batched meshes can be found and hidden separately (e.g. when viewing from below). */
 const FLOOR_COLORS = new Set(['#75886a','#30394c','#485166','#515b70'])
 /** Half the height of each fixture's own body (matches its first box() call below), used to press it flush against a truss it is docked onto. */
-const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:.4,subwoofer:.45,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,banner:.6,star:.4}
+const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:.4,subwoofer:.45,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,star:.4}
 /** Top surface of a floor tile (the .24 base slab plus the .04 detail overlay from the floor loop below) — where a ground-standing fixture's own base belongs, matching stageBand.ts's world-map floor level. */
 const GROUND_Y=.28
 /** Thickness of a Pixel-LED-Wand module's backing plate — its LEDs sit on the front of it. */
@@ -544,8 +544,6 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         for(const fx of [-.16,.16])for(const fz of [-.12,.12])put(fx,-.14,fz,.05,.03,.05,foot) // feet
         const nozzle=new Vector3(0,-.03,.33).applyQuaternion(facingQuat).add(pivot)
         effect('fog',nozzle.x,nozzle.y,nozzle.z,'#c9d6dd',facing)
-      }else if(p.kind==='banner'){
-        box(ex,ey+.6,ez,.9,1.2,.1,'#141c29');for(let a=0;a<5;a++)for(let b=0;b<6;b++)box(ex+(a-2)*.16,ey+.15+b*.17,ez+.07,.14,.14,.03,(a+b)%3?c:'#f3dfb0')
       }else if(p.kind==='screen'){
         // A borderless LED wall module: a plain 1x1 slab — one cell wide, one cell tall, thin in
         // depth — carrying nothing but LEDs on a backing plate. No bezel, no corner clips,

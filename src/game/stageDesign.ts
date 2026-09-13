@@ -10,7 +10,6 @@ export const COMPONENTS = {
   fog: {name:'Nebelmaschine',cost:160,party:4,beauty:1,power:.8},
   laser: {name:'Laser',cost:340,party:7,beauty:3,power:.6},
   screen: {name:'Pixel-LED-Wand',cost:420,party:5,beauty:5,power:1.5},
-  banner: {name:'Themenbanner',cost:90,party:1,beauty:6,power:0},
   star: {name:'Deko-Stern',cost:70,party:1,beauty:4,power:0},
   palm: {name:'Pixel-Palme',cost:120,party:1,beauty:7,power:0},
 } as const
@@ -203,7 +202,13 @@ export function migrateStageDesign(d:StageDesign):StageDesign {
     if(p.kind==='screen'){const facing=wallFacing(p);if(facing!==undefined&&facing!==p.rotation){turned=true;return {...p,rotation:facing}}}
     return p
   })
-  if(!changed&&!turned)return d
+  // The banner has no successor the way the old speaker had, so it is simply dropped — together
+  // with anything a legacy design had docked onto it, which would otherwise be left dangling.
+  let next={...d,parts}
+  const dropped=parts.filter(p=>(p.kind as string)==='banner')
+  for(const p of dropped)next=removeStagePart(next,p.id)
+  if(!changed&&!turned&&!dropped.length)return d
   if(changed)console.warn(`Bühnendesign "${d.name}": veraltetes Bauteil "speaker" auf "fullRange" migriert.`)
-  return {...d,parts}
+  if(dropped.length)console.warn(`Bühnendesign "${d.name}": ${dropped.length} entferntes Bauteil "Themenbanner" aus der Bühne genommen.`)
+  return next
 }
