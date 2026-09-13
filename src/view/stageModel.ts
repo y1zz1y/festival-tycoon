@@ -17,6 +17,8 @@ const ALONG_AXES = {x:{x:1,y:0,z:0},y:{x:0,y:1,z:0},z:{x:0,y:0,z:1}} as const
 const FLOOR_COLORS = new Set(['#75886a','#30394c','#485166','#515b70'])
 /** Half the height of each fixture's own body (matches its first box() call below), used to press it flush against a truss it is docked onto. */
 const EQUIPMENT_REACH:Partial<Record<string,number>> = {speaker:.4,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,screen:.6,banner:.6,star:.4}
+/** Top surface of a floor tile (the .24 base slab plus the .04 detail overlay from the floor loop below) — where a ground-standing fixture's own base belongs, matching stageBand.ts's world-map floor level. */
+const GROUND_Y=.28
 export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:Set<string>;effects?:boolean;lightBudget?:number}={}):Group {
   const root=new Group(), buckets=new Map<string,BufferGeometry[]>(), effects:Group[]=[]
   let origin: {x:number;z:number;rotation:number}|undefined
@@ -125,6 +127,10 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         if(dir.x)ex=hc.x+dir.x*reach
         if(dir.z)ez=hc.z+dir.z*reach
         if(dir.y)ey=hc.y+dir.y*reach-(EQUIPMENT_REACH[p.kind]??.3)
+      }else{
+        // No host truss: the fixture stands directly on the floor, so its base sits on the
+        // floor's own top surface rather than at the vertical centre of its grid cell.
+        ey=GROUND_Y
       }
       origin={x:ex,z:ez,rotation:p.rotation}
       if(p.kind==='speaker'){
