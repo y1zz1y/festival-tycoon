@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { Vector3, LineSegments, SpotLight, Box3, Quaternion } from 'three'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { stagePlacement } from '../src/game/stagePlacement'
-import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, lineArrayIndex, migrateStageDesign, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, STAGE_TILE_DETAIL, type StagePart } from '../src/game/stageDesign'
+import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, lineArrayIndex, migrateStageDesign, stageStats, stageDetailSize, COMPONENTS, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, STAGE_TILE_DETAIL, type StagePart } from '../src/game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from '../src/view/stageModel'
 import { showIssue } from '../src/game/festivalManagement'
 export function testStageInteraction(fixture:(count?:number)=>GameState){
@@ -256,6 +256,21 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.equal(stageDesignIssue({...podium,parts:[podium.parts[0]!,perchedFog]}),null,'a fog machine, laser or moving head can likewise stand on a subwoofer')
   const besidePlatform=stagePlacement(podium,{kind:'fullRange',brand:'budget',rotation:0,color:'#334455'},{x:0,z:0},{id:'platform',step:{x:1,y:0,z:0}})
   assert.ok(stageDesignIssue({...podium,parts:[podium.parts[0]!,besidePlatform]}),'nothing can dock onto the side of a subwoofer, only its top')
+
+  // The floor is free: a design is billed for the equipment standing on it and nothing else, so
+  // the platform can be as large as it likes. Party and beauty are no longer capped either — a
+  // rig big enough to earn more than 100 of either keeps the credit for it.
+  const billing=defaultStageDesign()
+  assert.equal(stageStats(billing).cost,0,'an empty stage costs nothing to build')
+  Object.assign(billing,{tileWidth:3,tileDepth:3},stageDetailSize(3,3,billing.tileHeight))
+  assert.equal(stageStats(billing).cost,0,'however large its floor is')
+  billing.parts.push({id:'beam',kind:'truss',brand:'budget',axis:'y',x:1,y:0,z:1,rotation:0,attachedTo:null,color:'#ffffff'})
+  assert.equal(stageStats(billing).cost,COMPONENTS.truss.cost,'and one budget truss costs exactly its own price, with no floor surcharge on top')
+  for(let n=0;n<15;n++)billing.parts.push({id:`palm-${n}`,kind:'palm',brand:'premium',x:n%9,y:0,z:3+Math.floor(n/9),rotation:0,attachedTo:null,color:'#ffffff'})
+  for(let n=0;n<12;n++)billing.parts.push({id:`sub-${n}`,kind:'subwoofer',brand:'premium',x:n%9,y:0,z:5+Math.floor(n/9),rotation:0,attachedTo:null,color:'#ffffff'})
+  assert.equal(stageDesignIssue(billing),null,'a floor packed with kit is still a valid design')
+  const packed=stageStats(billing)
+  assert.ok(packed.party>100&&packed.beauty>100,`party and beauty count past 100 instead of being clamped to it (${packed.party}/${packed.beauty})`)
 
   // Pixel-LED-Wand screens: truss-only, and two docked side by side on the same run merge into
   // one wider pixel matrix with a shared, synchronised diagonal glow wave.
