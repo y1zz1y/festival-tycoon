@@ -674,6 +674,24 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         box(ex,ey+.4,ez,.75,.22,.18,c);box(ex,ey+.4,ez,.22,.8,.18,c);box(ex,ey+.4,ez,.44,.44,.2,'#ffdd87')
       }else if(p.kind==='palm'){
         box(ex,ey+.6,ez,.15,1.2,.15,'#9c7353');box(ex,ey+1.2,ez,1,.15,.3,c);box(ex,ey+1.3,ez,.3,.15,1,c)
+      }else if(p.kind==='deck'){
+        // A real stage riser: an anti-slip top set into an aluminium frame, standing on four
+        // telescopic legs with adjustable feet and cross-braced underneath, with coupling plates
+        // at the corners where it bolts to its neighbours. The frame stops short of the cell edge,
+        // so a built-up stage shows the seams between its decks the way a real one does. Its top
+        // surface stays at the height performers are placed at (see stageBand).
+        const alu='#8d949c',tube='#5d646d',surface='#1b1f25',foot='#2a2f36'
+        for(const fx of [-.36,.36])for(const fz of [-.36,.36]){
+          box(ex+fx,ey+.115,ez+fz,.07,.17,.07,tube) // telescopic leg
+          box(ex+fx,ey+.015,ez+fz,.12,.03,.12,foot) // adjustable foot under it
+        }
+        box(ex,ey+.155,ez,.78,.035,.05,tube);box(ex,ey+.155,ez,.05,.035,.78,tube) // cross bracing between the legs
+        for(const fz of [-.435,.435])box(ex,ey+.215,ez+fz,.92,.05,.05,alu) // frame rail, front and back
+        for(const fx of [-.435,.435])box(ex+fx,ey+.215,ez,.05,.05,.92,alu) // frame rail, left and right
+        for(const fz of [-.458,.458])box(ex,ey+.2,ez+fz,.92,.018,.014,c) // safety edging, in the chosen colour
+        for(const fx of [-.458,.458])box(ex+fx,ey+.2,ez,.014,.018,.92,c)
+        box(ex,ey+.2175,ez,.86,.045,.86,surface) // anti-slip deck surface, set into the frame
+        for(const fx of [-.435,.435])for(const fz of [-.435,.435])box(ex+fx,ey+.247,ez+fz,.1,.014,.1,'#c8ced6') // coupling plates, sat on the frame corners where risers bolt together
       }else box(ex,ey+.12,ez,.92,.24,.92,c)
     }
   }
