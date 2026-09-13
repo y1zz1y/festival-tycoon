@@ -42,12 +42,15 @@ export type StagePart = {id:string;kind:ComponentKind;brand:keyof typeof BRANDS;
 export type ShowPhase = {movement?:number;pyro?:number;intensity:number;speed:number;fog:number;volume:number;color:string}
 export type StageDesign = {audience?:Array<{x:number;z:number}>;tileWidth?:number;tileDepth?:number;tileHeight?:number;name:string;width:number;depth:number;height:number;parts:StagePart[];linked:boolean;phases:[ShowPhase,ShowPhase,ShowPhase]}
 export const PHASE_NAMES = ['Warm-up','Main','Finale'] as const
-export const STAGE_TILE_DETAIL = 3
+/** Build cells per map tile, in each axis. Every part fills one cell, so this is also what sets how large the equipment reads against the rest of the world. */
+export const STAGE_TILE_DETAIL = 2
+/** How much headroom every stage gets to build in, in map tiles — fixed rather than chosen, since empty air above the rig costs nothing and simply leaves room for towers. */
+export const STAGE_TILE_HEIGHT = 15
 export function stageDetailSize(tileWidth?:number,tileDepth?:number,tileHeight?:number) {
   return {width:(tileWidth??1)*STAGE_TILE_DETAIL,depth:(tileDepth??1)*STAGE_TILE_DETAIL,height:(tileHeight??1)*STAGE_TILE_DETAIL}
 }
 export function defaultStageDesign():StageDesign {
-  const tileWidth=2,tileDepth=2,tileHeight=2
+  const tileWidth=2,tileDepth=2,tileHeight=STAGE_TILE_HEIGHT
   return {tileWidth,tileDepth,tileHeight,name:'Meine Traumbühne',...stageDetailSize(tileWidth,tileDepth,tileHeight),linked:false,parts:[],phases:[
     {movement:20,pyro:0,intensity:40,speed:25,fog:15,volume:50,color:'#ffc369'},
     {movement:55,pyro:35,intensity:75,speed:55,fog:40,volume:80,color:'#7f8cff'},
@@ -64,8 +67,9 @@ export function stageStats(d:StageDesign) {
   return {cost:Math.round(cost),upkeep:Math.round(cost*.008*10)/10,party:Math.round(party),beauty:Math.round(beauty),power:Math.round(power*10)/10,speakers}
 }
 export function stageDesignIssue(d:StageDesign):string|null {
-  if(!d || typeof d.name!=='string'||d.name.length>60||typeof d.linked!=='boolean'||!Array.isArray(d.parts)||d.parts.length>96) return 'Name und höchstens 96 Elemente wählen'
-  if(![d.tileWidth??1,d.tileDepth??1,d.tileHeight??1].every(n=>Number.isInteger(n)&&n>=1&&n<=8))return 'Kartengrundfläche zwischen 1 und 8 Feldern wählen'
+  if(!d || typeof d.name!=='string'||d.name.length>60||typeof d.linked!=='boolean'||!Array.isArray(d.parts)) return 'Name mit höchstens 60 Zeichen wählen'
+  if(![d.tileWidth??1,d.tileDepth??1].every(n=>Number.isInteger(n)&&n>=1&&n<=8))return 'Kartengrundfläche zwischen 1 und 8 Feldern wählen'
+  if(!Number.isInteger(d.tileHeight??1)||(d.tileHeight??1)<1||(d.tileHeight??1)>STAGE_TILE_HEIGHT)return `Bühnenhöhe zwischen 1 und ${STAGE_TILE_HEIGHT} Kacheln wählen`
   const grid=stageDetailSize(d.tileWidth,d.tileDepth,d.tileHeight)
   if(d.width!==grid.width||d.depth!==grid.depth||d.height!==grid.height)return 'Bühnenraster muss zur Kartengrundfläche passen'
   const audience=d.audience??[],aw=d.tileWidth??1,ad=d.tileDepth??1
@@ -196,8 +200,31 @@ export function lineArrayIndex(d:StageDesign,part:StagePart):number{
 export function isLastLineArrayElement(d:StageDesign,part:StagePart):boolean{
   return !d.parts.some(q=>q.attachedTo===part.id&&q.kind==='lineArray')
 }
+/**
+ * Re-grids a design that was saved while a map tile still held a different number of build cells.
+ * Positions are scaled into the current grid so the stage stays recognisable instead of failing
+ * validation and quietly vanishing from the library. Where the coarser grid puts two parts in the
+ * same cell the later one loses — along with anything it was carrying, which has nowhere to hang.
+ */
+function regridStageDesign(d:StageDesign):StageDesign {
+  const detail=d.width/(d.tileWidth??1)
+  if(!Number.isInteger(detail)||detail===STAGE_TILE_DETAIL)return d
+  const grid=stageDetailSize(d.tileWidth,d.tileDepth,d.tileHeight)
+  const fit=(n:number,limit:number)=>Math.max(0,Math.min(limit-1,Math.floor(n*STAGE_TILE_DETAIL/detail)))
+  const taken=new Set<string>(),kept=new Set<string>(),parts:StagePart[]=[]
+  for(const p of d.parts){
+    const x=fit(p.x,grid.width),y=fit(p.y,grid.height),z=fit(p.z,grid.depth),cell=`${x},${y},${z}`
+    if(taken.has(cell))continue
+    taken.add(cell);kept.add(p.id);parts.push({...p,x,y,z})
+  }
+  let next:StageDesign={...d,...grid,parts}
+  for(const p of d.parts)if(!kept.has(p.id))next=removeStagePart(next,p.id)
+  console.warn(`Bühnendesign "${d.name}": Raster von ${detail} auf ${STAGE_TILE_DETAIL} Zellen je Kachel umgerechnet.`)
+  return next
+}
 /** Rewrites StagePart kinds removed from COMPONENTS since a design was saved, so old saves keep loading instead of failing validation. Logs when it actually changes something. */
-export function migrateStageDesign(d:StageDesign):StageDesign {
+export function migrateStageDesign(design:StageDesign):StageDesign {
+  const d=regridStageDesign(design)
   let changed=false,turned=false
   /** The facing a module in a Pixel-LED-Wand must have: out along the truss face its wall is bolted to, resolved through however many modules the wall was grown by. */
   const wallFacing=(part:StagePart):number|undefined=>{

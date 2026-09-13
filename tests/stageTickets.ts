@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
-import { defaultStageDesign, stageDesignIssue, stageStats, stagePhase } from '../src/game/stageDesign'
+import { defaultStageDesign, stageDesignIssue, stageStats, stagePhase, stageDetailSize } from '../src/game/stageDesign'
 import { createStageModel, disposeStageModel } from '../src/view/stageModel'
 import { Mesh } from 'three'
 export function testStageTickets(fixture:(count?:number)=>GameState){
@@ -22,13 +22,14 @@ export function testStageTickets(fixture:(count?:number)=>GameState){
   assert.ok((legacy as any).spawnVisitorMember('day','legacy','pedestrian',false),'legacy saves keep arrivals')
   const build=fixture(0),bs=build.snapshot as GameSnapshot;build.addDebugMoney()
   const design=defaultStageDesign()
-  design.parts.push({id:'truss',kind:'truss',brand:'touring',x:2,y:0,z:2,axis:'y',rotation:0,attachedTo:null,color:'#abcdef'},
-    {id:'light',kind:'spot',brand:'premium',x:3,y:0,z:2,rotation:0,attachedTo:'truss',color:'#abcdef'},
-    {id:'sound',kind:'fullRange',brand:'touring',x:2,y:0,z:1,rotation:0,attachedTo:'truss',color:'#abcdef'})
+  design.parts.push({id:'truss',kind:'truss',brand:'touring',x:2,y:0,z:1,axis:'y',rotation:0,attachedTo:null,color:'#abcdef'},
+    {id:'light',kind:'spot',brand:'premium',x:3,y:0,z:1,rotation:0,attachedTo:'truss',color:'#abcdef'},
+    {id:'sound',kind:'fullRange',brand:'touring',x:2,y:0,z:0,rotation:0,attachedTo:'truss',color:'#abcdef'})
   assert.equal(stageDesignIssue(design),null)
   const bad=structuredClone(design);bad.parts=bad.parts.filter(p=>p.kind!=='truss');assert.ok(stageDesignIssue(bad))
   const cost=stageStats(design).cost,money=bs.money
-  assert.ok(build.manageFestival({type:'stageDesign',design,saveTemplate:true,selectForBuild:true}).ok)
+  const savedResult=build.manageFestival({type:'stageDesign',design,saveTemplate:true,selectForBuild:true})
+  assert.ok(savedResult.ok,`saving a template succeeds: ${savedResult.message}`)
   assert.equal(bs.money,money,'saving a template does not charge construction')
   for(let x=6;x<8;x++)for(let z=-20;z<-18;z++){build.manageFestival({type:'ground',x,z,kind:'drain'});build.manageFestival({type:'ground',x,z,kind:'compact'})}
   const before=bs.money
@@ -42,23 +43,25 @@ export function testStageTickets(fixture:(count?:number)=>GameState){
   assert.equal(build.designateCampingCell(7,-19).ok,false)
   assert.equal(build.manageFestival({type:'depot',x:7,z:-19,role:'storage'}).ok,false)
   assert.equal((build as any).isPedestrianSolidAt(7,-19,0),true)
-  const expanded=structuredClone(design);expanded.tileWidth=3;expanded.width=9
+  const expanded=structuredClone(design);Object.assign(expanded,{tileWidth:3},stageDetailSize(3,expanded.tileDepth,expanded.tileHeight))
   const unchanged=bs.money
   assert.equal(build.manageFestival({type:'stageDesign',stageId:stage.id,design:expanded}).ok,false,'expansion needs a prepared foundation on every new cell')
   assert.equal(bs.money,unchanged);assert.deepEqual(stage.stageDesign,design)
-  const rotated=structuredClone(design);rotated.tileWidth=3;rotated.tileDepth=1;rotated.width=9;rotated.depth=3
+  const rotated=structuredClone(design);Object.assign(rotated,{tileWidth:3,tileDepth:1},stageDetailSize(3,1,rotated.tileHeight))
   for(let x=6;x<9;x++)for(let z=-20;z<-17;z++){build.manageFestival({type:'ground',x,z,kind:'drain'});build.manageFestival({type:'ground',x,z,kind:'compact'})}
   stage.rotation=1
-  assert.ok(build.manageFestival({type:'stageDesign',stageId:stage.id,design:rotated}).ok)
+  const rotatedResult=build.manageFestival({type:'stageDesign',stageId:stage.id,design:rotated})
+  assert.ok(rotatedResult.ok,`rotating the stage keeps the design valid: ${rotatedResult.message}`)
   assert.equal(build.getAt(6,-18)?.id,stage.id,'rotated footprint occupies three rows')
   assert.equal(build.getAt(7,-19),undefined,'shrinking frees old cells even without building count changes')
-  assert.ok(build.manageFestival({type:'stageDesign',stageId:stage.id,design}).ok)
+  const shrunkResult=build.manageFestival({type:'stageDesign',stageId:stage.id,design})
+  assert.ok(shrunkResult.ok,`shrinking back to the original design succeeds: ${shrunkResult.message}`)
   const restored=GameState.fromJSON(JSON.stringify(bs))!
   assert.equal(restored.getAt(7,-19)?.id,stage.id,'save/load restores the complete occupied footprint')
   const demolished=GameState.fromJSON(JSON.stringify(bs))!
   assert.ok(demolished.bulldoze(7,-19).ok,'secondary cells can demolish the entire stage')
   assert.equal(demolished.getAt(6,-20),undefined)
-  const edgeDesign={...design,tileWidth:8,tileDepth:8,width:24,depth:24}
+  const edgeDesign={...design,tileWidth:8,tileDepth:8,...stageDetailSize(8,8,design.tileHeight)}
   assert.ok(build.manageFestival({type:'stageDesign',design:edgeDesign,selectForBuild:true}).ok)
   assert.equal(build.canPlace('stage',bs.scenario.worldSize/2-1,0).ok,false)
   assert.ok(build.manageFestival({type:'stageDesign',design,selectForBuild:true}).ok)

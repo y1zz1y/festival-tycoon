@@ -9,7 +9,7 @@ import { showIssue } from '../src/game/festivalManagement'
 export function testStageInteraction(fixture:(count?:number)=>GameState){
   const performerDesign=defaultStageDesign()
   assert.equal(bandPositions(performerDesign).length,0,'bare stage floor is not a performer podium')
-  for(let x=1;x<=4;x++)performerDesign.parts.push({id:`deck-${x}`,kind:'deck',x,y:0,z:4,rotation:0,attachedTo:null,brand:'budget',color:'#ffffff'})
+  for(let x=0;x<performerDesign.width;x++)performerDesign.parts.push({id:`deck-${x}`,kind:'deck',x,y:0,z:2,rotation:0,attachedTo:null,brand:'budget',color:'#ffffff'})
   assert.equal(bandPositions(performerDesign).length,4)
   for(const pos of bandPositions(performerDesign))assert.ok(performerDesign.parts.some(p=>p.x===pos.x+performerDesign.width/2-.5&&p.z===pos.z+performerDesign.depth/2-.5))
   const performanceStage=createStageModel(performerDesign)
@@ -21,8 +21,17 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   updateStageBand(performanceStage,'meadow',.4,false);assert.equal(performers.visible,false)
   updateStageBand(performanceStage,'neon',1,true,performerDesign);assert.equal(performanceStage.userData.band.children.length,2);assert.equal(performers.parent,null)
   assert.ok(bandRoles('brass').includes('brass'));assert.ok(bandRoles('campfire').includes('guitar'))
-  const occupied=defaultStageDesign();occupied.tileWidth=2;occupied.tileDepth=2;occupied.audience=[{x:0,z:1}];occupied.parts=[{id:'motor',kind:'truss',axis:'x',x:5,y:0,z:4,rotation:0,attachedTo:null,brand:'budget',color:'#ffffff'}]
-  for(const pos of bandPositions(occupied)){const x=pos.x+occupied.width/2-.5,z=pos.z+occupied.depth/2-.5;assert.ok(!(x<4&&z>=3));assert.ok(!(z===4&&Math.abs(x-5)<=1))}
+  // A deck floor with one spectator tile (its cells: the left half, back half) and one cell taken
+  // by a truss — musicians may use neither.
+  const occupied=defaultStageDesign();occupied.audience=[{x:0,z:1}]
+  const audienceCell=(x:number,z:number)=>x<occupied.width/2&&z>=occupied.depth/2
+  for(let x=0;x<occupied.width;x++)for(let z=0;z<occupied.depth;z++){
+    if(audienceCell(x,z)||(x===occupied.width-1&&z===occupied.depth-1))continue
+    occupied.parts.push({id:`deck-${x}-${z}`,kind:'deck',x,y:0,z,rotation:0,attachedTo:null,brand:'budget',color:'#ffffff'})
+  }
+  occupied.parts.push({id:'motor',kind:'truss',axis:'x',x:occupied.width-1,y:0,z:occupied.depth-1,rotation:0,attachedTo:null,brand:'budget',color:'#ffffff'})
+  assert.equal(stageDesignIssue(occupied),null)
+  for(const pos of bandPositions(occupied)){const x=pos.x+occupied.width/2-.5,z=pos.z+occupied.depth/2-.5;assert.ok(!audienceCell(x,z),'musicians keep off the spectator tile');assert.ok(!(x===occupied.width-1&&z===occupied.depth-1),'and off cells other equipment stands on')}
   occupied.parts=[];for(let x=0;x<occupied.width;x++)for(let z=0;z<occupied.depth;z++)occupied.parts.push({id:`${x}-${z}`,kind:'fullRange',x,y:0,z,rotation:0,attachedTo:null,brand:'budget',color:'#ffffff'})
   assert.equal(bandPositions(occupied).length,0);disposeStageModel(performanceStage)
 
@@ -37,18 +46,18 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
 
   // Effects: beam direction follows the part's own facing (rotation, as chosen with the
   // orientation cube), independent of which side of the host truss it happens to dock onto.
-  const rig=defaultStageDesign();rig.parts.push({id:'truss',kind:'truss',axis:'x',brand:'budget',x:3,y:1,z:2,rotation:0,attachedTo:null,color:'#ffffff'})
+  const rig=defaultStageDesign();rig.parts.push({id:'truss',kind:'truss',axis:'x',brand:'budget',x:2,y:1,z:2,rotation:0,attachedTo:null,color:'#ffffff'})
   const hanging=stagePlacement(rig,{...settings,kind:'spot',rotation:5},{x:0,z:0},{id:'truss',step:{x:0,y:-1,z:0}});hanging.id='hanging';rig.parts.push(hanging)
   assert.equal(hanging.attachedTo,'truss');assert.equal(stageDesignIssue(rig),null)
   const above=stagePlacement(rig,{...settings,kind:'spot',rotation:4},{x:0,z:0},{id:'truss',step:{x:0,y:1,z:0}});above.id='above';rig.parts.push(above)
   const laser=stagePlacement(rig,{...settings,kind:'laser'},{x:0,z:0},{id:'truss',step:{x:1,y:0,z:0}});laser.id='laser';rig.parts.push(laser)
-  const fog=stagePlacement(rig,{kind:'fog',brand:'touring',rotation:0,color:'#ff88cc'},{x:1,z:4});fog.id='fog';rig.parts.push(fog)
+  const fog=stagePlacement(rig,{kind:'fog',brand:'touring',rotation:0,color:'#ff88cc'},{x:0,z:0});fog.id='fog';rig.parts.push(fog)
   assert.equal(stageDesignIssue(rig),null,'a ground-placed fog machine rests on the floor while everything else hangs off the truss')
   const foggy=stagePlacement(rig,{kind:'fog',brand:'budget',rotation:2,color:'#88ccff'},{x:0,z:0},{id:'truss',step:{x:0,y:0,z:1}});foggy.id='foggy';rig.parts.push(foggy)
   assert.equal(foggy.attachedTo,'truss');assert.equal(stageDesignIssue(rig),null,'a fog machine can also dock onto a truss like a spot or laser')
   const trussSparks=stagePlacement(rig,{kind:'sparks',brand:'budget',rotation:4,color:'#ffd9a0'},{x:0,z:0},{id:'truss',step:{x:0,y:0,z:-1}});trussSparks.id='trussSparks';rig.parts.push(trussSparks)
   assert.equal(trussSparks.attachedTo,'truss');assert.equal(stageDesignIssue(rig),null,'a spark fountain hangs off a truss the same way')
-  const groundSparks=stagePlacement(rig,{kind:'sparks',brand:'budget',rotation:4,color:'#ffd9a0'},{x:2,z:5});groundSparks.id='groundSparks';rig.parts.push(groundSparks)
+  const groundSparks=stagePlacement(rig,{kind:'sparks',brand:'budget',rotation:4,color:'#ffd9a0'},{x:1,z:0});groundSparks.id='groundSparks';rig.parts.push(groundSparks)
   assert.equal(stageDesignIssue(rig),null,'and still stands on the floor on its own, like the fog machine')
   assert.equal(removeStagePart(rig,'truss').parts.some(p=>p.id==='hanging'),false)
   const model=createStageModel(rig,{lightBudget:6}),phase={intensity:100,speed:60,fog:80,volume:100,color:'#ff55cc'}
@@ -82,7 +91,7 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   // plume is sampled across a whole run of frames to find how far the fastest of them get.
   const fountainDesign=defaultStageDesign()
   fountainDesign.parts.push({id:'fountain',kind:'sparks',brand:'budget',x:1,y:0,z:1,rotation:4,attachedTo:null,color:'#ffd9a0'})
-  fountainDesign.parts.push({id:'sideways',kind:'sparks',brand:'budget',x:4,y:0,z:1,rotation:0,attachedTo:null,color:'#ffd9a0'})
+  fountainDesign.parts.push({id:'sideways',kind:'sparks',brand:'budget',x:3,y:0,z:1,rotation:0,attachedTo:null,color:'#ffd9a0'})
   const fountainModel=createStageModel(fountainDesign),pyroPhase={intensity:100,speed:60,movement:0,pyro:100,fog:0,volume:0,color:'#ffcf8a'}
   const plumeUp=fountainModel.userData.effects.find((r:any)=>r.userData.kind==='sparks'&&r.userData.dir.y===1)
   const plumeSide=fountainModel.userData.effects.find((r:any)=>r.userData.kind==='sparks'&&r.userData.dir.z===1)
@@ -128,7 +137,7 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
 
   // A tower is just trusses stacked straight up; branches, chains and corners all reuse the exact same step mechanism.
   const tower=defaultStageDesign(),trussSettings={kind:'truss' as const,brand:'budget' as const,rotation:0,color:'#ffffff'}
-  const base=stagePlacement(tower,trussSettings,{x:2,z:2});base.id='base';tower.parts.push(base)
+  const base=stagePlacement(tower,trussSettings,{x:1,z:2});base.id='base';tower.parts.push(base)
   assert.equal(base.axis,'y','a truss dropped on bare ground starts as a vertical post');assert.equal(base.attachedTo,null);assert.equal(base.y,0)
   const mid=stagePlacement(tower,trussSettings,{x:0,z:0},{id:'base',step:{x:0,y:1,z:0}});mid.id='mid';tower.parts.push(mid)
   assert.equal(mid.attachedTo,'base');assert.equal(mid.y,base.y+1,'stacking upward is just the neighbouring cell one grid step up')
@@ -145,7 +154,7 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.equal(stageDesignIssue(tower),null,'equipment docks onto a mid-air branch exactly like onto a grounded truss')
   const dupCell=stagePlacement(tower,trussSettings,{x:0,z:0},{id:'mid',step:{x:1,y:0,z:0}})
   assert.ok(stageDesignIssue({...tower,parts:[...tower.parts,{...dupCell,id:'dupCell'}]}),'the same neighbouring cell cannot be claimed twice')
-  const floating:StagePart={id:'floating',kind:'truss',brand:'budget',x:5,y:5,z:5,axis:'y',rotation:0,attachedTo:null,color:'#ffffff'}
+  const floating:StagePart={id:'floating',kind:'truss',brand:'budget',x:3,y:5,z:3,axis:'y',rotation:0,attachedTo:null,color:'#ffffff'}
   assert.equal(stageDesignIssue({...tower,parts:[...tower.parts,floating]}),null,'a truss may stand free in the grid with no connection back to the ground')
   const towerModel=createStageModel(tower,{lightBudget:2});disposeStageModel(towerModel)
   assert.equal(stageDesignIssue(JSON.parse(JSON.stringify(tower))),null)
@@ -166,10 +175,10 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.equal(stageDesignIssue(tallDesign),null,'a tower can fill the entire configured height')
   const tooTall=stagePlacement(tallDesign,trussSettings,{x:0,z:0},{id:chainId,step:{x:0,y:1,z:0}})
   assert.ok(stageDesignIssue({...tallDesign,parts:[...tallDesign.parts,{...tooTall,id:'tooTall'}]}),'the grid height is a hard limit')
-  const taller={...defaultStageDesign(),tileHeight:4,height:12}
-  assert.equal(stageDesignIssue(taller),null,'a taller "Höhe" setting raises that limit')
+  const taller={...defaultStageDesign(),tileHeight:4,...stageDetailSize(2,2,4)}
+  assert.equal(stageDesignIssue(taller),null,'a shorter stage simply has a lower ceiling')
 
-  const audience=defaultStageDesign();audience.tileWidth=3;audience.tileDepth=3;audience.width=9;audience.depth=9;audience.audience=[{x:0,z:1},{x:1,z:1}]
+  const audience=defaultStageDesign();Object.assign(audience,{tileWidth:3,tileDepth:3},stageDetailSize(3,3,audience.tileHeight));audience.audience=[{x:0,z:1},{x:1,z:1}]
   assert.equal(stageDesignIssue(audience),null)
   assert.ok(stageDesignIssue({...audience,audience:[{x:1,z:1}]}),'sealed audience courtyards need an entrance')
   assert.ok(stageDesignIssue({...audience,parts:[{id:'blocked',kind:'deck',brand:'budget',x:3,y:0,z:3,rotation:0,attachedTo:null,color:'#ffffff'}]}),'floor equipment cannot obstruct spectator tiles')
@@ -264,10 +273,10 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.equal(stageStats(billing).cost,0,'an empty stage costs nothing to build')
   Object.assign(billing,{tileWidth:3,tileDepth:3},stageDetailSize(3,3,billing.tileHeight))
   assert.equal(stageStats(billing).cost,0,'however large its floor is')
-  billing.parts.push({id:'beam',kind:'truss',brand:'budget',axis:'y',x:1,y:0,z:1,rotation:0,attachedTo:null,color:'#ffffff'})
+  billing.parts.push({id:'beam',kind:'truss',brand:'budget',axis:'y',x:0,y:0,z:billing.depth-1,rotation:0,attachedTo:null,color:'#ffffff'})
   assert.equal(stageStats(billing).cost,COMPONENTS.truss.cost,'and one budget truss costs exactly its own price, with no floor surcharge on top')
-  for(let n=0;n<15;n++)billing.parts.push({id:`palm-${n}`,kind:'palm',brand:'premium',x:n%9,y:0,z:3+Math.floor(n/9),rotation:0,attachedTo:null,color:'#ffffff'})
-  for(let n=0;n<12;n++)billing.parts.push({id:`sub-${n}`,kind:'subwoofer',brand:'premium',x:n%9,y:0,z:5+Math.floor(n/9),rotation:0,attachedTo:null,color:'#ffffff'})
+  for(let n=0;n<12;n++)billing.parts.push({id:`palm-${n}`,kind:'palm',brand:'premium',x:n%billing.width,y:0,z:Math.floor(n/billing.width),rotation:0,attachedTo:null,color:'#ffffff'})
+  for(let n=0;n<12;n++)billing.parts.push({id:`sub-${n}`,kind:'subwoofer',brand:'premium',x:n%billing.width,y:0,z:2+Math.floor(n/billing.width),rotation:0,attachedTo:null,color:'#ffffff'})
   assert.equal(stageDesignIssue(billing),null,'a floor packed with kit is still a valid design')
   const packed=stageStats(billing)
   assert.ok(packed.party>100&&packed.beauty>100,`party and beauty count past 100 instead of being clamped to it (${packed.party}/${packed.beauty})`)
@@ -383,6 +392,18 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const withoutBanner=migrateStageDesign(bannerDesign)
   assert.deepEqual(withoutBanner.parts.map(p=>p.id),['bannerTruss'],'migration takes the banner out and leaves the rest of the stage standing')
   assert.equal(stageDesignIssue(withoutBanner),null,'so a design saved with a banner still loads')
+  // A design saved while a map tile still held a different number of build cells is re-gridded on
+  // load, rather than failing validation and quietly dropping out of the library.
+  const legacyGrid:StagePart[]=[{id:'oldPost',kind:'truss',brand:'budget',axis:'y',x:4,y:0,z:4,rotation:0,attachedTo:null,color:'#ffffff'},
+    {id:'oldLamp',kind:'spot',brand:'budget',x:5,y:0,z:4,rotation:0,attachedTo:'oldPost',color:'#ffffff'}]
+  const coarse={...defaultStageDesign(),tileHeight:2,width:6,depth:6,height:6,parts:legacyGrid}
+  assert.ok(stageDesignIssue(coarse),'a design on the old grid does not validate as it stands')
+  const regridded=migrateStageDesign(coarse)
+  assert.deepEqual({width:regridded.width,depth:regridded.depth,height:regridded.height},stageDetailSize(2,2,2),'migration restates its size in current build cells')
+  const oldPost=regridded.parts.find(p=>p.id==='oldPost')!
+  assert.deepEqual({x:oldPost.x,z:oldPost.z},{x:2,z:2},'and scales its parts into the new grid')
+  assert.equal(stageDesignIssue(regridded),null,'so the stage keeps loading, docked equipment and all')
+
   // Likewise for saves made before a wall's LEDs were forced to face away from their truss: the
   // whole wall is turned round on load, chained modules included, not just the module bolted on.
   const backwardsDesign=defaultStageDesign()
