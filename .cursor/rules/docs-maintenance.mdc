@@ -1,0 +1,21 @@
+---
+description: Keep docs/*.md current when adding or changing game systems
+alwaysApply: true
+---
+
+Before changing a system, read `docs/README.md` and the matching topic MD.
+Those files say where the code lives and which invariants apply.
+
+When you add or change a function, also update the docs in the same change:
+
+- Existing system → edit its topic MD (files, entry points, invariants, tests).
+- New system → extend a topic MD or add `docs/<topic>.md` and register it in
+  `docs/README.md` and the table in root `AGENTS.md`.
+- New `GameCommand` or `GameSnapshot` field → `docs/multiplayer.md` and
+  `docs/saves.md`.
+- New balancing key → mention it in the topic MD; keep values in
+  `src/game/simulationConfig.ts`.
+- Player-visible behaviour or controls → root `README.md`.
+
+A feature is not finished if new modules, kinds or commands are missing from
+the documentation map.

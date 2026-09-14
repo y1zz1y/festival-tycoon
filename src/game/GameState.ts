@@ -7,6 +7,7 @@ import { WAY_TYPES, wayInfo, wayIssue } from './wayTypes'
 import type { WayType } from './wayTypes'
 import { groundRectangle } from './ground'
 import { createInfrastructure, updateSupplyChain, localStock, consumeLocal } from './supplyChain'
+import { CARDINAL_OFFSETS, isShopServiceKind } from './shopAccess'
 import { groundInfo, groundKey, buildingEfficiency, roadGroundLimit } from './ground'
 import { BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY } from './catalog'
 import { createFestivalManagement, festivalAction, updateFestival, assignAudience, activeBookings, watchableBookings, showIssue, BANDS } from './festivalManagement'
@@ -24,6 +25,7 @@ import {
   COASTER_TYPES,
   TRACK_BANK_ANGLE,
   TRACK_PIECES,
+  canTransitionTrackPitch,
   createCoasterTelemetry,
   createTrackPiece,
   computeTrackFrame,
@@ -144,6 +146,7 @@ import {
   directionBit,
   directionFromDelta,
   findRoadRoute,
+  isPlayerOwnedFleetVehicle,
   isRoadDirectionAllowed,
   isVehicleReversing,
   normalizeLogisticsSnapshot,
@@ -152,6 +155,7 @@ import {
 import type {
   ArrivalGroup,
   Direction,
+  FindRoadRouteOptions,
   LogisticsSnapshot,
   ParkingCell,
   RoadCell,
@@ -160,6 +164,30 @@ import type {
   RoadVehicle,
   SpeedLimit,
 } from './logistics'
+import {
+  accessCellKey,
+  accessEdgeKey,
+  closedAccessEdges,
+  createAccessControlSnapshot,
+  createPathBarrier,
+  createTrafficLight,
+  evaluateAccessSignal,
+  statsForArea,
+  stepUsesClosedEdge,
+  toggleAreaCells,
+  normalizeAccessControls,
+  type AccessAreaCell,
+  type AccessAreaIndexes,
+  type AccessAreaStats,
+  type AccessControl,
+  type AccessControlKind,
+  type AccessControlMode,
+  type AccessControlSnapshot,
+  type AccessPolarity,
+  type BarrierPassage,
+  type PathSensorKind,
+  type TrafficSensorKind,
+} from './accessControl'
 import {
   applyTerrainChanges,
   createEmptyTerrain,
@@ -350,11 +378,12 @@ export type SimTurn = {
 
 export type GameSnapshot = {
   festival: FestivalManagement
-  version: 24
+  version: 27
   simTick: number
   rngState: number
   money: number
   entryPrice: number
+  campingTicketPrice: number
   parkOpen: boolean
   guests: number
   reputation: number
@@ -382,6 +411,7 @@ export type GameSnapshot = {
   dayPlan: DayPlan
   complaints: ComplaintSnapshot
   logistics: LogisticsSnapshot
+  accessControls: AccessControlSnapshot
   scenario: ScenarioSettings
   terrain: TerrainSnapshot
   power: PowerSnapshot
@@ -390,6 +420,7 @@ export type GameSnapshot = {
 export type ActionResult = {
   ok: boolean
   message: string
+  placedId?: string
 }
 
 export type LocalSaveSlot = {
@@ -511,6 +542,7 @@ const PATH_COMPATIBLE_KINDS = new Set<BuildingKind>([
   'fence',
   'bench',
   'lighting',
+  'lightBalloon',
   'securityGate',
   'busStop',
   'wasteBin',
@@ -523,13 +555,14 @@ function createBlankSnapshot(
   const entrance = createScenarioEntrance(settings.worldSize)
   return {
     festival: createFestivalManagement(),
-    version: 24,
+    version: 27,
     simTick: 0,
     rngState: hashStringSeed(
       `festival-${settings.worldSize}-${settings.startingMoney}`,
     ),
     money: settings.startingMoney,
     entryPrice: SIMULATION_CONFIG.economy.defaultEntryPrice,
+    campingTicketPrice: SIMULATION_CONFIG.economy.defaultCampingTicketPrice,
     parkOpen: true,
     guests: 0,
     reputation: SIMULATION_CONFIG.economy.startingReputation,
@@ -570,6 +603,7 @@ function createBlankSnapshot(
     dayPlan: createDefaultDayPlan(),
     complaints: createComplaintSnapshot(),
     logistics: createDefaultLogisticsSnapshot(),
+    accessControls: createAccessControlSnapshot(),
     scenario: settings,
     terrain: createEmptyTerrain(),
     power: createEmptyPower(),
@@ -640,6 +674,10 @@ export class GameState {
   private readonly pedestrianPathCache = new Map<string, { path: readonly Cell[] | null; expires: number }>()
   private pedestrianNav = new Map<number, PedestrianNavNode>()
   private pedestrianNavKey = ''
+  private accessSignalRevision = 0
+  private accessEmergency = false
+  private closedTrafficEdges = new Set<string>()
+  private closedPathEdges = new Set<string>()
   private visitorIndex = new Map<string, Visitor>()
   private facilityQueues = new Map<string, string[]>()
   private indexedVisitorCount = -1
@@ -738,6 +776,8 @@ export class GameState {
     this.state.rngState ??= hashStringSeed('festival')
     this.rng.setState(this.state.rngState)
     this.state.entryPrice ??= SIMULATION_CONFIG.economy.defaultEntryPrice
+    this.state.campingTicketPrice ??=
+      this.state.entryPrice ?? SIMULATION_CONFIG.economy.defaultCampingTicketPrice
     this.state.parkOpen ??= true
     this.state.campingCells ??= []
     this.state.campInstallations ??= []
@@ -773,6 +813,8 @@ export class GameState {
     )
     this.state.logistics.wasteDepots ??= []
     this.state.logistics.specialDepots ??= []
+    this.state.accessControls = normalizeAccessControls(this.state.accessControls)
+    this.state.version = 27
     this.state.terrain = normalizeTerrain(this.state.terrain)
     this.state.power = normalizePower(this.state.power)
     this.rebuildTerrainCache()
@@ -993,7 +1035,10 @@ export class GameState {
       this.state.buildings.length +
       this.state.visitors.length +
       this.state.campInstallations.length +
+      this.state.accessControls.trafficLights.length +
+      this.state.accessControls.pathBarriers.length +
       this.state.coasters.reduce((total, coaster) => total + coaster.pieces.length + 1, 0)
+    this.evaluateAccessSignals()
   }
 
   static startNew(settings: ScenarioSettings): GameState {
@@ -1071,6 +1116,8 @@ export class GameState {
       'designateCampingArea', 'designateMedicalArea', 'designateWasteDump',
       'designateStageForecourt', 'designatePowerCable', 'designatePowerCableArea',
       'setRoadDirection', 'toggleRoadSeparator', 'toggleCrosswalk', 'setRoadSpeed',
+      'placeTrafficLight', 'placePathBarrier', 'configureAccessControl',
+      'toggleAccessControlArea', 'clearAccessControlArea',
       'setPathFlow', 'startCoaster', 'appendCoasterPiece', 'undoCoasterPiece',
       'deleteCoasterPiece', 'setCoasterAccess', 'setRideAccess',
     ].includes(command.type)
@@ -1327,7 +1374,13 @@ export class GameState {
   }
 
   setTool(tool: Tool): void {
+    if (this.state.selectedTool !== tool) this.state.buildElevation = 0
     this.state.selectedTool = tool
+    this.emit('local')
+  }
+
+  setBuildElevation(value: number): void {
+    this.state.buildElevation = Math.max(0, Math.min(6, Math.round(value)))
     this.emit('local')
   }
 
@@ -1522,7 +1575,7 @@ export class GameState {
       z: visitor.cellZ,
       elevation: visitor.cellElevation,
     }
-    const route = this.getAdjacentRoadPositions(vehicle.parkingCell)
+    const route = this.getParkingApproachRoads(vehicle.parkingCell)
       .flatMap((access) => {
         const path = this.findPath(start, [{ ...access, elevation: 0 }])
         return path ? [{ path, access }] : []
@@ -1699,6 +1752,14 @@ export class GameState {
     return this.wasteDumpIndex.get(this.packXZ(x, z))
   }
 
+  getDepotAt(x: number, z: number) {
+    return this.state.festival.infrastructure.depots.find((depot) => depot.x === x && depot.z === z)
+  }
+
+  getDepot(id: string) {
+    return this.state.festival.infrastructure.depots.find((depot) => depot.id === id)
+  }
+
   designateWasteDump(
     cells: ReadonlyArray<{ x: number; z: number }>,
   ): ActionResult {
@@ -1795,6 +1856,273 @@ export class GameState {
         path.flowDirection == null
           ? 'Bewegungsrichtung entfernt'
           : 'Bewegungsrichtung des Weges gesetzt',
+    }
+  }
+
+  placeTrafficLight(x: number, z: number, direction: Direction): ActionResult {
+    if (!this.getRoadCellAt(x, z)) {
+      return { ok: false, message: 'Ampeln stehen nur auf einer Straße' }
+    }
+    const existing = this.state.accessControls.trafficLights.find(
+      (light) => light.x === x && light.z === z && light.direction === direction,
+    )
+    if (existing) {
+      return { ok: false, message: 'Hier steht bereits eine Ampel in dieser Richtung', placedId: existing.id }
+    }
+    const cost = SIMULATION_CONFIG.logistics.trafficLightCost
+    if (this.state.money < cost) {
+      return { ok: false, message: `Die Ampel kostet ${cost} €` }
+    }
+    this.state.money -= cost
+    const light = createTrafficLight(this.nextId('light'), x, z, direction)
+    this.state.accessControls.trafficLights.push(light)
+    this.evaluateAccessSignals()
+    this.emit()
+    return { ok: true, message: 'Ampel gebaut', placedId: light.id }
+  }
+
+  placePathBarrier(x: number, z: number, elevation: number, direction: Direction): ActionResult {
+    const path = this.getPathAt(x, z, elevation) ?? this.getPathAt(x, z)
+    if (!path || path.pathType !== 'normal') {
+      return { ok: false, message: 'Schranken stehen nur auf normalen Wegen' }
+    }
+    const existing = this.state.accessControls.pathBarriers.find(
+      (barrier) =>
+        barrier.x === x &&
+        barrier.z === z &&
+        Math.abs(barrier.elevation - path.elevation) < 0.01 &&
+        barrier.direction === direction,
+    )
+    if (existing) {
+      return { ok: false, message: 'Hier steht bereits eine Schranke in dieser Richtung', placedId: existing.id }
+    }
+    const cost = SIMULATION_CONFIG.logistics.pathBarrierCost
+    if (this.state.money < cost) {
+      return { ok: false, message: `Die Schranke kostet ${cost} €` }
+    }
+    this.state.money -= cost
+    const barrier = createPathBarrier(
+      this.nextId('barrier'),
+      x,
+      z,
+      path.elevation,
+      direction,
+    )
+    this.state.accessControls.pathBarriers.push(barrier)
+    this.evaluateAccessSignals()
+    this.emit()
+    return { ok: true, message: 'Wegschranke gebaut', placedId: barrier.id }
+  }
+
+  configureAccessControl(
+    id: string,
+    patch: {
+      mode?: AccessControlMode
+      openSlots?: boolean[]
+      polarity?: AccessPolarity
+      sensorKind?: TrafficSensorKind | PathSensorKind
+      sensorThreshold?: number
+      passage?: BarrierPassage
+      openInEmergency?: boolean
+    },
+  ): ActionResult {
+    const control = this.getAccessControl(id)
+    if (!control) return { ok: false, message: 'Kontrolle nicht gefunden' }
+    if (patch.mode) control.mode = patch.mode
+    if (patch.openSlots) {
+      control.openSlots = Array.from({ length: 6 }, (_, index) =>
+        Boolean(patch.openSlots?.[index]),
+      )
+    }
+    if (patch.polarity) control.polarity = patch.polarity
+    if (typeof patch.sensorThreshold === 'number') {
+      control.sensorThreshold = Math.max(0, Math.round(patch.sensorThreshold))
+    }
+    if (patch.sensorKind) {
+      if (control.kind === 'trafficLight') {
+        if (
+          patch.sensorKind === 'freeParking' ||
+          patch.sensorKind === 'noFreeParking' ||
+          patch.sensorKind === 'carsBelow' ||
+          patch.sensorKind === 'carsAbove'
+        ) {
+          control.sensorKind = patch.sensorKind
+        }
+      } else if (
+        patch.sensorKind === 'freeCamping' ||
+        patch.sensorKind === 'occupiedCamping' ||
+        patch.sensorKind === 'peopleBelow' ||
+        patch.sensorKind === 'peopleAbove'
+      ) {
+        control.sensorKind = patch.sensorKind
+      }
+    }
+    if (
+      control.kind === 'pathBarrier' &&
+      (patch.passage === 'oneWay' || patch.passage === 'both')
+    ) {
+      control.passage = patch.passage
+    }
+    if (control.kind === 'pathBarrier' && typeof patch.openInEmergency === 'boolean') {
+      control.openInEmergency = patch.openInEmergency
+    }
+    this.evaluateAccessSignals()
+    this.emit()
+    return { ok: true, message: 'Kontrolle gespeichert' }
+  }
+
+  toggleAccessControlArea(
+    id: string,
+    from: { x: number; z: number },
+    to: { x: number; z: number },
+  ): ActionResult {
+    const control = this.getAccessControl(id)
+    if (!control) return { ok: false, message: 'Kontrolle nicht gefunden' }
+    control.area = toggleAreaCells(control.area, from, to)
+    this.evaluateAccessSignals()
+    this.emit()
+    return { ok: true, message: 'Gebiet aktualisiert' }
+  }
+
+  clearAccessControlArea(id: string): ActionResult {
+    const control = this.getAccessControl(id)
+    if (!control) return { ok: false, message: 'Kontrolle nicht gefunden' }
+    control.area = []
+    this.evaluateAccessSignals()
+    this.emit()
+    return { ok: true, message: 'Gebiet geleert' }
+  }
+
+  getAccessControl(id: string): AccessControl | undefined {
+    return (
+      this.state.accessControls.trafficLights.find((item) => item.id === id) ??
+      this.state.accessControls.pathBarriers.find((item) => item.id === id)
+    )
+  }
+
+  getAccessControlAt(
+    x: number,
+    z: number,
+    kind?: AccessControlKind,
+  ): AccessControl | undefined {
+    const lights = kind === 'pathBarrier' ? [] : this.state.accessControls.trafficLights
+    const barriers = kind === 'trafficLight' ? [] : this.state.accessControls.pathBarriers
+    return (
+      lights.find((item) => item.x === x && item.z === z) ??
+      barriers.find((item) => item.x === x && item.z === z)
+    )
+  }
+
+  accessAreaStats(cells: readonly AccessAreaCell[]): AccessAreaStats {
+    return statsForArea(cells, this.buildAccessAreaIndexes())
+  }
+
+  accessAreaPreview(id: string): AccessAreaStats | null {
+    const control = this.getAccessControl(id)
+    if (!control) return null
+    return this.accessAreaStats(control.area)
+  }
+
+  private removeAccessControlsAt(x: number, z: number): number {
+    const lights = this.state.accessControls.trafficLights.length
+    const barriers = this.state.accessControls.pathBarriers.length
+    this.state.accessControls.trafficLights =
+      this.state.accessControls.trafficLights.filter(
+        (light) => light.x !== x || light.z !== z,
+      )
+    this.state.accessControls.pathBarriers =
+      this.state.accessControls.pathBarriers.filter(
+        (barrier) => barrier.x !== x || barrier.z !== z,
+      )
+    return (
+      lights -
+      this.state.accessControls.trafficLights.length +
+      (barriers - this.state.accessControls.pathBarriers.length)
+    )
+  }
+
+  private buildAccessAreaIndexes(): AccessAreaIndexes {
+    const freeParking = new Set<string>()
+    const occupiedParking = new Set<string>()
+    const carsOnRoad = new Map<string, number>()
+    const freeCamping = new Set<string>()
+    const occupiedCamping = new Set<string>()
+    const people = new Map<string, number>()
+    for (const parking of this.state.logistics.parkingCells) {
+      const key = accessCellKey(parking.x, parking.z)
+      if (parking.occupiedBy) occupiedParking.add(key)
+      else freeParking.add(key)
+    }
+    for (const vehicle of this.state.logistics.roadVehicles) {
+      if (vehicle.state === 'parked') continue
+      const cell = vehicle.cell ?? vehicle.position
+      const key = accessCellKey(cell.x, cell.z)
+      carsOnRoad.set(key, (carsOnRoad.get(key) ?? 0) + 1)
+    }
+    const claimedCamps = new Set<string>()
+    let emergency = this.state.incidents.some((incident) => incident.kind === 'fire')
+    for (const visitor of this.state.visitors) {
+      const personKey = accessCellKey(visitor.cellX, visitor.cellZ)
+      people.set(personKey, (people.get(personKey) ?? 0) + 1)
+      if (visitor.isPanicking || visitor.state === 'panicking') emergency = true
+      if (visitor.campsite) {
+        claimedCamps.add(accessCellKey(visitor.campsite.x, visitor.campsite.z))
+      }
+    }
+    for (const member of this.state.staff) {
+      const key = accessCellKey(member.cellX, member.cellZ)
+      people.set(key, (people.get(key) ?? 0) + 1)
+    }
+    for (const cell of this.state.campingCells) {
+      const key = accessCellKey(cell.x, cell.z)
+      if (claimedCamps.has(key)) occupiedCamping.add(key)
+      else freeCamping.add(key)
+    }
+    return {
+      freeParking,
+      occupiedParking,
+      carsOnRoad,
+      freeCamping,
+      occupiedCamping,
+      people,
+      emergency,
+    }
+  }
+
+  isAccessEmergency(): boolean {
+    return this.accessEmergency
+  }
+
+  private evaluateAccessSignals(): void {
+    const indexes = this.buildAccessAreaIndexes()
+    const emergency = indexes.emergency
+    let changed = emergency !== this.accessEmergency
+    this.accessEmergency = emergency
+    const update = (control: AccessControl) => {
+      const next = evaluateAccessSignal(
+        control,
+        this.state.minute,
+        statsForArea(control.area, indexes),
+        emergency,
+      )
+      if (control.signal !== next) {
+        control.signal = next
+        changed = true
+      }
+    }
+    this.state.accessControls.trafficLights.forEach(update)
+    this.state.accessControls.pathBarriers.forEach(update)
+    this.closedTrafficEdges = closedAccessEdges(this.state.accessControls.trafficLights)
+    this.closedPathEdges = closedAccessEdges(
+      this.state.accessControls.pathBarriers,
+      false,
+      0,
+      Number.POSITIVE_INFINITY,
+      emergency,
+    )
+    if (changed) {
+      this.accessSignalRevision += 1
+      this.pedestrianPathCache.clear()
     }
   }
 
@@ -2042,10 +2370,12 @@ export class GameState {
     const definition = TRACK_PIECES[kind]
     if (
       kind === 'pitchTransition' &&
-      Math.abs((options.targetPitch ?? anchorPiece.end.pitch) - anchorPiece.end.pitch) >
-        Math.atan(0.5) + 0.001
+      !canTransitionTrackPitch(
+        anchorPiece.end.pitch,
+        options.targetPitch ?? anchorPiece.end.pitch,
+      )
     ) {
-      return { ok: false, message: 'Neigungsstufen müssen nacheinander überführt werden' }
+      return { ok: false, message: 'Diese Neigung kann nicht in einem Stück überführt werden' }
     }
     if (
       kind === 'bankTransition' &&
@@ -2265,6 +2595,17 @@ export class GameState {
   updateEntryPrice(price: number): void {
     this.state.entryPrice = this.normalizePrice(price)
     this.emit()
+  }
+
+  updateCampingTicketPrice(price: number): void {
+    this.state.campingTicketPrice = this.normalizePrice(price)
+    this.emit()
+  }
+
+  ticketPriceFor(ticketType: 'day' | 'camping'): number {
+    return ticketType === 'camping'
+      ? this.state.campingTicketPrice
+      : this.state.entryPrice
   }
 
   updateDayVisitorWindow(entryHour: number, exitHour: number): ActionResult {
@@ -3151,7 +3492,7 @@ export class GameState {
     })
     this.refreshPower()
     this.emit()
-    return { ok: true, message: '3×3-Betriebshof gebaut. Saugreiniger fahren von hier auf den Wegen, halten vor Besuchern und machen beim Fahren Lärm.' }
+    return { ok: true, message: '3×3-Betriebshof gebaut. Saugreiniger fahren von hier auf den Wegen und Bühnenvorplätzen, halten vor Besuchern und machen beim Fahren Lärm.' }
   }
 
   private placeBusStop(x: number, z: number): ActionResult {
@@ -3383,7 +3724,10 @@ export class GameState {
     const truck = this.state.logistics.roadVehicles.find(
       (vehicle) => vehicle.id === truckId && vehicle.kind === 'garbageTruck',
     )
-    if (!truck || truck.state !== 'idle' || truck.cargo > 0) {
+    const offMap = Boolean(
+      truck && this.isOffMapRoadExit(truck.cell ?? truck.position),
+    )
+    if (truck && !offMap && (truck.state !== 'idle' || truck.cargo > 0)) {
       return { ok: false, message: 'Das Müllfahrzeug ist unterwegs oder noch beladen' }
     }
     depot.truckIds = depot.truckIds.filter((id) => id !== truckId)
@@ -3394,7 +3738,12 @@ export class GameState {
         SIMULATION_CONFIG.logistics.busResaleFraction,
     )
     this.emit()
-    return { ok: true, message: 'Müllfahrzeug verkauft' }
+    return {
+      ok: true,
+      message: truck
+        ? 'Müllfahrzeug verkauft'
+        : 'Müllfahrzeug war nicht mehr vorhanden und wurde verkauft',
+    }
   }
 
   buySweeper(depotId: string): ActionResult {
@@ -3927,6 +4276,11 @@ export class GameState {
   }
 
   private bulldozeAt(x: number, z: number, buildingId?: string): ActionResult {
+    if (!buildingId && this.removeAccessControlsAt(x, z) > 0) {
+      this.evaluateAccessSignals()
+      this.emit()
+      return { ok: true, message: 'Kontrolle entfernt' }
+    }
     const busStop = this.state.logistics.busStops.find(
       (stop) => stop.x === x && stop.z === z,
     )
@@ -3977,6 +4331,7 @@ export class GameState {
         }
         this.state.logistics.roadCells =
           this.state.logistics.roadCells.filter((cell) => cell !== road)
+        this.removeAccessControlsAt(x, z)
         this.invalidateRoadGraph()
         this.emit()
         return { ok: true, message: 'Straße entfernt' }
@@ -4051,7 +4406,10 @@ export class GameState {
       return { ok: false, message: 'Nicht genug Geld, um den Baum zu entfernen' }
     }
 
-    if (building.kind === 'path') this.relocateVisitorsFromPath(building)
+    if (building.kind === 'path') {
+      this.relocateVisitorsFromPath(building)
+      this.removeAccessControlsAt(x, z)
+    }
     if (building.kind === 'ambulanceGarage') {
       const garage = this.state.logistics.ambulanceGarages.find(
         (candidate) => candidate.id === building.id,
@@ -4206,6 +4564,7 @@ export class GameState {
         this.rotateComplaintSession()
       }
     }
+    this.evaluateAccessSignals()
     this.enforceDayPlan()
     updateFestival(this.state)
     updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, true, undefined, true), (a, b) => this.canCarrierStep(a, b))
@@ -4305,7 +4664,9 @@ export class GameState {
   }
 
   private updateLogistics(minutes: number): void {
+    this.evaluateAccessSignals()
     this.syncFreightToVehicles()
+    this.restoreMissingGarbageTrucks()
     this.claimedTentCellsCache = null
     this.visitorsOnCellsThisTick = null
     const logistics = this.state.logistics
@@ -4392,9 +4753,32 @@ export class GameState {
         if (vehicle.state === 'idle') this.dispatchBus(vehicle)
       }
       if (vehicle.kind === 'garbageTruck') {
-        if (vehicle.state === 'idle') this.dispatchGarbageTruck(vehicle)
+        if (vehicle.state === 'idle') {
+          this.dispatchGarbageTruck(vehicle)
+          if (vehicle.state === 'idle' && !this.isGarbageTruckAtHome(vehicle)) {
+            this.continueGarbageTruck(vehicle)
+          }
+        }
         if (vehicle.state === 'waiting') {
           if (this.isAccidentVictimBlockingVehicle(vehicle)) return
+          if (
+            this.isOffMapRoadExit(vehicle.cell ?? vehicle.position) &&
+            vehicle.cargo <= 0
+          ) {
+            vehicle.waitMinutes += minutes
+            if (vehicle.waitMinutes < SIMULATION_CONFIG.waste.truckUnloadMinutes) {
+              return
+            }
+            if (this.reenterGarbageTruck(vehicle)) return
+            if (
+              vehicle.waitMinutes >=
+              SIMULATION_CONFIG.waste.truckUnloadMinutes +
+                SIMULATION_CONFIG.logistics.vehicleUnstickMinutes
+            ) {
+              this.returnGarbageTruckToDepot(vehicle)
+            }
+            return
+          }
           if (this.resumeVehicleAfterIncident(vehicle)) {
             // continue into movement below
           } else {
@@ -4441,6 +4825,9 @@ export class GameState {
           if (vehicle.state === 'waiting') return
         }
       }
+      if (this.claimAdjacentFreeParking(vehicle)) {
+        // pull into the first free bay beside this cell
+      }
 
       if (
         vehicle.state !== 'driving' &&
@@ -4481,7 +4868,10 @@ export class GameState {
         ) {
           vehicle.state = 'at-stop'
           vehicle.waitMinutes = 0
-        } else if (vehicle.state === 'returning') {
+        } else if (
+          vehicle.state === 'returning' &&
+          !isPlayerOwnedFleetVehicle(vehicle)
+        ) {
           vehicle.passengerIds.forEach((visitorId) => {
             removedVisitors.add(visitorId)
           })
@@ -4495,6 +4885,19 @@ export class GameState {
         return
       }
       const nextKey = roadCellKey(next.x, next.z)
+      const here = vehicle.cell ?? vehicle.position
+      if (this.isIllegalParkingPullIn(vehicle, here, next)) {
+        this.releaseVisitorCarParking(vehicle)
+        vehicle.route = []
+        vehicle.state = 'waiting'
+        vehicle.waitMinutes = 0
+        return
+      }
+      if (stepUsesClosedEdge(here.x, here.z, next.x, next.z, this.closedTrafficEdges)) {
+        if (this.rerouteAwayFromRedLight(vehicle, next)) return
+        vehicle.waitMinutes += minutes
+        return
+      }
       const truckBlocks = this.state.festival.infrastructure.trucks.some(
         (truck) =>
           !this.state.logistics.roadVehicles.some(
@@ -4616,6 +5019,9 @@ export class GameState {
       vehicle.route.shift()
       vehicle.waitMinutes = 0
       occupied.set(nextKey, vehicle.id)
+      if (this.claimAdjacentFreeParking(vehicle)) {
+        return
+      }
       if (vehicle.route.length === 0 && vehicle.kind === 'visitorCar') {
         if (vehicle.state === 'returning') {
           vehicle.passengerIds.forEach((visitorId) => {
@@ -4762,40 +5168,38 @@ export class GameState {
       }
       vehicle.waitMinutes = 0
     }
-    const parking = this.findReachableParking(vehicle)
-    if (parking) {
-      parking.cell.occupiedBy = vehicle.id
-      vehicle.parkingCell = {
-        x: parking.cell.x,
-        z: parking.cell.z,
-      }
-      vehicle.target = {
-        kind: 'parking',
-        parkingCell: { ...vehicle.parkingCell },
-      }
-      vehicle.route = parking.route.map((cell) => ({
-        x: cell.x,
-        z: cell.z,
-      }))
-      vehicle.state = vehicle.route.length > 0 ? 'driving' : 'parking'
-      vehicle.waitMinutes = 0
+    if (this.claimAdjacentFreeParking(vehicle)) {
       group.state = 'approaching'
+      return
+    }
+    const freeBays = this.state.logistics.parkingCells.some(
+      (cell) => cell.occupiedBy === null,
+    )
+    if (!freeBays) {
+      group.state = 'waiting-for-parking'
+      group.memberIds.forEach((visitorId) => {
+        const visitor = this.getVisitor(visitorId)
+        if (visitor) {
+          visitor.motivation = Math.max(
+            0,
+            visitor.motivation - minutes * 0.018,
+          )
+          visitor.thought = this.isVisitorCarHoldingNearParking(vehicle)
+            ? 'Wir warten vor dem Parkplatz, bis einer frei wird.'
+            : 'Wir fahren erstmal weiter und suchen einen freien Parkplatz.'
+        }
+      })
+    }
+    const plan =
+      this.findRouteTowardParking(vehicle) ??
+      this.findVisitorCarCirculation(vehicle)
+    if (plan) {
+      this.applyVisitorCarSearchRoute(vehicle, plan)
+      if (freeBays) group.state = 'approaching'
       return
     }
     group.state = 'waiting-for-parking'
     vehicle.waitMinutes = 0
-    group.memberIds.forEach((visitorId) => {
-      const visitor = this.getVisitor(visitorId)
-      if (visitor) {
-        visitor.motivation = Math.max(
-          0,
-          visitor.motivation - minutes * 0.018,
-        )
-        visitor.thought = this.isVisitorCarHoldingNearParking(vehicle)
-          ? 'Wir warten vor dem Parkplatz, bis einer frei wird.'
-          : 'Wir fahren erstmal weiter und suchen einen freien Parkplatz.'
-      }
-    })
     if (
       this.isVisitorCarOnIngress(vehicle) ||
       !this.isVisitorCarHoldingNearParking(vehicle)
@@ -4820,7 +5224,7 @@ export class GameState {
   private isVisitorCarHoldingNearParking(vehicle: RoadVehicle): boolean {
     const cell = vehicle.cell ?? vehicle.position
     return this.state.logistics.parkingCells.some((parking) =>
-      this.getAdjacentRoadPositions(parking).some(
+      this.getParkingApproachRoads(parking).some(
         (approach) => approach.x === cell.x && approach.z === cell.z,
       ),
     )
@@ -4837,6 +5241,201 @@ export class GameState {
     if (parking) parking.occupiedBy = null
     vehicle.parkingCell = null
     if (vehicle.target?.kind === 'parking') vehicle.target = null
+  }
+
+  private isVisitorCarSeekingParking(vehicle: RoadVehicle): boolean {
+    return (
+      vehicle.kind === 'visitorCar' &&
+      vehicle.state !== 'returning' &&
+      vehicle.state !== 'parked' &&
+      vehicle.state !== 'parking' &&
+      !vehicle.parkingCell
+    )
+  }
+
+  private forgetDistantParkingReservation(vehicle: RoadVehicle): void {
+    if (!vehicle.parkingCell) return
+    if (vehicle.state === 'parking' || vehicle.state === 'parked') return
+    if (
+      this.isVehicleOnItsParkingCell(vehicle) ||
+      this.isVehicleAtParkingAccess(vehicle)
+    ) {
+      return
+    }
+    this.releaseVisitorCarParking(vehicle)
+  }
+
+  private claimAdjacentFreeParking(vehicle: RoadVehicle): boolean {
+    if (vehicle.kind !== 'visitorCar' || vehicle.state === 'returning') return false
+    if (vehicle.state === 'parked' || vehicle.state === 'parking') return false
+    this.forgetDistantParkingReservation(vehicle)
+    if (vehicle.parkingCell) return false
+    const here = vehicle.cell ?? vehicle.position
+    const bay = this.state.logistics.parkingCells
+      .filter(
+        (cell) =>
+          cell.occupiedBy === null &&
+          this.getOpenParkingApproachRoads(cell).some(
+            (access) => access.x === here.x && access.z === here.z,
+          ),
+      )
+      .sort((left, right) => left.x - right.x || left.z - right.z)[0]
+    if (!bay) return false
+    bay.occupiedBy = vehicle.id
+    vehicle.parkingCell = { x: bay.x, z: bay.z }
+    this.beginVehiclePullIn(vehicle)
+    return true
+  }
+
+  private applyVisitorCarSearchRoute(
+    vehicle: RoadVehicle,
+    plan: { route: RoadPosition[]; target: NonNullable<RoadVehicle['target']> },
+  ): void {
+    this.forgetDistantParkingReservation(vehicle)
+    vehicle.route = plan.route.map((cell) => ({ x: cell.x, z: cell.z }))
+    vehicle.target = plan.target
+    vehicle.state = plan.route.length > 0 ? 'driving' : 'waiting'
+    vehicle.waitMinutes = 0
+  }
+
+  private routePreferringOpenLights(
+    options: FindRoadRouteOptions,
+  ): RoadCell[] | null {
+    return (
+      findRoadRoute({
+        ...options,
+        blockedEdges: this.closedTrafficEdges,
+      }) ?? findRoadRoute({ ...options, blockedEdges: undefined })
+    )
+  }
+
+  private findRouteTowardParking(
+    vehicle: RoadVehicle,
+    blockedCells?: ReadonlySet<string>,
+  ): { route: RoadPosition[]; target: NonNullable<RoadVehicle['target']> } | null {
+    const start = vehicle.cell ?? vehicle.position
+    const freeApproaches: RoadPosition[] = []
+    const allApproaches: RoadPosition[] = []
+    const seenFree = new Set<string>()
+    const seenAll = new Set<string>()
+    const nearbyParking = new Map<string, RoadPosition>()
+    for (const parking of this.state.logistics.parkingCells) {
+      for (const approach of this.getParkingApproachRoads(parking)) {
+        const key = roadCellKey(approach.x, approach.z)
+        if (approach.x === start.x && approach.z === start.z) continue
+        if (!seenAll.has(key)) {
+          seenAll.add(key)
+          allApproaches.push(approach)
+        }
+        if (!nearbyParking.has(key)) nearbyParking.set(key, { x: parking.x, z: parking.z })
+      }
+      if (parking.occupiedBy !== null) continue
+      for (const approach of this.getOpenParkingApproachRoads(parking)) {
+        const key = roadCellKey(approach.x, approach.z)
+        if (approach.x === start.x && approach.z === start.z) continue
+        if (!seenFree.has(key)) {
+          seenFree.add(key)
+          freeApproaches.push(approach)
+        }
+      }
+    }
+    const tryTargets = (targets: RoadPosition[]): RoadCell[] | null => {
+      if (!targets.length) return null
+      return this.routePreferringOpenLights({
+        roadCells: this.state.logistics.roadCells,
+        graph: this.getRoadGraph(),
+        start,
+        targets,
+        initialDirection: this.getVehicleDirection(vehicle),
+        blockedCells,
+        allowUTurn: false,
+      })
+    }
+    const route = tryTargets(freeApproaches) ?? tryTargets(allApproaches)
+    if (!route?.length) return null
+    const last = route.at(-1)!
+    const parking = nearbyParking.get(roadCellKey(last.x, last.z))
+    return {
+      route: route.map((cell) => ({ x: cell.x, z: cell.z })),
+      target: parking
+        ? { kind: 'hold', parkingCell: { ...parking } }
+        : { kind: 'cruise' },
+    }
+  }
+
+  private rerouteAwayFromRedLight(
+    vehicle: RoadVehicle,
+    blockedNext: RoadPosition,
+  ): boolean {
+    if (vehicle.kind === 'sweeper') return false
+    const waited =
+      vehicle.waitMinutes >=
+      SIMULATION_CONFIG.logistics.accessRerouteMinutes
+    const allowUTurn =
+      waited &&
+      (vehicle.kind === 'deliveryTruck' || vehicle.kind === 'garbageTruck')
+    if (this.isVisitorCarSeekingParking(vehicle)) {
+      const plan =
+        this.findRouteTowardParking(vehicle) ??
+        this.findVisitorCarCirculation(vehicle)
+      if (!plan?.route.length) return false
+      if (!this.adoptOpenLightDetour(vehicle, plan.route, blockedNext, allowUTurn)) {
+        return false
+      }
+      vehicle.target = plan.target
+      return true
+    }
+    const targets = this.collectVehicleRouteTargets(vehicle)
+    if (!targets.length) return false
+    const here = vehicle.cell ?? vehicle.position
+    const route = this.routePreferringOpenLights({
+      roadCells: this.state.logistics.roadCells,
+      graph: this.getRoadGraph(),
+      start: here,
+      targets,
+      initialDirection: this.getVehicleDirection(vehicle),
+      allowUTurn,
+    })
+    if (!route?.length) return false
+    return this.adoptOpenLightDetour(vehicle, route, blockedNext, allowUTurn)
+  }
+
+  private adoptOpenLightDetour(
+    vehicle: RoadVehicle,
+    route: readonly RoadPosition[],
+    blockedNext: RoadPosition,
+    allowUTurn: boolean,
+  ): boolean {
+    const first = route[0]
+    if (!first) return false
+    if (first.x === blockedNext.x && first.z === blockedNext.z) return false
+    const here = vehicle.cell ?? vehicle.position
+    if (
+      stepUsesClosedEdge(
+        here.x,
+        here.z,
+        first.x,
+        first.z,
+        this.closedTrafficEdges,
+      )
+    ) {
+      return false
+    }
+    const facing = this.getVehicleDirection(vehicle)
+    const step = directionFromDelta(first.x - here.x, first.z - here.z)
+    if (step === oppositeDirection(facing) && !allowUTurn) return false
+    if (step !== null) vehicle.facing = step * (Math.PI / 2)
+    vehicle.route = route.map((cell) => ({ x: cell.x, z: cell.z }))
+    vehicle.waitMinutes = 0
+    if (vehicle.state === 'waiting') {
+      vehicle.state = vehicle.resumeState ?? 'driving'
+      vehicle.resumeState = null
+    }
+    const truck = this.getDeliveryFreight(vehicle)
+    if (truck) {
+      truck.path = vehicle.route.map((cell) => ({ x: cell.x, z: cell.z }))
+    }
+    return true
   }
 
   private sendVisitorCarCirculating(
@@ -4874,7 +5473,7 @@ export class GameState {
     const holdFor = new Map<string, { x: number; z: number }>()
     const holds: RoadPosition[] = []
     for (const parking of this.state.logistics.parkingCells) {
-      for (const approach of this.getAdjacentRoadPositions(parking)) {
+      for (const approach of this.getParkingApproachRoads(parking)) {
         const key = roadCellKey(approach.x, approach.z)
         if (approach.x === start.x && approach.z === start.z) continue
         if (taken.has(key) || holdFor.has(key)) continue
@@ -5004,6 +5603,10 @@ export class GameState {
         vehicle.waitMinutes >=
         SIMULATION_CONFIG.logistics.vehicleAbandonMinutes
       ) {
+        if (isPlayerOwnedFleetVehicle(vehicle)) {
+          if (!this.isQueueTail(vehicle, occupied)) vehicle.waitMinutes = 0
+          return
+        }
         vehicle.passengerIds.forEach((visitorId) => {
           removedVisitors.add(visitorId)
         })
@@ -5083,29 +5686,14 @@ export class GameState {
         : []
     const blocked = this.collectRouteBlockedCells(vehicle, occupied, keepOpen)
     if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
-      const parking = this.findReachableParking(vehicle, blocked, false)
-      if (
-        parking &&
-        this.adoptVehicleRoute(
-          vehicle,
-          parking.route.map((cell) => ({ x: cell.x, z: cell.z })),
-          next,
-        )
-      ) {
-        if (
-          !vehicle.parkingCell ||
-          vehicle.parkingCell.x !== parking.cell.x ||
-          vehicle.parkingCell.z !== parking.cell.z
-        ) {
-          this.releaseVisitorCarParking(vehicle)
-          parking.cell.occupiedBy = vehicle.id
-          vehicle.parkingCell = { x: parking.cell.x, z: parking.cell.z }
-          vehicle.target = {
-            kind: 'parking',
-            parkingCell: { ...vehicle.parkingCell },
-          }
+      if (vehicle.state !== 'parking') {
+        const plan =
+          this.findRouteTowardParking(vehicle, blocked) ??
+          this.findVisitorCarCirculation(vehicle, blocked)
+        if (plan && this.adoptVehicleRoute(vehicle, plan.route, next)) {
+          vehicle.target = plan.target
+          return true
         }
-        return true
       }
     }
     if (vehicle.state === 'returning') {
@@ -5184,21 +5772,74 @@ export class GameState {
     })
   }
 
+  private collectMapExitTargets(): RoadPosition[] {
+    const edgeZ = -this.getWorldSize() / 2
+    return this.state.logistics.roadCells.filter(
+      (road) =>
+        road.z === edgeZ &&
+        road.x >= -3 &&
+        road.x <= 2 &&
+        isRoadDirectionAllowed(road, 2),
+    )
+  }
+
+  private collectRoadOrAccessTargets(position: RoadPosition): RoadPosition[] {
+    if (this.getRoadCellAt(position.x, position.z)) {
+      return [{ x: position.x, z: position.z }]
+    }
+    return this.getAdjacentRoadPositions(position)
+  }
+
+  private collectGarbageTruckTargets(vehicle: RoadVehicle): RoadPosition[] {
+    const target = vehicle.target
+    if (vehicle.cargo > 0) return this.collectMapExitTargets()
+    if (target?.kind === 'wasteDump') {
+      return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
+    }
+    if (target?.kind === 'depot') {
+      const depot = this.state.logistics.wasteDepots.find(
+        (candidate) => candidate.id === target.depotId,
+      )
+      const access = depot ? this.getLogisticsBuildingAccess(depot, 2) : null
+      return access ? [access] : []
+    }
+    if (target?.kind === 'cell') {
+      if (this.isRoadExitCell(target) || this.isOffMapRoadExit(target)) {
+        return this.collectMapExitTargets()
+      }
+      return this.collectRoadOrAccessTargets(target)
+    }
+    const last = vehicle.route.at(-1)
+    return last ? this.collectRoadOrAccessTargets(last) : []
+  }
+
   private collectVehicleRouteTargets(vehicle: RoadVehicle): RoadPosition[] {
     if (vehicle.kind === 'deliveryTruck') {
       return this.collectDeliveryTruckTargets(vehicle)
     }
+    if (vehicle.kind === 'garbageTruck') {
+      return this.collectGarbageTruckTargets(vehicle)
+    }
+    if (vehicle.kind === 'visitorCar' && vehicle.state === 'returning') {
+      return this.collectMapExitTargets()
+    }
     const target = vehicle.target
     if (!target) {
       const last = vehicle.route.at(-1)
-      return last ? [last] : []
+      return last ? this.collectRoadOrAccessTargets(last) : []
     }
-    if (target.kind === 'cell' || target.kind === 'wasteDump') {
-      return [{ x: target.x, z: target.z }]
+    if (target.kind === 'wasteDump') {
+      return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
+    }
+    if (target.kind === 'cell') {
+      if (this.isRoadExitCell(target) || this.isOffMapRoadExit(target)) {
+        return this.collectMapExitTargets()
+      }
+      return this.collectRoadOrAccessTargets(target)
     }
     if (target.kind === 'parking' || target.kind === 'hold') {
       const parking = target.parkingCell ?? vehicle.parkingCell
-      return parking ? this.getAdjacentRoadPositions(parking) : []
+      return parking ? this.getParkingApproachRoads(parking) : []
     }
     if (target.kind === 'cruise') {
       const last = vehicle.route.at(-1)
@@ -5286,35 +5927,39 @@ export class GameState {
         this.findReachableRoadExit(start, facing, undefined, false)
       if (exit && applyRoute(exit.route)) return
     }
-    if (
-      vehicle.kind === 'visitorCar' &&
-      vehicle.state !== 'returning' &&
-      (vehicle.parkingCell || vehicle.target?.kind === 'parking')
-    ) {
-      const parking =
-        this.findReachableParking(vehicle, blocked, false) ??
-        this.findReachableParking(vehicle, undefined, false)
-      if (parking && applyRoute(parking.route)) {
-        if (
-          !vehicle.parkingCell ||
-          vehicle.parkingCell.x !== parking.cell.x ||
-          vehicle.parkingCell.z !== parking.cell.z
-        ) {
-          this.releaseVisitorCarParking(vehicle)
-          parking.cell.occupiedBy = vehicle.id
-          vehicle.parkingCell = { x: parking.cell.x, z: parking.cell.z }
-          vehicle.target = {
-            kind: 'parking',
-            parkingCell: { ...vehicle.parkingCell },
-          }
+    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
+      if (vehicle.state === 'parking' && vehicle.parkingCell) {
+        if (this.isVehicleAtParkingAccess(vehicle)) {
+          this.beginVehiclePullIn(vehicle)
+          return
         }
+        const accesses = this.getParkingApproachRoads(vehicle.parkingCell)
+        const reserved = accesses.length
+          ? this.routePreferringOpenLights({
+              roadCells: this.state.logistics.roadCells,
+              graph: this.getRoadGraph(),
+              start,
+              targets: accesses,
+              initialDirection: facing,
+              blockedCells: blocked,
+              allowUTurn: false,
+            })
+          : null
+        if (reserved && applyRoute(reserved)) return
+        this.releaseVisitorCarParking(vehicle)
+      }
+      const plan =
+        this.findRouteTowardParking(vehicle, blocked) ??
+        this.findVisitorCarCirculation(vehicle, blocked)
+      if (plan && applyRoute(plan.route)) {
+        vehicle.target = plan.target
         return
       }
     }
     const targets = this.collectVehicleRouteTargets(vehicle)
     if (targets.length) {
       const rebuilt =
-        findRoadRoute({
+        this.routePreferringOpenLights({
           roadCells: this.state.logistics.roadCells,
           graph: this.getRoadGraph(),
           start,
@@ -5483,25 +6128,14 @@ export class GameState {
     }
     let continuation: RoadPosition[] = []
     if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
-      const parking = this.findReachableParking(fromBehind, searchBlocked, false)
-      if (parking?.route.length) {
-        if (
-          !vehicle.parkingCell ||
-          vehicle.parkingCell.x !== parking.cell.x ||
-          vehicle.parkingCell.z !== parking.cell.z
-        ) {
-          this.releaseVisitorCarParking(vehicle)
-          parking.cell.occupiedBy = vehicle.id
-          vehicle.parkingCell = { x: parking.cell.x, z: parking.cell.z }
-          vehicle.target = {
-            kind: 'parking',
-            parkingCell: { ...vehicle.parkingCell },
-          }
+      if (vehicle.state !== 'parking') {
+        const plan =
+          this.findRouteTowardParking(fromBehind, searchBlocked) ??
+          this.findVisitorCarCirculation(fromBehind, searchBlocked)
+        if (plan?.route.length) {
+          continuation = plan.route
+          vehicle.target = plan.target
         }
-        continuation = parking.route.map((cell) => ({
-          x: cell.x,
-          z: cell.z,
-        }))
       }
     }
     if (!continuation.length && vehicle.state === 'returning') {
@@ -5614,7 +6248,7 @@ export class GameState {
     occupied: ReadonlyMap<string, string>,
   ): void {
     if (!vehicle.parkingCell) return
-    const accesses = this.getAdjacentRoadPositions(vehicle.parkingCell).filter(
+    const accesses = this.getParkingApproachRoads(vehicle.parkingCell).filter(
       (cell) => !occupied.has(roadCellKey(cell.x, cell.z)),
     )
     const departure = this.findDepartureFromAccesses(vehicle, accesses, true)
@@ -5825,7 +6459,7 @@ export class GameState {
       blocked?: ReadonlySet<string>,
       direction?: Direction,
     ) =>
-      findRoadRoute({
+      this.routePreferringOpenLights({
         roadCells: this.state.logistics.roadCells,
         graph,
         start,
@@ -6108,12 +6742,14 @@ export class GameState {
       }
       vehicle.cargo = 0
       vehicle.state = 'waiting'
-      vehicle.waitMinutes = SIMULATION_CONFIG.waste.truckUnloadMinutes
+      vehicle.waitMinutes = 0
       vehicle.resumeState = 'returning'
       return
     }
     if (this.isOffMapRoadExit(vehicle.cell ?? vehicle.position)) {
-      this.reenterGarbageTruck(vehicle)
+      if (!this.reenterGarbageTruck(vehicle)) {
+        this.holdGarbageTruckOffMap(vehicle)
+      }
       return
     }
     vehicle.state = 'idle'
@@ -6162,7 +6798,9 @@ export class GameState {
       return
     }
     if (this.isOffMapRoadExit(vehicle.cell)) {
-      this.reenterGarbageTruck(vehicle)
+      if (!this.reenterGarbageTruck(vehicle)) {
+        this.holdGarbageTruckOffMap(vehicle)
+      }
       return
     }
     const depot = this.state.logistics.wasteDepots.find((candidate) =>
@@ -6181,7 +6819,11 @@ export class GameState {
       return
     }
     const route = this.findGarbageTruckRoute(vehicle, [access])
-    if (!route) {
+    if (!route?.length) {
+      if (this.isRoadExitCell(vehicle.cell) || this.isOffMapRoadExit(vehicle.cell)) {
+        this.holdGarbageTruckOffMap(vehicle)
+        return
+      }
       vehicle.state = 'idle'
       return
     }
@@ -6191,40 +6833,105 @@ export class GameState {
     vehicle.resumeState = null
   }
 
-  private reenterGarbageTruck(vehicle: RoadVehicle): void {
-    const entry = this.findAvailableRoadEntry() ?? this.getRoadEntry()
-    const occupied = this.state.logistics.roadVehicles.some(
-      (candidate) =>
-        candidate.id !== vehicle.id &&
-        candidate.cell?.x === entry.x &&
-        candidate.cell.z === entry.z &&
-        candidate.state !== 'parked',
+  private restoreMissingGarbageTrucks(): void {
+    const existing = new Set(
+      this.state.logistics.roadVehicles.map((vehicle) => vehicle.id),
     )
-    if (occupied) {
-      vehicle.state = 'waiting'
-      vehicle.waitMinutes = 1
-      vehicle.resumeState = 'returning'
-      return
+    for (const depot of this.state.logistics.wasteDepots) {
+      for (const id of depot.truckIds) {
+        if (existing.has(id)) continue
+        const access =
+          this.getLogisticsBuildingAccess(depot, 2) ??
+          this.findAvailableRoadEntry() ??
+          this.getRoadEntry()
+        this.state.logistics.roadVehicles.push(
+          this.createRoadVehicle(id, 'garbageTruck', access),
+        )
+        existing.add(id)
+      }
     }
-    vehicle.cell = { ...entry }
-    vehicle.position = { ...entry }
-    vehicle.facing = 0
-    vehicle.cargo = 0
-    vehicle.target = null
-    vehicle.route = []
+  }
+
+  private returnGarbageTruckToDepot(vehicle: RoadVehicle): void {
     const depot = this.state.logistics.wasteDepots.find((candidate) =>
       candidate.truckIds.includes(vehicle.id),
     )
     const access = depot ? this.getLogisticsBuildingAccess(depot, 2) : null
-    if (!depot || !access) {
-      vehicle.state = 'idle'
-      return
-    }
-    const route = this.findGarbageTruckRoute(vehicle, [access])
-    vehicle.target = { kind: 'depot', depotId: depot.id }
-    vehicle.route = route ?? []
-    vehicle.state = route ? 'returning' : 'idle'
+    const here = access ?? this.findAvailableRoadEntry() ?? this.getRoadEntry()
+    vehicle.cell = { ...here }
+    vehicle.position = { ...here }
+    vehicle.facing = 0
+    vehicle.cargo = 0
+    vehicle.route = []
+    vehicle.waitMinutes = 0
     vehicle.resumeState = null
+    vehicle.target = depot ? { kind: 'depot', depotId: depot.id } : null
+    vehicle.state = 'idle'
+  }
+
+  private isGarbageTruckAtHome(vehicle: RoadVehicle): boolean {
+    const here = vehicle.cell ?? vehicle.position
+    if (this.isOffMapRoadExit(here)) return false
+    const depot = this.state.logistics.wasteDepots.find((candidate) =>
+      candidate.truckIds.includes(vehicle.id),
+    )
+    const access = depot ? this.getLogisticsBuildingAccess(depot, 2) : null
+    return Boolean(access && access.x === here.x && access.z === here.z)
+  }
+
+  private holdGarbageTruckOffMap(vehicle: RoadVehicle): void {
+    const offMap = this.getOffMapRoadExit(vehicle.cell ?? vehicle.position)
+    vehicle.cell = { ...offMap }
+    vehicle.position = { ...offMap }
+    vehicle.facing = Math.PI
+    vehicle.route = []
+    vehicle.target = { kind: 'cell', ...offMap }
+    vehicle.state = 'waiting'
+    vehicle.resumeState = 'returning'
+  }
+
+  private reenterGarbageTruck(vehicle: RoadVehicle): boolean {
+    const depot = this.state.logistics.wasteDepots.find((candidate) =>
+      candidate.truckIds.includes(vehicle.id),
+    )
+    const access = depot ? this.getLogisticsBuildingAccess(depot, 2) : null
+    const entries = this.listFreeRoadEntries(vehicle.id, false)
+    if (entries.length === 0) {
+      this.holdGarbageTruckOffMap(vehicle)
+      return false
+    }
+    for (const entry of entries) {
+      vehicle.cell = { ...entry }
+      vehicle.position = { ...entry }
+      vehicle.facing = 0
+      vehicle.cargo = 0
+      if (!depot || !access) {
+        vehicle.target = null
+        vehicle.route = []
+        vehicle.waitMinutes = 0
+        vehicle.state = 'idle'
+        vehicle.resumeState = null
+        return true
+      }
+      if (access.x === entry.x && access.z === entry.z) {
+        vehicle.target = { kind: 'depot', depotId: depot.id }
+        vehicle.route = []
+        vehicle.waitMinutes = 0
+        vehicle.state = 'idle'
+        vehicle.resumeState = null
+        return true
+      }
+      const route = this.findGarbageTruckRoute(vehicle, [access])
+      if (!route?.length) continue
+      vehicle.target = { kind: 'depot', depotId: depot.id }
+      vehicle.route = route
+      vehicle.waitMinutes = 0
+      vehicle.state = 'returning'
+      vehicle.resumeState = null
+      return true
+    }
+    this.holdGarbageTruckOffMap(vehicle)
+    return false
   }
 
   private claimedTentCellKeys(): Set<string> {
@@ -6290,10 +6997,7 @@ export class GameState {
       vehicle.speed = 0
       return
     }
-    const nextPath =
-      this.getPathAt(next.x, next.z, this.getTerrainHeight(next.x, next.z)) ??
-      this.getPathAt(next.x, next.z)
-    if (!nextPath || nextPath.pathType === 'queue') {
+    if (!this.isSweeperDriveCell(next.x, next.z)) {
       vehicle.route = []
       return
     }
@@ -6317,7 +7021,11 @@ export class GameState {
     const z = vehicle.cell?.z ?? vehicle.position.z
     const path =
       this.getPathAt(x, z, this.getTerrainHeight(x, z)) ?? this.getPathAt(x, z)
-    return { x, z, elevation: path?.elevation ?? 0 }
+    return {
+      x,
+      z,
+      elevation: path?.elevation ?? this.getTerrainHeight(x, z),
+    }
   }
 
   private findSweeperRoute(
@@ -6689,7 +7397,7 @@ export class GameState {
     )
     if (!victim || !vehicle.cell) return
     const target = { x: victim.cellX, z: victim.cellZ }
-    const route = findRoadRoute({
+    const route = this.routePreferringOpenLights({
       roadCells: this.state.logistics.roadCells,
       graph: this.getRoadGraph(),
       start: vehicle.cell,
@@ -6729,7 +7437,7 @@ export class GameState {
         vehicle.state = 'idle'
         return
       }
-      const route = findRoadRoute({
+      const route = this.routePreferringOpenLights({
         roadCells: this.state.logistics.roadCells,
         graph: this.getRoadGraph(),
         start: vehicle.cell,
@@ -6887,7 +7595,7 @@ export class GameState {
       (candidate) => candidate.id === line.stopIds[stopIndex],
     )
     if (!stop || !vehicle.cell) return false
-    const route = findRoadRoute({
+    const route = this.routePreferringOpenLights({
       roadCells: this.state.logistics.roadCells,
       graph: this.getRoadGraph(),
       start: vehicle.cell,
@@ -6903,51 +7611,6 @@ export class GameState {
     return true
   }
 
-  private findReachableParking(
-    vehicle: RoadVehicle,
-    blockedCells?: ReadonlySet<string>,
-    allowUTurn = false,
-  ): { cell: ParkingCell; route: RoadCell[] } | null {
-    const start = vehicle.cell ?? vehicle.position
-    const approaches = new Map<string, ParkingCell>()
-    this.state.logistics.parkingCells
-      .filter(
-        (cell) =>
-          cell.occupiedBy === null || cell.occupiedBy === vehicle.id,
-      )
-      .sort(
-        (left, right) =>
-          Math.abs(left.x - start.x) +
-          Math.abs(left.z - start.z) -
-          (Math.abs(right.x - start.x) +
-            Math.abs(right.z - start.z)),
-      )
-      .slice(0, SIMULATION_CONFIG.logistics.parkingRouteCandidateLimit)
-      .forEach((cell) => {
-        this.getAdjacentRoadPositions(cell).forEach((approach) => {
-          const key = roadCellKey(approach.x, approach.z)
-          if (!approaches.has(key)) approaches.set(key, cell)
-        })
-      })
-    if (approaches.size === 0) return null
-    const route = findRoadRoute({
-      roadCells: this.state.logistics.roadCells,
-      graph: this.getRoadGraph(),
-      start,
-      targets: [...approaches.keys()].map((key) => {
-        const [x, z] = key.split(':')
-        return { x: Number(x), z: Number(z) }
-      }),
-      initialDirection: this.getVehicleDirection(vehicle),
-      blockedCells,
-      allowUTurn,
-    })
-    if (!route) return null
-    const last = route.at(-1) ?? start
-    const cell = approaches.get(roadCellKey(last.x, last.z))
-    return cell ? { cell, route } : null
-  }
-
   private getAdjacentRoadPositions(position: RoadPosition): RoadPosition[] {
     return [
       { x: position.x, z: position.z + 1 },
@@ -6955,6 +7618,49 @@ export class GameState {
       { x: position.x, z: position.z - 1 },
       { x: position.x - 1, z: position.z },
     ].filter((cell) => Boolean(this.getRoadCellAt(cell.x, cell.z)))
+  }
+
+  private canEnterParkingFromRoad(
+    road: RoadCell,
+    parking: RoadPosition,
+  ): boolean {
+    const direction = directionFromDelta(parking.x - road.x, parking.z - road.z)
+    if (direction === null) return false
+    return (road.blockedEdges & directionBit(direction)) === 0
+  }
+
+  private getParkingApproachRoads(parking: RoadPosition): RoadPosition[] {
+    return this.getAdjacentRoadPositions(parking).filter((approach) => {
+      const road = this.getRoadCellAt(approach.x, approach.z)
+      return Boolean(road && this.canEnterParkingFromRoad(road, parking))
+    })
+  }
+
+  private getOpenParkingApproachRoads(parking: RoadPosition): RoadPosition[] {
+    return this.getParkingApproachRoads(parking).filter(
+      (approach) =>
+        !stepUsesClosedEdge(
+          approach.x,
+          approach.z,
+          parking.x,
+          parking.z,
+          this.closedTrafficEdges,
+        ),
+    )
+  }
+
+  private isIllegalParkingPullIn(
+    vehicle: RoadVehicle,
+    here: RoadPosition,
+    next: RoadPosition,
+  ): boolean {
+    if (vehicle.kind !== 'visitorCar') return false
+    const parking = this.state.logistics.parkingCells.find(
+      (cell) => cell.x === next.x && cell.z === next.z,
+    )
+    if (!parking) return false
+    const road = this.getRoadCellAt(here.x, here.z)
+    return !road || !this.canEnterParkingFromRoad(road, parking)
   }
 
   private isVehicleOnItsParkingCell(vehicle: RoadVehicle): boolean {
@@ -6966,13 +7672,14 @@ export class GameState {
   private isVehicleAtParkingAccess(vehicle: RoadVehicle): boolean {
     if (!vehicle.parkingCell) return false
     const here = vehicle.cell ?? vehicle.position
-    return this.getAdjacentRoadPositions(vehicle.parkingCell).some(
+    return this.getParkingApproachRoads(vehicle.parkingCell).some(
       (access) => access.x === here.x && access.z === here.z,
     )
   }
 
   private beginVehiclePullIn(vehicle: RoadVehicle): void {
     if (!vehicle.parkingCell) return
+    if (!this.isVehicleAtParkingAccess(vehicle)) return
     vehicle.route = [{ x: vehicle.parkingCell.x, z: vehicle.parkingCell.z }]
     vehicle.state = 'parking'
     vehicle.target = {
@@ -6991,31 +7698,13 @@ export class GameState {
       this.beginVehiclePullIn(vehicle)
       return
     }
-    if (vehicle.parkingCell) {
-      const reroute = this.findReachableParking(vehicle, undefined, true)
-      if (reroute) {
-        if (
-          reroute.cell.x !== vehicle.parkingCell.x ||
-          reroute.cell.z !== vehicle.parkingCell.z
-        ) {
-          this.releaseVisitorCarParking(vehicle)
-          reroute.cell.occupiedBy = vehicle.id
-          vehicle.parkingCell = { x: reroute.cell.x, z: reroute.cell.z }
-          vehicle.target = {
-            kind: 'parking',
-            parkingCell: { ...vehicle.parkingCell },
-          }
-        }
-        vehicle.route = reroute.route.map((cell) => ({
-          x: cell.x,
-          z: cell.z,
-        }))
-        vehicle.state = vehicle.route.length > 0 ? 'driving' : 'parking'
-        vehicle.waitMinutes = 0
-        if (vehicle.state === 'parking') this.beginVehiclePullIn(vehicle)
-        return
-      }
-      this.releaseVisitorCarParking(vehicle)
+    this.releaseVisitorCarParking(vehicle)
+    const plan =
+      this.findRouteTowardParking(vehicle) ??
+      this.findVisitorCarCirculation(vehicle)
+    if (plan) {
+      this.applyVisitorCarSearchRoute(vehicle, plan)
+      return
     }
     vehicle.state = 'waiting'
     vehicle.route = []
@@ -7056,7 +7745,9 @@ export class GameState {
     )
     if (group) group.state = 'arrived'
     const access =
-      this.getAdjacentRoadPositions(vehicle.parkingCell)[0] ?? this.getEntrance()
+      this.getParkingApproachRoads(vehicle.parkingCell)[0] ??
+      this.getAdjacentRoadPositions(vehicle.parkingCell)[0] ??
+      this.getEntrance()
     const remainingPassengers: string[] = []
     vehicle.passengerIds.forEach((visitorId) => {
       const visitor = this.getVisitor(visitorId)
@@ -7945,7 +8636,7 @@ export class GameState {
       const migrated: GameSnapshot = {
         ...createBlankSnapshot(),
         ...data,
-        version: 24,
+        version: 27,
         terrain: normalizeTerrain(data.terrain),
         buildings: data.buildings.map(b => b.stageDesign ? { ...b, stageDesign: migrateStageDesign(b.stageDesign) } : b),
         campingCells: Array.isArray(data.campingCells) ? data.campingCells : [],
@@ -7968,6 +8659,10 @@ export class GameState {
         visitors: Array.isArray(data.visitors) ? data.visitors : [],
         coasters: Array.isArray(data.coasters) ? data.coasters : [],
         power: normalizePower(data.power),
+        campingTicketPrice:
+          data.campingTicketPrice ??
+          data.entryPrice ??
+          SIMULATION_CONFIG.economy.defaultCampingTicketPrice,
       }
       if (migrated.festival.stageTemplates) migrated.festival.stageTemplates = migrated.festival.stageTemplates.map(migrateStageDesign)
       return new GameState(migrated)
@@ -8193,12 +8888,13 @@ export class GameState {
       wanderNonce: 0,
     }
     if (this.state.festival.enabled) assignAudience(visitor, this.state.festival)
-    const paidEntry = this.chargeVisitor(visitor, this.state.entryPrice, {
+    const admissionPrice = this.ticketPriceFor(ticketType)
+    const paidEntry = this.chargeVisitor(visitor, admissionPrice, {
       x: (arrivalMode === 'car' ? this.getRoadEntry().x : this.getEntrance().x) + 0.5,
       y: 0.85,
       z: (arrivalMode === 'car' ? this.getRoadEntry().z : this.getEntrance().z) + 0.5,
     })
-    if (paidEntry) visitor.entryFeePaid = this.state.entryPrice
+    if (paidEntry) visitor.entryFeePaid = admissionPrice
     this.state.visitors.push(visitor)
     if (tickets) { if (ticketType === 'camping') tickets.usedCamping++; else tickets.usedDay[this.state.day] = (tickets.usedDay[this.state.day] ?? 0) + 1 }
     if (this.state.festival.enabled) { this.state.festival.admissions++; this.state.festival.metrics.guests++ }
@@ -8238,19 +8934,41 @@ export class GameState {
     return 1
   }
 
-  private findAvailableRoadEntry(): RoadPosition | null {
-    for (let x = -3; x <= 2; x += 1) {
-      const road = this.getRoadCellAt(x, -this.getWorldSize() / 2)
-      if (!road || !isRoadDirectionAllowed(road, 0)) continue
-      const occupied = this.state.logistics.roadVehicles.some(
+  private listFreeRoadEntries(
+    exceptVehicleId?: string,
+    ingressOnly = true,
+  ): RoadPosition[] {
+    const northZ = -this.getWorldSize() / 2
+    const occupied = (x: number, z: number) =>
+      this.state.logistics.roadVehicles.some(
         (vehicle) =>
+          vehicle.id !== exceptVehicleId &&
           vehicle.cell?.x === x &&
-          vehicle.cell.z === -this.getWorldSize() / 2 &&
+          vehicle.cell.z === z &&
           vehicle.state !== 'parked',
       )
-      if (!occupied) return { x, z: -this.getWorldSize() / 2 }
+    const entries: RoadPosition[] = []
+    const seen = new Set<string>()
+    const consider = (x: number, z: number) => {
+      const key = roadCellKey(x, z)
+      if (seen.has(key)) return
+      const road = this.getRoadCellAt(x, z)
+      if (!road || !isRoadDirectionAllowed(road, 0) || occupied(x, z)) return
+      seen.add(key)
+      entries.push({ x, z })
     }
-    return null
+    for (let x = -3; x <= 2; x += 1) consider(x, northZ)
+    if (!ingressOnly) {
+      for (const road of this.state.logistics.roadCells) {
+        if (road.z !== northZ) continue
+        consider(road.x, road.z)
+      }
+    }
+    return entries
+  }
+
+  private findAvailableRoadEntry(): RoadPosition | null {
+    return this.listFreeRoadEntries()[0] ?? null
   }
 
   private queueVisitorDecision(visitor: Visitor): void {
@@ -8923,14 +9641,6 @@ export class GameState {
     coaster.queue.forEach((visitorId, index) => {
       const visitor = this.getVisitor(visitorId)
       if (!visitor || visitor.state !== 'queuing') return
-      const precedingVisitorIds = coaster.queue.slice(0, index)
-      if (
-        precedingVisitorIds.some(
-          (precedingId) => this.getVisitor(precedingId)?.state === 'seeking',
-        )
-      ) {
-        return
-      }
       const desiredCellIndex = Math.min(
         queueCells.length - 1,
         Math.floor(index / SIMULATION_CONFIG.coasters.queueSlotsPerCell),
@@ -9022,23 +9732,8 @@ export class GameState {
   private getBuildingQueueCells(building: PlacedBuilding): Cell[] {
     if (building.kind === 'ride') return this.getAccessQueueCells(building.rideEntrance)
     if (!['food', 'toilet', 'ride', 'alcohol'].includes(building.kind)) return []
-    const access = this.getAccessCell(
-      building.x,
-      building.z,
-      building.elevation,
-      building.rotation,
-    )
-    const front = this.getPathAt(access.x, access.z, access.elevation)
-    const directionToCounter = front
-      ? this.getDirectionIndex(building.x - front.x, building.z - front.z)
-      : -1
-    if (
-      !front ||
-      front.pathType !== 'queue' ||
-      front.queueDirection !== directionToCounter
-    ) {
-      return []
-    }
+    const front = this.findBuildingQueueFront(building)
+    if (!front) return []
     const queueCells: Cell[] = []
     const visited = new Set<string>()
     const pending: PlacedBuilding[] = [front]
@@ -9079,7 +9774,30 @@ export class GameState {
         .map((visitor) => visitor.id)
       this.facilityQueues.set(buildingId, queue)
     }
+    this.prioritizeArrivedQueueVisitors(queue)
     return queue
+  }
+
+  /**
+   * Destination reservations still count toward capacity, but must not hold a
+   * physical place ahead of guests who have already reached the queue. This is
+   * a stable O(n) partition because queue maintenance runs every simulation tick.
+   */
+  private prioritizeArrivedQueueVisitors(queue: string[]): void {
+    const arrived: string[] = []
+    const pending: string[] = []
+    let pendingSeen = false
+    let needsReorder = false
+    queue.forEach((visitorId) => {
+      if (this.getVisitor(visitorId)?.state === 'queuing') {
+        arrived.push(visitorId)
+        needsReorder ||= pendingSeen
+      } else {
+        pending.push(visitorId)
+        pendingSeen = true
+      }
+    })
+    if (needsReorder) queue.splice(0, queue.length, ...arrived, ...pending)
   }
 
   private updateFacilityQueues(minutes: number): void {
@@ -9092,14 +9810,11 @@ export class GameState {
     )
     this.facilityQueues.forEach((queue, buildingId) => {
       if (facilityIds.has(buildingId)) return
-      queue.forEach((visitorId) => {
+      for (const visitorId of [...queue]) {
         const visitor = this.getVisitor(visitorId)
-        if (!visitor || visitor.targetId !== buildingId) return
-        visitor.state = 'exploring'
-        visitor.targetId = null
-        visitor.route = []
-        this.queueVisitorDecision(visitor)
-      })
+        if (!visitor || visitor.targetId !== buildingId) continue
+        this.leaveQueueOnFoot(visitor, 'Dieses Angebot ist nicht mehr da.')
+      }
       this.facilityQueues.delete(buildingId)
     })
     const usingCounts = new Map<string, number>()
@@ -9120,10 +9835,7 @@ export class GameState {
           existingQueue?.forEach((visitorId) => {
             const visitor = this.getVisitor(visitorId)
             if (!visitor || visitor.targetId !== building.id) return
-            visitor.state = 'exploring'
-            visitor.targetId = null
-            visitor.route = []
-            this.queueVisitorDecision(visitor)
+            this.leaveQueueOnFoot(visitor, 'Dieses Angebot hat inzwischen geschlossen.')
           })
           this.facilityQueues.delete(building.id)
           return
@@ -9158,6 +9870,33 @@ export class GameState {
           )
         })
         queue.splice(0, queue.length, ...valid)
+        this.prioritizeArrivedQueueVisitors(queue)
+        const supply = building.kind === 'food' ? 'food' : building.kind === 'alcohol' ? 'drinks' : null
+        if (supply && localStock(this.state, building.id, supply) < 1) {
+          const wait = SIMULATION_CONFIG.needs.interactionMinutes.stockout
+          const waitingThought =
+            building.kind === 'food'
+              ? 'Hier ist kein Essen mehr. Ich warte noch kurz.'
+              : 'Hier sind keine Getränke mehr. Ich warte noch kurz.'
+          for (const visitorId of [...queue]) {
+            const visitor = this.getVisitor(visitorId)
+            if (visitor?.state !== 'queuing' || visitor.targetId !== building.id) continue
+            if (visitor.thought === waitingThought && visitor.interactionRemaining <= 0) {
+              this.state.festival.metrics.stockouts++
+              visitor.emotion = 'sad'
+              visitor.emotionMinutes = 45
+              this.leaveQueueOnFoot(visitor, 'Ausverkauft! Hier fehlt Nachschub.')
+              continue
+            }
+            if (visitor.thought !== waitingThought) {
+              visitor.interactionRemaining = wait
+              visitor.thought = waitingThought
+            } else {
+              visitor.interactionRemaining = Math.max(0, visitor.interactionRemaining - minutes)
+            }
+          }
+          return
+        }
         this.positionFacilityQueue(queue, queueCells, minutes)
 
         let free =
@@ -9221,13 +9960,6 @@ export class GameState {
     queue.forEach((visitorId, index) => {
       const visitor = this.getVisitor(visitorId)
       if (!visitor || visitor.state !== 'queuing') return
-      if (
-        queue
-          .slice(0, index)
-          .some((precedingId) => this.getVisitor(precedingId)?.state === 'seeking')
-      ) {
-        return
-      }
       const desiredCellIndex = Math.min(
         queueCells.length - 1,
         Math.floor(index / SIMULATION_CONFIG.coasters.queueSlotsPerCell),
@@ -9279,6 +10011,16 @@ export class GameState {
     if (target.kind === 'ride' && this.getRideAccessIssue(target)) {
       visitor.state = 'exploring'; visitor.targetId = null; visitor.route = []
       this.queueVisitorDecision(visitor); return
+    }
+    const supply = target.kind === 'food' ? 'food' : target.kind === 'alcohol' ? 'drinks' : null
+    if (supply && localStock(this.state, target.id, supply) < 1) {
+      visitor.state = 'using'
+      visitor.interactionRemaining = SIMULATION_CONFIG.needs.interactionMinutes.stockout
+      visitor.thought =
+        target.kind === 'food'
+          ? 'Ich schaue kurz, ob noch Essen da ist.'
+          : 'Ich schaue kurz, ob noch Getränke da sind.'
+      return
     }
     if (target.rideType === 'bungee') {
       const active = target.bungeeVisitorId ? this.getVisitor(target.bungeeVisitorId) : undefined
@@ -9460,6 +10202,7 @@ export class GameState {
       seen.add(visitorId)
       return true
     })
+    this.prioritizeArrivedQueueVisitors(coaster.queue)
   }
 
   private recordCoasterTelemetry(
@@ -11111,7 +11854,7 @@ export class GameState {
     ) {
       return 'stages'
     }
-    if (kind === 'lighting') return 'lights'
+    if (kind === 'lighting' || kind === 'lightBalloon') return 'lights'
     return null
   }
 
@@ -11354,12 +12097,12 @@ export class GameState {
         return
       }
       if (visitor.state === 'queuing' && !ridesActive) {
-        this.removeVisitorFromCoasterQueues(visitor.id)
-        visitor.state = 'exploring'
-        visitor.targetId = null
-        visitor.route = []
-        visitor.thought = 'Die Fahrgeschäfte schließen für heute.'
-        this.decideNextAction(visitor)
+        const target = visitor.targetId
+          ? this.state.buildings.find((building) => building.id === visitor.targetId)
+          : undefined
+        if (target?.kind === 'ride' || (visitor.targetId && this.getCoaster(visitor.targetId))) {
+          this.leaveQueueOnFoot(visitor, 'Die Fahrgeschäfte schließen für heute.')
+        }
         return
       }
       if (
@@ -11604,42 +12347,40 @@ export class GameState {
       )
       .map((building) => {
         const queueCells = this.getBuildingQueueCells(building)
-        const access = building.kind === 'ride' && queueCells[0] ? queueCells[0] : this.getAccessCell(
-          building.x,
-          building.z,
-          building.elevation,
-          building.rotation,
-        )
+        const accessCells =
+          building.kind === 'ride' && queueCells[0]
+            ? [queueCells[0]]
+            : this.getFacilityAccessCells(building)
         const queueLength =
           queueCells.length > 0 ? this.getFacilityQueue(building.id).length : 0
-        const goal =
-          queueCells[
-            Math.min(
-              queueCells.length - 1,
-              Math.floor(
-                queueLength / SIMULATION_CONFIG.coasters.queueSlotsPerCell,
-              ),
-            )
-          ] ?? access
+        const goals =
+          queueCells.length > 0
+            ? [
+                queueCells[
+                  Math.min(
+                    queueCells.length - 1,
+                    Math.floor(
+                      queueLength / SIMULATION_CONFIG.coasters.queueSlotsPerCell,
+                    ),
+                  )
+                ]!,
+              ]
+            : accessCells
+        const distance = goals.reduce((minimum, goal) => {
+          const next = Math.abs(goal.x - start.x) + Math.abs(goal.z - start.z)
+          return next < minimum ? next : minimum
+        }, Number.POSITIVE_INFINITY)
         return {
           building,
-          access,
-          goal,
+          goals,
           queueCells,
           queueLength,
-          distance:
-            Math.abs(goal.x - start.x) + Math.abs(goal.z - start.z),
+          distance,
         }
       })
       .filter(
         (candidate) =>
-          Boolean(
-            this.getPathAt(
-              candidate.access.x,
-              candidate.access.z,
-              candidate.access.elevation,
-            ),
-          ) &&
+          candidate.goals.some((goal) => this.isWalkableServiceCell(goal)) &&
           (candidate.queueCells.length === 0 ||
             candidate.queueLength <
               candidate.queueCells.length *
@@ -11650,17 +12391,19 @@ export class GameState {
     if (candidates.length === 0) return null
     const route = this.findPath(
       start,
-      candidates.map((candidate) => candidate.goal),
+      candidates.flatMap((candidate) => candidate.goals),
       true,
     )
     if (!route) return null
     const end = route.at(-1) ?? start
     const match =
-      candidates.find(
-        (candidate) =>
-          candidate.goal.x === end.x &&
-          candidate.goal.z === end.z &&
-          Math.abs(candidate.goal.elevation - end.elevation) < 0.01,
+      candidates.find((candidate) =>
+        candidate.goals.some(
+          (goal) =>
+            goal.x === end.x &&
+            goal.z === end.z &&
+            Math.abs(goal.elevation - end.elevation) < 0.01,
+        ),
       ) ?? candidates[0]
     return match ? { building: match.building, route } : null
   }
@@ -11848,7 +12591,7 @@ export class GameState {
       (flags.allowMedical ? 4 : 0) |
       (flags.allowFestival ? 8 : 0) |
       (flags.ignoreDirectionalRestrictions ? 16 : 0)
-    return `${this.packCell(start)}:${packedGoals.join(',')}:${flagBits}`
+    return `${this.packCell(start)}:${packedGoals.join(',')}:${flagBits}:${this.accessSignalRevision}`
   }
 
   private clonePedestrianPath(path: readonly Cell[] | null): Cell[] | null {
@@ -11990,6 +12733,23 @@ export class GameState {
       visitor.cellX=target.rideExit.x; visitor.cellZ=target.rideExit.z; visitor.cellElevation=target.rideExit.y
       visitor.state='exiting'; visitor.route=[rideExitPath]; visitor.interactionRemaining=0
       delete target.bungeeVisitorId
+      return
+    }
+    const queueExit =
+      target && ['food', 'toilet', 'alcohol'].includes(target.kind)
+        ? this.buildQueueExitRoute(
+            { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation },
+            this.getBuildingQueueCells(target),
+          )
+        : []
+    if (queueExit.length > 0) {
+      this.clearVisitorActivity(visitor)
+      visitor.state = 'exploring'
+      visitor.route = queueExit
+      visitor.interactionRemaining = 0
+      if (purchasedConsumable) {
+        visitor.thought = 'Ich gehe die Schlange zurück und suche einen Platz zum Essen oder Trinken.'
+      }
       return
     }
     if (purchasedConsumable) {
@@ -12320,15 +13080,35 @@ export class GameState {
       if (campingHere && Math.abs(dest.cell.elevation - node.cell.elevation) >= 0.01) {
         continue
       }
+      const toPath = link.toPath ?? dest.path
+      if (toPath) {
+        if (
+          !this.canTraversePath(
+            node.path,
+            toPath,
+            node.cell.x,
+            node.cell.z,
+            allowQueue,
+            ignoreDirectional,
+          )
+        ) {
+          continue
+        }
+      } else if (node.path?.pathType === 'queue') {
+        const leaveDirection = this.getDirectionIndex(
+          dest.cell.x - node.cell.x,
+          dest.cell.z - node.cell.z,
+        )
+        if (node.path.queueEntryDirection !== (leaveDirection + 2) % 4) continue
+      }
       if (
-        link.toPath &&
-        !this.canTraversePath(
-          node.path,
-          link.toPath,
-          node.cell.x,
-          node.cell.z,
-          allowQueue,
-          ignoreDirectional,
+        !ignoreDirectional &&
+        this.closedPathEdges.has(
+          accessEdgeKey(
+            node.cell.x,
+            node.cell.z,
+            this.getDirectionIndex(dest.cell.x - node.cell.x, dest.cell.z - node.cell.z) as Direction,
+          ),
         )
       ) {
         continue
@@ -12520,6 +13300,9 @@ export class GameState {
 
   private isPedestrianEdgeBlocked(from: Cell, to: Cell): boolean {
     const direction = this.getDirectionIndex(to.x - from.x, to.z - from.z) as Direction
+    if (this.closedPathEdges.has(accessEdgeKey(from.x, from.z, direction))) {
+      return true
+    }
     const opposite = oppositeDirection(direction)
     const fromRoad = this.getRoadCellAt(from.x, from.z)
     const toRoad = this.getRoadCellAt(to.x, to.z)
@@ -12607,8 +13390,18 @@ export class GameState {
     allowQueue: boolean,
     ignoreDirectionalRestrictions = false,
   ): boolean {
-    if (!allowQueue && (from?.pathType === 'queue' || to.pathType === 'queue')) return false
+    const fromIsQueue = from?.pathType === 'queue'
+    const toIsQueue = to.pathType === 'queue'
+    if (!allowQueue && toIsQueue && !fromIsQueue) return false
     const direction = this.getDirectionIndex(to.x - fromX, to.z - fromZ)
+    if (fromIsQueue && from && toIsQueue) {
+      if (!this.isQueueChainStep(from, to, direction)) return false
+      if (!allowQueue && from.queueDirection === direction) return false
+    } else if (fromIsQueue && from && !toIsQueue) {
+      if (from.queueEntryDirection !== (direction + 2) % 4) return false
+    } else if (!fromIsQueue && toIsQueue && !ignoreDirectionalRestrictions) {
+      if (to.queueEntryDirection !== direction) return false
+    }
     if (!ignoreDirectionalRestrictions && !allowsPathFlow(from, to, direction)) return false
     const fromGate = this.getSecurityGateAt(fromX, fromZ, from?.elevation)
     const toGate = this.getSecurityGateAt(to.x, to.z, to.elevation)
@@ -12628,13 +13421,24 @@ export class GameState {
         from.pathSlopeDirection === (direction + 2) % 4
       if (!entersBuiltRamp && !leavesBuiltRampBackwards) return false
     }
-    if (!ignoreDirectionalRestrictions && from?.pathType === 'queue') {
-      return from.queueDirection === direction
-    }
-    if (!ignoreDirectionalRestrictions && to.pathType === 'queue') {
-      return to.queueEntryDirection === direction
-    }
     return true
+  }
+
+  private isQueueChainStep(
+    from: PlacedBuilding,
+    to: PlacedBuilding,
+    direction: number,
+  ): boolean {
+    if (from.queueDirection === direction) return true
+    return (
+      to.queueDirection ===
+      this.getDirectionIndex(from.x - to.x, from.z - to.z)
+    )
+  }
+
+  private queueBuildOrder(path: PlacedBuilding): number {
+    const match = path.id.match(/(\d+)$/)
+    return match ? Number(match[1]) : 0
   }
 
   private recalculateQueueDirections(): void {
@@ -12650,22 +13454,33 @@ export class GameState {
     const claimQueue = (
       seeds: Array<{ path: PlacedBuilding; target: { x: number; z: number } }>,
     ): void => {
-      const pending = [...seeds]
-      while (pending.length > 0) {
-        const entry = pending.shift()
-        if (!entry || claimed.has(entry.path.id)) continue
-        entry.path.queueDirection = this.getDirectionIndex(
-          entry.target.x - entry.path.x,
-          entry.target.z - entry.path.z,
-        )
-        claimed.add(entry.path.id)
-        this.getAdjacentQueuePaths(entry.path).forEach((neighbor) => {
-          if (claimed.has(neighbor.id)) return
-          pending.push({
-            path: neighbor,
-            target: { x: entry.path.x, z: entry.path.z },
+      const orderedSeeds = [...seeds].sort(
+        (left, right) => this.queueBuildOrder(left.path) - this.queueBuildOrder(right.path),
+      )
+      for (const seed of orderedSeeds) {
+        if (claimed.has(seed.path.id)) continue
+        let current = seed.path
+        let target = seed.target
+        while (current && !claimed.has(current.id)) {
+          current.queueDirection = this.getDirectionIndex(
+            target.x - current.x,
+            target.z - current.z,
+          )
+          claimed.add(current.id)
+          const neighbors = this.getAdjacentQueuePaths(current).filter(
+            (neighbor) => !claimed.has(neighbor.id),
+          )
+          if (neighbors.length === 0) break
+          const currentOrder = this.queueBuildOrder(current)
+          neighbors.sort((left, right) => {
+            const leftDelta = Math.abs(this.queueBuildOrder(left) - currentOrder)
+            const rightDelta = Math.abs(this.queueBuildOrder(right) - currentOrder)
+            return leftDelta - rightDelta || this.queueBuildOrder(left) - this.queueBuildOrder(right)
           })
-        })
+          const next = neighbors[0]!
+          target = { x: current.x, z: current.z }
+          current = next
+        }
       }
     }
 
@@ -12697,15 +13512,14 @@ export class GameState {
             .map(path=>({path,target:building.rideEntrance!})))
           return
         }
-        const access = this.getAccessCell(
-          building.x,
-          building.z,
-          building.elevation,
-          building.rotation,
-        )
-        const path = this.getPathAt(access.x, access.z, access.elevation)
-        if (!path || path.pathType !== 'queue' || claimed.has(path.id)) return
-        claimQueue([{ path, target: { x: building.x, z: building.z } }])
+        const seeds = this.getFacilityAccessCells(building)
+          .map((access) => this.getPathAt(access.x, access.z, access.elevation))
+          .filter(
+            (path): path is PlacedBuilding =>
+              Boolean(path && path.pathType === 'queue' && !claimed.has(path.id)),
+          )
+          .map((path) => ({ path, target: { x: building.x, z: building.z } }))
+        claimQueue(seeds)
       })
 
     this.state.stageForecourtCells.forEach((cell) => {
@@ -12855,6 +13669,77 @@ export class GameState {
     this.state.coasters.forEach((coaster) => {
       coaster.queue = coaster.queue.filter((queuedId) => queuedId !== visitorId)
     })
+    this.facilityQueues.forEach((queue) => {
+      const index = queue.indexOf(visitorId)
+      if (index >= 0) queue.splice(index, 1)
+    })
+  }
+
+  private buildQueueExitRoute(from: Cell, queueCells: readonly Cell[]): Cell[] {
+    if (queueCells.length === 0) return []
+    const index = queueCells.findIndex(
+      (cell) =>
+        cell.x === from.x &&
+        cell.z === from.z &&
+        Math.abs(cell.elevation - from.elevation) < 0.01,
+    )
+    const route: Cell[] = []
+    for (let i = index >= 0 ? index + 1 : 0; i < queueCells.length; i += 1) {
+      const cell = queueCells[i]!
+      route.push({ x: cell.x, z: cell.z, elevation: cell.elevation })
+    }
+    const tail = queueCells[queueCells.length - 1]
+    if (!tail) return route
+    const tailPath = this.getPathAt(tail.x, tail.z, tail.elevation)
+    if (tailPath?.queueEntryDirection === undefined) return route
+    const directions = [
+      { x: 0, z: 1 },
+      { x: 1, z: 0 },
+      { x: 0, z: -1 },
+      { x: -1, z: 0 },
+    ]
+    const entry = directions[tailPath.queueEntryDirection]
+    if (!entry) return route
+    const exit = {
+      x: tail.x - entry.x,
+      z: tail.z - entry.z,
+      elevation: tail.elevation,
+    }
+    const exitPath = this.getPathAt(exit.x, exit.z, exit.elevation)
+    if (!exitPath || exitPath.pathType === 'queue') return route
+    if (
+      !route.some(
+        (cell) =>
+          cell.x === exit.x &&
+          cell.z === exit.z &&
+          Math.abs(cell.elevation - exit.elevation) < 0.01,
+      )
+    ) {
+      route.push(exit)
+    }
+    return route
+  }
+
+  private leaveQueueOnFoot(visitor: Visitor, thought: string): void {
+    const target = visitor.targetId
+      ? this.state.buildings.find((building) => building.id === visitor.targetId)
+      : undefined
+    const coaster = visitor.targetId ? this.getCoaster(visitor.targetId) : undefined
+    const cells = target
+      ? this.getBuildingQueueCells(target)
+      : coaster
+        ? this.getCoasterQueueCells(coaster)
+        : []
+    const route = this.buildQueueExitRoute(
+      { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation },
+      cells,
+    )
+    this.removeVisitorFromCoasterQueues(visitor.id)
+    visitor.targetId = null
+    visitor.state = 'exploring'
+    visitor.thought = thought
+    visitor.route = route
+    if (route.length === 0) this.queueVisitorDecision(visitor)
   }
 
   private getAccessCell(
@@ -12863,15 +13748,76 @@ export class GameState {
     elevation: number,
     rotation: number,
   ): Cell {
-    const directions = [
-      { x: 0, z: 1 },
-      { x: 1, z: 0 },
-      { x: 0, z: -1 },
-      { x: -1, z: 0 },
-    ]
-    const direction = directions[rotation % directions.length] ?? directions[0]
+    const direction = CARDINAL_OFFSETS[rotation % CARDINAL_OFFSETS.length] ?? CARDINAL_OFFSETS[0]
     if (!direction) return { x, z: z + 1, elevation }
-    return { x: x + direction.x, z: z + direction.z, elevation }
+    return { x: x + direction[0], z: z + direction[1], elevation }
+  }
+
+  private getFacilityAccessCells(building: PlacedBuilding): Cell[] {
+    if (isShopServiceKind(building.kind)) return this.getAdjacentServiceCells(building)
+    const access = this.getAccessCell(
+      building.x,
+      building.z,
+      building.elevation,
+      building.rotation,
+    )
+    return this.isWalkableServiceCell(access) ? [access] : []
+  }
+
+  private getAdjacentServiceCells(origin: {
+    x: number
+    z: number
+    elevation: number
+  }): Cell[] {
+    const cells: Cell[] = []
+    for (const [dx, dz] of CARDINAL_OFFSETS) {
+      const x = origin.x + dx
+      const z = origin.z + dz
+      const path =
+        this.getPathAt(x, z, origin.elevation) ?? this.getPathAt(x, z)
+      if (path && Math.abs(path.elevation - origin.elevation) < 0.51) {
+        cells.push({ x, z, elevation: path.elevation })
+        continue
+      }
+      const plaza = this.getStageForecourtCellAt(x, z)
+      if (plaza && Math.abs(plaza.elevation - origin.elevation) < 0.51) {
+        cells.push({ x, z, elevation: plaza.elevation })
+      }
+    }
+    return cells
+  }
+
+  private isWalkableServiceCell(cell: Cell): boolean {
+    return Boolean(
+      this.getPathAt(cell.x, cell.z, cell.elevation) ||
+        this.getStageForecourtCellAt(cell.x, cell.z),
+    )
+  }
+
+  private findBuildingQueueFront(building: PlacedBuilding): PlacedBuilding | undefined {
+    const accesses = isShopServiceKind(building.kind)
+      ? this.getAdjacentServiceCells(building)
+      : [
+          this.getAccessCell(
+            building.x,
+            building.z,
+            building.elevation,
+            building.rotation,
+          ),
+        ]
+    for (const access of accesses) {
+      const front = this.getPathAt(access.x, access.z, access.elevation)
+      const directionToCounter = front
+        ? this.getDirectionIndex(building.x - front.x, building.z - front.z)
+        : -1
+      if (
+        front?.pathType === 'queue' &&
+        front.queueDirection === directionToCounter
+      ) {
+        return front
+      }
+    }
+    return undefined
   }
 
   private findBenchRotation(x: number, z: number): number | null {

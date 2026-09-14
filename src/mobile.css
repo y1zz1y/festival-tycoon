@@ -12,17 +12,24 @@
 @media (max-width: 900px), (pointer: coarse) {
   :root { --mobile-bottom: calc(116px + env(safe-area-inset-bottom)); }
   html, body, #app, .game-shell { height: 100dvh; overscroll-behavior: none; }
-  .topbar { top: env(safe-area-inset-top, 0px); left: env(safe-area-inset-left, 0px); right: env(safe-area-inset-right, 0px); min-height: 0; padding: 5px 8px; gap: 4px; z-index: 80; }
+  .topbar { top: env(safe-area-inset-top, 0px); left: env(safe-area-inset-left, 0px); right: env(safe-area-inset-right, 0px); max-width: none; min-height: 0; padding: 5px 8px; gap: 4px; z-index: 80; }
+  .rct-toolbar { position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); overflow-x: auto; gap: 6px; z-index: 79; }
+  .rct-group { flex-shrink: 0; }
+  .rct-group button { width: 40px; height: 40px; line-height: 40px; min-height: 40px; }
   .brand { width: 100%; min-width: 0; gap: 6px; }
   .brand div, .brand-mark { display: none; }
   .mobile-menu-toggle { display: block; margin-left: auto; min-height: 40px; padding: 6px 12px; background: #375a49; color: #f3e8c7; border: 1px solid #8a9e82; }
   .stats { width: 100%; flex: auto; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; gap: 14px; padding: 3px 0; font-size: 11px; }
   .stats span { flex-shrink: 0; }
   .stats span:nth-child(3) { display: inline; }
-  .topbar .game-actions { display: none; }
-  .topbar.mobile-menu-open .game-actions { display: flex; position: fixed; top: 82px; top: calc(82px + env(safe-area-inset-top)); left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); max-height: calc(100dvh - 160px - env(safe-area-inset-top)); overflow-y: auto; background: #29463d; padding: 10px; border: 1px solid #9ca888; gap: 10px; }
+  .rct-toolbar .mobile-instructions { display: none; }
+  .topbar.mobile-menu-open + .rct-toolbar .mobile-instructions,
+  .rct-toolbar:has(.mobile-instructions) .mobile-instructions { display: none; }
+  .topbar.mobile-menu-open ~ .rct-toolbar .mobile-instructions {
+    display: block; position: fixed; top: calc(100px + env(safe-area-inset-top)); left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right));
+    color: #dfdfc6; line-height: 1.5; margin: 0; padding: 10px; background: #29463d; border: 1px solid #9ca888; z-index: 81;
+  }
   .action-group { width: 100%; }
-  .mobile-instructions { display: block; color: #dfdfc6; line-height: 1.5; margin: 4px; }
   .game-actions button { min-height: 44px; font-size: 12px; }
   .mobile-controls { display: flex; position: fixed; left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); bottom: calc(60px + env(safe-area-inset-bottom)); z-index: 70; overflow-x: auto; gap: 4px; padding: 3px; }
   .mobile-controls button { flex-shrink: 0; min-width: 44px; min-height: 44px; color: #f2e8cb; background: #365747; border: 1px solid #819a7e; }
@@ -45,10 +52,11 @@
     transform: none !important; overflow: auto; overscroll-behavior: contain; padding: 10px; font-size: 12px;
   }
   .panel-header { touch-action: auto; cursor: default; }
-  .build-categories { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; overflow: visible; }
-  .build-categories button { min-height: 44px; }
-  .build-flyout { position: static; width: 100%; max-height: none; margin: 8px 0; }
-  .build-menu .tool { min-height: 44px; }
+  .build-menu.dock-right { left: max(6px, env(safe-area-inset-left)) !important; right: max(6px, env(safe-area-inset-right)) !important; }
+  .build-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .build-menu-catalog .build-grid { grid-template-columns: repeat(auto-fill, 96px); }
+  .build-menu .tool { min-height: 72px; }
+  .build-menu-catalog .build-grid .tool { min-height: 96px; }
   .supply-tools, .supply-planner form { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .festival-chrome { top: -10px; }
   .festival-grid { grid-template-columns: 1fr; }

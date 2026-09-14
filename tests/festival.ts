@@ -300,6 +300,30 @@ export function testFestival(fixture: (count?: number) => GameState): void {
   assert.equal(thoughtGroups.length, 2)
   assert.equal(thoughtGroups.find(group => group.thought === CONCERT_TOPLESS_CROWD_THOUGHT)?.count, 2)
 
+  const priced = fixture(0)
+  priced.updateEntryPrice(18)
+  priced.updateCampingTicketPrice(42)
+  priced.snapshot.campingCells = [
+    { x: 7, z: -20, elevation: 0 },
+    { x: 8, z: -20, elevation: 0 },
+  ]
+  priced.snapshot.dayPlan.campingCapacityBufferPercent = 0
+  const beforeMoney = priced.snapshot.money
+  const dayGuest = (priced as any).spawnVisitorMember('day', 'price-day', 'pedestrian', false)
+  const campGuest = (priced as any).spawnVisitorMember('camping', 'price-camp', 'pedestrian', false)
+  assert.ok(dayGuest)
+  assert.ok(campGuest)
+  assert.equal(dayGuest.entryFeePaid, 18)
+  assert.equal(campGuest.entryFeePaid, 42)
+  assert.equal(priced.snapshot.money, beforeMoney + 60)
+  const reloaded = GameState.fromJSON(JSON.stringify(priced.snapshot))!
+  assert.equal(reloaded.snapshot.entryPrice, 18)
+  assert.equal(reloaded.snapshot.campingTicketPrice, 42)
+  const legacyPrices = fixture(0)
+  delete (legacyPrices.snapshot as { campingTicketPrice?: number }).campingTicketPrice
+  const migrated = GameState.fromJSON(JSON.stringify(legacyPrices.snapshot))!
+  assert.equal(migrated.snapshot.campingTicketPrice, migrated.snapshot.entryPrice)
+
   const named = create(16)
   for (const visitor of named.snapshot.visitors) {
     const given = visitor.name.split(' ')[0]!

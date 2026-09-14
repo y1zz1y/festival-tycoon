@@ -6,6 +6,7 @@ import type { GameSnapshot } from '../game/GameState'
 import { groundInfo } from '../game/ground'
 import { getTerrainHeight } from '../game/terrain'
 import { disposeChildren } from './disposeObject3D'
+import { createRoadVehicleModel, createSupplyStructure } from './logisticsModels'
 
 export class SupplyChainView {
   group = new Group()
@@ -99,12 +100,8 @@ export class SupplyChainView {
     if (depots !== this.depotStamp) {
       this.depotStamp = depots; disposeChildren(this.structures)
       for (const d of i.depots) {
-        const model = new Group(); model.position.set(d.x + .5, getTerrainHeight(s.terrain, d.x, d.z), d.z + .5)
-        this.box(model, [.9, .16, .9], [0, .08, 0], 0x635544)
-        this.box(model, [.82, .65, .7], [0, .47, .05], d.role === 'delivery' ? 0xc9a45f : 0x678d82)
-        this.box(model, [.98, .13, .92], [0, .85, 0], 0xd5af5c)
-        this.box(model, [.48, .5, .02], [0, .41, -.31], 0x283e3a)
-        this.box(model, [.26, .24, .24], [.28, .27, -.32], 0xd1a16a)
+        const model = createSupplyStructure(d.role === 'delivery' ? 'delivery' : 'supply')
+        model.position.set(d.x + .5, getTerrainHeight(s.terrain, d.x, d.z), d.z + .5)
         this.structures.add(model)
       }
     }
@@ -124,9 +121,8 @@ export class SupplyChainView {
       if (!model) {
         model = new Group()
         if (truck) {
-          this.box(model, [.56, .44, .62], [0, .37, .1], 0xe1bb62)
-          this.box(model, [.53, .36, .3], [0, .33, -.35], 0x518fa0)
-          for (const x of [-.28, .28]) for (const z of [-.3, .32]) this.box(model, [.12, .2, .19], [x, .13, z], 0x293237)
+          const body = createRoadVehicleModel('deliveryTruck', id)
+          model.add(body)
         } else {
           this.box(model, [.18, .3, .16], [-.13, .34, -.15], 0x37b7a3)
           this.box(model, [.16, .16, .16], [-.13, .58, -.15], 0xe7bc8c)
@@ -142,7 +138,7 @@ export class SupplyChainView {
       }
       const target = model.userData.transportTarget as Vector3
       const dx=x+.5-target.x, dz=z+.5-target.z
-      if(Math.abs(dx)+Math.abs(dz)>.001) model.userData.transportFacing=Math.atan2(dx,dz)+(truck?Math.PI:0)
+      if(Math.abs(dx)+Math.abs(dz)>.001) model.userData.transportFacing=Math.atan2(dx,dz)
       target.set(x+.5,y,z+.5)
       model.getObjectByName('load')!.visible = loaded && !truck
       model.getObjectByName('driver')!.visible = stuck

@@ -22,6 +22,7 @@ export function packSim(snapshot: Readonly<GameSnapshot>): SimSnapshot {
     speed: snapshot.speed,
     parkOpen: snapshot.parkOpen,
     entryPrice: snapshot.entryPrice,
+    campingTicketPrice: snapshot.campingTicketPrice,
     visitors: snapshot.visitors.map(packVisitor),
     staff: snapshot.staff,
     vehicles: snapshot.logistics.roadVehicles,
@@ -99,6 +100,7 @@ export function applySim(snapshot: GameSnapshot, sim: SimSnapshot): void {
   snapshot.speed = sim.speed
   snapshot.parkOpen = sim.parkOpen
   snapshot.entryPrice = sim.entryPrice
+  snapshot.campingTicketPrice = sim.campingTicketPrice ?? snapshot.campingTicketPrice
   snapshot.incidents = sim.incidents
   snapshot.cashEffects = sim.cashEffects
   snapshot.fireworkEffects = sim.fireworkEffects

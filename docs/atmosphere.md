@@ -1,0 +1,52 @@
+# Atmosphäre, Strom und Tageslicht
+
+Attraktivität und Partystimmung sind zwei `AtmosphereSnapshot`s im Spielzustand.
+Strom ist ein eigenes Netz aus Generatoren, Kabeln und priorisierten Verbrauchern.
+Tageslicht und Öffnungszeiten kommen aus `dayPlan` / `dayNight`, nicht aus der GPU.
+
+## Wo finden
+
+| Aufgabe | Datei | Einstieg |
+| --- | --- | --- |
+| Schönheit / Party-Felder | `src/game/atmosphere.ts` | `AtmosphereSystem` |
+| Overlay-Darstellung | `src/view/AtmosphereView.ts` | |
+| Crowding-Overlay | `src/view/CrowdingView.ts` | `src/game/crowding.ts` |
+| Stromnetz | `src/game/power.ts` | `PowerSnapshot`, Demand-Priorität |
+| Kabel setzen | `src/game/GameState.ts` | `designatePowerCable`, `isBuildingPowered` |
+| Strom-View | `src/view/PowerView.ts` | |
+| Tagesplan / Angebote | `src/game/dayPlan.ts` | Öffnung, Lampen, Stände |
+| Feste Lichter | `src/view/FestivalLightsView.ts` | Pool aus acht PointLights |
+| Balancing | `src/game/simulationConfig.ts` | `atmosphere`, `power`, `dayNight` |
+
+## Wichtige Quellen (Atmosphäre)
+
+Feste Gebäude (Bäume, Bühnen, Lautsprecher, Lampen) und mobile Quellen
+(Tänzer, Musikboxen, Gespräche). Addition flacht ab; Feuer, Kotze und
+Schlafende wirken lokal negativ. Details der Gewichte stehen in
+`SIMULATION_CONFIG.atmosphere`.
+
+## Wichtige Regeln
+
+- Overlay-Berechnung im Tick / auf gedrosselten UI-Intervallen, nicht pro Frame
+  für die ganze Karte neu erfinden. Logistik/Untergrund ist ein eigenes
+  Karten-Overlay (`WorldView.setLogisticsMode`), kein Atmosphäre-Feld.
+- Strom: Verbraucher priorisieren (`CONSUMER_PRIORITY` in `power.ts`).
+  Bühnen ohne Strom spielen nicht.
+- **Keine** PointLight pro Lampe oder Zelt erzeugen. Acht Festival-Lights plus
+  Cursor-Licht bleiben permanent attached, auch bei Intensität 0.
+  Siehe `docs/rendering.md` und `docs/performance.md`.
+- `lighting`, Lichterketten und Lampions: warmes gelbes Licht, Reichweite 3–4.
+  `lightBalloon` (Demand 3, Priorität 42): weißes Licht, Atmosphäre `range` 8,
+  PointLight-Distance 9 statt 3.5. Derselbe Pool, Instanzfarben für Glow/Birne.
+- Render-Entscheidungen nicht im `GameSnapshot` speichern.
+
+## Tests
+
+`tests/performanceGuards.ts` (Licht-Pool, 0/1/514 Quellen).
+`tests/festival.ts` (Strom für Shows). `tests/operations.ts`.
+
+## Bei Änderungen dieses Dokument
+
+Aktualisieren, wenn Overlay-Quellen, Power-Verbraucher, Kabelregeln oder
+Day/Night-Parameter ändern. Neue Lichtarten zwingend gegen den festen
+Light-Pool prüfen.

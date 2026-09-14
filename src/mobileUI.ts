@@ -14,8 +14,9 @@ export function mountMobileUI(actions: {
   menu.textContent = '☰ Menü'
   menu.setAttribute('aria-expanded', 'false')
   menu.setAttribute('aria-controls', 'mobile-actions')
-  topbar.querySelector('.game-actions')!.id = 'mobile-actions'
-  topbar.querySelector('.game-actions')!.insertAdjacentHTML('beforeend', '<p class="mobile-instructions">Antippen baut oder wählt aus. Zwei Finger verschieben und zoomen. Mit ✋ verschiebst du mit einem Finger. Die Leiste unten lässt sich seitlich scrollen. Bands: erst Band, dann Zeitslot antippen.</p>')
+  const iconToolbar = document.querySelector<HTMLElement>('.rct-toolbar')!
+  iconToolbar.id = 'mobile-actions'
+  iconToolbar.insertAdjacentHTML('beforeend', '<p class="mobile-instructions">Antippen baut oder wählt aus. Zwei Finger verschieben und zoomen. Mit ✋ verschiebst du mit einem Finger. Die Leisten oben und unten lassen sich seitlich scrollen. Bands: erst Band, dann Zeitslot antippen.</p>')
   topbar.querySelector('.brand')!.append(menu)
   const setMenu = (open: boolean) => {
     topbar.classList.toggle('mobile-menu-open', open)
@@ -62,12 +63,16 @@ export function mountMobileUI(actions: {
     if (!compact.matches || !(event.target instanceof Element)) return
     const button = event.target.closest('button')
     if (!button) return
-    if (button.closest('.game-actions') && !button.matches('[aria-haspopup=true], #toggle-save-menu, #toggle-debug-menu, #toggle-bulldoze-menu')) setMenu(false)
+    if (button.closest('.game-actions, .rct-toolbar') && !button.matches('[aria-haspopup=true], #toggle-save-menu, #toggle-debug-menu')) setMenu(false)
     if (button.matches('[data-tool], [data-way-build], [data-bulldoze-size], [data-area-draw]')) {
       setPan(false)
       if (button.closest('.build-menu')) {
         document.querySelector<HTMLElement>('#build-menu')!.hidden = true
         document.querySelector('#open-build-menu')!.setAttribute('aria-expanded', 'false')
+        document.querySelectorAll<HTMLElement>('.rct-toolbar [data-build-category]').forEach((entry) => {
+          entry.classList.remove('open')
+          entry.setAttribute('aria-expanded', 'false')
+        })
       }
     }
   })

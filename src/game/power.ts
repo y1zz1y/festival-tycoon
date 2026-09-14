@@ -43,6 +43,7 @@ const CONSUMER_PRIORITY: Record<string, number> = {
   alcohol: 50,
   fireworkBattery: 45,
   lighting: 40,
+  lightBalloon: 42,
   ambulanceGarage: 30,
   busDepot: 25,
   wasteDepot: 22,

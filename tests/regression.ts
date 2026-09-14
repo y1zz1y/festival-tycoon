@@ -12,6 +12,7 @@ import { testStageTickets } from './stageTickets'
 import { SupplyChainView } from '../src/view/SupplyChainView'
 import { transportMotionFactor } from '../src/view/transportMotion'
 import { testOperations } from './operations'
+import { testAccessControl } from './accessControl'
 import { CampingView } from '../src/view/CampingView'
 import { Color } from 'three'
 import { readFileSync } from 'node:fs'
@@ -31,6 +32,7 @@ import { attachMultiplayer } from '../server/rooms'
 import type { GameCommand } from '../src/net/protocol'
 import { scenePixelRatio } from '../src/view/renderResolution'
 import { testFestival } from './festival'
+import { testBuildMenu } from './buildMenu'
 
 function test(name: string, run: () => void) {
   run()
@@ -40,6 +42,9 @@ function test(name: string, run: () => void) {
 testMobileTouch()
 testPixelPeople()
 testCampingModels()
+test('build menu lists every placeable tool once', () => {
+  testBuildMenu()
+})
 
 function fixture(count = 20): GameState {
   const initial = structuredClone(new GameState().snapshot)
@@ -63,6 +68,7 @@ function fixture(count = 20): GameState {
 }
 
 testPerformanceGuards(fixture)
+testAccessControl(fixture)
 testScenery(fixture)
 testFestivalAdditions(fixture)
 testRideAccess(fixture)

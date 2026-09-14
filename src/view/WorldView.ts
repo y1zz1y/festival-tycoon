@@ -1,6 +1,14 @@
 import { updateStageBand } from './stageBand'
 import { isScenery, isEdgeScenery, scenerySlot, sceneryTransform } from '../game/scenery'
 import { createRetroBuilding, batchRetroBuildings } from './retroBuildings'
+import {
+  createLogisticsFacility,
+  createSupplyStructure,
+  LOGISTICS_FACILITY_KINDS,
+  logisticsThumbnailScale,
+  type LogisticsFacilityKind,
+  type SupplyStructureKind,
+} from './logisticsModels'
 import { createAttractionAccess } from './attractionAccess'
 import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
@@ -11,6 +19,7 @@ import { activeBookings, showIssue } from '../game/festivalManagement'
 import { createEarthTexture, createTerrainBase, createTerrainMaterial, createTerrainSurface } from './terrainSurface'
 import { TerrainShape, terrainPads } from './terrainShape'
 import { FestivalLightsView } from './FestivalLightsView'
+import { AccessControlView } from './AccessControlView'
 import { createRoadDirectionArrowGeometry } from './roadDirectionArrow'
 import { wayTexture } from './wayTextures'
 import type { WayType } from '../game/wayTypes'
@@ -38,6 +47,8 @@ import {
   InstancedMesh,
   Line,
   LineBasicMaterial,
+  LineSegments,
+  Float32BufferAttribute,
   Matrix4,
   MathUtils,
   Mesh,
@@ -68,6 +79,7 @@ import { COASTER_TYPES, computeTrackFrame, sampleCoasterTrack } from '../game/co
 import { createBungeeModel, animateBungee, setBungeeJumper } from './bungee'
 import { createNudeAnatomy, createPersonGeometry, PersonDetailsView, personSeed, personStyle } from './pixelPeople'
 import { createCoasterSpecial } from './coasterSpecials'
+import { COASTER_CAR_SEATS, createCoasterCar } from './coasterCars'
 import type { Coaster, TrackPoint } from '../game/coasters'
 import type { CashEffect, GameSnapshot, PlacedBuilding, Visitor } from '../game/GameState'
 import { CampingView } from './CampingView'
@@ -134,6 +146,62 @@ type VisitorHandler = (visitorId: string) => void
 type ElevationHandler = (delta: number) => void
 type DragEndHandler = () => void
 type CoasterPieceHandler = (coasterId: string, pieceIndex: number) => void
+
+const CONSTRUCTION_GRID_CELLS = 7
+const CONSTRUCTION_HEIGHT_STEP_PX = 22
+const GROUND_ONLY_TOOLS = new Set([
+  'inspect',
+  'bulldoze',
+  'terrainRaise',
+  'terrainLower',
+  'terrainFlatten',
+  'camping',
+  'medicalArea',
+  'stageForecourt',
+  'wasteDump',
+  'powerCable',
+])
+
+function usesConstructionHeight(tool?: string): boolean {
+  return tool != null && !GROUND_ONLY_TOOLS.has(tool)
+}
+
+function createConstructionGrid(): LineSegments {
+  const cells = CONSTRUCTION_GRID_CELLS
+  const half = cells / 2
+  const positions = new Float32Array((cells + 1) * 4 * 3)
+  let index = 0
+  for (let n = 0; n <= cells; n++) {
+    const t = n - half
+    positions[index++] = -half
+    positions[index++] = 0
+    positions[index++] = t
+    positions[index++] = half
+    positions[index++] = 0
+    positions[index++] = t
+    positions[index++] = t
+    positions[index++] = 0
+    positions[index++] = -half
+    positions[index++] = t
+    positions[index++] = 0
+    positions[index++] = half
+  }
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
+  const grid = new LineSegments(
+    geometry,
+    new LineBasicMaterial({
+      color: 0xf2e08a,
+      transparent: true,
+      opacity: 0.88,
+      depthWrite: false,
+    }),
+  )
+  grid.visible = false
+  grid.renderOrder = 9
+  grid.frustumCulled = false
+  return grid
+}
 
 const WALK_EYE_HEIGHT = 0.68
 const WALK_SPEED = 2.8
@@ -272,6 +340,7 @@ export class WorldView {
   private partyMoodView = new AtmosphereView(0.82, false)
   private forecourtView = new ForecourtView()
   private logisticsView = new LogisticsView()
+  private accessControlView = new AccessControlView()
   private supplyChainView = new SupplyChainView()
   private logisticsMode = false
   private previousOverlays = [false, false, false]
@@ -356,6 +425,9 @@ export class WorldView {
   private cashEffectModels = new Map<string, Sprite>()
   private preview: Mesh
   private previewArrow: Mesh
+  private constructionGrid = createConstructionGrid()
+  private shiftHeightActive = false
+  private shiftHeightY = 0
   private sceneryPreview = new Group()
   private sceneryPreviewKind = ''
   private placementValidator: ((kind: BuildingKind, x: number, z: number, slot?: number) => boolean) | null = null
@@ -366,11 +438,30 @@ export class WorldView {
     const scene = new Scene()
     scene.background = new Color(0x314943)
     const model = this.createBuildingModel(kind, 0)
+    if ((LOGISTICS_FACILITY_KINDS as readonly string[]).includes(kind)) {
+      model.scale.setScalar(logisticsThumbnailScale(kind as LogisticsFacilityKind))
+    }
     scene.add(model, new AmbientLight(0xffffff, 2))
     const light = new DirectionalLight(0xfff0ce, 3)
     light.position.set(-3, 5, 4); scene.add(light)
     const camera = new OrthographicCamera(-.9, .9, .9, -.9, .1, 20)
     camera.position.set(3, 2.8, 4); camera.lookAt(0, .65, 0)
+    return this.renderThumbnail(scene, model, camera)
+  }
+
+  supplyThumbnail(kind: SupplyStructureKind): string {
+    const scene = new Scene()
+    scene.background = new Color(0x314943)
+    const model = createSupplyStructure(kind)
+    scene.add(model, new AmbientLight(0xffffff, 2))
+    const light = new DirectionalLight(0xfff0ce, 3)
+    light.position.set(-3, 5, 4); scene.add(light)
+    const camera = new OrthographicCamera(-.9, .9, .9, -.9, .1, 20)
+    camera.position.set(3, 2.8, 4); camera.lookAt(0, .55, 0)
+    return this.renderThumbnail(scene, model, camera)
+  }
+
+  private renderThumbnail(scene: Scene, model: Group, camera: OrthographicCamera): string {
     const target = new WebGLRenderTarget(96, 96)
     target.texture.colorSpace = this.renderer.outputColorSpace
     const shadowUpdate = this.renderer.shadowMap.needsUpdate
@@ -419,6 +510,9 @@ export class WorldView {
   private onCellHover: HoverHandler
   private onStaffClick: VisitorHandler = () => {}
   private onVehicleClick: VisitorHandler = () => {}
+  private onAccessControlClick: VisitorHandler = () => {}
+  private accessAreaOverlay: InstancedMesh | null = null
+  private accessAreaStamp = ''
   private followedStaffId: string | null = null
   private staffPreview: PersonPreviewSlot | null = null
   private visitorPreview: PersonPreviewSlot | null = null
@@ -510,9 +604,20 @@ export class WorldView {
       depthWrite: false,
       side: DoubleSide,
     })
+    const previewArrowMaterial = new MeshBasicMaterial({
+      color: 0xf4f0de,
+      transparent: true,
+      opacity: 0.96,
+      depthWrite: false,
+      depthTest: false,
+      side: DoubleSide,
+    })
     this.preview = new Mesh(new BoxGeometry(0.94, 0.12, 0.94), previewMaterial)
-    this.previewArrow = new Mesh(createRoadDirectionArrowGeometry(), previewMaterial)
-    this.previewArrow.renderOrder = 8
+    this.previewArrow = new Mesh(
+      createRoadDirectionArrowGeometry('paint'),
+      previewArrowMaterial,
+    )
+    this.previewArrow.renderOrder = 12
     this.constructionAnchor = new Mesh(
       new BoxGeometry(0.72, 0.18, 0.72),
       new MeshStandardMaterial({ color: 0x38c6ef, transparent: true, opacity: 0.72 }),
@@ -539,7 +644,7 @@ export class WorldView {
       this.rideGates,
       this.rideGatePreview,
       this.preview,
-      this.previewArrow,
+      this.constructionGrid,
       this.sceneryPreview,
       this.constructionAnchor,
       this.constructionNext,
@@ -558,6 +663,7 @@ export class WorldView {
       this.attractivenessView.group,
       this.partyMoodView.group,
       this.logisticsView.group,
+      this.accessControlView.group,
       this.supplyChainView.group,
       this.powerView.group,
       this.laserView.group,
@@ -570,6 +676,7 @@ export class WorldView {
       this.coasterPreview,
       this.coasterSelection,
       this.cashEffects,
+      this.previewArrow,
     )
 
     this.createWorld()
@@ -652,6 +759,10 @@ export class WorldView {
       snapshot.speed === 0,
       undefined,
       snapshot.selectedTool === 'roadDirection',
+    )
+    this.accessControlView.update(
+      snapshot.accessControls ?? { trafficLights: [], pathBarriers: [] },
+      (x, z) => getTerrainHeight(snapshot.terrain, x, z),
     )
     const showPower =
       snapshot.selectedTool === 'powerCable' ||
@@ -778,6 +889,7 @@ export class WorldView {
     this.staffView.invalidate()
     this.forecourtView.invalidate()
     this.logisticsView.invalidate()
+    this.accessControlView.invalidate()
     this.powerView.invalidate()
     this.laserView.invalidate()
   }
@@ -900,6 +1012,40 @@ export class WorldView {
 
   setStaffClickHandler(handler: VisitorHandler): void { this.onStaffClick = handler }
   setVehicleClickHandler(handler: VisitorHandler): void { this.onVehicleClick = handler }
+  setAccessControlClickHandler(handler: VisitorHandler): void { this.onAccessControlClick = handler }
+
+  showAccessArea(cells: ReadonlyArray<{ x: number; z: number }> | null): void {
+    const stamp = JSON.stringify(cells)
+    if (stamp === this.accessAreaStamp) return
+    this.accessAreaStamp = stamp
+    if (this.accessAreaOverlay) {
+      this.scene.remove(this.accessAreaOverlay)
+      this.accessAreaOverlay.geometry.dispose()
+      ;(this.accessAreaOverlay.material as MeshBasicMaterial).dispose()
+      this.accessAreaOverlay.dispose()
+      this.accessAreaOverlay = null
+    }
+    if (!cells?.length || !this.currentSnapshot) return
+    const mesh = new InstancedMesh(
+      new PlaneGeometry(0.94, 0.94),
+      new MeshBasicMaterial({ color: 0xf4c15d, transparent: true, opacity: 0.28, depthWrite: false }),
+      cells.length,
+    )
+    const pose = new Object3D()
+    pose.rotation.x = -Math.PI / 2
+    cells.forEach((cell, index) => {
+      pose.position.set(
+        cell.x + 0.5,
+        getTerrainHeight(this.currentSnapshot!.terrain, cell.x, cell.z) + 0.18,
+        cell.z + 0.5,
+      )
+      pose.updateMatrix()
+      mesh.setMatrixAt(index, pose.matrix)
+    })
+    mesh.frustumCulled = false
+    this.scene.add(mesh)
+    this.accessAreaOverlay = mesh
+  }
   setInspectedVehicle(id: string | null): void {
     this.logisticsView.setInspectedVehicle(id)
   }
@@ -1499,6 +1645,11 @@ export class WorldView {
     wayType?: WayType,
     variant?: string,
   ): Group {
+    if ((LOGISTICS_FACILITY_KINDS as readonly string[]).includes(kind)) {
+      const facility = createLogisticsFacility(kind as LogisticsFacilityKind)
+      this.addSupport(facility, elevation, .24)
+      return facility
+    }
     const detailed = createRetroBuilding(kind, variant)
     if (detailed) {
       this.addSupport(detailed, elevation, .24)
@@ -1611,6 +1762,35 @@ export class WorldView {
       lamp.position.y = 1.5
       group.add(pole, lamp)
       group.userData.nightLightMaterial = lampMaterial
+    } else if (kind === 'lightBalloon') {
+      const ballast = new Mesh(new BoxGeometry(0.3, 0.16, 0.24), darkMaterial)
+      ballast.position.y = 0.09
+      const crate = new Mesh(
+        new BoxGeometry(0.18, 0.12, 0.16),
+        new MeshStandardMaterial({ color: 0x3d4a55, roughness: 0.7 }),
+      )
+      crate.position.set(0.18, 0.07, 0.1)
+      const balloonMaterial = new MeshStandardMaterial({
+        color: 0xf4f7ff,
+        emissive: 0xc8d4ee,
+        emissiveIntensity: 0.15,
+        roughness: 0.42,
+      })
+      const balloon = new Mesh(new SphereGeometry(0.54, 14, 10), balloonMaterial)
+      balloon.position.y = 2.35
+      balloon.scale.set(1, 0.9, 1)
+      const ring = new Mesh(new CylinderGeometry(0.15, 0.15, 0.05, 10), darkMaterial)
+      ring.position.y = 1.84
+      const ropeMaterial = new MeshStandardMaterial({ color: 0xcfc8b8, roughness: 0.85 })
+      ;[0, (Math.PI * 2) / 3, (Math.PI * 4) / 3].forEach((angle) => {
+        const rope = new Mesh(new CylinderGeometry(0.012, 0.012, 1.88, 5), ropeMaterial)
+        rope.position.set(Math.sin(angle) * 0.2, 0.96, Math.cos(angle) * 0.2)
+        rope.rotation.z = Math.sin(angle) * 0.14
+        rope.rotation.x = -Math.cos(angle) * 0.14
+        group.add(rope)
+      })
+      group.add(ballast, crate, balloon, ring)
+      group.userData.nightLightMaterial = balloonMaterial
     } else if (kind === 'generator' || kind === 'backupGenerator') {
       const body = new Mesh(
         new BoxGeometry(0.72, 0.42, 0.52),
@@ -1727,12 +1907,18 @@ export class WorldView {
       group.add(body, roof)
 
       if (kind === 'food' || kind === 'alcohol') {
-        const counter = new Mesh(
-          new BoxGeometry(0.58, 0.22, 0.12),
-          new MeshStandardMaterial({ color: 0xfff4d6 }),
-        )
-        counter.position.set(0, 0.35, 0.43)
-        group.add(counter)
+        const counterMaterial = new MeshStandardMaterial({ color: 0xfff4d6 })
+        for (const [x, z, yaw] of [
+          [0, 0.43, 0],
+          [0, -0.43, 0],
+          [0.43, 0, Math.PI / 2],
+          [-0.43, 0, Math.PI / 2],
+        ] as const) {
+          const counter = new Mesh(new BoxGeometry(0.58, 0.22, 0.12), counterMaterial)
+          counter.position.set(x, 0.35, z)
+          counter.rotation.y = yaw
+          group.add(counter)
+        }
       }
       if (kind === 'alcohol') {
         const keg = new Mesh(
@@ -2218,7 +2404,7 @@ export class WorldView {
           leadDistance - index * physics.carSpacing,
         )
         if (!sample) return
-        car.position.set(sample.point.x + 0.5, sample.point.y + 0.34, sample.point.z + 0.5)
+        car.position.set(sample.point.x + 0.5, sample.point.y + 0.3, sample.point.z + 0.5)
         this.trainForward.set(
           sample.tangent.x,
           sample.tangent.y,
@@ -2261,15 +2447,8 @@ export class WorldView {
   private createTrainModel(coaster: Coaster): Group {
     const group = new Group()
     const type = COASTER_TYPES[coaster.typeId]
-    const material = new MeshStandardMaterial({
-      color: type.carColor,
-      roughness: 0.55,
-    })
     for (let index = 0; index < coaster.train.cars; index += 1) {
-      const carGroup = new Group()
-      const car = new Mesh(new BoxGeometry(0.42, 0.28, 0.55), material)
-      car.castShadow = false
-      carGroup.add(car)
+      const carGroup = createCoasterCar(type.carColor)
       for (let seat = 0; seat < type.carCapacity; seat += 1) {
         const passenger = this.createCarPassenger(index * type.carCapacity + seat, seat)
         carGroup.add(passenger)
@@ -2292,9 +2471,10 @@ export class WorldView {
       new SphereGeometry(0.045, 7, 5),
       new MeshStandardMaterial({ color: 0xf1bd8e }),
     )
-    body.position.y = 0.18
-    head.position.y = 0.29
-    passenger.position.set(seat % 2 === 0 ? -0.11 : 0.11, 0.08, seat < 2 ? -0.1 : 0.12)
+    body.position.y = 0.16
+    head.position.y = 0.27
+    const place = COASTER_CAR_SEATS[seat] ?? COASTER_CAR_SEATS[0]!
+    passenger.position.set(place.x, place.y, place.z)
     passenger.userData.passengerSeat = passengerSeat
     passenger.add(body, head)
     return passenger
@@ -2875,12 +3055,15 @@ export class WorldView {
         const staffId = staffHit?.object.userData.staffId
         const visitorId = inspecting ? this.pickVisitor(event) : null
         const vehicleId = inspecting ? this.pickVehicle() : null
+        const accessId = inspecting ? this.pickAccessControl() : null
         const scenery = inspecting || this.currentSnapshot?.selectedTool === 'bulldoze' ? this.pickScenery() : null
         if (typeof staffId === 'string') this.onStaffClick(staffId)
         else if (visitorId) {
           this.onVisitorClick(visitorId)
         } else if (vehicleId) {
           this.onVehicleClick(vehicleId)
+        } else if (accessId) {
+          this.onAccessControlClick(accessId)
         } else if (scenery) {
           this.onCellClick(scenery)
         } else if (this.hoveredCell) {
@@ -2921,6 +3104,25 @@ export class WorldView {
         this.panCamera(event.clientX - this.lastPointer.x, event.clientY - this.lastPointer.y)
         this.lastPointer.set(event.clientX, event.clientY)
         return
+      }
+      if (event.shiftKey && usesConstructionHeight(this.currentSnapshot?.selectedTool)) {
+        if (!this.shiftHeightActive) {
+          this.shiftHeightActive = true
+          this.shiftHeightY = event.clientY
+          this.updateConstructionGrid()
+        } else {
+          const dy = event.clientY - this.shiftHeightY
+          if (Math.abs(dy) >= CONSTRUCTION_HEIGHT_STEP_PX) {
+            this.onElevationChange(dy < 0 ? 1 : -1)
+            this.shiftHeightY = event.clientY
+          }
+        }
+        this.pickCell(event)
+        return
+      }
+      if (this.shiftHeightActive) {
+        this.shiftHeightActive = false
+        this.updateConstructionGrid()
       }
       this.pickCell(event)
       const moved = this.pointerDown.distanceTo(new Vector2(event.clientX, event.clientY))
@@ -2985,12 +3187,21 @@ export class WorldView {
         event.preventDefault()
         return
       }
+      if (event.key === 'Shift' && usesConstructionHeight(this.currentSnapshot?.selectedTool)) {
+        this.shiftHeightActive = true
+        this.shiftHeightY = this.lastPointer.y
+        this.updateConstructionGrid()
+      }
       if (event.key !== 'Escape' || !this.groundAreaStart) return
       this.setGroundAreaTool(this.groundAreaHandler)
       this.groundAreaCancelled = true; this.leftPointerDown = false; this.pointerDownCell = null
     })
     window.addEventListener('keyup', event => {
       this.walkKeys.delete(event.code)
+      if (event.key === 'Shift' && this.shiftHeightActive) {
+        this.shiftHeightActive = false
+        this.updateConstructionGrid()
+      }
     })
     window.addEventListener('resize', () => this.resize())
   }
@@ -3075,6 +3286,16 @@ export class WorldView {
     return null
   }
 
+  private pickAccessControl(): string | null {
+    const hit = this.raycaster.intersectObject(this.accessControlView.getPickRoot(), true)[0]
+    let object: Object3D | null = hit?.object ?? null
+    while (object) {
+      if (typeof object.userData.accessId === 'string') return object.userData.accessId
+      object = object.parent
+    }
+    return null
+  }
+
   private pickVisitor(event: PointerEvent): string | null {
     if (this.logisticsMode) return null
     this.setRayFromPointer(event)
@@ -3104,7 +3325,40 @@ export class WorldView {
     this.raycaster.setFromCamera(this.pointer, this.camera)
   }
 
+  private updateConstructionGrid(): void {
+    const snapshot = this.currentSnapshot
+    const cell = this.hoveredCell
+    const tool = snapshot?.selectedTool
+    const show = Boolean(
+      snapshot &&
+        cell &&
+        !this.walkMode &&
+        usesConstructionHeight(tool) &&
+        (this.shiftHeightActive || snapshot.buildElevation !== 0),
+    )
+    this.constructionGrid.visible = show
+    if (!show || !snapshot || !cell) return
+    const stageDesign =
+      tool === 'stage'
+        ? snapshot.festival.stageTemplates?.find(
+            (template) => template.name === snapshot.festival.selectedStageTemplate,
+          )
+        : undefined
+    const footprint = stageSize(stageDesign, snapshot.buildRotation)
+    const width = tool === 'stage' ? footprint.width : 1
+    const depth = tool === 'stage' ? footprint.depth : 1
+    const ground = this.terrainShape
+      ? this.terrainShape.sample(cell.x + width / 2, cell.z + depth / 2)
+      : getTerrainHeight(snapshot.terrain, cell.x, cell.z)
+    this.constructionGrid.position.set(
+      cell.x + width / 2,
+      ground + snapshot.buildElevation + 0.04,
+      cell.z + depth / 2,
+    )
+  }
+
   private updatePreview(): void {
+    this.updateConstructionGrid()
     this.sceneryPreview.visible = false
     if (this.walkMode) {
       this.preview.visible = false
@@ -3272,28 +3526,72 @@ export class WorldView {
               ? !existing && !campingOccupied && !medicalOccupied
               : tool === 'busStop'
                 ? validBusStopPosition
+              : tool === 'trafficLight'
+                ? this.currentSnapshot.logistics.roadCells.some(
+                    (road) => road.x === hovered.x && road.z === hovered.z,
+                  )
+                : tool === 'pathBarrier'
+                  ? objectsAtCell.some(
+                      (item) => item.kind === 'path' && item.pathType === 'normal',
+                    )
+                : tool === 'staffGate'
+                  ? objectsAtCell.some((item) => item.kind === 'path')
+                : tool === 'deliveryYard' || tool === 'supplyDepot'
+                  ? !existing &&
+                    !campingOccupied &&
+                    groundInfo(this.currentSnapshot, hovered.x, hovered.z).bearing >= 2 &&
+                    !this.currentSnapshot.festival.infrastructure.depots.some(
+                      (depot) => depot.x === hovered.x && depot.z === hovered.z,
+                    ) &&
+                    (tool === 'supplyDepot' ||
+                      this.currentSnapshot.logistics.roadCells.some(
+                        (road) => Math.abs(road.x - hovered.x) + Math.abs(road.z - hovered.z) === 1,
+                      ))
           : tool === 'inspect' || tool === 'coaster' || !collides
     const showDirectionArrow =
       (Boolean(buildingDefinition) && tool !== 'path') ||
       tool === 'roadDirection' ||
-      tool === 'roadSeparator'
+      tool === 'roadSeparator' ||
+      tool === 'trafficLight' ||
+      tool === 'pathBarrier'
     const material = this.preview.material as MeshStandardMaterial
     material.color.set(valid ? 0x55dd88 : 0xe84d4d)
 
     this.previewArrow.visible = showDirectionArrow
     if (showDirectionArrow) {
       const angle = this.currentSnapshot.buildRotation * (Math.PI / 2)
-      const directing = tool === 'roadDirection'
-      this.previewArrow.scale.setScalar(directing ? 1.15 : 0.72)
-      this.previewArrow.position.set(
-        this.hoveredCell.x + 0.5 + Math.sin(angle) * (directing ? 0 : 0.22),
-        elevation + (directing ? 0.05 : 0.04),
-        this.hoveredCell.z + 0.5 + Math.cos(angle) * (directing ? 0 : 0.22),
-      )
+      const directing =
+        tool === 'roadDirection' ||
+        tool === 'trafficLight' ||
+        tool === 'pathBarrier'
+      const arrowMaterial = this.previewArrow.material as MeshBasicMaterial
+      if (directing) {
+        material.opacity = 0.22
+        this.preview.scale.y = 0.28
+        this.previewArrow.scale.setScalar(0.72)
+        this.previewArrow.position.set(
+          this.hoveredCell.x + 0.5,
+          elevation + 0.04,
+          this.hoveredCell.z + 0.5,
+        )
+        arrowMaterial.color.set(0xf4f0de)
+        arrowMaterial.opacity = 1
+      } else {
+        material.opacity = 0.55
+        this.preview.scale.y = 1
+        this.previewArrow.scale.setScalar(0.72)
+        this.previewArrow.position.set(
+          this.hoveredCell.x + 0.5 + Math.sin(angle) * 0.22,
+          elevation + 0.04,
+          this.hoveredCell.z + 0.5 + Math.cos(angle) * 0.22,
+        )
+        arrowMaterial.color.copy(material.color)
+        arrowMaterial.opacity = 0.7
+      }
       this.previewArrow.rotation.set(0, angle, 0)
-      const arrowMaterial = this.previewArrow.material as MeshStandardMaterial
-      arrowMaterial.color.copy(material.color)
-      arrowMaterial.opacity = directing ? 0.92 : 0.7
+    } else {
+      material.opacity = 0.55
+      this.preview.scale.y = 1
     }
   }
 

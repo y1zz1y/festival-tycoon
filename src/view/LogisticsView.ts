@@ -4,7 +4,6 @@ import type { WayType } from '../game/wayTypes'
 import {
   BoxGeometry,
   BufferGeometry,
-  CylinderGeometry,
   Group,
   InstancedMesh,
   Line,
@@ -18,7 +17,6 @@ import {
   Quaternion,
   Vector3,
 } from 'three'
-import type { Object3D } from 'three'
 import type {
   AmbulanceGarage,
   BusDepot,
@@ -32,6 +30,12 @@ import type {
   RoadVehicle,
 } from '../game/logistics'
 import { disposeObject3D } from './disposeObject3D'
+import {
+  createLogisticsFacility,
+  createRoadVehicleModel,
+  logisticsFacilityFootprint,
+  type LogisticsFacilityKind,
+} from './logisticsModels'
 import { createRoadDirectionArrowGeometry } from './roadDirectionArrow'
 
 type FacilityLike = AmbulanceGarage | BusDepot | BusStop | WasteDepot | SpecialDepot
@@ -85,57 +89,26 @@ function structureFingerprint(logistics: Readonly<LogisticsSnapshot>): string {
   ].join('#')
 }
 
-const boxGeometries = new Map<string, BoxGeometry>()
-const cylinderGeometries = new Map<string, CylinderGeometry>()
-const materials = new Map<string, MeshStandardMaterial>()
-
-function sharedBoxGeometry(
-  size: readonly [number, number, number],
-): BoxGeometry {
-  const key = size.join('x')
-  const existing = boxGeometries.get(key)
-  if (existing) return existing
-  const geometry = new BoxGeometry(...size)
-  boxGeometries.set(key, geometry)
-  return geometry
-}
-
-function sharedCylinderGeometry(radius: number, height: number): CylinderGeometry {
-  const key = `${radius}:${height}`
-  const existing = cylinderGeometries.get(key)
-  if (existing) return existing
-  const geometry = new CylinderGeometry(radius, radius, height, 8)
-  cylinderGeometries.set(key, geometry)
-  return geometry
-}
-
-function sharedMaterial(color: number, roughness = 0.8): MeshStandardMaterial {
-  const key = `${color}:${roughness}`
-  const existing = materials.get(key)
-  if (existing) return existing
-  const material = new MeshStandardMaterial({ color, roughness })
-  materials.set(key, material)
-  return material
-}
-
-const FLOW_ARROWS = 5
+const FLOW_ARROWS = 4
 const FLOW_UP = new Vector3(0, 1, 0)
-const flowArrowGeometry = createRoadDirectionArrowGeometry()
-const roadArrowGeometry = createRoadDirectionArrowGeometry()
+const flowArrowGeometry = createRoadDirectionArrowGeometry('overlay')
+const roadArrowGeometry = createRoadDirectionArrowGeometry('paint')
+roadArrowGeometry.userData.shared = true
 const flowMaterial = new MeshBasicMaterial({
-  color: 0xffe27a,
+  color: 0xffd56a,
   transparent: true,
-  opacity: 0.92,
+  opacity: 0.82,
   depthWrite: false,
   depthTest: false,
   side: DoubleSide,
 })
-const roadArrowMaterial = new MeshStandardMaterial({
+const roadArrowMaterial = new MeshBasicMaterial({
   color: 0xf4f0de,
-  roughness: 0.82,
-  metalness: 0,
+  depthTest: false,
+  depthWrite: false,
   side: DoubleSide,
 })
+roadArrowMaterial.userData.shared = true
 
 type DirectionFlowMark = {
   x: number
@@ -160,50 +133,6 @@ function addBox(
   return mesh
 }
 
-function addSharedBox(
-  parent: Group,
-  size: readonly [number, number, number],
-  position: readonly [number, number, number],
-  color: number,
-  roughness = 0.8,
-): Mesh {
-  const mesh = new Mesh(
-    sharedBoxGeometry(size),
-    sharedMaterial(color, roughness),
-  )
-  mesh.position.set(...position)
-  parent.add(mesh)
-  return mesh
-}
-
-function addSharedCylinder(
-  parent: Group,
-  radius: number,
-  height: number,
-  position: readonly [number, number, number],
-  color: number,
-  roughness = 0.8,
-  rotation?: readonly [number, number, number],
-): Mesh {
-  const mesh = new Mesh(
-    sharedCylinderGeometry(radius, height),
-    sharedMaterial(color, roughness),
-  )
-  mesh.position.set(...position)
-  if (rotation) mesh.rotation.set(...rotation)
-  parent.add(mesh)
-  return mesh
-}
-
-function markShadows(root: Object3D): void {
-  root.traverse((object) => {
-    if (object instanceof Mesh) {
-      object.castShadow = true
-      object.receiveShadow = true
-    }
-  })
-}
-
 export class LogisticsView {
   readonly group = new Group()
   private readonly staticGroup = new Group()
@@ -219,6 +148,7 @@ export class LogisticsView {
   private inspectStamp = ''
   private inspectRoute: Line | null = null
   private getGroundY: (x: number, z: number) => number = () => 0
+  private readonly marksGroup = new Group()
   private readonly flowGroup = new Group()
   private flowMarks: DirectionFlowMark[] = []
   private flowArrows: InstancedMesh | null = null
@@ -231,7 +161,7 @@ export class LogisticsView {
 
   constructor() {
     this.flowGroup.renderOrder = 6
-    this.group.add(this.staticGroup, this.vehicleGroup, this.flowGroup)
+    this.group.add(this.staticGroup, this.vehicleGroup, this.marksGroup, this.flowGroup)
   }
 
   invalidate(): void {
@@ -297,6 +227,10 @@ export class LogisticsView {
       this.staticGroup.remove(child)
       disposeObject3D(child)
     })
+    this.marksGroup.children.slice().forEach((child) => {
+      this.marksGroup.remove(child)
+      disposeObject3D(child)
+    })
     const roadKeys = new Set(
       logistics.roadCells.map((road) => `${road.x}:${road.z}`),
     )
@@ -307,19 +241,19 @@ export class LogisticsView {
       this.staticGroup.add(this.createParkingSpace(space))
     })
     logistics.ambulanceGarages.forEach((garage) => {
-      this.staticGroup.add(this.createFacility(garage, 'garage'))
+      this.staticGroup.add(this.placeFacility(garage, 'ambulanceGarage'))
     })
     logistics.busDepots.forEach((depot) => {
-      this.staticGroup.add(this.createFacility(depot, 'depot'))
+      this.staticGroup.add(this.placeFacility(depot, 'busDepot'))
     })
     logistics.wasteDepots.forEach((depot) => {
-      this.staticGroup.add(this.createFacility(depot, 'waste'))
+      this.staticGroup.add(this.placeFacility(depot, 'wasteDepot'))
     })
     ;(logistics.specialDepots ?? []).forEach((depot) => {
-      this.staticGroup.add(this.createFacility(depot, 'special'))
+      this.staticGroup.add(this.placeFacility(depot, 'specialDepot'))
     })
     logistics.busStops.forEach((stop) => {
-      this.staticGroup.add(this.createBusStop(stop))
+      this.staticGroup.add(this.placeFacility(stop, 'busStop'))
     })
     this.rebuildDirectionFlow(logistics)
   }
@@ -388,9 +322,9 @@ export class LogisticsView {
     ).forEach((direction) => {
       const arrow = new Mesh(roadArrowGeometry, roadArrowMaterial)
       arrow.rotation.y = DIRECTION_ANGLE[direction]
-      arrow.position.y = 0.018
+      arrow.position.set(road.x + 0.5, this.groundY(road.x, road.z) + 0.018, road.z + 0.5)
       arrow.scale.setScalar(0.72)
-      group.add(arrow)
+      this.marksGroup.add(arrow)
     })
 
     directionsFromMask(road.blockedEdges).forEach((direction) => {
@@ -456,13 +390,13 @@ export class LogisticsView {
       this.flowQuaternion.setFromAxisAngle(FLOW_UP, DIRECTION_ANGLE[mark.direction])
       for (let step = 0; step < FLOW_ARROWS; step += 1) {
         const travel = (this.flowPhase + step / FLOW_ARROWS) % 1
-        const along = (travel - 0.5) * 0.82
+        const along = (travel - 0.5) * 0.7
         const edge = Math.min(travel, 1 - travel)
-        const appear = Math.min(1, edge / 0.14)
-        const size = 0.78 * appear
+        const appear = 0.72 + 0.28 * Math.min(1, edge / 0.18)
+        const size = 0.52 * appear
         this.flowPosition.set(
           mark.x + 0.5 + offsetX * along,
-          mark.y + 0.08,
+          mark.y + 0.045,
           mark.z + 0.5 + offsetZ * along,
         )
         this.flowScale.set(size, size, size)
@@ -514,68 +448,14 @@ export class LogisticsView {
     return group
   }
 
-  private createFacility(
-    facility: FacilityLike,
-    kind: 'garage' | 'depot' | 'waste' | 'special',
-  ): Group {
-    const group = new Group()
-    const size = kind === 'depot' || kind === 'special' ? 3 : 2
-    const color =
-      kind === 'garage'
-        ? 0x52718c
-        : kind === 'waste'
-          ? 0x4a5a3a
-          : kind === 'special'
-            ? 0x5a6a72
-            : 0x9b7445
+  private placeFacility(facility: FacilityLike, kind: LogisticsFacilityKind): Group {
+    const size = logisticsFacilityFootprint(kind)
+    const group = createLogisticsFacility(kind)
     group.position.set(
       facility.x + size / 2,
       this.groundY(facility.x, facility.z),
       facility.z + size / 2,
     )
-    addBox(group, [size - 0.12, 0.13, size - 0.12], [0, 0.065, 0], 0x3c4247)
-    if (kind === 'special') {
-      addBox(group, [size - 0.18, 0.08, size - 0.18], [0, 0.08, 0], 0x4d555b)
-      addBox(group, [0.9, 0.62, 0.72], [0, 0.42, -size / 2 + 0.46], color)
-      addBox(group, [1.02, 0.1, 0.84], [0, 0.78, -size / 2 + 0.46], 0x2c3236)
-      ;[-0.9, -0.3, 0.3, 0.9].forEach((offset) => {
-        addBox(group, [0.42, 0.03, 0.72], [offset, 0.09, 0.28], 0xd7b45b)
-        addBox(group, [0.04, 0.05, 0.72], [offset - 0.2, 0.1, 0.28], 0xf0d27a)
-        addBox(group, [0.04, 0.05, 0.72], [offset + 0.2, 0.1, 0.28], 0xf0d27a)
-      })
-      markShadows(group)
-      return group
-    }
-    addBox(group, [size - 0.3, 0.78, size - 0.4], [0, 0.52, 0.1], color)
-    addBox(group, [size - 0.55, 0.58, 0.04], [0, 0.4, size / 2 - 0.185], 0x30373c)
-    const roof = addBox(group, [size, 0.14, size], [0, 0.98, 0], 0x252a2e)
-    roof.castShadow = true
-    if (kind === 'depot') {
-      ;[-0.65, 0, 0.65].forEach((offset) => {
-        addBox(group, [0.08, 0.58, 0.06], [offset, 0.4, size / 2 - 0.145], 0xd7b45b)
-      })
-    }
-    if (kind === 'waste') {
-      ;[-0.28, 0.28].forEach((offset) => {
-        addBox(group, [0.22, 0.28, 0.22], [offset, 0.28, size / 2 - 0.22], 0x3d4a2e)
-      })
-    }
-    markShadows(group)
-    return group
-  }
-
-  private createBusStop(stop: FacilityLike): Group {
-    const group = new Group()
-    group.position.set(stop.x + 0.5, this.groundY(stop.x, stop.z), stop.z + 0.5)
-    addBox(group, [0.72, 0.045, 0.3], [0, 0.025, 0], 0x92989b)
-    addBox(group, [0.58, 0.04, 0.18], [-0.08, 0.25, 0], 0x356d91)
-    ;[-0.3, 0.14].forEach((offset) => {
-      addBox(group, [0.035, 0.48, 0.035], [offset, 0.25, 0], 0x41484c)
-    })
-    addBox(group, [0.035, 0.74, 0.035], [0.34, 0.37, 0], 0x41484c)
-    addBox(group, [0.22, 0.22, 0.035], [0.34, 0.66, 0], 0x2f75ad)
-    addBox(group, [0.13, 0.045, 0.045], [0.34, 0.66, 0.025], 0xf3f5ef)
-    markShadows(group)
     return group
   }
 
@@ -598,7 +478,7 @@ export class LogisticsView {
         model = undefined
       }
       if (!model) {
-        model = this.createVehicle(kind)
+        model = createRoadVehicleModel(kind, vehicle.id)
         model.userData.vehicleKind = kind
         model.userData.vehicleId = vehicle.id
         model.traverse((object) => {
@@ -708,148 +588,5 @@ export class LogisticsView {
           next.z - vehicle.position.z,
         )
       : 0
-  }
-
-  private createVehicle(kind: string): Group {
-    if (kind === 'ambulance') return this.createCar(0xf4f4ee, true)
-    if (kind === 'bus') return this.createBus()
-    if (kind === 'garbageTruck') return this.createGarbageTruck()
-    if (kind === 'deliveryTruck') return this.createDeliveryTruck()
-    if (kind === 'sweeper') return this.createSweeper()
-    return this.createCar(0x3479ad, false)
-  }
-
-  private createSweeper(): Group {
-    const group = new Group()
-    addSharedBox(group, [0.4, 0.08, 0.46], [0, 0.12, -0.02], 0x1a1c1e, 0.85)
-    addSharedBox(group, [0.36, 0.26, 0.34], [0, 0.29, -0.04], 0xf2f4f0, 0.45)
-    addSharedBox(group, [0.38, 0.035, 0.36], [0, 0.438, -0.04], 0x3cb54a, 0.5)
-    addSharedBox(group, [0.02, 0.16, 0.3], [-0.19, 0.3, -0.04], 0x3cb54a, 0.5)
-    addSharedBox(group, [0.02, 0.16, 0.3], [0.19, 0.3, -0.04], 0x3cb54a, 0.5)
-    addSharedBox(group, [0.3, 0.16, 0.018], [0, 0.33, 0.14], 0x6a8ea0, 0.25)
-    addSharedBox(group, [0.22, 0.1, 0.018], [0, 0.32, -0.21], 0x6a8ea0, 0.3)
-    addSharedBox(group, [0.38, 0.06, 0.06], [0, 0.13, 0.2], 0x141618, 0.8)
-    addSharedBox(group, [0.04, 0.04, 0.04], [0.08, 0.48, 0.04], 0xf0b020, 0.35)
-    addSharedBox(group, [0.03, 0.04, 0.02], [-0.23, 0.36, 0.08], 0x202326, 0.7)
-    addSharedBox(group, [0.03, 0.04, 0.02], [0.23, 0.36, 0.08], 0x202326, 0.7)
-    addSharedCylinder(group, 0.018, 0.14, [-0.1, 0.52, -0.12], 0x2a2c2e, 0.7)
-    addSharedCylinder(
-      group,
-      0.018,
-      0.1,
-      [-0.1, 0.57, -0.18],
-      0x2a2c2e,
-      0.7,
-      [HALF_PI, 0, 0],
-    )
-    ;[
-      [-0.16, 0.28],
-      [0.16, 0.28],
-      [0, 0.38],
-    ].forEach(([x, z]) => {
-      addSharedCylinder(group, 0.1, 0.03, [x, 0.05, z], 0x1c2430, 1)
-      addSharedCylinder(group, 0.028, 0.05, [x, 0.08, z], 0x2a3038, 0.75)
-    })
-    ;[-0.16, 0.16].forEach((x) => {
-      ;[-0.16, 0.08].forEach((z) => {
-        addSharedCylinder(
-          group,
-          0.07,
-          0.045,
-          [x, 0.09, z],
-          0x202326,
-          1,
-          [0, 0, HALF_PI],
-        )
-      })
-    })
-    return group
-  }
-
-  private createDeliveryTruck(): Group {
-    const group = new Group()
-    addSharedBox(group, [0.46, 0.36, 0.52], [0, 0.32, 0.08], 0xe1bb62, 0.55)
-    addSharedBox(group, [0.4, 0.28, 0.26], [0, 0.3, -0.32], 0x518fa0, 0.45)
-    addSharedBox(group, [0.3, 0.12, 0.02], [0, 0.34, -0.44], 0x86b4c7, 0.3)
-    ;[-0.2, 0.2].forEach((x) => {
-      ;[-0.3, 0.22].forEach((z) => {
-        const wheel = new Mesh(
-          sharedCylinderGeometry(0.09, 0.055),
-          sharedMaterial(0x202326, 1),
-        )
-        wheel.rotation.z = HALF_PI
-        wheel.position.set(x, 0.12, z)
-        group.add(wheel)
-      })
-    })
-    return group
-  }
-
-  private createGarbageTruck(): Group {
-    const group = new Group()
-    addSharedBox(group, [0.42, 0.2, 0.36], [0, 0.22, 0.28], 0x3f6b3a, 0.55)
-    addSharedBox(group, [0.34, 0.16, 0.18], [0, 0.38, 0.3], 0x3f6b3a, 0.5)
-    addSharedBox(group, [0.28, 0.1, 0.02], [0, 0.4, 0.4], 0x86b4c7, 0.3)
-    addSharedBox(group, [0.46, 0.34, 0.58], [0, 0.3, -0.18], 0x4a4f45, 0.7)
-    addSharedBox(group, [0.4, 0.08, 0.5], [0, 0.5, -0.18], 0x2f332c, 0.8)
-    ;[-0.22, 0.22].forEach((x) => {
-      ;[-0.32, 0.08, 0.32].forEach((z) => {
-        const wheel = new Mesh(
-          sharedCylinderGeometry(0.09, 0.055),
-          sharedMaterial(0x202326, 1),
-        )
-        wheel.rotation.z = HALF_PI
-        wheel.position.set(x, 0.12, z)
-        group.add(wheel)
-      })
-    })
-    return group
-  }
-
-  private createCar(color: number, ambulance: boolean): Group {
-    const group = new Group()
-    addSharedBox(group, [0.48, 0.18, 0.78], [0, 0.19, 0], color, 0.55)
-    addSharedBox(group, [0.4, 0.19, 0.4], [0, 0.36, -0.03], ambulance ? 0xf4f4ee : color, 0.5)
-    addSharedBox(group, [0.34, 0.13, 0.025], [0, 0.37, 0.18], 0x86b4c7, 0.3)
-    ;[-0.25, 0.25].forEach((x) => {
-      ;[-0.24, 0.24].forEach((z) => {
-        const wheel = new Mesh(
-          sharedCylinderGeometry(0.09, 0.055),
-          sharedMaterial(0x202326, 1),
-        )
-        wheel.rotation.z = HALF_PI
-        wheel.position.set(x, 0.12, z)
-        group.add(wheel)
-      })
-    })
-    if (ambulance) {
-      addSharedBox(group, [0.13, 0.03, 0.5], [0, 0.3, 0], 0xd73832)
-      addSharedBox(group, [0.4, 0.03, 0.13], [0, 0.3, 0], 0xd73832)
-      addSharedBox(group, [0.2, 0.07, 0.09], [0, 0.5, -0.04], 0x2878d1)
-    }
-    return group
-  }
-
-  private createBus(): Group {
-    const group = new Group()
-    addSharedBox(group, [0.62, 0.46, 1.38], [0, 0.34, 0], 0xe0a832, 0.65)
-    addSharedBox(group, [0.5, 0.19, 0.025], [0, 0.43, 0.7], 0x729fb2, 0.3)
-    ;[-0.45, -0.1, 0.25, 0.52].forEach((z) => {
-      ;[-0.316, 0.316].forEach((x) => {
-        addSharedBox(group, [0.025, 0.18, 0.22], [x, 0.45, z], 0x729fb2, 0.3)
-      })
-    })
-    ;[-0.45, 0.45].forEach((z) => {
-      ;[-0.32, 0.32].forEach((x) => {
-        const wheel = new Mesh(
-          sharedCylinderGeometry(0.11, 0.07),
-          sharedMaterial(0x202326),
-        )
-        wheel.rotation.z = HALF_PI
-        wheel.position.set(x, 0.14, z)
-        group.add(wheel)
-      })
-    })
-    return group
   }
 }

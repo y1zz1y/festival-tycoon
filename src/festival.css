@@ -30,6 +30,8 @@
 .festival-form label { display: flex; flex-direction: column; gap: 6px; color: #bfcebc; }
 .festival-form input, .festival-form select { max-width: 100%; padding: 8px; background: #162e27; color: #f1eedb; border: 1px solid #7e9986; font: inherit; }
 .festival-form input[type=number] { width: 100px; }
+.festival-management .day-plan-scroll { margin-top: 12px; }
+.festival-management .day-plan-status { color: #c3d3c6; }
 .festival-note { padding: 10px; border-left: 3px solid #c4ab64; }
 .festival-booking { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 8px 0; }
 .festival-booking span, .festival-booking small { display: block; margin-top: 6px; color: #b2c6ba; }

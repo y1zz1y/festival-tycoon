@@ -52,6 +52,13 @@ export function testScenery(fixture: (count?: number) => GameState): void {
   }
   assert.equal(scenerySlot('flowerbed', .75, .25), 1)
   assert.equal(sceneryOverlaps({ kind: 'flowerbed', rotation: 0, decorationSlot: 0 }, { kind: 'hedge', rotation: 0, decorationSlot: 0 }), false)
+  assert.ok(game.place('totem', 16, 0, 0).ok)
+  assert.ok(game.place('prayerFlags', 16, 0, 0).ok, 'quarter totem and edge prayer flags can share a tile')
+  assert.equal(game.canPlace('lightBalloon', 16, 0).ok, false, 'full-tile balloon cannot sit on occupied quarters')
+  assert.ok(game.place('lightBalloon', 17, 0).ok)
+  assert.equal(game.canPlace('flowerbed', 17, 0, 1).ok, false, 'daylight balloon occupies the whole tile')
+  assert.equal(scenerySlot('prayerFlags', .5, .95, 0), 0)
+  assert.equal(sceneryOverlaps({ kind: 'prayerFlags', rotation: 0, decorationSlot: 0 }, { kind: 'bunting', rotation: 0, decorationSlot: 0 }), true)
 
   const client = fixture(0), host = fixture(0), sent: GameCommand[] = []
   client.networkMode = 'client'; enableMultiplayerCommands(client)

@@ -139,6 +139,9 @@ export function testSupplyChain(fixture: (count?: number) => GameState) {
   assert.equal(s.festival.deliveries[0]!.quantity, 300 - depotBeforeOrder, 'automatic purchase accounts for stock and pending cargo')
   advance(15)
   assert.equal(s.festival.deliveries.length, 1, 'minimum stock does not duplicate pending purchases')
+  assert.ok(action({ type: 'minimum', depotId: depot.id, kind: 'water', quantity: 35 }).ok)
+  assert.equal(depot.minimum.water, 40, 'minimum stock snaps to 20-unit steps')
+  assert.ok(action({ type: 'minimum', depotId: depot.id, kind: 'water', quantity: 0 }).ok)
 
   const ingressGame = fixture(0), ingress = ingressGame.snapshot as GameSnapshot
   ingressGame.addDebugMoney()

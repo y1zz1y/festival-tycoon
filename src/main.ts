@@ -12,14 +12,25 @@ import type { Environment } from './game/environments'
 import { mountLogisticsUI } from './logisticsUI'
 import './style.css'
 import { mountFestivalUI } from './festivalUI'
-import { AUDIENCE_NAMES } from './game/festivalManagement'
+import { AUDIENCE_NAMES, SUPPLIES } from './game/festivalManagement'
+import type { Supply } from './game/festivalManagement'
+import { snapStockMinimum } from './game/supplyChain'
 import { BUILDINGS } from './game/catalog'
 import type { BuildingKind, Tool } from './game/catalog'
+import {
+  BUILD_CATEGORIES,
+  buildCategoryById,
+  categoryForTool,
+  isCatalogBuildCategory,
+  subgroupForTool,
+  type BuildCategoryId,
+} from './game/buildMenu'
 import {
   COASTER_TYPES,
   TRACK_BANK_ANGLE,
   TRACK_PIECES,
   TRACK_PITCHES,
+  canTransitionTrackPitch,
   createTrackPiece,
 } from './game/coasters'
 import type {
@@ -29,6 +40,14 @@ import type {
   TrackPieceKind,
 } from './game/coasters'
 import { GameState } from './game/GameState'
+import {
+  areaPreviewText,
+  currentAccessSlot,
+  previewLabel,
+  toggleAreaCells,
+  type AccessControl,
+  type AccessControlMode,
+} from './game/accessControl'
 import type { PlacedBuilding } from './game/GameState'
 import {
   describeRoadVehicleActivity,
@@ -64,7 +83,6 @@ import { WorldView } from './view/WorldView'
 import type { CellPosition, PathAnchor } from './view/WorldView'
 import { isTextEntryTarget } from './uiFocus'
 import { mountMobileUI } from './mobileUI'
-import { mountAppInstall } from './appInstall'
 import { mountUpdateNotice } from './updateNotice'
 
 function requireElement<T extends Element>(selector: string): T {
@@ -86,7 +104,7 @@ function setPanelOpen(
 
 function closeBuildSubmenus(): void {
   document
-    .querySelectorAll<HTMLElement>('[data-build-category], [data-build-panel]')
+    .querySelectorAll<HTMLElement>('[data-build-category]')
     .forEach((element) => element.classList.remove('open'))
 }
 
@@ -109,77 +127,52 @@ app.innerHTML = `
         <span>🗑️ <strong id="waste">0</strong></span>
         <span>📅 <strong id="date">Tag 1 · 08:00</strong></span>
   </div>
-      <div class="game-actions">
-        <div id="action-group-festival" class="action-group" aria-label="Festival"></div>
-        <div class="action-divider"></div>
-        <div id="action-group-build" class="action-group" aria-label="Bauwerkzeuge">
-          <button id="open-info">🔎 Info</button>
-          <button id="open-build-menu" aria-expanded="false">🏗️ Bauen</button>
-          <div class="dropdown-menu">
-            <button id="toggle-bulldoze-menu" aria-expanded="false">🚜 Abriss</button>
-            <div id="bulldoze-menu-panel" class="bulldoze-panel panel">
-              <div class="bulldoze-panel-header panel-header">
-                <span class="panel-drag-line" aria-hidden="true"></span>
-                <h3 class="panel-header-title">Abriss-Fläche</h3>
-                <span class="panel-drag-line" aria-hidden="true"></span>
-                <button data-close-bulldoze-menu class="panel-close-button" aria-label="Abriss schließen">×</button>
-              </div>
-              <div class="bulldoze-size-grid">
-                <button data-bulldoze-size="1" class="active">1×1</button>
-                <button data-bulldoze-size="2">2×2</button>
-                <button data-bulldoze-size="3">3×3</button>
-                <button data-bulldoze-size="4">4×4</button>
-                <button data-bulldoze-size="5">5×5</button>
-                <button data-bulldoze-size="6">6×6</button>
-                <button data-bulldoze-size="7">7×7</button>
-                <button data-bulldoze-size="8">8×8</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="action-divider"></div>
-        <div id="action-group-views" class="action-group" aria-label="Ansichten">
-          <button id="toggle-walk-mode" aria-pressed="false">🚶 Gelände betreten</button>
-          <button id="open-logistics" aria-expanded="false">🚚 Logistik</button>
-          <button id="open-day-plan" aria-expanded="false">📅 Tagesplan</button>
-          <button id="open-complaints" aria-expanded="false">📣 Beschwerden</button>
-          <button id="open-visitors" aria-expanded="false">👥 Besucher</button>
-          <div class="dropdown-menu">
-            <button id="toggle-staff-menu" aria-expanded="false" aria-haspopup="true">🧑‍💼 Personal ▾</button>
-            <div id="staff-menu-panel" class="dropdown-menu-panel panel">
-              ${STAFF_ROLES.map(role => `<button data-staff-role="${role}">${STAFF_DEFINITIONS[role].icon} ${STAFF_DEFINITIONS[role].name}</button>`).join('')}
-            </div>
-          </div>
-        </div>
-        <div class="action-divider"></div>
-        <div id="action-group-session" class="action-group" aria-label="Sitzung">
-          <button id="toggle-park">🔓 Park schließen</button>
-          <button id="toggle-multiplayer" aria-expanded="false">🌐 Mehrspieler</button>
-        </div>
-        <div class="action-divider"></div>
-        <div id="action-group-tools" class="action-group" aria-label="Menüs">
-          <div class="debug-menu">
-            <button id="toggle-debug-menu" aria-expanded="false">🐞 Debug ▾</button>
-            <div id="debug-menu-panel" class="debug-menu-panel panel">
-              <button id="debug-money" title="Debug-Geld hinzufügen">💰 +100.000 €</button>
-              <button id="debug-clear-waste" title="Müll, Erbrochenes und verlassene Campinggegenstände sofort entfernen">🧹 Müll & alte Gegenstände entfernen</button>
-              <button id="debug-remove-cars" title="Besucherautos entfernen">🚗 Autos entfernen & Gäste heimschicken</button>
-            </div>
-          </div>
-          <div class="dropdown-menu">
-            <button id="toggle-save-menu" aria-expanded="false" aria-haspopup="true">💾 Spielstand ▾</button>
-            <div id="save-menu-panel" class="dropdown-menu-panel panel">
-              <button id="save">💾 Schnell speichern</button>
-              <button id="save-as" title="Spielstand benennen oder einen vorhandenen überschreiben">💾 Speichern unter …</button>
-              <button id="load">📂 Schnell laden</button>
-              <button id="save-slots" title="Lokale Spielstände verwalten">🗂️ Spielstände verwalten</button>
-              <button id="copy-save" title="Spielstand als Base64 kopieren">⧉ Als Text kopieren</button>
-              <button id="paste-save" title="Base64-Spielstand einfügen">📋 Text einfügen</button>
-            </div>
-          </div>
-        </div>
-      </div>
     </header>
+    <nav class="rct-toolbar" aria-label="Werkzeuge">
+      <div id="action-group-build" class="rct-group" aria-label="Bauen">
+        ${BUILD_CATEGORIES.filter((category) => !['roads', 'logistics'].includes(category.id)).map((category) => `<button type="button" data-build-category="${category.id}" title="${category.label}" aria-label="${category.label}" aria-expanded="false">${category.icon}</button>`).join('')}
+        <span class="rct-split" aria-hidden="true"></span>
+        <button type="button" data-build-category="roads" title="Autostraßen" aria-label="Autostraßen" aria-expanded="false">🛣️</button>
+        <button type="button" data-build-category="logistics" title="Logistik" aria-label="Logistik" aria-expanded="false">🚚</button>
+        <button id="open-build-menu" class="rct-hidden-control" aria-expanded="false">Bauen</button>
+      </div>
+      <div class="rct-group" aria-label="Verwalten">
+        <div id="action-group-festival" class="rct-inject"></div>
+        <button id="open-logistics" type="button" title="Logistikverwaltung · Bestellungen &amp; Träger" aria-label="Logistikverwaltung · Bestellungen und Träger" aria-expanded="false">📦</button>
+        <button id="open-complaints" type="button" title="Beschwerden" aria-label="Beschwerden" aria-expanded="false">📣</button>
+        <button id="open-visitors" type="button" title="Besucher" aria-label="Besucher" aria-expanded="false">👥</button>
+        <button id="toggle-staff-menu" type="button" title="Personal" aria-label="Personal" aria-expanded="false">🧑‍💼</button>
+        <button id="toggle-multiplayer" type="button" title="Mehrspieler" aria-label="Mehrspieler" aria-expanded="false">🌐</button>
+      </div>
+      <div class="rct-group" aria-label="Kartenansichten">
+        <button id="toggle-logistics-overlay" type="button" title="Logistik / Untergrund" aria-label="Logistik / Untergrund" aria-pressed="false">🗺️</button>
+        <button id="toggle-crowding-overlay" type="button" title="Gedränge" aria-label="Gedränge" aria-pressed="false">👥</button>
+        <button id="toggle-attractiveness-overlay" type="button" title="Attraktivität" aria-label="Attraktivität" aria-pressed="false">🌿</button>
+        <button id="toggle-party-overlay" type="button" title="Partystimmung" aria-label="Partystimmung" aria-pressed="false">🎵</button>
+      </div>
+      <div id="action-group-session" class="rct-group" aria-label="Sitzung">
+        <button id="toggle-walk-mode" type="button" title="Gelände betreten" aria-label="Gelände betreten" aria-pressed="false">🚶</button>
+        <button id="toggle-save-menu" type="button" title="Spielstand" aria-label="Spielstand" aria-expanded="false" aria-haspopup="true">💾</button>
+        <button id="toggle-park" type="button" title="Park schließen" aria-label="Park schließen">🔓</button>
+        <button id="toggle-debug-menu" type="button" title="Debug" aria-label="Debug" aria-expanded="false">🐞</button>
+      </div>
+      <div id="staff-menu-panel" class="dropdown-menu-panel panel">
+        ${STAFF_ROLES.map((role) => `<button data-staff-role="${role}">${STAFF_DEFINITIONS[role].icon} ${STAFF_DEFINITIONS[role].name}</button>`).join('')}
+      </div>
+      <div id="debug-menu-panel" class="debug-menu-panel panel">
+        <button id="debug-money" title="Debug-Geld hinzufügen">💰 +100.000 €</button>
+        <button id="debug-clear-waste" title="Müll, Erbrochenes und verlassene Campinggegenstände sofort entfernen">🧹 Müll & alte Gegenstände entfernen</button>
+        <button id="debug-remove-cars" title="Besucherautos entfernen">🚗 Autos entfernen & Gäste heimschicken</button>
+      </div>
+      <div id="save-menu-panel" class="dropdown-menu-panel panel">
+        <button id="save">💾 Schnell speichern</button>
+        <button id="save-as" title="Spielstand benennen oder einen vorhandenen überschreiben">💾 Speichern unter …</button>
+        <button id="load">📂 Schnell laden</button>
+        <button id="save-slots" title="Lokale Spielstände verwalten">🗂️ Spielstände verwalten</button>
+        <button id="copy-save" title="Spielstand als Base64 kopieren">⧉ Als Text kopieren</button>
+        <button id="paste-save" title="Base64-Spielstand einfügen">📋 Text einfügen</button>
+      </div>
+    </nav>
     <aside id="scenario-panel" class="scenario-panel panel" hidden>
       <div class="panel-header">
         <span class="panel-drag-line" aria-hidden="true"></span>
@@ -289,152 +282,102 @@ app.innerHTML = `
     <aside id="build-menu" class="build-menu panel" aria-label="Bauwerkzeuge" hidden>
       <div class="build-menu-header panel-header">
         <span class="panel-drag-line" aria-hidden="true"></span>
-        <h2 class="panel-header-title">Bauen</h2>
+        <h2 class="panel-header-title" id="build-menu-title">Bauen</h2>
         <span class="panel-drag-line" aria-hidden="true"></span>
         <button data-close-build-menu class="panel-close-button" aria-label="Bauen schließen">×</button>
       </div>
-      <div id="path-tools" class="tools"></div>
-      <button id="toggle-path-editor" class="path-editor-launch">🛠 Weg-Editor</button>
-      <div class="tool-divider"></div>
-      <nav class="build-categories" aria-label="Baukategorien">
-        <button data-build-category="terrain"><span>⛰</span><em>Gelände</em><b>›</b></button>
-        <button data-build-category="supply"><span>🍔</span><em>Versorgung</em><b>›</b></button>
-        <button data-build-category="camping"><span>⛺</span><em>Camping</em><b>›</b></button>
-        <button data-build-category="rides"><span>🎡</span><em>Attraktionen</em><b>›</b></button>
-        <button data-build-category="emergency"><span>🚑</span><em>Notfallversorgung</em><b>›</b></button>
-        <button data-build-category="decoration"><span>🌳</span><em>Dekoration</em><b>›</b></button>
-        <button data-build-category="festival"><span>🎤</span><em>Festival</em><b>›</b></button>
-        <button data-build-category="tech"><span>⚡</span><em>Technik</em><b>›</b></button>
-        <button data-build-category="logistics"><span>🚚</span><em>Logistik</em><b>›</b></button>
-      </nav>
-      <section class="build-flyout panel" data-build-panel="terrain">
-        <h3>⛰ Gelände<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
-        <div class="tools">
-          <button class="tool" data-tool="terrainRaise"><span>▲</span><em>Erhöhen<small>8 € je Feld</small></em></button>
-          <button class="tool" data-tool="terrainLower"><span>▼</span><em>Senken<small>8 € je Feld</small></em></button>
-          <button class="tool" data-tool="terrainFlatten"><span>▬</span><em>Einebnen<small>auf Ebene 0</small></em></button>
-        </div>
-</section>
-      <section class="build-flyout panel" data-build-panel="supply">
-        <h3>🍔 Versorgung<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
-        <div id="supply-tools" class="tools"></div>
-      </section>
-      <section class="build-flyout panel" data-build-panel="camping">
-        <h3>⛺ Camping<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
-        <div class="tools">
-          <button class="tool" data-tool="camping"><span>⛺</span><em>Zeltbereich<small>Gelände ausweisen</small></em><kbd>7</kbd></button>
-        </div>
-      </section>
-      <section class="build-flyout panel" data-build-panel="rides">
-        <h3>🎡 Attraktionen<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
-        <div id="ride-tools" class="tools"></div>
-        <button class="tool" data-tool="coaster"><span>🎢</span><em>Achterbahn<small>ab 450 €</small></em><kbd>0</kbd></button>
-        <button class="tool" data-tool="ride" data-bungee="true"><span>🪂</span><em>Bungee-Turm<small>1.200 € + 25 €/Meter</small></em></button>
-        <label>Turmhöhe (m) <input id="bungee-height" type="number" min="4" max="200" step="1" value="20" style="width:70px" /></label>
-      </section>
-      <section class="build-flyout panel" data-build-panel="emergency">
-        <h3>🚑 Notfallversorgung<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
-        <div id="emergency-tools" class="tools"></div>
-        <button class="tool" data-tool="medicalArea"><span>🏥</span><em>Krankenbereich<small>3 Liegen je Feld</small></em></button>
-      </section>
-      <section class="build-flyout panel" data-build-panel="decoration">
-        <h3>🌳 Dekoration<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
-        <p class="scenery-help">Kleine Deko: bis zu 4 pro Feld. Hecken und Banner stehen an der Feldkante. Die Maus bestimmt die Position.</p>
+      <nav id="build-subtabs" class="build-subtabs" aria-label="Untergruppen" hidden></nav>
+      <div id="build-extra-paths" class="build-extra" hidden></div>
+      <div id="build-extra-roads" class="build-extra" hidden>
+        <div class="logistics-road-tools"></div>
+      </div>
+      <div id="build-extra-terrain" class="build-extra" hidden>
+        <div id="terrain-planner-slot"></div>
+      </div>
+      <div id="build-extra-decoration" class="build-extra" hidden>
+        <p class="scenery-help">Kleine Deko: bis zu 4 pro Feld. Hecken, Banner, Wimpel, Lichterketten und Gebetsfahnen stehen an der Feldkante. Tageslichtballons brauchen ein ganzes Feld. Die Maus bestimmt die Position.</p>
         <button id="rotate-scenery" type="button">↻ Drehen / nächste Seite <kbd>R</kbd></button>
-        <div id="decoration-tools" class="tools"></div>
-      </section>
-      <section class="build-flyout panel" data-build-panel="festival">
-        <h3>🎤 Festivalequipment<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
-        <div id="festival-tools" class="tools"></div>
-      </section>
-      <section class="build-flyout panel" data-build-panel="tech">
-        <h3>⚡ Strom & Showtechnik<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
-        <div class="tools">
-          <button class="tool" data-tool="powerCable"><span>🔌</span><em>Stromkabel<small>18 € je Feld</small></em></button>
-        </div>
-        <div id="tech-tools" class="tools"></div>
-      </section>
-      <section class="build-flyout panel" data-build-panel="logistics">
-        <h3>Transport & Logistik<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
-        <div class="logistics-tabs">
-          <button class="active" type="button">Straße</button>
-        </div>
-        <div class="tools logistics-road-tools">
-          <button class="tool" data-tool="road"><span>▰</span><em>Straße<small>Linie ziehen</small></em></button>
-          <button class="tool" data-tool="wasteDump"><span>🗑️</span><em>Müllablage<small>sehr unattraktiv</small></em></button>
-          <button class="tool" data-tool="parkingArea"><span>🅿</span><em>Parkplatz<small>Fläche ziehen</small></em></button>
-          <button class="tool" data-tool="roadDirection"><span>➜</span><em>Fahrtrichtung<small>Pfeil setzen</small></em></button>
-          <button class="tool" data-tool="roadSeparator"><span>⛔</span><em>Trennlinie<small>Kante sperren</small></em></button>
-          <button class="tool" data-tool="crosswalk"><span>▥</span><em>Zebrastreifen</em></button>
-          <button class="tool speed-10" data-tool="roadSpeed10"><span>10</span><em>Tempo 10</em></button>
-          <button class="tool speed-30" data-tool="roadSpeed30"><span>30</span><em>Tempo 30</em></button>
-          <button class="tool speed-50" data-tool="roadSpeed50"><span>50</span><em>Tempo 50</em></button>
-        </div>
-        <div id="logistics-tools" class="tools"></div>
-      </section>
-      <label class="park-price" for="entry-price">
-        <span>🎟️ Parkeintritt</span>
-        <span><input id="entry-price" type="number" min="0" max="1000000" step="1" value="10" /> €</span>
-      </label>
-      <div class="build-editor">
-        <div class="editor-label"><span>Bauhöhe</span><strong id="build-height">Ebene 0</strong></div>
-        <div class="editor-buttons">
-          <button id="height-down" title="Bauhöhe senken">−</button>
-          <button id="height-up" title="Bauhöhe erhöhen">＋</button>
-          <button id="rotate-build" title="Gebäude drehen">↻ Drehen</button>
-        </div>
-        <small id="build-direction">Zugang: ↙</small>
       </div>
-      <div class="tool-divider"></div>
-      <button class="tool" data-tool="bulldoze"><span>🚜</span><em>Abriss</em><kbd>8</kbd></button>
+      <div id="build-extra-attractions" class="build-extra" hidden>
+        <label class="bungee-height-field">Turmhöhe (m) <input id="bungee-height" type="number" min="4" max="200" step="1" value="20" /></label>
+      </div>
+      <div id="build-extra-logistics" class="build-extra" hidden></div>
+      <div id="build-grid" class="build-grid"></div>
+      <div id="build-catalog-status" class="build-catalog-status" hidden>
+        <div>
+          <strong id="build-catalog-name">Objekt wählen</strong>
+          <p id="build-catalog-detail"></p>
+        </div>
+        <strong id="build-catalog-cost"></strong>
+      </div>
     </aside>
-    <aside id="path-construction" class="path-construction panel" aria-label="Wege-Editor">
+    <aside id="path-construction" class="path-construction panel" aria-label="Fußwege">
       <div class="construction-title">
-        <div><small>Konstruktion</small><strong>Wege bauen</strong></div>
-        <button id="close-path-editor" aria-label="Editor schließen">×</button>
+        <div><small>Bauen</small><strong>Fußwege</strong></div>
+        <button id="close-path-editor" aria-label="Wege schließen">×</button>
       </div>
-      <p id="construction-status">Wähle einen bestehenden Weg als Startpunkt.</p>
-      <section class="rct-editor-section">
-        <label>Wegart</label>
+      <div id="path-tools"></div>
+      <section class="rct-editor-section rct-path-art">
+        <label>Art</label>
         <div class="piece-palette path-type-palette">
-          <button data-path-type="normal" class="active" title="Normaler Gehweg"><span>▦</span><small>Gehweg</small></button>
-          <button data-path-type="queue" title="Einbahn-Warteschlange"><span>⑂</span><small>Warteschlange</small></button>
+          <button data-path-type="normal" class="active" title="Normaler Gehweg"><span>▦</span><small>Weg</small></button>
+          <button data-path-type="queue" title="Einbahn-Warteschlange"><span>⑂</span><small>Schlange</small></button>
+        </div>
+        <select id="path-construction-type" class="editor-native-select" aria-hidden="true" tabindex="-1">
+          <option value="normal">Normaler Weg</option>
+          <option value="queue">Warteschlange (Einbahn)</option>
+        </select>
+        <div class="path-surface-hold">
+          <button id="path-surface-preview" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="path-surface-popup" title="Gedrückt halten für Wegarten">
+            <span class="way-swatch" data-surface="footDirt" aria-hidden="true"></span>
+            <strong data-path-surface-name>Trampelpfad</strong>
+          </button>
+          <div id="path-surface-popup" class="path-surface-popup" hidden>
+            <div id="path-surface-picker"></div>
+          </div>
         </div>
       </section>
-      <select id="path-construction-type" class="editor-native-select" aria-hidden="true" tabindex="-1">
-        <option value="normal">Normaler Weg</option>
-        <option value="queue">Warteschlange (Einbahn)</option>
-      </select>
-      <section class="rct-editor-section">
+      <section class="rct-editor-section rct-path-advanced">
         <label>Richtung</label>
-        <div class="direction-control fixed-directions">
-          <button data-path-direction="0" title="Richtung wählen"><span>↙</span><small>1</small></button>
-          <button data-path-direction="1" title="Richtung wählen"><span>↘</span><small>2</small></button>
-          <button data-path-direction="2" title="Richtung wählen"><span>↗</span><small>3</small></button>
-          <button data-path-direction="3" title="Richtung wählen"><span>↖</span><small>4</small></button>
+        <div class="path-direction-grid">
+          <button data-path-direction="3" class="path-dir-tile" title="Richtung wählen"><span>↖</span></button>
+          <button data-path-direction="2" class="path-dir-tile" title="Richtung wählen"><span>↗</span></button>
+          <button data-path-direction="0" class="path-dir-tile" title="Richtung wählen"><span>↙</span></button>
+          <button data-path-direction="1" class="path-dir-tile" title="Richtung wählen"><span>↘</span></button>
         </div>
       </section>
-      <section class="rct-editor-section">
-        <label>Steigung</label>
-        <div class="slope-control">
-          <button data-slope="-1" title="Abwärts"><span>↘</span><small>Ab</small></button>
-          <button data-slope="0" class="active" title="Ebener Weg"><span>→</span><small>Flach</small></button>
-          <button data-slope="1" title="Aufwärts"><span>↗</span><small>Auf</small></button>
+      <section class="rct-editor-section rct-path-advanced">
+        <label>Neigung</label>
+        <div class="path-slope-grid">
+          <button data-slope="-1" class="path-slope-tile" title="Abwärts"><span class="path-ramp path-ramp-down">↘</span><small>Runter</small></button>
+          <button data-slope="0" class="path-slope-tile active" title="Ebener Weg"><span class="path-ramp path-ramp-flat">→</span><small>Flach</small></button>
+          <button data-slope="1" class="path-slope-tile" title="Aufwärts"><span class="path-ramp path-ramp-up">↗</span><small>Hoch</small></button>
         </div>
       </section>
-      <section class="rct-editor-section">
-        <label>Bewegungsrichtung des gewählten Weges</label>
-        <div class="slope-control">
-          <button id="path-flow-set" title="Aktuelle Richtung als Einbahnrichtung setzen">⇥ Setzen</button>
-          <button id="path-flow-rotate" title="Einbahnrichtung drehen">↻ Drehen</button>
-          <button id="path-flow-clear" title="Beschränkung entfernen">↔ Frei</button>
-        </div>
-      </section>
-      <div class="next-piece-preview"><span id="path-piece-preview">▦ ↙ →</span><small>Nächstes Wegstück</small></div>
-      <div class="construction-actions">
-        <button id="undo-path" class="demolish" disabled><span>🔨</span> Zurück</button>
-        <button id="build-path" class="primary" disabled><span>⬇</span> Bauen</button>
+      <div class="path-cost-row">
+        <button id="path-demolish" type="button" aria-pressed="false" title="Wege abreißen">🔨 Abreißen</button>
+        <p id="path-art-cost">Kosten: €10</p>
       </div>
+      <section class="rct-editor-section path-access-links">
+        <label>Zugänge</label>
+        <div class="path-access-grid">
+          <button type="button" data-path-access="pathBarrier" title="Personentor auf einen Weg">🚧<small>Tor</small></button>
+          <button type="button" data-path-access="staffGate" title="Nur Personal und Logistik">🛂<small>Personaleingang</small></button>
+          <button type="button" data-path-access="securityGate" title="Sicherheitsschleuse / Festival-Einlass">🎟️<small>Festival-Einlass</small></button>
+        </div>
+      </section>
+      <p id="construction-status">Belag wählen, dann eine Linie ziehen.</p>
+      <div class="construction-actions rct-path-advanced">
+        <button id="undo-path" class="demolish" disabled>Zurück</button>
+        <button id="build-path" class="primary" disabled>Bauen</button>
+      </div>
+      <button id="toggle-path-editor" class="path-mode-toggle" type="button" aria-pressed="false" title="Stückweise bauen">
+        <svg viewBox="0 0 56 22" aria-hidden="true">
+          <rect x="6" y="8" width="44" height="6" rx="1" fill="#c2b396"></rect>
+          <polygon class="path-mode-arrow-fwd" points="44,4 54,11 44,18" fill="#f0c84a"></polygon>
+          <polygon class="path-mode-arrow-back" points="12,4 2,11 12,18" fill="#f0c84a"></polygon>
+        </svg>
+      </button>
     </aside>
     <aside id="ride-builder" class="coaster-builder ride-builder panel" aria-label="Fahrgeschäft-Konstruktion" hidden>
       <div class="construction-title"><div><small>Konstruktion</small><strong id="ride-builder-name">Fahrgeschäft bauen</strong></div><button id="close-ride-builder" aria-label="Fahrgeschäft-Editor schließen">×</button></div>
@@ -458,48 +401,42 @@ app.innerHTML = `
       <p id="ride-platform-height"></p>
       <div class="construction-actions"><button id="ride-builder-info">ⓘ Betriebsinfos</button><button id="finish-ride-builder" class="primary">✓ Fertig</button></div>
     </aside>
-    <aside id="coaster-builder" class="coaster-builder panel" aria-label="Achterbahn-Editor">
+    <aside id="coaster-builder" class="coaster-builder rct-coaster-construction panel" aria-label="Achterbahn-Konstruktion">
       <div class="construction-title">
-        <div><small>Konstruktion</small><strong>Achterbahn bauen</strong></div>
+        <strong id="coaster-construction-title">Achterbahn 1 Konstruktion</strong>
         <button id="close-coaster-builder" aria-label="Editor schließen">×</button>
       </div>
-      <p id="coaster-status">Klicke auf das Gelände, um die Startplattform zu bauen.</p>
-      <select id="coaster-type" class="coaster-type-select"><option value="classicSteel">🎢 Klassische Stahlachterbahn</option></select>
-      <div class="coaster-start-direction">
-        <span>Startrichtung</span>
-        <button id="coaster-rotate">↻ <b id="coaster-direction">↙</b></button>
-      </div>
+      <select id="coaster-type" class="editor-native-select" aria-hidden="true" tabindex="-1"><option value="classicSteel">Klassische Stahlachterbahn</option></select>
       <section class="rct-editor-section track-section">
-        <label>Richtung und Kurvenradius</label>
+        <label>Richtung <b id="coaster-direction">↙</b></label>
         <div id="track-direction-palette" class="piece-palette track-piece-palette"></div>
-        <h4>Sonderstücke</h4><div id="track-special-palette" class="piece-palette track-piece-palette"></div>
+        <button id="toggle-track-specials" class="track-special-toggle" type="button" aria-expanded="false">Speziell …</button>
+        <div id="track-special-palette" class="piece-palette track-piece-palette" hidden></div>
       </section>
       <section class="rct-editor-section track-section">
-        <label>Zielneigung / Station</label>
+        <label>Neigung</label>
         <div id="track-slope-palette" class="piece-palette track-slope-palette"></div>
       </section>
       <section class="rct-editor-section track-section">
-        <label>Seitliche Neigung</label>
+        <label>Rollen / S. Kippen</label>
         <div id="track-bank-palette" class="piece-palette track-bank-palette"></div>
       </section>
       <select id="track-piece" class="editor-native-select" aria-hidden="true" tabindex="-1"></select>
-      <label class="chain-option"><input id="chain-lift" type="checkbox" /> <span>⛓ Kettenzug auf Steigung</span></label>
-      <div class="next-piece-preview coaster-piece-preview">
+      <input id="chain-lift" class="editor-native-select" type="checkbox" aria-hidden="true" tabindex="-1" />
+      <button id="coaster-build-piece" class="next-piece-preview coaster-piece-preview primary" disabled title="Ausgewähltes Stück bauen">
         <span id="coaster-piece-preview">▰</span>
-        <small id="coaster-piece-label">Stationsplattform</small>
-      </div>
+        <small>Dies bauen …</small>
+        <strong id="coaster-piece-label">Kosten: 0 €</strong>
+      </button>
       <div class="coaster-build-actions">
-        <button id="coaster-undo" class="demolish" disabled><span>🔨</span> Zurück</button>
-        <button id="coaster-build-piece" class="primary" disabled><span>⬇</span> Bauen</button>
+        <button id="coaster-undo" class="demolish" disabled title="Letztes Stück abreißen" aria-label="Letztes Stück abreißen"><span>↶</span></button>
+        <button id="delete-track-from-here" class="demolish" disabled title="Markiertes Stück entfernen" aria-label="Markiertes Stück entfernen"><span>🚧</span></button>
+        <button id="track-previous" disabled title="Vorheriges Element" aria-label="Vorheriges Element">◀</button>
+        <button id="track-next" disabled title="Nächstes Element" aria-label="Nächstes Element">▶</button>
       </div>
-      <label class="editor-subheading">Streckenelement auswählen</label>
-      <div class="track-navigation">
-        <button id="track-previous" disabled title="Vorheriges Element">◀</button>
-        <strong id="track-selection">–</strong>
-        <button id="track-next" disabled title="Nächstes Element">▶</button>
-      </div>
-      <button id="delete-track-from-here" class="delete-track" disabled>🔨 Markiertes Element entfernen</button>
-      <label class="editor-subheading">Stationszugänge</label>
+      <strong id="track-selection" class="track-selection">–</strong>
+      <button id="coaster-rotate" class="coaster-start-rotate" type="button">↻ Startrichtung drehen</button>
+      <p id="coaster-status">Klicke auf das Gelände, um die Startplattform zu bauen.</p>
       <div class="coaster-access-actions">
         <button id="place-coaster-entrance" disabled>🚪 Eingang</button>
         <button id="place-coaster-exit" disabled>🚶 Ausgang</button>
@@ -511,20 +448,17 @@ app.innerHTML = `
       <button data-speed="2" title="Schnell · 3×">▶▶</button>
       <button data-speed="3" title="Sehr schnell · 8×">▶▶▶</button>
     </section>
-    <aside class="crowding-panel panel" aria-label="Gedrängeanzeige">
-      <button id="toggle-crowding-overlay" aria-pressed="false">👥 Gedränge-Overlay</button>
-      <div><span>Durchschnitt</span><strong id="average-crowding">0%</strong></div>
-      <i><u id="average-crowding-bar"></u></i>
-      <button id="toggle-attractiveness-overlay" aria-pressed="false">🌿 Attraktivität</button>
-      <div><span>Durchschnitt</span><strong id="average-attractiveness">0%</strong></div>
-      <i><u id="average-attractiveness-bar"></u></i>
-      <button id="toggle-party-overlay" aria-pressed="false">🎵 Partystimmung</button>
-      <div><span>Durchschnitt</span><strong id="average-party">0%</strong></div>
-      <i><u id="average-party-bar"></u></i>
+    <aside class="crowding-panel panel" aria-label="Kartenmittelwerte">
+      <div data-overlay-meter="crowding"><span>Gedränge</span><strong id="average-crowding">0%</strong></div>
+      <i data-overlay-meter="crowding"><u id="average-crowding-bar"></u></i>
+      <div data-overlay-meter="attractiveness"><span>Attraktivität</span><strong id="average-attractiveness">0%</strong></div>
+      <i data-overlay-meter="attractiveness"><u id="average-attractiveness-bar"></u></i>
+      <div data-overlay-meter="party"><span>Partystimmung</span><strong id="average-party">0%</strong></div>
+      <i data-overlay-meter="party"><u id="average-party-bar"></u></i>
     </aside>
     <section class="help panel">
       <strong id="context-help">Wähle ein Werkzeug und klicke auf das Gelände.</strong>
-      <span id="control-hint">Weg ziehen · Shift+Mausrad: Bauhöhe · R: Gebäude drehen · Q/E: Kamera</span>
+      <span id="control-hint">Weg ziehen · Shift+Maus: Bauhöhe · R: Gebäude drehen · Q/E: Kamera</span>
     </section>
     <div id="walk-hud" class="walk-hud" hidden>
       <p>WASD laufen · Umschalt rennen · Klick und Maus umsehen · Esc zurück zur Karte</p>
@@ -617,6 +551,66 @@ app.innerHTML = `
           <label for="dispatch-interval">Maximale Wartezeit: <b id="dispatch-value">30 min</b></label>
           <input id="dispatch-interval" type="range" min="5" max="120" step="5" value="30" />
         </div>
+        <div id="access-control-options" class="coaster-options" hidden>
+          <p id="access-signal" class="visitor-thought">–</p>
+          <label>Schaltung</label>
+          <div class="access-mode-row">
+            <button type="button" data-access-mode="schedule">Zeitgesteuert</button>
+            <button type="button" data-access-mode="sensor">Sensor</button>
+            <button type="button" data-access-mode="always">Immer offen</button>
+            <button type="button" data-access-mode="locked">Immer zu</button>
+          </div>
+          <div id="access-passage" hidden>
+            <label>Durchgang</label>
+            <div class="access-mode-row">
+              <button type="button" data-access-passage="oneWay">Eine Richtung</button>
+              <button type="button" data-access-passage="both">Beide Richtungen</button>
+            </div>
+          </div>
+          <div id="access-schedule">
+            <label>Grüne Slots je Stunde</label>
+            <div id="access-slots" class="access-slots"></div>
+          </div>
+          <div id="access-sensor" hidden>
+            <label>Signal wenn die Regel zutrifft</label>
+            <div class="access-mode-row">
+              <button type="button" data-access-polarity="open">Grün / offen</button>
+              <button type="button" data-access-polarity="closed">Rot / zu</button>
+            </div>
+            <label for="access-sensor-kind">Regel</label>
+            <select id="access-sensor-kind"></select>
+            <label id="access-threshold-label" for="access-threshold">Schwelle X</label>
+            <input id="access-threshold" type="number" min="0" max="200" step="1" value="5" />
+          </div>
+          <label id="access-emergency" class="access-emergency" hidden>
+            <input id="access-open-in-emergency" type="checkbox" checked />
+            Im Notfall offen
+          </label>
+          <p id="access-preview" class="scenario-hint">Gebiet: noch keine Messung</p>
+          <div class="entity-action-row">
+            <button type="button" id="access-draw-area">Gebiet zeichnen</button>
+            <button type="button" id="access-clear-area">Gebiet leeren</button>
+          </div>
+        </div>
+        <div id="depot-options" class="coaster-options">
+          <p id="depot-role-hint" class="scenario-hint"></p>
+          <label>Verwendung
+            <select id="depot-distribution">
+              <option value="shops">Nur Versorgung von Ständen</option>
+              <option value="relay">Zwischenlager: andere Depots dürfen entnehmen</option>
+            </select>
+          </label>
+          <label>Träger: <b id="depot-workers-value">0</b></label>
+          <input id="depot-workers" type="range" min="0" max="20" step="1" value="0" />
+          <small>120 € je neuem Träger</small>
+          <label>Essen Mindestbestand: <b id="depot-min-food-value">0</b></label>
+          <input id="depot-min-food" data-depot-min="food" type="range" min="0" max="800" step="20" value="0" />
+          <label>Getränke Mindestbestand: <b id="depot-min-drinks-value">0</b></label>
+          <input id="depot-min-drinks" data-depot-min="drinks" type="range" min="0" max="800" step="20" value="0" />
+          <label>Wasser Mindestbestand: <b id="depot-min-water-value">0</b></label>
+          <input id="depot-min-water" data-depot-min="water" type="range" min="0" max="800" step="20" value="0" />
+          <button id="depot-remove" type="button">Leeres Depot abbauen · +200 €</button>
+        </div>
         <div id="security-options" class="coaster-options">
           <label for="security-flow-share">Besucherstrom zu diesem Einlass: <b id="security-flow-share-value">100%</b></label>
           <input id="security-flow-share" type="range" min="0" max="100" step="5" value="100" />
@@ -641,32 +635,6 @@ app.innerHTML = `
         </div>
         <p id="dynamics-info" class="dynamics-info"></p>
       </section>
-    </aside>
-    <aside id="day-plan-panel" class="day-plan-panel panel" aria-label="Tagesplanung">
-      <div class="panel-header">
-        <span class="panel-drag-line" aria-hidden="true"></span>
-        <h2 class="panel-header-title">Tagesplan</h2>
-        <span class="panel-drag-line" aria-hidden="true"></span>
-        <button id="close-day-plan" class="panel-close-button" aria-label="Tagesplan schließen">×</button>
-      </div>
-      <div class="festival-cycle-controls">
-        <label>Vorlauf <input id="festival-lead-days" type="number" min="0" max="14" /></label>
-        <label>Festival <input id="festival-active-days" type="number" min="1" max="14" /></label>
-        <label>Pause <input id="festival-break-days" type="number" min="1" max="30" /></label>
-        <label>Camping-Abschlag <input id="camping-capacity-buffer" type="number" min="0" max="50" />%</label>
-        <button id="apply-festival-cycle">Zyklus übernehmen</button>
-      </div>
-      <div id="festival-cycle-strip" class="festival-cycle-strip"></div>
-      <small id="camping-capacity-summary" class="camping-capacity-summary"></small>
-      <div class="day-visitor-window">
-        <label>Tagesgäste ab <select id="day-entry-hour"></select></label>
-        <label>müssen gehen bis <select id="day-exit-hour"></select></label>
-        <small>Mindestens eine Stunde täglich bleibt für Tagesgäste geschlossen.</small>
-      </div>
-      <div class="day-plan-scroll">
-        <div id="day-plan-grid" class="day-plan-grid"></div>
-      </div>
-      <p id="day-plan-status" class="day-plan-status"></p>
     </aside>
     <aside id="complaints-panel" class="complaints-panel panel" aria-label="Beschwerdemanagement">
       <div class="panel-header">
@@ -723,6 +691,9 @@ app.innerHTML = `
         <span class="panel-drag-line" aria-hidden="true"></span>
         <button id="close-staff" class="panel-close-button" aria-label="Personal schließen">×</button>
       </div>
+      <nav class="staff-role-tabs" aria-label="Personalrolle">
+        ${STAFF_ROLES.map((role) => `<button type="button" data-staff-role="${role}">${STAFF_DEFINITIONS[role].icon} ${STAFF_DEFINITIONS[role].name}</button>`).join('')}
+      </nav>
       <div id="staff-list" class="staff-list"></div>
     </aside>
     <aside id="logistics-panel" class="day-plan-panel panel logistics-panel" aria-label="Logistikverwaltung">
@@ -734,9 +705,33 @@ app.innerHTML = `
       </div>
       <div class="logistics-management-tabs">
         <button data-logistics-tab="overview" class="active">Übersicht</button>
+        <button data-logistics-tab="supply">Waren & Träger</button>
         <button data-logistics-tab="routes">Buslinien</button>
       </div>
       <section id="logistics-overview"></section>
+      <section id="logistics-supply" hidden>
+        <p class="scenario-hint">Mindestbestände rasten in 20er-Schritten. Träger versorgen Depots und Stände automatisch. Anlieferung und Depot baut ihr im Baumenü unter Logistik.</p>
+        <label>Lager <select id="supply-depot-select"></select></label>
+        <p id="supply-depot-stock" class="scenario-hint"></p>
+        <label>Verwendung
+          <select id="supply-depot-distribution">
+            <option value="shops">Nur Versorgung von Ständen</option>
+            <option value="relay">Zwischenlager: andere Depots dürfen entnehmen</option>
+          </select>
+        </label>
+        <label>Träger am Depot: <b id="supply-workers-value">0</b></label>
+        <input id="supply-workers" type="range" min="0" max="20" step="1" value="0" />
+        <small>120 € je neuem Träger</small>
+        <label>Essen Mindestbestand: <b id="supply-min-food-value">0</b></label>
+        <input id="supply-min-food" data-supply-min="food" type="range" min="0" max="800" step="20" value="0" />
+        <label>Getränke Mindestbestand: <b id="supply-min-drinks-value">0</b></label>
+        <input id="supply-min-drinks" data-supply-min="drinks" type="range" min="0" max="800" step="20" value="0" />
+        <label>Wasser Mindestbestand: <b id="supply-min-water-value">0</b></label>
+        <input id="supply-min-water" data-supply-min="water" type="range" min="0" max="800" step="20" value="0" />
+        <button id="supply-remove-depot" type="button">Leeres Depot abbauen · +200 €</button>
+        <p id="supply-status" class="scenario-hint"></p>
+        <div id="supply-deliveries"></div>
+      </section>
       <section id="logistics-routes" hidden>
         <div class="line-editor">
           <label>Name <input id="bus-line-name" value="Festival-Shuttle" /></label>
@@ -753,71 +748,29 @@ app.innerHTML = `
   </main>
 `
 
-// .game-actions wraps onto extra rows whenever the buttons don't fit on one
-// line, so .topbar grows taller than the fixed "top" offsets .build-menu /
-// .crowding-panel use assume. Track the topbar's real rendered height and
-// expose it as a CSS variable so those panels always start below it,
-// however many rows it currently wraps to.
+// Left stats bar and the icon toolbar can have different bottoms. Panels
+// spawn below whichever is lower.
 const topbarElement = requireElement<HTMLElement>('.topbar')
-new ResizeObserver(([entry]) => {
-  const bottom = entry!.target.getBoundingClientRect().bottom
+const toolbarElement = requireElement<HTMLElement>('.rct-toolbar')
+const syncTopOffsets = (): void => {
+  const topbar = topbarElement.getBoundingClientRect()
+  const toolbar = toolbarElement.getBoundingClientRect()
+  const bottom = Math.max(topbar.bottom, toolbar.bottom)
   document.documentElement.style.setProperty('--topbar-gap-top', `${Math.round(bottom + 12)}px`)
-}).observe(topbarElement)
-
-const pathTools = requireElement<HTMLDivElement>('#path-tools')
-const supplyTools = requireElement<HTMLDivElement>('#supply-tools')
-const rideTools = requireElement<HTMLDivElement>('#ride-tools')
-const emergencyTools = requireElement<HTMLDivElement>('#emergency-tools')
-const decorationTools = requireElement<HTMLDivElement>('#decoration-tools')
-const festivalTools = requireElement<HTMLDivElement>('#festival-tools')
-const techTools = requireElement<HTMLDivElement>('#tech-tools')
-const logisticsTools = requireElement<HTMLDivElement>('#logistics-tools')
-
-Object.values(BUILDINGS).forEach((building, index) => {
-  const container =
-    building.kind === 'path'
-      ? pathTools
-      : building.kind === 'securityGate'
-        ? festivalTools
-      : building.kind === 'ambulanceGarage'
-        ? emergencyTools
-      : building.kind === 'busStop' ||
-          building.kind === 'busDepot' ||
-          building.kind === 'wasteDepot' ||
-          building.kind === 'specialDepot' ||
-          building.kind === 'wasteBin'
-        ? logisticsTools
-      : building.kind === 'ride'
-        ? rideTools
-        : isScenery(building.kind) || ['fence', 'bench', 'lighting'].includes(building.kind)
-          ? decorationTools
-          : ['stage', 'directionalSpeaker', 'omniSpeaker'].includes(building.kind)
-            ? festivalTools
-          : [
-                'generator',
-                'backupGenerator',
-                'foh',
-                'delayTower',
-                'videoWall',
-                'laserShow',
-                'fireworkBattery',
-              ].includes(building.kind)
-            ? techTools
-        : supplyTools
-  container.insertAdjacentHTML(
-    'beforeend',
-    `<button class="tool" data-tool="${building.kind}">
-      <span class="building-preview" data-preview-kind="${building.kind}">${building.icon}</span>
-      <em>${building.name}<small>${formatMoney(building.cost)}</small></em>
-      <kbd>${index + 1}</kbd>
-    </button>`,
+  document.documentElement.style.setProperty(
+    '--toolbar-width',
+    `${Math.round(toolbar.width + 18)}px`,
   )
-})
+}
+new ResizeObserver(syncTopOffsets).observe(topbarElement)
+new ResizeObserver(syncTopOffsets).observe(toolbarElement)
 
 const trackPieceSelect = requireElement<HTMLSelectElement>('#track-piece')
 const trackDirectionPalette = requireElement<HTMLElement>('#track-direction-palette')
 const trackSlopePalette = requireElement<HTMLElement>('#track-slope-palette')
 const trackBankPalette = requireElement<HTMLElement>('#track-bank-palette')
+const trackSpecialPalette = requireElement<HTMLElement>('#track-special-palette')
+const trackSpecialToggle = requireElement<HTMLButtonElement>('#toggle-track-specials')
 const TRACK_PIECE_ICONS: Record<TrackPieceKind, string> = {
   station: '▰',
   straight: '↑',
@@ -876,14 +829,14 @@ function populateTrackPalette(palette: HTMLElement, kinds: TrackPieceKind[]): vo
 }
 
 populateTrackPalette(trackDirectionPalette, TRACK_DIRECTION_ORDER)
-populateTrackPalette(requireElement('#track-special-palette'), ['sBendLeft', 'sBendRight', 'verticalLoop', 'halfLoopUp', 'halfLoopDown', 'photo', 'splash', 'brakes'])
+populateTrackPalette(trackSpecialPalette, ['station', 'sBendLeft', 'sBendRight', 'verticalLoop', 'halfLoopUp', 'halfLoopDown', 'photo', 'splash', 'brakes'])
 trackSlopePalette.innerHTML = `
   <button data-track-pitch="${TRACK_PITCHES.steepDown}" title="Steil abwärts"><span>⇘</span><small>Steil ab</small></button>
   <button data-track-pitch="${TRACK_PITCHES.gentleDown}" title="Sanft abwärts"><span>↘</span><small>Sanft ab</small></button>
   <button data-track-pitch="0" title="Flach"><span>→</span><small>Flach</small></button>
   <button data-track-pitch="${TRACK_PITCHES.gentleUp}" title="Sanft aufwärts"><span>↗</span><small>Sanft auf</small></button>
   <button data-track-pitch="${TRACK_PITCHES.steepUp}" title="Steil aufwärts"><span>⇗</span><small>Steil auf</small></button>
-  <button data-track-piece="station" title="Stationsplattform"><span>▰</span><small>Station</small></button>
+  <button id="toggle-chain-lift" type="button" title="Kettenlift für das nächste geeignete Stück" aria-pressed="false"><span>⛓</span><small>Kette</small></button>
 `
 trackBankPalette.innerHTML = `
   <button data-track-bank="${-TRACK_BANK_ANGLE}" title="Neigung links einleiten"><span>◢</span><small>Links</small></button>
@@ -899,6 +852,8 @@ const power = requireElement<HTMLElement>('#power')
 const waste = requireElement<HTMLElement>('#waste')
 const date = requireElement<HTMLElement>('#date')
 const toggleParkButton = requireElement<HTMLButtonElement>('#toggle-park')
+const logisticsOverlayButton =
+  requireElement<HTMLButtonElement>('#toggle-logistics-overlay')
 const crowdingOverlayButton =
   requireElement<HTMLButtonElement>('#toggle-crowding-overlay')
 const averageCrowding = requireElement<HTMLElement>('#average-crowding')
@@ -931,20 +886,16 @@ const visitorAttractiveness =
   requireElement<HTMLElement>('#visitor-attractiveness')
 const visitorParty = requireElement<HTMLElement>('#visitor-party')
 const visitorPreferences = requireElement<HTMLElement>('#visitor-preferences')
-const entryPriceInput = requireElement<HTMLInputElement>('#entry-price')
-const buildHeight = requireElement<HTMLElement>('#build-height')
-const buildDirection = requireElement<HTMLElement>('#build-direction')
 const pathConstruction = requireElement<HTMLElement>('#path-construction')
 const constructionStatus = requireElement<HTMLElement>('#construction-status')
-const pathPiecePreview = requireElement<HTMLElement>('#path-piece-preview')
 const buildPathButton = requireElement<HTMLButtonElement>('#build-path')
 const undoPathButton = requireElement<HTMLButtonElement>('#undo-path')
-const pathFlowSetButton = requireElement<HTMLButtonElement>('#path-flow-set')
-const pathFlowRotateButton = requireElement<HTMLButtonElement>('#path-flow-rotate')
-const pathFlowClearButton = requireElement<HTMLButtonElement>('#path-flow-clear')
+const pathDemolishButton = requireElement<HTMLButtonElement>('#path-demolish')
 const pathConstructionTypeSelect =
   requireElement<HTMLSelectElement>('#path-construction-type')
+const PATH_WINDOW_TOOLS: Tool[] = ['path', 'pathBarrier', 'staffGate', 'securityGate']
 const coasterBuilder = requireElement<HTMLElement>('#coaster-builder')
+const coasterConstructionTitle = requireElement<HTMLElement>('#coaster-construction-title')
 const coasterStatus = requireElement<HTMLElement>('#coaster-status')
 const coasterDirection = requireElement<HTMLElement>('#coaster-direction')
 const coasterPiecePreview = requireElement<HTMLElement>('#coaster-piece-preview')
@@ -955,6 +906,7 @@ const coasterUndoButton = requireElement<HTMLButtonElement>('#coaster-undo')
 const coasterEntranceButton = requireElement<HTMLButtonElement>('#place-coaster-entrance')
 const coasterExitButton = requireElement<HTMLButtonElement>('#place-coaster-exit')
 const chainLiftInput = requireElement<HTMLInputElement>('#chain-lift')
+const chainLiftButton = requireElement<HTMLButtonElement>('#toggle-chain-lift')
 const trackPreviousButton = requireElement<HTMLButtonElement>('#track-previous')
 const trackNextButton = requireElement<HTMLButtonElement>('#track-next')
 const trackSelection = requireElement<HTMLElement>('#track-selection')
@@ -981,6 +933,20 @@ const dispatchModeSelect = requireElement<HTMLSelectElement>('#dispatch-mode')
 const dispatchIntervalInput = requireElement<HTMLInputElement>('#dispatch-interval')
 const dispatchValue = requireElement<HTMLElement>('#dispatch-value')
 const operationModeSelect = requireElement<HTMLSelectElement>('#operation-mode')
+const accessControlOptions = requireElement<HTMLElement>('#access-control-options')
+const accessSignal = requireElement<HTMLElement>('#access-signal')
+const accessSchedule = requireElement<HTMLElement>('#access-schedule')
+const accessSensor = requireElement<HTMLElement>('#access-sensor')
+const accessSlots = requireElement<HTMLElement>('#access-slots')
+const accessSensorKind = requireElement<HTMLSelectElement>('#access-sensor-kind')
+const accessThreshold = requireElement<HTMLInputElement>('#access-threshold')
+const accessThresholdLabel = requireElement<HTMLElement>('#access-threshold-label')
+const accessPreview = requireElement<HTMLElement>('#access-preview')
+const accessDrawArea = requireElement<HTMLButtonElement>('#access-draw-area')
+const accessPassage = requireElement<HTMLElement>('#access-passage')
+const accessEmergency = requireElement<HTMLElement>('#access-emergency')
+const accessOpenInEmergency = requireElement<HTMLInputElement>('#access-open-in-emergency')
+const accessClearArea = requireElement<HTMLButtonElement>('#access-clear-area')
 const securityOptions = requireElement<HTMLElement>('#security-options')
 const securityThoroughness =
   requireElement<HTMLInputElement>('#security-thoroughness')
@@ -996,33 +962,31 @@ const staffPanel = requireElement<HTMLElement>('#staff-panel')
 const staffList = requireElement<HTMLElement>('#staff-list')
 const visitorOverviewPanel =
   requireElement<HTMLElement>('#visitor-overview-panel')
-const dayPlanPanel = requireElement<HTMLElement>('#day-plan-panel')
-const dayPlanGrid = requireElement<HTMLElement>('#day-plan-grid')
-const dayPlanStatus = requireElement<HTMLElement>('#day-plan-status')
-const dayEntryHour = requireElement<HTMLSelectElement>('#day-entry-hour')
-const dayExitHour = requireElement<HTMLSelectElement>('#day-exit-hour')
-const festivalLeadDays =
-  requireElement<HTMLInputElement>('#festival-lead-days')
-const festivalActiveDays =
-  requireElement<HTMLInputElement>('#festival-active-days')
-const festivalBreakDays =
-  requireElement<HTMLInputElement>('#festival-break-days')
-const festivalCycleStrip =
-  requireElement<HTMLElement>('#festival-cycle-strip')
-const campingCapacityBuffer =
-  requireElement<HTMLInputElement>('#camping-capacity-buffer')
-const campingCapacitySummary =
-  requireElement<HTMLElement>('#camping-capacity-summary')
 const complaintsPanel = requireElement<HTMLElement>('#complaints-panel')
 const complaintsSummary = requireElement<HTMLElement>('#complaints-summary')
 const complaintsList = requireElement<HTMLElement>('#complaints-list')
 const logisticsPanel = requireElement<HTMLElement>('#logistics-panel')
-for (const panel of [staffPanel, visitorOverviewPanel, dayPlanPanel, complaintsPanel, logisticsPanel]) {
+for (const panel of [staffPanel, visitorOverviewPanel, complaintsPanel, logisticsPanel]) {
   makeDraggable(panel.querySelector<HTMLElement>('.panel-header')!, panel)
   makeResizable(panel)
 }
 const logisticsOverview = requireElement<HTMLElement>('#logistics-overview')
+const logisticsSupply = requireElement<HTMLElement>('#logistics-supply')
 const logisticsRoutes = requireElement<HTMLElement>('#logistics-routes')
+const supplyDepotSelect = requireElement<HTMLSelectElement>('#supply-depot-select')
+const supplyDepotStock = requireElement<HTMLElement>('#supply-depot-stock')
+const supplyDepotDistribution = requireElement<HTMLSelectElement>('#supply-depot-distribution')
+const supplyWorkers = requireElement<HTMLInputElement>('#supply-workers')
+const supplyWorkersValue = requireElement<HTMLElement>('#supply-workers-value')
+const supplyStatus = requireElement<HTMLElement>('#supply-status')
+const supplyDeliveries = requireElement<HTMLElement>('#supply-deliveries')
+const supplyRemoveDepot = requireElement<HTMLButtonElement>('#supply-remove-depot')
+const depotOptions = requireElement<HTMLElement>('#depot-options')
+const depotRoleHint = requireElement<HTMLElement>('#depot-role-hint')
+const depotDistribution = requireElement<HTMLSelectElement>('#depot-distribution')
+const depotWorkers = requireElement<HTMLInputElement>('#depot-workers')
+const depotWorkersValue = requireElement<HTMLElement>('#depot-workers-value')
+const depotRemove = requireElement<HTMLButtonElement>('#depot-remove')
 const busLineDepot = requireElement<HTMLSelectElement>('#bus-line-depot')
 const busLineStops = requireElement<HTMLSelectElement>('#bus-line-stops')
 const busLinesList = requireElement<HTMLElement>('#bus-lines-list')
@@ -1065,11 +1029,31 @@ const multiplayerJoinActions = requireElement<HTMLElement>('#multiplayer-join-ac
 const MULTIPLAYER_NAME_KEY = 'festival-mp-name'
 
 let game = new GameState()
-const festivalUI = mountFestivalUI(() => game, showToast)
+const festivalUI = mountFestivalUI(() => game, showToast, (pane) => {
+  if (pane === 'dayplan') updateDayPlanPanel(true)
+})
+const dayPlanGrid = requireElement<HTMLElement>('#day-plan-grid')
+const dayPlanStatus = requireElement<HTMLElement>('#day-plan-status')
+const dayEntryHour = requireElement<HTMLSelectElement>('#day-entry-hour')
+const dayExitHour = requireElement<HTMLSelectElement>('#day-exit-hour')
+const festivalLeadDays =
+  requireElement<HTMLInputElement>('#festival-lead-days')
+const festivalActiveDays =
+  requireElement<HTMLInputElement>('#festival-active-days')
+const festivalBreakDays =
+  requireElement<HTMLInputElement>('#festival-break-days')
+const festivalCycleStrip =
+  requireElement<HTMLElement>('#festival-cycle-strip')
+const campingCapacityBuffer =
+  requireElement<HTMLInputElement>('#camping-capacity-buffer')
+const campingCapacitySummary =
+  requireElement<HTMLElement>('#camping-capacity-summary')
 const stageEditor = mountStageEditor(() => game, showToast)
 const stageEditorButton = document.createElement('button')
 stageEditorButton.id = 'open-stage-editor'
-stageEditorButton.textContent = '🎭 Bühnenwerkstatt'
+stageEditorButton.textContent = '🎭'
+stageEditorButton.title = 'Bühnenwerkstatt'
+stageEditorButton.setAttribute('aria-label', 'Bühnenwerkstatt')
 stageEditorButton.setAttribute('aria-expanded', 'false')
 stageEditorButton.addEventListener('click', () => {
   if (stageEditor.isOpen()) stageEditor.close()
@@ -1102,8 +1086,9 @@ const hourOptions = Array.from(
 dayEntryHour.innerHTML = hourOptions
 dayExitHour.innerHTML = hourOptions
 let securityItemsFingerprint = ''
-let bulldozeBrushSize = 1
+let pathWindowOpen = false
 let pathEditorActive = false
+let pathDemolishActive = false
 let pathAnchor: PathAnchor | null = null
 let pathDirection = 0
 let pathSlope: -1 | 0 | 1 = 0
@@ -1126,7 +1111,9 @@ let coasterEditIndex = -1
 let coasterAccessMode: 'entrance' | 'exit' | null = null
 let coasterTargetPitch = 0
 let coasterTargetBank = 0
-let selectedEntity: { type: 'building' | 'coaster' | 'vehicle'; id: string } | null = null
+let selectedEntity: { type: 'building' | 'coaster' | 'vehicle' | 'access' | 'depot'; id: string } | null = null
+let logisticsOverlayVisible = false
+let accessAreaDrawing = false
 let entityTab: 'overview' | 'dynamics' = 'overview'
 let unsubscribe: () => void = () => {}
 let toastTimer = 0
@@ -1207,13 +1194,14 @@ const syncWalkModeUi = (enabled: boolean): void => {
   }
   controlHint.textContent = enabled
     ? (coarse ? 'Stick laufen · Ziehen umsehen' : 'WASD laufen · Umschalt rennen · Maus umsehen · Esc Karte')
-    : 'Weg ziehen · Shift+Mausrad: Bauhöhe · R: Gebäude drehen · Q/E: Kamera'
+    : 'Weg ziehen · Shift+Maus: Bauhöhe · R: Gebäude drehen · Q/E: Kamera'
   contextHelp.textContent = enabled
     ? 'Du läufst über das Festivalgelände.'
     : 'Wähle ein Werkzeug und klicke auf das Gelände.'
 }
 const setFestivalWalk = (enabled: boolean): void => {
   if (enabled) {
+    setMapOverlay(null)
     supplyPlanner.close()
     supplyPlanner.releaseTool()
     game.setTool('inspect')
@@ -1224,6 +1212,7 @@ const setFestivalWalk = (enabled: boolean): void => {
   view.setWalkMode(enabled)
 }
 view.setVehicleClickHandler((vehicleId) => openEntityInfoForVehicle(vehicleId))
+view.setAccessControlClickHandler((accessId) => openEntityInfoForAccess(accessId))
 view.setWalkModeListener(syncWalkModeUi)
 walkModeButton.addEventListener('click', () => setFestivalWalk(!view.isWalkMode()))
 {
@@ -1297,9 +1286,6 @@ function bindGameState(nextGame: GameState): void {
     supplyPlanner.update(snapshot)
     staffDetails.update(snapshot)
     money.textContent = formatMoney(snapshot.money)
-    if (document.activeElement !== entryPriceInput) {
-      entryPriceInput.value = String(snapshot.entryPrice)
-    }
     guests.textContent = snapshot.guests.toLocaleString('de-DE')
     reputation.textContent = `${snapshot.reputation}%`
     const powerDemand = Math.round(snapshot.power.demand)
@@ -1337,9 +1323,16 @@ function bindGameState(nextGame: GameState): void {
     }[festivalPhase.phase]
     date.textContent = snapshot.festival.planning ? 'Planung · Festival noch nicht gestartet' :
       `${dayPhaseIcon} Tag ${snapshot.day} · ${festivalPhaseLabel} ${festivalPhase.phaseDay}/${festivalPhase.phaseLength} · ${formatTime(snapshot.minute)}`
-    toggleParkButton.textContent = snapshot.parkOpen ? '🔓 Park schließen' : snapshot.festival.planning || snapshot.festival.finished ? '🔒 Gelände eröffnen' : '🔒 Park öffnen'
+    toggleParkButton.textContent = snapshot.parkOpen ? '🔓' : '🔒'
     toggleParkButton.disabled = Boolean(snapshot.festival.planning || snapshot.festival.finished)
-    toggleParkButton.title = toggleParkButton.disabled ? 'Start über das Festivalmenü' : ''
+    toggleParkButton.title = toggleParkButton.disabled
+      ? 'Start über das Festivalmenü'
+      : snapshot.parkOpen
+        ? 'Park schließen'
+        : snapshot.festival.planning || snapshot.festival.finished
+          ? 'Gelände eröffnen'
+          : 'Park öffnen'
+    toggleParkButton.setAttribute('aria-label', toggleParkButton.title)
     toggleParkButton.classList.toggle('park-closed', !snapshot.parkOpen)
     const crowdingAverage = Math.round(snapshot.crowding.average)
     averageCrowding.textContent = `${crowdingAverage}%`
@@ -1360,70 +1353,22 @@ function bindGameState(nextGame: GameState): void {
     averagePartyBar.style.width = `${Math.max(0, partyAverage)}%`
     averagePartyBar.dataset.level =
       partyAverage >= 55 ? 'good' : partyAverage >= 20 ? 'warning' : 'critical'
-    buildHeight.textContent = `Ebene ${snapshot.buildElevation}`
     if (rideAccessPlacement && snapshot.selectedTool!=='ride') {
       rideAccessPlacement=null; view.setRideAccessPreview(null)
       requireElement<HTMLElement>('#cancel-ride-access').hidden=true
     }
     if (activeRideId && snapshot.selectedTool!=='ride' && snapshot.selectedTool!=='inspect') closeRideBuilder(false)
-    buildDirection.textContent = `Zugang: ${getIsoDirectionIcon(snapshot.buildRotation)}`
+    if (pathWindowOpen && !PATH_WINDOW_TOOLS.includes(snapshot.selectedTool)) closePathEditor()
+    else if (pathWindowOpen) updatePathEditor()
     document.querySelectorAll<HTMLElement>('[data-tool]').forEach((button) => {
       button.classList.toggle('active', button.dataset.tool === snapshot.selectedTool && (snapshot.selectedTool !== 'ride' || (button.dataset.bungee === 'true') === (view.bungeePreviewHeight !== null)))
     })
-    const activeCategory =
-      snapshot.selectedTool === 'food' ||
-            snapshot.selectedTool === 'toilet' ||
-            snapshot.selectedTool === 'alcohol'
-        ? 'supply'
-        : snapshot.selectedTool === 'camping'
-          ? 'camping'
-          : snapshot.selectedTool === 'ride' || snapshot.selectedTool === 'coaster'
-            ? 'rides'
-            : snapshot.selectedTool === 'medicalArea'
-              ? 'emergency'
-              : snapshot.selectedTool === 'securityGate'
-                ? 'festival'
-              : isScenery(snapshot.selectedTool) || ['fence', 'bench', 'lighting'].includes(
-                    snapshot.selectedTool,
-                  )
-                ? 'decoration'
-                : [
-                      'stage',
-                      'directionalSpeaker',
-                      'omniSpeaker',
-                      'stageForecourt',
-                    ].includes(snapshot.selectedTool)
-                  ? 'festival'
-                  : snapshot.selectedTool === 'powerCable' ||
-                      [
-                        'generator',
-                        'backupGenerator',
-                        'foh',
-                        'delayTower',
-                        'videoWall',
-                        'laserShow',
-                        'fireworkBattery',
-                      ].includes(snapshot.selectedTool)
-                    ? 'tech'
-                  : [
-                        'road',
-                        'parkingArea',
-                        'roadDirection',
-                        'roadSeparator',
-                        'roadSpeed10',
-                        'roadSpeed30',
-                        'roadSpeed50',
-                        'crosswalk',
-                        'busStop',
-                        'busDepot',
-                        'wasteDepot',
-                        'specialDepot',
-                        'wasteBin',
-                        'wasteDump',
-                      ].includes(snapshot.selectedTool)
-                    ? 'logistics'
-            : null
-    document.querySelectorAll<HTMLElement>('[data-build-category]').forEach((button) => {
+    if (!buildCatalogStatus.hidden && !catalogHoverActive) showSelectedCatalogStatus()
+    const activeCategory = categoryForTool(
+      snapshot.selectedTool,
+      snapshot.selectedTool === 'ride' && view.bungeePreviewHeight !== null,
+    )
+    document.querySelectorAll<HTMLElement>('.rct-toolbar [data-build-category]').forEach((button) => {
       button.classList.toggle('contains-active', button.dataset.buildCategory === activeCategory)
     })
     document.querySelectorAll<HTMLElement>('[data-speed]').forEach((button) => {
@@ -1472,6 +1417,9 @@ function updateStaffOverview(force = false): void {
   if (!force && fingerprint === staffPanelFingerprint && staffList.childElementCount > 0) return
   staffPanelFingerprint = fingerprint
   requireElement<HTMLElement>('#staff-panel-title').textContent = `Übersicht ${definition.name}`
+  document.querySelectorAll<HTMLButtonElement>('.staff-role-tabs [data-staff-role]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.staffRole === role))
+  })
   const rows = members.map((member) => {
     const hired = member.hiredDay != null && member.hiredMinute != null
       ? `Tag ${member.hiredDay} · ${formatTime(member.hiredMinute)}`
@@ -1496,7 +1444,9 @@ function updateStaffOverview(force = false): void {
 }
 
 function updateDayPlanPanel(force = false): void {
-  if (!dayPlanPanel.classList.contains('visible')) return
+  const festivalPanel = document.querySelector<HTMLElement>('#festival-management')
+  const dayPlanPane = document.querySelector<HTMLElement>('[data-pane="dayplan"]')
+  if (festivalPanel?.hidden || dayPlanPane?.hidden) return
   const snapshot = game.snapshot
   const currentHour = Math.floor(snapshot.minute / 60) % 24
   const cycle = getFestivalCycleStatus(snapshot.dayPlan, snapshot.day)
@@ -1645,9 +1595,35 @@ function updateComplaintsPanel(force = false): void {
   }).join('')
 }
 
+function depotWorkerCount(depotId: string): number {
+  return game.snapshot.festival.infrastructure.routes.filter(
+    (route) => route.automatic && route.depotId === depotId,
+  ).length
+}
+
+function selectedSupplyDepotId(): string {
+  return supplyDepotSelect.value
+}
+
+function syncStockSliders(
+  root: ParentNode,
+  attr: 'data-supply-min' | 'data-depot-min',
+  depot: { stock: Record<Supply, number>; minimum: Record<Supply, number> } | undefined,
+): void {
+  for (const kind of Object.keys(SUPPLIES) as Supply[]) {
+    const input = root.querySelector<HTMLInputElement>(`[${attr}="${kind}"]`)
+    const label = root.querySelector<HTMLElement>(`#${attr === 'data-supply-min' ? 'supply' : 'depot'}-min-${kind}-value`)
+    if (!input || !label) continue
+    const value = snapStockMinimum(depot?.minimum[kind] ?? 0)
+    if (document.activeElement !== input) input.value = String(value)
+    label.textContent = String(snapStockMinimum(Number(input.value)))
+  }
+}
+
 function updateLogisticsPanel(force = false): void {
   if (!logisticsPanel.classList.contains('visible')) return
   const logistics = game.snapshot.logistics
+  const infrastructure = game.snapshot.festival.infrastructure
   const fingerprint = JSON.stringify([
     logistics.roadCells.length,
     logistics.parkingCells.map((cell) => cell.occupiedBy),
@@ -1667,6 +1643,16 @@ function updateLogisticsPanel(force = false): void {
       line.busIds.length,
       line.active,
     ]),
+    infrastructure.depots.map((depot) => [
+      depot.id,
+      depot.role,
+      depot.distribution,
+      depot.stock,
+      depot.minimum,
+    ]),
+    infrastructure.routes.filter((route) => route.automatic).map((route) => [route.id, route.depotId]),
+    infrastructure.status,
+    game.snapshot.festival.deliveries.map((delivery) => [delivery.id, delivery.remaining, delivery.kind, delivery.quantity]),
   ])
   if (!force && fingerprint === logisticsFingerprint) return
   logisticsFingerprint = fingerprint
@@ -1728,6 +1714,40 @@ function updateLogisticsPanel(force = false): void {
       (line) =>
         `<div class="bus-line-row"><span>${line.name}</span><span>${line.stopIds.length} Stopps · ${line.busIds.length} Busse · ${line.headway} Min.</span><button data-delete-line="${line.id}">Löschen</button></div>`,
     )
+    .join('')
+  const previousDepot = supplyDepotSelect.value
+  supplyDepotSelect.innerHTML = infrastructure.depots
+    .map((depot, index) => {
+      const role = depot.role === 'delivery' ? 'Anlieferung' : 'Depot'
+      return `<option value="${depot.id}">${role} ${index + 1} · ${depot.x}, ${depot.z}</option>`
+    })
+    .join('') || '<option value="">Noch kein Depot</option>'
+  if ([...supplyDepotSelect.options].some((option) => option.value === previousDepot)) {
+    supplyDepotSelect.value = previousDepot
+  }
+  const depot = infrastructure.depots.find((item) => item.id === supplyDepotSelect.value)
+  const workers = depot ? depotWorkerCount(depot.id) : 0
+  if (document.activeElement !== supplyWorkers) supplyWorkers.value = String(workers)
+  supplyWorkersValue.textContent = supplyWorkers.value
+  if (document.activeElement !== supplyDepotDistribution) {
+    supplyDepotDistribution.value = depot?.distribution ?? 'shops'
+  }
+  supplyDepotStock.textContent = depot
+    ? Object.entries(SUPPLIES)
+        .map(([kind, item]) => `${item.name}: ${Math.floor(depot.stock[kind as Supply])} / Mindestbestand ${depot.minimum[kind as Supply]}`)
+        .join(' · ')
+    : 'Anlieferungsplatz und Depot im Baumenü unter Logistik setzen.'
+  syncStockSliders(logisticsSupply, 'data-supply-min', depot)
+  supplyRemoveDepot.disabled = !depot
+  supplyStatus.textContent = `${infrastructure.status} · ${infrastructure.trucks.length} Lieferwagen · ${infrastructure.routes.length} Träger`
+  supplyDeliveries.innerHTML = game.snapshot.festival.deliveries
+    .map((delivery) => {
+      const inbound = infrastructure.trucks.some((truck) => truck.deliveryId === delivery.id)
+      const waiting = inbound && infrastructure.trucks.some((truck) => truck.deliveryId === delivery.id && truck.z < -game.snapshot.scenario.worldSize / 2)
+      return `<p>${delivery.quantity} × ${SUPPLIES[delivery.kind].name} · ${
+        waiting ? 'Wartet auf freie Einfahrt' : inbound ? 'Lastwagen auf dem Gelände' : delivery.remaining > 0 ? `Anfahrt: ${Math.ceil(delivery.remaining)} min` : 'Wartet am Kartenrand'
+      }</p>`
+    })
     .join('')
 }
 
@@ -1893,18 +1913,51 @@ function handleCellClick(cell: CellPosition): void {
     return
   }
 
+  if (pathWindowOpen && pathDemolishActive) {
+    demolishPathAt(cell)
+    return
+  }
+
   if (pathEditorActive) {
     const path =
       game.getPathAt(cell.x, cell.z, game.snapshot.buildElevation) ??
       game.getPathAt(cell.x, cell.z)
-    if (!path) {
-      showToast('Wähle einen bestehenden Weg als Startpunkt', true)
+    if (path) {
+      pathAnchor = { x: path.x, z: path.z, elevation: path.elevation }
+      pathHistory = []
+      updatePathEditor()
+      showToast('Startpunkt gewählt')
       return
     }
-    pathAnchor = { x: path.x, z: path.z, elevation: path.elevation }
+    const elevation = game.snapshot.buildElevation
+    let result = game.placePathSegment(
+      cell.x,
+      cell.z,
+      elevation,
+      pathConstructionType,
+      pathDirection,
+      pathSlope,
+      supplyPlanner.getFootType(),
+    )
+    if (!result.ok && pathSlope !== 0) {
+      result = game.placePathSegment(
+        cell.x,
+        cell.z,
+        elevation,
+        pathConstructionType,
+        pathDirection,
+        0,
+        supplyPlanner.getFootType(),
+      )
+    }
+    if (!result.ok) {
+      showToast(result.message, true)
+      return
+    }
+    pathAnchor = { x: cell.x, z: cell.z, elevation }
     pathHistory = []
     updatePathEditor()
-    showToast('Startpunkt gewählt')
+    showToast(result.message)
     return
   }
 
@@ -1925,9 +1978,16 @@ function handleCellClick(cell: CellPosition): void {
       }
       return
     }
+    const access = game.getAccessControlAt(cell.x, cell.z)
+    if (access) {
+      openEntityInfoForAccess(access.id)
+      return
+    }
     const building = cell.buildingId ? game.snapshot.buildings.find(b => b.id === cell.buildingId) : game.getAt(cell.x, cell.z, undefined, cell.localX, cell.localZ)
+    const depot = game.getDepotAt(cell.x, cell.z)
     if (building?.kind === 'ride') openRideBuilder(building.id)
     else if (building) openEntityInfoForBuilding(building.id)
+    else if (depot) openEntityInfoForDepot(depot.id)
     else if (game.getCampingCellAt(cell.x, cell.z)) showToast('Ausgewiesener Zeltbereich')
     else {
       const height = game.getTerrainHeight(cell.x, cell.z)
@@ -1981,12 +2041,68 @@ function handleCellClick(cell: CellPosition): void {
     showToast(result.message, !result.ok)
     return
   }
+  if (tool === 'trafficLight') {
+    const result = game.placeTrafficLight(
+      cell.x,
+      cell.z,
+      game.snapshot.buildRotation as 0 | 1 | 2 | 3,
+    )
+    showToast(result.message, !result.ok)
+    if (result.ok && result.placedId) {
+      game.setTool('inspect')
+      openEntityInfoForAccess(result.placedId)
+    }
+    return
+  }
+  if (tool === 'pathBarrier') {
+    const result = game.placePathBarrier(
+      cell.x,
+      cell.z,
+      game.snapshot.buildElevation,
+      game.snapshot.buildRotation as 0 | 1 | 2 | 3,
+    )
+    showToast(result.message, !result.ok)
+    if (result.ok && result.placedId) {
+      openEntityInfoForAccess(result.placedId)
+      if (!pathWindowOpen) game.setTool('inspect')
+    }
+    return
+  }
   if (tool === 'roadSeparator') {
     const result = game.toggleRoadSeparator(
       cell.x,
       cell.z,
       game.snapshot.buildRotation as 0 | 1 | 2 | 3,
     )
+    showToast(result.message, !result.ok)
+    return
+  }
+  if (tool === 'deliveryYard' || tool === 'supplyDepot') {
+    const result = game.manageFestival({
+      type: 'depot',
+      x: cell.x,
+      z: cell.z,
+      role: tool === 'deliveryYard' ? 'delivery' : 'storage',
+    })
+    showToast(result.message, !result.ok)
+    if (result.ok) {
+      const depot = game.getDepotAt(cell.x, cell.z)
+      if (depot) {
+        game.setTool('inspect')
+        openEntityInfoForDepot(depot.id)
+      }
+    }
+    return
+  }
+  if (tool === 'staffGate') {
+    const path = game.snapshot.buildings.find(
+      (building) => building.kind === 'path' && building.x === cell.x && building.z === cell.z,
+    )
+    const result = game.manageFestival({
+      type: 'staffGate',
+      ...cell,
+      elevation: path?.elevation ?? 0,
+    })
     showToast(result.message, !result.ok)
     return
   }
@@ -2006,16 +2122,26 @@ function handleCellClick(cell: CellPosition): void {
     return
   }
 
+  if (tool === 'path') {
+    const result = game.placePathSegment(
+      cell.x,
+      cell.z,
+      game.snapshot.buildElevation,
+      pathConstructionType,
+      pathConstructionType === 'queue' ? pathDirection : 0,
+      0,
+      supplyPlanner.getFootType(),
+    )
+    showToast(result.message, !result.ok)
+    return
+  }
+
   if (tool === 'bulldoze') {
-    const result =
-      bulldozeBrushSize > 1
-        ? game.bulldozeArea(
-            createCampingArea(cell, {
-              x: cell.x + bulldozeBrushSize - 1,
-              z: cell.z + bulldozeBrushSize - 1,
-            }),
-          )
-        : game.bulldoze(cell.x, cell.z, cell.buildingId ?? game.getAt(cell.x, cell.z, undefined, cell.localX, cell.localZ)?.id)
+    const result = game.bulldoze(
+      cell.x,
+      cell.z,
+      cell.buildingId ?? game.getAt(cell.x, cell.z, undefined, cell.localX, cell.localZ)?.id,
+    )
     showToast(result.message, !result.ok)
     return
   }
@@ -2045,7 +2171,7 @@ function handleCellClick(cell: CellPosition): void {
 }
 
 function paintPath(cell: CellPosition): void {
-  if (pathEditorActive || !dragPathStart) return
+  if ((pathEditorActive && !pathDemolishActive) || !dragPathStart) return
   dragPathEnd = { ...cell }
   view.setPathDragPreview(
     game.snapshot.selectedTool === 'camping' ||
@@ -2062,7 +2188,7 @@ function paintPath(cell: CellPosition): void {
 }
 
 function startPathDrag(cell: CellPosition): void {
-  if (pathEditorActive) {
+  if (pathEditorActive && !pathDemolishActive) {
     dragPathStart = null
     return
   }
@@ -2104,7 +2230,7 @@ function startPathDrag(cell: CellPosition): void {
 }
 
 function finishPathDrag(): void {
-  if (!dragPathStart || !dragPathEnd || pathEditorActive) {
+  if (!dragPathStart || !dragPathEnd || (pathEditorActive && !pathDemolishActive)) {
     dragPathStart = null
     dragPathEnd = null
     view.setPathDragPreview([], 0)
@@ -2198,6 +2324,8 @@ function finishPathDrag(): void {
   }
   if (
     game.snapshot.selectedTool === 'roadDirection' ||
+    game.snapshot.selectedTool === 'trafficLight' ||
+    game.snapshot.selectedTool === 'pathBarrier' ||
     game.snapshot.selectedTool === 'roadSeparator' ||
     game.snapshot.selectedTool === 'crosswalk' ||
     game.snapshot.selectedTool === 'roadSpeed10' ||
@@ -2211,18 +2339,29 @@ function finishPathDrag(): void {
       const result =
         tool === 'roadDirection'
           ? game.setRoadDirection(cell.x, cell.z, direction)
-          : tool === 'roadSeparator'
-            ? game.toggleRoadSeparator(cell.x, cell.z, direction)
-            : tool === 'crosswalk'
-              ? game.toggleCrosswalk(cell.x, cell.z)
-              : game.setRoadSpeed(
-                  cell.x,
-                  cell.z,
-                  Number(tool.replace('roadSpeed', '')) as 10 | 30 | 50,
-                )
+          : tool === 'trafficLight'
+            ? game.placeTrafficLight(cell.x, cell.z, direction)
+            : tool === 'pathBarrier'
+              ? game.placePathBarrier(cell.x, cell.z, game.snapshot.buildElevation, direction)
+              : tool === 'roadSeparator'
+                ? game.toggleRoadSeparator(cell.x, cell.z, direction)
+                : tool === 'crosswalk'
+                  ? game.toggleCrosswalk(cell.x, cell.z)
+                  : game.setRoadSpeed(
+                      cell.x,
+                      cell.z,
+                      Number(tool.replace('roadSpeed', '')) as 10 | 30 | 50,
+                    )
       if (result.ok) changed += 1
     })
-    showToast(`${changed} Straßenfelder geändert`, changed === 0)
+    showToast(
+      game.snapshot.selectedTool === 'trafficLight'
+        ? `${changed} Ampel${changed === 1 ? '' : 'n'} gesetzt`
+        : game.snapshot.selectedTool === 'pathBarrier'
+          ? `${changed} Schranke${changed === 1 ? '' : 'n'} gesetzt`
+          : `${changed} Straßenfelder geändert`,
+      changed === 0,
+    )
     dragPathStart = null
     dragPathEnd = null
     view.setPathDragPreview([], 0)
@@ -2272,9 +2411,31 @@ function finishPathDrag(): void {
     view.setPathDragPreview([], 0)
     return
   }
+  if (pathDemolishActive) {
+    let removed = 0
+    for (const cell of cells) {
+      if (demolishPathAt(cell, true)) removed += 1
+    }
+    showToast(
+      removed > 0 ? `${removed} Wegfeld${removed === 1 ? '' : 'er'} abgerissen` : 'Hier liegt kein Weg',
+      removed === 0,
+    )
+    dragPathStart = null
+    dragPathEnd = null
+    view.setPathDragPreview([], 0)
+    return
+  }
   for (const cell of cells) {
     if (game.getPathAt(cell.x, cell.z, dragPathElevation)) continue
-    const result = game.placePathSegment(cell.x, cell.z, dragPathElevation)
+    const result = game.placePathSegment(
+      cell.x,
+      cell.z,
+      dragPathElevation,
+      pathConstructionType,
+      pathConstructionType === 'queue' ? pathDirection : 0,
+      0,
+      supplyPlanner.getFootType(),
+    )
     if (!result.ok) {
       showToast(`${result.message} – Bau an dieser Stelle beendet`, true)
       break
@@ -2339,22 +2500,61 @@ function getIsoDirectionIcon(direction: number): string {
   return icons[(direction - cameraQuarter + icons.length) % icons.length] ?? '◆'
 }
 
-function openPathEditor(): void {
-  closeRideBuilder(false)
-  supplyPlanner.releaseTool()
-  pathEditorActive = true
+function demolishPathAt(cell: CellPosition, quiet = false): boolean {
+  const path =
+    game.getPathAt(cell.x, cell.z, game.snapshot.buildElevation) ??
+    game.getPathAt(cell.x, cell.z)
+  if (!path) {
+    if (!quiet) showToast('Hier liegt kein Weg', true)
+    return false
+  }
+  const result = game.bulldoze(path.x, path.z, path.id)
+  if (pathAnchor && pathAnchor.x === path.x && pathAnchor.z === path.z) {
+    pathAnchor = null
+    pathHistory = []
+    updatePathEditor()
+  }
+  if (!quiet) showToast(result.message, !result.ok)
+  return result.ok
+}
+
+function resumePathPlacement(): void {
+  pathDemolishActive = false
+  if (game.snapshot.selectedTool !== 'path') game.setTool('path')
+}
+
+function setPathConstructMode(construct: boolean): void {
+  pathEditorActive = construct
   pathAnchor = null
   pathHistory = []
+  pathDemolishActive = false
+  supplyPlanner.releaseTool()
   game.setTool('path')
   updatePathEditor()
 }
 
+function openPathWindow(construct = false): void {
+  closeRideBuilder(false)
+  if (coasterBuilderActive) closeCoasterBuilder()
+  pathWindowOpen = true
+  closeBuildMenu()
+  setPathConstructMode(construct)
+  setToolbarCategoryOpen('paths')
+  buildMenuToggle.setAttribute('aria-expanded', 'true')
+}
+
 function closePathEditor(): void {
+  pathWindowOpen = false
   pathEditorActive = false
+  pathDemolishActive = false
   pathAnchor = null
   pathHistory = []
-  pathConstruction.classList.remove('visible')
+  pathConstruction.classList.remove('visible', 'path-mode-construct', 'path-mode-paint')
   view.setPathConstructionPreview(false, null, pathDirection, pathSlope)
+  if (buildMenuPanel.hidden) {
+    setToolbarCategoryOpen(null)
+    buildMenuToggle.setAttribute('aria-expanded', 'false')
+  }
 }
 
 function rotatePathDirection(delta: number): void {
@@ -2433,20 +2633,43 @@ function undoLastPathSegment(): void {
 }
 
 function updatePathEditor(): void {
-  pathConstruction.classList.toggle('visible', pathEditorActive)
-  const directionIcon = getIsoDirectionIcon(pathDirection)
-  const slopeIcon = pathSlope < 0 ? '↘' : pathSlope > 0 ? '↗' : '→'
-  const pathTypeIcon = pathConstructionType === 'queue' ? '⑂' : '▦'
-  pathPiecePreview.textContent = `${pathTypeIcon} ${directionIcon} ${slopeIcon}`
-  buildDirection.textContent = `Zugang: ${getIsoDirectionIcon(game.snapshot.buildRotation)}`
-  buildPathButton.disabled = !pathAnchor
-  undoPathButton.disabled = pathHistory.length === 0
-  constructionStatus.textContent = pathAnchor
-    ? `Aktuelles Feld: ${pathAnchor.x}, ${pathAnchor.z} · Ebene ${pathAnchor.elevation}` +
-      (pathConstructionType === 'queue'
-        ? ' · Laufrichtung automatisch zum Eingang'
-        : '')
-    : 'Wähle einen bestehenden Weg als Startpunkt.'
+  pathConstruction.classList.toggle('visible', pathWindowOpen)
+  pathConstruction.classList.toggle('path-mode-construct', pathWindowOpen && pathEditorActive)
+  pathConstruction.classList.toggle('path-mode-paint', pathWindowOpen && !pathEditorActive)
+  const modeToggle = document.querySelector<HTMLButtonElement>('#toggle-path-editor')
+  if (modeToggle) {
+    modeToggle.setAttribute('aria-pressed', String(pathEditorActive))
+    modeToggle.title = pathEditorActive ? 'Frei ziehen (zwei Pfeile)' : 'Stückweise bauen (ein Pfeil)'
+    modeToggle.setAttribute(
+      'aria-label',
+      pathEditorActive ? 'Frei ziehen' : 'Stückweise bauen',
+    )
+  }
+  pathDemolishButton.setAttribute('aria-pressed', String(pathDemolishActive))
+  document.querySelectorAll<HTMLButtonElement>('[data-path-access]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.pathAccess === game.snapshot.selectedTool))
+  })
+  pathConstruction.querySelectorAll<HTMLButtonElement>('.rct-path-advanced button').forEach((button) => {
+    if (button.id === 'undo-path') {
+      button.disabled = !pathEditorActive || pathHistory.length === 0
+      return
+    }
+    if (button.id === 'build-path') {
+      button.disabled = !pathEditorActive || !pathAnchor
+      return
+    }
+    button.disabled = !pathEditorActive
+  })
+  constructionStatus.textContent = pathDemolishActive
+    ? 'Weg anklicken oder ziehen zum Abreißen.'
+    : pathEditorActive
+      ? pathAnchor
+        ? `Aktuelles Feld: ${pathAnchor.x}, ${pathAnchor.z} · Ebene ${pathAnchor.elevation}` +
+          (pathConstructionType === 'queue' ? ' · Schlange zum Eingang' : '')
+        : 'Feld anklicken: setzt das erste Stück. Bauen setzt das nächste.'
+      : pathConstructionType === 'queue'
+        ? 'Schlange: Linie ziehen. Belag gedrückt halten.'
+        : 'Belag gedrückt halten, dann eine Linie ziehen.'
   document.querySelectorAll<HTMLButtonElement>('[data-slope]').forEach((button) => {
     button.classList.toggle('active', Number(button.dataset.slope) === pathSlope)
   })
@@ -2459,25 +2682,23 @@ function updatePathEditor(): void {
     const icon = button.querySelector('span')
     if (icon) icon.textContent = getIsoDirectionIcon(direction)
   })
-  const selectedPath = pathAnchor
-    ? game.getPathAt(pathAnchor.x, pathAnchor.z, pathAnchor.elevation)
-    : undefined
-  const canEditFlow = selectedPath?.pathType === 'normal'
-  pathFlowSetButton.disabled = !canEditFlow
-  pathFlowRotateButton.disabled = !canEditFlow || selectedPath?.flowDirection == null
-  pathFlowClearButton.disabled = !canEditFlow || selectedPath?.flowDirection == null
   view.setPathConstructionPreview(pathEditorActive, pathAnchor, pathDirection, pathSlope)
 }
 
 function openCoasterBuilder(coasterId: string | null = null): void {
   closeRideBuilder(false)
+  buildMenuPanel.hidden = true
+  buildMenuToggle.setAttribute('aria-expanded', 'false')
   closeBuildSubmenus()
   supplyPlanner.releaseTool()
-  if (pathEditorActive) closePathEditor()
+  if (pathWindowOpen) closePathEditor()
   if (!coasterId) {
     trackPieceSelect.value = 'station'
     chainLiftInput.checked = false
   }
+  trackSpecialPalette.hidden = true
+  trackSpecialToggle.setAttribute('aria-expanded', 'false')
+  trackSpecialToggle.textContent = 'Speziell …'
   coasterBuilderActive = true
   activeCoasterId = coasterId
   coasterStartCandidate = null
@@ -2497,6 +2718,8 @@ function closeCoasterBuilder(): void {
   coasterStartCandidate = null
   coasterEditIndex = -1
   coasterAccessMode = null
+  trackSpecialPalette.hidden = true
+  trackSpecialToggle.setAttribute('aria-expanded', 'false')
   coasterBuilder.classList.remove('visible')
   view.setCoasterConstructionPreview([])
   view.setCoasterTrackSelection([])
@@ -2620,6 +2843,7 @@ function updateCoasterBuilder(): void {
   if (!coasterBuilderActive) return
 
   const coaster = activeCoasterId ? game.getCoaster(activeCoasterId) : null
+  coasterConstructionTitle.textContent = `${coaster?.name ?? 'Achterbahn 1'} Konstruktion`
   if (coaster) {
     coasterEditIndex = Math.max(0, Math.min(coaster.pieces.length - 1, coasterEditIndex))
   }
@@ -2628,7 +2852,10 @@ function updateCoasterBuilder(): void {
     anchorPiece?.end.heading ?? game.snapshot.buildRotation,
   )
   coasterBuildButton.disabled = !coaster && !coasterStartCandidate
-  coasterBuildButton.textContent = coaster ? 'Schiene bauen' : 'Startplattform bauen'
+  coasterBuildButton.title = coaster
+    ? 'Ausgewähltes Schienenstück bauen'
+    : 'Startplattform bauen'
+  coasterBuildButton.setAttribute('aria-label', coasterBuildButton.title)
   coasterRotateButton.disabled = Boolean(coaster)
   coasterUndoButton.disabled = !coaster || coaster.pieces.length <= 1
   coasterEntranceButton.disabled = !coaster
@@ -2659,25 +2886,10 @@ function updateCoasterBuilder(): void {
   })
   document.querySelectorAll<HTMLButtonElement>('[data-track-pitch]').forEach((button) => {
     const pitch = Number(button.dataset.trackPitch)
-    const pitchLevels = [
-      TRACK_PITCHES.steepDown,
-      TRACK_PITCHES.gentleDown,
-      TRACK_PITCHES.flat,
-      TRACK_PITCHES.gentleUp,
-      TRACK_PITCHES.steepUp,
-    ]
-    const currentPitchIndex = pitchLevels.findIndex(
-      (level) => Math.abs(level - (anchorPiece?.end.pitch ?? 0)) < 0.001,
-    )
-    const targetPitchIndex = pitchLevels.findIndex(
-      (level) => Math.abs(level - pitch) < 0.001,
-    )
     button.classList.toggle('active', Math.abs(pitch - coasterTargetPitch) < 0.001)
     button.disabled =
       !coaster ||
-      (currentPitchIndex >= 0 &&
-        targetPitchIndex >= 0 &&
-        Math.abs(currentPitchIndex - targetPitchIndex) > 1)
+      !canTransitionTrackPitch(anchorPiece?.end.pitch ?? 0, pitch)
   })
   document.querySelectorAll<HTMLButtonElement>('[data-track-bank]').forEach((button) => {
     const bank = Number(button.dataset.trackBank)
@@ -2695,13 +2907,20 @@ function updateCoasterBuilder(): void {
   coasterPiecePreview.textContent = `${TRACK_PIECE_ICONS[displayedPiece.kind]} ${getIsoDirectionIcon(
     anchorPiece?.end.heading ?? game.snapshot.buildRotation,
   )}`
-  coasterPieceLabel.textContent = `${displayedPiece.name} · ${formatMoney(displayedPiece.cost)}`
   chainLiftInput.disabled =
     !coaster ||
     !selectedPiece?.chainAllowed ||
     (selectedPiece.kind === 'pitchTransition' &&
       Math.max(coasterTargetPitch, anchorPiece?.end.pitch ?? 0) <= 0)
   if (chainLiftInput.disabled) chainLiftInput.checked = false
+  chainLiftButton.disabled = chainLiftInput.disabled
+  chainLiftButton.classList.toggle('active', chainLiftInput.checked)
+  chainLiftButton.setAttribute('aria-pressed', String(chainLiftInput.checked))
+  const displayedCost =
+    displayedPiece.cost +
+    (chainLiftInput.checked ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
+  coasterPieceLabel.textContent =
+    `${displayedPiece.name} · Kosten: ${formatMoney(displayedCost)}`
 
   if (!coaster || !anchorPiece) {
     trackPreviousButton.disabled = true
@@ -2769,10 +2988,21 @@ function updateContextHelp(): void {
         : 'Wähle im Achterbahn-Editor das nächste Schienenelement.'
     return
   }
-  if (pathEditorActive) {
+  if (pathWindowOpen && pathDemolishActive) {
+    contextHelp.textContent = 'Weg anklicken oder ziehen, um ihn abzureißen.'
+    return
+  }
+  if (pathWindowOpen && pathEditorActive) {
     contextHelp.textContent = pathAnchor
-      ? 'Richtung und Neigung wählen, dann im Editor auf „Bauen“ klicken.'
-      : 'Klicke einen bestehenden Weg als Startpunkt an.'
+      ? 'Richtung und Neigung wählen, dann „Bauen“ oder das nächste Feld anklicken.'
+      : 'Feld anklicken, um das erste Wegstück zu setzen.'
+    return
+  }
+  if (pathWindowOpen && !pathEditorActive) {
+    contextHelp.textContent =
+      pathConstructionType === 'queue'
+        ? 'Schlange ziehen. Belag oben gedrückt halten.'
+        : 'Wegbelag gedrückt halten, dann Felder ziehen.'
     return
   }
   const tool = game.snapshot.selectedTool
@@ -2794,8 +3024,11 @@ function updateContextHelp(): void {
     const ground = groundInfo(game.snapshot, hoveredCell.x, hoveredCell.z)
     const soilName = { field: 'Ackerboden', clay: 'Lehmboden', gravel: 'Kiesboden', sand: 'Sandboden', grass: 'Wiesenboden', urban: 'Stadtboden' }[ground.type]
     const surfaceName = ground.surface === 'paved' ? 'Gepflastert' : ground.surface === 'gravel' ? 'Geschottert' : ground.compacted ? 'Verdichtet' : 'Unbefestigt'
+    const depot = game.getDepotAt(hoveredCell.x, hoveredCell.z)
     contextHelp.textContent = existing
       ? `${BUILDINGS[existing.kind].name} auswählen`
+      : depot
+        ? `${depot.role === 'delivery' ? 'Anlieferungsplatz' : 'Depot'} auswählen`
       : dump
         ? `Müllablage · ${dump.stored} Säcke gelagert`
       : height <= -2
@@ -2852,6 +3085,16 @@ function updateContextHelp(): void {
     contextHelp.textContent = 'Rechteckig ziehen, um Parkplätze auszuweisen.'
   } else if (tool === 'roadDirection') {
     contextHelp.textContent = 'Straße anklicken: aktuelle Baurichtung als Fahrtrichtung setzen.'
+  } else if (tool === 'trafficLight') {
+    contextHelp.textContent = 'Straße anklicken: Ampel in aktueller Baurichtung setzen. Danach öffnet sich die Steuerung.'
+  } else if (tool === 'pathBarrier') {
+    contextHelp.textContent = 'Personenweg anklicken: Tor in aktueller Baurichtung setzen. Danach öffnet sich die Steuerung.'
+  } else if (tool === 'deliveryYard') {
+    contextHelp.textContent = 'Anlieferungsplatz neben einer Straße auf verdichtetem Boden setzen (400 €).'
+  } else if (tool === 'supplyDepot') {
+    contextHelp.textContent = 'Depot an einem Fußweg auf verdichtetem Boden setzen (400 €).'
+  } else if (tool === 'staffGate') {
+    contextHelp.textContent = 'Fußweg anklicken: Personaltor nur für Personal und Logistik (80 €). Nochmaliger Klick entfernt es.'
   } else if (tool === 'roadSeparator') {
     contextHelp.textContent = 'Straße anklicken: Kante in aktueller Baurichtung sperren.'
   } else if (tool === 'fence') {
@@ -3057,8 +3300,8 @@ function openRideBuilder(id: string): void {
   if (!ride) return
   closeRideBuilder(false)
   if (coasterBuilderActive) closeCoasterBuilder()
-  if (pathEditorActive) closePathEditor()
-  closeEntityPanel(); closeBuildMenu(); closeBulldozeMenu(); supplyPlanner.releaseTool()
+  if (pathWindowOpen) closePathEditor()
+  closeEntityPanel(); closeBuildMenu(); supplyPlanner.releaseTool()
   hideVisitorPanel()
   activeRideId=id; bungeeBuildMode=false; view.bungeePreviewHeight=null
   requireElement<HTMLInputElement>('#ride-target-height').value=String(ride.bungeeHeight ?? 20)
@@ -3146,6 +3389,17 @@ window.addEventListener('keydown',event=>{
   if(event.key!=='Escape' || !activeRideId)return
   if(rideAccessPlacement)cancelRideAccessPlacement();else closeRideBuilder()
 })
+function openEntityInfoForDepot(depotId: string): void {
+  closeRideBuilder(false)
+  selectedEntity = { type: 'depot', id: depotId }
+  entityTab = 'overview'
+  hideVisitorPanel()
+  staffDetails.close()
+  view.setInspectedVehicle(null)
+  entityPanel.hidden = false
+  updateEntityPanel()
+}
+
 function openEntityInfoForBuilding(buildingId: string): void {
   closeRideBuilder(false)
   selectedEntity = { type: 'building', id: buildingId }
@@ -3166,6 +3420,53 @@ function openEntityInfoForCoaster(coasterId: string): void {
   updateEntityPanel()
 }
 
+function cancelAccessAreaDraw(): void {
+  if (!accessAreaDrawing) return
+  accessAreaDrawing = false
+  view.setGroundAreaTool(null)
+}
+
+function selectedAccessControl(): AccessControl | undefined {
+  if (selectedEntity?.type !== 'access') return undefined
+  return game.getAccessControl(selectedEntity.id)
+}
+
+function startAccessAreaDraw(): void {
+  const control = selectedAccessControl()
+  if (!control) return
+  accessAreaDrawing = true
+  game.setTool('inspect')
+  view.setGroundAreaTool((from, to, preview) => {
+    const current = selectedAccessControl()
+    if (!current) {
+      cancelAccessAreaDraw()
+      return
+    }
+    const next = toggleAreaCells(current.area, from, to)
+    view.showAccessArea(next)
+    const stats = game.accessAreaStats(next)
+    accessPreview.textContent = `Vorschau: ${areaPreviewText(current.kind, stats)}`
+    if (preview) return
+    const result = game.toggleAccessControlArea(current.id, from, to)
+    showToast(result.message, !result.ok)
+    updateEntityPanel()
+  })
+  accessDrawArea.textContent = 'Zeichnen beenden'
+  view.showAccessArea(control.area)
+}
+
+function openEntityInfoForAccess(accessId: string): void {
+  closeRideBuilder(false)
+  cancelAccessAreaDraw()
+  selectedEntity = { type: 'access', id: accessId }
+  entityTab = 'overview'
+  hideVisitorPanel()
+  staffDetails.close()
+  view.setInspectedVehicle(null)
+  entityPanel.hidden = false
+  updateEntityPanel()
+}
+
 function openEntityInfoForVehicle(vehicleId: string): void {
   closeRideBuilder(false)
   selectedEntity = { type: 'vehicle', id: vehicleId }
@@ -3181,6 +3482,88 @@ function updateEntityPanel(): void {
   requireElement<HTMLElement>('#open-ride-construction').hidden=true
   editStageButton.hidden = true
   if (!selectedEntity) return
+  accessControlOptions.hidden = selectedEntity.type !== 'access'
+  accessControlOptions.classList.toggle('visible', selectedEntity.type === 'access')
+  depotOptions.classList.toggle('visible', selectedEntity.type === 'depot')
+  if (selectedEntity.type === 'depot') {
+    const depot = game.getDepot(selectedEntity.id)
+    if (!depot) {
+      closeEntityPanel()
+      return
+    }
+    const delivery = depot.role === 'delivery'
+    entityIcon.textContent = delivery ? '📦' : '🏪'
+    entityType.textContent = delivery ? 'Anlieferungsplatz' : 'Warendepot'
+    entityName.textContent = delivery ? 'Anlieferung' : 'Depot'
+    entityStatus.textContent = delivery
+      ? 'Lastwagen laden hier ab. Träger bringen Ware zu Depots und Ständen.'
+      : depot.distribution === 'relay'
+        ? 'Zwischenlager: andere Depots dürfen entnehmen.'
+        : 'Versorgt Stände bis zum Mindestbestand.'
+    const workers = depotWorkerCount(depot.id)
+    entityStats.innerHTML = `
+      <span>Position <b>${depot.x}, ${depot.z}</b></span>
+      <span>Träger <b>${workers}</b></span>
+      ${Object.entries(SUPPLIES)
+        .map(
+          ([kind, item]) =>
+            `<span>${item.name} <b>${Math.floor(depot.stock[kind as Supply])} / ${depot.minimum[kind as Supply]}</b></span>`,
+        )
+        .join('')}
+    `
+    depotRoleHint.textContent = delivery
+      ? 'Mindestbestand löst Nachbestellungen aus. Träger holen Ware hier ab.'
+      : 'Mindestbestand und Träger gelten für dieses Depot.'
+    if (document.activeElement !== depotWorkers) depotWorkers.value = String(workers)
+    depotWorkersValue.textContent = depotWorkers.value
+    if (document.activeElement !== depotDistribution) {
+      depotDistribution.value = depot.distribution ?? 'shops'
+    }
+    syncStockSliders(depotOptions, 'data-depot-min', depot)
+    entityTabs.classList.remove('visible')
+    entityOverview.hidden = false
+    entityDynamics.classList.remove('visible')
+    priceOptions.classList.remove('visible')
+    applyPriceToKindButton.hidden = true
+    securityOptions.classList.remove('visible')
+    coasterOptions.classList.remove('visible')
+    return
+  }
+  if (selectedEntity.type === 'access') {
+    const control = game.getAccessControl(selectedEntity.id)
+    if (!control) {
+      closeEntityPanel()
+      return
+    }
+    const isLight = control.kind === 'trafficLight'
+    entityIcon.textContent = isLight ? '🚦' : '🚧'
+    entityType.textContent = isLight ? 'Ampel' : 'Personentor'
+    entityName.textContent = isLight ? 'Straßenampel' : 'Personentor'
+    entityStatus.textContent = accessStatusText(control)
+    accessSignal.textContent = entityStatus.textContent
+    entityStats.innerHTML = `
+      <span>Modus <b>${accessModeLabel(control.mode)}</b></span>
+      <span>Richtung <b>${getIsoDirectionIcon(control.direction)}</b></span>
+      ${
+        control.kind === 'pathBarrier'
+          ? `<span>Durchgang <b>${control.passage === 'both' ? 'beide Richtungen' : 'eine Richtung'}</b></span>`
+          : ''
+      }
+      <span>Gebiet <b>${control.area.length} Felder</b></span>
+    `
+    entityTabs.classList.remove('visible')
+    entityOverview.hidden = false
+    entityDynamics.classList.remove('visible')
+    priceOptions.classList.remove('visible')
+    applyPriceToKindButton.hidden = true
+    securityOptions.classList.remove('visible')
+    coasterOptions.classList.remove('visible')
+    depotOptions.classList.remove('visible')
+    accessControlOptions.hidden = false
+    accessControlOptions.classList.add('visible')
+    renderAccessControlForm(control)
+    return
+  }
   if (selectedEntity.type === 'vehicle') {
     const vehicle = game.snapshot.logistics.roadVehicles.find(
       (item) => item.id === selectedEntity?.id,
@@ -3218,6 +3601,7 @@ function updateEntityPanel(): void {
     applyPriceToKindButton.hidden = true
     securityOptions.classList.remove('visible')
     coasterOptions.classList.remove('visible')
+    depotOptions.classList.remove('visible')
     return
   }
   if (selectedEntity.type === 'building') {
@@ -3289,6 +3673,7 @@ function updateEntityPanel(): void {
     if (hasPrice && document.activeElement !== entityPriceInput) {
       entityPriceInput.value = String(building.price)
     }
+    depotOptions.classList.remove('visible')
     const isSecurityGate = building.kind === 'securityGate'
     securityOptions.classList.toggle('visible', isSecurityGate)
     if (isSecurityGate) {
@@ -3363,6 +3748,7 @@ function updateEntityPanel(): void {
   `
   coasterOptions.classList.add('visible')
   securityOptions.classList.remove('visible')
+  depotOptions.classList.remove('visible')
   entityTabs.classList.add('visible')
   entityOverview.hidden = entityTab !== 'overview'
   entityDynamics.classList.toggle('visible', entityTab === 'dynamics')
@@ -3556,9 +3942,139 @@ function drawTelemetryChart(coaster: Coaster): void {
 
 function closeEntityPanel(): void {
   if (rideAccessPlacement) cancelRideAccessPlacement()
+  cancelAccessAreaDraw()
+  view.showAccessArea(null)
   selectedEntity = null
   view.setInspectedVehicle(null)
   entityPanel.hidden = true
+}
+
+function ensureAccessSlotButtons(): void {
+  if (accessSlots.childElementCount === 6) return
+  accessSlots.replaceChildren(
+    ...Array.from({ length: 6 }, (_, index) => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.dataset.accessSlot = String(index)
+      const start = index * 10
+      button.textContent = `${String(start).padStart(2, '0')}–${String(start + 10).padStart(2, '0')}`
+      return button
+    }),
+  )
+}
+
+function fillAccessSensorOptions(kind: AccessControl['kind']): void {
+  if (accessSensorKind.dataset.accessKind === kind) return
+  accessSensorKind.dataset.accessKind = kind
+  const options =
+    kind === 'trafficLight'
+      ? [
+          ['freeParking', 'Freier Parkplatz im Gebiet'],
+          ['noFreeParking', 'Kein freier Parkplatz im Gebiet'],
+          ['carsBelow', 'Weniger als X Autos auf der Straße'],
+          ['carsAbove', 'Mehr als X Autos auf der Straße'],
+        ]
+      : [
+          ['freeCamping', 'Freie Campingfläche im Gebiet'],
+          ['occupiedCamping', 'Belegte Campingfläche im Gebiet'],
+          ['peopleBelow', 'Weniger als X Personen im Gebiet'],
+          ['peopleAbove', 'Mehr als X Personen im Gebiet'],
+        ]
+  accessSensorKind.replaceChildren(
+    ...options.map(([value, label]) => {
+      const option = document.createElement('option')
+      option.value = value
+      option.textContent = label
+      return option
+    }),
+  )
+}
+
+function accessModeLabel(mode: AccessControlMode): string {
+  if (mode === 'always') return 'Immer offen'
+  if (mode === 'locked') return 'Immer zu'
+  if (mode === 'schedule') return 'Zeitgesteuert'
+  return 'Sensor'
+}
+
+function accessStatusText(control: AccessControl): string {
+  if (
+    control.kind === 'pathBarrier' &&
+    control.openInEmergency &&
+    game.isAccessEmergency()
+  ) {
+    return 'Notfall – Tor in beide Richtungen offen'
+  }
+  if (control.kind === 'trafficLight') {
+    return control.signal === 'open'
+      ? 'Grün – Fahrzeuge dürfen in diese Richtung'
+      : 'Rot – Fahrzeuge warten in dieser Richtung'
+  }
+  if (control.signal === 'closed') {
+    return 'Geschlossen – Personen müssen umlaufen'
+  }
+  return control.passage === 'both'
+    ? 'Offen – Personen dürfen in beide Richtungen'
+    : 'Offen – nur in die gesetzte Richtung'
+}
+
+function renderAccessControlForm(control: AccessControl): void {
+  accessSchedule.hidden = control.mode !== 'schedule'
+  accessSensor.hidden = control.mode !== 'sensor'
+  accessPassage.hidden = control.kind !== 'pathBarrier'
+  accessEmergency.hidden = control.kind !== 'pathBarrier'
+  if (
+    control.kind === 'pathBarrier' &&
+    document.activeElement !== accessOpenInEmergency
+  ) {
+    accessOpenInEmergency.checked = control.openInEmergency
+  }
+  accessControlOptions.querySelectorAll<HTMLButtonElement>('[data-access-mode]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.accessMode === control.mode))
+  })
+  accessControlOptions.querySelectorAll<HTMLButtonElement>('[data-access-polarity]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.accessPolarity === control.polarity))
+  })
+  accessPassage.querySelectorAll<HTMLButtonElement>('[data-access-passage]').forEach((button) => {
+    button.setAttribute(
+      'aria-pressed',
+      String(
+        control.kind === 'pathBarrier' &&
+          button.dataset.accessPassage === control.passage,
+      ),
+    )
+  })
+  const slot = currentAccessSlot(game.snapshot.minute)
+  ensureAccessSlotButtons()
+  accessSlots.querySelectorAll<HTMLButtonElement>('[data-access-slot]').forEach((button) => {
+    const index = Number(button.dataset.accessSlot)
+    const open = Boolean(control.openSlots[index])
+    button.setAttribute('aria-pressed', String(open))
+    button.classList.toggle('current', index === slot)
+    const start = index * 10
+    const label = `${String(start).padStart(2, '0')}–${String(start + 10).padStart(2, '0')}${
+      open ? (control.kind === 'trafficLight' ? ' Grün' : ' Offen') : ''
+    }`
+    if (button.textContent !== label) button.textContent = label
+  })
+  fillAccessSensorOptions(control.kind)
+  if (document.activeElement !== accessSensorKind) {
+    accessSensorKind.value = control.sensorKind
+  }
+  const needsThreshold = control.sensorKind.endsWith('Below') || control.sensorKind.endsWith('Above')
+  accessThreshold.hidden = !needsThreshold
+  accessThresholdLabel.hidden = !needsThreshold
+  if (document.activeElement !== accessThreshold) {
+    accessThreshold.value = String(control.sensorThreshold)
+  }
+  const stats = game.accessAreaPreview(control.id)
+  accessPreview.textContent = accessAreaDrawing
+    ? accessPreview.textContent
+    : stats
+      ? `Aktuell: ${areaPreviewText(control.kind, stats)} · Regel: ${previewLabel(control.kind, control.sensorKind, stats)}`
+      : 'Aktuell: keine Messung'
+  accessDrawArea.textContent = accessAreaDrawing ? 'Zeichnen beenden' : 'Gebiet zeichnen'
+  if (!accessAreaDrawing) view.showAccessArea(control.area)
 }
 
 function showToast(message: string, isError = false): void {
@@ -3571,57 +4087,297 @@ function showToast(message: string, isError = false): void {
 }
 
 document.querySelector('#rotate-scenery')?.addEventListener('click', () => game.rotateBuild())
-document.querySelectorAll<HTMLButtonElement>('[data-build-category]').forEach((button) => {
-  button.addEventListener('click', () => {
-    const category = button.dataset.buildCategory
-    const wasOpen = button.classList.contains('open')
-    closeBuildSubmenus()
-    if (!wasOpen) {
-      document.querySelectorAll<HTMLElement>(`[data-build-panel="${category}"] [data-preview-kind]`).forEach(element => {
-        const kind = element.dataset.previewKind as BuildingKind
-        const image = document.createElement('img')
-        image.src = view.buildingThumbnail(kind); image.alt = ''; image.setAttribute('aria-hidden', 'true')
-        element.replaceChildren(image); delete element.dataset.previewKind
-      })
-      button.classList.add('open')
-      document
-        .querySelector<HTMLElement>(`[data-build-panel="${category}"]`)
-        ?.classList.add('open')
-    }
-  })
-})
-document.querySelectorAll<HTMLButtonElement>('[data-close-build-flyout]').forEach((button) => {
-  button.addEventListener('click', () => closeBuildSubmenus())
-})
-document.addEventListener('pointerdown', (event) => {
-  const target = event.target
-  if (!(target instanceof Element)) return
-  if (target.closest('[data-build-category]')) return
-  const openFlyout = document.querySelector<HTMLElement>('.build-flyout.open')
-  if (!openFlyout || openFlyout.contains(target)) return
-  closeBuildSubmenus()
-})
 
-document.querySelectorAll<HTMLButtonElement>('.build-menu [data-tool]').forEach((button) => {
-  button.addEventListener('click', () => {
-    const tool = button.dataset.tool as Tool
-    closeRideBuilder(false)
-    bungeeBuildMode = button.dataset.bungee === 'true'
-    view.bungeePreviewHeight = bungeeBuildMode ? Math.max(4, Math.min(200, Number(requireElement<HTMLInputElement>('#bungee-height').value) || 20)) : null
-    if (tool === 'coaster') {
-      openCoasterBuilder()
+const buildMenuToggle = requireElement<HTMLButtonElement>('#open-build-menu')
+const buildMenuPanel = requireElement<HTMLElement>('#build-menu')
+const buildMenuTitle = requireElement<HTMLElement>('#build-menu-title')
+const buildGrid = requireElement<HTMLElement>('#build-grid')
+const buildSubtabs = requireElement<HTMLElement>('#build-subtabs')
+const buildCatalogStatus = requireElement<HTMLElement>('#build-catalog-status')
+const buildCatalogName = requireElement<HTMLElement>('#build-catalog-name')
+const buildCatalogDetail = requireElement<HTMLElement>('#build-catalog-detail')
+const buildCatalogCost = requireElement<HTMLElement>('#build-catalog-cost')
+let lastBuildCategory: BuildCategoryId = 'paths'
+let lastBuildGroup = new Map<BuildCategoryId, string>()
+let catalogHoverActive = false
+
+function fillBuildThumbnails(): void {
+  buildGrid.querySelectorAll<HTMLElement>('[data-preview-kind]').forEach((element) => {
+    const kind = element.dataset.previewKind as BuildingKind
+    const image = document.createElement('img')
+    image.src = view.buildingThumbnail(kind)
+    image.alt = ''
+    image.setAttribute('aria-hidden', 'true')
+    element.replaceChildren(image)
+    delete element.dataset.previewKind
+  })
+  buildGrid.querySelectorAll<HTMLElement>('[data-preview-supply]').forEach((element) => {
+    const kind = element.dataset.previewSupply as 'delivery' | 'supply'
+    const image = document.createElement('img')
+    image.src = view.supplyThumbnail(kind)
+    image.alt = ''
+    image.setAttribute('aria-hidden', 'true')
+    element.replaceChildren(image)
+    delete element.dataset.previewSupply
+  })
+}
+
+function showCatalogStatus(button: HTMLButtonElement | null): void {
+  if (buildCatalogStatus.hidden) return
+  if (!button) {
+    buildCatalogName.textContent = 'Objekt wählen'
+    buildCatalogDetail.textContent = ''
+    buildCatalogDetail.hidden = true
+    buildCatalogCost.textContent = ''
+    return
+  }
+  const name = button.dataset.catalogName ?? button.textContent?.trim() ?? 'Objekt wählen'
+  const detail = button.dataset.catalogDetail ?? ''
+  const cost = button.dataset.catalogCost ?? ''
+  buildCatalogName.textContent = name
+  buildCatalogDetail.textContent = detail
+  buildCatalogDetail.hidden = detail.length === 0
+  buildCatalogCost.textContent = cost ? `Kosten: ${cost}` : ''
+}
+
+function showSelectedCatalogStatus(): void {
+  const active = buildGrid.querySelector<HTMLButtonElement>('.tool.active')
+  showCatalogStatus(active ?? buildGrid.querySelector<HTMLButtonElement>('.tool'))
+}
+
+function renderBuildGrid(categoryId: BuildCategoryId, groupId?: string): void {
+  const category = buildCategoryById(categoryId)
+  const group =
+    category.groups.find((entry) => entry.id === groupId) ?? category.groups[0]!
+  const catalog = isCatalogBuildCategory(categoryId)
+  lastBuildGroup.set(categoryId, group.id)
+  catalogHoverActive = false
+  buildMenuTitle.textContent = category.label
+  buildMenuPanel.classList.toggle('build-menu-catalog', catalog)
+  buildCatalogStatus.hidden = !catalog
+  if (category.groups.length > 1) {
+    buildSubtabs.hidden = false
+    buildSubtabs.innerHTML = category.groups
+      .map(
+        (entry) =>
+          `<button type="button" data-build-group="${entry.id}" aria-pressed="${entry.id === group.id}">${entry.label}</button>`,
+      )
+      .join('')
+  } else {
+    buildSubtabs.hidden = true
+    buildSubtabs.replaceChildren()
+  }
+  document.querySelectorAll<HTMLElement>('.build-extra').forEach((extra) => {
+    extra.hidden = extra.id !== `build-extra-${category.extra ?? ''}`
+  })
+  const attractionsExtra = document.querySelector<HTMLElement>('#build-extra-attractions')
+  if (attractionsExtra && categoryId === 'attractions') {
+    attractionsExtra.hidden = group.id !== 'rides'
+  }
+  buildGrid.innerHTML = group.items
+    .map((item) => {
+      const stageTemplate =
+        item.tool === 'stage'
+          ? game.snapshot.festival.stageTemplates?.find(
+              (template) => template.name === game.snapshot.festival.selectedStageTemplate,
+            )
+          : undefined
+      const name = escapeHtml(stageTemplate ? stageTemplate.name : item.name)
+      const buildingCost =
+        item.tool === 'stage'
+          ? formatMoney(BUILDINGS.stage.cost + (stageTemplate ? stageStats(stageTemplate).cost : 0))
+          : item.previewKind && !item.bungee
+            ? formatMoney(BUILDINGS[item.previewKind].cost)
+            : ''
+      const cost = buildingCost || (/€/.test(item.detail) ? item.detail : '')
+      const extraDetail = item.detail !== cost && item.detail !== buildingCost ? item.detail : ''
+      const preview = item.previewKind
+        ? `<span class="building-preview" data-preview-kind="${item.previewKind}">${item.icon}</span>`
+        : item.previewSupply
+          ? `<span class="building-preview" data-preview-supply="${item.previewSupply}">${item.icon}</span>`
+          : `<span>${item.icon}</span>`
+      const speedClass =
+        item.tool === 'roadSpeed10'
+          ? ' speed-10'
+          : item.tool === 'roadSpeed30'
+            ? ' speed-30'
+            : item.tool === 'roadSpeed50'
+              ? ' speed-50'
+              : ''
+      const label = [name, extraDetail, cost].filter(Boolean).join(', ')
+      const catalogAttrs = catalog
+        ? ` data-catalog-name="${name}" data-catalog-detail="${escapeHtml(extraDetail)}" data-catalog-cost="${escapeHtml(cost)}" aria-label="${escapeHtml(label)}"`
+        : ''
+      const caption = catalog ? '' : `<em>${name}<small>${item.tool === 'stage' ? cost : item.detail}</small></em>`
+      return `<button class="tool${speedClass}" data-tool="${item.tool}"${item.bungee ? ' data-bungee="true"' : ''}${catalogAttrs} type="button">${preview}${caption}</button>`
+    })
+    .join('')
+  fillBuildThumbnails()
+  if (catalog) showSelectedCatalogStatus()
+}
+
+function setToolbarCategoryOpen(categoryId: BuildCategoryId | null): void {
+  document.querySelectorAll<HTMLButtonElement>('.rct-toolbar [data-build-category]').forEach((button) => {
+    const open = button.dataset.buildCategory === categoryId
+    button.classList.toggle('open', open)
+    button.setAttribute('aria-expanded', String(open))
+  })
+}
+
+function closeBuildMenu(): void {
+  buildMenuPanel.hidden = true
+  closeBuildSubmenus()
+  if (pathWindowOpen) {
+    setToolbarCategoryOpen('paths')
+    buildMenuToggle.setAttribute('aria-expanded', 'true')
+    return
+  }
+  buildMenuToggle.setAttribute('aria-expanded', 'false')
+  setToolbarCategoryOpen(null)
+}
+
+function toggleBulldozeTool(): void {
+  if (activeRideId) closeRideBuilder()
+  const menuWasOpen = !buildMenuPanel.hidden || pathWindowOpen
+  if (pathWindowOpen) closePathEditor()
+  if (coasterBuilderActive) closeCoasterBuilder()
+  cancelAccessAreaDraw()
+  const wasActive = game.snapshot.selectedTool === 'bulldoze'
+  buildMenuPanel.hidden = true
+  closeBuildSubmenus()
+  buildMenuToggle.setAttribute('aria-expanded', 'false')
+  if (wasActive && !menuWasOpen) {
+    game.setTool('inspect')
+    setToolbarCategoryOpen(null)
+    return
+  }
+  game.setTool('bulldoze')
+  setToolbarCategoryOpen('bulldoze')
+}
+
+function openBuildCategory(categoryId: BuildCategoryId, groupId?: string): void {
+  if (categoryId === 'bulldoze') {
+    toggleBulldozeTool()
+    return
+  }
+  if (activeRideId) closeRideBuilder()
+  lastBuildCategory = categoryId
+  if (categoryId === 'paths') {
+    if (pathWindowOpen) {
+      closePathEditor()
+      game.setTool('inspect')
       return
     }
-    if (pathEditorActive && tool !== 'path') closePathEditor()
-    if (coasterBuilderActive) closeCoasterBuilder()
-    game.setTool(tool)
-    if (tool === 'road' || tool === 'path' && !pathEditorActive) supplyPlanner.activateWay(tool)
+    openPathWindow(false)
+    return
+  }
+  if (pathWindowOpen) closePathEditor()
+  const category = buildCategoryById(categoryId)
+  renderBuildGrid(categoryId, groupId ?? lastBuildGroup.get(categoryId))
+  buildMenuPanel.hidden = false
+  buildMenuPanel.classList.toggle('dock-right', category.dock === 'right')
+  if (category.dock !== 'right') {
+    buildMenuPanel.style.height = ''
+    buildMenuPanel.style.bottom = ''
+  }
+  buildMenuToggle.setAttribute('aria-expanded', 'true')
+  setToolbarCategoryOpen(categoryId)
+}
+
+function activateBuildTool(button: HTMLButtonElement): void {
+  const tool = button.dataset.tool as Tool
+  closeRideBuilder(false)
+  bungeeBuildMode = button.dataset.bungee === 'true'
+  view.bungeePreviewHeight = bungeeBuildMode
+    ? Math.max(4, Math.min(200, Number(requireElement<HTMLInputElement>('#bungee-height').value) || 20))
+    : null
+  if (tool === 'coaster') {
+    openCoasterBuilder()
+    return
+  }
+  if (pathWindowOpen && tool !== 'path') closePathEditor()
+  if (coasterBuilderActive) closeCoasterBuilder()
+  cancelAccessAreaDraw()
+  game.setBuildElevation(0)
+  game.setTool(tool)
+  if (tool === 'road' || (tool === 'path' && !pathEditorActive)) supplyPlanner.activateWay(tool)
+}
+
+document.querySelectorAll<HTMLButtonElement>('.rct-toolbar [data-build-category]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const category = button.dataset.buildCategory as BuildCategoryId
+    if (category === 'bulldoze') {
+      toggleBulldozeTool()
+      return
+    }
+    if (button.classList.contains('open')) {
+      if (category === 'paths') {
+        closePathEditor()
+        game.setTool('inspect')
+        return
+      }
+      closeBuildMenu()
+      if (buildMenuPanel.hidden && !pathWindowOpen) game.setTool('inspect')
+      return
+    }
+    openBuildCategory(category)
   })
 })
+buildSubtabs.addEventListener('click', (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>('[data-build-group]')
+  if (!button || !lastBuildCategory) return
+  openBuildCategory(lastBuildCategory, button.dataset.buildGroup)
+})
+buildGrid.addEventListener('click', (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>('[data-tool]')
+  if (button) activateBuildTool(button)
+})
+buildGrid.addEventListener('pointerover', (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>('[data-tool]')
+  if (!button || !buildGrid.contains(button) || buildCatalogStatus.hidden) return
+  catalogHoverActive = true
+  showCatalogStatus(button)
+})
+buildGrid.addEventListener('pointerleave', () => {
+  catalogHoverActive = false
+  showSelectedCatalogStatus()
+})
+buildGrid.addEventListener('focusin', (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>('[data-tool]')
+  if (button && !buildCatalogStatus.hidden) showCatalogStatus(button)
+})
+buildGrid.addEventListener('focusout', (event) => {
+  if (buildCatalogStatus.hidden || buildGrid.contains(event.relatedTarget as Node | null)) return
+  if (!catalogHoverActive) showSelectedCatalogStatus()
+})
+buildMenuToggle.addEventListener('click', () => {
+  if (pathWindowOpen) {
+    closePathEditor()
+    game.setTool('inspect')
+    return
+  }
+  if (!buildMenuPanel.hidden) {
+    closeBuildMenu()
+    if (buildMenuPanel.hidden) game.setTool('inspect')
+    return
+  }
+  const match = subgroupForTool(
+    game.snapshot.selectedTool,
+    game.snapshot.selectedTool === 'ride' && view.bungeePreviewHeight !== null,
+  )
+  const category = match?.category === 'bulldoze' ? lastBuildCategory : match?.category ?? lastBuildCategory
+  openBuildCategory(category, match?.category === 'bulldoze' ? undefined : match?.group)
+})
+requireElement<HTMLButtonElement>('[data-close-build-menu]').addEventListener('click', () => {
+  closeBuildMenu()
+  if (buildMenuPanel.hidden) game.setTool('inspect')
+})
+makeDraggable(requireElement<HTMLElement>('.build-menu-header'), buildMenuPanel)
+makeResizable(buildMenuPanel)
 
 document.querySelectorAll<HTMLButtonElement>('[data-way-build], [data-way-icon], .supply-planner [data-tool]').forEach(button => {
   button.addEventListener('click', () => {
-    if (pathEditorActive && !button.closest('#path-construction')) closePathEditor()
+    if (pathWindowOpen && !button.closest('#path-construction')) closePathEditor()
     if (coasterBuilderActive) closeCoasterBuilder()
   })
 })
@@ -3631,7 +4387,6 @@ document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((button) =>
 })
 
 const visitorOverviewToggle = requireElement<HTMLButtonElement>('#open-visitors')
-const dayPlanToggle = requireElement<HTMLButtonElement>('#open-day-plan')
 const logisticsPanelToggle = requireElement<HTMLButtonElement>('#open-logistics')
 const complaintsToggle = requireElement<HTMLButtonElement>('#open-complaints')
 visitorOverviewToggle.addEventListener('click', () => {
@@ -3642,17 +4397,6 @@ visitorOverviewToggle.addEventListener('click', () => {
     () => {
       visitorOverviewFingerprint = ''
       updateVisitorOverview(true)
-    },
-  )
-})
-dayPlanToggle.addEventListener('click', () => {
-  setPanelOpen(
-    dayPlanPanel,
-    dayPlanToggle,
-    !dayPlanPanel.classList.contains('visible'),
-    () => {
-      dayPlanFingerprint = ''
-      updateDayPlanPanel(true)
     },
   )
 })
@@ -3740,9 +4484,16 @@ saveMenuPanel.addEventListener('click', (event) => {
 staffMenuToggle.addEventListener('click', () => {
   closeDebugMenu()
   closeSaveMenu()
-  const open = staffMenuPanel.classList.toggle('open')
+  const open = !staffPanel.classList.contains('visible')
   staffMenuToggle.setAttribute('aria-expanded', String(open))
-  if (open) positionDropdownPanel(staffMenuToggle, staffMenuPanel)
+  if (open) openStaffOverview(currentStaffRole)
+  else staffPanel.classList.remove('visible')
+})
+document.querySelector('.staff-role-tabs')!.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-staff-role]')
+  if (!button) return
+  closeStaffMenu()
+  openStaffOverview(button.dataset.staffRole as StaffRole)
 })
 staffMenuPanel.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-staff-role]')
@@ -3750,82 +4501,9 @@ staffMenuPanel.addEventListener('click', (event) => {
   closeStaffMenu()
   openStaffOverview(button.dataset.staffRole as StaffRole)
 })
-
-// Build menu and bulldoze menu are mutually exclusive; whenever neither is
-// open, the active tool falls back to "Info" (inspect).
-const infoButton = requireElement<HTMLButtonElement>('#open-info')
-const buildMenuToggle = requireElement<HTMLButtonElement>('#open-build-menu')
-const buildMenuPanel = requireElement<HTMLElement>('#build-menu')
-const bulldozeMenuToggle = requireElement<HTMLButtonElement>('#toggle-bulldoze-menu')
-const bulldozeMenuPanel = requireElement<HTMLDivElement>('#bulldoze-menu-panel')
-const bulldozeSizeButtons = Array.from(
-  document.querySelectorAll<HTMLButtonElement>('[data-bulldoze-size]'),
-)
-makeDraggable(requireElement<HTMLElement>('.build-menu-header'), buildMenuPanel)
-makeResizable(buildMenuPanel)
-makeDraggable(requireElement<HTMLElement>('.bulldoze-panel-header'), bulldozeMenuPanel)
-makeResizable(bulldozeMenuPanel)
-
-const activateInfoIfNothingOpen = (): void => {
-  if (buildMenuPanel.hidden && !bulldozeMenuPanel.classList.contains('open')) {
-    game.setTool('inspect')
-  }
-}
-const closeBuildMenu = (): void => {
-  buildMenuPanel.hidden = true
-  buildMenuToggle.setAttribute('aria-expanded', 'false')
-  closeBuildSubmenus()
-}
-const closeBulldozeMenu = (): void => {
-  bulldozeMenuPanel.classList.remove('open')
-  bulldozeMenuToggle.setAttribute('aria-expanded', 'false')
-}
-infoButton.addEventListener('click', () => {
-  closeBuildMenu()
-  closeBulldozeMenu()
-  game.setTool('inspect')
-})
-buildMenuToggle.addEventListener('click', () => {
-  if (activeRideId) closeRideBuilder()
-  if (!buildMenuPanel.hidden) {
-    closeBuildMenu()
-    activateInfoIfNothingOpen()
-    return
-  }
-  closeBulldozeMenu()
-  buildMenuPanel.hidden = false
-  buildMenuToggle.setAttribute('aria-expanded', 'true')
-})
-requireElement<HTMLButtonElement>('[data-close-build-menu]').addEventListener('click', () => {
-  closeBuildMenu()
-  activateInfoIfNothingOpen()
-})
-bulldozeMenuToggle.addEventListener('click', () => {
-  if (bulldozeMenuPanel.classList.contains('open')) {
-    closeBulldozeMenu()
-    activateInfoIfNothingOpen()
-    return
-  }
-  closeBuildMenu()
-  bulldozeMenuPanel.classList.add('open')
-  bulldozeMenuToggle.setAttribute('aria-expanded', 'true')
-  game.setTool('bulldoze')
-})
-requireElement<HTMLButtonElement>('[data-close-bulldoze-menu]').addEventListener('click', () => {
-  closeBulldozeMenu()
-  activateInfoIfNothingOpen()
-})
-bulldozeSizeButtons.forEach((button) => {
-  button.addEventListener('click', () => {
-    bulldozeBrushSize = Number(button.dataset.bulldozeSize)
-    bulldozeSizeButtons.forEach((b) => b.classList.toggle('active', b === button))
-    game.setTool('bulldoze')
-  })
-})
 window.addEventListener('resize', () => {
   if (debugMenuPanel.classList.contains('open')) positionDropdownPanel(debugMenuToggle, debugMenuPanel)
   if (saveMenuPanel.classList.contains('open')) positionDropdownPanel(saveMenuToggle, saveMenuPanel)
-  if (staffMenuPanel.classList.contains('open')) positionDropdownPanel(staffMenuToggle, staffMenuPanel)
 })
 requireElement<HTMLButtonElement>('#debug-remove-cars').addEventListener(
   'click',
@@ -3923,11 +4601,14 @@ function renderMultiplayerStatus(status: MultiplayerStatus): void {
   multiplayerStatus.textContent = connected
     ? `Online · ${status.mode === 'host' ? 'Host' : 'Verbunden'} · Raum ${status.code}`
     : status.message || 'Singleplayer'
-  multiplayerToggle.textContent = connected
+  multiplayerToggle.textContent = '🌐'
+  const multiplayerLabel = connected
     ? status.mode === 'host'
-      ? `🌐 Host ${status.code}`
-      : `🌐 Online ${status.code}`
-    : '🌐 Mehrspieler'
+      ? `Host ${status.code}`
+      : `Online ${status.code}`
+    : 'Mehrspieler'
+  multiplayerToggle.title = multiplayerLabel
+  multiplayerToggle.setAttribute('aria-label', multiplayerLabel)
   multiplayerConnectActions.hidden = connected
   multiplayerCodeField.hidden = connected
   multiplayerJoinActions.hidden = connected
@@ -4016,7 +4697,7 @@ requireElement<HTMLButtonElement>('#start-scenario').addEventListener(
       showToast('Nur der Host kann ein neues Szenario starten', true)
       return
     }
-    if (pathEditorActive) closePathEditor()
+    if (pathWindowOpen) closePathEditor()
     hideVisitorPanel()
     bindGameState(GameState.startNew(readScenarioForm()))
     setScenarioPanelOpen(false)
@@ -4034,9 +4715,11 @@ document.querySelectorAll<HTMLButtonElement>('[data-logistics-tab]').forEach((bu
       .forEach((candidate) =>
         candidate.classList.toggle('active', candidate === button),
       )
-    const routes = button.dataset.logisticsTab === 'routes'
-    logisticsOverview.hidden = routes
-    logisticsRoutes.hidden = !routes
+    const tab = button.dataset.logisticsTab
+    logisticsOverview.hidden = tab !== 'overview'
+    logisticsSupply.hidden = tab !== 'supply'
+    logisticsRoutes.hidden = tab !== 'routes'
+    if (tab === 'supply') updateLogisticsPanel(true)
   })
 })
 logisticsOverview.addEventListener('click', (event) => {
@@ -4065,6 +4748,81 @@ logisticsOverview.addEventListener('click', (event) => {
         ? game.sellSweeper(sellSweeperId)
       : null
   if (result) showToast(result.message, !result.ok)
+})
+
+function applyDepotMinimum(depotId: string, kind: Supply, quantity: number): void {
+  const result = game.manageFestival({ type: 'minimum', depotId, kind, quantity: snapStockMinimum(quantity) })
+  showToast(result.message, !result.ok)
+  updateLogisticsPanel(true)
+  updateEntityPanel()
+}
+
+function applyDepotWorkers(depotId: string, workers: number, distribution: 'relay' | 'shops'): void {
+  const result = game.manageFestival({ type: 'depotSettings', depotId, distribution, workers })
+  showToast(result.message, !result.ok)
+  updateLogisticsPanel(true)
+  updateEntityPanel()
+}
+
+function bindStockSliders(root: ParentNode, attr: 'data-supply-min' | 'data-depot-min', getDepotId: () => string): void {
+  root.querySelectorAll<HTMLInputElement>(`[${attr}]`).forEach((input) => {
+    input.addEventListener('input', () => {
+      const snapped = snapStockMinimum(Number(input.value))
+      input.value = String(snapped)
+      const kind = input.getAttribute(attr)
+      const label = root.querySelector<HTMLElement>(`#${attr === 'data-supply-min' ? 'supply' : 'depot'}-min-${kind}-value`)
+      if (label) label.textContent = String(snapped)
+    })
+    input.addEventListener('change', () => {
+      const depotId = getDepotId()
+      const kind = input.getAttribute(attr) as Supply | null
+      if (!depotId || !kind) return
+      applyDepotMinimum(depotId, kind, Number(input.value))
+    })
+  })
+}
+
+bindStockSliders(logisticsSupply, 'data-supply-min', selectedSupplyDepotId)
+bindStockSliders(depotOptions, 'data-depot-min', () => selectedEntity?.type === 'depot' ? selectedEntity.id : '')
+supplyDepotSelect.addEventListener('change', () => updateLogisticsPanel(true))
+supplyDepotDistribution.addEventListener('change', () => {
+  const depotId = selectedSupplyDepotId()
+  if (!depotId) return
+  applyDepotWorkers(depotId, Number(supplyWorkers.value), supplyDepotDistribution.value as 'relay' | 'shops')
+})
+supplyWorkers.addEventListener('input', () => {
+  supplyWorkersValue.textContent = supplyWorkers.value
+})
+supplyWorkers.addEventListener('change', () => {
+  const depotId = selectedSupplyDepotId()
+  if (!depotId) return
+  applyDepotWorkers(depotId, Number(supplyWorkers.value), supplyDepotDistribution.value as 'relay' | 'shops')
+})
+supplyRemoveDepot.addEventListener('click', () => {
+  const depotId = selectedSupplyDepotId()
+  if (!depotId) return
+  const result = game.manageFestival({ type: 'removeDepot', depotId })
+  showToast(result.message, !result.ok)
+  if (result.ok && selectedEntity?.type === 'depot' && selectedEntity.id === depotId) closeEntityPanel()
+  updateLogisticsPanel(true)
+})
+depotDistribution.addEventListener('change', () => {
+  if (selectedEntity?.type !== 'depot') return
+  applyDepotWorkers(selectedEntity.id, Number(depotWorkers.value), depotDistribution.value as 'relay' | 'shops')
+})
+depotWorkers.addEventListener('input', () => {
+  depotWorkersValue.textContent = depotWorkers.value
+})
+depotWorkers.addEventListener('change', () => {
+  if (selectedEntity?.type !== 'depot') return
+  applyDepotWorkers(selectedEntity.id, Number(depotWorkers.value), depotDistribution.value as 'relay' | 'shops')
+})
+depotRemove.addEventListener('click', () => {
+  if (selectedEntity?.type !== 'depot') return
+  const result = game.manageFestival({ type: 'removeDepot', depotId: selectedEntity.id })
+  showToast(result.message, !result.ok)
+  if (result.ok) closeEntityPanel()
+  updateLogisticsPanel(true)
 })
 requireElement<HTMLButtonElement>('#create-bus-line').addEventListener('click', () => {
   const selectedStops = [...busLineStops.selectedOptions].map(
@@ -4101,9 +4859,6 @@ complaintsToggle.addEventListener('click', () => {
 })
 requireElement<HTMLButtonElement>('#close-complaints').addEventListener('click', () => {
   setPanelOpen(complaintsPanel, complaintsToggle, false)
-})
-requireElement<HTMLButtonElement>('#close-day-plan').addEventListener('click', () => {
-  setPanelOpen(dayPlanPanel, dayPlanToggle, false)
 })
 dayPlanGrid.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
@@ -4179,6 +4934,7 @@ visitorOverviewList.addEventListener('click', (event) => {
 })
 requireElement<HTMLButtonElement>('#close-staff').addEventListener('click', () => {
   staffPanel.classList.remove('visible')
+  staffMenuToggle.setAttribute('aria-expanded', 'false')
 })
 staffList.addEventListener('click', (event) => {
   const target = event.target as HTMLElement
@@ -4233,6 +4989,10 @@ securityProhibitedItems.addEventListener('change', () => {
   game.updateSecurityGate(selectedEntity.id, { prohibitedItems })
 })
 
+logisticsOverlayButton.addEventListener('click', () => {
+  setMapOverlay(logisticsOverlayVisible ? null : 'logistics')
+})
+
 crowdingOverlayButton.addEventListener('click', () => {
   setMapOverlay(crowdingOverlayVisible ? null : 'crowding')
 })
@@ -4246,15 +5006,18 @@ partyOverlayButton.addEventListener('click', () => {
 })
 
 function setMapOverlay(
-  overlay: 'crowding' | 'attractiveness' | 'party' | null,
+  overlay: 'crowding' | 'attractiveness' | 'party' | 'logistics' | null,
 ): void {
+  logisticsOverlayVisible = overlay === 'logistics'
   crowdingOverlayVisible = overlay === 'crowding'
   attractivenessOverlayVisible = overlay === 'attractiveness'
   partyOverlayVisible = overlay === 'party'
+  supplyPlanner.setOverlay(logisticsOverlayVisible)
   view.setCrowdingOverlayVisible(crowdingOverlayVisible)
   view.setAttractivenessOverlayVisible(attractivenessOverlayVisible)
   view.setPartyMoodOverlayVisible(partyOverlayVisible)
   ;[
+    [logisticsOverlayButton, logisticsOverlayVisible],
     [crowdingOverlayButton, crowdingOverlayVisible],
     [attractivenessOverlayButton, attractivenessOverlayVisible],
     [partyOverlayButton, partyOverlayVisible],
@@ -4267,12 +5030,8 @@ function setMapOverlay(
   })
 }
 
-entryPriceInput.addEventListener('change', () => {
-  game.updateEntryPrice(Number(entryPriceInput.value))
-})
-
 entityPriceInput.addEventListener('change', () => {
-  if (!selectedEntity) return
+  if (!selectedEntity || selectedEntity.type === 'depot' || selectedEntity.type === 'access' || selectedEntity.type === 'vehicle') return
   if (selectedEntity.type === 'coaster') {
     game.updateCoasterPrice(selectedEntity.id, Number(entityPriceInput.value))
   } else {
@@ -4299,60 +5058,56 @@ applyPriceToKindButton.addEventListener('click', () => {
   )
 })
 
-document.querySelector<HTMLButtonElement>('#height-down')?.addEventListener('click', () => {
-  game.adjustBuildElevation(-1)
-})
-
-document.querySelector<HTMLButtonElement>('#height-up')?.addEventListener('click', () => {
-  game.adjustBuildElevation(1)
-})
-
-document.querySelector<HTMLButtonElement>('#rotate-build')?.addEventListener('click', () => {
-  game.rotateBuild()
-})
-
 document.querySelector<HTMLButtonElement>('#toggle-path-editor')?.addEventListener('click', () => {
-  openPathEditor()
+  if (!pathWindowOpen) {
+    openPathWindow(true)
+    return
+  }
+  setPathConstructMode(!pathEditorActive)
 })
 
 document.querySelector<HTMLButtonElement>('#close-path-editor')?.addEventListener('click', () => {
   closePathEditor()
+  game.setTool('inspect')
 })
 
 document.querySelectorAll<HTMLButtonElement>('[data-path-direction]').forEach((button) => {
   button.addEventListener('click', () => {
+    resumePathPlacement()
     pathDirection = Number(button.dataset.pathDirection)
     updatePathEditor()
   })
 })
 
 document.querySelectorAll<HTMLButtonElement>('[data-slope]').forEach((button) => {
-  button.addEventListener('click', () => setPathSlope(Number(button.dataset.slope)))
-})
-
-pathFlowSetButton.addEventListener('click', () => {
-  if (!pathAnchor) return
-  showToast(
-    game.setPathFlow(pathAnchor.x, pathAnchor.z, pathAnchor.elevation, pathDirection)
-      .message,
-  )
-})
-pathFlowRotateButton.addEventListener('click', () => {
-  if (!pathAnchor) return
-  const path = game.getPathAt(pathAnchor.x, pathAnchor.z, pathAnchor.elevation)
-  const next = ((path?.flowDirection ?? pathDirection) + 1) % 4
-  pathDirection = next
-  showToast(game.setPathFlow(pathAnchor.x, pathAnchor.z, pathAnchor.elevation, next).message)
-})
-pathFlowClearButton.addEventListener('click', () => {
-  if (!pathAnchor) return
-  showToast(game.setPathFlow(pathAnchor.x, pathAnchor.z, pathAnchor.elevation, null).message)
+  button.addEventListener('click', () => {
+    resumePathPlacement()
+    setPathSlope(Number(button.dataset.slope))
+  })
 })
 
 document.querySelectorAll<HTMLButtonElement>('[data-path-type]').forEach((button) => {
   button.addEventListener('click', () => {
+    resumePathPlacement()
     pathConstructionType = button.dataset.pathType as 'normal' | 'queue'
     pathConstructionTypeSelect.value = pathConstructionType
+    updatePathEditor()
+  })
+})
+
+pathDemolishButton.addEventListener('click', () => {
+  pathDemolishActive = !pathDemolishActive
+  if (pathDemolishActive) game.setTool('path')
+  updatePathEditor()
+})
+
+document.querySelectorAll<HTMLButtonElement>('[data-path-access]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const tool = button.dataset.pathAccess as Tool | undefined
+    if (!tool) return
+    pathDemolishActive = false
+    pathEditorActive = false
+    game.setTool(tool)
     updatePathEditor()
   })
 })
@@ -4376,19 +5131,44 @@ coasterRotateButton.addEventListener('click', () => {
 })
 
 trackPieceSelect.addEventListener('change', () => updateCoasterBuilder())
+trackSpecialToggle.addEventListener('click', () => {
+  trackSpecialPalette.hidden = !trackSpecialPalette.hidden
+  trackSpecialToggle.setAttribute(
+    'aria-expanded',
+    String(!trackSpecialPalette.hidden),
+  )
+})
 document.querySelectorAll<HTMLButtonElement>('[data-track-piece]').forEach((button) => {
   button.addEventListener('click', () => {
     const kind = button.dataset.trackPiece as TrackPieceKind | undefined
     if (!kind) return
     trackPieceSelect.value = kind
+    if (button.closest('#track-special-palette')) {
+      trackSpecialPalette.hidden = true
+      trackSpecialToggle.setAttribute('aria-expanded', 'false')
+      trackSpecialToggle.textContent = `Speziell: ${TRACK_PIECES[kind].name}`
+    } else {
+      trackSpecialToggle.textContent = 'Speziell …'
+    }
     updateCoasterBuilder()
   })
 })
 document.querySelectorAll<HTMLButtonElement>('[data-track-pitch]').forEach((button) => {
-  button.addEventListener('click', () => selectCoasterPitch(Number(button.dataset.trackPitch)))
+  button.addEventListener('click', () => {
+    trackSpecialToggle.textContent = 'Speziell …'
+    selectCoasterPitch(Number(button.dataset.trackPitch))
+  })
 })
 document.querySelectorAll<HTMLButtonElement>('[data-track-bank]').forEach((button) => {
-  button.addEventListener('click', () => selectCoasterBank(Number(button.dataset.trackBank)))
+  button.addEventListener('click', () => {
+    trackSpecialToggle.textContent = 'Speziell …'
+    selectCoasterBank(Number(button.dataset.trackBank))
+  })
+})
+chainLiftButton.addEventListener('click', () => {
+  if (chainLiftButton.disabled) return
+  chainLiftInput.checked = !chainLiftInput.checked
+  updateCoasterBuilder()
 })
 chainLiftInput.addEventListener('change', () => updateCoasterBuilder())
 coasterBuildButton.addEventListener('click', () => buildCoasterPiece())
@@ -4429,7 +5209,7 @@ function setSaveSlotsPanelOpen(open: boolean): void {
 const formatSaveTime = (value: number) => new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' }).format(value)
 let serverSaveSlots: ServerSaveSlot[] | null = null
 function bindLoadedGame(loaded: GameState, message: string): void {
-  if (pathEditorActive) closePathEditor()
+  if (pathWindowOpen) closePathEditor()
   bindGameState(loaded)
   fillScenarioForm(loaded.snapshot.scenario)
   showToast(message)
@@ -4615,7 +5395,7 @@ saveTextImport.addEventListener('click', () => {
   try {
     const loaded = GameState.fromJSON(decodeSaveText(saveTextArea.value))
     if (!loaded) throw new Error('invalid save')
-    if (pathEditorActive) closePathEditor()
+    if (pathWindowOpen) closePathEditor()
     bindGameState(loaded)
     fillScenarioForm(loaded.snapshot.scenario)
     saveTextDialog.close()
@@ -4657,6 +5437,80 @@ followVisitorButton.addEventListener('click', () => {
 
 document.querySelector<HTMLButtonElement>('#close-entity')?.addEventListener('click', () => {
   closeEntityPanel()
+})
+
+function patchSelectedAccess(
+  patch: Parameters<GameState['configureAccessControl']>[1],
+): void {
+  const control = selectedAccessControl()
+  if (!control) return
+  const result = game.configureAccessControl(control.id, patch)
+  showToast(result.message, !result.ok)
+  updateEntityPanel()
+}
+
+accessControlOptions.querySelectorAll<HTMLButtonElement>('[data-access-mode]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const mode = button.dataset.accessMode
+    if (
+      mode === 'schedule' ||
+      mode === 'sensor' ||
+      mode === 'always' ||
+      mode === 'locked'
+    ) {
+      patchSelectedAccess({ mode })
+    }
+  })
+})
+accessOpenInEmergency.addEventListener('change', () => {
+  patchSelectedAccess({ openInEmergency: accessOpenInEmergency.checked })
+})
+accessPassage.querySelectorAll<HTMLButtonElement>('[data-access-passage]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const passage = button.dataset.accessPassage
+    if (passage === 'oneWay' || passage === 'both') patchSelectedAccess({ passage })
+  })
+})
+accessControlOptions.querySelectorAll<HTMLButtonElement>('[data-access-polarity]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const polarity = button.dataset.accessPolarity
+    if (polarity === 'open' || polarity === 'closed') patchSelectedAccess({ polarity })
+  })
+})
+accessSlots.addEventListener('pointerdown', (event) => {
+  const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-access-slot]')
+  const control = selectedAccessControl()
+  if (!button || !control) return
+  const index = Number(button.dataset.accessSlot)
+  if (!Number.isInteger(index) || index < 0 || index >= control.openSlots.length) return
+  const openSlots = control.openSlots.map((open, slot) => (slot === index ? !open : open))
+  patchSelectedAccess({ openSlots })
+})
+accessSensorKind.addEventListener('change', () => {
+  const control = selectedAccessControl()
+  if (!control) return
+  patchSelectedAccess({
+    sensorKind: accessSensorKind.value as typeof control.sensorKind,
+  })
+})
+accessThreshold.addEventListener('change', () => {
+  patchSelectedAccess({ sensorThreshold: Number(accessThreshold.value) })
+})
+accessDrawArea.addEventListener('click', () => {
+  if (accessAreaDrawing) {
+    cancelAccessAreaDraw()
+    updateEntityPanel()
+    return
+  }
+  startAccessAreaDraw()
+})
+accessClearArea.addEventListener('click', () => {
+  const control = selectedAccessControl()
+  if (!control) return
+  cancelAccessAreaDraw()
+  const result = game.clearAccessControlArea(control.id)
+  showToast(result.message, !result.ok)
+  updateEntityPanel()
 })
 makeDraggable(entityPanel.querySelector<HTMLElement>('.panel-header')!, entityPanel)
 makeResizable(entityPanel)
@@ -4770,7 +5624,6 @@ window.addEventListener('keydown', (event) => {
 })
 
 bindGameState(game)
-mountAppInstall()
 mountUpdateNotice()
 
 mountMobileUI({
@@ -4792,6 +5645,15 @@ performanceIndicator.className = 'performance-indicator'
 performanceIndicator.textContent = `${versionLabel}\nFPS — · TPS —`
 performanceIndicator.title = 'Bilder und lokal ausgeführte Logik-Ticks pro realer Sekunde. In Pause und auf Multiplayer-Clients laufen keine lokalen Logik-Ticks.'
 document.body.append(performanceIndicator)
+const syncDebugViewGap = (): void => {
+  const height = performanceIndicator.getBoundingClientRect().height
+  document.documentElement.style.setProperty(
+    '--debug-view-gap',
+    `${Math.max(48, Math.round(height + 18))}px`,
+  )
+}
+syncDebugViewGap()
+new ResizeObserver(syncDebugViewGap).observe(performanceIndicator)
 let measurementStart = performance.now()
 let measuredFrames = 0
 let measuredTicks = 0
