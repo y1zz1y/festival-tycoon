@@ -1,4 +1,4 @@
-import { isTruss, screenFacingRotation, SKYWARD_KINDS, UP_ROTATION, type StageDesign, type StagePart, type Axis } from './stageDesign'
+import { isTruss, screenFacingRotation, SKYWARD_KINDS, TILE_KINDS, STAGE_TILE_DETAIL, UP_ROTATION, type StageDesign, type StagePart, type Axis } from './stageDesign'
 /**
  * Every placement is one of two things: docking against a specific neighbouring cell of an
  * existing part (`hit`), or dropping straight onto the ground plane. There is no other case —
@@ -18,6 +18,12 @@ export function stagePlacement(d:StageDesign,settings:Pick<StagePart,'kind'|'bra
     if(settings.kind==='screen'&&host)rotation=(isTruss(host.kind)?screenFacingRotation(hit.step):host.kind==='screen'?host.rotation:undefined)??rotation
   }else{
     x=Math.floor(floorPoint.x);y=0;z=Math.floor(floorPoint.z);attachedTo=null
+    // A FOH stand and a delay tower are built at map-tile size, so they snap to the field itself
+    // rather than to one of the build cells inside it.
+    if(TILE_KINDS.includes(settings.kind)){
+      x=Math.floor(x/STAGE_TILE_DETAIL)*STAGE_TILE_DETAIL
+      z=Math.floor(z/STAGE_TILE_DETAIL)*STAGE_TILE_DETAIL
+    }
     axis=settings.kind==='truss'?'y':undefined
   }
   // Fireworks and spark machines work straight up into the sky and nowhere else, so the

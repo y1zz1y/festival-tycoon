@@ -2901,7 +2901,9 @@ export class GameState {
     if (this.getMedicalCellAt(x, z) && this.state.buildElevation < 1.2 && kind !== 'fence') {
       return { ok: false, message: 'Diese Fläche gehört zum Krankenbereich' }
     }
-    if (this.getStageForecourtCellAt(x, z) && this.state.buildElevation < 1.2 && kind !== 'fence') {
+    // A delay tower belongs out in the crowd — it takes the audience ground it stands on with it
+    // (see place), rather than being kept off the forecourt like everything else.
+    if (this.getStageForecourtCellAt(x, z) && this.state.buildElevation < 1.2 && kind !== 'fence' && kind !== 'delayTower') {
       return { ok: false, message: 'Diese Fläche gehört zum Bühnenvorplatz' }
     }
     if (this.getWasteDumpAt(x, z) && this.state.buildElevation < 1.2 && kind !== 'fence') {
@@ -3035,6 +3037,9 @@ export class GameState {
           : undefined,
       wasteFill: kind === 'wasteBin' ? 0 : undefined,
     })
+    // A delay tower standing in the crowd clears the audience ground under its own feet; the sync
+    // leaves it clear from then on, since it skips cells a building occupies.
+    if (kind === 'delayTower') this.state.stageForecourtCells = this.state.stageForecourtCells.filter(cell => cell.x !== x || cell.z !== z)
     if(design)syncStageAudience(this.state)
     if (['food', 'toilet', 'ride', 'alcohol', 'stage'].includes(kind)) {
       this.recalculateQueueDirections()
@@ -4007,7 +4012,16 @@ export class GameState {
         this.emit()
         return { ok: true, message: 'Müllablage aufgehoben' }
       }
-      if (this.getStageForecourtCellAt(x, z)) {
+      const forecourt = this.getStageForecourtCellAt(x, z)
+      if (forecourt) {
+        // A stage's own audience ground comes with the stage and goes with it — see
+        // syncStageAudience, which would lay it straight back down anyway.
+        if (forecourt.stageId) {
+          return {
+            ok: false,
+            message: 'Die Zuschauerfläche gehört zur Bühne und lässt sich nicht einzeln entfernen',
+          }
+        }
         this.state.stageForecourtCells =
           this.state.stageForecourtCells.filter(
             (cell) => cell.x !== x || cell.z !== z,

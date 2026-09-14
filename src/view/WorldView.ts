@@ -6,7 +6,7 @@ import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
 import { stageSiteIssue } from '../game/stageSite'
 import { createStageModel, animateStageModel, updateStageLightPool } from './stageModel'
-import { stagePhase, stageSize, occupiesBuildingCell } from '../game/stageDesign'
+import { stagePhase, stageSize, occupiesBuildingCell, fohDeskRole } from '../game/stageDesign'
 import { activeBookings, showIssue } from '../game/festivalManagement'
 import { createEarthTexture, createTerrainBase, createTerrainMaterial, createTerrainSurface } from './terrainSurface'
 import { TerrainShape, terrainPads } from './terrainShape'
@@ -1404,6 +1404,18 @@ export class WorldView {
     return `${items.length}:${hash}`
   }
 
+  /** Zwei direkt benachbarte FOH-Pulte bilden einen grossen FOH-Stand: Sound- und Lichtpult nebeneinander. */
+  private fohVariants(items: readonly PlacedBuilding[]): Map<string, 'sound' | 'light'> {
+    const desks = items.filter(item => item.kind === 'foh')
+    const variants = new Map<string, 'sound' | 'light'>()
+    for (const desk of desks) {
+      const mate = desks.find(other => other !== desk && Math.abs(other.x - desk.x) + Math.abs(other.z - desk.z) === 1)
+      if (!mate) continue
+      variants.set(desk.id, fohDeskRole(desk, mate) as 'sound' | 'light')
+    }
+    return variants
+  }
+
   private rebuildBuildings(items: readonly PlacedBuilding[]): void {
     disposeChildren(this.rideGates)
     for (const item of items) if (item.kind==='ride') for (const type of ['entrance','exit'] as const) {
@@ -1419,6 +1431,7 @@ export class WorldView {
     this.soundWaveGroups = []
     this.nightLightMaterials = []
     this.nightLightBuildingIds = []
+    const fohVariants = this.fohVariants(items)
     items.forEach((item) => {
       if (
         item.kind === 'ambulanceGarage' ||
@@ -1438,6 +1451,7 @@ export class WorldView {
         item.pathSlope,
         item.kind === 'path' ? wayInfo(this.currentSnapshot!, item.x, item.z, 'foot', item.wayType).color : undefined,
         item.wayType ?? this.currentSnapshot?.festival.infrastructure.ground[`${item.x},${item.z}`]?.footway,
+        fohVariants.get(item.id),
       )
       if (item.stageDesign) { model.scale.set((stageSize(item.stageDesign).width-.04)/item.stageDesign.width, item.stageDesign.tileWidth ? .5 : .96/Math.max(item.stageDesign.width,item.stageDesign.depth), (stageSize(item.stageDesign).depth-.04)/item.stageDesign.depth); model.userData.stageDesign = item.stageDesign }
       model.position.set(item.x + stageSize(item.stageDesign,item.rotation).width/2, item.elevation, item.z + stageSize(item.stageDesign,item.rotation).depth/2)
@@ -1483,8 +1497,9 @@ export class WorldView {
     pathSlope: -1 | 0 | 1 = 0,
     surfaceColor?: number,
     wayType?: WayType,
+    variant?: string,
   ): Group {
-    const detailed = createRetroBuilding(kind)
+    const detailed = createRetroBuilding(kind, variant)
     if (detailed) {
       this.addSupport(detailed, elevation, .24)
       return detailed

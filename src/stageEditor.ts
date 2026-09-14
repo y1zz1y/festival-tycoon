@@ -2,9 +2,9 @@ import { updateStageBand } from './view/stageBand'
 import { stagePlacement } from './game/stagePlacement'
 import { createStagePickTargets } from './view/stagePicking'
 import { BUILDINGS } from './game/catalog'
-import { Scene, Color, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, GridHelper, Raycaster, Vector2, Plane, Vector3, Group, Mesh, BoxGeometry, MeshBasicMaterial, MeshStandardMaterial, MOUSE } from 'three'
+import { Scene, Color, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, GridHelper, Raycaster, Vector2, Plane, Vector3, Group, Mesh, BoxGeometry, PlaneGeometry, MeshBasicMaterial, MeshStandardMaterial, MOUSE } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { COMPONENTS, brandsFor, isTruss, GROUND_ONLY_KINDS, STACKABLE_KINDS, PHASE_NAMES, DECO_PATTERNS, DECO_PATTERN_NAMES, STAGE_TILE_HEIGHT, defaultStageDesign, stageDesignIssue, stageDetailSize, stageStats, removeStagePart, migrateStageDesign, type StageDesign, type StagePart, type ComponentKind, type DecoPattern } from './game/stageDesign'
+import { COMPONENTS, AUDIENCE_KINDS, stageApronDepth, brandsFor, isTruss, GROUND_ONLY_KINDS, STACKABLE_KINDS, PHASE_NAMES, DECO_PATTERNS, STAGE_TILE_DETAIL, DECO_PATTERN_NAMES, STAGE_TILE_HEIGHT, defaultStageDesign, stageDesignIssue, stageDetailSize, stageStats, removeStagePart, migrateStageDesign, type StageDesign, type StagePart, type ComponentKind, type DecoPattern } from './game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from './view/stageModel'
 import { createOrientationGizmo, type OrientationGizmo } from './view/orientationGizmo'
 import type { GameState } from './game/GameState'
@@ -46,6 +46,9 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   /** Which act the preview stands in for: an indie line-up, or an electro booking's DJ booth. */
   let djPreview=false
   let audienceCell:{x:number;z:number}|null=null,ghost:Group|undefined,pickTargets:Group|undefined,ghostKey='',revision=0
+  /** The preview draws one map tile this many units wide, which is what the stage model is scaled to as well. */
+  const TILE_UNITS=4
+  let apron:Group|undefined,apronTile:PlaneGeometry|undefined,apronPaint:MeshBasicMaterial|undefined,grid:GridHelper|undefined
   /** Truss id awaiting confirmation because removing it would cascade onto other docked parts. */
   let pendingDelete:string|null=null
   let pointer:{x:number;y:number;alt:boolean}|null=null
@@ -86,16 +89,42 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   function rebuild(){if(!scene)return;revision++;ghostKey='';if(pickTargets)disposeStageModel(pickTargets);if(model){scene.remove(model);disposeStageModel(model)}model=createStageModel(design,{lightBudget:6})
     const scale=(design.tileWidth??1)*4/design.width;model.scale.set(scale,(design.tileHeight??1)*4/design.height,(design.tileDepth??1)*4/design.depth);scene.add(model);pickTargets=createStagePickTargets(design);pickTargets.scale.copy(model.scale);pickTargets.updateMatrixWorld(true)
     const sizeKey=`${design.tileWidth??1}:${design.tileDepth??1}:${design.tileHeight??1}`
-    // Framed on the footprint rather than the build volume: the headroom above a stage is mostly
-    // empty air, and letting it drive the camera would pull the view back far enough to shrink
-    // the stage itself to a dot.
-    if(framedSize!==sizeKey){framedSize=sizeKey;const extent=Math.max(design.tileWidth??1,design.tileDepth??1)*4, distance=Math.max(8,extent*1.15*Math.max(1,viewport.clientHeight/Math.max(1,viewport.clientWidth)));camera.position.set(distance,distance*.85,distance*1.15);controls!.target.set(0,Math.min(design.height*model.scale.y,extent)/2,0)}
+    // The standard audience area, laid out exactly as it will be on the map: the full width of the
+    // stage, twice that deep (see stageApronCells).
+    const tiles=design.tileWidth??1,rows=design.tileDepth??1,reach=tiles*2
+    // One patch per field rather than one big sheet, so a FOH stand or a delay tower built out
+    // here leaves the hole it really does leave in the crowd (see stageApronCells).
+    const taken=new Set(design.parts.filter(p=>p.attachedTo===null&&AUDIENCE_KINDS.includes(p.kind))
+      .map(p=>`${Math.floor(p.x/STAGE_TILE_DETAIL)},${Math.floor(p.z/STAGE_TILE_DETAIL)}`))
+    apron!.clear() // every patch shares one geometry and one material, so there is nothing to dispose of here
+    for(let row=0;row<reach;row++)for(let col=0;col<tiles;col++){
+      if(taken.has(`${col},${rows+row}`))continue
+      const patch=new Mesh(apronTile!,apronPaint!)
+      patch.rotation.x=-Math.PI/2;patch.scale.setScalar(TILE_UNITS)
+      patch.position.set((col+.5-tiles/2)*TILE_UNITS,.02,(rows/2+row+.5)*TILE_UNITS)
+      apron!.add(patch)
+    }
+    // Framed on the stage and the ground in front of it rather than the build volume: the headroom
+    // above a stage is mostly empty air, and letting it drive the camera would pull the view back
+    // far enough to shrink the stage itself to a dot.
+    if(framedSize!==sizeKey){
+      framedSize=sizeKey
+      const extent=Math.max(tiles,rows+reach)*TILE_UNITS
+      const distance=Math.max(8,extent*1.15*Math.max(1,viewport.clientHeight/Math.max(1,viewport.clientWidth)))
+      const focus=reach/2*TILE_UNITS
+      controls!.target.set(0,Math.min(design.height*model.scale.y,tiles*TILE_UNITS)/2,focus)
+      camera.position.set(distance,distance*.85,focus+distance*1.15)
+    }
     refresh();if(pointer)updateHover(pointer)}
   function init(){
     renderer=new WebGLRenderer({antialias:false});renderer.setPixelRatio(.7);renderer.setClearColor(0x121b2b);viewport.append(renderer.domElement)
     scene=new Scene();scene.background=new Color('#121b2b');camera=new PerspectiveCamera(42,1,.1,300);camera.position.set(11,10,13)
     controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1,0);controls.minDistance=5;controls.maxDistance=140;controls.maxPolarAngle=Math.PI*.97;controls.enableDamping=true;controls.mouseButtons.RIGHT=null
-    scene.add(new AmbientLight(0xffffff,1));const sun=new DirectionalLight(0xffeddb,1.8);sun.position.set(4,10,8);scene.add(sun);const grid=new GridHelper(40,40,0x718197,0x344456);grid.position.y=-.01;scene.add(grid)
+    scene.add(new AmbientLight(0xffffff,1));const sun=new DirectionalLight(0xffeddb,1.8);sun.position.set(4,10,8);scene.add(sun);grid=new GridHelper(160,160,0x718197,0x344456);grid.position.y=-.01;scene.add(grid)
+    // What comes with every stage but is not built in the workshop: the standard audience area in
+    // front of it. It is built once and only moved and resized as the stage changes.
+    apronTile=new PlaneGeometry(1,1);apronPaint=new MeshBasicMaterial({color:0x70518e,transparent:true,opacity:.4,depthWrite:false})
+    apron=new Group();scene.add(apron)
     gizmo=createOrientationGizmo();gizmo.setDirection(rotation)
     let down={x:0,y:0}
     const touchIds=new Set<number>();let cameraGesture=false
@@ -151,7 +180,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   function hideQuality(){panel.querySelectorAll<HTMLElement>('[data-quality-menu]').forEach(m=>m.hidden=true);panel.querySelectorAll('[data-part]').forEach(b=>b.setAttribute('aria-expanded','false'))}
   function rotate(step:number){rotation=(rotation+step+4)%4;refresh();if(pointer)updateHover(pointer)}
   function clearGhost(){if(ghost){scene.remove(ghost);disposeStageModel(ghost);ghost=undefined}}
-  /** Whether a screen position falls over the buildable stage floor, as opposed to the empty background beyond it. */
+  /** Whether a screen position falls over the buildable area — the stage floor, plus the audience area in front of it while a part that may be built out there is selected — as opposed to the empty background beyond it. */
   function isOverStage(clientX:number,clientY:number):boolean{
     if(!model||!renderer)return false
     const rect=renderer.domElement.getBoundingClientRect(),ray=new Raycaster()
@@ -159,7 +188,8 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     const floor=ray.ray.intersectPlane(new Plane(new Vector3(0,1,0),0),new Vector3())
     if(!floor)return false
     const local={x:floor.x/model.scale.x+design.width/2,z:floor.z/model.scale.z+design.depth/2}
-    return local.x>=0&&local.x<design.width&&local.z>=0&&local.z<design.depth
+    const apron=part&&!erase&&!audienceMode&&AUDIENCE_KINDS.includes(part)?stageApronDepth(design):0
+    return local.x>=0&&local.x<design.width&&local.z>=0&&local.z<design.depth+apron
   }
   function updateHover(p:{x:number;y:number;alt:boolean}){
     if(!model||!renderer)return
@@ -217,8 +247,11 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     const point=auto?hit!.point:floor
     if(!point){candidate=null;audienceCell=null;ghostKey='';clearGhost();return}
     const local={x:point.x/model.scale.x+design.width/2,z:point.z/model.scale.z+design.depth/2}
-    if(local.x<0||local.x>=design.width||local.z<0||local.z>=design.depth){candidate=null;audienceCell=null;ghostKey='';clearGhost();return}
-    audienceCell={x:Math.floor(local.x*(design.tileWidth??1)/design.width),z:Math.floor(local.z*(design.tileDepth??1)/design.depth)}
+    // A FOH stand and a delay position belong out with the crowd, so for those two the build area
+    // reaches on past the platform, across the standard audience area drawn in front of it.
+    const apron=kind&&!erase&&!audienceMode&&AUDIENCE_KINDS.includes(kind)?stageApronDepth(design):0
+    if(local.x<0||local.x>=design.width||local.z<0||local.z>=design.depth+apron){candidate=null;audienceCell=null;ghostKey='';clearGhost();return}
+    audienceCell={x:Math.floor(local.x*(design.tileWidth??1)/design.width),z:Math.floor(Math.min(local.z,design.depth-.001)*(design.tileDepth??1)/design.depth)}
     candidate=kind?stagePlacement(design,{kind,brand:quality[kind]??'budget',rotation,color:q<HTMLInputElement>('[data-color]').value},local,auto&&hitId&&hitStep?{id:hitId,step:hitStep}:undefined):null
     const next=candidate?{...design,parts:[...design.parts,candidate]}:design
     candidateIssue=candidate?stageDesignIssue(next):null
@@ -249,8 +282,14 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   const previewPhase=()=>{const p=design.phases[phaseIndex()]!;return p.pyro?p:{...p,pyro:30}}
   function animate(now:number){if(panel.hidden)return;const dt=Math.min(.1,(now-last)/1000);last=now;if(preview)elapsed+=dt
     const w=viewport.clientWidth,h=viewport.clientHeight;if(renderer!.domElement.clientWidth!==w||renderer!.domElement.clientHeight!==h||renderer!.domElement.width!==Math.floor(w*.7)){renderer!.setSize(w,h);camera.aspect=w/Math.max(1,h);camera.updateProjectionMatrix()}
-    controls!.update();const shown=previewPhase();if(model){animateStageModel(model,shown,elapsed,true);updateStageBand(model,djPreview?'neon':'meadow',elapsed,(q('[data-band-preview]') as HTMLInputElement).checked,design)
-      const belowGround=camera.position.y<0;for(const m of (model.userData.floorMeshes as Mesh[]|undefined)??[])m.visible=!belowGround}if(ghost)animateStageModel(ghost,shown,elapsed,true);if(pickTargets){animateStageModel(pickTargets,shown,elapsed,true);pickTargets.updateMatrixWorld(true);}renderer!.render(scene,camera)
+    controls!.update();const shown=previewPhase()
+    // Looking up at the stage from below, the ground plane would otherwise be an opaque lid over
+    // the whole view — so the floor, the grid and the audience area all step out of the way.
+    const belowGround=camera.position.y<0
+    if(grid)grid.visible=!belowGround
+    if(apron)apron.visible=!belowGround
+    if(model){animateStageModel(model,shown,elapsed,true);updateStageBand(model,djPreview?'neon':'meadow',elapsed,(q('[data-band-preview]') as HTMLInputElement).checked,design)
+      for(const m of (model.userData.floorMeshes as Mesh[]|undefined)??[])m.visible=!belowGround}if(ghost)animateStageModel(ghost,shown,elapsed,true);if(pickTargets){animateStageModel(pickTargets,shown,elapsed,true);pickTargets.updateMatrixWorld(true);}renderer!.render(scene,camera)
     gizmo!.update(camera,controls!.target);gizmo!.render(renderer!)
     frame=requestAnimationFrame(animate)
   }

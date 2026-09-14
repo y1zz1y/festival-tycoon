@@ -1,6 +1,6 @@
 import { Group, Mesh, BoxGeometry, CylinderGeometry, ConeGeometry, SphereGeometry, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, SpotLight, Vector3, Quaternion, Color, DoubleSide, MeshStandardMaterial, MeshBasicMaterial, AdditiveBlending } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { isTruss, stageMotion, mountDirection, partFacing, isLastLineArrayElement, STAGE_TILE_DETAIL, type StageDesign, type StagePart, type ShowPhase } from '../game/stageDesign'
+import { isTruss, stageMotion, mountDirection, partFacing, isLastLineArrayElement, partOnAudience, fohDeskRole, STAGE_TILE_DETAIL, type StageDesign, type StagePart, type ShowPhase } from '../game/stageDesign'
 
 const unitX=new Vector3(1,0,0)
 const unitZ=new Vector3(0,0,1)
@@ -19,6 +19,8 @@ const FLOOR_COLORS = new Set(['#75886a','#30394c','#485166','#515b70'])
 const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:.4,subwoofer:.45,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,star:.4,discoBall:.36}
 /** Top surface of a floor tile (the .24 base slab plus the .04 detail overlay from the floor loop below) — where a ground-standing fixture's own base belongs, matching stageBand.ts's world-map floor level. */
 const GROUND_Y=.28
+/** Top surface of a painted audience tile, which is a thin grass slab rather than the stage's own deck. */
+const AUDIENCE_GROUND_Y=.024
 /** Thickness of a Pixel-LED-Wand module's backing plate — its LEDs sit on the front of it. */
 const SCREEN_DEPTH=.08
 /** The mortar tubes of a firework rack: where each sits across the case and how far it stands above the deck. Shared by the rack's model and by the rockets that climb out of those same tubes. */
@@ -90,7 +92,10 @@ function resolveEquipmentBase(d:StageDesign,part:StagePart,cache:Map<string,{x:n
       pos={x:b.x+dir.x,y:b.y+dir.y,z:b.z+dir.z}
     }
   }else if(!host){
-    pos={x,y:GROUND_Y,z}
+    // A FOH stand or a delay tower belongs with the crowd, not on the platform: out on the
+    // standard audience area there is no stage floor under it at all, and on a painted audience
+    // tile only the thin grass slab, so neither stands a full deck's thickness up in the air.
+    pos={x,y:part.z>=d.depth?0:partOnAudience(d,part)?AUDIENCE_GROUND_Y:GROUND_Y,z}
   }else{
     const dir=mountDirection(part,host)
     // hc must be the host's own centre, not its base: a truss already renders centred on its
@@ -830,6 +835,110 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         for(const fx of [-.458,.458])box(ex+fx,ey+.2,ez,.014,.018,.92,c)
         box(ex,ey+.2175,ez,.86,.045,.86,surface) // anti-slip deck surface, set into the frame
         for(const fx of [-.435,.435])for(const fz of [-.435,.435])box(ex+fx,ey+.247,ez+fz,.1,.014,.1,'#c8ced6') // coupling plates, sat on the frame corners where risers bolt together
+      }else if(p.kind==='foh'){
+        // The front-of-house desk, built exactly like the one out on the map: a plinth carrying a
+        // raked console under a canopy on four posts, turned so the operator side faces the way it
+        // was placed. A FOH stand is as big as the field it stands on, not as one build cell, so it
+        // is laid out below in field units and blown up around the centre of its own field, which
+        // is also what it turns about.
+        const span=STAGE_TILE_DETAIL,tcx=ex+(span-1)/2,tcz=ez+(span-1)/2
+        origin={x:tcx,z:tcz,rotation:p.rotation}
+        const at=(x:number,y:number,z:number)=>[tcx+(x-ex)*span,ey+(y-ey)*span,tcz+(z-ez)*span] as const
+        const tileBox=(x:number,y:number,z:number,w:number,h:number,depth:number,color:string)=>{const a=at(x,y,z);box(a[0],a[1],a[2],w*span,h*span,depth*span,color)}
+        const ink='#28363b',shell='#42555c',steel='#92a6a5',cream='#f2dfb5',screen='#6aa6b3'
+        // Two desks on neighbouring fields are one big front-of-house stand, the way a real one is
+        // staffed: one becomes the sound console, the other the lighting desk, and since their
+        // canopies each fill their own field they close up into a single roof. Which desk is which
+        // follows the lower field (x, then z), so it never depends on the order they were built in
+        // — and it matches how the pair is picked apart out on the map (see WorldView).
+        const mate=d.parts.find(q=>q!==p&&q.kind==='foh'&&q.attachedTo===null&&q.y===p.y
+          &&((Math.abs(q.x-p.x)===STAGE_TILE_DETAIL&&q.z===p.z)||(Math.abs(q.z-p.z)===STAGE_TILE_DETAIL&&q.x===p.x)))
+        const desk=fohDeskRole(p,mate)
+        tileBox(ex,ey+.06,ez,.92,.12,.8,ink) // plinth
+        tileBox(ex,ey+.39,ez+.05,.74,.27,.42,shell) // raked console body
+        tileBox(ex,ey+.54,ez+.05,.76,.03,.43,ink) // work surface it is set into
+        if(desk==='sound'){
+          for(let strip=0;strip<12;strip++){
+            const fx=ex-.33+strip*.06
+            tileBox(fx,ey+.564,ez+.13,.008,.008,.19,steel) // channel fader slot
+            tileBox(fx,ey+.576,ez+.07+(strip%4)*.04,.03,.016,.02,strip%4?cream:c) // its cap, the chosen colour marking the masters
+            for(const row of [-.04,-.1])tileBox(fx,ey+.576,ez+row,.028,.022,.028,strip%3?'#6f7d84':'#8fb3c4') // rotary above it
+          }
+          for(const sx of [-.21,.21]){tileBox(ex+sx,ey+.69,ez-.13,.25,.21,.045,ink);tileBox(ex+sx,ey+.7,ez-.102,.21,.15,.014,screen)} // meter screens
+          tileBox(ex,ey+.3,ez-.3,.3,.46,.14,ink) // outboard rack tucked under the desk
+          for(let unit=0;unit<4;unit++)tileBox(ex,ey+.14+unit*.1,ez-.232,.24,.07,.015,'#4c6063')
+        }else if(desk==='light'){
+          for(let row=0;row<3;row++)for(let key=0;key<8;key++)
+            tileBox(ex-.27+key*.078,ey+.574,ez+.16-row*.07,.05,.014,.05,(row+key)%3?'#7f8b92':[c,screen,'#9dcc9a'][row]!) // playback keys
+          for(const sx of [-.31,-.23]){tileBox(ex+sx,ey+.564,ez-.07,.008,.008,.14,steel);tileBox(ex+sx,ey+.576,ez-.04,.032,.016,.02,cream)} // grand master and chase speed
+          tileBox(ex+.13,ey+.58,ez-.08,.07,.04,.07,'#2b3a40') // trackball for the moving lights
+          tileBox(ex,ey+.72,ez-.13,.52,.25,.045,ink);tileBox(ex,ey+.73,ez-.102,.46,.19,.014,screen) // one wide plot screen
+        }else{
+          for(let n=0;n<9;n++){
+            const fx=ex-.3+n*.075
+            tileBox(fx,ey+.564,ez+.12,.008,.008,.16,steel) // fader slot
+            tileBox(fx,ey+.575,ez+.075+(n%3)*.045,.035,.015,.02,n%3?cream:c) // its cap, the chosen colour marking the masters
+          }
+          for(const sx of [-.19,.19]){tileBox(ex+sx,ey+.68,ez-.11,.23,.19,.045,ink);tileBox(ex+sx,ey+.69,ez-.083,.19,.13,.014,screen)} // meter screens
+        }
+        for(const px of [-.42,.42])for(const pz of [-.32,.32])tileBox(ex+px,ey+.62,ez+pz,.035,1.18,.035,steel) // canopy posts
+        tileBox(ex,ey+1.21,ez,1,.085,1,'#355c66') // canopy roof, filling the field edge to edge so two stands share one roof
+        tileBox(ex,ey+1.16,ez+.485,1,.09,.03,c) // its valance, in the chosen colour
+      }else if(p.kind==='delay'){
+        // A delay position: a ballasted column of four vertical trusses with a small line array
+        // flown off the front of it, rigged the way the towers out in the crowd are.
+        // A delay tower is as big as the field it stands on, not as one build cell: it is laid out
+        // below in plain cell units and then blown up to map-tile size around the centre of its
+        // own field, which is also what it turns about.
+        const span=STAGE_TILE_DETAIL,tcx=ex+(span-1)/2,tcz=ez+(span-1)/2
+        origin={x:tcx,z:tcz,rotation:p.rotation}
+        const at=(x:number,y:number,z:number)=>[tcx+(x-ex)*span,ey+(y-ey)*span,tcz+(z-ez)*span] as const
+        const tileBox=(x:number,y:number,z:number,w:number,h:number,depth:number,color:string)=>{const a=at(x,y,z);box(a[0],a[1],a[2],w*span,h*span,depth*span,color)}
+        const tileStrut=(x1:number,y1:number,z1:number,x2:number,y2:number,z2:number,thickness:number,color:string)=>{const a=at(x1,y1,z1),b=at(x2,y2,z2);strut(a[0],a[1],a[2],b[0],b[1],b[2],thickness*span,color)}
+        const ink='#20242b',steel='#8d949c',posts:[number,number][]=[[-.15,-.15],[.15,-.15],[.15,.15],[-.15,.15]]
+        tileBox(ex,ey+.05,ez,.72,.1,.72,ink) // ballast plate
+        for(const [px,pz] of posts){
+          tileBox(ex+px*1.7,ey+.13,ez+pz*1.7,.17,.16,.17,'#1d2427') // ballast weight over each foot
+          tileBox(ex+px,ey+1.3,ez+pz,.05,2.4,.05,steel) // tower leg
+        }
+        for(let level=0;level<6;level++){
+          const y=ey+.35+level*.4
+          for(let n=0;n<4;n++){
+            const a=posts[n]!,b=posts[(n+1)%4]!
+            tileStrut(ex+a[0],y,ez+a[1],ex+b[0],y,ez+b[1],.026,steel) // rung
+            if(n%2===0&&level<5)tileStrut(ex+a[0],y,ez+a[1],ex+b[0],y+.4,ez+b[1],.02,steel) // diagonal, on two opposite faces, never past the top rung
+          }
+        }
+        tileBox(ex,ey+2.56,ez,.42,.06,.42,steel) // head frame the array flies from
+        tileBox(ex,ey+2.5,ez+.21,.12,.05,.36,steel) // pickup arm reaching out from the head frame
+        tileBox(ex,ey+2.46,ez+.36,.46,.07,.13,c) // bumper bar the array flies from, in the chosen colour
+        // The hang itself is built exactly like the stage's own line arrays: the cabinets are
+        // threaded onto one continuous rigging rod that kinks at every joint, so walking the rod
+        // is walking the cabinets. The top two boxes hang dead straight to throw far down the
+        // field, and from the third one every further cabinet picks up another
+        // LINE_ARRAY_ANGLE_STEP of down-tilt to cover the rows right in front of the tower.
+        // Built in the part's own unturned space and yawed exactly the way the boxes above yaw
+        // theirs, so the hang turns with the tower rather than beside it.
+        const trim='#3a4048',grille='#101318',pitch=.29,yaw=(origin?.rotation??0)*Math.PI/2
+        const cursor=new Vector3(ex,ey+2.4,ez+.36) // clear of the tower's own front legs
+        for(let cabinet=0;cabinet<5;cabinet++){
+          const segQuat=new Quaternion().setFromAxisAngle(unitX,Math.max(0,cabinet-1)*LINE_ARRAY_ANGLE_STEP)
+          const segDir=new Vector3(0,-1,0).applyQuaternion(segQuat)
+          const centre=cursor.clone().addScaledVector(segDir,pitch/2)
+          const putCab=(lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string)=>{
+            const g=new BoxGeometry(w*span,h*span,depth*span);g.applyQuaternion(segQuat);g.rotateY(yaw)
+            const wp=new Vector3(lx,ly,lz).applyQuaternion(segQuat).add(centre)
+            const a=at(wp.x,wp.y,wp.z),spun=rotateAround(a[0],a[2])
+            g.translate(spun.x,a[1],spun.z)
+            stash(color,g)
+          }
+          putCab(0,0,0,.44,.24,.28,ink) // cabinet body
+          for(const rail of [.09,-.09])putCab(0,rail,-.12,.35,.025,.02,trim) // rigging rails, top and bottom edge
+          for(const tx of [-.12,0,.12])putCab(tx,.05,.14,.05,.05,.02,grille) // three tweeters, side by side
+          putCab(0,-.08,.14,.24,.03,.02,c) // brand strip, tinted by the chosen colour
+          putCab(.2,0,-.11,.04,pitch,.04,trim) // rod segment, spanning the full pitch so joints meet exactly
+          cursor.addScaledVector(segDir,pitch)
+        }
       }else box(ex,ey+.12,ez,.92,.24,.92,c)
     }
   }

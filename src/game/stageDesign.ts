@@ -13,6 +13,8 @@ export const COMPONENTS = {
   discoBall: {name:'Diskokugel',cost:150,party:4,beauty:5,power:.1},
   star: {name:'Deko-Stern',cost:70,party:1,beauty:4,power:0},
   palm: {name:'Pixel-Palme',cost:120,party:1,beauty:7,power:0},
+  foh: {name:'FOH-Pult',cost:900,party:2,beauty:1,power:.6},
+  delay: {name:'Delayline',cost:520,party:7,beauty:0,power:1.4},
 } as const
 export const BRANDS = {
   budget: {name:'Bummringer · Garagenserie',cost:1,quality:.75},
@@ -27,11 +29,30 @@ export const TRUSS_BRANDS = {
 export function brandsFor(kind:ComponentKind){return kind==='truss'?TRUSS_BRANDS:BRANDS}
 export type ComponentKind = keyof typeof COMPONENTS
 /** Kinds that stand directly on the ground and never attach to a truss. */
-export const GROUND_ONLY_KINDS:ComponentKind[]=['deck','palm','fireworks','subwoofer']
+export const GROUND_ONLY_KINDS:ComponentKind[]=['deck','palm','fireworks','subwoofer','foh','delay']
 /** Kinds that may either stand on the ground or dock onto a truss, unlike GROUND_ONLY_KINDS which can only ever do the former. */
 export const GROUND_OR_TRUSS_KINDS:ComponentKind[]=['fog','sparks','fullRange']
 /** Kinds that only ever work straight upwards: the orientation cube gets no say over them, and they need open sky, since anything in the column above is something they would fire into. */
 export const SKYWARD_KINDS:ComponentKind[]=['fireworks','sparks']
+/**
+ * Kinds that belong out with the crowd rather than on the platform: a FOH stand and a delay
+ * position. They are the only parts that may stand on the painted audience tiles and out on the
+ * standard audience area in front of the stage, and wherever they do stand, that tile stops being
+ * audience ground — exactly the way a delay tower built out on the map clears the field it takes.
+ */
+export const AUDIENCE_KINDS:ComponentKind[]=['foh','delay']
+/** Kinds built at map-tile size rather than build-cell size: they fill their whole field, snap to it and let nothing else share it. */
+export const TILE_KINDS:ComponentKind[]=['foh','delay']
+/**
+ * Which half of a merged front-of-house stand a desk is, given the neighbouring desk it merges
+ * with: the lower field (x first, then z) takes the sound console, the other the lighting desk.
+ * Shared by the workshop model and the map, so a pair never swaps roles between the two.
+ */
+export function fohDeskRole(desk:{x:number;z:number},mate?:{x:number;z:number}):'all'|'sound'|'light'{
+  return !mate?'all':(desk.x!==mate.x?desk.x<mate.x:desk.z<mate.z)?'sound':'light'
+}
+/** The map tile a part stands on. */
+export function stagePartTile(p:{x:number;z:number}){return {x:Math.floor(p.x/STAGE_TILE_DETAIL),z:Math.floor(p.z/STAGE_TILE_DETAIL)}}
 /** Kinds that may additionally dock directly onto another part of their own kind (stacked speakers, a hung line-array chain) instead of only a truss. */
 export const STACKABLE_KINDS:ComponentKind[]=['lineArray','fullRange','subwoofer']
 export type Axis='x'|'y'|'z'
@@ -56,6 +77,8 @@ export const STAGE_TILE_HEIGHT = 15
 export function stageDetailSize(tileWidth?:number,tileDepth?:number,tileHeight?:number) {
   return {width:(tileWidth??1)*STAGE_TILE_DETAIL,depth:(tileDepth??1)*STAGE_TILE_DETAIL,height:(tileHeight??1)*STAGE_TILE_DETAIL}
 }
+/** How far the standard audience area reaches in front of the stage, in build cells — the build area AUDIENCE_KINDS get beyond the platform itself (see stageApronCells for the same reach in map tiles). */
+export function stageApronDepth(d:{tileWidth?:number}){return (d.tileWidth??1)*2*STAGE_TILE_DETAIL}
 export function defaultStageDesign():StageDesign {
   const tileWidth=5,tileDepth=2,tileHeight=STAGE_TILE_HEIGHT
   return {tileWidth,tileDepth,tileHeight,name:'Meine Traumbühne',...stageDetailSize(tileWidth,tileDepth,tileHeight),linked:false,parts:[],phases:[
@@ -88,7 +111,7 @@ export function stageDesignIssue(d:StageDesign):string|null {
   if(reachable.size!==audience.length)return 'Jede Zuschauerfläche braucht einen durchgehenden Zugang zum äußeren Rand'
   const ids=new Set<string>()
   for(const p of d.parts){
-    if(!p||typeof p.id!=='string'||p.id.length>80||ids.has(p.id)||!Object.hasOwn(COMPONENTS,p.kind)||!Object.hasOwn(brandsFor(p.kind),p.brand)||![p.x,p.y,p.z,p.rotation].every(Number.isInteger)||p.x<0||p.x>=d.width||p.y<0||p.y>=d.height||p.z<0||p.z>=d.depth||p.rotation<0||p.rotation>5||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.axis!==undefined&&!['x','y','z'].includes(p.axis)))return 'Ungültiges Bühnenelement'
+    if(!p||typeof p.id!=='string'||p.id.length>80||ids.has(p.id)||!Object.hasOwn(COMPONENTS,p.kind)||!Object.hasOwn(brandsFor(p.kind),p.brand)||![p.x,p.y,p.z,p.rotation].every(Number.isInteger)||p.x<0||p.x>=d.width||p.y<0||p.y>=d.height||p.z<0||p.z>=d.depth+(AUDIENCE_KINDS.includes(p.kind)?stageApronDepth(d):0)||p.rotation<0||p.rotation>5||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.axis!==undefined&&!['x','y','z'].includes(p.axis)))return 'Ungültiges Bühnenelement'
     ids.add(p.id)
     if(p.attachedTo===null){
       if(p.kind!=='truss'&&!GROUND_ONLY_KINDS.includes(p.kind)&&!GROUND_OR_TRUSS_KINDS.includes(p.kind))return 'Dieses Bauteil braucht eine Traverse als Träger'
@@ -125,8 +148,12 @@ export function stageDesignIssue(d:StageDesign):string|null {
     // Anything that works straight up has to do so into open sky: a part standing in the same
     // column above it — a truss most of all — is something it would fire into.
     if(SKYWARD_KINDS.includes(p.kind)&&d.parts.some(q=>q!==p&&q.x===p.x&&q.z===p.z&&q.y>p.y))return `${COMPONENTS[p.kind].name} arbeitet nach oben und braucht freien Himmel — darüber darf nichts stehen`
-    if(p.attachedTo===null&&p.y===0&&partOnAudience(d,p))return 'Zuschauerflächen bleiben frei von Bodenaufbauten'
-    if(d.parts.some(q=>q!==p&&q.x===p.x&&q.y===p.y&&q.z===p.z))return 'Dieser Platz ist bereits belegt'
+    if(p.attachedTo===null&&p.y===0&&!AUDIENCE_KINDS.includes(p.kind)&&partOnAudience(d,p))return 'Zuschauerflächen bleiben frei von Bodenaufbauten'
+    // A FOH stand and a delay tower are as big as the field they stand on, so nothing else shares
+    // that field with them — everything else claims only its own build cell.
+    if(d.parts.some(q=>q!==p&&q.y===p.y&&(TILE_KINDS.includes(p.kind)||TILE_KINDS.includes(q.kind)
+      ?stagePartTile(q).x===stagePartTile(p).x&&stagePartTile(q).z===stagePartTile(p).z
+      :q.x===p.x&&q.z===p.z)))return 'Dieser Platz ist bereits belegt'
   }
   if(!Array.isArray(d.phases)||d.phases.length!==3||d.phases.some(p=>!p||![p.intensity,p.speed,p.fog,p.volume,p.movement??0,p.pyro??0].every(n=>Number.isFinite(n)&&n>=0&&n<=100)||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.deco!==undefined&&!DECO_PATTERNS.includes(p.deco))))return 'Ungültige Showregler'
   return null
@@ -156,15 +183,46 @@ export function partOnAudience(d:StageDesign,p:{x:number;z:number}):boolean {
   const x=Math.floor((p.x+.5)*(d.tileWidth??1)/d.width),z=Math.floor((p.z+.5)*(d.tileDepth??1)/d.depth)
   return !!d.audience?.some(c=>c.x===x&&c.z===z)
 }
+/**
+ * Where a tile of the design — its own (x,z) in map tiles, which for the standard audience area
+ * runs on past the platform's own depth — ends up on the map once the stage is turned. Tiles in
+ * front of the stage simply come out with a local coordinate outside the footprint, which is
+ * exactly where they belong.
+ */
+function stageTileOnMap(rotation:number,x:number,z:number,w:number,h:number){
+  return rotation===1?{x:z,z:w-1-x}:rotation===2?{x:w-1-x,z:h-1-z}:rotation===3?{x:h-1-z,z:x}:{x,z}
+}
+/** Map tiles the crowd gives up because a FOH stand or a delay tower of the design occupies them. */
+function stagePartTiles(d:StageDesign){
+  return new Set(d.parts.filter(p=>AUDIENCE_KINDS.includes(p.kind)&&p.attachedTo===null)
+    .map(p=>{const t=stagePartTile(p);return `${t.x},${t.z}`}))
+}
 export function stageAudienceCells(b:{x:number;z:number;rotation:number;stageDesign?:StageDesign}){
   const d=b.stageDesign;if(!d)return []
-  const w=d.tileWidth??1,h=d.tileDepth??1
-  return (d.audience??[]).map(c=>{
-    const local=b.rotation===1?{x:c.z,z:w-1-c.x}:b.rotation===2?{x:w-1-c.x,z:h-1-c.z}:b.rotation===3?{x:h-1-c.z,z:c.x}:c
+  const w=d.tileWidth??1,h=d.tileDepth??1,taken=stagePartTiles(d)
+  return (d.audience??[]).filter(c=>!taken.has(`${c.x},${c.z}`)).map(c=>{
+    const local=stageTileOnMap(b.rotation,c.x,c.z,w,h)
     return {x:b.x+local.x,z:b.z+local.z}
   })
 }
 export function isStageAudienceCell(b:{x:number;z:number;rotation:number;stageDesign?:StageDesign},x:number,z:number){return stageAudienceCells(b).some(c=>c.x===x&&c.z===z)}
+/**
+ * The audience area every stage comes with: it runs the full width of the stage's frontage and
+ * twice that deep, laid directly in front of it — where a crowd actually stands. A stage design's
+ * own front is its +Z, so which way "in front" points on the map follows the rotation it was built
+ * at, the same way stageAudienceCells maps its painted tiles.
+ */
+export function stageApronCells(b:{x:number;z:number;rotation:number;stageDesign?:StageDesign}){
+  const d=b.stageDesign;if(!d)return []
+  const w=d.tileWidth??1,h=d.tileDepth??1,reach=w*2,taken=stagePartTiles(d)
+  const cells:Array<{x:number;z:number}>=[]
+  for(let row=0;row<reach;row++)for(let col=0;col<w;col++){
+    if(taken.has(`${col},${h+row}`))continue // a FOH stand or a delay tower built out here takes the field it stands on
+    const local=stageTileOnMap(b.rotation,col,h+row,w,h)
+    cells.push({x:b.x+local.x,z:b.z+local.z})
+  }
+  return cells
+}
 export function removeStagePart(d:StageDesign,id:string):StageDesign {
   const next=structuredClone(d),removed=new Set([id]);let added=true
   while(added){added=false;for(const p of next.parts)if(!removed.has(p.id)&&p.attachedTo&&removed.has(p.attachedTo)){removed.add(p.id);added=true}}
@@ -249,6 +307,12 @@ export function migrateStageDesign(design:StageDesign):StageDesign {
     // Designs saved before the LEDs were forced to point away from their truss (see
     // screenFacingRotation) can still hold a wall facing backwards into the structure.
     if(p.kind==='screen'){const facing=wallFacing(p);if(facing!==undefined&&facing!==p.rotation){turned=true;return {...p,rotation:facing}}}
+    // A FOH stand or a delay tower fills a whole map field, so it belongs on that field's own
+    // corner cell — a design saved while they still sat on any build cell gets pulled onto it.
+    if(TILE_KINDS.includes(p.kind)){
+      const x=Math.floor(p.x/STAGE_TILE_DETAIL)*STAGE_TILE_DETAIL,z=Math.floor(p.z/STAGE_TILE_DETAIL)*STAGE_TILE_DETAIL
+      if(x!==p.x||z!==p.z){turned=true;return {...p,x,z}}
+    }
     return p
   })
   // The banner has no successor the way the old speaker had, so it is simply dropped — together

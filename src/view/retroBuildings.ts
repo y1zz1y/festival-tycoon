@@ -16,8 +16,9 @@ export class ModelKit {
     geometry.deleteAttribute('uv')
     this.parts.push(geometry)
   }
-  box(x: number, y: number, z: number, w: number, h: number, d: number, color: number): void {
-    this.add(new BoxGeometry(w, h, d), color, x, y, z)
+  /** `rotation` is for the rare piece that does not sit square to the world, such as the tilted cabinets of a hung speaker array. */
+  box(x: number, y: number, z: number, w: number, h: number, d: number, color: number, rotation?: Quaternion): void {
+    this.add(new BoxGeometry(w, h, d), color, x, y, z, rotation)
   }
   cylinder(x: number, y: number, z: number, radius: number, height: number, color: number, top = radius, sides = 8): void {
     this.add(new CylinderGeometry(top, radius, height, sides), color, x, y, z)
@@ -43,7 +44,7 @@ material.userData.shared = true
 const geometries = new Map<BuildingKind, BufferGeometry>()
 export const DETAILED_BUILDINGS: readonly BuildingKind[] = ['food', 'alcohol', 'toilet', 'bench', 'wasteBin', 'generator', 'backupGenerator', 'foh', 'delayTower', 'securityGate', 'ride', ...SCENERY_KINDS]
 
-function build(kind: BuildingKind): BufferGeometry {
+function build(kind: BuildingKind, variant?: string): BufferGeometry {
   const k = new ModelKit()
   if (kind === 'bunting' || kind === 'stringLights') {
     for (const x of [-.44, .44]) { k.box(x, .68, 0, .045, 1.36, .07, timber); k.box(x, .03, 0, .13, .06, .27, ink) }
@@ -243,25 +244,77 @@ function build(kind: BuildingKind): BufferGeometry {
     k.box(0, .06, 0, .92, .12, .8, ink)
     k.box(0, .39, .05, .74, .27, .42, 0x42555c)
     k.box(0, .54, .05, .76, .03, .43, ink)
-    for (let i = 0; i < 9; i++) {
-      k.box(-.3 + i * .075, .564, .12, .008, .008, .16, steel)
-      k.box(-.3 + i * .075, .575, .075 + i % 3 * .045, .035, .015, .02, i % 3 ? cream : 0xdf7349)
-    }
-    for (const x of [-.19, .19]) {
-      k.box(x, .68, -.11, .23, .19, .045, ink)
-      k.box(x, .69, -.083, .19, .13, .014, 0x6aa6b3)
+    // Standing on its own it is the all-round desk it always was. Put two of them side by side and
+    // they share the work the way a real front-of-house does: one becomes the sound console, the
+    // other the lighting desk, and their canopies line up into one stand.
+    if (variant === 'sound') {
+      for (let strip = 0; strip < 12; strip++) {
+        const x = -.33 + strip * .06
+        k.box(x, .564, .13, .008, .008, .19, steel) // channel fader slot
+        k.box(x, .576, .07 + (strip % 4) * .04, .03, .016, .02, strip % 4 ? cream : 0xdf7349) // its cap
+        for (const row of [-.04, -.1]) k.box(x, .576, row, .028, .022, .028, strip % 3 ? 0x6f7d84 : 0x8fb3c4) // rotary above it
+      }
+      for (const x of [-.21, .21]) { k.box(x, .69, -.13, .25, .21, .045, ink); k.box(x, .7, -.102, .21, .15, .014, 0x6aa6b3) } // meter screens
+      k.box(0, .3, -.3, .3, .46, .14, ink) // outboard rack tucked under the desk
+      for (let unit = 0; unit < 4; unit++) k.box(0, .14 + unit * .1, -.232, .24, .07, .015, 0x4c6063)
+    } else if (variant === 'light') {
+      for (let row = 0; row < 3; row++) for (let key = 0; key < 8; key++) {
+        k.box(-.27 + key * .078, .574, .16 - row * .07, .05, .014, .05, (row + key) % 3 ? 0x7f8b92 : [0xdf7349, 0x6aa6b3, 0x9dcc9a][row]!) // playback keys
+      }
+      for (const x of [-.31, -.23]) { k.box(x, .564, -.07, .008, .008, .14, steel); k.box(x, .576, -.04, .032, .016, .02, cream) } // grand master and chase speed
+      k.box(.13, .58, -.08, .07, .04, .07, 0x2b3a40) // trackball for the moving lights
+      k.box(0, .72, -.13, .52, .25, .045, ink); k.box(0, .73, -.102, .46, .19, .014, 0x6aa6b3) // one wide plot screen
+    } else {
+      for (let i = 0; i < 9; i++) {
+        k.box(-.3 + i * .075, .564, .12, .008, .008, .16, steel)
+        k.box(-.3 + i * .075, .575, .075 + i % 3 * .045, .035, .015, .02, i % 3 ? cream : 0xdf7349)
+      }
+      for (const x of [-.19, .19]) {
+        k.box(x, .68, -.11, .23, .19, .045, ink)
+        k.box(x, .69, -.083, .19, .13, .014, 0x6aa6b3)
+      }
     }
     for (const x of [-.42, .42]) for (const z of [-.32, .32]) k.box(x, .62, z, .035, 1.18, .035, steel)
     k.box(0, 1.21, 0, .94, .085, .83, 0x355c66)
     k.box(0, 1.16, .42, .94, .09, .03, cream)
   } else if (kind === 'delayTower') {
-    k.box(0, .06, 0, .62, .12, .6, ink)
-    for (const x of [-.14, .14]) k.box(x, 1.1, 0, .045, 2.1, .045, steel)
-    for (let i = 0; i < 8; i++) k.beam([-.14, .12 + i * .25, 0], [.14, .37 + i * .25, 0], .025, steel)
-    for (let i = 0; i < 4; i++) {
-      k.box(0, 1.26 + i * .18, .16, .42, .165, .26, ink)
-      k.box(0, 1.26 + i * .18, .299, .35, .11, .018, 0x4c6063)
-      k.box(.17, 1.26 + i * .18, .31, .015, .015, .01, cream)
+    // A ballasted tower of four vertical trusses with a line array hung off its front, the way
+    // delay positions are actually rigged out in the field.
+    const posts: ReadonlyArray<readonly [number, number]> = [[-.16, -.16], [.16, -.16], [.16, .16], [-.16, .16]]
+    k.box(0, .05, 0, .74, .1, .74, ink) // ballast plate
+    for (const [x, z] of posts) {
+      k.box(x * 1.6, .13, z * 1.6, .18, .16, .18, 0x1d2427) // ballast weight over each foot
+      k.box(x, 1.22, z, .05, 2.18, .05, steel) // tower leg
+    }
+    for (let level = 0; level < 6; level++) {
+      const y = .35 + level * .36
+      for (let n = 0; n < 4; n++) {
+        const a = posts[n]!, b = posts[(n + 1) % 4]!
+        k.beam([a[0], y, a[1]], [b[0], y, b[1]], .028, steel) // rung
+        if (n % 2 === 0 && level < 5) k.beam([a[0], y, a[1]], [b[0], y + .36, b[1]], .022, steel) // diagonal, on two opposite faces, never past the top rung
+      }
+    }
+    k.box(0, 2.36, 0, .44, .06, .44, steel) // head frame the array flies from
+    k.box(0, 2.3, .22, .12, .05, .36, steel) // pickup arm reaching out from the head frame
+    k.box(0, 2.26, .38, .46, .07, .14, steel) // bumper bar the array flies from
+    // The hang, rigged exactly like the stage's own line arrays: the cabinets are threaded onto
+    // one continuous rod, the top two dead straight to throw far down the field, and from the
+    // third one every further cabinet picks up another 6 degrees of down-tilt for the rows
+    // standing right at the tower.
+    const pitch = .19, cursor = new Vector3(0, 2.2, .38) // clear of the tower's own front legs
+    for (let cabinet = 0; cabinet < 5; cabinet++) {
+      const turn = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.max(0, cabinet - 1) * Math.PI / 30)
+      const dir = new Vector3(0, -1, 0).applyQuaternion(turn)
+      const centre = cursor.clone().addScaledVector(dir, pitch / 2)
+      const put = (lx: number, ly: number, lz: number, w: number, h: number, depth: number, color: number) => {
+        const wp = new Vector3(lx, ly, lz).applyQuaternion(turn).add(centre)
+        k.box(wp.x, wp.y, wp.z, w, h, depth, color, turn)
+      }
+      put(0, 0, 0, .5, .15, .3, ink) // cabinet
+      put(0, -.01, .15, .4, .1, .02, 0x4c6063) // its grille
+      put(.21, .02, .15, .02, .02, .015, cream) // rigging pin
+      put(.23, 0, -.12, .035, pitch, .035, steel) // rod segment, spanning the full pitch so the joints meet exactly
+      cursor.addScaledVector(dir, pitch)
     }
   } else if (kind === 'securityGate') {
     for (const x of [-.38, .38]) {
@@ -298,10 +351,12 @@ function build(kind: BuildingKind): BufferGeometry {
   return k.finish()
 }
 
-export function createRetroBuilding(kind: BuildingKind): Group | null {
+/** `variant` picks a different build of the same kind — the sound and lighting halves of a shared front-of-house stand — and is cached separately. */
+export function createRetroBuilding(kind: BuildingKind, variant?: string): Group | null {
   if (!DETAILED_BUILDINGS.includes(kind)) return null
-  let geometry = geometries.get(kind)
-  if (!geometry) { geometry = build(kind); geometries.set(kind, geometry) }
+  const key = variant ? `${kind}:${variant}` as BuildingKind : kind
+  let geometry = geometries.get(key)
+  if (!geometry) { geometry = build(kind, variant); geometries.set(key, geometry) }
   const group = new Group(), mesh = new Mesh(geometry, material)
   mesh.castShadow = mesh.receiveShadow = true
   mesh.userData.retroStatic = true

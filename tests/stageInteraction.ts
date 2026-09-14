@@ -1,9 +1,9 @@
 import { bandPositions, bandRoles, updateStageBand } from '../src/view/stageBand'
 import assert from 'node:assert/strict'
-import { Vector3, LineSegments, SpotLight, Box3, Quaternion } from 'three'
+import { Vector3, LineSegments, SpotLight, Box3, Quaternion, Mesh, type Group } from 'three'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { stagePlacement } from '../src/game/stagePlacement'
-import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, lineArrayIndex, migrateStageDesign, stageStats, stageDetailSize, COMPONENTS, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, STAGE_TILE_DETAIL, type StagePart } from '../src/game/stageDesign'
+import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, stageApronCells, stageApronDepth, fohDeskRole, lineArrayIndex, migrateStageDesign, stageStats, stageDetailSize, COMPONENTS, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, STAGE_TILE_DETAIL, type StagePart } from '../src/game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from '../src/view/stageModel'
 import { showIssue } from '../src/game/festivalManagement'
 export function testStageInteraction(fixture:(count?:number)=>GameState){
@@ -235,6 +235,19 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const spotOnGround:StagePart={id:'spotOnGround',kind:'spot',brand:'budget',x:0,y:0,z:0,rotation:0,attachedTo:null,color:'#ffffff'}
   assert.ok(stageDesignIssue({...defaultStageDesign(),parts:[spotOnGround]}),'equipment other than ground-only kinds and trusses needs a truss host')
 
+  // The FOH desk and the delay position are components of the workshop like any other, standing on
+  // the floor rather than coming with every stage the way the audience area does.
+  for(const kind of ['foh','delay'] as const){
+    const onGround=stagePlacement(tower,{kind,brand:'touring',rotation:0,color:'#ffaa33'},{x:0,z:0})
+    assert.equal(onGround.attachedTo,null)
+    assert.equal(stageDesignIssue({...defaultStageDesign(),parts:[onGround]}),null,`${kind} stands on the floor`)
+    const onTruss=stagePlacement(tower,{kind,brand:'touring',rotation:0,color:'#ffaa33'},{x:0,z:0},{id:'base',step:{x:0,y:0,z:1}})
+    assert.ok(stageDesignIssue({...tower,parts:[...tower.parts,{...onTruss,id:`${kind}OnTruss`}]}),`${kind} cannot hang from a truss`)
+    const built=createStageModel({...defaultStageDesign(),parts:[onGround]},{lightBudget:2})
+    assert.ok(built.children.length,`${kind} builds geometry`)
+    disposeStageModel(built)
+  }
+
   // The configured grid height is the only limit on how tall a tower can grow.
   const tallDesign=defaultStageDesign()
   let cursor=stagePlacement(tallDesign,trussSettings,{x:2,z:2});cursor.id='t0';tallDesign.parts.push(cursor);let chainId='t0'
@@ -251,13 +264,58 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.ok(stageDesignIssue({...audience,audience:[{x:1,z:1}]}),'sealed audience courtyards need an entrance')
   assert.ok(stageDesignIssue({...audience,parts:[{id:'blocked',kind:'deck',brand:'budget',x:3,y:0,z:3,rotation:0,attachedTo:null,color:'#ffffff'}]}),'floor equipment cannot obstruct spectator tiles')
   assert.deepEqual(stageAudienceCells({x:6,z:-20,rotation:1,stageDesign:audience}),[{x:7,z:-18},{x:7,z:-19}])
+
+  // A FOH stand and a delay position are the exception: they belong with the crowd, so they may
+  // stand on a painted audience tile and out on the standard audience area in front of the stage,
+  // and wherever they do stand, that field stops being audience ground.
+  const deskOnAudience:StagePart={id:'foh',kind:'foh',brand:'budget',x:0,y:0,z:2,rotation:0,attachedTo:null,color:'#ffffff'}
+  const withDesk={...audience,parts:[deskOnAudience]}
+  assert.equal(stageDesignIssue(withDesk),null,'a FOH stand may stand on a painted audience tile')
+  assert.deepEqual(stageAudienceCells({x:6,z:-20,rotation:1,stageDesign:withDesk}),[{x:7,z:-19}],'and takes that tile out of the crowd')
+  const towerOnApron:StagePart={id:'delay',kind:'delay',brand:'budget',x:2,y:0,z:audience.depth,rotation:0,attachedTo:null,color:'#ffffff'}
+  assert.equal(stageDesignIssue({...audience,parts:[towerOnApron]}),null,'a delay tower may stand out on the standard audience area')
+  assert.ok(stageDesignIssue({...audience,parts:[{...towerOnApron,kind:'deck'}]}),'while everything else stops at the platform edge')
+  assert.ok(stageDesignIssue({...audience,parts:[{...towerOnApron,z:audience.depth+stageApronDepth(audience)}]}),'and the audience area is where even their build area ends')
+  // Both are built at the size of the field they stand on, so they snap to it and fill it alone.
+  const snapped=stagePlacement(audience,{kind:'delay',brand:'budget',rotation:0,color:'#ffffff'},{x:3.4,z:audience.depth+1.6})
+  assert.deepEqual({x:snapped.x,z:snapped.z},{x:2,z:audience.depth},'a delay tower snaps to its whole field, not to a build cell inside it')
+  assert.ok(stageDesignIssue({...audience,parts:[towerOnApron,{...towerOnApron,id:'squeezed',kind:'foh',x:3,z:audience.depth+1}]}),'and nothing else squeezes onto that field beside it')
+  // Two desks on neighbouring fields are one big front-of-house stand: the lower field takes the
+  // sound console, the other the lighting desk, the same way round in the workshop and on the map.
+  assert.equal(fohDeskRole({x:4,z:6}),'all','a desk standing on its own is the all-round one')
+  assert.equal(fohDeskRole({x:4,z:6},{x:6,z:6}),'sound')
+  assert.equal(fohDeskRole({x:6,z:6},{x:4,z:6}),'light')
+  assert.equal(fohDeskRole({x:4,z:6},{x:4,z:8}),'sound')
+  assert.equal(fohDeskRole({x:4,z:8},{x:4,z:6}),'light')
+  const pair={...audience,parts:[{...deskOnAudience,id:'left',x:0,z:audience.depth},{...deskOnAudience,id:'right',x:2,z:audience.depth}]}
+  assert.equal(stageDesignIssue(pair),null,'two desks may stand side by side on neighbouring fields')
+  const merged=createStageModel(pair,{floor:false,effects:false}),single=createStageModel({...audience,parts:[{...deskOnAudience,id:'left',x:0,z:audience.depth}]},{floor:false,effects:false})
+  const vertices=(g:Group)=>{let n=0;g.traverse(o=>{if(o instanceof Mesh)n+=o.geometry.getAttribute('position').count});return n}
+  assert.notEqual(vertices(merged),vertices(single)*2,'and are then built as two different desks rather than twice the same one')
+  disposeStageModel(merged);disposeStageModel(single)
+  const crowd=stageApronCells({x:6,z:-20,rotation:1,stageDesign:audience})
+  const gapped=stageApronCells({x:6,z:-20,rotation:1,stageDesign:{...audience,parts:[towerOnApron]}})
+  assert.equal(gapped.length,crowd.length-1,'a delay tower out in the crowd clears the field it stands on')
   const game=fixture(0),s=game.snapshot as GameSnapshot;game.addDebugMoney()
   for(let x=6;x<9;x++)for(let z=-20;z<-17;z++){game.manageFestival({type:'ground',x,z,kind:'drain'});game.manageFestival({type:'ground',x,z,kind:'compact'})}
   assert.ok(game.placePathSegment(5,-19,0).ok)
   assert.ok(game.manageFestival({type:'stageDesign',design:audience,selectForBuild:true}).ok)
   assert.ok(game.place('stage',6,-20).ok)
   const stage=s.buildings.find(b=>b.kind==='stage')!
-  assert.equal(s.stageForecourtCells.filter(c=>c.stageId===stage.id).length,2)
+  const owned=()=>s.stageForecourtCells.filter(c=>c.stageId===stage.id)
+  for(const c of stageAudienceCells(stage))assert.ok(owned().some(o=>o.x===c.x&&o.z===c.z),'painted audience tiles become forecourt ground')
+  // Plus the standard apron: the full width of the stage's frontage, twice that deep, starting at
+  // the cell in front of it. The stage is 3 tiles wide, so 3 across and 6 deep.
+  const ownedCount=owned().length
+  assert.equal(ownedCount,stageAudienceCells(stage).length+3*6,'and a standard audience area in front of it')
+  assert.ok(owned().some(c=>c.x===7&&c.z===-17),'which starts directly in front of the stage')
+  assert.ok(owned().some(c=>c.x===7&&c.z===-12),'and reaches two stage widths out')
+  assert.ok(!owned().some(c=>c.z<=-13&&c.z>=-16&&c.x===9),'staying within the stage\'s own frontage, not spilling sideways')
+  assert.ok(!owned().some(c=>c.z===-11),'and no further')
+  const shielded=game.bulldoze(7,-17)
+  assert.equal(shielded.ok,false,'the standard audience area cannot be bulldozed away')
+  assert.match(shielded.message,/Zuschauerfläche/,'and says so')
+  assert.equal(owned().length,ownedCount,'so it is still all there')
   assert.equal((game as any).isPedestrianSolidAt(7,-19,0),false)
   assert.equal((game as any).isPedestrianSolidAt(7,-20,0),true)
   const route=(game as any).findPath({x:4,z:-19,elevation:0},[{x:7,z:-19,elevation:0}],false,false,false,false,true)
@@ -267,7 +325,7 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   s.dayPlan.offers.stages=Array(24).fill(true)
   assert.equal(showIssue(s,{id:'show',stageId:stage.id,bandId:'meadow',day:s.day,start:600,duration:120,fee:450}),null,'integrated audience areas satisfy concert forecourt requirements')
   const loaded=GameState.fromJSON(JSON.stringify(s))!
-  assert.equal(loaded.snapshot.stageForecourtCells.filter(c=>c.stageId===stage.id).length,2,'load does not duplicate integrated audience cells')
+  assert.equal(loaded.snapshot.stageForecourtCells.filter(c=>c.stageId===stage.id).length,ownedCount,'load does not duplicate integrated audience cells')
   assert.ok(loaded.bulldoze(7,-19).ok);assert.equal(loaded.snapshot.stageForecourtCells.filter(c=>c.stageId===stage.id).length,0)
 
   // Line arrays: the first cabinet docks onto a truss like any other equipment; every further
