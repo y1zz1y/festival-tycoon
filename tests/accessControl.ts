@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
+import { createRoadGraph, findRoadRoute, type RoadCell } from '../src/game/logistics'
 import {
   areaPreviewText,
   currentAccessSlot,
@@ -54,6 +55,15 @@ function visitorCar(
 }
 
 export function testAccessControl(fixture: (count?: number) => GameState): void {
+  const junction: RoadCell[] = [
+    { x: 0, z: 0, allowedDirections: null, blockedEdges: 0, speedLimit: 30, crosswalk: false },
+    { x: 1, z: 0, allowedDirections: 8, blockedEdges: 0, speedLimit: 30, crosswalk: false },
+    { x: 0, z: 1, allowedDirections: 1, blockedEdges: 0, speedLimit: 30, crosswalk: false },
+  ]
+  assert.equal(findRoadRoute({ roadCells: junction, start: junction[0]!, target: junction[1]! }), null,
+    'an undirected junction cannot enter an incoming one-way branch backwards, even as its goal')
+  assert.ok(findRoadRoute({ roadCells: junction, start: junction[1]!, target: junction[2]! }))
+  assert.ok(!createRoadGraph(junction).neighbors.get('0:0')?.some(cell => cell.x === 1))
   const lights = fixture(0)
   const lightState = lights.snapshot as GameSnapshot
   lights.addDebugMoney()

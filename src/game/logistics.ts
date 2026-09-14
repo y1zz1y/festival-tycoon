@@ -411,6 +411,9 @@ function collectRoadNeighbors(
     const neighbor = roadsByKey.get(cellKey(position.x, position.z))
     if (
       !neighbor ||
+      (neighbor.allowedDirections !== null &&
+        isRoadDirectionAllowed(neighbor, oppositeDirection(direction)) &&
+        !isRoadDirectionAllowed(neighbor, direction)) ||
       (neighbor.blockedEdges &
         directionBit(oppositeDirection(direction))) !==
         0

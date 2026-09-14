@@ -4,6 +4,12 @@ import { visitorLooksFemale } from '../src/game/rng'
 import { createNudeAnatomy, createPersonDetails, createPersonGeometry, PERSON_VARIANTS, PersonDetailsView, personSeed, personStyle, visitorIsFemale } from '../src/view/pixelPeople'
 
 export function testPixelPeople(): void {
+  const chestColors = createNudeAnatomy('breasts').getAttribute('color')
+  for (let i = 0; i < chestColors.count; i++) {
+    assert.equal(chestColors.getX(i), 1, 'chest has only skin tint, no nipple markings')
+    assert.equal(chestColors.getY(i), 1)
+    assert.equal(chestColors.getZ(i), 1)
+  }
   const parts = ['body', 'head', 'leg', 'arm', 'femaleBody'] as const
   const vertices = parts.map(part => {
     const geometry = createPersonGeometry(part)

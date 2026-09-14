@@ -70,7 +70,6 @@ export function createNudeAnatomy(kind: 'breasts' | 'bust' | 'penis') {
   if (kind === 'breasts' || kind === 'bust') {
     for (const x of [-.032, .032]) {
       k.box(x, .046, .06, .052, .044, .044, skin)
-      if (kind === 'breasts') k.box(x, .05, .08, .012, .01, .01, tip)
     }
     if (kind === 'bust') k.box(0, .044, .05, .036, .03, .032, skin)
   } else {

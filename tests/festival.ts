@@ -287,8 +287,13 @@ export function testFestival(fixture: (count?: number) => GameState): void {
   ss.minute = 850
   ss.parkOpen = true
   const neighborFun = neighbor.needs.fun
-  for (let n = 0; n < 80 && dancer.toplessMinutes <= 0; n += 1) (show as any).updateVisitors(1)
-  assert.ok(dancer.toplessMinutes > 0, 'any guest may take their shirt off during a live set')
+  const originalNext = (show as any).rng.next
+  ;(show as any).rng.next = () => 0
+  ;(show as any).updateConcertTopless(dancer, 1, { booking: ss.festival.bookings[0]! })
+  ;(show as any).updateConcertTopless(neighbor, 1, { booking: ss.festival.bookings[0]! })
+  ;(show as any).rng.next = originalNext
+  assert.ok(dancer.toplessMinutes > 0, 'a rare event can select an individual guest')
+  assert.equal(neighbor.toplessMinutes, 0, 'even a successful random draw cannot start a second event')
   ;(show as any).updateVisitors(1)
   assert.equal(dancer.thought, CONCERT_TOPLESS_THOUGHT)
   assert.ok(neighbor.needs.fun > neighborFun, 'nearby guests enjoy the topless cheer')

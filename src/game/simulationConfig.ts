@@ -505,7 +505,7 @@ export const SIMULATION_CONFIG = {
     partyDurationMinimum: 35,
     partyDurationRandomRange: 55,
     concertArriveEarlyMinutes: 30,
-    concertToplessChancePerMinute: 0.12,
+    concertToplessChancePerMinute: 0.002,
     concertToplessNearbyFun: 5.5,
     concertToplessSelfFun: 2.2,
     concertToplessRadius: 5,

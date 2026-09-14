@@ -233,7 +233,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
     id: 'roads',
     label: 'Autostraßen',
     icon: '🛣️',
-    dock: 'right',
+    dock: 'left',
     extra: 'roads',
     groups: [
       {

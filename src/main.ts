@@ -317,6 +317,10 @@ app.innerHTML = `
         <button id="close-path-editor" aria-label="Wege schließen">×</button>
       </div>
       <div id="path-tools"></div>
+      <section id="road-editor-tools" class="rct-editor-section" hidden>
+        <label>Straßen & Verkehr</label>
+        <div class="piece-palette">${buildCategoryById('roads').groups.flatMap(group => group.items).map(item => `<button type="button" data-road-editor-tool="${item.tool}" title="${item.detail}">${item.icon}<small>${item.name}</small></button>`).join('')}</div>
+      </section>
       <section class="rct-editor-section rct-path-art">
         <label>Art</label>
         <div class="piece-palette path-type-palette">
@@ -1087,6 +1091,7 @@ dayEntryHour.innerHTML = hourOptions
 dayExitHour.innerHTML = hourOptions
 let securityItemsFingerprint = ''
 let pathWindowOpen = false
+let roadEditorOpen = false
 let pathEditorActive = false
 let pathDemolishActive = false
 let pathAnchor: PathAnchor | null = null
@@ -1097,6 +1102,7 @@ let pathHistory: Array<{
   from: PathAnchor
   to: PathAnchor
   previousPath?: PlacedBuilding
+  roadExisted?: boolean
 }> = []
 let dragPathStart: CellPosition | null = null
 let dragPathEnd: CellPosition | null = null
@@ -1919,6 +1925,17 @@ function handleCellClick(cell: CellPosition): void {
   }
 
   if (pathEditorActive) {
+    if (roadEditorOpen) {
+      const existing = game.getRoadCellAt(cell.x, cell.z)
+      const result = existing ? { ok: true, message: 'Startpunkt gewählt' } : buildRoadCell(cell)
+      if (result.ok) {
+        pathAnchor = { x: cell.x, z: cell.z, elevation: game.getTerrainHeight(cell.x, cell.z) }
+        pathHistory = []
+        updatePathEditor()
+      }
+      showToast(result.message, !result.ok)
+      return
+    }
     const path =
       game.getPathAt(cell.x, cell.z, game.snapshot.buildElevation) ??
       game.getPathAt(cell.x, cell.z)
@@ -2023,7 +2040,7 @@ function handleCellClick(cell: CellPosition): void {
   }
 
   if (tool === 'road') {
-    const result = game.designateRoad([cell])
+    const result = buildRoadCell(cell)
     showToast(result.message, !result.ok)
     return
   }
@@ -2315,8 +2332,12 @@ function finishPathDrag(): void {
     return
   }
   if (game.snapshot.selectedTool === 'road') {
-    const result = game.designateRoad(cells)
-    showToast(result.message, !result.ok)
+    if (pathDemolishActive) {
+      for (const cell of cells) if (demolishPathAt(cell, true)) built++
+    } else {
+      for (const cell of cells) if (buildRoadCell(cell).ok) built++
+    }
+    showToast(`${built} Straßenfelder ${pathDemolishActive ? 'entfernt' : 'gebaut'}`, built === 0)
     dragPathStart = null
     dragPathEnd = null
     view.setPathDragPreview([], 0)
@@ -2501,6 +2522,13 @@ function getIsoDirectionIcon(direction: number): string {
 }
 
 function demolishPathAt(cell: CellPosition, quiet = false): boolean {
+  if (roadEditorOpen) {
+    if (!game.getRoadCellAt(cell.x, cell.z)) return false
+    const result = game.bulldoze(cell.x, cell.z)
+    if (!quiet) showToast(result.message, !result.ok)
+    if (result.ok) { pathAnchor = null; pathHistory = []; updatePathEditor() }
+    return result.ok
+  }
   const path =
     game.getPathAt(cell.x, cell.z, game.snapshot.buildElevation) ??
     game.getPathAt(cell.x, cell.z)
@@ -2520,7 +2548,8 @@ function demolishPathAt(cell: CellPosition, quiet = false): boolean {
 
 function resumePathPlacement(): void {
   pathDemolishActive = false
-  if (game.snapshot.selectedTool !== 'path') game.setTool('path')
+  supplyPlanner.releaseTool()
+  game.setTool(roadEditorOpen ? 'road' : 'path')
 }
 
 function setPathConstructMode(construct: boolean): void {
@@ -2529,17 +2558,20 @@ function setPathConstructMode(construct: boolean): void {
   pathHistory = []
   pathDemolishActive = false
   supplyPlanner.releaseTool()
-  game.setTool('path')
+  game.setTool(roadEditorOpen ? 'road' : 'path')
   updatePathEditor()
 }
 
-function openPathWindow(construct = false): void {
+function openPathWindow(construct = false, road = false): void {
   closeRideBuilder(false)
   if (coasterBuilderActive) closeCoasterBuilder()
   pathWindowOpen = true
   closeBuildMenu()
+  roadEditorOpen = road
+  pathSlope = 0
+  supplyPlanner.setEditorRoad(road)
   setPathConstructMode(construct)
-  setToolbarCategoryOpen('paths')
+  setToolbarCategoryOpen(road ? 'roads' : 'paths')
   buildMenuToggle.setAttribute('aria-expanded', 'true')
 }
 
@@ -2551,6 +2583,7 @@ function closePathEditor(): void {
   pathHistory = []
   pathConstruction.classList.remove('visible', 'path-mode-construct', 'path-mode-paint')
   view.setPathConstructionPreview(false, null, pathDirection, pathSlope)
+  view.setPathDragPreview([], 0)
   if (buildMenuPanel.hidden) {
     setToolbarCategoryOpen(null)
     buildMenuToggle.setAttribute('aria-expanded', 'false')
@@ -2563,7 +2596,7 @@ function rotatePathDirection(delta: number): void {
 }
 
 function setPathSlope(value: number): void {
-  pathSlope = Math.max(-1, Math.min(1, value)) as -1 | 0 | 1
+  pathSlope = roadEditorOpen ? 0 : Math.max(-1, Math.min(1, value)) as -1 | 0 | 1
   updatePathEditor()
 }
 
@@ -2575,6 +2608,18 @@ function buildNextPathSegment(): void {
     x: pathAnchor.x + direction.x,
     z: pathAnchor.z + direction.z,
     elevation: pathAnchor.elevation + pathSlope,
+  }
+  if (roadEditorOpen) {
+    next.elevation = game.getTerrainHeight(next.x, next.z)
+    const existed = Boolean(game.getRoadCellAt(next.x, next.z))
+    const result = existed ? { ok: true, message: 'Straße verbunden' } : buildRoadCell(next)
+    if (result.ok) {
+      pathHistory.push({ from: { ...pathAnchor }, to: next, roadExisted: existed })
+      pathAnchor = next
+      updatePathEditor()
+    }
+    showToast(result.message, !result.ok)
+    return
   }
   const candidateBase = Math.min(pathAnchor.elevation, next.elevation)
   const candidateTop =
@@ -2616,7 +2661,9 @@ function buildNextPathSegment(): void {
 function undoLastPathSegment(): void {
   const entry = pathHistory.pop()
   if (!entry) return
-  const result = game.undoPathSegment(
+  const result = roadEditorOpen
+    ? entry.roadExisted ? { ok: true, message: 'Vorheriges Straßenfeld' } : game.bulldoze(entry.to.x, entry.to.z)
+    : game.undoPathSegment(
     entry.to.x,
     entry.to.z,
     entry.to.elevation,
@@ -2633,6 +2680,11 @@ function undoLastPathSegment(): void {
 }
 
 function updatePathEditor(): void {
+  pathConstruction.classList.toggle('road-editor', roadEditorOpen)
+  pathConstruction.querySelector('.construction-title strong')!.textContent = roadEditorOpen ? 'Autostraßen' : 'Fußwege'
+  pathConstruction.setAttribute('aria-label', roadEditorOpen ? 'Autostraßen' : 'Fußwege')
+  requireElement<HTMLElement>('#road-editor-tools').hidden = !roadEditorOpen
+  pathDemolishButton.title = roadEditorOpen ? 'Straßen abreißen' : 'Wege abreißen'
   pathConstruction.classList.toggle('visible', pathWindowOpen)
   pathConstruction.classList.toggle('path-mode-construct', pathWindowOpen && pathEditorActive)
   pathConstruction.classList.toggle('path-mode-paint', pathWindowOpen && !pathEditorActive)
@@ -2658,7 +2710,7 @@ function updatePathEditor(): void {
       button.disabled = !pathEditorActive || !pathAnchor
       return
     }
-    button.disabled = !pathEditorActive
+    button.disabled = !pathEditorActive || (roadEditorOpen && button.hasAttribute('data-slope'))
   })
   constructionStatus.textContent = pathDemolishActive
     ? 'Weg anklicken oder ziehen zum Abreißen.'
@@ -2682,7 +2734,15 @@ function updatePathEditor(): void {
     const icon = button.querySelector('span')
     if (icon) icon.textContent = getIsoDirectionIcon(direction)
   })
-  view.setPathConstructionPreview(pathEditorActive, pathAnchor, pathDirection, pathSlope)
+  view.setPathConstructionPreview(pathEditorActive && !roadEditorOpen, pathAnchor, pathDirection, pathSlope)
+  if (roadEditorOpen && pathEditorActive && pathAnchor) {
+    const direction = PATH_DIRECTIONS[pathDirection]!
+    view.setPathDragPreview([{ x: pathAnchor.x + direction.x, z: pathAnchor.z + direction.z }], pathAnchor.elevation)
+  }
+}
+
+function buildRoadCell(cell: { x: number; z: number }) {
+  return game.manageFestival({ type: 'wayArea', from: cell, to: cell, kind: supplyPlanner.getRoadType() })
 }
 
 function openCoasterBuilder(coasterId: string | null = null): void {
@@ -4262,13 +4322,13 @@ function openBuildCategory(categoryId: BuildCategoryId, groupId?: string): void 
   }
   if (activeRideId) closeRideBuilder()
   lastBuildCategory = categoryId
-  if (categoryId === 'paths') {
-    if (pathWindowOpen) {
+  if (categoryId === 'paths' || categoryId === 'roads') {
+    if (pathWindowOpen && roadEditorOpen === (categoryId === 'roads')) {
       closePathEditor()
       game.setTool('inspect')
       return
     }
-    openPathWindow(false)
+    openPathWindow(false, categoryId === 'roads')
     return
   }
   if (pathWindowOpen) closePathEditor()
@@ -4311,7 +4371,7 @@ document.querySelectorAll<HTMLButtonElement>('.rct-toolbar [data-build-category]
       return
     }
     if (button.classList.contains('open')) {
-      if (category === 'paths') {
+      if (category === 'paths' || category === 'roads') {
         closePathEditor()
         game.setTool('inspect')
         return
@@ -5097,8 +5157,21 @@ document.querySelectorAll<HTMLButtonElement>('[data-path-type]').forEach((button
 
 pathDemolishButton.addEventListener('click', () => {
   pathDemolishActive = !pathDemolishActive
-  if (pathDemolishActive) game.setTool('path')
+  supplyPlanner.releaseTool()
+  if (pathDemolishActive) game.setTool(roadEditorOpen ? 'road' : 'path')
   updatePathEditor()
+})
+
+document.querySelectorAll<HTMLButtonElement>('[data-road-editor-tool]').forEach(button => {
+  button.addEventListener('click', () => {
+    supplyPlanner.releaseTool()
+    pathDemolishActive = false
+    pathEditorActive = false
+    pathAnchor = null
+    pathHistory = []
+    game.setTool(button.dataset.roadEditorTool as Tool)
+    updatePathEditor()
+  })
 })
 
 document.querySelectorAll<HTMLButtonElement>('[data-path-access]').forEach((button) => {

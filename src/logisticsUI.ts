@@ -12,6 +12,7 @@ import './logistics.css'
 
 export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toast: (text: string, error?: boolean) => void) {
   let footType: WayType = 'footDirt', roadType: WayType = 'roadDirt'
+  let editorRoad = false
   let groundOpen = false, overlayOn = false, mode = 'none'
 
   const groundButton = document.createElement('button'); groundButton.textContent = '🏞️ Boden vorbereiten'; groundButton.id = 'open-terrain-planner'; groundButton.setAttribute('aria-pressed', 'false')
@@ -77,7 +78,8 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
   }
   const editorPicker = makePicker('foot', true), roadPicker = makePicker('road')
   document.querySelector('#path-surface-picker')!.append(editorPicker)
-  document.querySelector('.logistics-road-tools')!.before(roadPicker)
+  document.querySelector('#path-surface-picker')!.append(roadPicker)
+  roadPicker.hidden = true
   const pickers = [editorPicker, roadPicker]
   const surfacePreview = document.querySelector<HTMLButtonElement>('#path-surface-preview')
   const surfacePopup = document.querySelector<HTMLElement>('#path-surface-popup')
@@ -87,11 +89,12 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
       const label = document.querySelector(`.build-menu [data-tool="${tool}"] em`)
       if (label) label.innerHTML = `${WAY_TYPES[id].name}<small>${WAY_TYPES[id].cost} €/Feld</small>`
     }
-    const foot = WAY_TYPES[footType]
+    const selectedType = editorRoad ? roadType : footType
+    const foot = WAY_TYPES[selectedType]
     const previewSwatch = document.querySelector('#path-surface-preview .way-swatch')
     const previewName = document.querySelector('[data-path-surface-name]')
     const previewCost = document.querySelector('#path-art-cost')
-    if (previewSwatch) previewSwatch.setAttribute('data-surface', footType)
+    if (previewSwatch) previewSwatch.setAttribute('data-surface', selectedType)
     if (previewName) previewName.textContent = foot.name
     if (previewCost) previewCost.textContent = `Kosten: €${foot.cost}`
     if (surfacePreview) {
@@ -180,7 +183,9 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
       }
       roadType = icon.dataset.wayIcon as WayType
       refreshTypes()
-      choose('road')
+      setSurfacePopup(false)
+      releaseTool()
+      getGame().setTool('road')
     })
   }
   refreshTypes()
@@ -202,5 +207,7 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
     qG('[data-cell]').innerHTML = `<b>Feld ${cell.x}, ${cell.z}</b> · ${{ clay: 'Lehm', field: 'Ackerboden', gravel: 'Kiesboden', sand: 'Sandboden', grass: 'Wiesenboden', urban: 'Befestigter Stadtboden' }[ground.type]}<br>Tragfähigkeit ${ground.bearing}/3 · Tempo ${Math.round(ground.speed * 100)} %<br>Fahrbahn geeignet bis Tempo ${roadGroundLimit(s, cell.x, cell.z)}<br>${ground.drained ? 'Entwässert' : 'Ohne Entwässerung'} · ${ground.surface === 'paved' ? 'Gepflastert' : ground.surface === 'gravel' ? 'Geschottert' : ground.compacted ? 'Verdichtet' : 'Unbefestigt'}${b ? `<br>Gebäudeeffizienz ${Math.round((ground.bearing === 3 ? 1.25 : Math.max(.4, ground.speed)) * 100)} %${s.festival.infrastructure.shops[b.id] ? `<br>Standbestand: ${Object.entries(s.festival.infrastructure.shops[b.id]!).map(([k, n]) => `${SUPPLIES[k as keyof typeof SUPPLIES].name} ${Math.floor(n)}`).join(' · ')}` : ''}` : ''}`
     return true
   }
-  return { update, handleCell, releaseTool, activateWay: (kind: 'path' | 'road') => choose(kind), getFootType: () => footType, isActive: () => groundOpen, isOverlay: () => overlayOn, setOverlay, close: () => { toggleGround(false); setOverlay(false) } }
+  return { update, handleCell, releaseTool, activateWay: (kind: 'path' | 'road') => choose(kind), getFootType: () => footType, getRoadType: () => roadType,
+    setEditorRoad: (enabled: boolean) => { editorRoad = enabled; editorPicker.hidden = enabled; roadPicker.hidden = !enabled; setSurfacePopup(false); refreshTypes() },
+    isActive: () => groundOpen, isOverlay: () => overlayOn, setOverlay, close: () => { toggleGround(false); setOverlay(false) } }
 }

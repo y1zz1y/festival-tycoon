@@ -136,8 +136,8 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     z: number
   }>
   assert.ok(
-    sideAccesses.some((cell) => cell.x === 4 && cell.z === -20),
-    'a stall accepts the path on its side',
+    !sideAccesses.some((cell) => cell.x === 4 && cell.z === -20),
+    'customers cannot buy from the side',
   )
   assert.equal(
     sideAccesses.some((cell) => cell.x === 5 && cell.z === -19),
@@ -155,8 +155,7 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     needs: { ...guest.needs, hunger: 10 },
   })
   const reached = (sideShop as any).findReachableFacility(guest, 'food')
-  assert.ok(reached, 'guests can buy from a side path instead of the facing counter')
-  assert.equal(reached.building.id, sideStand.id)
+  assert.equal(reached, null, 'customers need a connected front counter')
   sideState.festival.infrastructure.depots.push({
     id: 'side-pad',
     x: 1,
@@ -189,7 +188,14 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   const sideQueue = sideState.buildings.find(
     (building) => building.kind === 'path' && building.x === 4 && building.z === -20,
   )!
-  assert.equal(sideQueue.queueDirection, 1, 'a queue on the side of a stall points toward it')
+  assert.equal(sideQueue.queueDirection, undefined, 'a side queue does not connect to the counter')
+  assert.deepEqual((sideShop as any).getBuildingQueueCells(sideStand), [])
+  assert.ok(sideShop.placePathSegment(5, -19, 0).ok)
+  assert.deepEqual((sideShop as any).getFacilityAccessCells(sideStand), [{ x: 5, z: -19, elevation: 0 }])
+  assert.ok((sideShop as any).findReachableFacility(guest, 'food'))
+  sideState.festival.infrastructure.shops[sideStand.id]!.food = 0
+  assert.equal((sideShop as any).findReachableFacility(guest, 'food'), null,
+    'an empty nearby shop is excluded from destination selection')
 
   const rearStock=fixture(0)
   rearStock.addDebugMoney()
@@ -271,9 +277,11 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   ;(snake as any).facilityQueues.set(snakeShop.id, [waiter.id])
   ;(snake as any).updateFacilityQueues(0.1)
   assert.equal(waiter.state, 'queuing', 'an empty stand makes guests wait briefly')
-  assert.ok(waiter.interactionRemaining > 0)
-  waiter.interactionRemaining = 0
-  ;(snake as any).updateFacilityQueues(0.1)
+  assert.ok(waiter.interactionRemaining < 0)
+  for (let i = 0; i < 15 && waiter.state === 'queuing'; i++) {
+    waiter.thought = 'Ein anderer Gedanke darf die Wartezeit nicht verlängern.'
+    ;(snake as any).updateFacilityQueues(0.1)
+  }
   assert.equal(waiter.state, 'exploring')
   assert.match(waiter.thought, /Ausverkauft/)
   assert.deepEqual(

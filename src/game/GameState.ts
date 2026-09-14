@@ -634,6 +634,7 @@ function createInitialSnapshot(
 }
 
 export class GameState {
+  private concertToplessVisitorId: string | null = null
   private state: GameSnapshot
   private listeners = new Set<Listener>()
   private idCounter = 0
@@ -4851,6 +4852,14 @@ export class GameState {
       const currentRoad = vehicle.cell
         ? roadsByCell.get(roadCellKey(vehicle.cell.x, vehicle.cell.z))
         : undefined
+      if (currentRoad?.allowedDirections != null) {
+        const facing = this.getVehicleDirection(vehicle)
+        if (!isRoadDirectionAllowed(currentRoad, facing) &&
+            isRoadDirectionAllowed(currentRoad, oppositeDirection(facing))) {
+          vehicle.facing = oppositeDirection(facing) * Math.PI / 2
+          this.rebuildVehicleRouteFromHere(vehicle)
+        }
+      }
       const interval =
         SIMULATION_CONFIG.logistics.vehicleMoveIntervalMinutes *
         (30 / Math.min(currentRoad?.speedLimit ?? 30, vehicle.cell ? roadGroundLimit(this.state, vehicle.cell.x, vehicle.cell.z) : 30))
@@ -4886,6 +4895,11 @@ export class GameState {
       }
       const nextKey = roadCellKey(next.x, next.z)
       const here = vehicle.cell ?? vehicle.position
+      if (!this.isLegalRoadStep(here, next)) {
+        vehicle.route = []
+        this.rebuildVehicleRouteFromHere(vehicle)
+        return
+      }
       if (this.isIllegalParkingPullIn(vehicle, here, next)) {
         this.releaseVisitorCarParking(vehicle)
         vehicle.route = []
@@ -5571,6 +5585,7 @@ export class GameState {
         },
       }))
       .find(({ direction, cell }) => {
+        if (!this.isLegalRoadStep(start, cell)) return false
         if (!this.getRoadCellAt(cell.x, cell.z)) return false
         if (!isRoadDirectionAllowed(here, direction)) return false
         if ((here.blockedEdges & directionBit(direction)) !== 0) return false
@@ -6118,6 +6133,7 @@ export class GameState {
     if (!here) return false
     const behind = this.cellBehindVehicle(vehicle)
     if (!behind || !this.getRoadCellAt(behind.x, behind.z)) return false
+    if (!this.isLegalRoadStep(here, behind)) return false
     if (occupied.has(roadCellKey(behind.x, behind.z))) return false
     const searchBlocked = new Set(blockedCells)
     searchBlocked.add(roadCellKey(here.x, here.z))
@@ -6198,6 +6214,15 @@ export class GameState {
       previous = cell
     }
     return route.length > 0
+  }
+
+  private isLegalRoadStep(from: RoadPosition, to: RoadPosition): boolean {
+    const road = this.getRoadCellAt(from.x, from.z)
+    const next = this.getRoadCellAt(to.x, to.z)
+    // Parking and off-map access have their own checks.
+    if (!road || !next) return true
+    return (this.getRoadGraph().neighbors.get(roadCellKey(from.x, from.z)) ?? [])
+      .some((neighbor) => neighbor.x === to.x && neighbor.z === to.z)
   }
 
   private replanBlockedReverse(
@@ -9000,6 +9025,13 @@ export class GameState {
   }
 
   private updateVisitors(minutes: number): void {
+    // Rebuild once per pass, also repairing older saves with mass events.
+    this.concertToplessVisitorId = null
+    for (const visitor of this.state.visitors) {
+      if (visitor.toplessMinutes <= 0) continue
+      if (this.concertToplessVisitorId === null) this.concertToplessVisitorId = visitor.id
+      else visitor.toplessMinutes = 0
+    }
     this.flushVisitorDecisions(SIMULATION_CONFIG.pathfinding.decisionsPerTick)
     const leavingIds = new Set<string>()
 
@@ -9881,21 +9913,21 @@ export class GameState {
           for (const visitorId of [...queue]) {
             const visitor = this.getVisitor(visitorId)
             if (visitor?.state !== 'queuing' || visitor.targetId !== building.id) continue
-            if (visitor.thought === waitingThought && visitor.interactionRemaining <= 0) {
+            visitor.interactionRemaining = Math.min(0, visitor.interactionRemaining) - minutes
+            if (visitor.interactionRemaining <= -wait) {
               this.state.festival.metrics.stockouts++
               visitor.emotion = 'sad'
               visitor.emotionMinutes = 45
               this.leaveQueueOnFoot(visitor, 'Ausverkauft! Hier fehlt Nachschub.')
               continue
             }
-            if (visitor.thought !== waitingThought) {
-              visitor.interactionRemaining = wait
-              visitor.thought = waitingThought
-            } else {
-              visitor.interactionRemaining = Math.max(0, visitor.interactionRemaining - minutes)
-            }
+            visitor.thought = waitingThought
           }
           return
+        }
+        for (const id of queue) {
+          const visitor = this.getVisitor(id)
+          if (visitor?.state === 'queuing') visitor.interactionRemaining = 0
         }
         this.positionFacilityQueue(queue, queueCells, minutes)
 
@@ -10734,6 +10766,7 @@ export class GameState {
           const queue = this.getFacilityQueue(target.id)
           if (!queue.includes(visitor.id)) queue.push(visitor.id)
           visitor.state = 'queuing'
+          visitor.interactionRemaining = 0
           visitor.thought = `Ich stehe bei ${BUILDINGS[target.kind].name} an.`
           return
         }
@@ -11560,8 +11593,9 @@ export class GameState {
       this.spreadConcertToplessFun(visitor, minutes)
       return
     }
-    if (visitor.audience === 'family') return
-    if (this.rng.next() >= Math.min(1, minutes * atmosphere.concertToplessChancePerMinute)) return
+    if (visitor.audience === 'family' || this.concertToplessVisitorId !== null) return
+    if (this.rng.next() >= Math.min(1, minutes * atmosphere.concertToplessChancePerMinute / Math.max(1, this.state.visitors.length))) return
+    this.concertToplessVisitorId = visitor.id
     visitor.toplessMinutes = remaining
     visitor.needs.fun = Math.min(
       100,
@@ -12343,7 +12377,8 @@ export class GameState {
     const candidates = this.state.buildings
       .filter(
         (building) =>
-          building.kind === kind && this.isBuildingCurrentlyActive(building),
+          building.kind === kind && this.isBuildingCurrentlyActive(building) &&
+          (!isShopServiceKind(kind) || localStock(this.state, building.id, kind === 'food' ? 'food' : 'drinks') >= 1),
       )
       .map((building) => {
         const queueCells = this.getBuildingQueueCells(building)
@@ -13754,7 +13789,6 @@ export class GameState {
   }
 
   private getFacilityAccessCells(building: PlacedBuilding): Cell[] {
-    if (isShopServiceKind(building.kind)) return this.getAdjacentServiceCells(building)
     const access = this.getAccessCell(
       building.x,
       building.z,
@@ -13762,29 +13796,6 @@ export class GameState {
       building.rotation,
     )
     return this.isWalkableServiceCell(access) ? [access] : []
-  }
-
-  private getAdjacentServiceCells(origin: {
-    x: number
-    z: number
-    elevation: number
-  }): Cell[] {
-    const cells: Cell[] = []
-    for (const [dx, dz] of CARDINAL_OFFSETS) {
-      const x = origin.x + dx
-      const z = origin.z + dz
-      const path =
-        this.getPathAt(x, z, origin.elevation) ?? this.getPathAt(x, z)
-      if (path && Math.abs(path.elevation - origin.elevation) < 0.51) {
-        cells.push({ x, z, elevation: path.elevation })
-        continue
-      }
-      const plaza = this.getStageForecourtCellAt(x, z)
-      if (plaza && Math.abs(plaza.elevation - origin.elevation) < 0.51) {
-        cells.push({ x, z, elevation: plaza.elevation })
-      }
-    }
-    return cells
   }
 
   private isWalkableServiceCell(cell: Cell): boolean {
@@ -13795,9 +13806,7 @@ export class GameState {
   }
 
   private findBuildingQueueFront(building: PlacedBuilding): PlacedBuilding | undefined {
-    const accesses = isShopServiceKind(building.kind)
-      ? this.getAdjacentServiceCells(building)
-      : [
+    const accesses = [
           this.getAccessCell(
             building.x,
             building.z,
