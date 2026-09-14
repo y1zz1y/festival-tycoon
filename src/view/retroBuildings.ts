@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three'
+import { BoxGeometry, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, SphereGeometry, Vector3 } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { BuildingKind } from '../game/catalog'
 import { SCENERY_KINDS } from '../game/scenery'
@@ -22,6 +22,9 @@ export class ModelKit {
   }
   cylinder(x: number, y: number, z: number, radius: number, height: number, color: number, top = radius, sides = 8): void {
     this.add(new CylinderGeometry(top, radius, height, sides), color, x, y, z)
+  }
+  sphere(x: number, y: number, z: number, radius: number, color: number, segments = 8): void {
+    this.add(new SphereGeometry(radius, segments, Math.max(4, segments - 2)), color, x, y, z)
   }
   beam(a: [number, number, number], b: [number, number, number], width: number, color: number): void {
     const start = new Vector3(...a), end = new Vector3(...b), direction = end.clone().sub(start)
@@ -68,6 +71,66 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
   } else if (kind === 'festivalSign') {
     k.box(0, .58, 0, .065, 1.16, .065, timber)
     for (let i = 0; i < 3; i++) { const sign = i % 2 ? -1 : 1, y = 1.08 - i * .2; k.box(0, y, 0, .64, .14, .05, i % 2 ? 0xc95778 : 0x559f91); k.box(sign * .34, y, 0, .08, .085, .05, i % 2 ? 0xc95778 : 0x559f91); k.box(0, y, .032, .35, .018, .012, cream) }
+  } else if (kind === 'totem') {
+    k.box(0, .05, 0, .46, .1, .46, 0x5a4634)
+    k.cylinder(0, .28, 0, .16, .36, 0xd97a3a, .14, 6)
+    k.box(0, .56, 0, .4, .28, .34, 0xe4b754)
+    k.box(-.09, .58, .18, .07, .05, .02, ink)
+    k.box(.09, .58, .18, .07, .05, .02, ink)
+    k.box(0, .88, 0, .34, .34, .3, 0xce5677)
+    k.box(0, .88, .16, .12, .08, .02, cream)
+    k.box(0, 1.18, 0, .28, .28, .26, 0x5da397)
+    k.box(0, 1.38, 0, .2, .14, .2, 0xe4b754)
+    k.cylinder(0, 1.5, 0, .04, .18, cream)
+  } else if (kind === 'flagPole') {
+    k.box(0, .04, 0, .24, .08, .24, ink)
+    k.cylinder(0, .88, 0, .028, 1.7, steel)
+    k.box(.24, 1.48, 0, .46, .28, .025, 0xc43d55)
+    k.box(.24, 1.5, .016, .22, .05, .012, cream)
+    k.box(.24, 1.4, .016, .4, .035, .012, 0xe4b754)
+    k.cylinder(0, 1.76, 0, .05, .06, 0xe4b754, .01)
+  } else if (kind === 'lanternPole') {
+    k.box(0, .03, 0, .2, .06, .2, ink)
+    k.cylinder(0, .52, 0, .02, 1, timber)
+    k.box(0, 1.08, 0, .22, .24, .22, 0xf2b35a)
+    k.box(0, 1.08, 0, .16, .18, .16, 0xffd58a)
+    k.box(0, .96, 0, .18, .03, .18, 0xd97a3a)
+    k.cylinder(0, 1.22, 0, .07, .05, 0xd97a3a)
+  } else if (kind === 'kegStack') {
+    k.cylinder(-.14, .2, .05, .16, .38, 0x8a6a3a, .16, 8)
+    k.cylinder(.16, .16, -.04, .14, .3, 0x6e5530, .14, 8)
+    k.cylinder(.02, .5, .04, .13, .26, steel)
+    for (const [x, y, z] of [[-.14, .2, .05], [.16, .16, -.04], [.02, .5, .04]] as const) {
+      k.cylinder(x, y + .08, z, .165, .02, cream, .165, 8)
+      k.cylinder(x, y - .08, z, .165, .02, cream, .165, 8)
+    }
+    k.box(-.14, .4, .05, .04, .04, .04, ink)
+  } else if (kind === 'inflatable') {
+    k.sphere(0, .28, .02, .24, 0xe86a8a, 8)
+    k.sphere(0, .18, .16, .16, 0xf08aa3, 7)
+    k.beam([0, .42, .04], [0, .98, .02], .09, 0xf08aa3)
+    k.sphere(0, 1.08, .04, .13, 0xe86a8a, 7)
+    k.box(0, 1.06, .16, .055, .04, .12, 0xf2b35a)
+    k.box(-.2, .22, .04, .07, .2, .05, 0xe86a8a)
+    k.box(.2, .22, .04, .07, .2, .05, 0xe86a8a)
+    k.box(-.08, .04, .2, .045, .08, .16, 0xe4b754)
+    k.box(.08, .04, .2, .045, .08, .16, 0xe4b754)
+  } else if (kind === 'prayerFlags') {
+    const flags = [0x3d7cc7, 0xf4f0e6, 0xc43d55, 0x4f9a62, 0xe4b754]
+    for (const x of [-.44, .44]) { k.box(x, .68, 0, .04, 1.36, .06, timber); k.box(x, .03, 0, .12, .06, .24, ink) }
+    k.beam([-.44, 1.3, 0], [.44, 1.3, 0], .018, ink)
+    for (let n = 0; n < 5; n++) {
+      const x = -.32 + n * .16, y = 1.12 - (n % 2) * .06
+      k.box(x, y, 0, .13, .22, .015, flags[n]!)
+      k.box(x, y - .08, 0, .04, .08, .012, flags[n]!)
+    }
+  } else if (kind === 'fireBowl') {
+    k.cylinder(0, .06, 0, .2, .08, ink, .2, 8)
+    k.cylinder(0, .16, 0, .22, .14, 0x6a5340, .16, 8)
+    for (const [x, z] of [[-.06, .04], [.07, -.03], [0, .08]] as const) k.box(x, .24, z, .05, .04, .14, timber)
+    k.cylinder(0, .34, 0, .07, .16, 0xd4652a, .02, 5)
+    k.cylinder(0, .4, 0, .045, .14, 0xf2b35a, .01, 5)
+    k.cylinder(0, .44, 0, .02, .1, cream, .01, 5)
   } else if (kind === 'shrub' || kind === 'flowerbed' || kind === 'planter') {
     const base = kind === 'planter' ? .35 : .06
     k.box(0, base / 2, 0, .8, base, .8, kind === 'planter' ? 0xb37751 : 0x88754f)
@@ -115,6 +178,9 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
     k.box(0, .63, -.315, .76, .3, .045, accent)
     for (const x of [-.36, .36]) k.box(x, .57, 0, .055, .53, .67, accent)
     k.box(0, .51, .32, .83, .055, .25, cream)
+    k.box(0, .51, -.32, .83, .055, .25, cream)
+    k.box(.38, .51, 0, .25, .055, .7, cream)
+    k.box(-.38, .51, 0, .25, .055, .7, cream)
     k.box(0, .75, .12, .86, .07, .93, cream)
     for (let i = 0; i < 9; i++) {
       const color = i % 2 ? cream : accent

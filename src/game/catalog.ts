@@ -16,9 +16,11 @@ export const BUILDING_KINDS = [
   'statue',
   'banner',
   'bunting', 'stringLights', 'hayBale', 'parasol', 'picnicTable', 'festivalSign',
+  'totem', 'flagPole', 'lanternPole', 'kegStack', 'inflatable', 'prayerFlags', 'fireBowl',
   'fence',
   'bench',
   'lighting',
+  'lightBalloon',
   'stage',
   'directionalSpeaker',
   'omniSpeaker',
@@ -47,11 +49,16 @@ export type Tool =
   | 'road'
   | 'parkingArea'
   | 'roadDirection'
+  | 'trafficLight'
+  | 'pathBarrier'
   | 'roadSeparator'
   | 'roadSpeed10'
   | 'roadSpeed30'
   | 'roadSpeed50'
   | 'crosswalk'
+  | 'deliveryYard'
+  | 'supplyDepot'
+  | 'staffGate'
   | 'coaster'
   | 'terrainRaise'
   | 'terrainLower'
@@ -161,6 +168,14 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
     height: 1.75,
     color: 0xf0c75e,
     icon: '💡',
+  },
+  lightBalloon: {
+    kind: 'lightBalloon',
+    name: 'Tageslichtballon',
+    ...SIMULATION_CONFIG.economy.buildings.lightBalloon,
+    height: 3.1,
+    color: 0xf4f7ff,
+    icon: '⚪',
   },
   stage: {
     kind: 'stage',
@@ -302,6 +317,13 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
   parasol: { kind: 'parasol', name: 'Festival-Sonnenschirm', cost: 60, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: 1.15, color: 0xd75b79, icon: '⛱️' },
   picnicTable: { kind: 'picnicTable', name: 'Picknickgarnitur', cost: 75, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: .6, color: 0xb28053, icon: '🪑' },
   festivalSign: { kind: 'festivalSign', name: 'Festival-Wegweiser', cost: 30, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: 1.2, color: 0x569c91, icon: '🪧' },
+  totem: { kind: 'totem', name: 'Festival-Totem', cost: 95, upkeep: 1, capacity: 0, appeal: 7, defaultPrice: 0, height: 1.55, color: 0xd97a3a, icon: '🗿' },
+  flagPole: { kind: 'flagPole', name: 'Fahnenmast', cost: 55, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: 1.7, color: 0xc43d55, icon: '🚩' },
+  lanternPole: { kind: 'lanternPole', name: 'Lampion', cost: 50, upkeep: 1, capacity: 0, appeal: 6, defaultPrice: 0, height: 1.35, color: 0xf2b35a, icon: '🏮' },
+  kegStack: { kind: 'kegStack', name: 'Bierfässer', cost: 40, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .7, color: 0x8a6a3a, icon: '🍺' },
+  inflatable: { kind: 'inflatable', name: 'Luftfigur', cost: 80, upkeep: 2, capacity: 0, appeal: 7, defaultPrice: 0, height: 1.25, color: 0xe86a8a, icon: '🦩' },
+  prayerFlags: { kind: 'prayerFlags', name: 'Gebetsfahnen', cost: 40, upkeep: 1, capacity: 0, appeal: 6, defaultPrice: 0, height: 1.3, color: 0xe4b754, icon: '🎐' },
+  fireBowl: { kind: 'fireBowl', name: 'Feuerschale', cost: 70, upkeep: 2, capacity: 0, appeal: 5, defaultPrice: 0, height: .55, color: 0xd4652a, icon: '🔥' },
 }
 
 export const STARTING_MONEY = SIMULATION_CONFIG.economy.startingMoney

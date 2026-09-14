@@ -9,10 +9,18 @@ const money = (n: number) => `${Math.round(n).toLocaleString('de-DE')} €`
 const clock = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(Math.floor(n % 60)).padStart(2, '0')}`
 const meter = (label: string, n: number) => `<label class="festival-meter">${label}<strong>${Math.round(n)}%</strong><progress max="100" value="${n}"></progress></label>`
 
-export function mountFestivalUI(getGame: () => GameState, toast: (text: string, error?: boolean) => void) {
+export function mountFestivalUI(
+  getGame: () => GameState,
+  toast: (text: string, error?: boolean) => void,
+  onPane?: (pane: string) => void,
+) {
   const shell = document.querySelector<HTMLElement>('.game-shell')!
   const open = document.createElement('button')
-  open.id = 'open-festival'; open.textContent = '🎪 Festival planen'; open.setAttribute('aria-expanded', 'false')
+  open.id = 'open-festival'
+  open.textContent = '🎪'
+  open.title = 'Festival planen'
+  open.setAttribute('aria-label', 'Festival planen')
+  open.setAttribute('aria-expanded', 'false')
   document.querySelector('#action-group-festival')!.prepend(open)
   const weather = document.createElement('div'); weather.className = 'festival-weather'; weather.setAttribute('aria-hidden', 'true'); shell.append(weather)
   const panel = document.createElement('section')
@@ -20,11 +28,32 @@ export function mountFestivalUI(getGame: () => GameState, toast: (text: string, 
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-labelledby', 'festival-title')
   panel.innerHTML = `<div class="festival-chrome"><header class="festival-heading panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 id="festival-title" class="panel-header-title">Das Festivalwochenende</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Festivalverwaltung schließen">×</button></header>
     <div class="festival-status" aria-live="polite"></div>
-    <nav class="festival-tabs" aria-label="Festivalbereiche">${[['overview', 'Übersicht'], ['lineup', 'Bands & Spielplan'], ['supply', 'Lager & Lieferungen'], ['prepare', 'Wetter & Vorsorge'], ['reports', 'Abrechnung & Ruf']].map(([id, label]) => `<button data-tab="${id}" aria-pressed="${id === 'overview'}">${label}</button>`).join('')}</nav></div>
-    <section data-pane="overview"><div class="festival-intro"><h3>Ein Gelände. Ein Wochenende. Euer Publikum.</h3><p>Vorlauf und Festivaltage legt ihr in der Tagesplanung fest. Erst mit dem Start läuft die Festivalzeit. Bucht ein Programm, versorgt eure Gäste und entscheidet, welche Reserven ihr euch leisten könnt. Das vorhandene Gelände und Budget werden übernommen.</p><button data-action="start">Festival starten</button><button data-action="sandbox">Freies Spiel fortsetzen</button></div><form data-tickets class="festival-form"><label>Tagestickets je Festivaltag<input name="dayTickets" type="number" min="0" max="100000" value="150" required></label><label>Campingtickets für die gesamte Ausgabe<input name="campTickets" type="number" min="0" max="100000" value="0" required></label><button>Kontingente übernehmen</button></form><p data-camping-summary></p><div data-music-overview></div><div data-summary></div></section>
+    <nav class="festival-tabs" aria-label="Festivalbereiche">${[['overview', 'Übersicht'], ['dayplan', 'Tagesplan'], ['lineup', 'Bands & Spielplan'], ['supply', 'Lager & Lieferungen'], ['prepare', 'Wetter & Vorsorge'], ['reports', 'Abrechnung & Ruf']].map(([id, label]) => `<button data-tab="${id}" aria-pressed="${id === 'overview'}">${label}</button>`).join('')}</nav></div>
+    <section data-pane="overview"><div class="festival-intro"><h3>Ein Gelände. Ein Wochenende. Euer Publikum.</h3><p>Vorlauf und Festivaltage legt ihr im Reiter Tagesplan fest. Erst mit dem Start läuft die Festivalzeit. Bucht ein Programm, versorgt eure Gäste und entscheidet, welche Reserven ihr euch leisten könnt. Das vorhandene Gelände und Budget werden übernommen.</p><button data-action="start">Festival starten</button><button data-action="sandbox">Freies Spiel fortsetzen</button></div><form data-ticket-prices class="festival-form"><label>Preis Tagesticket<input name="dayTicketPrice" type="number" min="0" max="1000000" step="1" value="10" required></label><label>Preis Campingticket<input name="campTicketPrice" type="number" min="0" max="1000000" step="1" value="25" required></label><button>Preise übernehmen</button></form><form data-tickets class="festival-form"><label>Tagestickets je Festivaltag<input name="dayTickets" type="number" min="0" max="100000" value="150" required></label><label>Campingtickets für die gesamte Ausgabe<input name="campTickets" type="number" min="0" max="100000" value="0" required></label><button>Kontingente übernehmen</button></form><p data-camping-summary></p><div data-music-overview></div><div data-summary></div></section>
+    <section data-pane="dayplan" hidden>
+      <p>Vorlauf, Festivaltage und Angebotszeiten gelten für das ganze Gelände. Tagesgäste dürfen nur im eingestellten Fenster bleiben.</p>
+      <div class="festival-cycle-controls">
+        <label>Vorlauf <input id="festival-lead-days" type="number" min="0" max="14" /></label>
+        <label>Festival <input id="festival-active-days" type="number" min="1" max="14" /></label>
+        <label>Pause <input id="festival-break-days" type="number" min="1" max="30" /></label>
+        <label>Camping-Abschlag <input id="camping-capacity-buffer" type="number" min="0" max="50" />%</label>
+        <button id="apply-festival-cycle" type="button">Zyklus übernehmen</button>
+      </div>
+      <div id="festival-cycle-strip" class="festival-cycle-strip"></div>
+      <small id="camping-capacity-summary" class="camping-capacity-summary"></small>
+      <div class="day-visitor-window">
+        <label>Tagesgäste ab <select id="day-entry-hour"></select></label>
+        <label>müssen gehen bis <select id="day-exit-hour"></select></label>
+        <small>Mindestens eine Stunde täglich bleibt für Tagesgäste geschlossen.</small>
+      </div>
+      <div class="day-plan-scroll">
+        <div id="day-plan-grid" class="day-plan-grid"></div>
+      </div>
+      <p id="day-plan-status" class="day-plan-status"></p>
+    </section>
     <section data-pane="lineup" hidden><p>Gagen werden sofort bezahlt. Jede Bühne benötigt Strom und einen erreichbaren Bühnenvorplatz. Zwischen Auftritten liegen 30 Minuten Umbauzeit. Stornierung vor Beginn erstattet 50 %. Leere Slots könnt ihr automatisch füllen lassen; vorhandene Buchungen bleiben erhalten.</p>
       <details><summary>Besucherbasis & Genreverteilung vergleichen</summary><div data-lineup-mix></div></details><div data-music-planner></div></section>
-    <section data-pane="supply" hidden><p>Waren werden am Kartenrand angeliefert und per Lastwagen zum ersten Depot gebracht. Träger versorgen einzelne Stände. Depots, Zielbestände und Routen in der Logistikansicht planen. Jede Lieferung kostet zusätzlich 45 €.</p><div data-stock class="festival-grid"></div>
+    <section data-pane="supply" hidden><p>Waren werden am Kartenrand angeliefert und per Lastwagen zur Anlieferung gebracht. Träger versorgen Depots und Stände automatisch. Anlieferung, Depots und Personaltore baut ihr im Baumenü unter Logistik; Mindestbestände und Träger stellt ihr im Infofenster oder im Reiter Waren & Träger ein. Jede Lieferung kostet zusätzlich 45 €.</p><div data-stock class="festival-grid"></div>
       <form data-order class="festival-form"><label>Ware<select name="kind">${Object.entries(SUPPLIES).map(([key, item]) => `<option value="${key}">${item.name} · ${item.price.toLocaleString('de-DE')} €/Einheit</option>`).join('')}</select></label><label>Menge<input name="quantity" type="number" min="50" max="2000" step="50" value="200" required></label><label>Versandfenster<select name="delay"><option value="0">Jetzt</option><option value="360">In 6 Stunden</option><option value="720">In 12 Stunden</option></select></label><button type="submit">Kostenpflichtig bestellen</button></form><div data-deliveries></div></section>
     <section data-pane="prepare" hidden><div data-forecast class="festival-grid"></div><p>Die Sechs-Stunden-Vorhersage zeigt Wetterrisiken; einzelne Stunden können milder ausfallen. Regen weicht unbefestigte Flächen auf; befestigte Wege bleiben schnell. Ohne Sturmsicherung ruhen Auftritte bei starkem Wind. Schutzmaßnahmen gelten festivalweit und bleiben für weitere Ausgaben erhalten.</p><div data-upgrades class="festival-grid"></div></section>
     <section data-pane="reports" hidden><div data-reputation class="festival-grid"></div><p>Musikruf öffnet den Zugang zu größeren Bands. Atmosphäre, Komfort und Organisation beeinflussen die erwarteten Zielgruppen und die Nachfrage. Die Tagesbilanz enthält sämtliche Einnahmen und Ausgaben des Spiels.</p><div data-reports></div></section>`
@@ -44,6 +73,7 @@ export function mountFestivalUI(getGame: () => GameState, toast: (text: string, 
       panel.querySelectorAll<HTMLElement>('[data-pane]').forEach(pane => pane.hidden = pane.dataset.pane !== button.dataset.tab)
       panel.querySelectorAll('[data-tab]').forEach(tab => tab.setAttribute('aria-pressed', String(tab === button)))
       render(getGame().snapshot, true)
+      onPane?.(button.dataset.tab)
     }
     if (button.dataset.action) execute({ type: button.dataset.action === 'start'&&getGame().snapshot.festival.finished?'prepare':button.dataset.action as 'start' | 'sandbox' })
     if (button.dataset.cancel) execute({ type: 'cancel', id: button.dataset.cancel })
@@ -53,6 +83,14 @@ export function mountFestivalUI(getGame: () => GameState, toast: (text: string, 
   panel.querySelector<HTMLFormElement>('[data-tickets]')!.addEventListener('submit', event => {
     event.preventDefault(); const data = new FormData(event.currentTarget as HTMLFormElement)
     execute({type:'tickets',day:Number(data.get('dayTickets')),camping:Number(data.get('campTickets'))})
+  })
+  panel.querySelector<HTMLFormElement>('[data-ticket-prices]')!.addEventListener('submit', event => {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget as HTMLFormElement)
+    getGame().updateEntryPrice(Number(data.get('dayTicketPrice')))
+    getGame().updateCampingTicketPrice(Number(data.get('campTicketPrice')))
+    toast('Ticketpreise übernommen')
+    render(getGame().snapshot, true)
   })
   panel.querySelector<HTMLFormElement>('[data-order]')!.addEventListener('submit', event => {
     event.preventDefault(); const data = new FormData(event.currentTarget as HTMLFormElement)
@@ -79,6 +117,11 @@ export function mountFestivalUI(getGame: () => GameState, toast: (text: string, 
     if (f.tickets && !ticketForm.contains(document.activeElement)) {
       ticketForm.querySelector<HTMLInputElement>('[name=dayTickets]')!.value = String(f.tickets.day)
       ticketForm.querySelector<HTMLInputElement>('[name=campTickets]')!.value = String(f.tickets.camping)
+    }
+    const priceForm = panel.querySelector<HTMLFormElement>('[data-ticket-prices]')!
+    if (!priceForm.contains(document.activeElement)) {
+      priceForm.querySelector<HTMLInputElement>('[name=dayTicketPrice]')!.value = String(s.entryPrice)
+      priceForm.querySelector<HTMLInputElement>('[name=campTicketPrice]')!.value = String(s.campingTicketPrice)
     }
     put('[data-camping-summary]', `${s.campingCells.length} Campingfelder · ${capacity} buchbar nach ${s.dayPlan.campingCapacityBufferPercent}% Reserve · ${occupied} belegt · ${Math.max(0,capacity-occupied)} frei.<br>${f.tickets ? `Geplant: ${f.tickets.camping}/${capacity} Campingplätze (${capacity ? Math.round(f.tickets.camping/capacity*100) : 0}%). Angereist: ${f.tickets.usedCamping} Camper · ${f.tickets.usedDay[s.day]??0}/${f.tickets.day} Tagesgäste heute.` : 'Noch kein Kontingent festgelegt: bisheriger Besucherzulauf. Übernehmt eure Ticketzahlen vor dem Start.'} Die Kontingente begrenzen die Anreisen; Einlasszeiten und Nachfrage gelten weiterhin. Bezahlung erfolgt bei Anreise.`)
     put('[data-music-overview]',musicOverview(s))

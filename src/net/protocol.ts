@@ -3,6 +3,13 @@ import type { BuildingKind, Tool } from '../game/catalog'
 import type { ActionResult, PlacedBuilding } from '../game/GameState'
 import type { TerrainEditMode } from '../game/terrain'
 import type { Direction, RoadPosition, SpeedLimit } from '../game/logistics'
+import type {
+  AccessControlMode,
+  AccessPolarity,
+  BarrierPassage,
+  PathSensorKind,
+  TrafficSensorKind,
+} from '../game/accessControl'
 import type { CoasterOperationMode, CoasterTypeId, DispatchMode, TrackBuildOptions, TrackPieceKind } from '../game/coasters'
 import type { StaffRole } from '../game/staff'
 import type { DayPlanOffer } from '../game/dayPlan'
@@ -58,6 +65,27 @@ type GameCommandAction =
   | { type: 'designatePowerCable'; x: number; z: number; enabled: boolean }
   | { type: 'designatePowerCableArea'; cells: CellRef[] }
   | { type: 'setRoadDirection'; x: number; z: number; direction: Direction }
+  | { type: 'placeTrafficLight'; x: number; z: number; direction: Direction }
+  | {
+      type: 'placePathBarrier'
+      x: number
+      z: number
+      elevation: number
+      direction: Direction
+    }
+  | {
+      type: 'configureAccessControl'
+      id: string
+      mode?: AccessControlMode
+      openSlots?: boolean[]
+      polarity?: AccessPolarity
+      sensorKind?: TrafficSensorKind | PathSensorKind
+      sensorThreshold?: number
+      passage?: BarrierPassage
+      openInEmergency?: boolean
+    }
+  | { type: 'toggleAccessControlArea'; id: string; from: CellRef; to: CellRef }
+  | { type: 'clearAccessControlArea'; id: string }
   | { type: 'toggleRoadSeparator'; x: number; z: number; direction: Direction }
   | { type: 'toggleCrosswalk'; x: number; z: number }
   | { type: 'setRoadSpeed'; x: number; z: number; speedLimit: SpeedLimit }
@@ -106,6 +134,7 @@ type GameCommandAction =
   | { type: 'recallCoasterTrain'; coasterId: string }
   | { type: 'updateBuildingPrice'; buildingId: string; price: number; allOfKind?: boolean }
   | { type: 'updateEntryPrice'; price: number }
+  | { type: 'updateCampingTicketPrice'; price: number }
   | { type: 'updateSecurityGate'; id: string; config: Partial<SecurityGateConfig> }
   | { type: 'setDayPlanHour'; offer: DayPlanOffer; hour: number; active: boolean }
   | { type: 'updateDayVisitorWindow'; entryHour: number; exitHour: number }
@@ -179,6 +208,7 @@ export type SimSnapshot = {
   speed: number
   parkOpen: boolean
   entryPrice: number
+  campingTicketPrice: number
   visitors: PackedVisitor[]
   staff: StaffMember[]
   vehicles: RoadVehicle[]

@@ -74,6 +74,242 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     assert.ok(Math.abs(stand.x) <= 0.42 && Math.abs(stand.z) <= 0.42, 'six stand points stay on the tile')
   }
 
+  const queueFlow = fixture(3)
+  queueFlow.addDebugMoney()
+  const queueFlowState = queueFlow.snapshot as GameSnapshot
+  assert.ok(queueFlow.place('food', 8, -20).ok)
+  const queueFlowShop = queueFlowState.buildings.find(b => b.kind === 'food')!
+  ;(queueFlow as any).poweredBuildingIds.add(queueFlowShop.id)
+  queueFlowState.dayPlan.offers.food.fill(true)
+  queueFlowState.festival.infrastructure.shops[queueFlowShop.id] = {
+    food: 20,
+    drinks: 0,
+    water: 0,
+  }
+  assert.ok(queueFlow.placePathSegment(8, -19, 0, 'queue').ok)
+  assert.ok(queueFlow.placePathSegment(8, -18, 0, 'queue').ok)
+  const [reserved, arrivedFirst, arrivedSecond] = queueFlowState.visitors
+  Object.assign(reserved!, {
+    targetId: queueFlowShop.id,
+    state: 'seeking',
+    route: [{ x: 8, z: -18, elevation: 0 }],
+  })
+  for (const visitor of [arrivedFirst!, arrivedSecond!]) {
+    Object.assign(visitor, {
+      targetId: queueFlowShop.id,
+      state: 'queuing',
+      route: [],
+      cellX: 8,
+      cellZ: -18,
+      cellElevation: 0,
+      x: 8.5,
+      y: 0,
+      z: -17.5,
+    })
+  }
+  ;(queueFlow as any).facilityQueues.set(queueFlowShop.id, [
+    reserved!.id,
+    arrivedFirst!.id,
+    arrivedSecond!.id,
+  ])
+  ;(queueFlow as any).updateFacilityQueues(0.1)
+  assert.deepEqual(
+    (queueFlow as any).facilityQueues.get(queueFlowShop.id),
+    [arrivedFirst!.id, arrivedSecond!.id, reserved!.id],
+    'guests already at a queue stand ahead of earlier reservations that are still walking',
+  )
+  assert.ok(
+    arrivedFirst!.z < -17.5 && arrivedSecond!.z < -17.5,
+    'arrived guests advance continuously instead of waiting for a distant reservation',
+  )
+
+  const sideShop = fixture(1)
+  sideShop.addDebugMoney()
+  const sideState = sideShop.snapshot as GameSnapshot
+  assert.ok(sideShop.place('food', 5, -20).ok)
+  const sideStand = sideState.buildings.find((building) => building.kind === 'food')!
+  ;(sideShop as any).poweredBuildingIds.add(sideStand.id)
+  sideState.dayPlan.offers.food.fill(true)
+  assert.equal(sideStand.rotation, 0, 'the default counter faces +Z')
+  const sideAccesses = (sideShop as any).getFacilityAccessCells(sideStand) as Array<{
+    x: number
+    z: number
+  }>
+  assert.ok(
+    sideAccesses.some((cell) => cell.x === 4 && cell.z === -20),
+    'a stall accepts the path on its side',
+  )
+  assert.equal(
+    sideAccesses.some((cell) => cell.x === 5 && cell.z === -19),
+    false,
+    'the empty facing tile is not required for service',
+  )
+  sideState.festival.infrastructure.shops[sideStand.id] = { food: 5, drinks: 0, water: 0 }
+  const guest = sideState.visitors[0]!
+  Object.assign(guest, {
+    cellX: 4,
+    cellZ: -20,
+    cellElevation: 0,
+    x: 4.5,
+    z: -19.5,
+    needs: { ...guest.needs, hunger: 10 },
+  })
+  const reached = (sideShop as any).findReachableFacility(guest, 'food')
+  assert.ok(reached, 'guests can buy from a side path instead of the facing counter')
+  assert.equal(reached.building.id, sideStand.id)
+  sideState.festival.infrastructure.depots.push({
+    id: 'side-pad',
+    x: 1,
+    z: -20,
+    role: 'delivery',
+    distribution: 'shops',
+    stock: { food: 80, drinks: 0, water: 0 },
+    minimum: { food: 80, drinks: 0, water: 0 },
+  })
+  assert.ok(
+    sideShop.manageFestival({
+      type: 'depotSettings',
+      depotId: 'side-pad',
+      distribution: 'shops',
+      workers: 1,
+    }).ok,
+  )
+  const sideWalk = (start: unknown, goals: unknown) =>
+    (sideShop as any).findPath(start, goals, false, false, false, false, true, undefined, true)
+  for (let n = 0; n < 200; n += 1) {
+    updateDepotCarriers(sideState, 1, sideWalk, (from, to) =>
+      (sideShop as any).canCarrierStep(from, to),
+    )
+  }
+  assert.ok(
+    (sideState.festival.infrastructure.shops[sideStand.id]?.food ?? 0) > 5,
+    'carriers restock a stall from a side path',
+  )
+  assert.ok(sideShop.placePathSegment(4, -20, 0, 'queue').ok)
+  const sideQueue = sideState.buildings.find(
+    (building) => building.kind === 'path' && building.x === 4 && building.z === -20,
+  )!
+  assert.equal(sideQueue.queueDirection, 1, 'a queue on the side of a stall points toward it')
+
+  const rearStock=fixture(0)
+  rearStock.addDebugMoney()
+  const rear=rearStock.snapshot as GameSnapshot
+  assert.ok(rearStock.place('food',7,-18).ok)
+  const rearStand=rear.buildings.find(building=>building.kind==='food')!
+  assert.ok(rearStock.placePathSegment(5,-19,0).ok)
+  assert.ok(rearStock.placePathSegment(6,-19,0).ok)
+  assert.ok(rearStock.placePathSegment(7,-19,0).ok)
+  rear.festival.infrastructure.depots.push({
+    id:'rear-pad',x:1,z:-20,role:'delivery',distribution:'shops',
+    stock:{food:80,drinks:0,water:0},minimum:{food:80,drinks:0,water:0},
+  })
+  assert.ok(rearStock.manageFestival({type:'depotSettings',depotId:'rear-pad',distribution:'shops',workers:1}).ok)
+  const rearWalk=(start:any,goals:any)=>(rearStock as any).findPath(start,goals,false,false,false,false,true,undefined,true)
+  for (let n=0;n<200;n+=1) updateDepotCarriers(rear,1,rearWalk,(from,to)=>(rearStock as any).canCarrierStep(from,to))
+  assert.ok(
+    (rear.festival.infrastructure.shops[rearStand.id]?.food??0)>0,
+    'carriers restock a stall from the back when only that side has a path',
+  )
+
+  const snake = fixture(1), snakeState = snake.snapshot as GameSnapshot
+  snake.addDebugMoney()
+  assert.ok(snake.place('food', 8, -20).ok)
+  const snakeShop = snakeState.buildings.find(b => b.kind === 'food')!
+  ;(snake as any).poweredBuildingIds.add(snakeShop.id)
+  snakeState.festival.infrastructure.shops[snakeShop.id] = { food: 2, drinks: 0, water: 0 }
+  assert.ok(snake.placePathSegment(8, -19, 0, 'queue').ok)
+  assert.ok(snake.placePathSegment(8, -18, 0, 'queue').ok)
+  assert.ok(snake.placePathSegment(9, -18, 0, 'queue').ok)
+  assert.ok(snake.placePathSegment(9, -19, 0, 'queue').ok)
+  assert.ok(snake.placePathSegment(10, -19, 0).ok)
+  const snakeCells = (snake as any).getBuildingQueueCells(snakeShop) as Array<{ x: number; z: number }>
+  assert.deepEqual(
+    snakeCells.map(cell => [cell.x, cell.z]),
+    [[8, -19], [8, -18], [9, -18], [9, -19]],
+    'a snaking queue follows build order instead of cutting across adjacent tiles',
+  )
+  const shortcut = (snake as any).findPath({ x: 9, z: -19, elevation: 0 }, [{ x: 8, z: -19, elevation: 0 }], true)
+  assert.ok(shortcut && shortcut.length >= 3, 'queue pathfinding cannot skip along a side-by-side snake')
+  assert.ok(
+    shortcut.some((cell: { x: number; z: number }) => cell.x === 8 && cell.z === -18),
+    'the only way forward is the built chain',
+  )
+  const diner = snakeState.visitors[0]!
+  Object.assign(diner, {
+    targetId: snakeShop.id,
+    state: 'using',
+    budget: 100,
+    cellX: 8,
+    cellZ: -19,
+    cellElevation: 0,
+    x: 8.5,
+    z: -18.5,
+    route: [],
+  })
+  ;(snake as any).finishInteraction(diner)
+  assert.deepEqual(
+    diner.route.map((cell: { x: number; z: number }) => [cell.x, cell.z]),
+    [[8, -18], [9, -18], [9, -19], [10, -19]],
+    'after buying food guests walk the queue back to the entrance',
+  )
+  assert.match(diner.thought, /Schlange zurück/)
+
+  snakeState.festival.infrastructure.shops[snakeShop.id] = { food: 0, drinks: 0, water: 0 }
+  const waiter = snakeState.visitors[0]!
+  Object.assign(waiter, {
+    targetId: snakeShop.id,
+    state: 'queuing',
+    thought: 'Ich stehe an.',
+    interactionRemaining: 0,
+    cellX: 8,
+    cellZ: -18,
+    cellElevation: 0,
+    x: 8.5,
+    z: -17.5,
+    route: [],
+  })
+  ;(snake as any).facilityQueues.set(snakeShop.id, [waiter.id])
+  ;(snake as any).updateFacilityQueues(0.1)
+  assert.equal(waiter.state, 'queuing', 'an empty stand makes guests wait briefly')
+  assert.ok(waiter.interactionRemaining > 0)
+  waiter.interactionRemaining = 0
+  ;(snake as any).updateFacilityQueues(0.1)
+  assert.equal(waiter.state, 'exploring')
+  assert.match(waiter.thought, /Ausverkauft/)
+  assert.deepEqual(
+    waiter.route.map((cell: { x: number; z: number }) => [cell.x, cell.z]),
+    [[9, -18], [9, -19], [10, -19]],
+    'they leave an empty stand by walking the queue backwards',
+  )
+  Object.assign(waiter, {
+    targetId: snakeShop.id,
+    state: 'queuing',
+    cellX: 8,
+    cellZ: -18,
+    cellElevation: 0,
+    x: 8.5,
+    z: -17.5,
+    route: [],
+  })
+  const midQueueNeighbors = (
+    (snake as any).getPedestrianNeighbors(
+      { x: 8, z: -18, elevation: 0 },
+      { allowQueue: false, allowGrass: true },
+    ) as Array<{ x: number; z: number }>
+  ).map((cell) => [cell.x, cell.z])
+  assert.deepEqual(
+    midQueueNeighbors,
+    [[9, -18]],
+    'from mid-queue the only way out is backwards',
+  )
+  ;(snake as any).beginVisitorDeparture(waiter)
+  assert.ok(waiter.route.length > 0, 'a guest who wants to leave can walk out of the queue')
+  assert.deepEqual(
+    [waiter.route[0]!.x, waiter.route[0]!.z],
+    [9, -18],
+    'leaving a queue starts by walking it backwards, not sideways',
+  )
+
   const gates=fixture(0), from={x:2,z:-20,elevation:0}, gate={x:3,z:-20,elevation:0}
   assert.ok((gates as any).findPath(from,[gate]))
   assert.ok(gates.manageFestival({type:'staffGate',...gate}).ok)
@@ -686,7 +922,7 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.equal(queued.cell?.z,-18,'after the other car leaves it continues immediately')
   assert.equal(describeRoadVehicleActivity({
     ...queued, state:'driving', waitMinutes:0.4, route:[{x:0,z:-17}], stuckMinutes:0,
-  }),'Wartet, bis die Fahrbahn frei ist')
+  }),'Wartet, bis die Fahrbahn oder Ampel frei ist')
   assert.equal(describeRoadVehicleActivity({
     ...queued, cell:{x:0,z:-19}, facing:0, route:[{x:0,z:-20}], waitMinutes:0, stuckMinutes:0,
   }),'Setzt zurück')
@@ -887,6 +1123,17 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   const plazaRoute=(plaza as any).findSweeperRoute(plazaSweeper,plazaAccesses.map(access=>access.path))
   assert.ok(plazaRoute,'the sweeper can route onto the festival forecourt')
   assert.ok(plazaRoute.some((cell:{x:number})=>cell.x>=5),'the sweeper drives across the dance floor')
+  plaza.snapshot.logistics.roadVehicles.push(plazaSweeper)
+  for (let n=0;n<40;n+=1) (plaza as any).updateLogistics(2)
+  assert.ok(
+    plazaSweeper.cell && plazaSweeper.cell.x>=5,
+    'the sweeper drives onto the dance floor instead of stopping at the path edge',
+  )
+  assert.equal(
+    plaza.snapshot.incidents.some(incident=>incident.id==='dance-litter' && incident.severity>0),
+    false,
+    'the sweeper cleans litter on the dance floor',
+  )
 
   const plazaShop=fixture(0)
   plazaShop.addDebugMoney()
@@ -905,6 +1152,183 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     (plazaState.festival.infrastructure.shops[remoteStand.id]?.food??0)>0,
     'delivery workers take goods across the dance floor to a stall without a path edge',
   )
+
+  const wasteFleet = () => {
+    const game = fixture(0)
+    game.addDebugMoney()
+    const state = game.snapshot as GameSnapshot
+    const edge = -state.scenario.worldSize / 2
+    for (let z = edge; z <= -16; z += 1) {
+      if (!state.logistics.roadCells.some((cell) => cell.x === 0 && cell.z === z)) {
+        assert.ok(game.designateRoad([{ x: 0, z }]).ok)
+      }
+    }
+    const placed = game.place('wasteDepot', -2, -18)
+    assert.ok(placed.ok, placed.message)
+    const depot = state.logistics.wasteDepots[0]!
+    const bought = game.buyGarbageTruck(depot.id)
+    assert.ok(bought.ok, bought.message)
+    const truck = state.logistics.roadVehicles.find((vehicle) => vehicle.kind === 'garbageTruck')
+    assert.ok(truck)
+    return { game, state, edge, depot, truck }
+  }
+  const parkedCar = (id: string, x: number, z: number) => ({
+    id,
+    kind: 'visitorCar' as const,
+    position: { x, z },
+    cell: { x, z },
+    route: [],
+    state: 'waiting' as const,
+    speed: 0,
+    passengerIds: [],
+    groupId: null,
+    parkingCell: null,
+    target: null,
+    facing: 0,
+    waitMinutes: 0,
+    resumeState: null,
+    lineId: null,
+    nextStopIndex: 0,
+    cargo: 0,
+  })
+
+  const stuckReturn = wasteFleet()
+  stuckReturn.truck.state = 'returning'
+  stuckReturn.truck.cargo = 0
+  stuckReturn.truck.cell = { x: 0, z: -18 }
+  stuckReturn.truck.position = { x: 0, z: -18 }
+  stuckReturn.truck.route = [{ x: 0, z: -17 }]
+  stuckReturn.truck.waitMinutes = SIMULATION_CONFIG.logistics.vehicleAbandonMinutes
+  stuckReturn.state.logistics.roadVehicles.push(parkedCar('jam-blocker', 0, -17))
+  ;(stuckReturn.game as any).updateLogistics(1)
+  assert.ok(
+    stuckReturn.state.logistics.roadVehicles.some((vehicle) => vehicle.id === stuckReturn.truck.id),
+    'a garbage truck stuck on the way back is not deleted',
+  )
+  assert.ok(stuckReturn.depot.truckIds.includes(stuckReturn.truck.id))
+
+  const ghost = wasteFleet()
+  ghost.state.logistics.roadVehicles = ghost.state.logistics.roadVehicles.filter(
+    (vehicle) => vehicle.id !== ghost.truck.id,
+  )
+  const soldGhost = ghost.game.sellGarbageTruck(ghost.depot.id)
+  assert.ok(soldGhost.ok, soldGhost.message)
+  assert.equal(ghost.depot.truckIds.length, 0)
+  assert.equal(
+    ghost.state.logistics.roadVehicles.some((vehicle) => vehicle.id === ghost.truck.id),
+    false,
+  )
+
+  const restored = wasteFleet()
+  restored.state.logistics.roadVehicles = restored.state.logistics.roadVehicles.filter(
+    (vehicle) => vehicle.id !== restored.truck.id,
+  )
+  ;(restored.game as any).updateLogistics(0.1)
+  const back = restored.state.logistics.roadVehicles.find(
+    (vehicle) => vehicle.id === restored.truck.id,
+  )
+  assert.ok(back, 'a missing garbage truck respawns at the depot')
+  assert.equal(back.kind, 'garbageTruck')
+  back.state = 'idle'
+  back.cargo = 0
+  assert.ok(restored.game.sellGarbageTruck(restored.depot.id).ok)
+
+  const offMap = wasteFleet()
+  offMap.truck.cell = { x: 0, z: offMap.edge - 1 }
+  offMap.truck.position = { x: 0, z: offMap.edge - 1 }
+  offMap.truck.state = 'waiting'
+  offMap.truck.cargo = 0
+  offMap.truck.route = []
+  offMap.truck.waitMinutes =
+    SIMULATION_CONFIG.waste.truckUnloadMinutes +
+    SIMULATION_CONFIG.logistics.vehicleUnstickMinutes
+  offMap.truck.resumeState = 'returning'
+  offMap.state.logistics.roadCells
+    .filter((cell) => cell.z === offMap.edge)
+    .forEach((cell) => {
+      offMap.state.logistics.roadVehicles.push(
+        parkedCar(`entry-block-${cell.x}`, cell.x, cell.z),
+      )
+    })
+  ;(offMap.game as any).updateLogistics(1)
+  assert.ok(
+    offMap.truck.cell && offMap.truck.cell.z >= offMap.edge,
+    'a garbage truck blocked off the map returns to the depot',
+  )
+  assert.ok(
+    offMap.state.logistics.roadVehicles.some((vehicle) => vehicle.id === offMap.truck.id),
+  )
+  offMap.truck.state = 'idle'
+  offMap.truck.cargo = 0
+  assert.ok(offMap.game.sellGarbageTruck(offMap.depot.id).ok)
+
+  const reenterWhenFree = wasteFleet()
+  reenterWhenFree.truck.cell = { x: 0, z: reenterWhenFree.edge - 1 }
+  reenterWhenFree.truck.position = { x: 0, z: reenterWhenFree.edge - 1 }
+  reenterWhenFree.truck.state = 'waiting'
+  reenterWhenFree.truck.cargo = 0
+  reenterWhenFree.truck.route = []
+  reenterWhenFree.truck.waitMinutes = SIMULATION_CONFIG.waste.truckUnloadMinutes
+  reenterWhenFree.truck.resumeState = 'returning'
+  reenterWhenFree.truck.facing = Math.PI
+  reenterWhenFree.state.logistics.roadCells
+    .filter((cell) => cell.z === reenterWhenFree.edge && cell.x >= -3 && cell.x <= 2)
+    .forEach((cell) => {
+      reenterWhenFree.state.logistics.roadVehicles.push(
+        parkedCar(`gate-${cell.x}`, cell.x, cell.z),
+      )
+    })
+  ;(reenterWhenFree.game as any).updateLogistics(1)
+  assert.ok(
+    reenterWhenFree.truck.cell && reenterWhenFree.truck.cell.z < reenterWhenFree.edge,
+    'a garbage truck stays off the map while every entry is occupied',
+  )
+  reenterWhenFree.state.logistics.roadVehicles =
+    reenterWhenFree.state.logistics.roadVehicles.filter(
+      (vehicle) => vehicle.kind !== 'visitorCar',
+    )
+  ;(reenterWhenFree.game as any).updateLogistics(1)
+  assert.ok(
+    reenterWhenFree.truck.cell && reenterWhenFree.truck.cell.z >= reenterWhenFree.edge,
+    'a garbage truck re-enters when an entry cell becomes free',
+  )
+  assert.ok(
+    reenterWhenFree.truck.state === 'returning' ||
+      reenterWhenFree.truck.state === 'idle',
+    'the re-entering truck heads home or is already at the depot',
+  )
+  if (reenterWhenFree.truck.state === 'idle') {
+    const home = (reenterWhenFree.game as any).getLogisticsBuildingAccess(
+      reenterWhenFree.depot,
+      2,
+    )
+    assert.ok(home)
+    assert.equal(reenterWhenFree.truck.cell.x, home.x)
+    assert.equal(reenterWhenFree.truck.cell.z, home.z)
+  }
+
+  const idleAtExit = wasteFleet()
+  idleAtExit.truck.cell = { x: -3, z: idleAtExit.edge }
+  idleAtExit.truck.position = { x: -3, z: idleAtExit.edge }
+  idleAtExit.truck.state = 'idle'
+  idleAtExit.truck.cargo = 0
+  idleAtExit.truck.route = []
+  idleAtExit.truck.facing = 0
+  ;(idleAtExit.game as any).updateLogistics(1)
+  assert.ok(
+    idleAtExit.truck.state === 'returning' && idleAtExit.truck.route.length > 0,
+    'an idle garbage truck stranded on the ingress drives back to the depot',
+  )
+
+  const leaving = wasteFleet()
+  leaving.truck.cell = { x: 0, z: leaving.edge - 1 }
+  leaving.truck.position = { x: 0, z: leaving.edge - 1 }
+  leaving.truck.state = 'waiting'
+  leaving.truck.cargo = 0
+  leaving.truck.route = []
+  const soldAway = leaving.game.sellGarbageTruck(leaving.depot.id)
+  assert.ok(soldAway.ok, soldAway.message)
+  assert.equal(leaving.depot.truckIds.length, 0)
 
   console.log('PASS planned festival start, stand clearance, staff gates, automatic depot delivery, stock conservation and cleaning chain')
 }

@@ -1,4 +1,4 @@
-import { AdditiveBlending, DataTexture, Group, InstancedMesh, LinearFilter, MeshBasicMaterial, PlaneGeometry, SphereGeometry, Matrix4, PointLight, Vector3 } from 'three'
+import { AdditiveBlending, Color, DataTexture, Group, InstancedMesh, LinearFilter, MeshBasicMaterial, PlaneGeometry, SphereGeometry, Matrix4, PointLight, Vector3 } from 'three'
 import type { GameSnapshot } from '../game/GameState'
 import { isFestivalOfferActive } from '../game/dayPlan'
 import { getTerrainHeight } from '../game/terrain'
@@ -10,6 +10,17 @@ export function nightStrength(minute: number): number {
 }
 
 export const FESTIVAL_LIGHT_BUDGET = 8
+export const WARM_LIGHT_COLOR = 0xffca82
+export const DAYLIGHT_LIGHT_COLOR = 0xf4f8ff
+export const WARM_LIGHT_DISTANCE = 3.5
+export const DAYLIGHT_LIGHT_DISTANCE = 9
+
+type LightStyle = 'warm' | 'daylight'
+
+const WARM_BULB = new Color(0xffd89a)
+const DAY_BULB = new Color(0xf4f8ff)
+const WARM_GLOW = new Color(0xffc778)
+const DAY_GLOW = new Color(0xe8eefc)
 
 function glowTexture(): DataTexture {
   const size = 32, data = new Uint8Array(size * size * 4)
@@ -34,38 +45,44 @@ export class FestivalLightsView {
   private bulbs: InstancedMesh | null = null
   private glows: InstancedMesh | null = null
   private glowGeometry = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2)
-  private glowMaterial = new MeshBasicMaterial({ color: 0xffc778, map: glowTexture(), transparent: true, blending: AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
+  private glowMaterial = new MeshBasicMaterial({ color: 0xffffff, map: glowTexture(), transparent: true, blending: AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
   private positions: Vector3[] = []
+  private styles: LightStyle[] = []
   private focus = new Vector3()
   private geometry = new SphereGeometry(1, 6, 4)
-  private material = new MeshBasicMaterial({ color: 0xffd89a })
+  private material = new MeshBasicMaterial({ color: 0xffffff })
   private night = 0
   constructor() {
     this.group.add(this.cursor); this.cursor.castShadow = false
     // Keep these lights attached even when off. Light count is part of Three's
     // shader cache key; growing/shrinking it can block rendering for seconds.
     for (let i = 0; i < FESTIVAL_LIGHT_BUDGET; i++) {
-      const light = new PointLight(0xffca82, 0, 3.5, 1.6)
+      const light = new PointLight(WARM_LIGHT_COLOR, 0, WARM_LIGHT_DISTANCE, 1.6)
       light.castShadow = false; this.pool.push(light); this.group.add(light)
     }
   }
   update(s: Readonly<GameSnapshot>): void {
     this.night = nightStrength(s.minute)
-    const positions: Vector3[] = [], groundHeights: number[] = [], powered = new Set(s.power.poweredBuildingIds)
+    const positions: Vector3[] = [], groundHeights: number[] = [], styles: LightStyle[] = []
+    const powered = new Set(s.power.poweredBuildingIds)
     const lightsActive = isFestivalOfferActive(s.dayPlan, 'lights', s.minute, s.day)
+    const push = (position: Vector3, ground: number, style: LightStyle = 'warm'): void => {
+      positions.push(position)
+      groundHeights.push(ground)
+      styles.push(style)
+    }
     for (const b of s.buildings) {
-      if (b.kind === 'stringLights' && lightsActive) {
+      if ((b.kind === 'stringLights' || b.kind === 'lanternPole') && lightsActive) {
         const t = sceneryTransform(b)
-        positions.push(new Vector3(b.x + t.x, b.elevation + 1.23, b.z + t.z))
-        groundHeights.push(b.elevation)
+        push(new Vector3(b.x + t.x, b.elevation + (b.kind === 'lanternPole' ? 1.1 : 1.23), b.z + t.z), b.elevation)
       } else if (b.kind === 'lighting' && lightsActive && powered.has(b.id)) {
-        positions.push(new Vector3(b.x + .5, b.elevation + 1.46, b.z + .5))
-        groundHeights.push(b.elevation)
+        push(new Vector3(b.x + .5, b.elevation + 1.46, b.z + .5), b.elevation)
+      } else if (b.kind === 'lightBalloon' && lightsActive && powered.has(b.id)) {
+        push(new Vector3(b.x + .5, b.elevation + 2.4, b.z + .5), b.elevation, 'daylight')
       } else if (b.kind === 'food' || b.kind === 'alcohol' || b.kind === 'toilet') {
         if (!powered.has(b.id) || !isFestivalOfferActive(s.dayPlan, b.kind === 'toilet' ? 'toilets' : b.kind === 'food' ? 'food' : 'drinks', s.minute, s.day)) continue
         const a = b.rotation * Math.PI / 2
-        positions.push(new Vector3(b.x + .5 + Math.sin(a) * .38, b.elevation + (b.kind === 'toilet' ? 1 : .69), b.z + .5 + Math.cos(a) * .38))
-        groundHeights.push(b.elevation)
+        push(new Vector3(b.x + .5 + Math.sin(a) * .38, b.elevation + (b.kind === 'toilet' ? 1 : .69), b.z + .5 + Math.cos(a) * .38), b.elevation)
       }
     }
     const sleeping = s.visitors.filter(v => v.campsite && v.campingPhase === 'resting')
@@ -84,8 +101,7 @@ export class FestivalLightsView {
     for (const { v } of litTents) {
       if (!v.campsite) continue
       const angle = ((Number(v.id.replace(/\D/g, '').slice(-2)) || 0) % 4) * Math.PI / 2
-      positions.push(new Vector3(v.campsite.x + .5 + Math.sin(angle) * .38, getTerrainHeight(s.terrain, v.campsite.x, v.campsite.z) + .25, v.campsite.z + .5 + Math.cos(angle) * .38))
-      groundHeights.push(getTerrainHeight(s.terrain, v.campsite.x, v.campsite.z))
+      push(new Vector3(v.campsite.x + .5 + Math.sin(angle) * .38, getTerrainHeight(s.terrain, v.campsite.x, v.campsite.z) + .25, v.campsite.z + .5 + Math.cos(angle) * .38), getTerrainHeight(s.terrain, v.campsite.x, v.campsite.z))
     }
     if (!this.bulbs || this.bulbs.instanceMatrix.count < positions.length) {
       if (this.bulbs) { this.group.remove(this.bulbs); this.bulbs.dispose() }
@@ -96,15 +112,22 @@ export class FestivalLightsView {
     }
     const matrix = new Matrix4()
     positions.forEach((p, i) => {
-      matrix.makeScale(.055, .04, .055); matrix.setPosition(p); this.bulbs!.setMatrixAt(i, matrix)
-      const radius = p.y - groundHeights[i]! < .5 ? 1.2 : 3.2
+      const daylight = styles[i] === 'daylight'
+      matrix.makeScale(daylight ? .16 : .055, daylight ? .12 : .04, daylight ? .16 : .055)
+      matrix.setPosition(p); this.bulbs!.setMatrixAt(i, matrix)
+      this.bulbs!.setColorAt(i, daylight ? DAY_BULB : WARM_BULB)
+      const radius = daylight ? 8.2 : p.y - groundHeights[i]! < .5 ? 1.2 : 3.2
       matrix.makeScale(radius, 1, radius); matrix.setPosition(p.x, groundHeights[i]! + .085, p.z)
       this.glows!.setMatrixAt(i, matrix)
+      this.glows!.setColorAt(i, daylight ? DAY_GLOW : WARM_GLOW)
     })
     this.bulbs.count = positions.length; this.bulbs.instanceMatrix.needsUpdate = true
+    if (this.bulbs.instanceColor) this.bulbs.instanceColor.needsUpdate = true
     this.glows!.count = positions.length; this.glows!.instanceMatrix.needsUpdate = true
+    if (this.glows!.instanceColor) this.glows!.instanceColor.needsUpdate = true
     this.glowMaterial.opacity = .06 + this.night * .22
     this.positions = positions
+    this.styles = styles
     this.updateLocalLights()
   }
   setFocus(position: Vector3): void {
@@ -113,12 +136,27 @@ export class FestivalLightsView {
     this.updateLocalLights()
   }
   private updateLocalLights(): void {
-    const nearest = this.positions.map((position, index) => ({ position, index, distance: (position.x - this.focus.x) ** 2 + (position.z - this.focus.z) ** 2 }))
-      .sort((a, b) => a.distance - b.distance || a.index - b.index)
+    const nearest = this.positions.map((position, index) => {
+      const style = this.styles[index] ?? 'warm'
+      const raw = (position.x - this.focus.x) ** 2 + (position.z - this.focus.z) ** 2
+      return { position, index, style, distance: style === 'daylight' ? raw * .4 : raw }
+    }).sort((a, b) => a.distance - b.distance || a.index - b.index)
     this.pool.forEach((light, i) => {
-      const p = nearest[i]?.position
-      light.intensity = p ? 0.45 + this.night * 2.35 : 0
-      if (p) { light.position.copy(p); light.position.y += .15 }
+      const source = nearest[i]
+      if (!source) {
+        light.intensity = 0
+        light.color.setHex(WARM_LIGHT_COLOR)
+        light.distance = WARM_LIGHT_DISTANCE
+        light.decay = 1.6
+        return
+      }
+      const daylight = source.style === 'daylight'
+      light.color.setHex(daylight ? DAYLIGHT_LIGHT_COLOR : WARM_LIGHT_COLOR)
+      light.distance = daylight ? DAYLIGHT_LIGHT_DISTANCE : WARM_LIGHT_DISTANCE
+      light.decay = daylight ? 1.15 : 1.6
+      light.intensity = daylight ? 0.85 + this.night * 3.2 : 0.45 + this.night * 2.35
+      light.position.copy(source.position)
+      light.position.y += daylight ? .2 : .15
     })
   }
   updateCursor(position: Vector3 | null): void { this.cursor.intensity = position ? 0.35 + this.night * 1.85 : 0; if (position) this.cursor.position.copy(position).add(new Vector3(0, 1.5, 0)) }

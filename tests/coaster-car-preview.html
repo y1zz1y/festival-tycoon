@@ -1,0 +1,25 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>Achterbahnwagen</title>
+<style>body{margin:0;background:#3a4d58;color:#efe1ba;font:15px system-ui}header{position:absolute;top:20px;left:28px;pointer-events:none}h1{margin:0;font-size:24px}p{opacity:.8}canvas{display:block;image-rendering:pixelated}footer{position:absolute;bottom:20px;left:28px}</style>
+<header><h1>Stahlwaggons.</h1><p>Wanne · Bügel · zwei Sitzreihen<br>Geteilte Geometrie, ein Mesh pro Wagen</p></header>
+<footer>Ziehen zum Drehen · Mausrad zum Zoomen</footer>
+<script type="module">
+import * as T from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createCoasterCar } from '../src/view/coasterCars.ts';
+const scene=new T.Scene();scene.background=new T.Color('#3a4d58');
+const camera=new T.PerspectiveCamera(34,innerWidth/innerHeight,.1,100);camera.position.set(-2.2,0.85,-0.35);camera.lookAt(0,.12,0);
+const renderer=new T.WebGLRenderer({antialias:false});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(.85);document.body.append(renderer.domElement);
+scene.add(new T.HemisphereLight(0xfff1d4,0x4a5c68,2));
+const sun=new T.DirectionalLight(0xffe6c4,2.1);sun.position.set(-2,4,-3);scene.add(sun);
+const rail=new T.Mesh(new T.BoxGeometry(2.4,.04,.08),new T.MeshStandardMaterial({color:0xf2d35c,metalness:.45,roughness:.4}));
+rail.position.set(0,.02,0.16);scene.add(rail);
+const rail2=rail.clone();rail2.position.z=-0.16;scene.add(rail2);
+[0x2876c7,0xd53945,0x2f8f6b].forEach((color,i)=>{
+  const car=createCoasterCar(color);
+  car.position.set((i-1)*0.72,0.12,0);
+  scene.add(car);
+});
+const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,.12,0);controls.minDistance=1.2;controls.maxDistance=8;controls.maxPolarAngle=Math.PI*.47;controls.update();
+const render=()=>renderer.render(scene,camera);controls.addEventListener('change',render);render();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);render()});
+</script></html>

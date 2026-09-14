@@ -3,8 +3,17 @@ import { Group, InstancedMesh, Mesh, Vector3 } from 'three'
 import { GameState } from '../src/game/GameState'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { createRetroBuilding, batchRetroBuildings, DETAILED_BUILDINGS } from '../src/view/retroBuildings'
-import { FESTIVAL_LIGHT_BUDGET, FestivalLightsView } from '../src/view/FestivalLightsView'
+import { DAYLIGHT_LIGHT_COLOR, DAYLIGHT_LIGHT_DISTANCE, FESTIVAL_LIGHT_BUDGET, FestivalLightsView } from '../src/view/FestivalLightsView'
 import { createAttractionAccess } from '../src/view/attractionAccess'
+import { createCoasterCar } from '../src/view/coasterCars'
+import {
+  createLogisticsFacility,
+  createRoadVehicleModel,
+  createSupplyStructure,
+  LOGISTICS_FACILITY_KINDS,
+  VISITOR_CAR_COLORS,
+  visitorCarColor,
+} from '../src/view/logisticsModels'
 import { disposeObject3D } from '../src/view/disposeObject3D'
 
 export function testPerformanceGuards(fixture: (count?: number) => GameState): void {
@@ -91,6 +100,50 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
     accessModels.add(a, b)
   }
   assert.equal(batchRetroBuildings(accessModels).children.length, 6, 'gate draw calls depend on theme, not gate count')
+  const carA = createCoasterCar(0x2876c7)
+  const carB = createCoasterCar(0x2876c7)
+  const carMesh = carA.children[0] as Mesh
+  assert.equal(carA.children.length, 1, 'coaster cars merge into one mesh')
+  assert.equal(carMesh.geometry, (carB.children[0] as Mesh).geometry, 'coaster cars reuse geometry')
+  assert.ok(carMesh.geometry.getAttribute('position').count < 1200, 'car geometry stays bounded')
+  let carGeometryDisposed = false
+  carMesh.geometry.addEventListener('dispose', () => { carGeometryDisposed = true })
+  disposeObject3D(carB)
+  assert.equal(carGeometryDisposed, false, 'disposing one car keeps the shared body')
+
+  for (const kind of LOGISTICS_FACILITY_KINDS) {
+    const a = createLogisticsFacility(kind)
+    const b = createLogisticsFacility(kind)
+    const mesh = a.children[0] as Mesh
+    assert.equal(a.children.length, 1, `${kind}: logistics facility details must be merged`)
+    assert.ok(mesh.geometry.getAttribute('color'))
+    assert.ok(mesh.geometry.getAttribute('position').count < 5000, `${kind}: facility geometry budget`)
+    assert.equal(mesh.geometry, (b.children[0] as Mesh).geometry, `${kind}: facilities share geometry`)
+  }
+  for (const kind of ['delivery', 'supply'] as const) {
+    const a = createSupplyStructure(kind)
+    const b = createSupplyStructure(kind)
+    assert.equal(a.children.length, 1, `${kind}: supply structure merges`)
+    assert.equal((a.children[0] as Mesh).geometry, (b.children[0] as Mesh).geometry)
+  }
+  const visitorA = createRoadVehicleModel('visitorCar', 'car-a')
+  const visitorB = createRoadVehicleModel('visitorCar', 'car-a')
+  const visitorC = createRoadVehicleModel('visitorCar', 'car-other-hue')
+  assert.equal(visitorA.children.length, 1, 'visitor cars merge into one mesh')
+  assert.equal((visitorA.children[0] as Mesh).geometry, (visitorB.children[0] as Mesh).geometry)
+  assert.ok(
+    VISITOR_CAR_COLORS.includes(visitorCarColor('car-a') as typeof VISITOR_CAR_COLORS[number]),
+  )
+  assert.equal(visitorCarColor('car-a'), visitorCarColor('car-a'), 'car paint is stable for an id')
+  for (const kind of ['garbageTruck', 'deliveryTruck', 'bus', 'ambulance', 'sweeper'] as const) {
+    const a = createRoadVehicleModel(kind)
+    const b = createRoadVehicleModel(kind)
+    const mesh = a.children[0] as Mesh
+    assert.equal(a.children.length, 1, `${kind}: vehicle details merge`)
+    assert.equal(mesh.geometry, (b.children[0] as Mesh).geometry, `${kind}: vehicles share geometry`)
+    assert.ok(mesh.geometry.getAttribute('position').count < 2000, `${kind}: vehicle geometry budget`)
+  }
+  void visitorC
   lightSnapshot.minute = 23 * 60
   lightSnapshot.power.poweredBuildingIds = ['unpowered-food-light', 'unpowered-lamp-light']
   lightSnapshot.dayPlan.offers.food[23] = true
@@ -153,5 +206,26 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   assert.deepEqual((festivalLights as any).pool, originalLights, 'adding hundreds of lights cannot increase shader light count')
   festivalLights.setFocus(new Vector3(39, 0, 11))
   assert.ok(originalLights.some(light => light.position.x > 35), 'real-time illumination follows the viewed area')
+  const balloonLights = new FestivalLightsView()
+  lightSnapshot.buildings = [{
+    id: 'moon-balloon',
+    kind: 'lightBalloon',
+    x: 4,
+    z: 6,
+    elevation: 0,
+    rotation: 0,
+    price: 0,
+  }]
+  lightSnapshot.power.poweredBuildingIds = ['moon-balloon']
+  lightSnapshot.minute = 23 * 60
+  lightSnapshot.dayPlan.offers.lights[23] = true
+  lightSnapshot.visitors[0]!.campingPhase = 'none'
+  balloonLights.update(lightSnapshot)
+  balloonLights.setFocus(new Vector3(4.5, 0, 6.5))
+  const balloonPool = (balloonLights as any).pool as { color: { getHex(): number }; distance: number; intensity: number; parent: unknown }[]
+  assert.equal(balloonPool.length, FESTIVAL_LIGHT_BUDGET, 'daylight balloons reuse the same shader light budget')
+  assert.ok(balloonPool.some(light => light.color.getHex() === DAYLIGHT_LIGHT_COLOR && light.distance === DAYLIGHT_LIGHT_DISTANCE && light.intensity > 0), 'balloons use white light with a wider radius')
+  assert.ok(balloonPool.filter(light => light.intensity === 0).length === FESTIVAL_LIGHT_BUDGET - 1, 'unused pool slots stay attached and dark')
+  assert.ok(balloonPool.every(light => light.parent === balloonLights.group), 'balloon lighting never adds extra PointLights')
   console.log('PASS deterministic decision budget, camp route bound, cache refresh and detailed asset batching')
 }

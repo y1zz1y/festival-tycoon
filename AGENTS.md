@@ -13,7 +13,7 @@ Important per-system facts live in `docs/*.md`, not only in this file. Start at
 | Camping / gatherings | `docs/camping.md` |
 | Buildings, catalog, scenery | `docs/buildings.md` |
 | Terrain, ground, way types | `docs/terrain.md` |
-| Roads, depots, freight | `docs/logistics.md` |
+| Roads, depots, freight, lights | `docs/logistics.md` |
 | Staff, medical, security | `docs/staff.md` |
 | Waste, incidents, panic | `docs/incidents.md` |
 | Festival weekend, bands, tickets | `docs/festival.md` |

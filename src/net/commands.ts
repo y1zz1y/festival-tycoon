@@ -53,6 +53,21 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.designatePowerCableArea(command.cells)
     case 'setRoadDirection':
       return game.setRoadDirection(command.x, command.z, command.direction)
+    case 'placeTrafficLight':
+      return game.placeTrafficLight(command.x, command.z, command.direction)
+    case 'placePathBarrier':
+      return game.placePathBarrier(
+        command.x,
+        command.z,
+        command.elevation,
+        command.direction,
+      )
+    case 'configureAccessControl':
+      return game.configureAccessControl(command.id, command)
+    case 'toggleAccessControlArea':
+      return game.toggleAccessControlArea(command.id, command.from, command.to)
+    case 'clearAccessControlArea':
+      return game.clearAccessControlArea(command.id)
     case 'toggleRoadSeparator':
       return game.toggleRoadSeparator(command.x, command.z, command.direction)
     case 'toggleCrosswalk':
@@ -138,7 +153,10 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return { ok: true, message: 'Preis geändert' }
     case 'updateEntryPrice':
       game.updateEntryPrice(command.price)
-      return { ok: true, message: 'Eintrittspreis geändert' }
+      return { ok: true, message: 'Tagesticketpreis geändert' }
+    case 'updateCampingTicketPrice':
+      game.updateCampingTicketPrice(command.price)
+      return { ok: true, message: 'Campingticketpreis geändert' }
     case 'updateSecurityGate':
       return game.updateSecurityGate(command.id, command.config)
     case 'setDayPlanHour':

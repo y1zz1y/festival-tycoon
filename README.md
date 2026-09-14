@@ -48,8 +48,7 @@ Oder aus dem Repo: `docker compose up --build`. Danach http://localhost:8080 öf
 ### iOS-Homescreen-App
 
 Spieladresse in Safari öffnen → Teilen → **Zum Home-Bildschirm** →
-**Als Web-App öffnen** (falls angeboten) → Hinzufügen. Unter **Menü → Zum
-Home-Bildschirm** steht die Anleitung auch im Spiel. Die App startet im
+**Als Web-App öffnen** (falls angeboten) → Hinzufügen. Die App startet im
 Standalone-Modus mit eigenem Icon; Hoch- und Querformat bleiben möglich.
 Für eine öffentlich erreichbare Installation den Spielserver über HTTPS betreiben.
 Das Manifest und die PNG-Icons liegen in `public/` und werden auch im Docker-Build
@@ -60,8 +59,9 @@ und das vorhandene `no-cache` für HTML sorgt beim erneuten Laden für den aktue
 Browser- und Homescreen-Speicher können getrennt sein: vor dem Wechsel auf dem Server
 speichern oder einen Spielstand als Text exportieren und in der App importieren.
 
-Auf schmalen Bildschirmen öffnet **Menü** die Verwaltung, die Leiste unten die
-Bauwerkzeuge und Kameraaktionen. Die Leiste ist seitlich scrollbar.
+Auf schmalen Bildschirmen öffnet **Menü** die Verwaltung, die Iconleiste oben
+die Bau- und Verwaltungsgruppen, die Leiste unten Kameraaktionen. Die Leisten
+sind seitlich scrollbar.
 Ein Tipp baut oder wählt aus; mit zwei Fingern verschiebt und zoomt man die Karte.
 **✋ Schieben** aktiviert das Verschieben mit einem Finger, auch bei gewähltem Bauwerkzeug.
 Im Info-Modus verschiebt Ziehen die Kamera; Flächenwerkzeuge zeichnen mit einem Finger.
@@ -88,32 +88,65 @@ Die Einstellungen gelten beim Start eines neuen Spiels. Spielstände und Multipl
 
 ### Waren, Müll und Boden vorbereiten
 
-Die **Logistikansicht** in der oberen Leiste blendet Besucher aus. Alle normalen
-Bauwerkzeuge bleiben links verfügbar; der ergänzende Logistikplaner sitzt rechts
-über der Zeitsteuerung. Beim Umschalten bleibt das gewählte Bauwerkzeug erhalten.
-Geöffnete Infofenster nutzen vorübergehend den rechten Platz des Planers. Die Zeit läuft weiter; die Pause-Taste ermöglicht ruhiges Planen.
+Das Overlay **Logistik / Untergrund** in der Iconleiste Kartenansichten blendet Besucher
+aus und zeigt Bodenmarkierungen. Alle normalen Bauwerkzeuge bleiben im
+Baumenü. Die Zeit läuft weiter; die Pause-Taste ermöglicht ruhiges Planen.
 Bodenarbeiten lassen sich mit gedrückter linker Maustaste als Rechteck aufziehen;
 die Vorschau zeigt Kosten und geeignete Felder. Erst beim Loslassen wird gebaut.
 Bereits vorbereitete, ungeeignete oder nicht finanzierbare Felder werden übersprungen.
-Bodenmarkierungen und Straßenfarben erscheinen nur in der Logistikansicht;
+Bodenmarkierungen und Straßenfarben erscheinen nur im Overlay Logistik / Untergrund;
 gesetzte Fahrtrichtungen liegen als weiße Fahrstreifenpfeile (wie im
 deutschen Straßenverkehr) auf der Straße. Mit dem Werkzeug
-**Fahrtrichtung** erscheint dieselbe Pfeilform groß in der Vorschau; auf
-bereits gesetzten Einbahnen laufen die Pfeile weich über die Fahrbahn.
+**Fahrtrichtung** erscheint dieselbe weiße Markierung über dem Baufeld
+und über den Fahrzeugen; auf gesetzten Einbahnen laufen kompaktere
+Pfeile weich über die Fahrbahn.
 Die normale Darstellung bleibt frei von der Laufanimation.
 Eine nachträglich gesetzte Einbahn dreht alle Straßenfahrzeuge auf dieser
 Kachel — Autos, Busse, Liefer- und Müllwagen — und plant ihre Route neu.
 Fahrzeuge anklicken zeigt Status und die geplante Route.
 
+**Ampeln** (120 €) stehen auf einer Straße in genau einer Richtung,
+**Personentore** (70 €) auf einem normalen Weg. Nach dem Bauen öffnet
+sich die Steuerung. Vier Schaltungen: zeitgesteuerte 10-Minuten-Slots,
+Sensor, **Immer offen** oder **Immer zu**. Feste Slots und die festen
+Zustände brauchen kein Gebiet. Tore stehen auf der Ausgangskante der
+gesetzten Richtung und klappen auf. Zusätzlich **eine Richtung**
+(Gegenrichtung bleibt zu, auch bei offenem Tor) oder **beide
+Richtungen**. **Im Notfall offen** (Standard an) öffnet das Tor bei
+Massenpanik oder Feuer in beide Richtungen. Im Sensor-Modus gilt
+die Regel im gezeichneten Gebiet: Ampeln nach freien oder keinen freien
+Parkplätzen beziehungsweise weniger/mehr als X Autos auf der Straße;
+Tore nach freien oder belegten Campingflächen beziehungsweise
+weniger/mehr als X Personen. Ob die erfüllte Regel Grün/offen oder
+Rot/zu bedeutet, lässt sich umschalten. Das Fenster zeigt immer, wie
+viele Parkplätze, Autos, Campingflächen oder Personen gerade ins Gebiet
+fallen. Gebiet: Rechteck aufziehen setzt Felder; nochmals über ein
+  vollständig markiertes Rechteck ziehen nimmt sie wieder raus. Bei Rot
+halten Autos auf der Kachel **vor** der Ampel. Können sie die rote
+Abbiegung umfahren, tun sie das; sonst warten sie an der Haltelinie.
+Alle Straßenfahrzeuge umfahren eine Ampel, wenn ein anderer Weg zum
+Ziel frei ist. Bleibt sie länger rot, dürfen Liefer- und Müllwagen
+dafür auch wenden.
+Parkplätze werden nicht von weitem reserviert: das erste freie Feld
+neben dem Auto wird genommen, auch auf einer Einbahn, sobald keine
+Trennlinie und keine rote Ampel die Einfahrt sperren. Eine
+**Trennlinie** an der Straßenseite blockiert Einfahrt und Ausfahrt
+über diese Kante — Autos queren sie nicht. Geschlossene Tore zwingen
+Fußgänger zum Umlaufen.
+
 1. Ein freies Feld neben einer Zufahrt und einem Fußweg vorbereiten: Lehm zuerst
    entwässern, dann verdichten. Ein Depot kostet 400 € und belegt ein Feld.
 2. Straße vom nördlichen Kartenrand bis direkt neben das Depot führen. Fußwege
    müssen ebenfalls direkt neben Depot und Zielgebäude liegen, auf gleicher Höhe.
+   Imbiss und Bar nehmen Verkauf und Nachschub von jeder angrenzenden Seite an;
+   die Bude muss nicht zur Lieferseite drehen.
 3. Ware bestellen oder je Depot Mindestbestände setzen. Automatische Bestellungen
    bezahlen Ware und jeweils 45 € Fracht; Mindestbestand 0 schaltet sie aus.
 4. Einen Träger pro Versorgungsroute einstellen (120 €, danach 0,04 €/Spielminute).
    Er trägt bis zu 40 Einheiten. Optionale Wegpunkte müssen auf vorhandenen
    Fußwegen liegen. Essen geht zum Imbiss, Getränke zur Bar, Wasser zum WC.
+   Imbiss und Bar nehmen Nachschub und Gäste von jedem angrenzenden Weg
+   oder Bühnenvorplatz, nicht nur von der Vorderseite.
    Jeder Stand verkauft ausschließlich seinen eigenen angelieferten Vorrat.
 5. Müllrouten leeren Eimer ab ihrer Abholschwelle (maximal 12) und bringen die
    Ladung zu einer erreichbaren Müllablage. Eine Ablage fasst 40 Einheiten;
@@ -148,14 +181,20 @@ im Umkreis von drei Feldern ausgegeben.
 
 ### Auswählbare Wegtypen
 
-Die Icon-Leiste direkt über dem **Weg-Werkzeug** und im **Weg-Editor** bietet in beiden
-Ansichten vier Fußwege
-(Trampelpfad, Schotterweg, Holzbohlenweg, Promenade) und vier Straßen
-(Feldstraße, Schotterstraße, Fahrplatten, Asphalt) in der Baukategorie **Logistik**. Ein Klick auf ein Material-Icon ändert direkt den Baumodus; Gold markiert die aktuelle Auswahl.
-Tooltips beschreiben Preis pro Feld und Anforderungen. Dezente Materialtexturen zeigen Holzbohlen,
-Pflasterfugen, Schotter und Fahrplatten ohne zusätzliche Planungsmarkierungen.
-Mit dem normalen Weg- beziehungsweise Straßenwerkzeug werden Flächen auf Geländehöhe gebaut oder bestehende
-Beläge ersetzt. Der Weg-Editor übernimmt denselben Fußwegbelag für seine Segmente, einschließlich Warteschlangen.
+**Wege** in der Iconleiste öffnet das Fußwegfenster. Oben **Weg** oder
+**Schlange** wählen (beide Modi). Unter **Art** den Belag gedrückt halten:
+Trampelpfad, Schotterweg, Holzbohlenweg und Promenade. Gold markiert die
+Auswahl; Kosten und **Abreißen** stehen darunter. Anschließend eine Linie
+ziehen. Richtung und Neigung sind sichtbar, aber ausgegraut, bis unten der
+Streckenbutton von zwei Pfeilen (frei ziehen) auf einen Pfeil (stückweise)
+umschaltet. Im Stückmodus setzt ein Klick aufs Gelände das erste Stück.
+Tor, Personaleingang und Festival-Einlass (Sicherheitsschleuse) liegen als
+Schnellzugriff im selben Fenster. Autostraßen bleiben rechts in ihrer
+eigenen Palette (Feldstraße, Schotterstraße, Fahrplatten, Asphalt).
+Tooltips beschreiben Preis pro Feld und Anforderungen. Dezente
+Materialtexturen zeigen Holzbohlen, Pflasterfugen, Schotter und Fahrplatten
+ohne zusätzliche Planungsmarkierungen. Mit dem Straßenwerkzeug werden Flächen
+auf Geländehöhe gebaut oder bestehende Beläge ersetzt.
 
 Holzbohlen und Fahrplatten funktionieren auf weichem Boden. Schotter braucht
 tragfähigen Untergrund; Promenade und Asphalt zusätzlich Entwässerung.
@@ -183,10 +222,10 @@ Der Host muss geöffnet bleiben; eine automatische Host-Übernahme ist nicht ent
 Die 3D-Ansicht nutzt eine auf maximal 1440 × 810 Bildpunkte begrenzte Pixelrasterung
 (auch bei Full HD und 4K), helleres Tageslicht und weiterhin die
 isometrische Kamera. Die Oberfläche verwendet kompakte, gerahmte Tycoon-Fenster,
-eine zweizeilige Aktionsleiste und getrennte Bau- und Overlay-Bereiche.
-Infofenstern weicht die Overlay-Steuerung seitlich aus; in schmalen Ansichten und bei
-großen Verwaltungsfenstern wird sie bis zum Schließen des Fensters ausgeblendet.
-Aktivierte Karten-Overlays bleiben dabei bestehen.
+eine zweizeilige Aktionsleiste. Karten-Overlays sitzen als eigene Icongruppe
+zwischen Verwalten und Sitzung. Die Mittelwerte weichen Infofenstern seitlich
+aus; in schmalen Ansichten und bei großen Verwaltungsfenstern werden sie bis
+zum Schließen ausgeblendet. Aktivierte Karten-Overlays bleiben dabei bestehen.
 
 Prüfungen und reproduzierbarer synthetischer Lasttest:
 
@@ -283,14 +322,15 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - unbegrenzter Besucherzustrom mit lokaler Gedränge- und Festivallust-Simulation
 - zuschaltbares Gedränge-Overlay mit durchschnittlicher Parkauslastung
 - getrennte Karten-Overlays für lokale Attraktivität und Partystimmung mit abflachender Quellenaddition
-- Dekoration mit Bäumen, Hecken, automatisch am Wegrand ausgerichteten Bänken und Beleuchtung
+- Dekoration mit Bäumen, Hecken, Bannern, Wimpeln, Totems, Fahnen, Lampions, Bierfässern, Luftfiguren, Gebetsfahnen, Feuerschalen, automatisch am Wegrand ausgerichteten Bänken, Mastleuchten und großen weißen Tageslichtballons
 - Festivalbühnen, gerichtete sowie omnidirektionale Lautsprecher und ausweisbare Bühnenvorplätze
 - maximal neun feiernde Besucher je Vorplatzfeld, lokale Tanz-Hotspots und Stimmungsverstärkung durch Tänzer
 - individuelle Vorlieben für schöne Umgebung und Partystimmung sowie Meidung von Feuer, Kotze und Schlafenden
 - kleine Camping-Musikboxen und Gespräche als lokale Stimmungsquellen
 - sortier- und durchsuchbare Besucherübersicht mit Seitenansicht für große Besuchermengen
 - vollständiger Tag-Nacht-Zyklus mit zehn realen Minuten pro Spieltag, Sonnenstand, Dämmerung und Nachtbeleuchtung
-- 24-Stunden-Tagesplan für Bühnen, Buden, Toiletten, Fahrgeschäfte und Lampen
+- 24-Stunden-Tagesplan unter **Festival planen** für Bühnen, Buden, Toiletten, Fahrgeschäfte und Lampen
+- getrennte Preise für Tages- und Campingticket unter **Festival planen**
 - getrennte Tages- und Campingtickets mit festgelegtem Einlass- und Räumungsfenster für Tagesgäste
 - individuelle Schlafrhythmen; Camper schlafen nachts und früh morgens in ihren Zelten
 - auf Tageslängen abgestimmte Hunger-, Toiletten-, Spaß- und Energieraten
@@ -306,20 +346,23 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - automatisch besetzte Einbahn-Sicherheitsschleusen mit konfigurierbaren Verboten und Kontrollgründlichkeit
 - ausweisbare Krankenbereiche mit drei Liegen pro Feld und Sanitätertransport für Bewusstlose
 - alkohol- und toilettenabhängige Übelkeit sowie zusätzliche Übelkeit nach alkoholisierten Fahrten
-- sichtbare Verschmutzungen, die von Reinigungskräften gesucht und beseitigt werden
+- sichtbare Verschmutzungen, die von Reinigungskräften und Saugreinigern
+  gesucht und beseitigt werden; Saugreiniger fahren dazu auch auf Bühnenvorplätze
 - versetzte Kotzeflecken pro Feld und vollständige Reinigung des nächstgelegenen Feldes
 - lokales, nicht ausbreitendes Brandrisiko durch betrunken gezündetes Feuerwerk
 - patrouillierende Feuerwehrkräfte, die lokale Brände löschen
-- kompaktes Baumenü mit ausfahrenden Kategorien für Versorgung, Camping, Attraktionen und Notfallversorgung
+- RCT-Iconleiste oben rechts: Bauen, Verwalten und Sitzung; Raster-Paletten links, Autostraßen rechts
+- Dekoration, Attraktionen und Logistik als Bildkatalog: Kacheln im Raster, Name und Preis unten beim Darüberfahren
+- Camping unter Attraktionen, Krankenhaus (Garage und Krankenbereich) unter Logistik
 - generisches Achterbahnsystem mit erweiterbarem Typ- und Schienenkatalog
 - fortgesetzter Schienenbau mit Station, Geraden, sanften/steilen Steigungen und Kurven 1×1 bis 4×4
-- explizite, weich gesampelte Übergangsstücke zwischen den Höhenneigungen
+- einfeldrige Steigungen; das lange Rundungsstück nur beim Sprung flach ↔ steil
 - RCT2-artige seitliche Neigung mit Einleitungs- und Ausleitungsstücken
 - optionale Kettenzüge auf ansteigenden Schienenelementen
 - Stationsplattformen bestimmen die Anzahl der Wagen und die Zugkapazität
 - separat anzubauender Achterbahn-Eingang und -Ausgang
 - fahrender Achterbahnzug mit konfigurierbarer Abfahrt
-- einzeln entlang der Schienenkurve ausgerichtete Wagen mit sichtbaren Fahrgästen
+- einzeln entlang der Schienenkurve ausgerichtete Waggons mit Wanne, Bügeln und sichtbaren Fahrgästen
 - gemeinsamer Track-Rahmen für kontrolliertes Rollen von Schienen und Wagen
 - echte Besucher laufen zum Eingang, warten und steigen nacheinander ein
 - Fahrgäste bleiben während der Fahrt als dieselben Besucher ihren Sitzen zugeordnet
@@ -351,37 +394,39 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Mausrad: zoomen
 - Q / E: Kamera um 90 Grad drehen
 - R: Gebäudezugang um 90 Grad drehen
-- Shift + Mausrad oder Bild hoch/runter: Bauhöhe ändern
+- Shift halten und Maus hoch/runter (oder Mausrad / Bild hoch/runter): Bauhöhe ändern. Um das Gebäude erscheint ein 7×7-Baugitter auf dieser Ebene. Shift loslassen behält die Höhe; ein neues Bauwerkzeug setzt sie auf 0.
 - 1–9: Werkzeug wählen, 0: Achterbahn
 - Leertaste: pausieren / fortsetzen
 - Besucher anklicken: Gedanken und Bedürfnisse öffnen
 
 ### Wege-Editor
 
-1. Beim Werkzeug „Weg“ den Wege-Editor öffnen.
-2. Einen bestehenden Weg als Startpunkt anklicken.
-3. Richtung und Neigung für das nächste Segment wählen.
-4. „Bauen“ drücken; der neue Weg wird zum nächsten Bauanker.
-5. „Rückgängig“ entfernt das letzte Segment und setzt den Anker zurück.
-6. Am gewählten normalen Weg kann eine Laufrichtung gesetzt, gedreht oder wieder freigegeben werden.
+1. In der Iconleiste **Wege** öffnen (frei ziehen, zwei Pfeile).
+2. Unten den Streckenbutton auf einen Pfeil stellen.
+3. Ein beliebiges Feld anklicken; das erste Stück liegt dort.
+4. Richtung und Neigung für das nächste Segment wählen.
+5. „Bauen“ drücken oder das nächste Feld setzen.
+6. „Zurück“ entfernt das letzte Segment.
+7. **Abreißen** entfernt angeklickte oder gezogene Wege.
 
 Tastatur: `R` oder Pfeiltasten drehen, `Enter` baut und `Backspace` nimmt das letzte Segment zurück.
 
 Richtungen werden als diagonale Pfeile der aktuellen isometrischen Kameraansicht angezeigt. Nach dem Drehen der Kamera passen sich die Symbole automatisch an.
 
-Der Wegtyp „Warteschlange“ steht ausschließlich in diesem Editor zur Verfügung. Die Einbahnrichtung und die Öffnungen der Absperrungen werden automatisch vom angeschlossenen Attraktionseingang aus berechnet. Besucher mit einem Attraktionsziel stellen sich darin geordnet auf; normale Parkbesucher verwenden diese Wege nicht. Am hinteren Ende muss ein normaler Weg liegen.
+Der Wegtyp „Warteschlange“ steht ausschließlich in diesem Editor zur Verfügung. Die Einbahnrichtung und die Öffnungen der Absperrungen werden automatisch vom angeschlossenen Attraktionseingang oder Stand aus berechnet und folgen der Bau-Reihenfolge: nebeneinander liegende Serpentinenstücke bilden keine Abkürzung. Besucher mit einem Attraktions- oder Standziel stellen sich darin geordnet auf; normale Parkbesucher verwenden diese Wege nicht. Am hinteren Ende muss ein normaler Weg liegen. Wer die Schlange verlassen will oder am Stand Essen bzw. Getränke geholt hat, geht dieselbe Kette rückwärts wieder hinaus. Ist ein Stand leer, warten Gäste nur kurz und gehen dann zurück.
 
 ### Achterbahn-Editor
 
-1. Im Baumenü „Achterbahn“ wählen und auf dem Gelände einen Startpunkt setzen.
-2. Startpunkt, Bauhöhe und Startrichtung in der Vorschau anpassen und erst dann „Startplattform bauen“ drücken.
-3. Schienenelement wählen und über „Schiene bauen“ fortsetzen.
-4. Beim Wechsel zwischen flach, sanft und steil setzt der Editor automatisch ein erforderliches Übergangsstück ein.
+1. In der Iconleiste **Attraktionen** öffnen, „Achterbahn“ wählen und auf dem Gelände einen Startpunkt setzen.
+2. Startpunkt, Bauhöhe und Startrichtung in der Vorschau anpassen und mit dem blauen Hammer die Startplattform bauen.
+3. Wie in RCT2 oben Richtung/Kurvenradius wählen. Weitere Elemente liegen hinter **Speziell …**.
+4. Jeder Wechsel zwischen flach, sanft und steil setzt ein Übergangsstück. Flach ↔ steil nutzt das lange Rundungsstück, alle anderen Stufen ein Feld. Der Wechsel von einer Steigung auf flach endet dadurch wieder exakt waagerecht.
 5. Seitliche Neigung links oder rechts muss vor einer Kurve eingeleitet und vor Stationen wieder neutral ausgeleitet werden. Nachfolgende Kurven übernehmen die gesetzte Neigung.
 6. Weitere Stationsplattformen verlängern den Zug um jeweils einen Wagen.
-7. Bei Steigungen kann optional ein Kettenzug aktiviert werden.
-8. Eingang und Ausgang auf getrennten Feldern neben Stationsplattformen anbauen.
-9. Die Strecke zum Startpunkt mit gleicher Höhe, Richtung, Höhenneigung und Seitenneigung zurückführen.
+7. Bei geeigneten Steigungen schaltet das Kettensymbol den Kettenzug für das nächste Stück ein; die angezeigten Kosten enthalten den Aufpreis.
+8. Die roten Rückbauknöpfe entfernen das letzte bzw. markierte Stück. Mit den Pfeilen wird ein vorhandenes Element markiert.
+9. Eingang und Ausgang über die beiden unteren Schaltflächen auf getrennten Feldern neben Stationsplattformen anbauen.
+10. Die Strecke zum Startpunkt mit gleicher Höhe, Richtung, Höhenneigung und Seitenneigung zurückführen.
 
 Eine Bahn fährt erst, wenn Strecke, Eingang und Ausgang vollständig sind. Mit dem Info-Werkzeug lässt sich anschließend einstellen, ob der Zug bei voller Belegung, nach einer festen Wartezeit oder beim ersten eintretenden Ereignis abfährt.
 
@@ -423,11 +468,11 @@ RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafi
 
 ## Festivalbetrieb und automatische Logistik
 
-Neue Szenarien beginnen geschlossen in der Planung. Die Tagesplanung legt Vorlauf, Festivaltage und Angebotszeiten fest; erst **Festival starten** setzt die Festivalzeit in Gang. Nach dem Ende bleiben Abreise und Reinigung aktiv, der Park bleibt bis zum nächsten Start geschlossen. Bestehende laufende Spielstände behalten ihren Ablauf.
+Neue Szenarien beginnen geschlossen in der Planung. Unter **Festival planen** legt ihr Vorlauf, Festivaltage, Angebotszeiten sowie die Preise für Tages- und Campingticket fest; erst **Festival starten** setzt die Festivalzeit in Gang. Nach dem Ende bleiben Abreise und Reinigung aktiv, der Park bleibt bis zum nächsten Start geschlossen. Bestehende laufende Spielstände behalten ihren Ablauf.
 
-In der Logistikansicht einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen, Mindestbestände festlegen und mehrere Träger zuweisen. Bestellungen kosten Warenpreis plus 45 € Fracht. Lastwagen liefern zum Anlieferungsplatz; Träger holen dort Waren physisch ab und bringen sie ins Depot. Depots versorgen Stände automatisch bis zum Zielbestand von 40 Einheiten. Als **Zwischenlager** freigegebene Depots geben zusätzlich Ware an andere Depots ab. Träger kosten einmalig 120 € und anschließend 0,04 €/Spielminute. Alte manuelle Warenrouten bleiben nutzbar.
+Unter **Logistik** in der Iconleiste einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen. Das Paket-Icon in der Gruppe **Verwalten** öffnet die Logistikverwaltung für Bestellungen und Träger. Mindestbestände (in 20er-Schritten) und Trägerzahl stellt ihr dort im Reiter **Waren & Träger** oder im Infofenster des Lagers ein. Bestellungen kosten Warenpreis plus 45 € Fracht. Lastwagen liefern zum Anlieferungsplatz; Träger holen dort Waren physisch ab und bringen sie ins Depot. Depots versorgen Stände automatisch bis zum Zielbestand von 40 Einheiten. Als **Zwischenlager** freigegebene Depots geben zusätzlich Ware an andere Depots ab. Träger kosten einmalig 120 € und anschließend 0,04 €/Spielminute.
 
-Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als farbigen Balken und als Zahl im Infofenster. Reinigungskräfte bringen gesammelten Bodenmüll zuerst zum nächsten erreichbaren Mülleimer; Eimerinhalte werden von Reinigungskräften zur Müllablage gebracht, Müllwagen übernehmen die weitere Abfuhr. Alte Müllträger beenden vorhandene Ladungen und werden anschließend aus dem Logistiksystem entfernt.
+Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als farbigen Balken und als Zahl im Infofenster. An Mülleimern liegt der Füllstand als grobe Zahl Kartons am Boden (leer keine, voll vier). Reinigungskräfte bringen gesammelten Bodenmüll zuerst zum nächsten erreichbaren Mülleimer; Eimerinhalte werden von Reinigungskräften zur Müllablage gebracht, Müllwagen übernehmen die weitere Abfuhr. Saugreiniger vom Betriebshof fahren auf Wegen und Bühnenvorplätzen, halten vor Besuchern und entladen an der Müllablage; Eimer lassen sie stehen. Alte Müllträger beenden vorhandene Ladungen und werden anschließend aus dem Logistiksystem entfernt.
 
 **Personaltore** werden auf Fußwege gesetzt und sperren diese Kachel für Besucher; Personal und Warenlogistik dürfen passieren. Für einen vollständig getrennten Bereich muss das Tor mit Zäunen bzw. geschlossenen Grenzen kombiniert werden. Personalfiguren oder Namen in der Personalverwaltung anklicken: Das Infofenster bietet Verfolgen und einen rechteckigen Arbeitsbereich. Der Bereich wird bei Auswahl türkis markiert. Abhol-/Einsatzorte liegen im zugewiesenen Bereich; notwendige Entsorgungs-, Rettungs- und Rückwege dürfen hinausführen. Automatische Träger können ebenfalls angeklickt und einem Bereich zugewiesen werden.
 
@@ -436,7 +481,7 @@ Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als f
 
 In der Festivalübersicht lassen sich Tagestickets **je Festivaltag** und Campingtickets **je Ausgabe** festlegen. Campingfelder, Sicherheitsreserve, buchbare und belegte Plätze sowie geplante Auslastung werden angezeigt. Kontingente sind nach Festivalstart gesperrt. Anreisen verbrauchen Tickets dauerhaft, auch wenn Gäste wieder abreisen; Tageskontingente beginnen am nächsten Tag neu. Nachfrage und Einlasszeiten gelten weiterhin, der Eintritt wird bei Anreise bezahlt. Neue Szenarien starten mit 150 Tagestickets und 0 Campingtickets. Alte Spielstände ohne Kontingente behalten ihren bisherigen Zulauf, bis Ticketzahlen festgelegt werden.
 
-Die **Bühnenwerkstatt** öffnet über die obere Leiste oder **Bühne gestalten** im Infofenster einer Bühne. Das Detailraster (4–12 breit/tief) ist unabhängig von der Kartengrundfläche (1–8 Felder je Achse). Neue Entwürfe starten auf 2 × 2 Feldern; bisherige Entwürfe ohne Flächenangabe behalten 1 × 1 Feld. Die vollständige gedrehte Fläche muss frei, eben und tragfähig sein. Größere Flächen kosten zusätzlich Fundament und Unterhalt. Vergrößerungen werden vor dem Bezahlen geprüft; Wegfindung, Abriss und Kollisionen berücksichtigen jedes belegte Feld. Ein Klick auf ein Bauteil aktiviert die Platzierung und öffnet dessen Qualitätsmenü. Die Vorschau am Mauszeiger zeigt gültige Plätze grün und ungültige rot. R bzw. Rechtsklick dreht das Bauteil, Umschalt+R dreht zurück; alternativ gibt es Drehpfeile über der Vorschau. Bauteile rasten beim Zeigen auf Traversen automatisch ein; Alt erzwingt Bodenmontage. Lautsprecher lassen sich durch Zeigen auf einen vorhandenen Stapel bis zu vierfach stapeln. Das Entfernen eines Trägers entfernt auch abhängige Teile. Rückgängig stellt die vorige Konstruktion wieder her.
+Die **Bühnenwerkstatt** öffnet über das Theater-Icon in der Leiste oder **Bühne gestalten** im Infofenster einer Bühne. Das Detailraster (4–12 breit/tief) ist unabhängig von der Kartengrundfläche (1–8 Felder je Achse). Neue Entwürfe starten auf 2 × 2 Feldern; bisherige Entwürfe ohne Flächenangabe behalten 1 × 1 Feld. Die vollständige gedrehte Fläche muss frei, eben und tragfähig sein. Größere Flächen kosten zusätzlich Fundament und Unterhalt. Vergrößerungen werden vor dem Bezahlen geprüft; Wegfindung, Abriss und Kollisionen berücksichtigen jedes belegte Feld. Ein Klick auf ein Bauteil aktiviert die Platzierung und öffnet dessen Qualitätsmenü. Die Vorschau am Mauszeiger zeigt gültige Plätze grün und ungültige rot. R bzw. Rechtsklick dreht das Bauteil, Umschalt+R dreht zurück; alternativ gibt es Drehpfeile über der Vorschau. Bauteile rasten beim Zeigen auf Traversen automatisch ein; Alt erzwingt Bodenmontage. Lautsprecher lassen sich durch Zeigen auf einen vorhandenen Stapel bis zu vierfach stapeln. Das Entfernen eines Trägers entfernt auch abhängige Teile. Rückgängig stellt die vorige Konstruktion wieder her.
 
 Mit **Zuschauerfläche** werden einzelne Kartenfelder innerhalb der Bühne zu begehbaren Bereichen, etwa für U-förmige Bühnen und Innenhöfe. Jede Fläche benötigt eine Verbindung zum Bühnenrand und anschließend einen Zugang vom Gelände. Bodenbauteile und Traversenstützen dürfen diese Flächen nicht blockieren. Zuschauerflächen werden mit der Bühne gedreht und gespeichert.
 

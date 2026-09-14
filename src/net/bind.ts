@@ -116,6 +116,37 @@ export function enableMultiplayerCommands(game: GameState): void {
     z,
     direction,
   }))
+  game.placeTrafficLight = wrap(game, game.placeTrafficLight, (x, z, direction) => ({
+    type: 'placeTrafficLight',
+    x,
+    z,
+    direction,
+  }))
+  game.placePathBarrier = wrap(
+    game,
+    game.placePathBarrier,
+    (x, z, elevation, direction) => ({
+      type: 'placePathBarrier',
+      x,
+      z,
+      elevation,
+      direction,
+    }),
+  )
+  game.configureAccessControl = wrap(game, game.configureAccessControl, (id, patch) => ({
+    type: 'configureAccessControl',
+    id,
+    ...patch,
+  }))
+  game.toggleAccessControlArea = wrap(
+    game,
+    game.toggleAccessControlArea,
+    (id, from, to) => ({ type: 'toggleAccessControlArea', id, from, to }),
+  )
+  game.clearAccessControlArea = wrap(game, game.clearAccessControlArea, (id) => ({
+    type: 'clearAccessControlArea',
+    id,
+  }))
   game.toggleRoadSeparator = wrap(
     game,
     game.toggleRoadSeparator,
@@ -258,6 +289,10 @@ export function enableMultiplayerCommands(game: GameState): void {
   )
   game.updateEntryPrice = wrap(game, game.updateEntryPrice, (price) => ({
     type: 'updateEntryPrice',
+    price,
+  }))
+  game.updateCampingTicketPrice = wrap(game, game.updateCampingTicketPrice, (price) => ({
+    type: 'updateCampingTicketPrice',
     price,
   }))
   game.updateSecurityGate = wrap(game, game.updateSecurityGate, (id, config) => ({

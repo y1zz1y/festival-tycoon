@@ -155,6 +155,49 @@ export const TRACK_PITCHES = {
 
 export const TRACK_BANK_ANGLE = (35 * Math.PI) / 180
 
+const PITCH_LEVELS = [
+  TRACK_PITCHES.steepDown,
+  TRACK_PITCHES.gentleDown,
+  TRACK_PITCHES.flat,
+  TRACK_PITCHES.gentleUp,
+  TRACK_PITCHES.steepUp,
+] as const
+
+export function trackPitchLevelIndex(pitch: number): number {
+  return PITCH_LEVELS.findIndex((level) => Math.abs(level - pitch) < 0.001)
+}
+
+export function isFlatTrackPitch(pitch: number): boolean {
+  return Math.abs(pitch) < 0.001
+}
+
+export function isSteepTrackPitch(pitch: number): boolean {
+  return Math.abs(Math.abs(pitch) - TRACK_PITCHES.steepUp) < 0.001
+}
+
+/** Large 4-tile clothoid only when skipping the gentle step: flat ↔ steep. */
+export function usesWidePitchTransition(from: number, to: number): boolean {
+  return (
+    (isFlatTrackPitch(from) && isSteepTrackPitch(to)) ||
+    (isSteepTrackPitch(from) && isFlatTrackPitch(to))
+  )
+}
+
+export function canTransitionTrackPitch(from: number, to: number): boolean {
+  if (Math.abs(from - to) < 0.001) return true
+  const startLevel = trackPitchLevelIndex(from)
+  const targetLevel = trackPitchLevelIndex(to)
+  if (startLevel < 0 || targetLevel < 0) {
+    return Math.abs(from - to) <= Math.atan(0.5) + 0.001
+  }
+  const span = Math.abs(startLevel - targetLevel)
+  return span <= 1 || usesWidePitchTransition(from, to)
+}
+
+function snapTrackRise(value: number): number {
+  return Math.round(value * 2) / 2
+}
+
 export type CoasterTypeDefinition = {
   id: CoasterTypeId
   name: string
@@ -364,8 +407,16 @@ export function createTrackPiece(
     }
   }
 
-  const length = transition === 'pitch' ? 4 : Math.abs(targetPitch) > .001 && Math.abs(Math.tan(targetPitch)) < .75 ? 2 : 1
-  const rise = Math.round(length * (transition === 'pitch' ? (Math.tan(normalizedStart.pitch) + Math.tan(targetPitch)) / 2 : Math.tan(targetPitch)))
+  const length =
+    transition === 'pitch' && usesWidePitchTransition(normalizedStart.pitch, targetPitch)
+      ? 4
+      : 1
+  const rise = snapTrackRise(
+    length *
+      (transition === 'pitch'
+        ? (Math.tan(normalizedStart.pitch) + Math.tan(targetPitch)) / 2
+        : Math.tan(targetPitch)),
+  )
   const samples = 16
   const points: TrackPoint[] = []
   let elevation = normalizedStart.elevation
@@ -390,13 +441,20 @@ export function createTrackPiece(
           : targetPitch
       elevation += (t - previousT) * Math.tan(middlePitch)
     }
-    // Hermite endpoints preserve both pitches and land exactly on the height grid.
+    // 1-tile pitch changes stay linear so they climb immediately instead of
+    // sagging into the ground. Wide flat↔steep clothoids keep the hermite.
     const startSlope = length * Math.tan(transition === 'pitch' ? normalizedStart.pitch : targetPitch)
     const endSlope = length * Math.tan(targetPitch)
-    const hermiteY = (t * t * t - 2 * t * t + t) * startSlope + (-2 * t * t * t + 3 * t * t) * rise + (t * t * t - t * t) * endSlope
+    const hermiteY =
+      (t * t * t - 2 * t * t + t) * startSlope +
+      (-2 * t * t * t + 3 * t * t) * rise +
+      (t * t * t - t * t) * endSlope
+    const linearY = t * rise
+    const rawY = transition === 'pitch' && length === 1 ? linearY : hermiteY
+    const offsetY = rise >= 0 ? Math.max(linearY * 0.35, rawY) : Math.min(linearY * 0.35, rawY)
     points.push({
       x: normalizedStart.x + forward.x * t * length,
-      y: normalizedStart.elevation + hermiteY,
+      y: normalizedStart.elevation + offsetY,
       z: normalizedStart.z + forward.z * t * length,
       pitch,
       bank,
@@ -411,6 +469,8 @@ export function createTrackPiece(
     pitch: targetPitch,
     bank: targetBank,
   }
+  const lastPoint = points.at(-1)
+  if (lastPoint) lastPoint.y = end.elevation
   return {
     id,
     kind,

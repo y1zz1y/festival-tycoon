@@ -1,29 +1,36 @@
-import { BufferGeometry, Float32BufferAttribute } from 'three'
+import { Shape, ShapeGeometry } from 'three'
+
+export type RoadArrowKind = 'paint' | 'overlay'
+
 /**
- * The flat arrow used wherever a direction has to be shown on the ground: one-way road markings
- * and logistics flow markers in LogisticsView, and the build preview's heading in WorldView.
- *
- * It lies in the XZ plane pointing along +Z, so callers only ever spin it about Y by the angle of
- * the direction they mean (see DIRECTION_ANGLE), and it is built to fill roughly one cell at scale
- * 1 — road markings shrink it, the road-direction tool blows it up a little. Being flat, it is
- * drawn a hair above whatever it marks rather than sunk into it.
+ * Flat lane arrow, tip toward +Z after rotateX(-π/2).
+ * `paint` is the StVO mark on asphalt. `overlay` is a shorter, even-weight
+ * chevron for the tool preview and the moving direction overlay.
  */
-export function createRoadDirectionArrowGeometry(): BufferGeometry {
-  const positions = [
-    -0.075, 0, -0.34, // shaft, back left
-    0.075, 0, -0.34, // shaft, back right
-    0.075, 0, 0.08, // shaft, front right
-    -0.075, 0, 0.08, // shaft, front left
-    -0.21, 0, 0.08, // head, left barb
-    0.21, 0, 0.08, // head, right barb
-    0, 0, 0.38, // head, tip
-  ]
-  const geometry = new BufferGeometry()
-  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
-  geometry.setAttribute(
-    'normal',
-    new Float32BufferAttribute(Array.from({ length: positions.length / 3 }, () => [0, 1, 0]).flat(), 3),
-  )
-  geometry.setIndex([0, 2, 1, 0, 3, 2, 4, 6, 5]) // wound so the faces look up
+export function createRoadDirectionArrowGeometry(
+  kind: RoadArrowKind = 'paint',
+): ShapeGeometry {
+  const shape = new Shape()
+  if (kind === 'overlay') {
+    shape.moveTo(0, -0.3)
+    shape.lineTo(-0.15, -0.02)
+    shape.lineTo(-0.075, -0.02)
+    shape.lineTo(-0.075, 0.26)
+    shape.lineTo(0.075, 0.26)
+    shape.lineTo(0.075, -0.02)
+    shape.lineTo(0.15, -0.02)
+  } else {
+    shape.moveTo(0, -0.4)
+    shape.lineTo(-0.2, -0.06)
+    shape.lineTo(-0.09, -0.06)
+    shape.lineTo(-0.09, 0.38)
+    shape.lineTo(0.09, 0.38)
+    shape.lineTo(0.09, -0.06)
+    shape.lineTo(0.2, -0.06)
+  }
+  shape.closePath()
+  const geometry = new ShapeGeometry(shape)
+  geometry.rotateX(-Math.PI / 2)
+  geometry.computeBoundingBox()
   return geometry
 }

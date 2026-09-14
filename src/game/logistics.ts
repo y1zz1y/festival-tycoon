@@ -81,6 +81,7 @@ export type RoadVehicle = {
   resumeState: RoadVehicleState | null
   cargo: number
   deliveryId?: string | null
+  parkingSearchCursor?: number
 }
 
 export const ROAD_VEHICLE_KIND_LABELS: Record<
@@ -93,6 +94,15 @@ export const ROAD_VEHICLE_KIND_LABELS: Record<
   garbageTruck: { icon: '🚛', name: 'Müllfahrzeug' },
   sweeper: { icon: '🧹', name: 'Saugreiniger' },
   deliveryTruck: { icon: '🚚', name: 'Lieferfahrzeug' },
+}
+
+export function isPlayerOwnedFleetVehicle(vehicle: Pick<RoadVehicle, 'kind'>): boolean {
+  return (
+    vehicle.kind === 'ambulance' ||
+    vehicle.kind === 'bus' ||
+    vehicle.kind === 'garbageTruck' ||
+    vehicle.kind === 'sweeper'
+  )
 }
 
 export function vehicleFacingDirection(facing: number): Direction {
@@ -120,7 +130,7 @@ export function describeRoadVehicleActivity(vehicle: RoadVehicle): string {
       vehicle.state === 'responding' ||
       vehicle.state === 'returning' ||
       vehicle.state === 'parking')
-  if (queued) return 'Wartet, bis die Fahrbahn frei ist'
+  if (queued) return 'Wartet, bis die Fahrbahn oder Ampel frei ist'
   switch (vehicle.state) {
     case 'parked':
       return 'Steht auf dem Parkplatz'
@@ -235,6 +245,7 @@ export type FindRoadRouteOptions = {
   target?: RoadPosition
   targets?: readonly RoadPosition[]
   blockedCells?: ReadonlySet<string>
+  blockedEdges?: ReadonlySet<string>
   worldSize?: number
   initialDirection?: Direction
   allowUTurn?: boolean
@@ -453,7 +464,10 @@ export function findRoadRoute(
           (!options.allowUTurn &&
             node.direction !== null &&
             direction === oppositeDirection(node.direction)) ||
-          options.blockedCells?.has(cellKey(neighbor.x, neighbor.z))
+          options.blockedCells?.has(cellKey(neighbor.x, neighbor.z)) ||
+          options.blockedEdges?.has(
+            `${node.cell.x}:${node.cell.z}:${direction}`,
+          )
         ) {
           return []
         }
@@ -581,6 +595,7 @@ function normalizeRoadVehicle(value: unknown): RoadVehicle | null {
     resumeState: memberOf(source.resumeState, VEHICLE_STATES) ?? null,
     cargo: nonNegativeNumber(source.cargo),
     deliveryId: nullableString(source.deliveryId),
+    parkingSearchCursor: Math.floor(nonNegativeNumber(source.parkingSearchCursor)),
   }
 }
 

@@ -3,6 +3,7 @@ import type { GameSnapshot } from './GameState'
 import type { Point, CarryRoute, Depot } from './supplyChain'
 import { emptyStock } from './supplyChain'
 import type { Supply } from './festivalManagement'
+import { CARDINAL_OFFSETS } from './shopAccess'
 import { wayInfo, type WayType } from './wayTypes'
 
 export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from: Point, goals: Point[]) => Point[] | null, canStep: (from:Point,to:Point)=>boolean): void {
@@ -18,14 +19,26 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
     const walkKey = key(walk)
     if (!byCell.has(walkKey)) byCell.set(walkKey, walk)
   }
+  const byXZ = new Map<string, Point[]>()
+  for (const walk of byCell.values()) {
+    const xz = `${walk.x},${walk.z}`
+    const list = byXZ.get(xz)
+    if (list) list.push(walk)
+    else byXZ.set(xz, [walk])
+  }
   const access = (p:{x:number;z:number}) => {
     const goals: Point[] = []
-    for (const [dx, dz] of [[0, 1], [1, 0], [0, -1], [-1, 0]] as const) {
+    for (const [dx, dz] of CARDINAL_OFFSETS) {
       const x = p.x + dx
       const z = p.z + dz
       const elevation = getTerrainHeight(s.terrain, x, z)
-      const walk = byCell.get(key({ x, z, elevation }))
-      if (walk) goals.push(walk)
+      const exact = byCell.get(key({ x, z, elevation }))
+      if (exact) {
+        goals.push(exact)
+        continue
+      }
+      const nearby = byXZ.get(`${x},${z}`)
+      if (nearby?.[0]) goals.push(nearby[0]!)
     }
     return goals
   }

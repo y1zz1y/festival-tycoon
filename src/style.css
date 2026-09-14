@@ -51,13 +51,91 @@ button {
   position: absolute;
   top: 12px;
   left: 12px;
-  right: 12px;
+  right: auto;
+  max-width: calc(100vw - var(--toolbar-width, 420px) - 18px);
   min-height: 64px;
   padding: 8px 10px;
   border-radius: 13px;
   display: flex;
   align-items: center;
-  gap: 22px;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+}
+
+.rct-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 26;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.rct-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: #344d48;
+  border: 1px solid #152a27;
+  border-top-color: #91aaa0;
+  border-left-color: #91aaa0;
+  box-shadow: inset -1px -1px #233c36, inset 1px 1px #58756a, 3px 3px 0 #14272070;
+}
+
+.rct-split {
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 3px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.rct-inject {
+  display: flex;
+  gap: 2px;
+}
+
+.rct-group button {
+  width: 45px;
+  height: 45px;
+  padding: 0;
+  overflow: hidden;
+  font-size: 22px;
+  line-height: 45px;
+  text-align: center;
+  white-space: nowrap;
+  color: #eaf4ee;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.rct-group button:hover,
+.rct-group button.open,
+.rct-group button.contains-active,
+.rct-group button.active,
+.rct-group button[aria-pressed='true'],
+.rct-group button[aria-expanded='true'] {
+  background: rgba(69, 151, 111, 0.28);
+  border-color: #5daf85;
+}
+
+.rct-group button.park-closed {
+  color: #ffd8d3;
+  background: rgba(176, 61, 51, 0.38);
+  border-color: rgba(239, 116, 104, 0.58);
+}
+
+.rct-hidden-control {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
 }
 
 .brand {
@@ -342,10 +420,13 @@ button {
 }
 
 .stats {
-  flex: 1;
+  flex: 1 1 220px;
   display: flex;
-  justify-content: center;
-  gap: clamp(14px, 3vw, 42px);
+  justify-content: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 8px 16px;
 }
 
 .stats span {
@@ -409,30 +490,11 @@ button {
   white-space: normal;
 }
 
-/* Abriss (bulldoze) brush-size panel. Spawns at the same fixed spot as
-   .build-menu (they're mutually exclusive, so sharing a spawn point is
-   fine) instead of being anchored to its toggle button - consistent with
-   every other standardized overlay, and still draggable from there. */
-.bulldoze-panel {
-  position: fixed;
-  top: var(--topbar-gap-top, 100px);
-  left: 12px;
-  z-index: 30;
-  display: none;
-  width: 220px;
-  max-width: calc(100vw - 16px);
-  padding: 10px;
-}
-
-.bulldoze-panel.open {
-  display: block;
-}
-
 /* Shared "draggable overlay header" building blocks: a grab-able bar
    (.panel-header) holding two dividing lines (.panel-drag-line) around a
    centered title (.panel-header-title) and a fixed close button
    (.panel-close-button) at the end. Used by every overlay panel that can be
-   dragged and closed (currently: Bauen, Abriss) - add both this class and
+   dragged and closed (currently: Bauen) - add both this class and
    the panel's own unique class (needed to target it from JS) to reuse it. */
 .panel-header {
   display: flex;
@@ -509,17 +571,6 @@ button {
   border-radius: 1px;
 }
 
-.bulldoze-size-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-}
-
-.bulldoze-size-grid button.active {
-  background: #3f715b;
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
 .game-actions button[aria-expanded='true'] {
   background: #3f715b;
 }
@@ -569,83 +620,208 @@ button {
   position: absolute;
   top: 90px;
   left: 12px;
-  width: 194px;
+  width: 300px;
+  max-height: calc(100dvh - var(--topbar-gap-top, 90px) - 16px);
   padding: 12px;
-  border-radius: 13px;
-  overflow: visible;
+  overflow: auto;
   z-index: 20;
 }
 
-.build-categories {
-  display: grid;
-  gap: 5px;
+.build-menu:not([hidden]) {
+  display: flex;
+  flex-direction: column;
 }
 
-.build-categories button {
-  min-height: 43px;
-  padding: 6px 9px;
-  display: grid;
-  grid-template-columns: 30px 1fr 12px;
-  align-items: center;
+.build-menu:not(.dock-right) {
+  bottom: var(--debug-view-gap, 48px);
+  max-height: none;
+  overflow: hidden;
+}
+
+.build-menu.build-menu-catalog {
+  width: 440px;
+}
+
+.build-menu.dock-right {
+  left: auto;
+  right: 12px;
+}
+
+.build-menu-header,
+.build-subtabs,
+.build-extra {
+  flex-shrink: 0;
+}
+
+.build-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.build-subtabs button {
+  padding: 4px 8px;
   color: #eaf4ee;
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid transparent;
-  border-radius: 8px;
-  text-align: left;
   cursor: pointer;
 }
 
-.build-categories button:hover,
-.build-categories button.open,
-.build-categories button.contains-active {
-  background: rgba(69, 151, 111, 0.25);
+.build-subtabs button[aria-pressed='true'] {
+  background: rgba(69, 151, 111, 0.28);
   border-color: #5daf85;
 }
 
-.build-categories span {
-  font-size: 20px;
+.build-extra {
+  margin-bottom: 8px;
 }
 
-.build-categories em {
-  font-style: normal;
-  font-weight: 750;
+.build-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
 }
 
-.build-categories b {
-  color: #8faaa0;
-  font-size: 20px;
+.build-grid .tool {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  min-height: 86px;
+  padding: 6px 4px;
+  text-align: center;
+  background: #263d36;
+  border-color: #4f6c5d;
 }
 
-.build-flyout {
-  position: absolute;
-  top: 0;
-  left: calc(100% + 8px);
-  width: 210px;
-  padding: 10px;
+.build-grid .tool > span {
+  font-size: 22px;
+}
+
+.build-grid .building-preview img {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 3px;
+}
+
+.build-grid .tool.active {
+  background: #456550;
+  border-color: #f0cf7d;
+}
+
+.build-menu-catalog .build-grid {
+  grid-template-columns: repeat(auto-fill, 96px);
+  justify-content: start;
+}
+
+.build-menu-catalog .build-grid .tool,
+.build-menu-catalog .build-grid .tool:has(.building-preview) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  min-height: 96px;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.build-menu-catalog .build-grid .tool > span {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.build-menu-catalog .build-grid .building-preview img,
+.build-menu-catalog .building-preview img {
+  width: 88px;
+  height: 88px;
+  margin: 0;
+  border: none;
+}
+
+.build-catalog-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 8px 2px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+}
+
+.build-catalog-status[hidden] {
   display: none;
-  z-index: 20;
 }
 
-.build-flyout.open {
-  display: block;
-  animation: flyout-in 120ms ease-out;
-}
-
-.build-flyout h3 {
-  margin: 1px 4px 8px;
-  color: #dcebe4;
+.build-catalog-status strong {
+  color: #f2e8cb;
   font-size: 13px;
 }
 
-@keyframes flyout-in {
-  from {
-    opacity: 0;
-    transform: translateX(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+.build-catalog-status p {
+  margin: 4px 0 0;
+  color: #cbdcd4;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.build-catalog-status p[hidden] {
+  display: none;
+}
+
+#build-catalog-cost {
+  flex-shrink: 0;
+  color: #efcf86;
+}
+
+#path-tools {
+  display: none;
+}
+
+.staff-role-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.staff-role-tabs button {
+  padding: 4px 8px;
+  color: #eaf4ee;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.staff-role-tabs button[aria-pressed='true'] {
+  background: rgba(69, 151, 111, 0.28);
+  border-color: #5daf85;
+}
+
+.bungee-height-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.bungee-height-field input {
+  width: 70px;
+}
+
+#build-extra-logistics button,
+#terrain-planner-slot button {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px;
+  color: #f2dfb5;
+  background: #476859;
+  border: 1px solid #819b80;
+  cursor: pointer;
 }
 
 .tools {
@@ -716,75 +892,242 @@ button {
   background: rgba(255, 255, 255, 0.1);
 }
 
-.path-editor-launch {
-  width: 100%;
-  margin-top: 8px;
-  padding: 7px;
-  color: #f4e5ad;
-  background: rgba(216, 168, 61, 0.13);
-  border: 1px solid rgba(239, 194, 92, 0.36);
-  border-radius: 7px;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.path-editor-launch:hover {
-  background: rgba(216, 168, 61, 0.24);
-}
-
-.build-editor {
-  margin-top: 10px;
-  padding: 9px;
-  background: rgba(0, 0, 0, 0.14);
-  border-radius: 8px;
-}
-
-.editor-label {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-  color: #9eb6ac;
-  font-size: 10px;
-  text-transform: uppercase;
-}
-
-.editor-label strong {
-  color: #eaf4ee;
-}
-
-.editor-buttons {
+.path-mode-toggle {
   display: grid;
-  grid-template-columns: 32px 32px 1fr;
-  gap: 4px;
-}
-
-.editor-buttons button {
-  padding: 5px;
-  color: #eaf4ee;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 5px;
-  font-size: 11px;
+  place-items: center;
+  width: 72px;
+  height: 36px;
+  margin: 12px auto 0;
+  padding: 4px 8px;
+  color: #f4e5ad;
+  background: #3d584c;
+  border: 1px solid #81977c;
   cursor: pointer;
 }
 
-.editor-buttons button:hover {
-  background: #3f715b;
+.path-mode-toggle svg {
+  display: block;
+  width: 56px;
+  height: 22px;
 }
 
-.build-editor > small {
+.path-mode-toggle:hover {
+  background: #4c6b5c;
+}
+
+.path-mode-toggle[aria-pressed='true'] {
+  background: #806928;
+  border-color: #d5ae48;
+}
+
+.path-mode-toggle[aria-pressed='true'] .path-mode-arrow-back {
+  display: none;
+}
+
+.path-construction.path-mode-paint .rct-path-advanced {
+  opacity: 0.38;
+}
+
+.path-construction.path-mode-paint .rct-path-advanced button:disabled {
+  cursor: default;
+}
+
+.path-direction-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.path-dir-tile {
+  min-height: 58px;
+  display: grid;
+  place-items: center;
+  color: #f5d04a;
+  background:
+    linear-gradient(135deg, #d8c9a4 0 48%, #b9a882 52% 100%);
+  border: 1px solid #8d8064;
+  box-shadow: inset 1px 1px #efe4c6, 2px 3px #1a2a22;
+}
+
+.path-dir-tile span {
+  font-size: 28px;
+  line-height: 1;
+  text-shadow: 1px 2px #6a5318;
+}
+
+.path-dir-tile.active {
+  outline: 2px solid #edcc79;
+  outline-offset: 1px;
+}
+
+.path-slope-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.path-slope-tile {
+  min-height: 64px;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  color: #f3e8cb;
+  background: #2c453b;
+  border: 1px solid #7d9476;
+}
+
+.path-slope-tile .path-ramp {
   display: block;
-  margin-top: 6px;
-  color: #9eb6ac;
-  font-size: 10px;
+  width: 42px;
+  height: 22px;
+  color: #f5d04a;
+  font-size: 22px;
+  line-height: 22px;
   text-align: center;
+  background: #c4b392;
+  border: 1px solid #8d8064;
+  box-shadow: 2px 3px #1a2a22;
+  text-shadow: 1px 1px #6a5318;
+}
+
+.path-slope-tile .path-ramp-down {
+  transform: rotate(-22deg) skewX(18deg);
+}
+
+.path-slope-tile .path-ramp-up {
+  transform: rotate(22deg) skewX(-18deg);
+}
+
+.path-slope-tile .path-ramp-flat {
+  transform: rotate(-8deg) skewX(16deg);
+}
+
+.path-slope-tile.active {
+  border-color: #edcc79;
+  box-shadow: inset 1px 1px #483f25;
+}
+
+.path-cost-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+#path-demolish {
+  min-height: 34px;
+  padding: 6px 10px;
+  color: #ffd0c4;
+  background: #5a3530;
+  border: 1px solid #b57a6e;
+  cursor: pointer;
+}
+
+#path-demolish[aria-pressed='true'] {
+  color: #fff4ca;
+  background: #806928;
+  border-color: #d5ae48;
+}
+
+.path-access-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.path-access-grid button {
+  display: grid;
+  min-height: 58px;
+  padding: 6px 4px;
+  place-items: center;
+  gap: 4px;
+  color: #f3e8cb;
+  background: #2c453b;
+  border: 1px solid #7d9476;
+  cursor: pointer;
+}
+
+.path-access-grid button small {
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.path-access-grid button[aria-pressed='true'] {
+  background: #806928;
+  border-color: #d5ae48;
+}
+
+.path-surface-hold {
+  position: relative;
+}
+
+.path-type-palette {
+  margin-bottom: 8px;
+}
+
+#path-surface-preview {
+  display: grid;
+  width: 100%;
+  min-height: 78px;
+  padding: 10px;
+  place-items: center;
+  gap: 8px;
+  color: #f3e8cb;
+  background: #2c453b;
+  border: 1px solid #7d9476;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+#path-surface-preview .way-swatch {
+  width: 58px;
+  height: 48px;
+}
+
+#path-surface-preview:hover {
+  background: #38574a;
+}
+
+#path-surface-preview[aria-expanded='true'] {
+  border-color: #edcc79;
+  box-shadow: inset 1px 1px #483f25, inset -1px -1px #dbc27c;
+}
+
+.path-surface-popup {
+  position: absolute;
+  top: calc(100% - 2px);
+  right: 0;
+  left: 0;
+  z-index: 6;
+  padding: 8px;
+  background: #203c35;
+  border: 2px solid #829481;
+  box-shadow: 3px 4px #112823;
+}
+
+#path-art-cost,
+#construction-status {
+  min-height: 0;
+  margin: 8px 0 0;
+  padding: 0;
+  color: #e3cf96;
+  background: none;
+  font-size: 12px;
+}
+
+#construction-status {
+  color: #cbdcd4;
+  font-size: 11px;
 }
 
 .path-construction {
   position: absolute;
   top: 90px;
-  left: 218px;
+  left: 12px;
+  z-index: 20;
   width: 272px;
   padding: 14px;
   border-radius: 13px;
@@ -1071,7 +1414,7 @@ button {
 
 .path-construction,
 .coaster-builder {
-  width: 310px;
+  width: 300px;
   max-height: calc(100vh - 120px);
   overflow-x: hidden;
   overflow-y: auto;
@@ -1275,6 +1618,266 @@ button {
   background: rgba(255, 255, 255, 0.05);
 }
 
+/* RCT2-style sequential track construction window. */
+.rct-coaster-construction {
+  width: 330px;
+  padding: 3px;
+  z-index: 35;
+  color: #fff7d5;
+  background: #8f826b;
+  border: 2px solid;
+  border-color: #c8baa0 #594f40 #594f40 #c8baa0;
+  border-radius: 0;
+  box-shadow: 2px 2px 0 #211d18;
+}
+
+.rct-coaster-construction [hidden] {
+  display: none !important;
+}
+
+.rct-coaster-construction .construction-title {
+  min-height: 20px;
+  margin: 0 0 2px;
+  padding: 2px 4px;
+  color: #fff4a9;
+  background: #554d40;
+  border: 1px solid;
+  border-color: #776d5a #332e27 #332e27 #776d5a;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.rct-coaster-construction .construction-title > strong {
+  flex: 1;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rct-coaster-construction .construction-title button {
+  width: 18px;
+  height: 16px;
+  padding: 0;
+  border-radius: 0;
+  line-height: 13px;
+}
+
+.rct-coaster-construction .rct-editor-section {
+  margin: 0;
+  padding: 3px 2px 5px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px groove #b9aa8d;
+  border-radius: 0;
+}
+
+.rct-coaster-construction .rct-editor-section > label {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 2px;
+  color: #f1ead9;
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.rct-coaster-construction .rct-editor-section > label b {
+  color: #ffe86d;
+}
+
+.rct-coaster-construction .piece-palette {
+  gap: 2px;
+}
+
+.rct-coaster-construction .track-piece-palette {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+}
+
+.rct-coaster-construction .track-slope-palette {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.rct-coaster-construction .track-bank-palette {
+  grid-template-columns: repeat(3, 42px);
+  justify-content: center;
+}
+
+.rct-coaster-construction .piece-palette button,
+.rct-coaster-construction .track-special-toggle,
+.rct-coaster-construction .coaster-build-actions button,
+.rct-coaster-construction .coaster-access-actions button,
+.rct-coaster-construction .coaster-start-rotate {
+  min-height: 34px;
+  padding: 2px;
+  color: #3e372d;
+  background: #9d8e74;
+  border: 2px solid;
+  border-color: #c9b99b #5b5142 #5b5142 #c9b99b;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.rct-coaster-construction .piece-palette button span {
+  min-height: 20px;
+  color: #4d4437;
+  font-size: 18px;
+  line-height: 20px;
+}
+
+.rct-coaster-construction .piece-palette button small {
+  display: none;
+}
+
+.rct-coaster-construction .piece-palette button:hover:not(:disabled),
+.rct-coaster-construction .coaster-build-actions button:hover:not(:disabled),
+.rct-coaster-construction .coaster-access-actions button:hover:not(:disabled) {
+  background: #ad9d80;
+}
+
+.rct-coaster-construction .piece-palette button.active {
+  color: #3f3215;
+  background: #d6b737;
+  border-color: #f8de61 #796613 #796613 #f8de61;
+}
+
+.rct-coaster-construction .piece-palette button:disabled {
+  filter: grayscale(1);
+  opacity: 0.38;
+}
+
+.rct-coaster-construction .track-special-toggle {
+  width: 100%;
+  min-height: 18px;
+  margin-top: 2px;
+  padding: 0 4px;
+  color: #fff06c;
+  background: #786b50;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.rct-coaster-construction #track-special-palette {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 3px;
+  background: #766a56;
+  border: 1px solid #4e4639;
+}
+
+.rct-coaster-construction #track-special-palette button {
+  min-height: 38px;
+}
+
+.rct-coaster-construction .coaster-piece-preview {
+  width: 100%;
+  min-height: 154px;
+  margin: 2px 0 0;
+  padding-top: 18px;
+  color: #fff;
+  background: #90836e;
+  border: 1px solid;
+  border-color: #5e5444 #b9aa8d #b9aa8d #5e5444;
+  border-radius: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.rct-coaster-construction .coaster-piece-preview:hover:not(:disabled) {
+  background: #9d9079;
+  border-color: #c8b99b #5e5444 #5e5444 #c8b99b;
+}
+
+.rct-coaster-construction .coaster-piece-preview:active:not(:disabled) {
+  padding-top: 20px;
+  background: #847864;
+  border-color: #5e5444 #b9aa8d #b9aa8d #5e5444;
+}
+
+.rct-coaster-construction .coaster-piece-preview span {
+  color: #2b2924;
+  font-size: 34px;
+  text-shadow: 1px 1px #c4b99e;
+}
+
+.rct-coaster-construction .coaster-piece-preview small,
+.rct-coaster-construction .coaster-piece-preview strong {
+  display: block;
+  color: #fffdf0;
+  font-size: 10px;
+  text-align: center;
+}
+
+.rct-coaster-construction .coaster-piece-preview strong {
+  margin-top: 2px;
+}
+
+.rct-coaster-construction .coaster-build-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+  margin: 3px 0;
+}
+
+.rct-coaster-construction .coaster-build-actions button {
+  min-height: 34px;
+  font-size: 16px;
+}
+
+.rct-coaster-construction .coaster-build-actions button.primary {
+  color: #172d43;
+  background: #829dc1;
+  border-color: #c1d6ee #43566f #43566f #c1d6ee;
+}
+
+.rct-coaster-construction .coaster-build-actions button.demolish {
+  color: #741a16;
+  background: #a89478;
+  border-color: #cfbda0 #5c5040 #5c5040 #cfbda0;
+}
+
+.rct-coaster-construction .track-selection {
+  display: block;
+  min-height: 16px;
+  color: #f7e9c7;
+  font-size: 9px;
+  text-align: center;
+}
+
+.rct-coaster-construction .coaster-start-rotate {
+  width: 100%;
+  min-height: 24px;
+  font-size: 10px;
+}
+
+.rct-coaster-construction .coaster-start-rotate:disabled {
+  display: none;
+}
+
+.rct-coaster-construction > #coaster-status {
+  min-height: 0;
+  max-height: 34px;
+  margin: 2px 0;
+  padding: 3px 5px;
+  overflow: hidden;
+  color: #f1ead9;
+  background: #796e5c;
+  border-radius: 0;
+  font-size: 9px;
+  line-height: 13px;
+}
+
+.rct-coaster-construction .coaster-access-actions {
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  margin: 2px 0 0;
+}
+
+.rct-coaster-construction .coaster-access-actions button {
+  min-height: 22px;
+  padding: 1px 4px;
+  font-size: 10px;
+}
+
 .time-controls {
   position: absolute;
   right: 12px;
@@ -1316,7 +1919,9 @@ button {
   border-color: #e8a94f;
 }
 
-.crowding-panel > button:not(:first-child) {
+.crowding-panel > button + button,
+.crowding-panel > button + div,
+.crowding-panel > i + div {
   margin-top: 9px;
 }
 
@@ -2296,6 +2901,54 @@ button {
   accent-color: #5eb081;
 }
 
+.coaster-options input[type='number'] {
+  width: 100%;
+  padding: 7px;
+  color: #edf7f1;
+  background: #29463a;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.access-mode-row,
+.access-slots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.access-emergency {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #edf7f1;
+  font-size: 11px;
+}
+
+.access-emergency[hidden] {
+  display: none;
+}
+
+.access-emergency input {
+  accent-color: #5eb081;
+}
+
+.access-slots {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.access-mode-row button[aria-pressed='true'],
+.access-slots button[aria-pressed='true'] {
+  background: #3f715b;
+  color: #edf7f1;
+  border-color: #7dba96;
+}
+
+.access-slots button.current {
+  box-shadow: inset 0 0 0 1px #e2c57e;
+}
+
 .park-price {
   display: flex;
   align-items: center;
@@ -2373,6 +3026,10 @@ button {
     width: 154px;
   }
 
+  .build-menu.build-menu-catalog {
+    width: min(440px, calc(100vw - 12px));
+  }
+
   .help {
     display: none;
   }
@@ -2384,17 +3041,20 @@ button {
   border-radius: 2px;
 }
 .topbar {
-  top: 6px; left: 6px; right: 6px;
-  min-height: 82px; padding: 6px 9px; gap: 6px 16px;
-  flex-wrap: wrap;
+  top: 6px; left: 6px; right: auto;
+  max-width: calc(100vw - var(--toolbar-width, 420px) - 18px);
+  min-height: 52px; padding: 6px 9px; gap: 6px 12px;
 }
+.rct-toolbar { top: 6px; right: 6px; }
+.rct-group { padding: 5px; gap: 3px; }
+.rct-group button { width: 40px; height: 40px; line-height: 40px; font-size: 20px; }
 .brand { min-width: 185px; flex-shrink: 0; }
 .brand-mark { width: 30px; height: 30px; flex-shrink: 0; font-size: 20px; }
 .brand strong { font-size: 14px; }
 .brand small { font-size: 9px; }
-.stats { gap: 16px; justify-content: flex-end; min-width: 0; }
+.stats { gap: 8px 14px; justify-content: flex-start; min-width: 0; flex-wrap: wrap; }
 .stats strong { font-variant-numeric: tabular-nums; }
-.game-actions { display: flex; flex: 1 0 100%; gap: 6px; flex-wrap: wrap; }
+.game-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .action-group { gap: 4px; }
 .action-divider { display: none; }
 .game-actions button, .festival-management button, .supply-planner button, .save-as-panel button, .entity-panel button, .staff-panel button, .staff-details button, .scenario-panel button, .save-slots-panel button { padding: 5px 9px; font-size: 11px; }
@@ -2409,13 +3069,13 @@ button {
 button:focus-visible, input:focus-visible, select:focus-visible {
   outline: 2px solid #ffd47d; outline-offset: 2px;
 }
-.build-menu { top: 100px; left: 6px; width: 190px; padding: 8px; }
-.build-categories { max-height: max(60px, calc(100dvh - 550px)); overflow-y: auto; gap: 2px; scrollbar-color: #91aaa0 #253e35; scrollbar-width: thin; }
-.build-categories button { min-height: 30px; padding: 4px 6px; grid-template-columns: 24px 1fr 10px; font-size: 11px; }
-.build-categories span { font-size: 16px; }
-.build-flyout { max-height: calc(100dvh - 115px); overflow-y: auto; }
+.build-menu { top: 100px; left: 6px; width: 300px; padding: 8px; }
+.build-menu:not(.dock-right) { bottom: var(--debug-view-gap, 48px); }
+.build-menu.build-menu-catalog { width: 440px; }
+.path-construction { left: 6px; }
+.build-menu.dock-right { left: auto; right: 6px; }
 .crowding-panel { left: auto; right: 6px; top: 100px; bottom: auto; width: 164px; padding: 6px 8px; }
-.build-menu > .tool { min-height: 36px; padding: 5px; }
+.build-grid .tool { min-height: 78px; padding: 5px; }
 .time-controls { right: 6px; bottom: 6px; }
 .panel h2, .panel h3 { color: #efcf86; }
 
@@ -2433,10 +3093,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   .brand { min-width: 130px; }
   .stats { gap: 7px; font-size: 10px; flex-wrap: wrap; }
   .game-actions button, .festival-management button, .supply-planner button, .save-as-panel button, .entity-panel button, .staff-panel button, .staff-details button, .scenario-panel button, .save-slots-panel button { padding: 4px 6px; font-size: 10px; }
-  .build-menu { top: 125px; width: 164px; }
-  .build-categories { max-height: max(60px, calc(100dvh - 575px)); }
+  .build-menu { top: 125px; width: min(300px, calc(100vw - 12px)); }
+  .build-menu.build-menu-catalog { width: min(440px, calc(100vw - 12px)); }
   .crowding-panel { top: 125px; width: 144px; }
-  .build-flyout { width: min(210px, calc(100vw - 186px)); }
   .visitor-panel, .day-plan-panel, .visitor-overview-panel, .complaints-panel, .entity-panel { top: 125px; max-height: calc(100dvh - 181px); }
   .staff-panel { max-height: calc(100dvh - 181px); }
 }

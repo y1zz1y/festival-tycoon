@@ -13,6 +13,12 @@ import type { GroundCell, GroundWork } from './ground'
 export type Point = { x: number; z: number; elevation: number }
 export type Stock = Record<Supply, number>
 export const emptyStock = (): Stock => ({ food: 0, drinks: 0, water: 0 })
+export const STOCK_MINIMUM_STEP = 20
+export const STOCK_MINIMUM_MAX = 800
+export function snapStockMinimum(quantity: number): number {
+  if (!Number.isFinite(quantity)) return 0
+  return Math.max(0, Math.min(STOCK_MINIMUM_MAX, Math.round(quantity / STOCK_MINIMUM_STEP) * STOCK_MINIMUM_STEP))
+}
 export type Depot = { role?: 'delivery' | 'storage'; distribution?: 'relay' | 'shops'; id: string; x: number; z: number; stock: Stock; minimum: Stock }
 export type CarryRoute = { assignmentDelay?: number; workArea?: { minX:number;maxX:number;minZ:number;maxZ:number } | null; automatic?: boolean; job?: { sourceId: string; destinationId: string; destinationKind: 'depot' | 'shop'; quantity: number; phase: 'pickup' | 'deliver' | 'home' }; id: string; depotId: string; targetId: string; kind: Supply | 'waste'; minimum: number;
   waypoints: Point[]; position: Point; path: Point[]; phase: 'idle' | 'outbound' | 'return'; cargo: number; progress: number; status: string }
@@ -74,7 +80,7 @@ export function infrastructureAction(s: GameSnapshot, a: InfrastructureAction): 
       if (quantity > 0) s.festival.deliveries.push({ id: `delivery-${s.festival.nextId++}`, kind, quantity, due: s.day * 1440 + s.minute, remaining: 0, depotId: i.depots[0]!.id })
       s.festival.supplies[kind] = 0
     }
-    return { ok: true, message: 'Depot gebaut. Straße und Fußweg direkt anschließen; Mindestbestände und Trägerrouten planen.' }
+    return { ok: true, message: 'Depot gebaut. Straße und Fußweg direkt anschließen; Mindestbestände und Träger im Infofenster oder unter Logistik einstellen.' }
   }
   if (a.type === 'removeRoute') {
     const route = i.routes.find(r => r.id === a.id)
@@ -105,8 +111,9 @@ export function infrastructureAction(s: GameSnapshot, a: InfrastructureAction): 
     return { ok: true, message: 'Leeres Depot abgebaut; 200 € erstattet' }
   }
   if (a.type === 'minimum') {
-    if (!SUPPLIES[a.kind] || !Number.isInteger(a.quantity) || a.quantity < 0 || a.quantity > 800) return fail('Mindestbestand zwischen 0 und 800 wählen')
-    depot.minimum[a.kind] = a.quantity
+    const quantity = snapStockMinimum(a.quantity)
+    if (!SUPPLIES[a.kind] || !Number.isInteger(quantity)) return fail(`Mindestbestand in ${STOCK_MINIMUM_STEP}er-Schritten zwischen 0 und ${STOCK_MINIMUM_MAX} wählen`)
+    depot.minimum[a.kind] = quantity
     return { ok: true, message: 'Mindestbestand gespeichert; Fehlmengen werden kostenpflichtig nachbestellt (45 € je Lieferung).' }
   }
   const target = s.buildings.find(b => b.id === a.targetId)
@@ -126,7 +133,7 @@ export function orderGoods(s: GameSnapshot, kind: Supply, quantity: number, dela
   const fail = (message: string) => ({ ok: false, message })
   if (depot?.role === 'storage' && !i.depots.some(d => d.role === 'delivery')) return fail('Zuerst einen Anlieferungsplatz an einer Straße definieren')
   if (depot?.role === 'storage' && i.depots.some(d => d.role === 'delivery')) depot = i.depots.filter(d => d.role === 'delivery').sort((a,b) => Math.abs(a.x-depot!.x)+Math.abs(a.z-depot!.z)-Math.abs(b.x-depot!.x)-Math.abs(b.z-depot!.z))[0]
-  if (!depot) return fail('Zuerst ein Warendepot in der Logistikansicht bauen')
+  if (!depot) return fail('Zuerst ein Warendepot im Baumenü unter Logistik bauen')
   if (!SUPPLIES[kind] || !Number.isInteger(quantity) || quantity < 50 || quantity > 2000 || ![0, 360, 720].includes(delay)) return fail('50–2.000 Einheiten und gültiges Lieferfenster wählen')
   const used = Object.values(depot.stock).reduce((a, b) => a + b, 0) + f.deliveries.filter(d => d.depotId === depot.id).reduce((a, d) => a + d.quantity, 0)
   if (used + quantity > (f.upgrades.warehouse ? 5000 : 3000)) return fail('Depot einschließlich bestellter Ware voll')
