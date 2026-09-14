@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { ENVIRONMENTS } from '../src/game/environments'
 import type { Environment } from '../src/game/environments'
-import { normalizeScenarioSettings } from '../src/game/scenario'
+import { normalizeScenarioSettings, SCENARIO_WORLD_SIZES } from '../src/game/scenario'
 import { GameState } from '../src/game/GameState'
 import type { GameSnapshot } from '../src/game/GameState'
 import { generateTerrain, getTerrainHeight } from '../src/game/terrain'
 import { DeterministicRng } from '../src/game/rng'
-import { groundInfo } from '../src/game/ground'
+import { groundInfo, prepareGround } from '../src/game/ground'
 import { packWorld } from '../src/net/codec'
 import { WorldUpdates } from '../src/net/worldUpdates'
 
@@ -17,6 +17,19 @@ export function testEnvironments() {
   assert.equal(normalizeScenarioSettings({ unevenness: -5 }).unevenness, 0)
   assert.equal(normalizeScenarioSettings({ unevenness: 8 }).unevenness, 1)
   assert.equal(normalizeScenarioSettings({ environment: 'invalid' as Environment }).environment, 'farmland')
+  // Every offered map size has to survive generation, including the odd-sided Riesig,
+  // whose tiles run from -132 to 132 rather than symmetrically around the middle.
+  for (const worldSize of SCENARIO_WORLD_SIZES) {
+    assert.equal(normalizeScenarioSettings({ worldSize }).worldSize, worldSize, `${worldSize} is a valid map size`)
+    const world = GameState.startNew(normalizeScenarioSettings({ worldSize, unevenness: .5 })).snapshot as GameSnapshot
+    const half = worldSize / 2
+    for (const key of Object.keys(world.terrain.heights)) {
+      const [x, z] = key.split(',').map(Number) as [number, number]
+      assert.ok(x >= -half && x < half && z >= -half && z < half, `${worldSize}: terrain stays inside the map (${key})`)
+    }
+    assert.equal(prepareGround(world, Math.ceil(-half) - 1, 0, 'drain').ok, false, `${worldSize}: the field past the western edge is outside`)
+    assert.equal(prepareGround(world, Math.ceil(half) - 1, 0, 'drain').ok, true, `${worldSize}: the last field inside it is not`)
+  }
   for (const environment of Object.keys(ENVIRONMENTS) as Environment[]) {
     const settings = normalizeScenarioSettings({ environment, unevenness: 0, worldSize: 32 })
     const game = GameState.startNew(settings), s = game.snapshot as GameSnapshot

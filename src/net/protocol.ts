@@ -34,6 +34,7 @@ type GameCommandAction =
   | { type: 'placeBungee'; x: number; z: number; height: number }
   | { type: 'setBungeeHeight'; id: string; height: number }
   | { type: 'festival'; action: FestivalAction }
+  | { type: 'loan'; action: { type: 'borrow' | 'repay'; amount: number } }
   | { type: 'place'; kind: BuildingKind; x: number; z: number; decorationSlot?: number }
   | {
       type: 'placePath'

@@ -10,6 +10,8 @@ import { createInfrastructure, updateSupplyChain, localStock, consumeLocal } fro
 import { CARDINAL_OFFSETS, isShopServiceKind } from './shopAccess'
 import { groundInfo, groundKey, buildingEfficiency, roadGroundLimit } from './ground'
 import { BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY } from './catalog'
+import { bookFinance, createFinanceState, financeEdition, loanInterest, loanLimit, LOAN, type FinanceCategory, type FinanceState } from './finance'
+import { createScenarioProgress, updateScenarioProgress, type ScenarioProgress } from './scenarioGoals'
 import { createFestivalManagement, festivalAction, updateFestival, assignAudience, activeBookings, watchableBookings, showIssue, BANDS } from './festivalManagement'
 import type { FestivalManagement, FestivalAction, Audience, Booking } from './festivalManagement'
 import {
@@ -378,7 +380,7 @@ export type SimTurn = {
 
 export type GameSnapshot = {
   festival: FestivalManagement
-  version: 27
+  version: 28
   simTick: number
   rngState: number
   money: number
@@ -413,6 +415,8 @@ export type GameSnapshot = {
   logistics: LogisticsSnapshot
   accessControls: AccessControlSnapshot
   scenario: ScenarioSettings
+  finance: FinanceState
+  scenarioProgress: ScenarioProgress
   terrain: TerrainSnapshot
   power: PowerSnapshot
 }
@@ -555,12 +559,14 @@ function createBlankSnapshot(
   const entrance = createScenarioEntrance(settings.worldSize)
   return {
     festival: createFestivalManagement(),
-    version: 27,
+    version: 28,
     simTick: 0,
     rngState: hashStringSeed(
       `festival-${settings.worldSize}-${settings.startingMoney}`,
     ),
     money: settings.startingMoney,
+    finance: createFinanceState(settings.startingLoan),
+    scenarioProgress: createScenarioProgress(settings.goals),
     entryPrice: SIMULATION_CONFIG.economy.defaultEntryPrice,
     campingTicketPrice: SIMULATION_CONFIG.economy.defaultCampingTicketPrice,
     parkOpen: true,
@@ -814,7 +820,10 @@ export class GameState {
     this.state.logistics.wasteDepots ??= []
     this.state.logistics.specialDepots ??= []
     this.state.accessControls = normalizeAccessControls(this.state.accessControls)
-    this.state.version = 27
+    this.state.finance ??= createFinanceState()
+    this.state.finance.periods ??= []
+    this.state.scenarioProgress ??= createScenarioProgress(this.state.scenario.goals)
+    this.state.version = 28
     this.state.terrain = normalizeTerrain(this.state.terrain)
     this.state.power = normalizePower(this.state.power)
     this.rebuildTerrainCache()
@@ -1338,7 +1347,7 @@ export class GameState {
       const path = type.mode === 'foot' ? this.getPathAt(c.x, c.z, this.getTerrainHeight(c.x, c.z)) : undefined
       const road = type.mode === 'road' ? this.getRoadCellAt(c.x, c.z) : undefined
       if (!path && !road) { reason = 'Weg konnte an dieser Stelle nicht angelegt werden'; continue }
-      this.state.money -= extra
+      bookFinance(this.state, 'construction', -extra)
       const cell = this.state.festival.infrastructure.ground[key] ??= {}
       cell[property] = kind
       if (path) path.wayType = kind
@@ -1420,7 +1429,7 @@ export class GameState {
         message: `Nicht genug Geld (${cost} € für ${planned.changes.length} Felder)`,
       }
     }
-    this.state.money -= cost
+    bookFinance(this.state, 'landscaping', -cost)
     applyTerrainChanges(this.state.terrain, planned.changes)
     for (const c of planned.changes) delete this.state.festival.infrastructure.ground[groundKey(c.x, c.z)]
     this.terrainHeights = null
@@ -1615,7 +1624,7 @@ export class GameState {
     if (this.state.money < definition.hireCost) {
       return { ok: false, message: 'Nicht genug Geld für diese Einstellung' }
     }
-    this.state.money -= definition.hireCost
+    bookFinance(this.state, 'staff', -definition.hireCost)
     const member = createStaffMember(this.nextId('staff'), role, this.getEntrance())
     const usedNumbers = new Set(
       this.state.staff
@@ -1783,7 +1792,7 @@ export class GameState {
       this.clearTreesAt(cell.x, cell.z, 0, 1)
       cell.elevation = this.getTerrainHeight(cell.x, cell.z)
     })
-    this.state.money -= result.cost
+    bookFinance(this.state, 'landscaping', -result.cost)
     this.state.wasteDumpCells = result.cells
     this.emit()
     return {
@@ -1826,7 +1835,7 @@ export class GameState {
       cell.elevation = this.getTerrainHeight(cell.x, cell.z)
     })
     this.state.stageForecourtCells = result.cells
-    this.state.money -= result.cost
+    bookFinance(this.state, 'landscaping', -result.cost)
     if (result.placed > 0) this.recalculateQueueDirections()
     this.emit()
     return {
@@ -1873,7 +1882,7 @@ export class GameState {
     if (this.state.money < cost) {
       return { ok: false, message: `Die Ampel kostet ${cost} €` }
     }
-    this.state.money -= cost
+    bookFinance(this.state, 'construction', -cost)
     const light = createTrafficLight(this.nextId('light'), x, z, direction)
     this.state.accessControls.trafficLights.push(light)
     this.evaluateAccessSignals()
@@ -1900,7 +1909,7 @@ export class GameState {
     if (this.state.money < cost) {
       return { ok: false, message: `Die Schranke kostet ${cost} €` }
     }
-    this.state.money -= cost
+    bookFinance(this.state, 'construction', -cost)
     const barrier = createPathBarrier(
       this.nextId('barrier'),
       x,
@@ -2311,7 +2320,7 @@ export class GameState {
     }
 
     const id = this.nextId('coaster')
-    this.state.money -= TRACK_PIECES.station.cost
+    bookFinance(this.state, 'construction', -TRACK_PIECES.station.cost)
     this.state.coasters.push({
       id,
       typeId,
@@ -2432,7 +2441,7 @@ export class GameState {
       (piece.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
     if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld' }
 
-    this.state.money -= cost
+    bookFinance(this.state, 'construction', -cost)
     coaster.pieces.splice(anchorIndex + 1, 0, piece)
     const stations = coaster.pieces.filter((item) => item.kind === 'station').length
     coaster.train.cars = stations
@@ -2459,9 +2468,7 @@ export class GameState {
     }
     const piece = coaster.pieces.pop()
     if (!piece) return { ok: false, message: 'Kein Element vorhanden' }
-    this.state.money +=
-      TRACK_PIECES[piece.kind].cost +
-      (piece.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
+    bookFinance(this.state, 'construction', TRACK_PIECES[piece.kind].cost + (piece.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0))
     this.recalculateCoasterTrackState(coaster)
     coaster.telemetry = createCoasterTelemetry()
     coaster.operationMode = 'closed'
@@ -2506,7 +2513,7 @@ export class GameState {
     if (!result.ok) return result
     const building = this.state.buildings.find(b=>b.id===buildingId)!
     const key = type === 'entrance' ? 'rideEntrance' : 'rideExit'
-    if (!building[key]) this.state.money -= SIMULATION_CONFIG.economy.coasterAccessCost
+    if (!building[key]) bookFinance(this.state, 'construction', -SIMULATION_CONFIG.economy.coasterAccessCost)
     building[key] = {x,y:building.elevation,z}
     this.indexedBuildingCount = -1
     this.recalculateQueueDirections(); this.emit()
@@ -2540,7 +2547,7 @@ export class GameState {
       : SIMULATION_CONFIG.economy.coasterAccessCost
     if (this.state.money < accessCost) return { ok: false, message: 'Nicht genug Geld' }
     coaster[accessType] = { x, y: station.start.elevation, z }
-    this.state.money -= accessCost
+    bookFinance(this.state, 'construction', -accessCost)
     this.recalculateQueueDirections()
     this.emit()
     return {
@@ -2673,8 +2680,87 @@ export class GameState {
     )
   }
 
+  /**
+   * What the park is worth on paper: everything standing on it, at what it cost to
+   * build. The bank lends against this, and the overview shows it next to the debt.
+   */
+  parkValue(): number {
+    const buildings = this.state.buildings.reduce(
+      (total, item) =>
+        total +
+        BUILDINGS[item.kind].cost +
+        (item.stageDesign ? stageStats(item.stageDesign).cost : 0),
+      0,
+    )
+    const coasters = this.state.coasters.reduce(
+      (total, coaster) => total + coaster.pieces.reduce((sum, piece) => sum + TRACK_PIECES[piece.kind].cost, 0),
+      0,
+    )
+    return Math.round(buildings + coasters)
+  }
+
+  /** Everything the finance window draws, in one place, so the UI never has to know how the books are kept. */
+  financeOverview(): {
+    periods: FinanceState['periods']
+    loan: number
+    loanLimit: number
+    interestPerDay: number
+    parkValue: number
+    companyValue: number
+    money: number
+    edition: number
+  } {
+    const parkValue = this.parkValue()
+    return {
+      periods: this.state.finance.periods,
+      loan: this.state.finance.loan,
+      loanLimit: loanLimit(parkValue),
+      interestPerDay: LOAN.interestPerDay,
+      parkValue,
+      companyValue: Math.round(parkValue + this.state.money - this.state.finance.loan),
+      money: this.state.money,
+      edition: financeEdition(this.state),
+    }
+  }
+
+  /**
+   * Borrowing and repaying. A loan is not income and a repayment is not an expense —
+   * both only move money between the cash box and the debt, so neither is booked into
+   * the table; what the loan costs shows up as interest, day by day.
+   */
+  manageLoan(action: { type: 'borrow' | 'repay'; amount: number }): ActionResult {
+    const amount = Math.round(Number(action.amount))
+    if (!Number.isFinite(amount) || amount <= 0) return { ok: false, message: 'Betrag wählen' }
+    const finance = this.state.finance
+    if (action.type === 'borrow') {
+      const limit = loanLimit(this.parkValue())
+      if (finance.loan + amount > limit) {
+        return { ok: false, message: `Die Bank gibt derzeit höchstens ${limit.toLocaleString('de-DE')} € — davon laufen bereits ${Math.round(finance.loan).toLocaleString('de-DE')} €` }
+      }
+      finance.loan += amount
+      this.state.money += amount
+      this.emit()
+      return { ok: true, message: `${amount.toLocaleString('de-DE')} € aufgenommen · ${(LOAN.interestPerDay * 100).toFixed(1)} % Zinsen pro Tag` }
+    }
+    if (finance.loan <= 0) return { ok: false, message: 'Es läuft kein Darlehen' }
+    const payment = Math.min(amount, Math.floor(finance.loan), Math.floor(this.state.money))
+    if (payment <= 0) return { ok: false, message: 'Nicht genug Geld für eine Tilgung' }
+    finance.loan = Math.round((finance.loan - payment) * 100) / 100
+    this.state.money -= payment
+    updateScenarioProgress(this.state, financeEdition(this.state))
+    this.emit()
+    return {
+      ok: true,
+      message: finance.loan > 0
+        ? `${payment.toLocaleString('de-DE')} € getilgt · noch ${Math.round(finance.loan).toLocaleString('de-DE')} € offen`
+        : `${payment.toLocaleString('de-DE')} € getilgt · Darlehen vollständig zurückgezahlt`,
+    }
+  }
+
   addDebugMoney(): ActionResult {
     const amount = 100_000
+    // Deliberately not booked: a debug purse is not income, and the finance table
+    // should keep adding up to what the park actually earned.
     this.state.money += amount
     this.state.cashEffects.push({
       id: this.nextId('debug-cash'),
@@ -2765,7 +2851,7 @@ export class GameState {
     if (!result.ok) return result
     const tower = this.state.buildings.at(-1)!
     tower.rideType = 'bungee'; tower.bungeeHeight = height
-    this.state.money -= height * 25
+    bookFinance(this.state, 'construction', -(height * 25))
     this.emit()
     return { ok: true, message: `Bungee-Turm (${height} m) gebaut` }
   }
@@ -2778,7 +2864,7 @@ export class GameState {
     if (this.coasterOccupiesVolume(tower.x, tower.z, tower.elevation, top) || this.state.buildings.some(b => b.id !== id && b.x === tower.x && b.z === tower.z && this.volumesOverlap(b, tower.elevation, top))) return { ok: false, message: 'Über der Turmfläche muss Platz frei bleiben' }
     const cost = Math.max(0, height - (tower.bungeeHeight ?? 20)) * 25
     if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld' }
-    this.state.money -= cost; tower.bungeeHeight = height; this.emit()
+    bookFinance(this.state, 'construction', -cost); tower.bungeeHeight = height; this.emit()
     return { ok: true, message: `Turmhöhe auf ${height} m geändert` }
   }
 
@@ -2870,7 +2956,7 @@ export class GameState {
       const roadCost = SIMULATION_CONFIG.logistics.roadBuildCost + clearCost
       if (this.state.money < roadCost) break
       this.clearTreesAt(cell.x, cell.z, 0, 1)
-      this.state.money -= SIMULATION_CONFIG.logistics.roadBuildCost
+      bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.roadBuildCost)
       this.state.logistics.roadCells.push({
         ...cell,
         allowedDirections: null,
@@ -2923,8 +3009,7 @@ export class GameState {
         break
       }
       this.clearTreesAt(cell.x, cell.z, 0, 1)
-      this.state.money -=
-        SIMULATION_CONFIG.logistics.parkingDesignationCost
+      bookFinance(this.state, 'landscaping', -SIMULATION_CONFIG.logistics.parkingDesignationCost)
       this.state.logistics.parkingCells.push({
         ...cell,
         occupiedBy: null,
@@ -3085,7 +3170,7 @@ export class GameState {
     if (this.state.money < cost) {
       return { ok: false, message: `Nicht genug Geld (${cost} €)` }
     }
-    this.state.money -= cost
+    bookFinance(this.state, 'construction', -cost)
     this.state.power.cableCells = [
       ...this.state.power.cableCells,
       { x, z },
@@ -3114,7 +3199,7 @@ export class GameState {
         message: `Nicht genug Geld (${cost} € für ${result.placed} Felder)`,
       }
     }
-    this.state.money -= cost
+    bookFinance(this.state, 'construction', -cost)
     this.state.power.cableCells = result.cells
     this.refreshPower()
     this.emit()
@@ -3186,7 +3271,7 @@ export class GameState {
     const refund =
       TRACK_PIECES[removed.kind].cost +
       (removed.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
-    this.state.money += refund
+    bookFinance(this.state, 'construction', refund)
     this.recalculateCoasterTrackState(coaster)
     coaster.telemetry = createCoasterTelemetry()
     coaster.operationMode = 'closed'
@@ -3353,7 +3438,7 @@ export class GameState {
     const placeElevation = this.getPlaceElevation(x, z)
     if (!isScenery(kind)) this.clearTreesAt(x, z, placeElevation, BUILDINGS[kind].height)
     const design = kind === 'stage' ? this.state.festival.stageTemplates?.find(t=>t.name===this.state.festival.selectedStageTemplate) : undefined
-    this.state.money -= BUILDINGS[kind].cost + (design ? stageStats(design).cost : 0)
+    bookFinance(this.state, 'construction', -(BUILDINGS[kind].cost + (design ? stageStats(design).cost : 0)))
     this.state.buildings.push({
       stageDesign: design ? structuredClone(design) : undefined,
       decorationSlot,
@@ -3400,7 +3485,7 @@ export class GameState {
     if (!result.ok) return result
     footprint.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
     const id = this.nextId('ambulance-garage')
-    this.state.money -= BUILDINGS.ambulanceGarage.cost
+    bookFinance(this.state, 'construction', -BUILDINGS.ambulanceGarage.cost)
     this.state.logistics.ambulanceGarages.push({
       id,
       x,
@@ -3429,7 +3514,7 @@ export class GameState {
     if (!result.ok) return result
     footprint.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
     const id = this.nextId('bus-depot')
-    this.state.money -= BUILDINGS.busDepot.cost
+    bookFinance(this.state, 'construction', -BUILDINGS.busDepot.cost)
     this.state.logistics.busDepots.push({ id, x, z, busIds: [] })
     this.state.buildings.push({
       id,
@@ -3453,7 +3538,7 @@ export class GameState {
     if (!result.ok) return result
     footprint.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
     const id = this.nextId('waste-depot')
-    this.state.money -= BUILDINGS.wasteDepot.cost
+    bookFinance(this.state, 'construction', -BUILDINGS.wasteDepot.cost)
     this.state.logistics.wasteDepots.push({ id, x, z, truckIds: [] })
     this.state.buildings.push({
       id,
@@ -3479,7 +3564,7 @@ export class GameState {
     if (!result.ok) return result
     footprint.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
     const id = this.nextId('special-depot')
-    this.state.money -= BUILDINGS.specialDepot.cost
+    bookFinance(this.state, 'construction', -BUILDINGS.specialDepot.cost)
     this.state.logistics.specialDepots.push({ id, x, z, vehicleIds: [] })
     this.state.buildings.push({
       id,
@@ -3525,7 +3610,7 @@ export class GameState {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     const id = this.nextId('bus-stop')
-    this.state.money -= BUILDINGS.busStop.cost
+    bookFinance(this.state, 'construction', -BUILDINGS.busStop.cost)
     this.state.logistics.busStops.push({
       id,
       x,
@@ -3659,7 +3744,7 @@ export class GameState {
     const access = this.getLogisticsBuildingAccess(garage, 2)
     if (!access) return { ok: false, message: 'Die Garage hat keinen befahrbaren Anschluss' }
     const id = this.nextId('ambulance')
-    this.state.money -= SIMULATION_CONFIG.logistics.ambulanceCost
+    bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.ambulanceCost)
     garage.bays[bay] = id
     this.state.logistics.roadVehicles.push(
       this.createRoadVehicle(id, 'ambulance', access),
@@ -3682,7 +3767,7 @@ export class GameState {
     const access = this.getLogisticsBuildingAccess(depot, 3)
     if (!access) return { ok: false, message: 'Das Depot hat keinen befahrbaren Anschluss' }
     const id = this.nextId('bus')
-    this.state.money -= SIMULATION_CONFIG.logistics.busCost
+    bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.busCost)
     depot.busIds.push(id)
     this.state.logistics.roadVehicles.push(
       this.createRoadVehicle(id, 'bus', access),
@@ -3705,7 +3790,7 @@ export class GameState {
     const access = this.getLogisticsBuildingAccess(depot, 2)
     if (!access) return { ok: false, message: 'Das Depot hat keinen befahrbaren Anschluss' }
     const id = this.nextId('garbage')
-    this.state.money -= SIMULATION_CONFIG.logistics.garbageTruckCost
+    bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.garbageTruckCost)
     depot.truckIds.push(id)
     this.state.logistics.roadVehicles.push(
       this.createRoadVehicle(id, 'garbageTruck', access),
@@ -3733,10 +3818,10 @@ export class GameState {
     depot.truckIds = depot.truckIds.filter((id) => id !== truckId)
     this.state.logistics.roadVehicles =
       this.state.logistics.roadVehicles.filter((vehicle) => vehicle.id !== truckId)
-    this.state.money += Math.floor(
+    bookFinance(this.state, 'construction', Math.floor(
       SIMULATION_CONFIG.logistics.garbageTruckCost *
         SIMULATION_CONFIG.logistics.busResaleFraction,
-    )
+    ))
     this.emit()
     return {
       ok: true,
@@ -3760,7 +3845,7 @@ export class GameState {
     const access = this.getLogisticsPathAccess(depot, 3)
     if (!access) return { ok: false, message: 'Der Betriebshof hat keinen Wegeanschluss' }
     const id = this.nextId('sweeper')
-    this.state.money -= SIMULATION_CONFIG.logistics.sweeperCost
+    bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.sweeperCost)
     depot.vehicleIds.push(id)
     this.state.logistics.roadVehicles.push(
       this.createRoadVehicle(id, 'sweeper', access),
@@ -3785,10 +3870,10 @@ export class GameState {
     depot.vehicleIds = depot.vehicleIds.filter((id) => id !== vehicleId)
     this.state.logistics.roadVehicles =
       this.state.logistics.roadVehicles.filter((vehicle) => vehicle.id !== vehicleId)
-    this.state.money += Math.floor(
+    bookFinance(this.state, 'construction', Math.floor(
       SIMULATION_CONFIG.logistics.sweeperCost *
         SIMULATION_CONFIG.logistics.busResaleFraction,
-    )
+    ))
     this.emit()
     return { ok: true, message: 'Saugreiniger verkauft' }
   }
@@ -3854,7 +3939,7 @@ export class GameState {
       SIMULATION_CONFIG.logistics.busCost *
         SIMULATION_CONFIG.logistics.busResaleFraction,
     )
-    this.state.money += refund
+    bookFinance(this.state, 'construction', refund)
     this.state.cashEffects.push({
       id: this.nextId('bus-sale'),
       amount: refund,
@@ -4154,7 +4239,7 @@ export class GameState {
     }
 
     this.clearTreesAt(x, z, candidateBase, candidateTop - candidateBase)
-    this.state.money -= pathCost
+    bookFinance(this.state, 'construction', -pathCost)
     const pathData: Omit<PlacedBuilding, 'id'> = {
       kind: 'path',
       x,
@@ -4223,7 +4308,7 @@ export class GameState {
       this.relocateVisitorsFromPath(path)
       this.state.buildings = this.state.buildings.filter((building) => building.id !== path.id)
     }
-    this.state.money += BUILDINGS.path.cost
+    bookFinance(this.state, 'construction', BUILDINGS.path.cost)
     this.recalculateQueueDirections()
     if (elevation === this.getTerrainHeight(x, z)) {
       const ground = this.state.festival.infrastructure.ground[groundKey(x, z)]
@@ -4467,12 +4552,12 @@ export class GameState {
       this.recalculateQueueDirections()
     }
     if (building.kind === 'tree') {
-      this.state.money -= SIMULATION_CONFIG.economy.treeClearCost
+      bookFinance(this.state, 'landscaping', -SIMULATION_CONFIG.economy.treeClearCost)
     } else {
-      this.state.money += Math.floor(
+      bookFinance(this.state, 'construction', Math.floor(
         BUILDINGS[building.kind].cost *
           SIMULATION_CONFIG.economy.demolitionRefundRate,
-      )
+      ))
     }
     this.state.visitors.forEach((visitor) => {
       if (visitor.targetId === building.id) {
@@ -4557,6 +4642,7 @@ export class GameState {
     while (this.state.minute >= SIMULATION_CONFIG.time.minutesPerDay) {
       this.state.minute -= SIMULATION_CONFIG.time.minutesPerDay
       this.state.day += 1
+      updateScenarioProgress(this.state, financeEdition(this.state))
       if (
         getFestivalCycleStatus(this.state.dayPlan, this.state.day)
           .cycleDay === 0
@@ -8636,7 +8722,7 @@ export class GameState {
       const migrated: GameSnapshot = {
         ...createBlankSnapshot(),
         ...data,
-        version: 27,
+        version: 28,
         terrain: normalizeTerrain(data.terrain),
         buildings: data.buildings.map(b => b.stageDesign ? { ...b, stageDesign: migrateStageDesign(b.stageDesign) } : b),
         campingCells: Array.isArray(data.campingCells) ? data.campingCells : [],
@@ -8653,6 +8739,12 @@ export class GameState {
         incidents: Array.isArray(data.incidents) ? data.incidents : [],
         logistics: normalizeLogisticsSnapshot(data.logistics),
         scenario: normalizeScenarioSettings(data.scenario),
+        finance: data.finance && Array.isArray(data.finance.periods)
+          ? { loan: Math.max(0, Number(data.finance.loan) || 0), periods: data.finance.periods }
+          : createFinanceState(),
+        scenarioProgress: data.scenarioProgress && Array.isArray(data.scenarioProgress.status)
+          ? data.scenarioProgress
+          : createScenarioProgress(normalizeScenarioSettings(data.scenario).goals),
         stageForecourtCells: Array.isArray(data.stageForecourtCells)
           ? data.stageForecourtCells
           : [],
@@ -8893,7 +8985,7 @@ export class GameState {
       x: (arrivalMode === 'car' ? this.getRoadEntry().x : this.getEntrance().x) + 0.5,
       y: 0.85,
       z: (arrivalMode === 'car' ? this.getRoadEntry().z : this.getEntrance().z) + 0.5,
-    })
+    }, 'tickets')
     if (paidEntry) visitor.entryFeePaid = admissionPrice
     this.state.visitors.push(visitor)
     if (tickets) { if (ticketType === 'camping') tickets.usedCamping++; else tickets.usedDay[this.state.day] = (tickets.usedDay[this.state.day] ?? 0) + 1 }
@@ -9570,7 +9662,7 @@ export class GameState {
             x: paymentPosition.x + 0.5,
             y: paymentPosition.y + 0.85,
             z: paymentPosition.z + 0.5,
-          })
+          }, 'rides')
           if (!paid) {
             visitor.state = 'exploring'
             visitor.targetId = null
@@ -10093,7 +10185,7 @@ export class GameState {
         ;(train.photoPieces ??= []).push(sample.pieceId)
         for (const id of train.passengerIds) {
           const visitor = this.getVisitor(id)
-          if (visitor && this.chargeVisitor(visitor, 2, sample.point)) visitor.thought = 'Ein Erinnerungsfoto von der Achterbahn!'
+          if (visitor && this.chargeVisitor(visitor, 2, sample.point, 'rides')) visitor.thought = 'Ein Erinnerungsfoto von der Achterbahn!'
         }
       }
       const remainingMeters =
@@ -13001,9 +13093,11 @@ export class GameState {
       (total, member) => total + STAFF_DEFINITIONS[member.role].hourlyWage,
       0,
     )
-    this.state.money -= (hourlyUpkeep + staffWages) * hours
+    bookFinance(this.state, 'upkeep', -hourlyUpkeep * hours)
+    bookFinance(this.state, 'staff', -staffWages * hours)
+    bookFinance(this.state, 'interest', -loanInterest(this.state.finance.loan, hours / 24))
     if (this.state.power.backupActive) {
-      this.state.money -= SIMULATION_CONFIG.power.backupFuelPerHour * hours
+      bookFinance(this.state, 'upkeep', -(SIMULATION_CONFIG.power.backupFuelPerHour * hours))
     }
     this.recalculatePark()
   }
@@ -14030,7 +14124,7 @@ export class GameState {
       (building) => !ids.has(building.id),
     )
     const cost = trees.length * SIMULATION_CONFIG.economy.treeClearCost
-    this.state.money -= cost
+    bookFinance(this.state, 'landscaping', -cost)
     return cost
   }
 
@@ -14392,7 +14486,7 @@ export class GameState {
     if (refund <= 0) return
     visitor.entryFeePaid = 0
     visitor.budget += refund
-    this.state.money -= refund
+    bookFinance(this.state, 'tickets', -refund)
     this.state.cashEffects.push({
       id: this.nextId('refund'),
       amount: -refund,
@@ -14407,12 +14501,13 @@ export class GameState {
     visitor: Visitor,
     amount: number,
     position: { x: number; y: number; z: number },
+    category: FinanceCategory = 'sales',
   ): boolean {
     const price = this.normalizePrice(amount)
     if (visitor.budget < price) return false
     visitor.budget -= price
     if (price > 0) {
-      this.state.money += price
+      bookFinance(this.state, category, price)
       this.state.cashEffects.push({
         id: this.nextId('cash'),
         amount: price,

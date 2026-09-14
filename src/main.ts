@@ -16,6 +16,9 @@ import { AUDIENCE_NAMES, SUPPLIES } from './game/festivalManagement'
 import type { Supply } from './game/festivalManagement'
 import { snapStockMinimum } from './game/supplyChain'
 import { BUILDINGS } from './game/catalog'
+import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financePeriodTotal } from './game/finance'
+import { goalName, goalProgressText } from './game/scenarioGoals'
+import { SCENARIO_PRESETS, scenarioPreset } from './game/scenarioPresets'
 import type { BuildingKind, Tool } from './game/catalog'
 import {
   BUILD_CATEGORIES,
@@ -123,7 +126,7 @@ app.innerHTML = `
          top bar, which leaves the top of the screen to the name and the tools. -->
     <aside id="status-overlay" class="status-overlay panel" aria-label="Überblick">
       <div class="stats">
-        <span>💰 <strong id="money">0 €</strong></span>
+        <span><button id="open-finance-money" type="button" class="status-money" title="Finanzen öffnen">💰 <strong id="money">0 €</strong></button></span>
         <span>👥 <strong id="guests">0</strong></span>
         <span>★ <strong id="reputation">0%</strong></span>
         <span>⚡ <strong id="power">0/0 kW</strong></span>
@@ -154,6 +157,7 @@ app.innerHTML = `
         <button id="toggle-party-overlay" type="button" title="Partystimmung" aria-label="Partystimmung" aria-pressed="false">🎵</button>
       </div>
       <div id="action-group-session" class="rct-group" aria-label="Sitzung">
+        <button id="toggle-finance" type="button" title="Finanzen" aria-label="Finanzen" aria-expanded="false">💶</button>
         <button id="toggle-walk-mode" type="button" title="Gelände betreten" aria-label="Gelände betreten" aria-pressed="false">🚶</button>
         <button id="toggle-save-menu" type="button" title="Spielstand" aria-label="Spielstand" aria-expanded="false" aria-haspopup="true">💾</button>
         <button id="toggle-park" type="button" title="Park schließen" aria-label="Park schließen">🔓</button>
@@ -185,9 +189,11 @@ app.innerHTML = `
         <button id="close-scenario" class="panel-close-button" aria-label="Einstellungen schließen">×</button>
       </div>
       <h3 class="scenario-heading">Einstellungen</h3>
-      <label class="scenario-check"><input id="setting-debug-tools" type="checkbox" checked /><span>Debug</span></label>
+      <label class="scenario-check"><input id="setting-debug-tools" type="checkbox" /><span>Debug</span></label>
       <h3 class="scenario-heading">Szenario</h3>
       <p class="scenario-hint">Diese Werte gelten für ein neues Spiel und werden mitgespeichert.</p>
+      <label class="scenario-field"><span>Vorlage</span><select id="scenario-preset"><option value="">Leere Karte · freies Spiel</option>${SCENARIO_PRESETS.map((entry) => `<option value="${entry.id}">${entry.name}</option>`).join('')}</select></label>
+      <p id="scenario-preset-detail" class="scenario-hint"></p>
       <label class="scenario-field"><span>Umgebung</span><select id="scenario-environment">${Object.entries(ENVIRONMENTS).map(([id, e]) => `<option value="${id}">${e.name}</option>`).join('')}</select></label>
       <p id="scenario-ground-details" class="scenario-hint"></p>
       <label class="scenario-field"><span>Geländeunebenheit <b id="scenario-unevenness-value">50 %</b></span><small>0 %: vollständig flach · 100 %: stark hügelig. Eingang und Zufahrt bleiben eben.</small><input id="scenario-unevenness" type="range" min="0" max="100" step="5" value="50" /></label>
@@ -222,6 +228,7 @@ app.innerHTML = `
           <option value="48">Normal (48×48)</option>
           <option value="64">Groß (64×64)</option>
           <option value="80">Sehr groß (80×80)</option>
+          <option value="265">Riesig (265×265)</option>
         </select>
       </label>
       <button id="start-scenario" type="button">Neues Szenario starten</button>
@@ -643,6 +650,31 @@ app.innerHTML = `
           <span class="longitudinal">Längs-G</span>
         </div>
         <p id="dynamics-info" class="dynamics-info"></p>
+      </section>
+    </aside>
+    <aside id="finance-panel" class="finance-panel panel" aria-label="Finanzen">
+      <div class="panel-header">
+        <span class="panel-drag-line" aria-hidden="true"></span>
+        <h2 class="panel-header-title">Finanzen</h2>
+        <span class="panel-drag-line" aria-hidden="true"></span>
+        <button id="close-finance" class="panel-close-button" aria-label="Finanzen schließen">×</button>
+      </div>
+      <div class="finance-scroll"><table id="finance-table" class="finance-table"></table></div>
+      <div class="finance-loan">
+        <label for="finance-loan-amount">Darlehen</label>
+        <div class="finance-loan-controls">
+          <button id="finance-loan-less" type="button" title="Betrag verringern">−</button>
+          <input id="finance-loan-amount" type="number" min="0" step="1000" value="5000" />
+          <button id="finance-loan-more" type="button" title="Betrag erhöhen">+</button>
+          <button id="finance-borrow" type="button">Aufnehmen</button>
+          <button id="finance-repay" type="button">Tilgen</button>
+        </div>
+        <p id="finance-loan-status" class="scenario-hint"></p>
+      </div>
+      <dl id="finance-totals" class="finance-totals"></dl>
+      <section id="finance-goals" class="finance-goals" hidden>
+        <h3 class="scenario-heading">Ziele</h3>
+        <ul id="finance-goal-list" class="finance-goal-list"></ul>
       </section>
     </aside>
     <aside id="complaints-panel" class="complaints-panel panel" aria-label="Beschwerdemanagement">
@@ -1398,6 +1430,7 @@ function bindGameState(nextGame: GameState): void {
     updateVisitorOverview()
     updateDayPlanPanel()
     updateComplaintsPanel()
+    updateFinancePanel()
     updateLogisticsPanel()
   })
 }
@@ -4403,6 +4436,90 @@ document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((button) =>
 
 const visitorOverviewToggle = requireElement<HTMLButtonElement>('#open-visitors')
 const logisticsPanelToggle = requireElement<HTMLButtonElement>('#open-logistics')
+const financePanel = requireElement<HTMLElement>('#finance-panel')
+const financeToggle = requireElement<HTMLButtonElement>('#toggle-finance')
+const financeTable = requireElement<HTMLTableElement>('#finance-table')
+const financeTotals = requireElement<HTMLElement>('#finance-totals')
+const financeLoanAmount = requireElement<HTMLInputElement>('#finance-loan-amount')
+const financeLoanStatus = requireElement<HTMLElement>('#finance-loan-status')
+const financeGoals = requireElement<HTMLElement>('#finance-goals')
+const financeGoalList = requireElement<HTMLElement>('#finance-goal-list')
+makeDraggable(financePanel.querySelector<HTMLElement>('.panel-header')!, financePanel)
+const euro = (value: number): string =>
+  `${value < 0 ? '−' : ''}${Math.abs(Math.round(value)).toLocaleString('de-DE')} €`
+/** Same line the ledger of every tycoon game draws: a signed figure, red when it leaves. */
+const ledgerCell = (value: number | undefined): string =>
+  value === undefined || Math.round(value) === 0
+    ? '<td class="finance-empty"></td>'
+    : `<td class="${value < 0 ? 'finance-out' : 'finance-in'}">${value > 0 ? '+' : '−'}${Math.abs(Math.round(value)).toLocaleString('de-DE')} €</td>`
+
+let financeFingerprint = ''
+function updateFinancePanel(force = false): void {
+  if (!financePanel.classList.contains('visible')) return
+  const overview = game.financeOverview()
+  const snapshot = game.snapshot
+  const fingerprint = JSON.stringify([overview, snapshot.scenarioProgress, snapshot.scenario.goals])
+  if (!force && fingerprint === financeFingerprint) return
+  financeFingerprint = fingerprint
+  // Columns are festival editions, oldest on the left, like the months in the classics.
+  const periods = overview.periods.length ? overview.periods : [{ edition: overview.edition, entries: {} }]
+  financeTable.innerHTML = `
+    <thead><tr><th scope="col">Ausgaben / Einnahmen</th>${periods
+      .map((period) => `<th scope="col">${period.edition}. Ausgabe</th>`)
+      .join('')}</tr></thead>
+    <tbody>${FINANCE_CATEGORIES.map((category) => {
+      if (!periods.some((period) => Math.round(period.entries[category] ?? 0) !== 0)) return ''
+      return `<tr><th scope="row">${FINANCE_CATEGORY_NAMES[category]}</th>${periods
+        .map((period) => ledgerCell(period.entries[category]))
+        .join('')}</tr>`
+    }).join('')}</tbody>
+    <tfoot><tr><th scope="row">Saldo</th>${periods
+      .map((period) => ledgerCell(financePeriodTotal(period)))
+      .join('')}</tr></tfoot>`
+  financeTotals.innerHTML = [
+    ['Guthaben', euro(overview.money)],
+    ['Darlehen', euro(-overview.loan)],
+    ['Parkwert', euro(overview.parkValue)],
+    ['Firmenwert', euro(overview.companyValue)],
+  ]
+    .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
+    .join('')
+  const headroom = Math.max(0, overview.loanLimit - overview.loan)
+  financeLoanStatus.textContent = overview.loan > 0
+    ? `${euro(overview.loan)} offen · ${(overview.interestPerDay * 100).toFixed(1)} % Zinsen pro Tag · noch ${euro(headroom)} Kreditrahmen frei`
+    : `Kein Darlehen · bis zu ${euro(overview.loanLimit)} möglich · ${(overview.interestPerDay * 100).toFixed(1)} % Zinsen pro Tag`
+  const goals = snapshot.scenario.goals
+  financeGoals.hidden = goals.length === 0
+  financeGoalList.innerHTML = goals
+    .map((goal, index) => {
+      const status = snapshot.scenarioProgress.status[index] ?? 'open'
+      const mark = status === 'done' ? '✔' : status === 'failed' ? '✘' : '○'
+      return `<li class="finance-goal finance-goal-${status}"><span>${mark}</span><span>${goalName(goal)} <small>bis zur ${goal.edition}. Ausgabe · ${goalProgressText(goal, snapshot)}</small></span></li>`
+    })
+    .join('')
+}
+const openFinancePanel = (open: boolean): void => {
+  setPanelOpen(financePanel, financeToggle, open, () => updateFinancePanel(true))
+}
+financeToggle.addEventListener('click', () => openFinancePanel(!financePanel.classList.contains('visible')))
+requireElement<HTMLButtonElement>('#open-finance-money').addEventListener('click', () => openFinancePanel(true))
+requireElement<HTMLButtonElement>('#close-finance').addEventListener('click', () => openFinancePanel(false))
+const loanStep = (direction: number): void => {
+  const step = 1_000
+  const value = Math.max(0, Math.round((Number(financeLoanAmount.value) || 0) / step) * step + direction * step)
+  financeLoanAmount.value = String(value)
+}
+requireElement<HTMLButtonElement>('#finance-loan-less').addEventListener('click', () => loanStep(-1))
+requireElement<HTMLButtonElement>('#finance-loan-more').addEventListener('click', () => loanStep(1))
+const sendLoan = (type: 'borrow' | 'repay'): void => {
+  const amount = Math.max(0, Math.round(Number(financeLoanAmount.value) || 0))
+  const result = game.manageLoan({ type, amount })
+  showToast(result.message, !result.ok)
+  updateFinancePanel(true)
+}
+requireElement<HTMLButtonElement>('#finance-borrow').addEventListener('click', () => sendLoan('borrow'))
+requireElement<HTMLButtonElement>('#finance-repay').addEventListener('click', () => sendLoan('repay'))
+
 const complaintsToggle = requireElement<HTMLButtonElement>('#open-complaints')
 visitorOverviewToggle.addEventListener('click', () => {
   setPanelOpen(
@@ -4542,6 +4659,9 @@ const scenarioUnevenness = requireElement<HTMLInputElement>('#scenario-unevennes
 const scenarioGroundDetails = requireElement<HTMLElement>('#scenario-ground-details')
 const scenarioUnevennessValue = requireElement<HTMLElement>('#scenario-unevenness-value')
 const scenarioWorldSize = requireElement<HTMLSelectElement>('#scenario-world-size')
+const scenarioPresetSelect = requireElement<HTMLSelectElement>('#scenario-preset')
+const scenarioPresetDetail = requireElement<HTMLElement>('#scenario-preset-detail')
+scenarioPresetSelect.addEventListener('change', () => applyScenarioPreset())
 scenarioEnvironment.addEventListener('change', () => updateScenarioLabels())
 const scenarioCarValue = requireElement<HTMLElement>('#scenario-car-value')
 const scenarioPartyValue = requireElement<HTMLElement>('#scenario-party-value')
@@ -4551,7 +4671,13 @@ const scenarioMoneyValue = requireElement<HTMLElement>('#scenario-money-value')
 
 function readScenarioForm(): ScenarioSettings {
   const worldSize = Number(scenarioWorldSize.value)
+  // A template contributes what the sliders cannot express — the debt the site comes
+  // with and what it asks of the player. The terrain values stay editable afterwards.
+  const preset = scenarioPreset(scenarioPresetSelect.value)
   return normalizeScenarioSettings({
+    preset: preset?.id,
+    startingLoan: preset?.settings.startingLoan ?? 0,
+    goals: preset?.settings.goals ?? [],
     environment: scenarioEnvironment.value as Environment,
     unevenness: Number(scenarioUnevenness.value) / 100,
     carArrivalShare: Number(scenarioCarShare.value) / 100,
@@ -4576,7 +4702,28 @@ function fillScenarioForm(settings: ScenarioSettings): void {
   scenarioAggression.value = String(Math.round(settings.aggressiveShare * 100))
   scenarioMoney.value = String(settings.startingMoney)
   scenarioWorldSize.value = String(settings.worldSize)
+  scenarioPresetSelect.value = settings.preset ?? ''
   updateScenarioLabels()
+  updateScenarioPresetDetail()
+}
+
+/** Pouring a template into the form: everything it prescribes, with the description and the goals underneath. */
+function applyScenarioPreset(): void {
+  const preset = scenarioPreset(scenarioPresetSelect.value)
+  if (preset) {
+    const { preset: _preset, ...values } = preset.settings
+    fillScenarioForm({ ...values, preset: preset.id })
+    scenarioPresetSelect.value = preset.id
+  }
+  updateScenarioPresetDetail()
+}
+
+function updateScenarioPresetDetail(): void {
+  const preset = scenarioPreset(scenarioPresetSelect.value)
+  const goals = preset?.settings.goals ?? []
+  scenarioPresetDetail.innerHTML = preset
+    ? `${preset.detail}${goals.length ? `<br><b>Ziel:</b> ${goals.map((goal) => `${goalName(goal)} bis zur ${goal.edition}. Ausgabe`).join(' · ')}` : ''}${preset.settings.startingLoan > 0 ? `<br><b>Startdarlehen:</b> ${preset.settings.startingLoan.toLocaleString('de-DE')} €` : ''}`
+    : 'Leeres Gelände ohne Vorgaben: Größe, Boden und Startkapital frei wählen, keine Ziele.'
 }
 
 function updateScenarioLabels(): void {
@@ -5676,8 +5823,9 @@ new ResizeObserver(syncDebugViewGap).observe(performanceIndicator)
 new ResizeObserver(syncDebugViewGap).observe(statusOverlay)
 
 // Whether the game shows its developer readouts at all: the build/frame-rate line
-// in the bottom-left corner and the bug button in the toolbar. Kept in the browser
-// rather than in the save, because it is about this machine, not about the park.
+// in the bottom-left corner and the bug button in the toolbar. Off unless it was
+// switched on here before, and kept in the browser rather than in the save, because
+// it is about this machine, not about the park.
 const DEBUG_TOOLS_KEY = 'festival-debug-tools'
 const debugToolsToggle = requireElement<HTMLInputElement>('#setting-debug-tools')
 const applyDebugTools = (shown: boolean): void => {
@@ -5687,7 +5835,7 @@ const applyDebugTools = (shown: boolean): void => {
   syncDebugViewGap()
 }
 try {
-  debugToolsToggle.checked = window.localStorage.getItem(DEBUG_TOOLS_KEY) !== 'off'
+  debugToolsToggle.checked = window.localStorage.getItem(DEBUG_TOOLS_KEY) === 'on'
 } catch { /* private mode or blocked storage: fall back to showing them */ }
 applyDebugTools(debugToolsToggle.checked)
 debugToolsToggle.addEventListener('change', () => {

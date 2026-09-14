@@ -1,4 +1,5 @@
 import { autoLineupDuration, planAutoLineup } from './autoLineup'
+import { bookFinance, type FinanceCategory } from './finance'
 import { GENRES, bandGenre, musicTaste, musicAppeal, evolveMusicAudience, type MusicMix } from './musicTaste'
 import { stageDistance, buildingFootprint, stageDesignIssue, stageStats, stagePhase, type StageDesign } from './stageDesign'
 import type { WayType } from './wayTypes'
@@ -156,7 +157,7 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
   if (action.type === 'order') return orderGoods(s, action.kind, action.quantity, action.delay, action.depotId)
   const f = s.festival, now = festivalTime(s)
   const fail = (message: string): ActionResult => ({ ok: false, message })
-  const pay = (amount: number) => { if (s.money < amount) return false; s.money -= amount; return true }
+  const pay = (amount: number, category: FinanceCategory) => { if (s.money < amount) return false; bookFinance(s, category, -amount); return true }
   if (action.type === 'sandbox') { f.planning = false; f.enabled = false; s.parkOpen = true; s.speed = 1; return { ok: true, message: 'Freies Spiel fortgesetzt' } }
   if (action.type === 'stageTemplate') {
     if(action.name!==null&&!f.stageTemplates?.some(t=>t.name===action.name))return fail('Vorlage nicht gefunden')
@@ -170,7 +171,7 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
     if ((action.saveTemplate || action.selectForBuild) && (f.stageTemplates?.length??0)>=30 && !f.stageTemplates?.some(t=>t.name===action.design.name)) return fail('Höchstens 30 Vorlagen speichern')
     if (stage) {
       const price = Math.max(0,stageStats(action.design).cost-(stage.stageDesign?stageStats(stage.stageDesign).cost:0))
-      if (!pay(price)) return fail('Nicht genug Geld für den Bühnenausbau')
+      if (!pay(price, 'construction')) return fail('Nicht genug Geld für den Bühnenausbau')
       stage.stageDesign = structuredClone(action.design)
     }
     if (action.saveTemplate || action.selectForBuild) {
@@ -224,7 +225,7 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
     if (f.bookings.some(b => b.id!==previous?.id && b.day === action.day && (b.bandId === band.id || (b.stageId === action.stageId &&
         action.start < b.start + b.duration + 30 && action.start + action.duration + 30 > b.start)))) return fail('Band bereits gebucht oder Bühne belegt (30 Minuten Umbauzeit)')
     if(previous){Object.assign(previous,{stageId:action.stageId,day:action.day,start:action.start,duration:action.duration});return {ok:true,message:'Auftritt verschoben – keine zusätzliche Gage'}}
-    if (!pay(band.fee)) return fail('Nicht genug Geld für die Gage')
+    if (!pay(band.fee, 'bands')) return fail('Nicht genug Geld für die Gage')
     f.bookings.push({ id: `booking-${f.nextId++}`, bandId: band.id, stageId: action.stageId, day: action.day,
       start: action.start, duration: action.duration, fee: band.fee })
     return { ok: true, message: `${band.name} gebucht – Gage bezahlt` }
@@ -248,13 +249,13 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
   if (action.type === 'cancel') {
     const b = f.bookings.find(b => b.id === action.id)
     if (!b || b.day * 1440 + b.start <= now) return fail('Nur zukünftige Auftritte können storniert werden')
-    s.money += b.fee / 2; f.bookings = f.bookings.filter(item => item.id !== b.id)
+    bookFinance(s, 'bands', b.fee / 2); f.bookings = f.bookings.filter(item => item.id !== b.id)
     return { ok: true, message: 'Buchung storniert, 50 % der Gage erstattet' }
   }
   if (action.type === 'upgrade') {
     const upgrade = UPGRADES[action.kind]
     if (!upgrade || f.upgrades[action.kind]) return fail('Ausbau bereits vorhanden oder unbekannt')
-    if (!pay(upgrade.cost)) return fail('Nicht genug Geld für diesen Ausbau')
+    if (!pay(upgrade.cost, 'construction')) return fail('Nicht genug Geld für diesen Ausbau')
     f.upgrades[action.kind] = true
     return { ok: true, message: `${upgrade.name} eingerichtet` }
   }

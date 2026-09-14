@@ -1,4 +1,5 @@
 import { getTerrainHeight } from './terrain'
+import { bookFinance } from './finance'
 import type { GameSnapshot } from './GameState'
 import type { Point, CarryRoute, Depot } from './supplyChain'
 import { emptyStock } from './supplyChain'
@@ -52,7 +53,7 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
   const go = (r:CarryRoute, goals:Point[]) => { const path=findPath(r.position,goals); if(path===null) return false; r.path=path; return true }
   for (const r of i.routes) {
     if (!r.automatic) continue
-    s.money -= dt*.04
+    bookFinance(s, 'staff', -dt*.04)
     const area=r.workArea
     const inside=(p:{x:number;z:number})=>!area||p.x>=area.minX&&p.x<=area.maxX&&p.z>=area.minZ&&p.z<=area.maxZ
     const home=i.depots.find(d=>d.id===r.depotId)

@@ -8,6 +8,8 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
     case 'setBungeeHeight': return game.setBungeeHeight(command.id, command.height)
     case 'festival':
       return game.manageFestival(command.action)
+    case 'loan':
+      return game.manageLoan(command.action)
     case 'place':
       return game.place(command.kind, command.x, command.z, command.decorationSlot)
     case 'placePath':

@@ -6,7 +6,8 @@ import type { ActionResult, GameSnapshot } from './GameState'
 import type { Supply } from './festivalManagement'
 import { SUPPLIES } from './festivalManagement'
 import { cellKey, createRoadGraph, findRoadRoute } from './logistics'
-import { getTerrainHeight } from './terrain'
+import { getTerrainHeight, isInTerrainWorld } from './terrain'
+import { bookFinance } from './finance'
 import { groundInfo, groundKey, prepareGround, prepareGroundArea } from './ground'
 import type { GroundCell, GroundWork } from './ground'
 
@@ -57,7 +58,7 @@ export function infrastructureAction(s: GameSnapshot, a: InfrastructureAction): 
     const path = s.buildings.find(b => b.kind === 'path' && b.x === a.x && b.z === a.z && b.elevation === a.elevation)
     if (!path) return fail('Personaltor auf einem Fußweg platzieren')
     if (!path.staffOnly && s.money < 80) return fail('Personaltor kostet 80 €')
-    if (!path.staffOnly) s.money -= 80
+    if (!path.staffOnly) bookFinance(s, 'construction', -80)
     path.staffOnly = !path.staffOnly
     return {ok:true,message:path.staffOnly ? 'Personaltor gesetzt: nur Personal und Logistik' : 'Personaltor entfernt'}
   }
@@ -66,13 +67,13 @@ export function infrastructureAction(s: GameSnapshot, a: InfrastructureAction): 
   if (a.type === 'route' && a.kind === 'waste') return fail('Mülltransporte übernimmt automatisch das Reinigungspersonal')
   if (a.type === 'depot') {
     if (a.role && !['delivery','storage'].includes(a.role)) return fail('Ungültiger Lagertyp')
-    if (!Number.isInteger(a.x) || !Number.isInteger(a.z) || Math.abs(a.x + .5) > s.scenario.worldSize / 2 || Math.abs(a.z + .5) > s.scenario.worldSize / 2) return fail('Außerhalb des Geländes')
+    if (!Number.isInteger(a.x) || !Number.isInteger(a.z) || !isInTerrainWorld(a.x, a.z, s.scenario.worldSize)) return fail('Außerhalb des Geländes')
     if (getTerrainHeight(s.terrain, a.x, a.z) < 0 || s.buildings.some(b => occupiesBuildingCell(b,a.x,a.z)) ||
       [...i.depots, ...s.logistics.roadCells, ...s.logistics.parkingCells, ...s.campingCells, ...s.wasteDumpCells, ...s.stageForecourtCells, ...s.medicalCells].some(p => p.x === a.x && p.z === a.z)) return fail('Depot benötigt ein freies, trockenes Feld')
     if (groundInfo(s, a.x, a.z).bearing < 2) return fail('Depot benötigt verdichteten Untergrund')
     if (s.money < 400) return fail('Depot kostet 400 €')
     if (a.role === 'delivery' && !s.logistics.roadCells.some(p => Math.abs(p.x-a.x)+Math.abs(p.z-a.z) === 1)) return fail('Anlieferungsplatz direkt neben einer Straße setzen')
-    s.money -= 400
+    bookFinance(s, 'construction', -400)
     i.depots.push({ id: `supply-${i.nextId++}`, x: a.x, z: a.z, stock: emptyStock(), minimum: emptyStock(), ...(a.role ? { role: a.role } : {}), distribution: 'shops' })
     // Old shared inventory becomes cargo awaiting physical delivery, never shop stock.
     for (const kind of Object.keys(SUPPLIES) as Supply[]) {
@@ -100,14 +101,14 @@ export function infrastructureAction(s: GameSnapshot, a: InfrastructureAction): 
     if (difference < 0 && idle.length < -difference) return fail('Träger zuerst ihre Lieferung abschließen lassen')
     for (let n=0;n<difference;n++) i.routes.push({id:`carrier-${i.nextId++}`,automatic:true,depotId:depot.id,targetId:'',kind:'food',minimum:40,waypoints:[],position:{x:depot.x,z:depot.z,elevation:getTerrainHeight(s.terrain,depot.x,depot.z)},path:[],phase:'idle',cargo:0,progress:0,status:'Suche Transportauftrag'})
     if (difference < 0) { const removed = new Set(idle.slice(0,-difference).map(r => r.id)); i.routes = i.routes.filter(r => !removed.has(r.id)) }
-    s.money -= Math.max(0,difference)*120
+    bookFinance(s, 'staff', -Math.max(0,difference)*120)
     depot.distribution = a.distribution
     return {ok:true,message:'Depot und automatische Träger gespeichert'}
   }
   if (a.type === 'removeDepot') {
     if (Object.values(depot.stock).some(n => n > 0) || i.routes.some(r => r.depotId === depot.id || r.job?.sourceId === depot.id || r.job?.destinationId === depot.id) ||
       i.trucks.some(t => t.depotId === depot.id) || s.festival.deliveries.some(d => d.depotId === depot.id)) return fail('Depot erst leeren, Lieferungen abschließen und Trägerrouten entfernen')
-    i.depots = i.depots.filter(d => d !== depot); s.money += 200
+    i.depots = i.depots.filter(d => d !== depot); bookFinance(s, 'construction', 200)
     return { ok: true, message: 'Leeres Depot abgebaut; 200 € erstattet' }
   }
   if (a.type === 'minimum') {
@@ -121,7 +122,7 @@ export function infrastructureAction(s: GameSnapshot, a: InfrastructureAction): 
   if (!Number.isInteger(a.minimum) || a.minimum < 1 || a.minimum > (a.kind === 'waste' ? SIMULATION_CONFIG.waste.binCapacity : 200) || a.waypoints.length > 12 || a.waypoints.some(p => !s.buildings.some(b => b.kind === 'path' && b.x === p.x && b.z === p.z && b.elevation === p.elevation))) return fail('Zielbestand 1–200 und maximal zwölf Wegpunkte auf Fußwegen wählen')
   if (i.routes.some(r => r.targetId === a.targetId && r.kind === a.kind)) return fail('Für dieses Ziel besteht bereits eine Route')
   if (s.money < 120) return fail('Träger mit Handkarren kostet 120 €')
-  s.money -= 120
+  bookFinance(s, 'staff', -120)
   i.routes.push({ id: `carrier-${i.nextId++}`, depotId: depot.id, targetId: target.id, kind: a.kind, minimum: a.minimum,
     waypoints: a.waypoints.map(p => ({ ...p })), position: { x: depot.x, z: depot.z, elevation: getTerrainHeight(s.terrain, depot.x, depot.z) }, path: [], phase: 'idle', cargo: 0, progress: 0, status: 'Warte auf Wegverbindung' })
   return { ok: true, message: 'Träger eingestellt: 0,04 €/Spielminute. Er folgt der geplanten Route.' }
@@ -139,7 +140,7 @@ export function orderGoods(s: GameSnapshot, kind: Supply, quantity: number, dela
   if (used + quantity > (f.upgrades.warehouse ? 5000 : 3000)) return fail('Depot einschließlich bestellter Ware voll')
   const cost = quantity * SUPPLIES[kind].price + 45
   if (s.money < cost) return fail('Nicht genug Geld für Ware und 45 € Lieferung')
-  s.money -= cost
+  bookFinance(s, 'stock', -cost)
   f.deliveries.push({ id: `delivery-${f.nextId++}`, depotId: depot.id, kind, quantity, due: s.day * 1440 + s.minute + delay, remaining: 90 })
   return { ok: true, message: 'Bestellt: 90 Minuten Anfahrt bis zum Kartenrand, danach Fahrt zum Depot und Verteilung per Träger.' }
 }
@@ -272,7 +273,7 @@ export function updateSupplyChain(s: GameSnapshot, routeWalk: PedestrianRouter, 
   updateDepotCarriers(s, dt, routeWalk, canStep)
   for (const r of i.routes) {
     if (r.automatic) continue
-    s.money -= dt * .04
+    bookFinance(s, 'staff', -dt * .04)
     const depot = i.depots.find(d => d.id === r.depotId), target = s.buildings.find(b => b.id === r.targetId)
     if (!depot) continue
     if (r.path.length) {

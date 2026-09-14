@@ -511,6 +511,172 @@ button {
   line-height: 1.4;
 }
 
+/* The books, laid out the way a tycoon ledger is: one row per kind of money, one
+   column per festival edition, money out in red and money in in green. */
+.finance-panel {
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 27;
+  display: none;
+  width: min(760px, calc(100vw - 24px));
+  max-height: calc(100dvh - 140px);
+  overflow: auto;
+  padding: 12px;
+}
+
+.finance-panel.visible {
+  display: block;
+}
+
+.finance-scroll {
+  overflow-x: auto;
+}
+
+.finance-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-table th,
+.finance-table td {
+  padding: 3px 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.finance-table thead th,
+.finance-table tbody th,
+.finance-table tfoot th {
+  color: #efcf86;
+}
+
+.finance-table th[scope='row'] {
+  text-align: left;
+  font-weight: 600;
+}
+
+.finance-table thead th {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.finance-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.finance-table tfoot th,
+.finance-table tfoot td {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  font-weight: 700;
+}
+
+.finance-in {
+  color: #9fe3ac;
+}
+
+.finance-out {
+  color: #f08b7e;
+}
+
+.finance-loan {
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.finance-loan > label {
+  color: #efcf86;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.finance-loan-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.finance-loan-controls input {
+  width: 110px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-totals {
+  margin: 10px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.finance-totals div {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.finance-totals dt {
+  color: #a9beb5;
+  font-size: 11px;
+}
+
+.finance-totals dd {
+  margin: 0;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.finance-goals {
+  margin-top: 12px;
+}
+
+.finance-goal-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.finance-goal {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.finance-goal small {
+  display: block;
+  color: #9eb6ac;
+  font-size: 10px;
+}
+
+.finance-goal-done > span:first-child { color: #9fe3ac; }
+.finance-goal-failed > span:first-child { color: #f08b7e; }
+.finance-goal-failed { color: #c9a9a3; }
+.finance-goal-open > span:first-child { color: #e1bc65; }
+
+/* The money readout doubles as the way into the books. */
+.status-money {
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.status-money:hover strong {
+  color: #efcf86;
+}
+
 /* A plain on/off setting: the box, then its label, on one line. */
 .scenario-check {
   display: flex;

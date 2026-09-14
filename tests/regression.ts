@@ -33,6 +33,7 @@ import type { GameCommand } from '../src/net/protocol'
 import { scenePixelRatio } from '../src/view/renderResolution'
 import { testFestival } from './festival'
 import { testBuildMenu } from './buildMenu'
+import { testFinance } from './finance'
 
 function test(name: string, run: () => void) {
   run()
@@ -44,6 +45,9 @@ testPixelPeople()
 testCampingModels()
 test('build menu lists every placeable tool once', () => {
   testBuildMenu()
+})
+test('books, loans, prepared scenarios and their goals', () => {
+  testFinance()
 })
 
 function fixture(count = 20): GameState {
