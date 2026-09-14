@@ -10,6 +10,101 @@
   box-sizing: border-box;
 }
 
+/* One scrollbar for the whole app: a flat retro track with a bevelled thumb in
+   the panel palette, so every scrollable list — the build submenus, the
+   workshop sidebars, the festival planner — looks like part of the same UI.
+   Firefox has no ::-webkit-scrollbar and gets the two standard properties
+   instead, but only there: in Chromium a `scrollbar-color` (which inherits!)
+   switches that scrollbar back to the plain OS rendering and would undo
+   everything below, so no rule anywhere may set it unconditionally. */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f332b;
+  border: 1px solid #18271f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3d584b;
+  border: 1px solid #18271f;
+  border-top-color: #517059;
+  border-left-color: #517059;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #486755;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #547562;
+  border-top-color: #18271f;
+  border-left-color: #18271f;
+}
+
+::-webkit-scrollbar-corner {
+  background: #1f332b;
+}
+
+/* The step arrows at both ends. Chromium only draws them for a custom scrollbar
+   once they are given a size of their own, and it offers a second, unused pair
+   at each end (the "double button" layout), which is switched off below so each
+   end keeps exactly one arrow. */
+::-webkit-scrollbar-button {
+  display: block;
+  width: 12px;
+  height: 12px;
+  background-color: #3d584b;
+  background-repeat: no-repeat;
+  background-position: center;
+  border: 1px solid #18271f;
+  border-top-color: #517059;
+  border-left-color: #517059;
+}
+
+::-webkit-scrollbar-button:hover {
+  background-color: #486755;
+}
+
+::-webkit-scrollbar-button:active {
+  background-color: #547562;
+  border-top-color: #18271f;
+  border-left-color: #18271f;
+}
+
+::-webkit-scrollbar-button:vertical:start:increment,
+::-webkit-scrollbar-button:vertical:end:decrement,
+::-webkit-scrollbar-button:horizontal:start:increment,
+::-webkit-scrollbar-button:horizontal:end:decrement {
+  display: none;
+}
+
+::-webkit-scrollbar-button:vertical:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M4 2L7 6H1Z' fill='%238ea79a'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:vertical:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M4 6L1 2H7Z' fill='%238ea79a'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:horizontal:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M2 4L6 1V7Z' fill='%238ea79a'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:horizontal:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath d='M6 4L2 7V1Z' fill='%238ea79a'/%3E%3C/svg%3E");
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-color: #3d584b #1f332b;
+    scrollbar-width: thin;
+  }
+}
+
 html,
 body,
 #app,
@@ -620,7 +715,9 @@ button {
   position: absolute;
   top: 0;
   left: calc(100% + 8px);
-  width: 210px;
+  /* Wide enough for the longest entry ("Krankenwagengarage") to lay out at its own
+     minimum width, so the list never needs a horizontal scrollbar of its own. */
+  width: 252px;
   padding: 10px;
   display: none;
   z-index: 20;
@@ -632,9 +729,19 @@ button {
 }
 
 .build-flyout h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 1px 4px 8px;
   color: #dcebe4;
   font-size: 13px;
+}
+
+/* The submenu's own close button, sat at the end of its heading row. */
+.build-flyout h3 .panel-close-button {
+  margin-left: auto;
+  padding: 3px 7px;
+  font-size: 12px;
 }
 
 @keyframes flyout-in {
@@ -2410,7 +2517,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   outline: 2px solid #ffd47d; outline-offset: 2px;
 }
 .build-menu { top: 100px; left: 6px; width: 190px; padding: 8px; }
-.build-categories { max-height: max(60px, calc(100dvh - 550px)); overflow-y: auto; gap: 2px; scrollbar-color: #91aaa0 #253e35; scrollbar-width: thin; }
+.build-categories { max-height: max(60px, calc(100dvh - 550px)); overflow-y: auto; gap: 2px; }
 .build-categories button { min-height: 30px; padding: 4px 6px; grid-template-columns: 24px 1fr 10px; font-size: 11px; }
 .build-categories span { font-size: 16px; }
 .build-flyout { max-height: calc(100dvh - 115px); overflow-y: auto; }
@@ -2436,13 +2543,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   .build-menu { top: 125px; width: 164px; }
   .build-categories { max-height: max(60px, calc(100dvh - 575px)); }
   .crowding-panel { top: 125px; width: 144px; }
-  .build-flyout { width: min(210px, calc(100vw - 186px)); }
+  .build-flyout { width: min(252px, calc(100vw - 186px)); }
   .visitor-panel, .day-plan-panel, .visitor-overview-panel, .complaints-panel, .entity-panel { top: 125px; max-height: calc(100dvh - 181px); }
   .staff-panel { max-height: calc(100dvh - 181px); }
 }
 
 /* Keep the expanded scenario form inside the viewport. */
-.scenario-panel { max-height: calc(100dvh - 116px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.scenario-panel { max-height: calc(100dvh - 116px); overflow-y: auto; overscroll-behavior: contain; }
 @media (max-width: 780px) { .scenario-panel { max-height: calc(100dvh - 141px); } }
 
 /* .topbar wraps onto extra rows (and so grows taller than any of the fixed

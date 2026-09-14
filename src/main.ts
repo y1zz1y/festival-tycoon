@@ -308,7 +308,7 @@ app.innerHTML = `
         <button data-build-category="logistics"><span>🚚</span><em>Logistik</em><b>›</b></button>
       </nav>
       <section class="build-flyout panel" data-build-panel="terrain">
-        <h3>⛰ Gelände</h3>
+        <h3>⛰ Gelände<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
         <div class="tools">
           <button class="tool" data-tool="terrainRaise"><span>▲</span><em>Erhöhen<small>8 € je Feld</small></em></button>
           <button class="tool" data-tool="terrainLower"><span>▼</span><em>Senken<small>8 € je Feld</small></em></button>
@@ -316,47 +316,46 @@ app.innerHTML = `
         </div>
 </section>
       <section class="build-flyout panel" data-build-panel="supply">
-        <h3>🍔 Versorgung</h3>
+        <h3>🍔 Versorgung<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
         <div id="supply-tools" class="tools"></div>
       </section>
       <section class="build-flyout panel" data-build-panel="camping">
-        <h3>⛺ Camping</h3>
+        <h3>⛺ Camping<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
         <div class="tools">
           <button class="tool" data-tool="camping"><span>⛺</span><em>Zeltbereich<small>Gelände ausweisen</small></em><kbd>7</kbd></button>
         </div>
       </section>
       <section class="build-flyout panel" data-build-panel="rides">
-        <h3>🎡 Attraktionen</h3>
+        <h3>🎡 Attraktionen<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
         <div id="ride-tools" class="tools"></div>
         <button class="tool" data-tool="coaster"><span>🎢</span><em>Achterbahn<small>ab 450 €</small></em><kbd>0</kbd></button>
         <button class="tool" data-tool="ride" data-bungee="true"><span>🪂</span><em>Bungee-Turm<small>1.200 € + 25 €/Meter</small></em></button>
         <label>Turmhöhe (m) <input id="bungee-height" type="number" min="4" max="200" step="1" value="20" style="width:70px" /></label>
       </section>
       <section class="build-flyout panel" data-build-panel="emergency">
-        <h3>🚑 Notfallversorgung</h3>
+        <h3>🚑 Notfallversorgung<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
         <div id="emergency-tools" class="tools"></div>
         <button class="tool" data-tool="medicalArea"><span>🏥</span><em>Krankenbereich<small>3 Liegen je Feld</small></em></button>
       </section>
       <section class="build-flyout panel" data-build-panel="decoration">
-        <h3>🌳 Dekoration</h3>
+        <h3>🌳 Dekoration<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
         <p class="scenery-help">Kleine Deko: bis zu 4 pro Feld. Hecken und Banner stehen an der Feldkante. Die Maus bestimmt die Position.</p>
         <button id="rotate-scenery" type="button">↻ Drehen / nächste Seite <kbd>R</kbd></button>
         <div id="decoration-tools" class="tools"></div>
       </section>
       <section class="build-flyout panel" data-build-panel="festival">
-        <h3>🎤 Festivalequipment</h3>
+        <h3>🎤 Festivalequipment<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
         <div id="festival-tools" class="tools"></div>
-        <button class="tool" data-tool="stageForecourt"><span>🎉</span><em>Bühnenvorplatz<small>9 Personen pro Feld</small></em></button>
       </section>
       <section class="build-flyout panel" data-build-panel="tech">
-        <h3>⚡ Strom & Showtechnik</h3>
+        <h3>⚡ Strom & Showtechnik<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
         <div class="tools">
           <button class="tool" data-tool="powerCable"><span>🔌</span><em>Stromkabel<small>18 € je Feld</small></em></button>
         </div>
         <div id="tech-tools" class="tools"></div>
       </section>
       <section class="build-flyout panel" data-build-panel="logistics">
-        <h3>Transport & Logistik</h3>
+        <h3>Transport & Logistik<button data-close-build-flyout class="panel-close-button" aria-label="Untermenü schließen">×</button></h3>
         <div class="logistics-tabs">
           <button class="active" type="button">Straße</button>
         </div>
@@ -3590,6 +3589,9 @@ document.querySelectorAll<HTMLButtonElement>('[data-build-category]').forEach((b
         ?.classList.add('open')
     }
   })
+})
+document.querySelectorAll<HTMLButtonElement>('[data-close-build-flyout]').forEach((button) => {
+  button.addEventListener('click', () => closeBuildSubmenus())
 })
 document.addEventListener('pointerdown', (event) => {
   const target = event.target

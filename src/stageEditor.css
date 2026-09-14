@@ -7,7 +7,7 @@
 .stage-editor button[aria-pressed=true]{background:#3f715b;border-color:rgba(255,255,255,.25)}
 
 .stage-layout{display:grid;grid-template-columns:225px minmax(220px,1fr) 220px;flex:1;min-height:0}
-.stage-layout aside{overflow:auto;padding:14px;background:rgba(17,35,28,.35);scrollbar-color:#9bb499 #294238;scrollbar-width:thin}
+.stage-layout aside{overflow:auto;padding:14px;background:rgba(17,35,28,.35)}
 .stage-layout aside:last-child{border-left:1px solid rgba(255,255,255,.14)}
 .stage-editor label{display:block;margin:9px 0}
 .stage-editor input:not([type=checkbox]):not([type=color]),.stage-editor select{width:100%;box-sizing:border-box;margin-top:4px;color:#edf7f1;background:#29463a;border:1px solid rgba(255,255,255,.14)}
