@@ -214,7 +214,6 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         label: 'Festival',
         items: [
           buildingItem('stage'),
-          toolItem('stageForecourt', 'Bühnenvorplatz', '🎉', '9 Personen pro Feld'),
           buildingItem('directionalSpeaker'),
           buildingItem('omniSpeaker'),
           toolItem('powerCable', 'Stromkabel', '🔌', '18 € je Feld'),
@@ -370,7 +369,6 @@ export function placeableTools(): Tool[] {
     'camping',
     'medicalArea',
     'wasteDump',
-    'stageForecourt',
     'road',
     'parkingArea',
     'roadDirection',
