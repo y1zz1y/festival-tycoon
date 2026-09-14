@@ -13,7 +13,8 @@ Multi-Goal-Suche, kein A* pro Objekt.
 | Baumenü | `src/game/buildMenu.ts` | Attraktionen → Tab **Camping** (`camping`) |
 | Wegschranken-Sensor | `src/game/accessControl.ts` | freie/belegte Campingflächen im Gebiet |
 | Verfall verlassener Camps | `src/game/camping.ts` | `decayUnclaimedInstallations`, `abandonVisitorCamp` |
-| Balancing | `src/game/simulationConfig.ts` | `camping` |
+| Balancing | `src/game/simulationConfig.ts` | `camping`, `camping.sleepSchedule` |
+| Schlaffenster / Chronotyp | `src/game/visitorSleep.ts` | `sampleFestivalSleepRhythm`, `isMinuteInSleepWindow` |
 | Ticket-Kontingente | `src/game/festivalManagement.ts` | `tickets`, Camping-Kapazität |
 | Modelle / Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts` | 14 Camping-Batches |
 | Boden / Rand | `src/view/campingGround.ts` | Gras-Instancing, Curb-Flood-Fill |
@@ -31,11 +32,24 @@ Multi-Goal-Suche, kein A* pro Objekt.
   zerstören (`GameState.clearWasteForDebug`).
 - Camping-Gras teilt eine Textur und instanzierte Kacheln. Den
   Außenkanten-Flood-Fill nur bei Flächenedits neu bauen.
+- `CampingView` hält `CampMeshBatcher` dauerhaft: kleine Phasen-/Farb-/Alterungs-
+  Änderungen aktualisieren Instanzdaten statt alle GPU-Batches neu zu erzeugen.
+  Kapazität wächst in Zweierpotenzen, Instanzpuffer werden beim Ersetzen freigegeben.
+  Bollerwagen teilen statische Geometrie/Materialien; Sprites bleiben eigenständig.
+- Gleichzeitige Camp-Abreisen teilen das Besucher-Entscheidungsbudget. Ein noch
+  abzubauendes Camp wird bei verzögerter Routenplanung auch am Ausgang erhalten.
+- Geplanter Schlaf schickt Camper mit `findRouteToCampsite` zurück ins eigene
+  Zelt (`campingPhase: returning` → `resting`). Das Ziel bleibt das
+  bestehende Camp; neu ist nur das Festival-Fenster in
+  `camping.sleepSchedule` (späte Nacht / Vormittag, gestaffelte Chronotypen).
+  Im Schlaffenster wachen Camper erst auf, wenn die Energie
+  `restCompleteEnergy` erreicht **und** ihre persönliche Weckzeit vorbei ist.
 
 ## Tests
 
 `tests/performanceGuards.ts` (eine Route für 335 Ziele, belegte Sitze).
 `tests/campingModels.ts` (Batches, Vertices, stabile IDs).
+Schlafziel Zelt vs. nächtliches Wachbleiben: `tests/visitorSleep.ts`.
 Visuelle Fixture: `tests/camping-preview.html`.
 
 ## Bei Änderungen dieses Dokument

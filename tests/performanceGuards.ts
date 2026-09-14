@@ -14,6 +14,7 @@ import {
   VISITOR_CAR_COLORS,
   visitorCarColor,
 } from '../src/view/logisticsModels'
+import { createPorterModel } from '../src/view/carrierModels'
 import { disposeObject3D } from '../src/view/disposeObject3D'
 
 export function testPerformanceGuards(fixture: (count?: number) => GameState): void {
@@ -49,6 +50,67 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   assert.equal(internal.visitorsAwaitingDecision.size, 0, 'deferred decisions eventually drain')
   internal.processingSimulationStep = false
 
+  const closing = fixture(100), departure = closing as any
+  const budget = SIMULATION_CONFIG.pathfinding.decisionsPerTick
+  departure.visitorsAwaitingDecision.clear()
+  departure.processingSimulationStep = true
+  departure.decisionBudget = budget
+  departure.decidedThisTick.clear()
+  let departures = 0
+  const beginDeparture = departure.camping.beginDeparture.bind(departure.camping)
+  departure.camping.beginDeparture = (...args: any[]) => { departures++; return beginDeparture(...args) }
+  departure.findPath = (_start: any, goals: any[]) => [goals[0]]
+  closing.snapshot.visitors.forEach(v => {
+    Object.assign(v, { state: 'exploring', campsite: null, campingPhase: 'none', cellX: 2, cellZ: -20, pendingWaste: 0, arrivalGroupId: null, route: [], targetId: null })
+    departure.beginVisitorDeparture(v)
+  })
+  assert.equal(departures, budget, 'mass departures share the destination budget')
+  assert.ok(closing.snapshot.visitors.every(v => v.state === 'leaving'), 'urgent departure states change immediately even with no routing budget')
+  assert.equal(departure.pendingVisitorRouting.size, 100-budget)
+  for (let i=0;i<Math.ceil(100/budget);i++) {
+    departure.decisionBudget = budget; departure.decidedThisTick.clear()
+    departure.flushVisitorDecisions(budget)
+  }
+  assert.equal(departures, 100, 'all queued departures drain fairly')
+  assert.equal(departure.pendingVisitorRouting.size, 0)
+  assert.ok(closing.snapshot.visitors.every(v => v.route.length > 0))
+  departure.processingSimulationStep = false
+  closing.setParkOpen(false)
+  assert.equal(departures,100,'manual closure does not route the entire crowd outside the tick budget')
+  assert.equal(departure.pendingVisitorRouting.size,100)
+  departure.pendingVisitorRouting.clear(); departure.visitorsAwaitingDecision.clear()
+  departure.processingSimulationStep = true
+  const wasteGuest = closing.snapshot.visitors[0]!
+  closing.snapshot.buildings.push({ id:'budget-bin', kind:'wasteBin', x:5, z:-20, elevation:0, rotation:0, price:0, wasteFill:0 })
+  Object.assign(wasteGuest, { state:'exploring', route:[], targetId:null })
+  departure.decisionBudget = 0
+  departure.giveWaste(wasteGuest, 1)
+  assert.equal(wasteGuest.pendingWaste, 1, 'deferral does not lose generated waste')
+  assert.equal(wasteGuest.route.length, 0, 'direct waste callbacks cannot exceed the routing budget')
+  assert.equal(departure.pendingVisitorRouting.get(wasteGuest.id), 'waste')
+  departure.decisionBudget = budget; departure.decidedThisTick.clear()
+  departure.flushVisitorDecisions(budget)
+  assert.equal(wasteGuest.targetId, 'budget-bin')
+  assert.ok(wasteGuest.route.length > 0)
+  const remainingBudget = departure.decisionBudget
+  departure.beginVisitorDeparture(wasteGuest)
+  assert.equal(departure.decisionBudget, remainingBudget, 'ongoing waste disposal is not replanned by every closing check')
+
+  const packing = fixture(1), packingInternal = packing as any
+  const camper = packing.snapshot.visitors[0]!, entrance = packingInternal.getEntrance()
+  Object.assign(camper, { state:'exploring', ticketType:'camping', campsite:{x:3,z:0,elevation:0}, campingPhase:'ready',
+    cellX:entrance.x, cellZ:entrance.z, cellElevation:entrance.elevation, route:[], targetId:null, pendingWaste:0 })
+  packing.snapshot.parkOpen = false
+  packingInternal.processingSimulationStep = true
+  packingInternal.decisionBudget = 0
+  packingInternal.beginVisitorDeparture(camper)
+  packingInternal.updateVisitors(0.1)
+  assert.equal(packing.snapshot.visitors.length, 1, 'a camper at the exit cannot disappear while their packing route is deferred')
+  const restoredPacking = GameState.fromJSON(JSON.stringify(packing.snapshot))!, restoredInternal = restoredPacking as any
+  restoredInternal.findPath = (_start: any, goals: any[]) => [goals[0]]
+  restoredInternal.ensureExitRoute(restoredPacking.snapshot.visitors[0])
+  assert.equal(restoredPacking.snapshot.visitors[0]!.campingPhase, 'packing', 'loading reconstructs a deferred packing trip even at the entrance')
+
   const paths = fixture(0), navigation = paths as any
   const start = { x: 2, z: -20, elevation: 0 }, goal = { x: 4, z: -20, elevation: 0 }
   assert.ok(navigation.findPath(start, [goal]))
@@ -62,6 +124,15 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   paths.placePathSegment(5, -20, 0)
   navigation.findPath(start, [goal])
   assert.ok(![...navigation.pedestrianPathCache.values()].includes(beforeRebuild), 'new construction invalidates old routes immediately')
+  paths.snapshot.buildings.find(b => b.kind === 'path' && b.x === goal.x && b.z === goal.z)!.staffOnly = true
+  paths.worldRevision++
+  let expandedNeighbors = 0
+  const originalNeighbors = navigation.getPedestrianNeighbors
+  navigation.getPedestrianNeighbors = (...args: any[]) => { expandedNeighbors++; return originalNeighbors.apply(navigation,args) }
+  assert.equal(navigation.findPath(start,[goal]),null)
+  assert.equal(expandedNeighbors,0,'a forbidden target needs no graph traversal')
+  assert.ok(navigation.findPath(start,[goal],false,false,false,false,false,undefined,true),'staff retain access to staff-only targets')
+  assert.ok(expandedNeighbors>0)
 
   const source = new Group()
   for (const kind of DETAILED_BUILDINGS) {
@@ -143,6 +214,13 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
     assert.equal(mesh.geometry, (b.children[0] as Mesh).geometry, `${kind}: vehicles share geometry`)
     assert.ok(mesh.geometry.getAttribute('position').count < 2000, `${kind}: vehicle geometry budget`)
   }
+  const porterA = createPorterModel('carrier-guard-a')
+  const porterB = createPorterModel('carrier-guard-b')
+  const porterMeshes = porterA.children.filter((child) => child instanceof Mesh) as Mesh[]
+  assert.ok(porterMeshes.length <= 2, 'porter cart and extras stay merged')
+  const porterCart = porterMeshes[0]!
+  assert.equal(porterCart.geometry, (porterB.children.find((child) => child instanceof Mesh) as Mesh).geometry, 'porters share cart geometry')
+  assert.ok(porterCart.geometry.getAttribute('position').count < 900, 'porter cart stays bounded')
   void visitorC
   lightSnapshot.minute = 23 * 60
   lightSnapshot.power.poweredBuildingIds = ['unpowered-food-light', 'unpowered-lamp-light']

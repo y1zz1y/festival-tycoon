@@ -107,8 +107,14 @@ Fahrzeuge anklicken zeigt Status und die geplante Route.
 
 **Ampeln** (120 €) stehen auf einer Straße in genau einer Richtung,
 **Personentore** (70 €) auf einem normalen Weg. Nach dem Bauen öffnet
-sich die Steuerung. Vier Schaltungen: zeitgesteuerte 10-Minuten-Slots,
-Sensor, **Immer offen** oder **Immer zu**. Feste Slots und die festen
+sich die Steuerung. Vier Schaltungen: zeitgesteuert, Sensor,
+**Immer offen** oder **Immer zu**. Zeitgesteuert gilt an gewählten
+Tagen — **Vorbereitung**, **Festival**, **Pause** — und für die Zeit
+entweder die bisherigen 10-Minuten-Slots je Stunde, ein
+24-Stunden-Tageszeitenraster oder **Nach Zeitplan** (dieselben
+Öffnungszeiten wie Fahrgeschäfte, Buden, Bühnen oder Lampen unter
+**Festival planen**). Alte Spielstände behalten die stündlichen Slots
+an allen Tagen. Feste Slots und die festen
 Zustände brauchen kein Gebiet. Tore stehen auf der Ausgangskante der
 gesetzten Richtung und klappen auf. Zusätzlich **eine Richtung**
 (Gegenrichtung bleibt zu, auch bei offenem Tor) oder **beide
@@ -144,7 +150,8 @@ Fußgänger zum Umlaufen.
    bezahlen Ware und jeweils 45 € Fracht; Mindestbestand 0 schaltet sie aus.
 4. Einen Träger pro Versorgungsroute einstellen (120 €, danach 0,04 €/Spielminute).
    Er trägt bis zu 40 Einheiten. Optionale Wegpunkte müssen auf vorhandenen
-   Fußwegen liegen. Essen geht zum Imbiss, Getränke zur Bar, Wasser zum WC.
+   Fußwegen liegen. Essen geht zum Imbiss, Getränke zur Bar, Wasser zum WC,
+   allgemeine Waren (Souvenirs) zu Maskottchen- und T-Shirt-Stand.
    Imbiss und Bar nehmen Nachschub und Gäste von jedem angrenzenden Weg
    oder Bühnenvorplatz, nicht nur von der Vorderseite.
    Jeder Stand verkauft ausschließlich seinen eigenen angelieferten Vorrat.
@@ -189,12 +196,21 @@ ziehen. Richtung und Neigung sind sichtbar, aber ausgegraut, bis unten der
 Streckenbutton von zwei Pfeilen (frei ziehen) auf einen Pfeil (stückweise)
 umschaltet. Im Stückmodus setzt ein Klick aufs Gelände das erste Stück.
 Tor, Personaleingang und Festival-Einlass (Sicherheitsschleuse) liegen als
-Schnellzugriff im selben Fenster. Autostraßen bleiben rechts in ihrer
-eigenen Palette (Feldstraße, Schotterstraße, Fahrplatten, Asphalt).
+Schnellzugriff im selben Fenster. Autostraßen öffnen ebenfalls links den
+Editor mit Belagwahl (Feldstraße, Schotterstraße, Fahrplatten, Asphalt),
+Richtung, Stückbau, Zurück und Abriss. Parkplätze und Verkehrszeichen stehen
+im selben Fenster. Straßen folgen dem Gelände; Neigung ist deaktiviert.
 Tooltips beschreiben Preis pro Feld und Anforderungen. Dezente
 Materialtexturen zeigen Holzbohlen, Pflasterfugen, Schotter und Fahrplatten
-ohne zusätzliche Planungsmarkierungen. Mit dem Straßenwerkzeug werden Flächen
+ohne zusätzliche Planungsmarkierungen. Mit dem Straßenwerkzeug werden Linien
 auf Geländehöhe gebaut oder bestehende Beläge ersetzt.
+
+Imbiss, Getränkestand, Maskottchen- und T-Shirt-Stand verkaufen nur an der gedrehten Vorderseite;
+Nachschub ist von allen vier Seiten möglich. Leere Läden werden bei der
+Zielwahl übersprungen. Bereits wartende Gäste verlassen nach kurzer Wartezeit
+die Schlange und suchen eine erreichbare Alternative mit Bestand.
+Das Ausziehen des Oberteils im Konzertpublikum ist ein seltenes Ereignis
+mit höchstens einer Person gleichzeitig; die Figuren haben keine Brustwarzen.
 
 Holzbohlen und Fahrplatten funktionieren auf weichem Boden. Schotter braucht
 tragfähigen Untergrund; Promenade und Asphalt zusätzlich Entwässerung.
@@ -332,30 +348,34 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - 24-Stunden-Tagesplan unter **Festival planen** für Bühnen, Buden, Toiletten, Fahrgeschäfte und Lampen
 - getrennte Preise für Tages- und Campingticket unter **Festival planen**
 - getrennte Tages- und Campingtickets mit festgelegtem Einlass- und Räumungsfenster für Tagesgäste
-- individuelle Schlafrhythmen; Camper schlafen nachts und früh morgens in ihren Zelten
+- individuelle Festival-Schlafrhythmen (oft bis 03:00–06:00 wach, Schlaf am Vormittag); Camper gehen gestaffelt ins Zelt, das Gelände bleibt nachts belebt
 - auf Tageslängen abgestimmte Hunger-, Toiletten-, Spaß- und Energieraten
 - individuelle Positionen innerhalb eines Wegfeldes für natürlichere Besuchergruppen
 - bevorzugte Aufenthaltsorte anhand persönlicher Schönheits- und Partyvorlieben statt ziellosem Umherlaufen
 - entstehende Besuchergruppen, Gespräche, gemeinsames Essen und Trinken sowie dynamische Feier-Hotspots
 - Stände verkaufen Essen und Getränke ins Inventar; konsumiert wird erst später im Stehen oder Sitzen
+- Maskottchen-Stand und T-Shirt-Stand handeln mit Allgemeinen Waren; ein Teil der Käufer trägt das Maskottchen sichtbar, Shirts erscheinen in der am Stand eingestellten Farbe und im Schnitt
 - gedrängebewusste A*-Wegsuche, die freie Alternativen ohne große Umwege bevorzugt
 - Personalverwaltung für Reinigung, Sicherheit, Feuerwehr und Sanitäter mit laufenden Lohnkosten
 - Sanitäter wählen für Transporte stets das über die Wegstrecke nächstgelegene freie Krankenbett
 - deutlich erkennbare Personalmodelle mit rollenabhängigen Uniformen und Mützen
+- Träger (Transportkräfte) in derselben Figurenqualität wie Besucher, mit gelber Warnweste und Handkarren
 - gerichtete normale Wege mit dreh- und entfernbaren Bodenmarkierungen
 - automatisch besetzte Einbahn-Sicherheitsschleusen mit konfigurierbaren Verboten und Kontrollgründlichkeit
 - ausweisbare Krankenbereiche mit drei Liegen pro Feld und Sanitätertransport für Bewusstlose
 - alkohol- und toilettenabhängige Übelkeit sowie zusätzliche Übelkeit nach alkoholisierten Fahrten
 - sichtbare Verschmutzungen, die von Reinigungskräften und Saugreinigern
   gesucht und beseitigt werden; Saugreiniger fahren dazu auch auf Bühnenvorplätze
+  und stehen in der Personalverwaltung als Reinigungskraft (Saugroboter)
 - versetzte Kotzeflecken pro Feld und vollständige Reinigung des nächstgelegenen Feldes
 - lokales, nicht ausbreitendes Brandrisiko durch betrunken gezündetes Feuerwerk
 - patrouillierende Feuerwehrkräfte, die lokale Brände löschen
-- RCT-Iconleiste oben rechts: Bauen, Verwalten und Sitzung; Raster-Paletten links, Autostraßen rechts
+- RCT-Iconleiste oben rechts: Bauen, Verwalten und Sitzung; Baupaletten und Straßeneditor links
 - Dekoration, Attraktionen und Logistik als Bildkatalog: Kacheln im Raster, Name und Preis unten beim Darüberfahren
 - Camping unter Attraktionen, Krankenhaus (Garage und Krankenbereich) unter Logistik
 - generisches Achterbahnsystem mit erweiterbarem Typ- und Schienenkatalog
 - fortgesetzter Schienenbau mit Station, Geraden, sanften/steilen Steigungen und Kurven 1×1 bis 4×4
+- leicht gerundete Schienenübergänge (abgeleitet beim Mesh-/Pfadaufbau, auch für alte Strecken)
 - einfeldrige Steigungen; das lange Rundungsstück nur beim Sprung flach ↔ steil
 - RCT2-artige seitliche Neigung mit Einleitungs- und Ausleitungsstücken
 - optionale Kettenzüge auf ansteigenden Schienenelementen
@@ -413,7 +433,7 @@ Tastatur: `R` oder Pfeiltasten drehen, `Enter` baut und `Backspace` nimmt das le
 
 Richtungen werden als diagonale Pfeile der aktuellen isometrischen Kameraansicht angezeigt. Nach dem Drehen der Kamera passen sich die Symbole automatisch an.
 
-Der Wegtyp „Warteschlange“ steht ausschließlich in diesem Editor zur Verfügung. Die Einbahnrichtung und die Öffnungen der Absperrungen werden automatisch vom angeschlossenen Attraktionseingang oder Stand aus berechnet und folgen der Bau-Reihenfolge: nebeneinander liegende Serpentinenstücke bilden keine Abkürzung. Besucher mit einem Attraktions- oder Standziel stellen sich darin geordnet auf; normale Parkbesucher verwenden diese Wege nicht. Am hinteren Ende muss ein normaler Weg liegen. Wer die Schlange verlassen will oder am Stand Essen bzw. Getränke geholt hat, geht dieselbe Kette rückwärts wieder hinaus. Ist ein Stand leer, warten Gäste nur kurz und gehen dann zurück.
+Der Wegtyp „Warteschlange“ steht ausschließlich in diesem Editor zur Verfügung. Die Einbahnrichtung und die Öffnungen der Absperrungen werden automatisch vom angeschlossenen Attraktionseingang oder Stand aus berechnet und folgen der Bau-Reihenfolge: nebeneinander liegende Serpentinenstücke bilden keine Abkürzung. Besucher mit einem Attraktions- oder Standziel stellen sich darin geordnet auf; normale Parkbesucher verwenden diese Wege nicht. Am hinteren Ende muss ein normaler Weg liegen. Wer die Schlange verlassen will oder am Stand Essen bzw. Getränke geholt hat, geht dieselbe Kette rückwärts wieder hinaus. An Ständen (Imbiss, Getränke, WC, Souvenirs) ist die Schlange geteilt: links die Anstehspur, rechts der Rückweg, Blick zur Theke, damit Gegenverkehr sich nicht drängelt. Den Rückweg gehen sie in normaler Gehgeschwindigkeit und laufen am Ausgang sofort weiter. Ihr baut weiter nur eine Schlange. Attraktionsqueues bleiben eine Spur. Ist ein Stand leer, warten Gäste nur kurz und gehen dann zurück.
 
 ### Achterbahn-Editor
 
@@ -472,9 +492,9 @@ Neue Szenarien beginnen geschlossen in der Planung. Unter **Festival planen** le
 
 Unter **Logistik** in der Iconleiste einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen. Das Paket-Icon in der Gruppe **Verwalten** öffnet die Logistikverwaltung für Bestellungen und Träger. Mindestbestände (in 20er-Schritten) und Trägerzahl stellt ihr dort im Reiter **Waren & Träger** oder im Infofenster des Lagers ein. Bestellungen kosten Warenpreis plus 45 € Fracht. Lastwagen liefern zum Anlieferungsplatz; Träger holen dort Waren physisch ab und bringen sie ins Depot. Depots versorgen Stände automatisch bis zum Zielbestand von 40 Einheiten. Als **Zwischenlager** freigegebene Depots geben zusätzlich Ware an andere Depots ab. Träger kosten einmalig 120 € und anschließend 0,04 €/Spielminute.
 
-Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als farbigen Balken und als Zahl im Infofenster. An Mülleimern liegt der Füllstand als grobe Zahl Kartons am Boden (leer keine, voll vier). Reinigungskräfte bringen gesammelten Bodenmüll zuerst zum nächsten erreichbaren Mülleimer; Eimerinhalte werden von Reinigungskräften zur Müllablage gebracht, Müllwagen übernehmen die weitere Abfuhr. Saugreiniger vom Betriebshof fahren auf Wegen und Bühnenvorplätzen, halten vor Besuchern und entladen an der Müllablage; Eimer lassen sie stehen. Alte Müllträger beenden vorhandene Ladungen und werden anschließend aus dem Logistiksystem entfernt.
+Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als farbigen Balken und als Zahl im Infofenster. An Mülleimern liegt der Füllstand als grobe Zahl Kartons am Boden (leer keine, voll vier). Reinigungskräfte bringen gesammelten Bodenmüll zuerst zum nächsten erreichbaren Mülleimer; Eimerinhalte werden von Reinigungskräften zur Müllablage gebracht, Müllwagen übernehmen die weitere Abfuhr. Saugreiniger vom Betriebshof fahren auf Wegen und Bühnenvorplätzen, dürfen den Personaleingang wie Personal nutzen, halten vor Besuchern und entladen an der Müllablage; Eimer lassen sie stehen. In der Personalverwaltung erscheinen sie unter **Reinigungskraft** als Saugroboter und bekommen dieselben Einsatzgebiete wie Reinigungskräfte. Alte Müllträger beenden vorhandene Ladungen und werden anschließend aus dem Logistiksystem entfernt.
 
-**Personaltore** werden auf Fußwege gesetzt und sperren diese Kachel für Besucher; Personal und Warenlogistik dürfen passieren. Für einen vollständig getrennten Bereich muss das Tor mit Zäunen bzw. geschlossenen Grenzen kombiniert werden. Personalfiguren oder Namen in der Personalverwaltung anklicken: Das Infofenster bietet Verfolgen und einen rechteckigen Arbeitsbereich. Der Bereich wird bei Auswahl türkis markiert. Abhol-/Einsatzorte liegen im zugewiesenen Bereich; notwendige Entsorgungs-, Rettungs- und Rückwege dürfen hinausführen. Automatische Träger können ebenfalls angeklickt und einem Bereich zugewiesen werden.
+**Personaltore** werden auf Fußwege gesetzt, sitzen wie Personentore auf der Kante der aktuellen Baurichtung (`R`) und sperren diese Kachel für Besucher; Personal, Saugroboter und Warenlogistik dürfen passieren. Lastwagen bleiben auf der Straße. Alte zentrierte Personaleingänge bleiben beim Laden gültig. Für einen vollständig getrennten Bereich muss das Tor mit Zäunen bzw. geschlossenen Grenzen kombiniert werden. Personalfiguren, Saugroboter oder Namen in der Personalverwaltung anklicken: Das Infofenster bietet Verfolgen und Einsatzgebiete (3×3-Felder, zusammenhängend). Der Bereich wird bei Auswahl markiert. Abhol-/Einsatzorte liegen im zugewiesenen Bereich; notwendige Entsorgungs-, Rettungs- und Rückwege dürfen hinausführen. Automatische Träger können ebenfalls angeklickt und einem rechteckigen Bereich zugewiesen werden.
 
 
 ### Ticketplanung und Bühnenwerkstatt
@@ -506,3 +526,7 @@ Nach dem Festival entwickelt sich die Basis einmalig aus 80 % bisheriger Basis, 
 ### Mehrere lokale Spielstände
 
 Über **Spielstände** in der oberen Leiste lassen sich bis zu 20 benannte Spielstände speichern, laden, überschreiben und löschen. Beim lokalen Entwicklungs- oder Spielserver liegen sie als einzelne JSON-Dateien im Ordner `saves` neben dem Projekt und stehen damit allen Browsern zur Verfügung, die diesen Server verwenden. Ohne erreichbaren Spielserver verwendet das Spiel automatisch einen gleichwertigen Browser-Speicher als Ausweichlösung. **Speichern** und **Laden** bleiben als schneller Einzelspielstand erhalten; Base64-Export und -Import bleiben unabhängig davon nutzbar.
+
+### Performance bei großen Festivals
+
+Abreise- und Müllwegentscheidungen teilen das begrenzte Besucherbudget pro Simulationstick. Größere Gruppen planen ihre Ziele dadurch nacheinander; Zustandswechsel, laufende Bewegungen, Bedürfnisse und Spielzeit laufen weiter. Campingobjekte und Bodenereignisse verwenden wiederverwendete Grafikpuffer. Sichtbare Details, Figuren, Farben, Beleuchtung und Effekte bleiben erhalten. Reproduzierbare Messungen stehen in `docs/performance.md`.

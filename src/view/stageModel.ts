@@ -883,7 +883,7 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         }
         for(const px of [-.42,.42])for(const pz of [-.32,.32])tileBox(ex+px,ey+.62,ez+pz,.035,1.18,.035,steel) // canopy posts
         tileBox(ex,ey+1.21,ez,1,.085,1,'#355c66') // canopy roof, filling the field edge to edge so two stands share one roof
-        tileBox(ex,ey+1.16,ez+.485,1,.09,.03,c) // its valance, in the chosen colour
+        tileBox(ex,ey+1.16,ez+.52,1,.09,.03,c) // its valance, in the chosen colour, hung just proud of the roof's own front edge so the two never fight over the same face
       }else if(p.kind==='delay'){
         // A delay position: a ballasted column of four vertical trusses with a small line array
         // flown off the front of it, rigged the way the towers out in the crowd are.

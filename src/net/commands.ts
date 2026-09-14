@@ -8,6 +8,8 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
     case 'setBungeeHeight': return game.setBungeeHeight(command.id, command.height)
     case 'festival':
       return game.manageFestival(command.action)
+    case 'loan':
+      return game.manageLoan(command.action)
     case 'place':
       return game.place(command.kind, command.x, command.z, command.decorationSlot)
     case 'placePath':
@@ -85,6 +87,10 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.hireStaff(command.role)
     case 'fireStaff':
       return game.fireStaff(command.role)
+    case 'fireStaffMember':
+      return game.fireStaffMember(command.staffId)
+    case 'toggleStaffZone':
+      return game.toggleStaffZone(command.staffId, command.key)
     case 'buyAmbulance':
       return game.buyAmbulance(command.garageId)
     case 'buyBus':
@@ -151,6 +157,11 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
         command.allOfKind,
       )
       return { ok: true, message: 'Preis geändert' }
+    case 'configureShirtStall':
+      return game.configureShirtStall(command.buildingId, {
+        color: command.color,
+        style: command.style,
+      })
     case 'updateEntryPrice':
       game.updateEntryPrice(command.price)
       return { ok: true, message: 'Tagesticketpreis geändert' }

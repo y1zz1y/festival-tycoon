@@ -2,7 +2,8 @@ import type { Environment } from './environments'
 import type { WayType } from './wayTypes'
 import { wayInfo } from './wayTypes'
 import type { GameSnapshot } from './GameState'
-import { getTerrainHeight } from './terrain'
+import { getTerrainHeight, isInTerrainWorld } from './terrain'
+import { bookFinance } from './finance'
 
 export type GroundWork = 'drain' | 'compact' | 'gravel' | 'pave'
 export type GroundCell = { footway?: WayType; roadway?: WayType; drained?: boolean; compacted?: boolean; surface?: 'gravel' | 'paved' }
@@ -29,7 +30,10 @@ export function groundInfo(s: Readonly<GameSnapshot>, x: number, z: number) {
 }
 export function prepareGround(s: GameSnapshot, x: number, z: number, kind: GroundWork) {
   const fail = (message: string) => ({ ok: false, message })
-  if (!Number.isInteger(x) || !Number.isInteger(z) || Math.abs(x + .5) > s.scenario.worldSize / 2 || Math.abs(z + .5) > s.scenario.worldSize / 2) return fail('Außerhalb des Geländes')
+  // isInTerrainWorld is what the terrain and the renderer go by; the hand-rolled
+  // half-size comparison that used to stand here agreed with it only on maps with an
+  // even side length and let one extra row through on odd ones (see Riesig, 265).
+  if (!Number.isInteger(x) || !Number.isInteger(z) || !isInTerrainWorld(x, z, s.scenario.worldSize)) return fail('Außerhalb des Geländes')
   if (getTerrainHeight(s.terrain, x, z) < 0) return fail('Zuerst Wasser und Senken mit dem Geländewerkzeug aufarbeiten')
   const offer = GROUND_WORK[kind], info = groundInfo(s, x, z)
   if (!offer) return fail('Unbekannte Bodenarbeit')
@@ -38,7 +42,7 @@ export function prepareGround(s: GameSnapshot, x: number, z: number, kind: Groun
   if (kind === 'gravel' && info.bearing < 2) return fail('Zuerst den Untergrund verdichten')
   if (kind === 'pave' && (!info.drained || info.bearing < 2)) return fail('Fundament braucht Entwässerung und tragfähigen Untergrund')
   if (s.money < offer.cost) return fail('Nicht genug Geld für die Bodenarbeit')
-  s.money -= offer.cost
+  bookFinance(s, 'landscaping', -offer.cost)
   const cell = s.festival.infrastructure.ground[groundKey(x, z)] ??= {}
   if (kind === 'drain') cell.drained = true
   if (kind === 'compact') cell.compacted = true
@@ -65,7 +69,9 @@ export function groundRectangle(s: Readonly<GameSnapshot>, from: { x: number; z:
 
 export function prepareGroundArea(s: GameSnapshot, from: { x: number; z: number }, to: { x: number; z: number }, kind: GroundWork, preview = false) {
   const cells = groundRectangle(s, from, to)
-  const target = preview ? { ...s, festival: { ...s.festival, infrastructure: { ...s.festival.infrastructure, ground: Object.fromEntries(Object.entries(s.festival.infrastructure.ground).map(([k, v]) => [k, { ...v }])) } } } : s
+  // A preview must not touch anything the real snapshot shares with it — the books
+  // included, since prepareGround books every euro it spends (see bookFinance).
+  const target = preview ? { ...s, finance: { loan: s.finance.loan, periods: s.finance.periods.map(period => ({ edition: period.edition, entries: { ...period.entries } })) }, festival: { ...s.festival, infrastructure: { ...s.festival.infrastructure, ground: Object.fromEntries(Object.entries(s.festival.infrastructure.ground).map(([k, v]) => [k, { ...v }])) } } } : s
   const before = target.money
   let changed = 0, reason = 'Ungültige Fläche'
   for (const cell of cells) {

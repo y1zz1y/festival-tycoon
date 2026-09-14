@@ -9,7 +9,9 @@ sind abgeleitete Darstellung desselben Zustands.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Typen, Spawn, Bewegung, Ziele | `src/game/GameState.ts` | `Visitor`, `VisitorState`, `trySpawnVisitor`, `walkVisitors` |
+| Stand-Queue-Spuren | `src/game/queueLanes.ts` | `queueStandOffset`, `stallQueueTileOffset` |
 | Need-/Alkohol-/Übelkeitswerte | `src/game/simulationConfig.ts` | `visitors`, `needs` (`interactionMinutes.stockout`), `alcohol`, `nausea` |
+| Festival-Schlafrhythmus | `src/game/visitorSleep.ts`, `src/game/simulationConfig.ts` | `camping.sleepSchedule`, `sampleFestivalSleepRhythm`, `isMinuteInSleepWindow` |
 | Inventar (Zelt, Essen, Pyro, …) | `src/game/inventory.ts` | Inventarfelder und Verbrauch |
 | Gedanken gruppieren | `src/game/visitorThoughts.ts` | `groupVisitorsByThought` |
 | Statusblasen / Panik-Schwellen | `src/game/visitorBubbles.ts` | `visitorBubbleKind`, `spontaneousPanicChance` |
@@ -17,6 +19,7 @@ sind abgeleitete Darstellung desselben Zustands.
 | Beschwerden | `src/game/complaints.ts` | `COMPLAINT_TOPICS`, Zähler |
 | Stabile Optik (Geschlecht, Hash) | `src/game/rng.ts` | `visitorLooksFemale`, `hashStringSeed` |
 | Pixel-Personen | `src/view/pixelPeople.ts` | geteilte Geometrien, Accessory-Batches |
+| Souvenirs | `src/game/shopGoods.ts`, `src/view/souvenirMeshes.ts` | `ownedMascot`/`heldMascot`, `wornShirt`; Instanz-Batches |
 | Ankunft per Auto/Fuß | `src/game/logistics.ts` | `ArrivalGroup` |
 
 ## Wichtige Regeln
@@ -27,29 +30,67 @@ sind abgeleitete Darstellung desselben Zustands.
   Räumliche / Belegungsindizes einmal pro Pass bauen.
 - Zielwahl und Interaktions-Callbacks zählen gegen das Entscheidungsbudget
   (`docs/pathfinding.md`, `docs/simulation.md`).
-- Imbiss und Getränkestand sind von jedem angrenzenden Weg oder
-  Bühnenvorplatz erreichbar (`getFacilityAccessCells`), nicht nur von der
-  gedrehten Theke. Warteschlangen dürfen an jeder dieser Seiten ansetzen.
-  Toiletten und Fahrgeschäfte behalten den frontalen Zugang.
+- Gäste erreichen Imbiss und Getränkestand ausschließlich an der gedrehten
+  Vorderseite (`getFacilityAccessCells`); auch die Queue muss dort anschließen.
+  Warenträger dürfen weiterhin von allen vier Seiten liefern.
 - Tages- vs. Campinggäste haben getrennte Tickets, Einlassfenster und
   Abreisewege. Fahrzeug-Abreise hängt an `logistics`.
 - Wer eine Schlange verlässt (Abreise, geschlossenes Angebot, Ausverkauf)
   oder am Essen-/Getränkestand bedient wurde, geht die Queue-Kette
-  rückwärts zum Eingang. Leere Stände: nur
+  rückwärts zum Eingang. An **Stand-Queues** (Imbiss, Getränke, WC, Souvenirs)
+  ist das die rechte **Zurückschlange**; Anstehende bleiben links in der
+  **Anstehschlange** (Blick zur Theke). Der Rückweg läuft mit normaler
+  Gehgeschwindigkeit, ohne Queue-Gedränge; am Ausgang wählen sie sofort
+  das nächste Ziel. Attraktionsqueues bleiben ungeteilt.
+  Leere Stände: nur
   `needs.interactionMinutes.stockout` warten, dann denselben Rückweg.
+  Die Wartezeit zählt als negativer `interactionRemaining` unabhängig vom
+  Gedanken-Text; bei wieder verfügbarem Bestand wird sie zurückgesetzt.
+  Die budgetierte Zielwahl lässt leere Läden aus und sucht mit einer
+  Multi-Goal-Suche nach erreichbaren Alternativen mit Bestand.
+- Das Konzert-Oberteil-Ereignis betrifft höchstens eine Person auf dem Gelände.
+  `atmosphere.concertToplessChancePerMinute` begrenzt die gesamte Ereignisrate
+  (0,002 pro Spielminute), auf die Population verteilt. Die aktive Person wird
+  einmal pro Besucherpass ermittelt; alte Mehrfachereignisse werden bereinigt.
 - Bereits beim Loslaufen reservieren Gäste Queue-Kapazität. Diese noch
   laufenden Reservierungen dürfen aber keinen physischen Platz blockieren:
   Angekommene Gäste stehen stabil in Ankunftsreihenfolge davor und rücken bei
   jedem Tick kontinuierlich nach. Das gilt für Stände und Achterbahnen.
 - Neue Need- oder State-Werte müssen in Snapshot, UI, Gedanken und ggf.
   Multiplayer-Deltas landen.
+- Maskottchen und T-Shirts sind Andenken (`goods`), kein Hunger-/Durststillen.
+  `souvenirs.holdMascotChance` entscheidet nach dem Kauf, ob das Maskottchen
+  in der Hand sichtbar bleibt. `wornShirt` überschreibt Körperfarbe und Schnitt
+  bis zur Abreise. Fehlende Felder = altes Aussehen.
+- Schlafzeiten sind Festival-Chronotypen, kein ziviler Feierabend:
+  Bettzeit etwa 03:00–06:00, Schlafdauer 5–9 Stunden (Wachfenster grob
+  08:00–15:00). `preferredBedtime` / `preferredWakeTime` bleiben Snapshot-
+  Felder; fehlende Werte kommen aus der Visitor-ID, alte zivile 20:00–24:00-
+  Bettzeiten werden einmalig verschoben. Familien gehen
+  `familyBedtimeAdvanceMinutes` früher schlafen. Camper laufen in ihrem
+  Fenster bei Energie unter `scheduledSleepEnergyBelow` zum Zelt
+  (`findRouteToCampsite`); Gäste ohne Camp gehen bei
+  `nonCamperDepartureEnergyBelow` nach Hause oder ruhen auf Bänken.
+  Über Nacht (etwa 16:00–02:00) senkt `peakEnergyDecayMultiplier` den
+  Grundverbrauch, nach der persönlichen Bettzeit erhöht
+  `afterBedtimeEnergyDecayMultiplier` ihn. Kein neues Quartier für
+  Tagesgäste.
 
 ## Tests
 
-`tests/pixelPeople.ts` (Batches, stabile Optik). `tests/regression.ts`
+Abreise-, Müll- und Ausgangsziele teilen `decisionsPerTick`, einschließlich direkter
+Callbacks. Dringende Zustandsfreigaben passieren sofort; aufgeschobene Besucher
+behalten Camp und Müll, bis die faire Entscheidungsqueue ihren Auftrag verarbeitet.
+Bereits begonnene Müllwege werden beim wiederholten Schließzeit-Check beibehalten.
+
+`tests/pixelPeople.ts` (Batches, stabile Optik). `tests/shopGoods.ts` (Kauf,
+Hand-Chance, Shirt vom Stand, Save). `tests/regression.ts`
 (Spawn, Needs, Speed-Partition). Festival-Anreisen: `tests/festival.ts`,
 `tests/stageTickets.ts`. Queue-Reihenfolge, kontinuierliches Nachrücken,
-Queue-Rückweg und leere Stände: `tests/operations.ts`.
+Queue-Rückweg, geteilte Stand-Spuren und leere Stände: `tests/operations.ts`,
+`tests/queueLanes.ts`.
+Festival-Schlafzeiten, Legacy-Remap, zirkadianer Energieverbrauch und
+Zelt-/Abreiseziele: `tests/visitorSleep.ts`.
 
 ## Bei Änderungen dieses Dokument
 

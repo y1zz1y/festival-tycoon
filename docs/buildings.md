@@ -19,7 +19,10 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 | Ride-Eingang/Ausgang | `src/game/GameState.ts` | `setRideAccess`, `canPlaceRideAccess` |
 | Retro-Gebäude-Batches | `src/view/retroBuildings.ts` | `batchRetroBuildings` |
 | Logistik-Gebäude / Fahrzeuge | `src/view/logisticsModels.ts` | `createLogisticsFacility`, `createSupplyStructure`, `createRoadVehicleModel` (Besucherautos: `VISITOR_CAR_COLORS` über Fahrzeug-ID) |
-| Bude: alle Seiten | `src/game/shopAccess.ts` | `isShopServiceKind`, `CARDINAL_OFFSETS` |
+| Bude: alle Seiten | `src/game/shopAccess.ts` | `isShopServiceKind` (Imbiss, Getränke, Maskottchen, Shirt) |
+| Warenart je Stand | `src/game/shopGoods.ts` | `shopSupplyKind`, `mascot`/`shirt` → `goods` |
+| Shirt-Angebot | `src/game/shopGoods.ts` | `SHIRT_STYLES`, `SHIRT_COLORS`, `configureShirtStall` |
+| Stand-Queue-Spuren | `src/game/queueLanes.ts` | Imbiss/Getränke/WC/Souvenir: hälftig Ansteh- und Zurückschlange |
 | Zugangstore visuell | `src/view/attractionAccess.ts` | sechs geteilte Meshes |
 
 ## Wichtige Regeln
@@ -30,9 +33,16 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 - Scenery: fehlendes `decorationSlot` ist ein **Legacy-Vollfeld**. Alte Saves
   nicht still verkleinern. Placement, Preview, Kollision und Multiplayer
   müssen `scenery.ts` teilen. Instanzierte Deko trägt Building-IDs für Picking.
-- Imbiss und Getränkestand sind Inselbuden: Verkauf und Nachschub gelten
-  von allen vier Nachbarfeldern (Weg oder Bühnenvorplatz). Die Drehung
-  bleibt für Modell und Thekenpfeil. Toiletten nutzen weiter nur die Tür.
+- Personaleingang (`staffGate`) sitzt wie das Personentor auf der
+  Ausgangskante der Baurichtung (`staffGateDirection`, Vorschau mit
+  Richtungspfeil). Fehlt das Feld, bleibt ein altes mittiges Tor gültig.
+- Imbiss, Getränkestand, Maskottchen- und T-Shirt-Stand sind Inselbuden:
+  Gäste kaufen an der gedrehten Vorderseite, Nachschub gilt von allen vier
+  Nachbarfeldern (Weg oder Bühnenvorplatz). Die Drehung bleibt für Modell
+  und Thekenpfeil. Toiletten nutzen weiter nur die Tür.
+  Eine angeschlossene Warteschlange bleibt **ein** Bauobjekt, wird aber
+  senkrecht zur Laufrichtung hälftig geteilt (Anstehspur links, Rückweg
+  rechts zur Theke). Attraktionsqueues sind ungeteilt.
 - Gebäude und Wege dürfen übereinander liegen, wenn Höhenvolumen frei bleiben.
   Die Bauhöhe bleibt nach dem Loslassen von Shift; ein neues Werkzeug
   startet wieder auf Ebene 0.
@@ -48,7 +58,8 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 ## Tests
 
 `tests/scenery.ts` (Slots, Overlaps, Legacy). `tests/rideAccess.ts` (Tore).
-`tests/operations.ts` (Buden von der Seite und von hinten).
+`tests/operations.ts` (Buden von der Seite und von hinten; Personaleingang-Kante; Stand-Queue-Spuren).
+`tests/shopGoods.ts` (Allgemeine Waren, Maskottchen, Shirt-Farbe/Schnitt).
 `tests/stageTickets.ts` / `tests/stageInteraction.ts` (Bühnenfläche).
 `tests/operations.ts` (Imbiss von der Seite/hinten). `tests/buildMenu.ts`
 (Katalog und Bauhöhe-Reset). Draw-Call-Grenzen: `tests/performanceGuards.ts`.

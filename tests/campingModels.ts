@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
-import { Group, InstancedMesh, Mesh, MeshStandardMaterial } from 'three'
+import { Color, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial } from 'three'
 import { CAMP_COLORS, campGeometry, campRotation, campSeed, createCampModel } from '../src/view/campingModels'
-import { batchCampMeshes } from '../src/view/batchCampMeshes'
+import { batchCampMeshes, CampMeshBatcher } from '../src/view/batchCampMeshes'
 import { disposeChildren } from '../src/view/disposeObject3D'
 import { abandonVisitorCamp } from '../src/game/camping'
 import { GameState } from '../src/game/GameState'
@@ -40,6 +40,29 @@ export function testCampingModels(): void {
   }
   disposeChildren(batched);disposeChildren(source)
   assert.equal(disposedCachedGeometry,0,'scene rebuilds preserve all shared camp geometries')
+  const persistentSource = new Group(), persistent = new CampMeshBatcher()
+  const tent = createCampModel('tent', 'retained-tent', 0x559c87)
+  persistentSource.add(tent)
+  persistent.update(persistentSource)
+  const retained = persistent.group.children[0] as InstancedMesh
+  const geometry = retained.geometry, material = retained.material
+  let disposedInstances = 0
+  retained.addEventListener('dispose', () => disposedInstances++)
+  tent.position.set(2, 3, -4)
+  ;((tent.children[0] as Mesh).material as MeshStandardMaterial).color.setHex(0xff0000)
+  persistent.update(persistentSource)
+  assert.equal(persistent.group.children[0], retained, 'camp changes retain GPU buffers')
+  const transform = new Matrix4(), tint = new Color()
+  retained.getMatrixAt(0, transform); retained.getColorAt(0, tint)
+  assert.deepEqual(transform.elements.slice(12,15), [2,3,-4])
+  assert.equal(tint.getHex(), 0xff0000)
+  for (let i=0;i<20;i++) persistentSource.add(createCampModel('tent', 'retained-tent', 0x559c87))
+  persistent.update(persistentSource)
+  assert.equal(disposedInstances, 1, 'growing a batch frees its previous instance attributes')
+  assert.notEqual((persistent.group.children[0] as Mesh).geometry, geometry)
+  assert.notEqual((persistent.group.children[0] as Mesh).material, material)
+  assert.equal(persistent.group.children.reduce((n,b)=>n+(b as InstancedMesh).count,0),42)
+  persistent.clear(); disposeChildren(persistentSource)
 
   const visitor={id:'guest-143',color:0x559c87,campsite:{x:1,z:2,elevation:0},campingPhase:'ready' as const}
   const abandoned=abandonVisitorCamp(visitor,[],()=> 'abandoned-1')[0]!

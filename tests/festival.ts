@@ -140,11 +140,18 @@ export function testFestival(fixture: (count?: number) => GameState): void {
   const shop = create(1), shopState = shop.snapshot as GameSnapshot
   assert.ok(shop.place('food', 8, -20).ok)
   const food = shopState.buildings.find(b => b.kind === 'food')!, customer = shopState.visitors[0]!
+  assert.ok(shop.placePathSegment(8, -19, 0).ok)
+  customer.cellX = 8; customer.cellZ = -19; customer.cellElevation = 0
   customer.targetId = food.id; customer.budget = 100; shopState.festival.supplies.food = 0
   const wallet = customer.budget
   ;(shop as any).finishInteraction(customer)
   assert.equal(customer.budget, wallet, 'empty stock must not charge the customer')
-  customer.targetId = food.id; shopState.festival.infrastructure.shops[food.id] = { food: 2, drinks: 0, water: 0 }
+  customer.targetId = food.id; shopState.festival.infrastructure.shops[food.id] = { food: 2, drinks: 0, water: 0, goods: 0 }
+  customer.cellZ = -21
+  ;(shop as any).finishInteraction(customer)
+  assert.equal(customer.budget, wallet, 'a saved customer behind the shop cannot purchase')
+  assert.equal(shopState.festival.infrastructure.shops[food.id]!.food, 2)
+  customer.targetId = food.id; customer.cellZ = -19
   ;(shop as any).finishInteraction(customer)
   assert.equal(shopState.festival.infrastructure.shops[food.id]!.food, 1)
   assert.equal(customer.budget, wallet - food.price)

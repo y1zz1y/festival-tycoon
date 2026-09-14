@@ -79,8 +79,8 @@ export class FestivalLightsView {
         push(new Vector3(b.x + .5, b.elevation + 1.46, b.z + .5), b.elevation)
       } else if (b.kind === 'lightBalloon' && lightsActive && powered.has(b.id)) {
         push(new Vector3(b.x + .5, b.elevation + 2.4, b.z + .5), b.elevation, 'daylight')
-      } else if (b.kind === 'food' || b.kind === 'alcohol' || b.kind === 'toilet') {
-        if (!powered.has(b.id) || !isFestivalOfferActive(s.dayPlan, b.kind === 'toilet' ? 'toilets' : b.kind === 'food' ? 'food' : 'drinks', s.minute, s.day)) continue
+      } else if (b.kind === 'food' || b.kind === 'alcohol' || b.kind === 'toilet' || b.kind === 'mascot' || b.kind === 'shirt') {
+        if (!powered.has(b.id) || !isFestivalOfferActive(s.dayPlan, b.kind === 'toilet' ? 'toilets' : b.kind === 'food' ? 'food' : b.kind === 'alcohol' ? 'drinks' : 'shops', s.minute, s.day)) continue
         const a = b.rotation * Math.PI / 2
         push(new Vector3(b.x + .5 + Math.sin(a) * .38, b.elevation + (b.kind === 'toilet' ? 1 : .69), b.z + .5 + Math.cos(a) * .38), b.elevation)
       }

@@ -6,10 +6,34 @@ import { isStageAudienceCell, stageDistance, stageSize, buildingFootprint, occup
 import { WAY_TYPES, wayInfo, wayIssue } from './wayTypes'
 import type { WayType } from './wayTypes'
 import { groundRectangle } from './ground'
-import { createInfrastructure, updateSupplyChain, localStock, consumeLocal } from './supplyChain'
+import { createInfrastructure, updateSupplyChain, localStock, consumeLocal, normalizeInfrastructure, normalizeStock } from './supplyChain'
 import { CARDINAL_OFFSETS, isShopServiceKind } from './shopAccess'
+import {
+  defaultShirtSettings,
+  isPricedShopKind,
+  isQueuedFacilityKind,
+  normalizeShirtColor,
+  normalizeShirtStyle,
+  normalizeWornShirt,
+  shopSupplyKind,
+  souvenirPurchaseThought,
+  souvenirSeekThought,
+  stockoutThought,
+  type ShirtStyle,
+  type WornShirt,
+} from './shopGoods'
+import {
+  QUEUE_CARDINALS,
+  isStallQueueKind,
+  queueStandOffset as computeQueueStandOffset,
+  queueTravelLane,
+  stallQueueLaneFromLocal,
+  stallQueueTileOffset,
+} from './queueLanes'
 import { groundInfo, groundKey, buildingEfficiency, roadGroundLimit } from './ground'
 import { BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY } from './catalog'
+import { bookFinance, createFinanceState, financeEdition, loanInterest, loanLimit, LOAN, type FinanceCategory, type FinanceState } from './finance'
+import { createScenarioProgress, updateScenarioProgress, type ScenarioProgress } from './scenarioGoals'
 import { createFestivalManagement, festivalAction, updateFestival, assignAudience, activeBookings, watchableBookings, showIssue, BANDS } from './festivalManagement'
 import type { FestivalManagement, FestivalAction, Audience, Booking } from './festivalManagement'
 import {
@@ -88,7 +112,7 @@ import { applyGameCommand } from '../net/commands'
 import { allowsPathFlow, normalizeFlowDirection } from './pathFlow'
 import { createStaffMember, STAFF_DEFINITIONS } from './staff'
 import type { StaffMember, StaffRole } from './staff'
-import { zonesConnected, isZoneAdjacentToAny } from './staffZones'
+import { isInAnyZone, toggleAssignedWorkZones } from './staffZones'
 import { StaffSimulation } from './staffSimulation'
 import { MedicalSystem } from './medical'
 import type { MedicalCell } from './medical'
@@ -100,6 +124,13 @@ import type {
 import { DEFAULT_SECURITY_CONFIG, SecuritySystem } from './security'
 import type { SecurityGateConfig } from './security'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import {
+  circadianEnergyDecayMultiplier,
+  isMinuteInSleepWindow,
+  remapLegacySleepRhythm,
+  sampleFestivalSleepRhythm,
+  sleepRhythmFromVisitorId,
+} from './visitorSleep'
 import type { GameCommand, SimSnapshot, WorldSnapshot } from '../net/protocol'
 import { applySim, applyWorld } from '../net/codec'
 import { AtmosphereSystem } from './atmosphere'
@@ -176,17 +207,19 @@ import {
   stepUsesClosedEdge,
   toggleAreaCells,
   normalizeAccessControls,
+  normalizeScheduleHours,
+  normalizeScheduleOffer,
+  normalizeSchedulePhases,
+  normalizeScheduleTime,
+  normalizeStaffGateDirection,
   type AccessAreaCell,
   type AccessAreaIndexes,
   type AccessAreaStats,
   type AccessControl,
   type AccessControlKind,
-  type AccessControlMode,
+  type AccessControlPatch,
   type AccessControlSnapshot,
-  type AccessPolarity,
-  type BarrierPassage,
-  type PathSensorKind,
-  type TrafficSensorKind,
+  type AccessScheduleContext,
 } from './accessControl'
 import {
   applyTerrainChanges,
@@ -219,10 +252,13 @@ export type PlacedBuilding = {
   elevation: number
   stageDesign?: StageDesign
   staffOnly?: boolean
+  staffGateDirection?: Direction
   wayType?: WayType
   pathType?: 'normal' | 'queue'
   queueDirection?: number
   queueEntryDirection?: number
+  /** Stall queues only: derived 50/50 inbound (wait) / outbound (return) lanes. */
+  queueSplit?: boolean
   pathSlope?: -1 | 0 | 1
   pathSlopeDirection?: number
   price: number
@@ -230,6 +266,8 @@ export type PlacedBuilding = {
   securityConfig?: SecurityGateConfig
   bandName?: string
   wasteFill?: number
+  shirtColor?: number
+  shirtStyle?: ShirtStyle
 }
 
 export type VisitorNeeds = {
@@ -352,6 +390,9 @@ export type Visitor = {
   streakingCooldownMinutes: number
   toplessMinutes: number
   bungeeNude: boolean
+  ownedMascot?: boolean
+  heldMascot?: boolean
+  wornShirt?: WornShirt
   pathSeed: number
   wanderNonce: number
   netX?: number
@@ -378,7 +419,7 @@ export type SimTurn = {
 
 export type GameSnapshot = {
   festival: FestivalManagement
-  version: 27
+  version: 28
   simTick: number
   rngState: number
   money: number
@@ -413,6 +454,8 @@ export type GameSnapshot = {
   logistics: LogisticsSnapshot
   accessControls: AccessControlSnapshot
   scenario: ScenarioSettings
+  finance: FinanceState
+  scenarioProgress: ScenarioProgress
   terrain: TerrainSnapshot
   power: PowerSnapshot
 }
@@ -555,12 +598,14 @@ function createBlankSnapshot(
   const entrance = createScenarioEntrance(settings.worldSize)
   return {
     festival: createFestivalManagement(),
-    version: 27,
+    version: 28,
     simTick: 0,
     rngState: hashStringSeed(
       `festival-${settings.worldSize}-${settings.startingMoney}`,
     ),
     money: settings.startingMoney,
+    finance: createFinanceState(settings.startingLoan),
+    scenarioProgress: createScenarioProgress(settings.goals),
     entryPrice: SIMULATION_CONFIG.economy.defaultEntryPrice,
     campingTicketPrice: SIMULATION_CONFIG.economy.defaultCampingTicketPrice,
     parkOpen: true,
@@ -701,9 +746,13 @@ export class GameState {
   private partyMoodValues = new Map<string, number>()
   private roadGraph: RoadGraph | null = null
   private visitorsAwaitingDecision = new Set<string>()
+  /** Guests walking a stall return lane; full speed, then an immediate next goal. */
+  private stallQueueReturnIds = new Set<string>()
   private processingSimulationStep = false
   private decisionBudget = 0
   private decidedThisTick = new Set<string>()
+  private activeVisitorDecision: string | null = null
+  private pendingVisitorRouting = new Map<string, 'departure' | 'exit' | 'waste'>()
   private concertChoiceKey = ''
   private concertChoices:Array<{booking:Booking;band:(typeof BANDS)[number];stage:GameSnapshot['buildings'][number]}>=[]
   private concertSlotTick = -1
@@ -739,6 +788,8 @@ export class GameState {
     this.state.selectedTool = 'inspect'
     this.state.festival ??= createFestivalManagement()
     this.state.festival.infrastructure ??= createInfrastructure()
+    this.state.festival.supplies = normalizeStock(this.state.festival.supplies)
+    this.state.festival.infrastructure = normalizeInfrastructure(this.state.festival.infrastructure)
     this.state.scenario = normalizeScenarioSettings(this.state.scenario)
     this.camping = new CampingSystem({
       getCells: () => this.state.campingCells,
@@ -815,7 +866,10 @@ export class GameState {
     this.state.logistics.wasteDepots ??= []
     this.state.logistics.specialDepots ??= []
     this.state.accessControls = normalizeAccessControls(this.state.accessControls)
-    this.state.version = 27
+    this.state.finance ??= createFinanceState()
+    this.state.finance.periods ??= []
+    this.state.scenarioProgress ??= createScenarioProgress(this.state.scenario.goals)
+    this.state.version = 28
     this.state.terrain = normalizeTerrain(this.state.terrain)
     this.state.power = normalizePower(this.state.power)
     this.rebuildTerrainCache()
@@ -866,9 +920,17 @@ export class GameState {
         building.pathType ??= 'normal'
         building.queueDirection ??= building.rotation
         building.queueEntryDirection ??= undefined
+        building.queueSplit ??= false
         building.pathSlope ??= 0
         building.pathSlopeDirection ??= building.rotation
         building.flowDirection ??= null
+        if (building.staffOnly) {
+          const direction = normalizeStaffGateDirection(building.staffGateDirection)
+          if (direction === undefined) delete building.staffGateDirection
+          else building.staffGateDirection = direction
+        } else if (building.staffGateDirection !== undefined) {
+          delete building.staffGateDirection
+        }
       }
       if (building.kind === 'securityGate') {
         building.securityConfig ??= structuredClone(DEFAULT_SECURITY_CONFIG)
@@ -880,6 +942,11 @@ export class GameState {
       }
       if (building.kind === 'wasteBin') {
         building.wasteFill ??= 0
+      }
+      if (building.kind === 'shirt') {
+        const fallback = defaultShirtSettings()
+        building.shirtColor = normalizeShirtColor(building.shirtColor ?? fallback.color)
+        building.shirtStyle = normalizeShirtStyle(building.shirtStyle ?? fallback.style)
       }
     })
     if (this.state.campInstallations.length === 0) {
@@ -972,8 +1039,7 @@ export class GameState {
       visitor.activitySlot ??= 0
       visitor.activityCapacity ??= 1
       visitor.isDancing ??= false
-      visitor.preferredBedtime ??= this.createPreferredBedtime()
-      visitor.preferredWakeTime ??= this.createPreferredWakeTime()
+      this.restoreVisitorSleepRhythm(visitor)
       visitor.ticketType ??=
         getItemQuantity(visitor.inventory, 'tent') > 0
           ? 'camping'
@@ -1000,6 +1066,9 @@ export class GameState {
       visitor.streakingCooldownMinutes ??= 0
       visitor.toplessMinutes ??= 0
       visitor.bungeeNude ??= false
+      visitor.ownedMascot = Boolean(visitor.ownedMascot)
+      visitor.heldMascot = Boolean(visitor.heldMascot)
+      visitor.wornShirt = normalizeWornShirt(visitor.wornShirt)
       visitor.pathSeed ??= hashStringSeed(visitor.id)
       const given = visitor.name.split(' ')[0] ?? ''
       const female = visitorLooksFemale(visitor.id)
@@ -1339,7 +1408,7 @@ export class GameState {
       const path = type.mode === 'foot' ? this.getPathAt(c.x, c.z, this.getTerrainHeight(c.x, c.z)) : undefined
       const road = type.mode === 'road' ? this.getRoadCellAt(c.x, c.z) : undefined
       if (!path && !road) { reason = 'Weg konnte an dieser Stelle nicht angelegt werden'; continue }
-      this.state.money -= extra
+      bookFinance(this.state, 'construction', -extra)
       const cell = this.state.festival.infrastructure.ground[key] ??= {}
       cell[property] = kind
       if (path) path.wayType = kind
@@ -1421,7 +1490,7 @@ export class GameState {
         message: `Nicht genug Geld (${cost} € für ${planned.changes.length} Felder)`,
       }
     }
-    this.state.money -= cost
+    bookFinance(this.state, 'landscaping', -cost)
     applyTerrainChanges(this.state.terrain, planned.changes)
     for (const c of planned.changes) delete this.state.festival.infrastructure.ground[groundKey(c.x, c.z)]
     this.terrainHeights = null
@@ -1477,7 +1546,7 @@ export class GameState {
     this.state.parkOpen = open
     if (!open) {
       this.state.visitors.forEach((visitor) => {
-        if (visitor.state !== 'riding') this.beginVisitorDeparture(visitor)
+        if (visitor.state !== 'riding') this.deferVisitorDeparture(visitor)
       })
     }
     this.emit()
@@ -1504,10 +1573,38 @@ export class GameState {
 
   private beginVisitorDeparture(visitor: Visitor): void {
     if (this.isVisitorInDepartureVehicle(visitor)) return
+    if (visitor.pendingWaste > 0 && visitor.state === 'seeking' && visitor.route.length > 0 &&
+        visitor.targetId && this.state.buildings.some(building => building.id === visitor.targetId && building.kind === 'wasteBin')) return
+    if (!this.runVisitorRouting(visitor, 'departure', () => this.planVisitorDeparture(visitor))) {
+      this.deferVisitorDeparture(visitor)
+    }
+  }
+
+  private deferVisitorDeparture(visitor: Visitor): void {
+    if (this.isVisitorInDepartureVehicle(visitor)) return
+    // Closing from a UI/network command must not search for the entire crowd
+    // outside the tick budget, including while the simulation is paused.
+    this.pendingVisitorRouting.set(visitor.id, 'departure')
+    this.visitorsAwaitingDecision.add(visitor.id)
+    this.clearVisitorForDeparture(visitor)
+    visitor.state = 'leaving'
+    visitor.route = []
+    visitor.targetId = null
+  }
+
+  private planVisitorDeparture(visitor: Visitor): void {
     if ((visitor.pendingWaste ?? 0) > 0 && visitor.campingPhase !== 'packing') {
       this.tryDisposeWaste(visitor)
       if (visitor.state === 'seeking' && visitor.pendingWaste > 0) return
     }
+    this.clearVisitorForDeparture(visitor)
+    this.camping.beginDeparture(visitor, this.getEntrance())
+    if (visitor.state === 'leaving') this.leaveVisitorCampBehind(visitor)
+    if (visitor.ticketType === 'day') visitor.hasHandcart = false
+    this.ensureExitRoute(visitor)
+  }
+
+  private clearVisitorForDeparture(visitor: Visitor): void {
     this.clearVisitorActivity(visitor)
     this.removeVisitorFromCoasterQueues(visitor.id)
     visitor.streakingMinutes = 0
@@ -1524,19 +1621,22 @@ export class GameState {
       member.medicalSlot = null
       member.state = 'patrolling'
     })
-    this.camping.beginDeparture(visitor, this.getEntrance())
-    if (visitor.state === 'leaving') this.leaveVisitorCampBehind(visitor)
-    if (visitor.ticketType === 'day') visitor.hasHandcart = false
-    this.ensureExitRoute(visitor)
   }
 
   private ensureExitRoute(visitor: Visitor): void {
-    if (
-      visitor.state !== 'leaving' ||
-      this.isAtEntrance(visitor)
-    ) {
+    if (visitor.state !== 'leaving') return
+    // A loaded snapshot can reconstruct a departure whose routing was deferred.
+    if (this.pendingVisitorRouting.get(visitor.id) === 'departure' ||
+        (visitor.campsite && visitor.campingPhase !== 'none') || visitor.pendingWaste > 0) {
+      this.beginVisitorDeparture(visitor)
       return
     }
+    if (this.isAtEntrance(visitor)) return
+    if (visitor.route.length > 0 && (!visitor.arrivalGroupId || visitor.targetId)) return
+    this.runVisitorRouting(visitor, 'exit', () => this.planExitRoute(visitor))
+  }
+
+  private planExitRoute(visitor: Visitor): void {
     if (this.routeVisitorToParkedCar(visitor)) return
     if (visitor.route.length > 0) return
     visitor.route =
@@ -1616,7 +1716,7 @@ export class GameState {
     if (this.state.money < definition.hireCost) {
       return { ok: false, message: 'Nicht genug Geld für diese Einstellung' }
     }
-    this.state.money -= definition.hireCost
+    bookFinance(this.state, 'staff', -definition.hireCost)
     const member = createStaffMember(this.nextId('staff'), role, this.getEntrance())
     const usedNumbers = new Set(
       this.state.staff
@@ -1636,24 +1736,23 @@ export class GameState {
 
   toggleStaffZone(staffId: string, key: string): ActionResult {
     const member = this.state.staff.find((p) => p.id === staffId)
-    if (!member) return { ok: false, message: 'Personal nicht gefunden' }
-    const zones = member.workZones ?? []
-    const has = zones.includes(key)
-    if (has) {
-      const next = zones.filter((z) => z !== key)
-      if (!zonesConnected(next)) {
-        return { ok: false, message: 'Bereiche müssen zusammenhängend bleiben - zuerst die trennende Seite entfernen' }
-      }
-      member.workZones = next
-    } else {
-      if (zones.length && !isZoneAdjacentToAny(key, zones)) {
-        return { ok: false, message: 'Bereiche müssen zusammenhängend sein' }
-      }
-      member.workZones = [...zones, key]
+    const sweeper = member
+      ? undefined
+      : this.state.logistics.roadVehicles.find(
+          (vehicle) => vehicle.id === staffId && vehicle.kind === 'sweeper',
+        )
+    const assignee = member ?? sweeper
+    if (!assignee) return { ok: false, message: 'Personal nicht gefunden' }
+    const result = toggleAssignedWorkZones(assignee.workZones, key)
+    if (!result.ok) return result
+    assignee.workZones = result.next
+    if (member && member.state === 'patrolling') member.route = []
+    if (sweeper && (sweeper.state === 'idle' || sweeper.state === 'responding')) {
+      sweeper.route = []
+      sweeper.state = 'idle'
     }
-    if (member.state === 'patrolling') member.route = []
     this.emit()
-    return { ok: true, message: has ? 'Bereich entfernt' : 'Bereich zugewiesen' }
+    return { ok: true, message: result.removed ? 'Bereich entfernt' : 'Bereich zugewiesen' }
   }
 
   placeStaffAt(staffId: string, x: number, z: number): ActionResult {
@@ -1700,6 +1799,10 @@ export class GameState {
   }
 
   fireStaffMember(staffId: string): ActionResult {
+    const sweeper = this.state.logistics.roadVehicles.find(
+      (vehicle) => vehicle.id === staffId && vehicle.kind === 'sweeper',
+    )
+    if (sweeper) return this.removeSweeper(sweeper.id)
     const index = this.state.staff.findIndex((p) => p.id === staffId)
     if (index < 0) return { ok: false, message: 'Personal nicht gefunden' }
     const member = this.state.staff[index]!
@@ -1784,7 +1887,7 @@ export class GameState {
       this.clearTreesAt(cell.x, cell.z, 0, 1)
       cell.elevation = this.getTerrainHeight(cell.x, cell.z)
     })
-    this.state.money -= result.cost
+    bookFinance(this.state, 'landscaping', -result.cost)
     this.state.wasteDumpCells = result.cells
     this.emit()
     return {
@@ -1827,7 +1930,7 @@ export class GameState {
       cell.elevation = this.getTerrainHeight(cell.x, cell.z)
     })
     this.state.stageForecourtCells = result.cells
-    this.state.money -= result.cost
+    bookFinance(this.state, 'landscaping', -result.cost)
     if (result.placed > 0) this.recalculateQueueDirections()
     this.emit()
     return {
@@ -1874,7 +1977,7 @@ export class GameState {
     if (this.state.money < cost) {
       return { ok: false, message: `Die Ampel kostet ${cost} €` }
     }
-    this.state.money -= cost
+    bookFinance(this.state, 'construction', -cost)
     const light = createTrafficLight(this.nextId('light'), x, z, direction)
     this.state.accessControls.trafficLights.push(light)
     this.evaluateAccessSignals()
@@ -1901,7 +2004,7 @@ export class GameState {
     if (this.state.money < cost) {
       return { ok: false, message: `Die Schranke kostet ${cost} €` }
     }
-    this.state.money -= cost
+    bookFinance(this.state, 'construction', -cost)
     const barrier = createPathBarrier(
       this.nextId('barrier'),
       x,
@@ -1917,15 +2020,7 @@ export class GameState {
 
   configureAccessControl(
     id: string,
-    patch: {
-      mode?: AccessControlMode
-      openSlots?: boolean[]
-      polarity?: AccessPolarity
-      sensorKind?: TrafficSensorKind | PathSensorKind
-      sensorThreshold?: number
-      passage?: BarrierPassage
-      openInEmergency?: boolean
-    },
+    patch: AccessControlPatch,
   ): ActionResult {
     const control = this.getAccessControl(id)
     if (!control) return { ok: false, message: 'Kontrolle nicht gefunden' }
@@ -1934,6 +2029,18 @@ export class GameState {
       control.openSlots = Array.from({ length: 6 }, (_, index) =>
         Boolean(patch.openSlots?.[index]),
       )
+    }
+    if (patch.scheduleTime) {
+      control.scheduleTime = normalizeScheduleTime(patch.scheduleTime)
+    }
+    if (patch.scheduleHours) {
+      control.scheduleHours = normalizeScheduleHours(patch.scheduleHours)
+    }
+    if (patch.scheduleOffer) {
+      control.scheduleOffer = normalizeScheduleOffer(patch.scheduleOffer)
+    }
+    if (Array.isArray(patch.schedulePhases)) {
+      control.schedulePhases = normalizeSchedulePhases(patch.schedulePhases)
     }
     if (patch.polarity) control.polarity = patch.polarity
     if (typeof patch.sensorThreshold === 'number') {
@@ -2094,6 +2201,13 @@ export class GameState {
     return this.accessEmergency
   }
 
+  private accessScheduleContext(): AccessScheduleContext {
+    return {
+      day: this.state.day,
+      dayPlan: this.state.dayPlan,
+    }
+  }
+
   private evaluateAccessSignals(): void {
     const indexes = this.buildAccessAreaIndexes()
     const emergency = indexes.emergency
@@ -2105,6 +2219,7 @@ export class GameState {
         this.state.minute,
         statsForArea(control.area, indexes),
         emergency,
+        this.accessScheduleContext(),
       )
       if (control.signal !== next) {
         control.signal = next
@@ -2312,7 +2427,7 @@ export class GameState {
     }
 
     const id = this.nextId('coaster')
-    this.state.money -= TRACK_PIECES.station.cost
+    bookFinance(this.state, 'construction', -TRACK_PIECES.station.cost)
     this.state.coasters.push({
       id,
       typeId,
@@ -2433,7 +2548,7 @@ export class GameState {
       (piece.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
     if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld' }
 
-    this.state.money -= cost
+    bookFinance(this.state, 'construction', -cost)
     coaster.pieces.splice(anchorIndex + 1, 0, piece)
     const stations = coaster.pieces.filter((item) => item.kind === 'station').length
     coaster.train.cars = stations
@@ -2460,9 +2575,7 @@ export class GameState {
     }
     const piece = coaster.pieces.pop()
     if (!piece) return { ok: false, message: 'Kein Element vorhanden' }
-    this.state.money +=
-      TRACK_PIECES[piece.kind].cost +
-      (piece.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
+    bookFinance(this.state, 'construction', TRACK_PIECES[piece.kind].cost + (piece.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0))
     this.recalculateCoasterTrackState(coaster)
     coaster.telemetry = createCoasterTelemetry()
     coaster.operationMode = 'closed'
@@ -2507,7 +2620,7 @@ export class GameState {
     if (!result.ok) return result
     const building = this.state.buildings.find(b=>b.id===buildingId)!
     const key = type === 'entrance' ? 'rideEntrance' : 'rideExit'
-    if (!building[key]) this.state.money -= SIMULATION_CONFIG.economy.coasterAccessCost
+    if (!building[key]) bookFinance(this.state, 'construction', -SIMULATION_CONFIG.economy.coasterAccessCost)
     building[key] = {x,y:building.elevation,z}
     this.indexedBuildingCount = -1
     this.recalculateQueueDirections(); this.emit()
@@ -2541,7 +2654,7 @@ export class GameState {
       : SIMULATION_CONFIG.economy.coasterAccessCost
     if (this.state.money < accessCost) return { ok: false, message: 'Nicht genug Geld' }
     coaster[accessType] = { x, y: station.start.elevation, z }
-    this.state.money -= accessCost
+    bookFinance(this.state, 'construction', -accessCost)
     this.recalculateQueueDirections()
     this.emit()
     return {
@@ -2576,9 +2689,7 @@ export class GameState {
     const building = this.state.buildings.find((item) => item.id === buildingId)
     if (
       !building ||
-      (building.kind !== 'food' &&
-        building.kind !== 'ride' &&
-        building.kind !== 'alcohol')
+      !isPricedShopKind(building.kind)
     ) {
       return
     }
@@ -2591,6 +2702,20 @@ export class GameState {
       building.price = normalized
     }
     this.emit()
+  }
+
+  configureShirtStall(
+    buildingId: string,
+    settings: { color?: number; style?: ShirtStyle },
+  ): ActionResult {
+    const building = this.state.buildings.find((item) => item.id === buildingId)
+    if (!building || building.kind !== 'shirt') {
+      return { ok: false, message: 'T-Shirt-Stand wählen' }
+    }
+    if (settings.color !== undefined) building.shirtColor = normalizeShirtColor(settings.color)
+    if (settings.style !== undefined) building.shirtStyle = normalizeShirtStyle(settings.style)
+    this.emit()
+    return { ok: true, message: 'Shirt-Angebot gespeichert' }
   }
 
   updateEntryPrice(price: number): void {
@@ -2674,8 +2799,87 @@ export class GameState {
     )
   }
 
+  /**
+   * What the park is worth on paper: everything standing on it, at what it cost to
+   * build. The bank lends against this, and the overview shows it next to the debt.
+   */
+  parkValue(): number {
+    const buildings = this.state.buildings.reduce(
+      (total, item) =>
+        total +
+        BUILDINGS[item.kind].cost +
+        (item.stageDesign ? stageStats(item.stageDesign).cost : 0),
+      0,
+    )
+    const coasters = this.state.coasters.reduce(
+      (total, coaster) => total + coaster.pieces.reduce((sum, piece) => sum + TRACK_PIECES[piece.kind].cost, 0),
+      0,
+    )
+    return Math.round(buildings + coasters)
+  }
+
+  /** Everything the finance window draws, in one place, so the UI never has to know how the books are kept. */
+  financeOverview(): {
+    periods: FinanceState['periods']
+    loan: number
+    loanLimit: number
+    interestPerDay: number
+    parkValue: number
+    companyValue: number
+    money: number
+    edition: number
+  } {
+    const parkValue = this.parkValue()
+    return {
+      periods: this.state.finance.periods,
+      loan: this.state.finance.loan,
+      loanLimit: loanLimit(parkValue),
+      interestPerDay: LOAN.interestPerDay,
+      parkValue,
+      companyValue: Math.round(parkValue + this.state.money - this.state.finance.loan),
+      money: this.state.money,
+      edition: financeEdition(this.state),
+    }
+  }
+
+  /**
+   * Borrowing and repaying. A loan is not income and a repayment is not an expense —
+   * both only move money between the cash box and the debt, so neither is booked into
+   * the table; what the loan costs shows up as interest, day by day.
+   */
+  manageLoan(action: { type: 'borrow' | 'repay'; amount: number }): ActionResult {
+    const amount = Math.round(Number(action.amount))
+    if (!Number.isFinite(amount) || amount <= 0) return { ok: false, message: 'Betrag wählen' }
+    const finance = this.state.finance
+    if (action.type === 'borrow') {
+      const limit = loanLimit(this.parkValue())
+      if (finance.loan + amount > limit) {
+        return { ok: false, message: `Die Bank gibt derzeit höchstens ${limit.toLocaleString('de-DE')} € — davon laufen bereits ${Math.round(finance.loan).toLocaleString('de-DE')} €` }
+      }
+      finance.loan += amount
+      this.state.money += amount
+      this.emit()
+      return { ok: true, message: `${amount.toLocaleString('de-DE')} € aufgenommen · ${(LOAN.interestPerDay * 100).toFixed(1)} % Zinsen pro Tag` }
+    }
+    if (finance.loan <= 0) return { ok: false, message: 'Es läuft kein Darlehen' }
+    const payment = Math.min(amount, Math.floor(finance.loan), Math.floor(this.state.money))
+    if (payment <= 0) return { ok: false, message: 'Nicht genug Geld für eine Tilgung' }
+    finance.loan = Math.round((finance.loan - payment) * 100) / 100
+    this.state.money -= payment
+    updateScenarioProgress(this.state, financeEdition(this.state))
+    this.emit()
+    return {
+      ok: true,
+      message: finance.loan > 0
+        ? `${payment.toLocaleString('de-DE')} € getilgt · noch ${Math.round(finance.loan).toLocaleString('de-DE')} € offen`
+        : `${payment.toLocaleString('de-DE')} € getilgt · Darlehen vollständig zurückgezahlt`,
+    }
+  }
+
   addDebugMoney(): ActionResult {
     const amount = 100_000
+    // Deliberately not booked: a debug purse is not income, and the finance table
+    // should keep adding up to what the park actually earned.
     this.state.money += amount
     this.state.cashEffects.push({
       id: this.nextId('debug-cash'),
@@ -2766,7 +2970,7 @@ export class GameState {
     if (!result.ok) return result
     const tower = this.state.buildings.at(-1)!
     tower.rideType = 'bungee'; tower.bungeeHeight = height
-    this.state.money -= height * 25
+    bookFinance(this.state, 'construction', -(height * 25))
     this.emit()
     return { ok: true, message: `Bungee-Turm (${height} m) gebaut` }
   }
@@ -2779,7 +2983,7 @@ export class GameState {
     if (this.coasterOccupiesVolume(tower.x, tower.z, tower.elevation, top) || this.state.buildings.some(b => b.id !== id && b.x === tower.x && b.z === tower.z && this.volumesOverlap(b, tower.elevation, top))) return { ok: false, message: 'Über der Turmfläche muss Platz frei bleiben' }
     const cost = Math.max(0, height - (tower.bungeeHeight ?? 20)) * 25
     if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld' }
-    this.state.money -= cost; tower.bungeeHeight = height; this.emit()
+    bookFinance(this.state, 'construction', -cost); tower.bungeeHeight = height; this.emit()
     return { ok: true, message: `Turmhöhe auf ${height} m geändert` }
   }
 
@@ -2871,7 +3075,7 @@ export class GameState {
       const roadCost = SIMULATION_CONFIG.logistics.roadBuildCost + clearCost
       if (this.state.money < roadCost) break
       this.clearTreesAt(cell.x, cell.z, 0, 1)
-      this.state.money -= SIMULATION_CONFIG.logistics.roadBuildCost
+      bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.roadBuildCost)
       this.state.logistics.roadCells.push({
         ...cell,
         allowedDirections: null,
@@ -2924,8 +3128,7 @@ export class GameState {
         break
       }
       this.clearTreesAt(cell.x, cell.z, 0, 1)
-      this.state.money -=
-        SIMULATION_CONFIG.logistics.parkingDesignationCost
+      bookFinance(this.state, 'landscaping', -SIMULATION_CONFIG.logistics.parkingDesignationCost)
       this.state.logistics.parkingCells.push({
         ...cell,
         occupiedBy: null,
@@ -3086,7 +3289,7 @@ export class GameState {
     if (this.state.money < cost) {
       return { ok: false, message: `Nicht genug Geld (${cost} €)` }
     }
-    this.state.money -= cost
+    bookFinance(this.state, 'construction', -cost)
     this.state.power.cableCells = [
       ...this.state.power.cableCells,
       { x, z },
@@ -3115,7 +3318,7 @@ export class GameState {
         message: `Nicht genug Geld (${cost} € für ${result.placed} Felder)`,
       }
     }
-    this.state.money -= cost
+    bookFinance(this.state, 'construction', -cost)
     this.state.power.cableCells = result.cells
     this.refreshPower()
     this.emit()
@@ -3187,7 +3390,7 @@ export class GameState {
     const refund =
       TRACK_PIECES[removed.kind].cost +
       (removed.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
-    this.state.money += refund
+    bookFinance(this.state, 'construction', refund)
     this.recalculateCoasterTrackState(coaster)
     coaster.telemetry = createCoasterTelemetry()
     coaster.operationMode = 'closed'
@@ -3354,7 +3557,7 @@ export class GameState {
     const placeElevation = this.getPlaceElevation(x, z)
     if (!isScenery(kind)) this.clearTreesAt(x, z, placeElevation, BUILDINGS[kind].height)
     const design = kind === 'stage' ? this.state.festival.stageTemplates?.find(t=>t.name===this.state.festival.selectedStageTemplate) : undefined
-    this.state.money -= BUILDINGS[kind].cost + (design ? stageStats(design).cost : 0)
+    bookFinance(this.state, 'construction', -(BUILDINGS[kind].cost + (design ? stageStats(design).cost : 0)))
     this.state.buildings.push({
       stageDesign: design ? structuredClone(design) : undefined,
       decorationSlot,
@@ -3378,12 +3581,18 @@ export class GameState {
           ? BAND_NAMES[this.idCounter % BAND_NAMES.length]
           : undefined,
       wasteFill: kind === 'wasteBin' ? 0 : undefined,
+      ...(kind === 'shirt'
+        ? {
+            shirtColor: defaultShirtSettings().color,
+            shirtStyle: defaultShirtSettings().style,
+          }
+        : {}),
     })
     // A delay tower standing in the crowd clears the audience ground under its own feet; the sync
     // leaves it clear from then on, since it skips cells a building occupies.
     if (kind === 'delayTower') this.state.stageForecourtCells = this.state.stageForecourtCells.filter(cell => cell.x !== x || cell.z !== z)
     if(design)syncStageAudience(this.state)
-    if (['food', 'toilet', 'ride', 'alcohol', 'stage'].includes(kind)) {
+    if (isQueuedFacilityKind(kind) || kind === 'stage') {
       this.recalculateQueueDirections()
     }
     this.recalculatePark()
@@ -3401,7 +3610,7 @@ export class GameState {
     if (!result.ok) return result
     footprint.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
     const id = this.nextId('ambulance-garage')
-    this.state.money -= BUILDINGS.ambulanceGarage.cost
+    bookFinance(this.state, 'construction', -BUILDINGS.ambulanceGarage.cost)
     this.state.logistics.ambulanceGarages.push({
       id,
       x,
@@ -3430,7 +3639,7 @@ export class GameState {
     if (!result.ok) return result
     footprint.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
     const id = this.nextId('bus-depot')
-    this.state.money -= BUILDINGS.busDepot.cost
+    bookFinance(this.state, 'construction', -BUILDINGS.busDepot.cost)
     this.state.logistics.busDepots.push({ id, x, z, busIds: [] })
     this.state.buildings.push({
       id,
@@ -3454,7 +3663,7 @@ export class GameState {
     if (!result.ok) return result
     footprint.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
     const id = this.nextId('waste-depot')
-    this.state.money -= BUILDINGS.wasteDepot.cost
+    bookFinance(this.state, 'construction', -BUILDINGS.wasteDepot.cost)
     this.state.logistics.wasteDepots.push({ id, x, z, truckIds: [] })
     this.state.buildings.push({
       id,
@@ -3480,7 +3689,7 @@ export class GameState {
     if (!result.ok) return result
     footprint.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
     const id = this.nextId('special-depot')
-    this.state.money -= BUILDINGS.specialDepot.cost
+    bookFinance(this.state, 'construction', -BUILDINGS.specialDepot.cost)
     this.state.logistics.specialDepots.push({ id, x, z, vehicleIds: [] })
     this.state.buildings.push({
       id,
@@ -3526,7 +3735,7 @@ export class GameState {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     const id = this.nextId('bus-stop')
-    this.state.money -= BUILDINGS.busStop.cost
+    bookFinance(this.state, 'construction', -BUILDINGS.busStop.cost)
     this.state.logistics.busStops.push({
       id,
       x,
@@ -3660,7 +3869,7 @@ export class GameState {
     const access = this.getLogisticsBuildingAccess(garage, 2)
     if (!access) return { ok: false, message: 'Die Garage hat keinen befahrbaren Anschluss' }
     const id = this.nextId('ambulance')
-    this.state.money -= SIMULATION_CONFIG.logistics.ambulanceCost
+    bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.ambulanceCost)
     garage.bays[bay] = id
     this.state.logistics.roadVehicles.push(
       this.createRoadVehicle(id, 'ambulance', access),
@@ -3683,7 +3892,7 @@ export class GameState {
     const access = this.getLogisticsBuildingAccess(depot, 3)
     if (!access) return { ok: false, message: 'Das Depot hat keinen befahrbaren Anschluss' }
     const id = this.nextId('bus')
-    this.state.money -= SIMULATION_CONFIG.logistics.busCost
+    bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.busCost)
     depot.busIds.push(id)
     this.state.logistics.roadVehicles.push(
       this.createRoadVehicle(id, 'bus', access),
@@ -3706,7 +3915,7 @@ export class GameState {
     const access = this.getLogisticsBuildingAccess(depot, 2)
     if (!access) return { ok: false, message: 'Das Depot hat keinen befahrbaren Anschluss' }
     const id = this.nextId('garbage')
-    this.state.money -= SIMULATION_CONFIG.logistics.garbageTruckCost
+    bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.garbageTruckCost)
     depot.truckIds.push(id)
     this.state.logistics.roadVehicles.push(
       this.createRoadVehicle(id, 'garbageTruck', access),
@@ -3734,10 +3943,10 @@ export class GameState {
     depot.truckIds = depot.truckIds.filter((id) => id !== truckId)
     this.state.logistics.roadVehicles =
       this.state.logistics.roadVehicles.filter((vehicle) => vehicle.id !== truckId)
-    this.state.money += Math.floor(
+    bookFinance(this.state, 'construction', Math.floor(
       SIMULATION_CONFIG.logistics.garbageTruckCost *
         SIMULATION_CONFIG.logistics.busResaleFraction,
-    )
+    ))
     this.emit()
     return {
       ok: true,
@@ -3761,7 +3970,7 @@ export class GameState {
     const access = this.getLogisticsPathAccess(depot, 3)
     if (!access) return { ok: false, message: 'Der Betriebshof hat keinen Wegeanschluss' }
     const id = this.nextId('sweeper')
-    this.state.money -= SIMULATION_CONFIG.logistics.sweeperCost
+    bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.sweeperCost)
     depot.vehicleIds.push(id)
     this.state.logistics.roadVehicles.push(
       this.createRoadVehicle(id, 'sweeper', access),
@@ -3777,19 +3986,26 @@ export class GameState {
     if (!depot) return { ok: false, message: 'Betriebshof nicht gefunden' }
     const vehicleId = depot.vehicleIds.at(-1)
     if (!vehicleId) return { ok: false, message: 'Hier steht kein Spezialfahrzeug' }
+    return this.removeSweeper(vehicleId)
+  }
+
+  private removeSweeper(vehicleId: string): ActionResult {
     const sweeper = this.state.logistics.roadVehicles.find(
       (vehicle) => vehicle.id === vehicleId && vehicle.kind === 'sweeper',
     )
-    if (!sweeper || sweeper.state !== 'idle' || sweeper.cargo > 0) {
+    if (!sweeper) return { ok: false, message: 'Personal nicht gefunden' }
+    if (sweeper.state !== 'idle' || sweeper.cargo > 0) {
       return { ok: false, message: 'Der Saugreiniger ist unterwegs oder noch beladen' }
     }
-    depot.vehicleIds = depot.vehicleIds.filter((id) => id !== vehicleId)
+    for (const depot of this.state.logistics.specialDepots) {
+      depot.vehicleIds = depot.vehicleIds.filter((id) => id !== vehicleId)
+    }
     this.state.logistics.roadVehicles =
       this.state.logistics.roadVehicles.filter((vehicle) => vehicle.id !== vehicleId)
-    this.state.money += Math.floor(
+    bookFinance(this.state, 'construction', Math.floor(
       SIMULATION_CONFIG.logistics.sweeperCost *
         SIMULATION_CONFIG.logistics.busResaleFraction,
-    )
+    ))
     this.emit()
     return { ok: true, message: 'Saugreiniger verkauft' }
   }
@@ -3855,7 +4071,7 @@ export class GameState {
       SIMULATION_CONFIG.logistics.busCost *
         SIMULATION_CONFIG.logistics.busResaleFraction,
     )
-    this.state.money += refund
+    bookFinance(this.state, 'construction', refund)
     this.state.cashEffects.push({
       id: this.nextId('bus-sale'),
       amount: refund,
@@ -4155,7 +4371,7 @@ export class GameState {
     }
 
     this.clearTreesAt(x, z, candidateBase, candidateTop - candidateBase)
-    this.state.money -= pathCost
+    bookFinance(this.state, 'construction', -pathCost)
     const pathData: Omit<PlacedBuilding, 'id'> = {
       kind: 'path',
       x,
@@ -4166,6 +4382,7 @@ export class GameState {
       wayType,
       queueDirection: pathType === 'queue' ? queueDirection : undefined,
       queueEntryDirection: undefined,
+      queueSplit: false,
       pathSlope: slope,
       pathSlopeDirection: queueDirection,
       price: 0,
@@ -4224,7 +4441,7 @@ export class GameState {
       this.relocateVisitorsFromPath(path)
       this.state.buildings = this.state.buildings.filter((building) => building.id !== path.id)
     }
-    this.state.money += BUILDINGS.path.cost
+    bookFinance(this.state, 'construction', BUILDINGS.path.cost)
     this.recalculateQueueDirections()
     if (elevation === this.getTerrainHeight(x, z)) {
       const ground = this.state.festival.infrastructure.ground[groundKey(x, z)]
@@ -4463,17 +4680,17 @@ export class GameState {
     if(building.stageDesign)syncStageAudience(this.state)
     if (
       building.kind === 'path' ||
-      ['food', 'toilet', 'ride', 'alcohol', 'stage'].includes(building.kind)
+      isQueuedFacilityKind(building.kind) || building.kind === 'stage'
     ) {
       this.recalculateQueueDirections()
     }
     if (building.kind === 'tree') {
-      this.state.money -= SIMULATION_CONFIG.economy.treeClearCost
+      bookFinance(this.state, 'landscaping', -SIMULATION_CONFIG.economy.treeClearCost)
     } else {
-      this.state.money += Math.floor(
+      bookFinance(this.state, 'construction', Math.floor(
         BUILDINGS[building.kind].cost *
           SIMULATION_CONFIG.economy.demolitionRefundRate,
-      )
+      ))
     }
     this.state.visitors.forEach((visitor) => {
       if (visitor.targetId === building.id) {
@@ -4558,6 +4775,7 @@ export class GameState {
     while (this.state.minute >= SIMULATION_CONFIG.time.minutesPerDay) {
       this.state.minute -= SIMULATION_CONFIG.time.minutesPerDay
       this.state.day += 1
+      updateScenarioProgress(this.state, financeEdition(this.state))
       if (
         getFestivalCycleStatus(this.state.dayPlan, this.state.day)
           .cycleDay === 0
@@ -5022,6 +5240,12 @@ export class GameState {
         )
       }
       vehicle.position = { ...next }
+      if (road?.allowedDirections != null) {
+        const facing = this.getVehicleDirection(vehicle)
+        if (!isRoadDirectionAllowed(road, facing) && isRoadDirectionAllowed(road, oppositeDirection(facing))) {
+          vehicle.facing = oppositeDirection(facing) * Math.PI / 2
+        }
+      }
       vehicle.passengerIds.forEach((visitorId) => {
         const passenger = this.getVisitor(visitorId)
         if (!passenger) return
@@ -7077,6 +7301,7 @@ export class GameState {
             allowMedical: true,
             allowFestival: true,
             allowGrass: false,
+            // Same staff-only access as walking staff so robots can use Personaleingang.
             allowStaff: true,
           }).filter((next) => this.isSweeperDriveCell(next.x, next.z, next.elevation)),
         movementCost: (_from, to) =>
@@ -7104,7 +7329,7 @@ export class GameState {
       this.sendSweeperToDump(vehicle)
       return
     }
-    const accesses = this.getSweeperDirtAccesses()
+    const accesses = this.getSweeperDirtAccesses(vehicle.workZones)
     if (accesses.length === 0) {
       if (vehicle.cargo > 0) {
         this.sendSweeperToDump(vehicle)
@@ -7139,7 +7364,7 @@ export class GameState {
     vehicle.state = 'responding'
   }
 
-  private getSweeperDirtAccesses(): Array<{
+  private getSweeperDirtAccesses(zones?: string[]): Array<{
     dirt: { x: number; z: number }
     path: Cell
   }> {
@@ -7149,6 +7374,7 @@ export class GameState {
     this.state.incidents.forEach((incident) => {
       if (incident.kind !== 'litter' && incident.kind !== 'vomit') return
       if (incident.severity <= 0) return
+      if (!isInAnyZone(zones, incident.x, incident.z)) return
       if (blocked.has(roadCellKey(incident.x, incident.z))) return
       const paths: Cell[] = []
       this.getSweeperAccessCells(incident).forEach((path) => {
@@ -7177,7 +7403,7 @@ export class GameState {
         this.sendSweeperToDump(vehicle)
         return
       }
-      const remaining = this.getSweeperDirtAccesses().filter(
+      const remaining = this.getSweeperDirtAccesses(vehicle.workZones).filter(
         (access) =>
           access.path.x !== vehicle.cell?.x || access.path.z !== vehicle.cell?.z,
       )
@@ -7237,7 +7463,7 @@ export class GameState {
       this.sendSweeperToDump(vehicle)
       return
     }
-    if (this.getSweeperDirtAccesses().length > 0) {
+    if (this.getSweeperDirtAccesses(vehicle.workZones).length > 0) {
       vehicle.state = 'idle'
       this.dispatchSweeper(vehicle)
       return
@@ -7370,6 +7596,7 @@ export class GameState {
       Math.max(0, SIMULATION_CONFIG.logistics.sweeperCapacity - vehicle.cargo)
     this.state.incidents.forEach((incident) => {
       if (incident.kind !== 'litter' && incident.kind !== 'vomit') return
+      if (!isInAnyZone(vehicle.workZones, incident.x, incident.z)) return
       if (!cells.has(roadCellKey(incident.x, incident.z))) return
       const taken = Math.min(incident.severity, room())
       if (taken <= 0) return
@@ -8661,7 +8888,7 @@ export class GameState {
       const migrated: GameSnapshot = {
         ...createBlankSnapshot(),
         ...data,
-        version: 27,
+        version: 28,
         terrain: normalizeTerrain(data.terrain),
         buildings: data.buildings.map(b => b.stageDesign ? { ...b, stageDesign: migrateStageDesign(b.stageDesign) } : b),
         campingCells: Array.isArray(data.campingCells) ? data.campingCells : [],
@@ -8678,6 +8905,12 @@ export class GameState {
         incidents: Array.isArray(data.incidents) ? data.incidents : [],
         logistics: normalizeLogisticsSnapshot(data.logistics),
         scenario: normalizeScenarioSettings(data.scenario),
+        finance: data.finance && Array.isArray(data.finance.periods)
+          ? { loan: Math.max(0, Number(data.finance.loan) || 0), periods: data.finance.periods }
+          : createFinanceState(),
+        scenarioProgress: data.scenarioProgress && Array.isArray(data.scenarioProgress.status)
+          ? data.scenarioProgress
+          : createScenarioProgress(normalizeScenarioSettings(data.scenario).goals),
         stageForecourtCells: Array.isArray(data.stageForecourtCells)
           ? data.stageForecourtCells
           : [],
@@ -8884,8 +9117,7 @@ export class GameState {
       activitySlot: 0,
       activityCapacity: 1,
       isDancing: false,
-      preferredBedtime: this.createPreferredBedtime(),
-      preferredWakeTime: this.createPreferredWakeTime(),
+      ...this.createPreferredSleepRhythm(),
       ticketType,
       consumptionCooldown: 0,
       isConversing: false,
@@ -8909,6 +9141,8 @@ export class GameState {
       streakingCooldownMinutes: 0,
       toplessMinutes: 0,
       bungeeNude: false,
+      ownedMascot: false,
+      heldMascot: false,
       pathSeed: hashStringSeed(id),
       wanderNonce: 0,
     }
@@ -8918,7 +9152,7 @@ export class GameState {
       x: (arrivalMode === 'car' ? this.getRoadEntry().x : this.getEntrance().x) + 0.5,
       y: 0.85,
       z: (arrivalMode === 'car' ? this.getRoadEntry().z : this.getEntrance().z) + 0.5,
-    })
+    }, 'tickets')
     if (paidEntry) visitor.entryFeePaid = admissionPrice
     this.state.visitors.push(visitor)
     if (tickets) { if (ticketType === 'camping') tickets.usedCamping++; else tickets.usedDay[this.state.day] = (tickets.usedDay[this.state.day] ?? 0) + 1 }
@@ -9002,6 +9236,25 @@ export class GameState {
     this.visitorsAwaitingDecision.add(visitor.id)
   }
 
+  private runVisitorRouting(visitor: Visitor, kind: 'departure' | 'exit' | 'waste', action: () => void): boolean {
+    if (!this.processingSimulationStep || this.activeVisitorDecision === visitor.id) {
+      action()
+      return true
+    }
+    if (this.decisionBudget <= 0 || this.decidedThisTick.has(visitor.id) ||
+        this.pendingVisitorRouting.has(visitor.id)) {
+      const existing = this.pendingVisitorRouting.get(visitor.id)
+      if (!existing || kind === 'departure') this.pendingVisitorRouting.set(visitor.id, kind)
+      this.visitorsAwaitingDecision.add(visitor.id)
+      return false
+    }
+    this.decisionBudget--
+    this.decidedThisTick.add(visitor.id)
+    this.activeVisitorDecision = visitor.id
+    try { action() } finally { this.activeVisitorDecision = null }
+    return true
+  }
+
   private flushVisitorDecisions(limit = 2): void {
     let decided = 0
     while (decided < limit && this.visitorsAwaitingDecision.size > 0) {
@@ -9010,6 +9263,14 @@ export class GameState {
       this.visitorsAwaitingDecision.delete(visitorId)
       decided += 1
       const visitor = this.getVisitor(visitorId)
+      const routing = this.pendingVisitorRouting.get(visitorId)
+      this.pendingVisitorRouting.delete(visitorId)
+      if (visitor && routing) {
+        if (routing === 'departure') this.beginVisitorDeparture(visitor)
+        else if (routing === 'exit') this.ensureExitRoute(visitor)
+        else this.tryDisposeWaste(visitor)
+        continue
+      }
       if (
         !visitor ||
         visitor.state === 'camping' ||
@@ -9069,6 +9330,7 @@ export class GameState {
       }
       if (
         (visitor.state === 'leaving' || visitor.isPanicking || visitor.state === 'panicking') &&
+        !(visitor.state === 'leaving' && ((visitor.campsite && visitor.campingPhase !== 'none') || visitor.pendingWaste > 0)) &&
         this.isAtParkExit(visitor)
       ) {
         leavingIds.add(visitor.id)
@@ -9491,7 +9753,9 @@ export class GameState {
         (visitor.state === 'leaving' || visitor.isPanicking || visitor.state === 'panicking') &&
         this.isAtParkExit(visitor)
       ) {
-        leavingIds.add(visitor.id)
+        if (!(visitor.state === 'leaving' && ((visitor.campsite && visitor.campingPhase !== 'none') || visitor.pendingWaste > 0))) {
+          leavingIds.add(visitor.id)
+        }
       } else if (visitor.targetId) {
         this.arriveOrDecide(visitor)
       } else {
@@ -9602,7 +9866,7 @@ export class GameState {
             x: paymentPosition.x + 0.5,
             y: paymentPosition.y + 0.85,
             z: paymentPosition.z + 0.5,
-          })
+          }, 'rides')
           if (!paid) {
             visitor.state = 'exploring'
             visitor.targetId = null
@@ -9763,7 +10027,7 @@ export class GameState {
 
   private getBuildingQueueCells(building: PlacedBuilding): Cell[] {
     if (building.kind === 'ride') return this.getAccessQueueCells(building.rideEntrance)
-    if (!['food', 'toilet', 'ride', 'alcohol'].includes(building.kind)) return []
+    if (!isQueuedFacilityKind(building.kind)) return []
     const front = this.findBuildingQueueFront(building)
     if (!front) return []
     const queueCells: Cell[] = []
@@ -9836,7 +10100,7 @@ export class GameState {
     const facilityIds = new Set(
       this.state.buildings
         .filter((building) =>
-          ['food', 'toilet', 'ride', 'alcohol'].includes(building.kind),
+          isQueuedFacilityKind(building.kind),
         )
         .map((building) => building.id),
     )
@@ -9859,7 +10123,7 @@ export class GameState {
     })
     this.state.buildings
       .filter((building) =>
-        ['food', 'toilet', 'ride', 'alcohol'].includes(building.kind),
+        isQueuedFacilityKind(building.kind),
       )
       .forEach((building) => {
         const existingQueue = this.facilityQueues.get(building.id)
@@ -9903,13 +10167,10 @@ export class GameState {
         })
         queue.splice(0, queue.length, ...valid)
         this.prioritizeArrivedQueueVisitors(queue)
-        const supply = building.kind === 'food' ? 'food' : building.kind === 'alcohol' ? 'drinks' : null
-        if (supply && localStock(this.state, building.id, supply) < 1) {
+        const supply = shopSupplyKind(building.kind)
+        if (supply && supply !== 'water' && localStock(this.state, building.id, supply) < 1) {
           const wait = SIMULATION_CONFIG.needs.interactionMinutes.stockout
-          const waitingThought =
-            building.kind === 'food'
-              ? 'Hier ist kein Essen mehr. Ich warte noch kurz.'
-              : 'Hier sind keine Getränke mehr. Ich warte noch kurz.'
+          const waitingThought = stockoutThought(building.kind, true)
           for (const visitorId of [...queue]) {
             const visitor = this.getVisitor(visitorId)
             if (visitor?.state !== 'queuing' || visitor.targetId !== building.id) continue
@@ -9929,7 +10190,8 @@ export class GameState {
           const visitor = this.getVisitor(id)
           if (visitor?.state === 'queuing') visitor.interactionRemaining = 0
         }
-        this.positionFacilityQueue(queue, queueCells, minutes)
+        const splitStallQueue = isStallQueueKind(building.kind)
+        this.positionFacilityQueue(queue, queueCells, minutes, splitStallQueue)
 
         let free =
           (building.rideType === 'bungee' ? 1 : BUILDINGS[building.kind].capacity) -
@@ -9937,6 +10199,11 @@ export class GameState {
         while (free > 0 && queue.length > 0) {
           const visitor = this.getVisitor(queue[0]!)
           const front = queueCells[0]
+          const frontPath = front
+            ? this.getPathAt(front.x, front.z, front.elevation)
+            : undefined
+          const frontDirection = QUEUE_CARDINALS[frontPath?.queueDirection ?? 0] ?? QUEUE_CARDINALS[0]!
+          const frontStand = this.queueStandOffset(0, frontDirection, true, splitStallQueue)
           if (
             !visitor ||
             visitor.state !== 'queuing' ||
@@ -9944,8 +10211,8 @@ export class GameState {
             visitor.cellX !== front.x ||
             visitor.cellZ !== front.z ||
             Math.hypot(
-              visitor.x - (front.x + 0.5),
-              visitor.z - (front.z + 0.5),
+              visitor.x - (front.x + 0.5 + frontStand.x),
+              visitor.z - (front.z + 0.5 + frontStand.z),
             ) > 0.58
           ) {
             break
@@ -9961,27 +10228,16 @@ export class GameState {
     index: number,
     direction: { x: number; z: number },
     packed: boolean,
+    split = false,
   ): { x: number; z: number } {
-    if (!packed) return { x: 0, z: 0 }
-    const config = SIMULATION_CONFIG.coasters
-    const slot = index % config.queueSlotsPerCell
-    const columns = config.queueSlotColumns
-    const rows = Math.ceil(config.queueSlotsPerCell / columns)
-    const col = slot % columns
-    const row = Math.floor(slot / columns)
-    const side = { x: -direction.z, z: direction.x }
-    const sideShift = (col - (columns - 1) / 2) * config.queueSlotOffset
-    const alongShift = (row - (rows - 1) / 2) * config.queueSlotOffset
-    return {
-      x: side.x * sideShift + direction.x * alongShift,
-      z: side.z * sideShift + direction.z * alongShift,
-    }
+    return computeQueueStandOffset(index, direction, packed, split)
   }
 
   private positionFacilityQueue(
     queue: readonly string[],
     queueCells: readonly Cell[],
     minutes: number,
+    split = false,
   ): void {
     const directions = [
       { x: 0, z: 1 },
@@ -10012,9 +10268,12 @@ export class GameState {
         index,
         direction,
         targetCellIndex === desiredCellIndex,
+        split,
       )
       const targetX = cell.x + 0.5 + stand.x
       const targetZ = cell.z + 0.5 + stand.z
+      visitor.tileOffsetX = 0.5 + stand.x
+      visitor.tileOffsetZ = 0.5 + stand.z
       const deltaX = targetX - visitor.x
       const deltaZ = targetZ - visitor.z
       const distance = Math.hypot(deltaX, deltaZ)
@@ -10040,18 +10299,19 @@ export class GameState {
     visitor: Visitor,
     target: PlacedBuilding,
   ): void {
+    if (isShopServiceKind(target.kind) && !this.isVisitorAtShopCounter(visitor, target)) {
+      this.leaveQueueOnFoot(visitor, 'Ich gehe zur Vorderseite des Ladens.')
+      return
+    }
     if (target.kind === 'ride' && this.getRideAccessIssue(target)) {
       visitor.state = 'exploring'; visitor.targetId = null; visitor.route = []
       this.queueVisitorDecision(visitor); return
     }
-    const supply = target.kind === 'food' ? 'food' : target.kind === 'alcohol' ? 'drinks' : null
-    if (supply && localStock(this.state, target.id, supply) < 1) {
+    const supply = shopSupplyKind(target.kind)
+    if (supply && supply !== 'water' && localStock(this.state, target.id, supply) < 1) {
       visitor.state = 'using'
       visitor.interactionRemaining = SIMULATION_CONFIG.needs.interactionMinutes.stockout
-      visitor.thought =
-        target.kind === 'food'
-          ? 'Ich schaue kurz, ob noch Essen da ist.'
-          : 'Ich schaue kurz, ob noch Getränke da sind.'
+      visitor.thought = stockoutThought(target.kind, false)
       return
     }
     if (target.rideType === 'bungee') {
@@ -10079,7 +10339,11 @@ export class GameState {
           ? interaction.alcohol
           : target.kind === 'toilet'
             ? interaction.toilet
-            : interaction.food
+            : target.kind === 'mascot'
+              ? interaction.mascot
+              : target.kind === 'shirt'
+                ? interaction.shirt
+                : interaction.food
     visitor.thought = target.rideType === 'bungee' ? 'Jetzt geht es hoch zum Bungeesprung!' : `Ich besuche ${BUILDINGS[target.kind].name}.`
   }
 
@@ -10125,7 +10389,7 @@ export class GameState {
         ;(train.photoPieces ??= []).push(sample.pieceId)
         for (const id of train.passengerIds) {
           const visitor = this.getVisitor(id)
-          if (visitor && this.chargeVisitor(visitor, 2, sample.point)) visitor.thought = 'Ein Erinnerungsfoto von der Achterbahn!'
+          if (visitor && this.chargeVisitor(visitor, 2, sample.point, 'rides')) visitor.thought = 'Ein Erinnerungsfoto von der Achterbahn!'
         }
       }
       const remainingMeters =
@@ -10452,9 +10716,12 @@ export class GameState {
         : 1)
     const ground = wayInfo(this.state, visitor.cellX, visitor.cellZ, 'foot', this.getPathAt(visitor.cellX, visitor.cellZ, visitor.cellElevation)?.wayType)
     const surface = visitor.cellElevation > this.getTerrainHeight(visitor.cellX, visitor.cellZ) ? 1 : ground.speed
-    const crowdSlowdown = visitor.isPanicking
-      ? 1 + Math.max(0, visitor.crowding - 50) / 90
-      : 1 + Math.max(0, visitor.crowding - 35) / 55
+    const returningOnStallQueue = this.stallQueueReturnIds.has(visitor.id)
+    const crowdSlowdown = returningOnStallQueue
+      ? 1
+      : visitor.isPanicking
+        ? 1 + Math.max(0, visitor.crowding - 50) / 90
+        : 1 + Math.max(0, visitor.crowding - 35) / 55
     return visitor.walkSpeed * speedMultiplier * (visitor.isPanicking ? SIMULATION_CONFIG.crowding.panicFleeBoost : 1) * surface / crowdSlowdown
   }
 
@@ -10497,6 +10764,7 @@ export class GameState {
     const first = (this.state.simTick % period) * 4
     for (let index = first; index < Math.min(first + 4, visitors.length); index++) {
       const visitor = visitors[index]!
+      if (this.stallQueueReturnIds.has(visitor.id)) continue
       if (visitor.route.length < 3 || ['security-check', 'vomiting', 'using', 'queuing', 'riding', 'bus-riding', 'vehicle-arrival', 'injured'].includes(visitor.state)) continue
       const next = visitor.route[0]!
       const goal = visitor.route.at(-1)!
@@ -10526,7 +10794,7 @@ export class GameState {
     this.movementOccupancy.clear()
     for (const v of this.state.visitors) {
       if (['riding', 'bus-riding', 'vehicle-arrival'].includes(v.state)) continue
-      const key = this.packCell({ x: v.cellX, z: v.cellZ, elevation: v.cellElevation })
+      const key = this.visitorOccupancyKey(v)
       this.movementOccupancy.set(key, (this.movementOccupancy.get(key) ?? 0) + 1)
     }
     for (const route of this.state.festival.infrastructure.routes) {
@@ -10567,15 +10835,20 @@ export class GameState {
   ): void {
     while (distance > 0 && visitor.route.length > 0) {
       const next = visitor.route[0]
-      const nextKey = this.packCell(next)
-      const oldKey = this.packCell({ x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation })
-      const capacity = wayInfo(this.state, next.x, next.z, 'foot', this.getPathAt(next.x, next.z, next.elevation)?.wayType).capacity
+      const oldKey = this.visitorOccupancyKey(visitor)
+      const nextPath = this.getPathAt(next.x, next.z, next.elevation)
+      this.applyQueueLaneOffset(visitor, next)
+      const nextKey = this.occupancyKeyForCell(next, nextPath, visitor.tileOffsetX, visitor.tileOffsetZ)
+      const capacity = wayInfo(this.state, next.x, next.z, 'foot', nextPath?.wayType).capacity
       const density = Math.max(0, (this.movementOccupancy.get(nextKey) ?? 0) - (nextKey === oldKey ? 1 : 0)) / capacity
       // Destination occupancy controls flow: leaving a packed tile for a free one must stay easy.
       // At capacity retain 12.5% speed, and at least 4% even in extreme crowds.
-      const crowdSpeed = Math.max(0.04, 1 / (1 + 7 * Math.pow(Math.max(0, density - 0.5) * 2, 2)))
-      if (density >= 1) visitor.thought = 'Hier ist es eng – ich komme nur langsam voran.'
-      const nextPath = this.getPathAt(next.x, next.z, next.elevation)
+      // Stall return lanes keep normal walking speed — only the inbound wait lane crawls.
+      const returningOnStallQueue = this.stallQueueReturnIds.has(visitor.id)
+      const crowdSpeed = returningOnStallQueue
+        ? 1
+        : Math.max(0.04, 1 / (1 + 7 * Math.pow(Math.max(0, density - 0.5) * 2, 2)))
+      if (!returningOnStallQueue && density >= 1) visitor.thought = 'Hier ist es eng – ich komme nur langsam voran.'
       const nextCampingCell = this.getCampingCellAt(next.x, next.z)
       const nextMedicalCell = this.getMedicalCellAt(next.x, next.z)
       const nextFestivalCell = this.getStageForecourtCellAt(next.x, next.z)
@@ -10674,8 +10947,12 @@ export class GameState {
       }
     }
 
-    if (visitor.route.length === 0 && decideOnArrival) {
-      this.arriveOrDecide(visitor)
+    if (visitor.route.length === 0) {
+      if (this.stallQueueReturnIds.has(visitor.id)) {
+        this.continueAfterStallQueueReturn(visitor)
+        return
+      }
+      if (decideOnArrival) this.arriveOrDecide(visitor)
     }
   }
 
@@ -10809,7 +11086,7 @@ export class GameState {
 
   private decideNextAction(visitor: Visitor): void {
     if (this.processingSimulationStep) {
-      if (this.decisionBudget <= 0 || this.decidedThisTick.has(visitor.id)) {
+      if (this.decisionBudget <= 0 || this.decidedThisTick.has(visitor.id) || this.pendingVisitorRouting.has(visitor.id)) {
         this.queueVisitorDecision(visitor)
         return
       }
@@ -10817,6 +11094,13 @@ export class GameState {
       this.decidedThisTick.add(visitor.id)
       this.visitorsAwaitingDecision.delete(visitor.id)
     }
+    const previousDecision = this.activeVisitorDecision
+    this.activeVisitorDecision = visitor.id
+    try { this.chooseNextVisitorAction(visitor) }
+    finally { this.activeVisitorDecision = previousDecision }
+  }
+
+  private chooseNextVisitorAction(visitor: Visitor): void {
     if (visitor.streakingMinutes > 0) {
       this.continueStreakingRun(visitor)
       return
@@ -10991,6 +11275,19 @@ export class GameState {
     )
     if (!urgentNeed && this.tryVisitConcert(visitor)) return
     const decisionRng = this.visitorDecisionRng(visitor)
+    if (
+      !urgentNeed &&
+      visitor.needs.fun < decisions.seekSouvenirFunBelow &&
+      ((visitor.pathSeed + visitor.wanderNonce * 17) >>> 0) % 1000 <
+        decisions.seekSouvenirProbability * 1000
+    ) {
+      if (!visitor.ownedMascot && this.state.buildings.some((building) => building.kind === 'mascot')) {
+        desiredKinds.push('mascot')
+      }
+      if (!visitor.wornShirt && this.state.buildings.some((building) => building.kind === 'shirt')) {
+        desiredKinds.push('shirt')
+      }
+    }
     const searchAtmosphere =
       visitor.wanderNonce %
         SIMULATION_CONFIG.pathfinding.exploreSearchEvery ===
@@ -11071,6 +11368,8 @@ export class GameState {
               ? 'Ich hole mir etwas zu trinken.'
             : kind === 'toilet'
               ? 'Ich brauche dringend eine Toilette.'
+            : kind === 'mascot' || kind === 'shirt'
+              ? souvenirSeekThought(kind)
               : 'Ich möchte etwas Spannendes erleben!'
         return
       }
@@ -11683,6 +11982,11 @@ export class GameState {
       this.depositPendingWaste(visitor, bin.id)
       return
     }
+    if (visitor.targetId === bin.id && visitor.state === 'seeking' && visitor.route.length > 0) return
+    this.runVisitorRouting(visitor, 'waste', () => this.routeVisitorToWasteBin(visitor, bin))
+  }
+
+  private routeVisitorToWasteBin(visitor: Visitor, bin: { id: string; x: number; z: number; elevation: number }): void {
     const route = this.findPath(
       {
         x: visitor.cellX,
@@ -11827,12 +12131,45 @@ export class GameState {
     return false
   }
 
-  private createPreferredBedtime(): number {
+  private createPreferredSleepRhythm(): {
+    preferredBedtime: number
+    preferredWakeTime: number
+  } {
+    const rhythm = sampleFestivalSleepRhythm(
+      this.rng.next(),
+      this.rng.next(),
+      SIMULATION_CONFIG.camping.sleepSchedule,
+      SIMULATION_CONFIG.time.minutesPerDay,
+    )
+    return {
+      preferredBedtime: rhythm.bedtime,
+      preferredWakeTime: rhythm.wakeTime,
+    }
+  }
+
+  private restoreVisitorSleepRhythm(visitor: Visitor): void {
     const schedule = SIMULATION_CONFIG.camping.sleepSchedule
-    return (
-      schedule.bedtimeMinimum +
-      this.rng.next() * schedule.bedtimeRandomRange
-    ) % SIMULATION_CONFIG.time.minutesPerDay
+    const minutesPerDay = SIMULATION_CONFIG.time.minutesPerDay
+    if (
+      visitor.preferredBedtime == null ||
+      visitor.preferredWakeTime == null
+    ) {
+      const rhythm = sleepRhythmFromVisitorId(
+        visitor.id,
+        schedule,
+        minutesPerDay,
+      )
+      visitor.preferredBedtime = rhythm.bedtime
+      visitor.preferredWakeTime = rhythm.wakeTime
+      return
+    }
+    const remapped = remapLegacySleepRhythm(
+      visitor,
+      schedule,
+      minutesPerDay,
+    )
+    visitor.preferredBedtime = remapped.bedtime
+    visitor.preferredWakeTime = remapped.wakeTime
   }
 
   private samplePoisson(expected: number): number {
@@ -11847,25 +12184,11 @@ export class GameState {
     return count - 1
   }
 
-  private createPreferredWakeTime(): number {
-    const schedule = SIMULATION_CONFIG.camping.sleepSchedule
-    return (
-      schedule.wakeTimeMinimum +
-      this.rng.next() * schedule.wakeTimeRandomRange
-    ) % SIMULATION_CONFIG.time.minutesPerDay
-  }
-
   private isVisitorSleepTime(visitor: Visitor): boolean {
-    const minute = this.state.minute
-    if (visitor.preferredBedtime > visitor.preferredWakeTime) {
-      return (
-        minute >= visitor.preferredBedtime ||
-        minute < visitor.preferredWakeTime
-      )
-    }
-    return (
-      minute >= visitor.preferredBedtime &&
-      minute < visitor.preferredWakeTime
+    return isMinuteInSleepWindow(
+      this.state.minute,
+      visitor.preferredBedtime,
+      visitor.preferredWakeTime,
     )
   }
 
@@ -11875,6 +12198,7 @@ export class GameState {
     if (kind === 'food') return 'food'
     if (kind === 'alcohol') return 'drinks'
     if (kind === 'toilet') return 'toilets'
+    if (kind === 'mascot' || kind === 'shirt') return 'shops'
     if (kind === 'ride') return 'rides'
     if (
       kind === 'stage' ||
@@ -12378,7 +12702,7 @@ export class GameState {
       .filter(
         (building) =>
           building.kind === kind && this.isBuildingCurrentlyActive(building) &&
-          (!isShopServiceKind(kind) || localStock(this.state, building.id, kind === 'food' ? 'food' : 'drinks') >= 1),
+          (!isShopServiceKind(kind) || localStock(this.state, building.id, shopSupplyKind(kind) ?? 'goods') >= 1),
       )
       .map((building) => {
         const queueCells = this.getBuildingQueueCells(building)
@@ -12532,6 +12856,19 @@ export class GameState {
     if (cached && cached.expires > this.state.simTick) return this.clonePedestrianPath(cached.path)
     if (cached) this.pedestrianPathCache.delete(accessCacheKey)
     const goalKeys = new Set(goals.map((cell) => this.packCell(cell)))
+    // A forbidden destination cannot be reached from any predecessor. Avoid
+    // traversing the whole map (twice) to prove this for e.g. staff-only bins.
+    // Keep all original goals in the heuristic so valid routes retain tie order.
+    const canEnterGoal = goalKeys.has(this.packCell(start)) || goals.some(goal => {
+      const node = this.pedestrianNav.get(this.packCell(goal))
+      if (!node || (node.flags & NAV_SOLID) !== 0) return false
+      if (node.path?.staffOnly && !allowStaff) return false
+      if ((node.flags & NAV_WATER) !== 0 && (node.flags & NAV_PATH) === 0) return false
+      if (!campingAllowed && (node.flags & NAV_CAMPING) !== 0) return false
+      if (!medicalAllowed && (node.flags & NAV_MEDICAL) !== 0) return false
+      if (!festivalAllowed && (node.flags & NAV_FORECOURT) !== 0 && (node.flags & NAV_PATH) === 0) return false
+      return true
+    })
     const movementCost = (_from: Cell, to: Cell): number => {
       const key = this.packCell(to)
       const surface = this.pedestrianNav.get(key)?.cost ?? this.getPedestrianSurfaceCost(to)
@@ -12580,13 +12917,13 @@ export class GameState {
         },
         this.pedestrianPathScratch,
       )
-    const result =
+    const result = canEnterGoal ? (
       search(false) ??
       (maxVisited === undefined ? search(
         true,
         nearestGoal * SIMULATION_CONFIG.pathfinding.grassCostMultiplier * 1.6 +
           24,
-      ) : null)
+      ) : null)) : null
     if (
       this.pedestrianPathCache.size >=
       SIMULATION_CONFIG.pathfinding.pathCacheLimit
@@ -12646,22 +12983,28 @@ export class GameState {
     const config = SIMULATION_CONFIG.pathfinding
     const span = config.wanderMaxSteps - config.wanderMinSteps + 1
     const steps = config.wanderMinSteps + Math.floor(rng() * span)
-    visitor.route = this.pickSeededWalk(
-      {
-        x: visitor.cellX,
-        z: visitor.cellZ,
-        elevation: visitor.cellElevation,
-      },
-      steps,
-      rng,
-      {
-        allowCamping: Boolean(this.getCampingCellAt(visitor.cellX, visitor.cellZ)),
-        allowMedical: Boolean(this.getMedicalCellAt(visitor.cellX, visitor.cellZ)),
-        allowFestival: Boolean(
-          this.getStageForecourtCellAt(visitor.cellX, visitor.cellZ),
-        ),
-      },
-    )
+    const wanderFrom = {
+      x: visitor.cellX,
+      z: visitor.cellZ,
+      elevation: visitor.cellElevation,
+    }
+    const wanderOptions = {
+      allowCamping: Boolean(this.getCampingCellAt(visitor.cellX, visitor.cellZ)),
+      allowMedical: Boolean(this.getMedicalCellAt(visitor.cellX, visitor.cellZ)),
+      allowFestival: Boolean(
+        this.getStageForecourtCellAt(visitor.cellX, visitor.cellZ),
+      ),
+      allowQueue:
+        this.getPathAt(visitor.cellX, visitor.cellZ, visitor.cellElevation)?.pathType ===
+        'queue',
+    }
+    visitor.route = this.pickSeededWalk(wanderFrom, steps, rng, wanderOptions)
+    if (visitor.route.length === 0) {
+      visitor.route = this.pickSeededWalk(wanderFrom, steps, rng, {
+        ...wanderOptions,
+        allowQueue: true,
+      })
+    }
     visitor.state = 'exploring'
     visitor.targetId = null
     visitor.wanderNonce += 1
@@ -12675,6 +13018,7 @@ export class GameState {
       allowCamping?: boolean
       allowMedical?: boolean
       allowFestival?: boolean
+      allowQueue?: boolean
     },
     previous: Cell | null = null,
   ): Cell[] {
@@ -12690,6 +13034,7 @@ export class GameState {
         allowFestival:
           options.allowFestival ??
           Boolean(this.getStageForecourtCellAt(current.x, current.z)),
+        allowQueue: options.allowQueue ?? false,
       })
       if (neighbors.length === 0) break
       const forward = last
@@ -12714,14 +13059,19 @@ export class GameState {
 
   private finishInteraction(visitor: Visitor): void {
     const target = this.state.buildings.find((building) => building.id === visitor.targetId)
+    if (target && isShopServiceKind(target.kind) && !this.isVisitorAtShopCounter(visitor, target)) {
+      this.leaveQueueOnFoot(visitor, 'Ich gehe zur Vorderseite des Ladens.')
+      return
+    }
     const rideExitPath = target?.kind === 'ride' && target.rideExit
       ? this.getAccessPathNeighbors(target.rideExit).find(c=>this.getPathAt(c.x,c.z,c.elevation)?.pathType !== 'queue') : undefined
     if (target?.kind === 'ride' && !rideExitPath) {
       visitor.thought = 'Ich warte, bis der Ausgang wieder mit einem Gehweg verbunden ist.'
       return
     }
-    const supply = target?.kind === 'food' ? 'food' : target?.kind === 'alcohol' ? 'drinks' : null
-    const available = !supply || !!target && localStock(this.state, target.id, supply) >= 1
+    const supply = target ? shopSupplyKind(target.kind) : null
+    const shopSupply = supply && supply !== 'water' ? supply : null
+    const available = !shopSupply || !!target && localStock(this.state, target.id, shopSupply) >= 1
     if (!available) this.state.festival.metrics.stockouts++
     const paid =
       target && available &&
@@ -12730,7 +13080,7 @@ export class GameState {
         y: target.elevation + BUILDINGS[target.kind].height,
         z: target.z + 0.5,
       })
-    if (paid && supply && target) consumeLocal(this.state, target.id, supply)
+    if (paid && shopSupply && target) consumeLocal(this.state, target.id, shopSupply)
     if (target?.kind === 'food' && paid) {
       addItem(visitor.inventory, 'food')
       visitor.thought = 'Ich habe Essen gekauft und suche einen Platz zum Essen.'
@@ -12753,6 +13103,19 @@ export class GameState {
     } else if (target?.kind === 'alcohol' && paid) {
       addItem(visitor.inventory, 'alcohol')
       visitor.thought = 'Ich habe ein Getränk gekauft und trinke es gleich in Ruhe.'
+    } else if (target?.kind === 'mascot' && paid) {
+      visitor.ownedMascot = true
+      visitor.heldMascot = this.rng.next() < SIMULATION_CONFIG.souvenirs.holdMascotChance
+      visitor.needs.fun = Math.min(100, visitor.needs.fun + SIMULATION_CONFIG.souvenirs.funGain)
+      visitor.thought = souvenirPurchaseThought('mascot', Boolean(visitor.heldMascot))
+    } else if (target?.kind === 'shirt' && paid) {
+      const shirt = defaultShirtSettings()
+      visitor.wornShirt = {
+        color: normalizeShirtColor(target.shirtColor ?? shirt.color),
+        style: normalizeShirtStyle(target.shirtStyle ?? shirt.style),
+      }
+      visitor.needs.fun = Math.min(100, visitor.needs.fun + SIMULATION_CONFIG.souvenirs.funGain)
+      visitor.thought = souvenirPurchaseThought('shirt', false)
     } else if (target && !paid) {
       visitor.thought = available ? 'Dafür reicht mein Budget nicht.' : 'Ausverkauft! Hier fehlt Nachschub.'
       visitor.emotion = 'sad'
@@ -12771,7 +13134,7 @@ export class GameState {
       return
     }
     const queueExit =
-      target && ['food', 'toilet', 'alcohol'].includes(target.kind)
+      target && isStallQueueKind(target.kind)
         ? this.buildQueueExitRoute(
             { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation },
             this.getBuildingQueueCells(target),
@@ -12782,6 +13145,7 @@ export class GameState {
       visitor.state = 'exploring'
       visitor.route = queueExit
       visitor.interactionRemaining = 0
+      this.beginStallQueueReturn(visitor, queueExit[0])
       if (purchasedConsumable) {
         visitor.thought = 'Ich gehe die Schlange zurück und suche einen Platz zum Essen oder Trinken.'
       }
@@ -12831,10 +13195,17 @@ export class GameState {
     )
     const alcoholEnergyDrain =
       (visitor.alcoholLevel / 100) * config.alcoholEnergyDecayPerMinute
+    const circadian = circadianEnergyDecayMultiplier(
+      this.state.minute,
+      visitor.preferredBedtime,
+      visitor.preferredWakeTime,
+      SIMULATION_CONFIG.camping.sleepSchedule,
+    )
     visitor.needs.energy = Math.max(
       0,
       visitor.needs.energy -
-        minutes * (config.baseEnergyDecayPerMinute + alcoholEnergyDrain),
+        minutes *
+          (config.baseEnergyDecayPerMinute * circadian + alcoholEnergyDrain),
     )
   }
 
@@ -13036,9 +13407,11 @@ export class GameState {
       (total, member) => total + STAFF_DEFINITIONS[member.role].hourlyWage,
       0,
     )
-    this.state.money -= (hourlyUpkeep + staffWages) * hours
+    bookFinance(this.state, 'upkeep', -hourlyUpkeep * hours)
+    bookFinance(this.state, 'staff', -staffWages * hours)
+    bookFinance(this.state, 'interest', -loanInterest(this.state.finance.loan, hours / 24))
     if (this.state.power.backupActive) {
-      this.state.money -= SIMULATION_CONFIG.power.backupFuelPerHour * hours
+      bookFinance(this.state, 'upkeep', -(SIMULATION_CONFIG.power.backupFuelPerHour * hours))
     }
     this.recalculatePark()
   }
@@ -13483,11 +13856,13 @@ export class GameState {
     queuePaths.forEach((path) => {
       path.queueDirection = undefined
       path.queueEntryDirection = undefined
+      path.queueSplit = false
     })
     const claimed = new Set<string>()
 
     const claimQueue = (
       seeds: Array<{ path: PlacedBuilding; target: { x: number; z: number } }>,
+      split = false,
     ): void => {
       const orderedSeeds = [...seeds].sort(
         (left, right) => this.queueBuildOrder(left.path) - this.queueBuildOrder(right.path),
@@ -13501,6 +13876,7 @@ export class GameState {
             target.x - current.x,
             target.z - current.z,
           )
+          current.queueSplit = split
           claimed.add(current.id)
           const neighbors = this.getAdjacentQueuePaths(current).filter(
             (neighbor) => !claimed.has(neighbor.id),
@@ -13537,7 +13913,7 @@ export class GameState {
 
     this.state.buildings
       .filter((building) =>
-        ['food', 'toilet', 'ride', 'alcohol'].includes(building.kind),
+        isQueuedFacilityKind(building.kind),
       )
       .forEach((building) => {
         if (building.kind === 'ride') {
@@ -13554,7 +13930,7 @@ export class GameState {
               Boolean(path && path.pathType === 'queue' && !claimed.has(path.id)),
           )
           .map((path) => ({ path, target: { x: building.x, z: building.z } }))
-        claimQueue(seeds)
+        claimQueue(seeds, isStallQueueKind(building.kind))
       })
 
     this.state.stageForecourtCells.forEach((cell) => {
@@ -13775,6 +14151,8 @@ export class GameState {
     visitor.thought = thought
     visitor.route = route
     if (route.length === 0) this.queueVisitorDecision(visitor)
+    else if (target && isStallQueueKind(target.kind)) this.beginStallQueueReturn(visitor, route[0])
+    else this.applyQueueLaneOffset(visitor, route[0])
   }
 
   private getAccessCell(
@@ -13796,6 +14174,12 @@ export class GameState {
       building.rotation,
     )
     return this.isWalkableServiceCell(access) ? [access] : []
+  }
+
+  private isVisitorAtShopCounter(visitor: Visitor, building: PlacedBuilding): boolean {
+    return this.getFacilityAccessCells(building).some(cell =>
+      cell.x === visitor.cellX && cell.z === visitor.cellZ &&
+      Math.abs(cell.elevation - visitor.cellElevation) < 0.01)
   }
 
   private isWalkableServiceCell(cell: Cell): boolean {
@@ -13872,6 +14256,71 @@ export class GameState {
 
   private packCell(cell: { x: number; z: number; elevation: number }): number {
     return this.packXZ(cell.x, cell.z) | ((Math.round(cell.elevation) + 16) << 16)
+  }
+
+  private occupancyLaneBit(path: PlacedBuilding | undefined, localX: number, localZ: number): number {
+    if (!path?.queueSplit) return 0
+    return stallQueueLaneFromLocal(path.queueDirection ?? 0, localX, localZ) === 'outbound' ? 1 : 0
+  }
+
+  private occupancyKeyForCell(
+    cell: { x: number; z: number; elevation: number },
+    path: PlacedBuilding | undefined,
+    localX: number,
+    localZ: number,
+  ): number {
+    return this.packCell(cell) | (this.occupancyLaneBit(path, localX, localZ) << 24)
+  }
+
+  private visitorOccupancyKey(visitor: Visitor): number {
+    const cell = {
+      x: visitor.cellX,
+      z: visitor.cellZ,
+      elevation: visitor.cellElevation,
+    }
+    return this.occupancyKeyForCell(
+      cell,
+      this.getPathAt(cell.x, cell.z, cell.elevation),
+      visitor.x - cell.x,
+      visitor.z - cell.z,
+    )
+  }
+
+  private beginStallQueueReturn(
+    visitor: Visitor,
+    next: { x: number; z: number; elevation: number } | undefined,
+  ): void {
+    this.stallQueueReturnIds.add(visitor.id)
+    this.applyQueueLaneOffset(visitor, next)
+  }
+
+  private continueAfterStallQueueReturn(visitor: Visitor): void {
+    this.stallQueueReturnIds.delete(visitor.id)
+    if (
+      visitor.state === 'leaving' ||
+      visitor.isPanicking ||
+      visitor.state === 'panicking'
+    ) {
+      return
+    }
+    this.visitorsAwaitingDecision.delete(visitor.id)
+    this.chooseNextVisitorAction(visitor)
+  }
+
+  private applyQueueLaneOffset(
+    visitor: Visitor,
+    next: { x: number; z: number; elevation: number } | undefined,
+  ): void {
+    if (!next) return
+    const to = this.getPathAt(next.x, next.z, next.elevation)
+    if (to?.pathType !== 'queue' || !to.queueSplit) return
+    const from = this.getPathAt(visitor.cellX, visitor.cellZ, visitor.cellElevation)
+    const moveDirection = this.getDirectionIndex(next.x - visitor.cellX, next.z - visitor.cellZ)
+    const lane = queueTravelLane(from?.queueDirection, to.queueDirection, moveDirection)
+    const along = 0.35 + ((visitor.pathSeed >>> 0) % 31) / 100
+    const offset = stallQueueTileOffset(to.queueDirection ?? 0, lane, along)
+    visitor.tileOffsetX = offset.x
+    visitor.tileOffsetZ = offset.z
   }
 
   private getBuildingsAtCell(x: number, z: number): readonly PlacedBuilding[] {
@@ -14039,7 +14488,7 @@ export class GameState {
       (building) => !ids.has(building.id),
     )
     const cost = trees.length * SIMULATION_CONFIG.economy.treeClearCost
-    this.state.money -= cost
+    bookFinance(this.state, 'landscaping', -cost)
     return cost
   }
 
@@ -14401,7 +14850,7 @@ export class GameState {
     if (refund <= 0) return
     visitor.entryFeePaid = 0
     visitor.budget += refund
-    this.state.money -= refund
+    bookFinance(this.state, 'tickets', -refund)
     this.state.cashEffects.push({
       id: this.nextId('refund'),
       amount: -refund,
@@ -14416,12 +14865,13 @@ export class GameState {
     visitor: Visitor,
     amount: number,
     position: { x: number; y: number; z: number },
+    category: FinanceCategory = 'sales',
   ): boolean {
     const price = this.normalizePrice(amount)
     if (visitor.budget < price) return false
     visitor.budget -= price
     if (price > 0) {
-      this.state.money += price
+      bookFinance(this.state, category, price)
       this.state.cashEffects.push({
         id: this.nextId('cash'),
         amount: price,

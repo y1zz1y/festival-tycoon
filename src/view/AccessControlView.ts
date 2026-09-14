@@ -7,7 +7,11 @@ import {
   MeshStandardMaterial,
   SphereGeometry,
 } from 'three'
-import type { AccessControlSnapshot, PathBarrier } from '../game/accessControl'
+import {
+  gateEdgeWorldPosition,
+  type AccessControlSnapshot,
+  type PathBarrier,
+} from '../game/accessControl'
 import { DIRECTION_OFFSETS, type Direction } from '../game/logistics'
 import { disposeObject3D } from './disposeObject3D'
 import { createRoadDirectionArrowGeometry } from './roadDirectionArrow'
@@ -110,15 +114,16 @@ export class AccessControlView {
     barrier: PathBarrier,
     groundY: (x: number, z: number) => number,
   ): Group {
-    const forward = DIRECTION_OFFSETS[barrier.direction]
     const open = barrier.signal === 'open'
     const root = new Group()
     root.userData.accessId = barrier.id
-    root.position.set(
-      barrier.x + 0.5 + forward.x * 0.42,
+    const edge = gateEdgeWorldPosition(
+      barrier.x,
+      barrier.z,
       barrier.elevation || groundY(barrier.x, barrier.z),
-      barrier.z + 0.5 + forward.z * 0.42,
+      barrier.direction,
     )
+    root.position.set(edge.x, edge.y, edge.z)
     root.rotation.y = ANGLES[barrier.direction]
     const leftPost = new Mesh(gatePostGeometry, materials.post)
     leftPost.position.set(-0.43, 0.41, 0)

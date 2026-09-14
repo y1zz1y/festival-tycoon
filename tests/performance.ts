@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { GameState } from '../src/game/GameState'
 
 const requested = process.argv[2] ?? 'rtest3'
@@ -20,7 +21,9 @@ for (const speed of [1, 2, 3]) {
   game.setSpeed(speed)
   const totals = new Map<string, { ms: number, calls: number }>()
   const slowPaths = new Map<string, { ms: number, calls: number }>()
-  if (process.env.PROFILE_METHODS) for (const name of ['walkVisitors', 'updateVisitors', 'flushVisitorDecisions', 'updateCrowdingAndMotivation', 'updateAtmosphere', 'updateStaff', 'updateLogistics', 'reviewVisitorRoutes', 'refreshPedestrianCongestion', 'findPath', 'rebuildPedestrianNav', 'tryVisitConcert', 'ensurePedestrianNav', 'decideNextAction', 'tryDisposeWaste', 'findReachableFacility', 'findBenchDestination', 'findPartyDestination', 'findLeisureDestination', 'beginVisitorDeparture', 'ensureExitRoute', 'enforceDayPlan']) {
+  const tickCosts = new Map<string, number>()
+  const spikes: Array<{ tick: number; minute: number; visitors: number; ms: number; methods: Record<string, number> }> = []
+  if (process.env.PROFILE_METHODS) for (const name of ['walkVisitors', 'updateVisitors', 'flushVisitorDecisions', 'updateCrowdingAndMotivation', 'updateAtmosphere', 'updateStaff', 'updateLogistics', 'reviewVisitorRoutes', 'refreshPedestrianCongestion', 'findPath', 'rebuildPedestrianNav', 'tryVisitConcert', 'ensurePedestrianNav', 'decideNextAction', 'tryDisposeWaste', 'findReachableFacility', 'findBenchDestination', 'findPartyDestination', 'findLeisureDestination', 'beginVisitorDeparture', 'ensureExitRoute', 'enforceDayPlan', 'findRouteTowardParking', 'findVisitorCarCirculation', 'findDepartureFromAccesses', 'findReachableRoadExit', 'rebuildVehicleRouteFromHere', 'findServiceVehicleRoute', 'updateCoasters', 'updateAbandonedCamps', 'updateFacilityQueues', 'updateVisitorConversations', 'trySpawnVisitor', 'updateAccessSignals', 'replanBlockedReverse', 'replanBlockedTurn', 'rerouteAwayFromRedLight', 'unstickVehicle', 'updateSweeper', 'nudgeVehicleAlongRoad', 'replanOffMapDelivery', 'claimAdjacentFreeParking', 'syncFreightToVehicles', 'syncVehiclesToFreight']) {
     const target = game as any
     const original = target[name]
     if (!original) continue
@@ -30,6 +33,7 @@ for (const speed of [1, 2, 3]) {
       finally {
         const ms = performance.now() - start
         const record = totals.get(name) ?? { ms: 0, calls: 0 }; record.ms += ms; record.calls++; totals.set(name, record)
+        tickCosts.set(name, (tickCosts.get(name) ?? 0) + ms)
         if (name === 'findPath' && ms > 10) {
           const caller = new Error().stack?.split('\n').slice(2, 5).join(' ') ?? ''
           const entry = slowPaths.get(caller) ?? { ms: 0, calls: 0 }; entry.ms += ms; entry.calls++; slowPaths.set(caller, entry)
@@ -40,10 +44,20 @@ for (const speed of [1, 2, 3]) {
   const times: number[] = []
   const startTick = game.snapshot.simTick
   const start = performance.now()
-  for (let i = 0; i < steps; i++) { const t = performance.now(); game.tick(.1); times.push(performance.now() - t) }
+  for (let i = 0; i < steps; i++) {
+    tickCosts.clear()
+    const t = performance.now(); game.tick(.1); const ms = performance.now() - t; times.push(ms)
+    if (process.env.PROFILE_METHODS && (spikes.length < 8 || ms > spikes.at(-1)!.ms)) {
+      spikes.push({ tick: i + 1, minute: game.snapshot.minute, visitors: game.snapshot.visitors.length, ms,
+        methods: Object.fromEntries([...tickCosts].sort((a, b) => b[1] - a[1]).slice(0, 10)) })
+      spikes.sort((a, b) => b.ms - a.ms); spikes.length = Math.min(8, spikes.length)
+    }
+  }
   const elapsed = performance.now() - start
   times.sort((a, b) => a - b)
   console.log(JSON.stringify({ save: requested, speed: [0, 1, 3, 8][speed], visitors: game.snapshot.visitors.length, ticks: game.snapshot.simTick - startTick, ms: Math.round(elapsed), median: times[Math.floor(steps * .5)]?.toFixed(2), p95: times[Math.floor(steps * .95)]?.toFixed(2), max: times.at(-1)?.toFixed(2), methods: Object.fromEntries([...totals].sort((a, b) => b[1].ms - a[1].ms)) }))
   if (slowPaths.size) console.log('Slow route callers', Object.fromEntries(slowPaths))
+  if (spikes.length) console.log('Slow ticks', JSON.stringify({ speed: [0, 1, 3, 8][speed], spikes }))
+  console.log('State SHA256', speed, createHash('sha256').update(JSON.stringify(game.snapshot)).digest('hex'))
 }
 

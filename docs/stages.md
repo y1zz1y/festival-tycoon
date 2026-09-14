@@ -30,8 +30,14 @@ gelten Footprint, Strom, Vorplatz und Buchungen.
 - Musiker nur auf Podesten (selbstgebaut) bzw. fester Plattform (Standard).
   Keine Audio-Erzeugung durch Band-Visuals.
 - Zuschauerflächen brauchen Verbindung zum Bühnenrand und Geländezugang.
+- Konzert-Oberteil-Ereignisse sind selten und auf eine Person gleichzeitig
+  begrenzt; Rate und Tick-Verhalten siehe `visitors.md`.
 - Umbauten berechnen nur positive Ausstattungs-Differenz, keine Erstattung.
 - Designs in Snapshot, Base64 und lokalem Vorlagen-Store halten.
+- Alte 2D-Designs ohne Höhenwerte werden vor dem Regridding auf `y=0` je Teil
+  und die Standard-Bauhöhe ergänzt. Dadurch bleiben alte Traversen erhalten und
+  erzeugen keine NaN-Vertices/Bounding-Spheres. Der ursprüngliche Save bleibt
+  unangetastet; aktuelle Höhen werden nicht geändert.
 
 ## Tests
 

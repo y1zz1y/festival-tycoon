@@ -9,7 +9,7 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Straßengraph, Fahrzeuge, Ankunft | `src/game/logistics.ts` | `LogisticsSnapshot`, `findRoadRoute`, `RoadVehicle` |
-| Saugreiniger | `src/game/GameState.ts` | `isSweeperDriveCell`, `findSweeperRoute`, `updateSweeper` |
+| Saugreiniger | `src/game/GameState.ts` | `isSweeperDriveCell`, `findSweeperRoute`, `updateSweeper`, `getSweeperDirtAccesses` |
 | Müllwagen-Erhalt | `src/game/GameState.ts` | `restoreMissingGarbageTrucks`, `reenterGarbageTruck`, `holdGarbageTruckOffMap`, `sellGarbageTruck` |
 | Depots, Bestellungen, Lastwagen | `src/game/supplyChain.ts` | `Infrastructure`, `infrastructureAction`, `updateSupplyChain` |
 | Automatische Träger | `src/game/depotCarriers.ts` | `updateDepotCarriers` |
@@ -19,8 +19,9 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Festival-Bestellungen | `src/game/festivalManagement.ts` | `orderGoods`, Supplies |
 | Straßen-UI | `src/logisticsUI.ts` | Geländeplaner, Straßenbelag; Fußweg-Art-Hold in `#path-construction` |
 | Straßen-/Depot-Darstellung | `src/view/LogisticsView.ts`, `src/view/SupplyChainView.ts`, `src/view/logisticsModels.ts` | Retro-ModelKit: Haltestellen, Depots, Anlieferung, Lager; Fahrzeuge |
+| Träger-Figuren | `src/view/carrierModels.ts` | Gäste-Personen-Teile, Warnweste, Handkarren, Kistenstapel; Picking über `staffId` |
 | StVO-Fahrtrichtungspfeil | `src/view/roadDirectionArrow.ts` | Weiße Markierung (`paint`) auf Straße und in der Vorschau; kompaktes Overlay (`overlay`) |
-| Ampeln und Wegschranken | `src/game/accessControl.ts` | Slots, Sensoren, Gebiet, `evaluateAccessSignal` |
+| Ampeln und Wegschranken | `src/game/accessControl.ts` | Slots, Tageszeit, Festivalphase, Tagesplan, Sensoren, Gebiet, `evaluateAccessSignal` |
 | Trennlinie / Kante sperren | `src/game/GameState.ts` | `toggleRoadSeparator`, `road.blockedEdges` |
 | Ampel-/Schranken-Darstellung | `src/view/AccessControlView.ts` | eine Richtung, Grün/Rot bzw. offen/zu |
 | Fahrzeug-Interpolation | `src/view/transportMotion.ts` | nur Darstellung |
@@ -31,15 +32,24 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 - Trägerwege über `findPath` (Fußgänger), Fahrzeuge über `findRoadRoute`.
   Nicht mischen. Saugreiniger (`sweeper`) sind die Ausnahme: sie nutzen
   den Fußgängergraphen, fahren aber nur auf normalen Wegen **und**
-  Bühnenvorplätzen (`isSweeperDriveCell`). Der Fahrschritt prüft dieselbe
-  Fläche, nicht `getPathAt` allein — Vorplätze haben keinen Weg und würden
-  sonst die Route am Rand verwerfen.
+  Bühnenvorplätzen (`isSweeperDriveCell`). `findSweeperRoute` setzt
+  `allowStaff`, damit Personaleingänge (`staffOnly`) passierbar sind;
+  Gäste bleiben blockiert, Lastwagen bleiben auf der Straße. Der
+  Fahrschritt prüft dieselbe Fläche, nicht `getPathAt` allein — Vorplätze
+  haben keinen Weg und würden sonst die Route am Rand verwerfen.
 - Imbiss und Getränkestand nehmen Nachschub von **jeder** angrenzenden
   Weg- oder Vorplatzkachel, nicht nur von der gedrehten Vorderseite.
   `shopAccess.ts` (`CARDINAL_OFFSETS`, `isShopServiceKind`) und
-  `GameState.getFacilityAccessCells` gelten für Träger und Gäste.
+  Träger nutzen weiterhin alle vier Seiten (auch Maskottchen- und T-Shirt-Stand).
+  `GameState.getFacilityAccessCells` und Warteschlangen berücksichtigen für Gäste
+  ausschließlich die gedrehte Vorderseite. `Supply` umfasst `food`, `drinks`,
+  `water` und `goods` (Allgemeine Waren für alles außer den drei Grundtypen).
+  Fehlendes `goods` in alten Depots/Ständen wird 0.
 - Saugreiniger halten vor Besuchern, nicht vor Personal. Volle Maschinen
-  entladen an einer Müllablage; sie leeren keine Eimer.
+  entladen an einer Müllablage; sie leeren keine Eimer. Optionales
+  `RoadVehicle.workZones` (3×3-Schlüssel wie Personal) begrenzt
+  Schmutzsuche und Aufnahme; fehlend oder leer = gesamtes Gelände.
+  In der Personalverwaltung erscheinen sie unter Reinigungskraft.
 - Träger behalten Ladung, wenn ein Weg fehlt oder die Ablage voll ist.
 - `updateDepotCarriers` bekommt eine Multi-Goal-`findPath`-Funktion; keine
   Suche pro einzelnem gleichwertigem Ziel in einer Schleife.
@@ -55,7 +65,12 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   **Verwalten**; das Lkw-Icon im Baubereich bleibt dem Baukatalog vorbehalten.
 - Die Logistikansicht mit Untergrund ist ein Overlay
   (`setLogisticsMode`), unabhängig vom Geländeplaner.
-- Personaltore sperren die Kachel für Besucher, nicht für Personal/Ware.
+- Personaltore sperren die Kachel für Besucher, nicht für Personal,
+  Saugroboter oder Waren-Träger. Lastwagen nutzen das Straßennetz und
+  fahren nicht durch Personaleingänge.
+  Neu gesetzte Tore rasten auf der Ausgangskante der Baurichtung ein
+  (`staffGateDirection`, dieselbe Versatzkonstante wie Personentore);
+  alte Saves ohne Richtung bleiben optisch mittig, der Zugang ändert sich nicht.
 - Laufende Transporte, Ladungen und Bestände gehören in Snapshot und
   Host-Sync.
 - Im Stau bleibt die Nase vorwärts. Eine blockierte Abbiegung wird sofort
@@ -96,14 +111,26 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   auf gesetzten Einbahnen.
 - Gebäude und Fahrzeuge nutzen gemergte ModelKit-Meshes
   (`logisticsModels.ts`): ein Draw-Call pro Instanz, geteilte Geometrie.
+- Träger nutzen `carrierModels.ts`: dieselben Personen-Teile wie Gäste,
+  plus eine geteilte Warnwesten-Geometrie, einen gemergten Handkarren und
+  einen Kistenstapel (`load`). Kein Mesh pro Latte oder Schloss.
   Fahrzeugnasen zeigen lokal nach **+Z** (wie `facing` /
   `atan2(dx, dz)`). Besucherautos wählen die Lackfarbe deterministisch aus
   `VISITOR_CAR_COLORS` über die Fahrzeug-ID.
 - Ampeln stehen rechts an der Fahrbahn und leuchten dem Verkehr entgegen.
   Sie stehen nur auf Straßen, Wegschranken nur auf normalen
   Personenwegen, jeweils mit gesetzter Baurichtung. Nach dem Bau öffnet
-  sich der Info-Dialog. Vier Modi: zeitgesteuerte Slots, Sensor,
-  **Immer offen**, **Immer zu**. Feste Slots brauchen kein Gebiet.
+  sich der Info-Dialog.   Vier Modi: zeitgesteuert, Sensor,
+  **Immer offen**, **Immer zu**. Zeitgesteuert kombiniert
+  Festivalphasen (`lead` Vorbereitung, `festival`, `break` Pause) mit
+  einer Zeitquelle: wiederholende 10-Minuten-Slots je Stunde
+  (Standard, fehlende Felder in alten Saves), **Tageszeit**
+  (24-Stunden-Raster) oder **Nach Zeitplan** (folgt einem
+  `DayPlanOffer` über `isFestivalOfferActive`, also denselben
+  Öffnungszeiten wie Fahrgeschäfte, Buden, Bühnen oder Lampen).
+  Beide Teile gelten per UND: die gewählten Phasen **und** die
+  Zeitquelle müssen offen sein. Feste Slots und die festen
+  Zustände brauchen kein Gebiet.
   Wegschranken haben Durchgang **eine Richtung** (Gegenrichtung bleibt
   gesperrt, auch wenn das Tor offen ist) oder **beide Richtungen**.
   `openInEmergency` (Standard an) öffnet das Tor bei Massenpanik oder
@@ -142,14 +169,23 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   nicht in Kontroll-Schleifen scannen.
 - Kosten: `trafficLightCost` 120 €, `pathBarrierCost` 70 €.
 
+Einbahn-Einfahrten werden auch an der Zielkachel geprüft: kein Einfahren
+gegen einen Pfeil aus einer ungerichteten Kreuzung, seitliches Abbiegen bleibt
+erlaubt. Fahrbewegung, Ausweichen und Rücksetzen prüfen denselben Graphen.
+Alte illegale Routen werden neu geplant; falsch ausgerichtete Fahrzeuge
+werden im Tick korrigiert. Ausparken richtet die Nase beim Einfahren aus.
+
 ## Tests
 
+`tests/carrierModels.ts` (geteilte Gästeteile, Warnweste, Karren).
 `tests/supplyChain.ts` (Lieferung, Umwege, Cache-Recovery).
 `tests/festival.ts` (Lager, Bestellungen). `tests/operations.ts` (Betrieb,
-Saugreiniger auf Wegen und Bühnenvorplatz, Müllwagen bleiben im Stau
+Saugreiniger auf Wegen, Bühnenvorplatz und durch Personaleingang,
+Müllwagen bleiben im Stau
 und hinter der Karte erhalten, Wiedereinfahrt sobald Einstiege frei
-sind, Rückfahrt vom Ausgang, Buden-Nachschub von der Seite/hinten).
-`tests/accessControl.ts` (Ampel/Schranke, Slots, Sensor, Halt vor Rot,
+sind, Rückfahrt vom Ausgang, Buden-Nachschub von der Seite/hinten,
+Personaleingang auf der Kante).
+`tests/accessControl.ts` (Ampel/Schranke, Slots, Tageszeit, Festivalphase, Zeitplan, Sensor, Halt vor Rot,
 opportunistisches Parken inkl. Einbahn-Nebenbucht, Trennlinie,
 Liefer- und Müllwagen-Umweg bei Dauer-Rot, Gebiet).
 

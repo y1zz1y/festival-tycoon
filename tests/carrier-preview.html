@@ -1,0 +1,31 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>Träger – Modellvorschau</title>
+<style>body{margin:0;background:#223632;color:#f2dfb7;font:15px system-ui}header{position:absolute;top:22px;left:28px;pointer-events:none}h1{margin:0;font-size:25px}p{opacity:.75}canvas{display:block;image-rendering:pixelated}</style>
+<header><h1>Träger bleiben sofort erkennbar.</h1><p>Gästefigur · Warnweste · Handkarren · Kisten, wenn beladen</p></header>
+<script type="module">
+import * as T from 'three';
+import { createNudeAnatomy, createPersonGeometry, createPersonDetails, personStyle } from '../src/view/pixelPeople.ts';
+import { createPorterModel } from '../src/view/carrierModels.ts';
+const scene=new T.Scene(); scene.background=new T.Color('#223632');
+const camera=new T.PerspectiveCamera(36,innerWidth/innerHeight,.1,100); camera.position.set(2.1,2.4,4.6);camera.lookAt(0,.35,0);
+const renderer=new T.WebGLRenderer({antialias:false});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(.8);renderer.outputColorSpace=T.SRGBColorSpace;document.body.append(renderer.domElement);
+scene.add(new T.HemisphereLight(0xfff3d6,0x607d65,2.7));const sun=new T.DirectionalLight(0xffe4bd,3);sun.position.set(-3,5,4);scene.add(sun);
+const ground=new T.Mesh(new T.BoxGeometry(6,.1,3.2),new T.MeshStandardMaterial({color:0x718667,roughness:1}));ground.position.y=-.07;scene.add(ground);
+const shirts=[0x374655,0xc26755,0xd2ae5b,0x4b8f8b];
+for(let i=0;i<4;i++){
+  const female=i>=2, variant=i%2, style=personStyle(female?32+variant:variant),g=new T.Group();
+  g.position.set((i-3.2)*.7,0,-.7);g.rotation.y=.35;g.scale.set(style.width,style.height,style.width);scene.add(g);
+  for(const [part,x,y,color] of [[female?'femaleBody':'body',0,.39,shirts[i]],['head',0,.605,style.skin],['leg',-.044,.275,style.trousers],['leg',.044,.275,style.trousers],['arm',female?-.11:-.128,.485,style.skin],['arm',female?.11:.128,.485,style.skin]]){
+    const m=new T.Mesh(createPersonGeometry(part),new T.MeshStandardMaterial({color,vertexColors:true,roughness:.95}));m.position.set(x,y,0);g.add(m)
+  }
+  if(female){const bust=new T.Mesh(createNudeAnatomy('bust'),new T.MeshStandardMaterial({color:shirts[i],vertexColors:true,roughness:.95}));bust.position.y=.39;g.add(bust)}
+  g.add(new T.Mesh(createPersonDetails(style.variant),new T.MeshStandardMaterial({vertexColors:true,roughness:.95})));
+}
+for(let i=0;i<4;i++){
+  const porter=createPorterModel(`carrier-preview-${i}`);
+  porter.position.set((i-1.5)*.85,0,.55);
+  porter.rotation.y=-.4;
+  if(i%2) porter.getObjectByName('load').visible=false;
+  scene.add(porter);
+}
+renderer.render(scene,camera);addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.render(scene,camera)});
+</script></html>

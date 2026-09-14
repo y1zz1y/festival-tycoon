@@ -53,6 +53,9 @@ function packVisitor(visitor: Visitor): PackedVisitor {
     streakingMinutes: visitor.streakingMinutes,
     toplessMinutes: visitor.toplessMinutes,
     bungeeNude: visitor.bungeeNude,
+    ownedMascot: visitor.ownedMascot,
+    heldMascot: visitor.heldMascot,
+    wornShirt: visitor.wornShirt,
     tileOffsetX: visitor.tileOffsetX,
     tileOffsetZ: visitor.tileOffsetZ,
     isDancing: visitor.isDancing,
@@ -136,6 +139,9 @@ function mergeVisitors(snapshot: GameSnapshot, packed: PackedVisitor[]): void {
     visitor.streakingMinutes = item.streakingMinutes
     visitor.toplessMinutes = item.toplessMinutes ?? 0
     visitor.bungeeNude = Boolean(item.bungeeNude)
+    visitor.ownedMascot = Boolean(item.ownedMascot)
+    visitor.heldMascot = Boolean(item.heldMascot)
+    visitor.wornShirt = item.wornShirt
     visitor.tileOffsetX = item.tileOffsetX
     visitor.tileOffsetZ = item.tileOffsetZ
     visitor.isDancing = item.isDancing
@@ -248,6 +254,9 @@ function createRemoteVisitor(item: PackedVisitor): Visitor {
     streakingCooldownMinutes: 0,
     toplessMinutes: item.toplessMinutes ?? 0,
     bungeeNude: Boolean(item.bungeeNude),
+    ownedMascot: Boolean(item.ownedMascot),
+    heldMascot: Boolean(item.heldMascot),
+    wornShirt: item.wornShirt,
     pathSeed: hashStringSeed(item.id),
     wanderNonce: 0,
   }

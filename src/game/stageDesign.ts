@@ -291,7 +291,19 @@ function regridStageDesign(d:StageDesign):StageDesign {
 }
 /** Rewrites StagePart kinds removed from COMPONENTS since a design was saved, so old saves keep loading instead of failing validation. Logs when it actually changes something. */
 export function migrateStageDesign(design:StageDesign):StageDesign {
-  const d=regridStageDesign(design)
+  // Old 2D workshops stored x/z only. Supply ground-level heights before any
+  // regridding: undefined y would otherwise produce NaN vertices (or collisions).
+  const missingHeight = !Number.isFinite(design.height)
+  const missingPartHeight = design.parts.some(part => !Number.isFinite(part.y))
+  const normalized = missingHeight || missingPartHeight ? {
+    ...design,
+    ...(missingHeight ? {
+      tileHeight: design.tileHeight ?? STAGE_TILE_HEIGHT,
+      height: (design.tileHeight ?? STAGE_TILE_HEIGHT) * STAGE_TILE_DETAIL,
+    } : {}),
+    parts: design.parts.map(part => Number.isFinite(part.y) ? part : { ...part, y: 0 }),
+  } : design
+  const d=regridStageDesign(normalized)
   let changed=false,turned=false
   /** The facing a module in a Pixel-LED-Wand must have: out along the truss face its wall is bolted to, resolved through however many modules the wall was grown by. */
   const wallFacing=(part:StagePart):number|undefined=>{

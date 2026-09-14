@@ -75,13 +75,23 @@ import { BUILDINGS, WORLD_SIZE } from '../game/catalog'
 import type { BuildingKind } from '../game/catalog'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { isFestivalOfferActive } from '../game/dayPlan'
-import { COASTER_TYPES, computeTrackFrame, sampleCoasterTrack } from '../game/coasters'
+import {
+  COASTER_TYPES,
+  computeTrackFrame,
+  getSmoothedCoasterPiecePoints,
+  sampleCoasterTrack,
+  smoothTrackDisplayPoints,
+} from '../game/coasters'
 import { createBungeeModel, animateBungee, setBungeeJumper } from './bungee'
 import { createNudeAnatomy, createPersonGeometry, PersonDetailsView, personSeed, personStyle } from './pixelPeople'
+import { SouvenirPropsView } from './souvenirMeshes'
+import { mascotVariant } from '../game/shopGoods'
 import { createCoasterSpecial } from './coasterSpecials'
 import { COASTER_CAR_SEATS, createCoasterCar } from './coasterCars'
 import type { Coaster, TrackPoint } from '../game/coasters'
 import type { CashEffect, GameSnapshot, PlacedBuilding, Visitor } from '../game/GameState'
+import { usesGateEdgePlacement } from '../game/accessControl'
+import { queueDirectionVector, stallQueueLaneOffset } from '../game/queueLanes'
 import { CampingView } from './CampingView'
 import { FireworksView } from './FireworksView'
 import { CrowdingView } from './CrowdingView'
@@ -208,7 +218,7 @@ const WALK_SPEED = 2.8
 const WALK_RUN_SPEED = 5.6
 const WALK_LOOK_SENSITIVITY = 0.0024
 const WALK_BLOCKED_KINDS = new Set<string>([
-  'food', 'toilet', 'ride', 'alcohol', 'securityGate', 'tree', 'hedge', 'shrub', 'rock', 'statue',
+  'food', 'toilet', 'ride', 'alcohol', 'mascot', 'shirt', 'securityGate', 'tree', 'hedge', 'shrub', 'rock', 'statue',
   'picnicTable', 'parasol', 'fence', 'stage', 'directionalSpeaker', 'omniSpeaker', 'ambulanceGarage',
   'busStop', 'busDepot', 'wasteDepot', 'specialDepot', 'generator', 'backupGenerator', 'foh', 'delayTower',
   'videoWall', 'laserShow', 'fireworkBattery',
@@ -358,6 +368,7 @@ export class WorldView {
   private visitorBodyInstances: InstancedMesh | null = null
   private visitorFemaleBodyInstances: InstancedMesh | null = null
   private personDetails = new PersonDetailsView()
+  private souvenirProps = new SouvenirPropsView()
   private visitorHeadInstances: InstancedMesh | null = null
   private visitorLeftLegInstances: InstancedMesh | null = null
   private visitorRightLegInstances: InstancedMesh | null = null
@@ -1059,6 +1070,18 @@ export class WorldView {
 
   private resolveStaffPosition(id: string, snapshot: Readonly<GameSnapshot>): { x: number; y: number; z: number } | null {
     const carrier = snapshot.festival.infrastructure.routes.find((r) => r.id === id)
+    const sweeper = snapshot.logistics.roadVehicles.find(
+      (vehicle) => vehicle.id === id && vehicle.kind === 'sweeper',
+    )
+    if (sweeper) {
+      const x = sweeper.cell?.x ?? sweeper.position.x
+      const z = sweeper.cell?.z ?? sweeper.position.z
+      return {
+        x: x + 0.5,
+        y: getTerrainHeight(snapshot.terrain, x, z),
+        z: z + 0.5,
+      }
+    }
     return (
       snapshot.staff.find((p) => p.id === id) ??
       this.supplyChainView.getCarrierPosition(id) ??
@@ -1156,7 +1179,10 @@ export class WorldView {
     const position = this.resolveStaffPosition(id, snapshot)
     if (!position) return null
     const member = snapshot.staff.find((entry) => entry.id === id)
-    return { x: position.x, y: position.y, z: position.z, facing: member?.facing ?? 0 }
+    const sweeper = snapshot.logistics.roadVehicles.find(
+      (vehicle) => vehicle.id === id && vehicle.kind === 'sweeper',
+    )
+    return { x: position.x, y: position.y, z: position.z, facing: member?.facing ?? sweeper?.facing ?? 0 }
   }
 
   private renderPersonPreview(slot: PersonPreviewSlot | null, snapshot: Readonly<GameSnapshot>): void {
@@ -1257,7 +1283,6 @@ export class WorldView {
       this.walkStickX = 0
       this.walkStickZ = 0
       this.walkLookActive = false
-      if (document.pointerLockElement === this.canvas) document.exitPointerLock()
       this.cameraTarget.set(this.walkX, 0, this.walkZ)
       this.updateCamera()
     }
@@ -1350,6 +1375,7 @@ export class WorldView {
   setCoasterConstructionPreview(points: readonly TrackPoint[]): void {
     disposeChildren(this.coasterPreview)
     if (points.length < 2) return
+    const preview = smoothTrackDisplayPoints(points)
     const material = new MeshStandardMaterial({
       color: 0x65e6ee,
       transparent: true,
@@ -1357,9 +1383,9 @@ export class WorldView {
       depthWrite: false,
     })
     ;[-0.15, 0.15].forEach((offset) => {
-      const railPoints = points.map((point, index) => {
-        const previous = points[Math.max(0, index - 1)] ?? point
-        const next = points[Math.min(points.length - 1, index + 1)] ?? point
+      const railPoints = preview.map((point, index) => {
+        const previous = preview[Math.max(0, index - 1)] ?? point
+        const next = preview[Math.min(preview.length - 1, index + 1)] ?? point
         const frame = computeTrackFrame(
           {
             x: next.x - previous.x,
@@ -1380,7 +1406,7 @@ export class WorldView {
         new Mesh(
           new TubeGeometry(
             new CatmullRomCurve3(railPoints),
-            Math.max(4, points.length * 3),
+            Math.max(4, preview.length * 3),
             0.05,
             6,
             false,
@@ -1408,11 +1434,12 @@ export class WorldView {
   ): void {
     disposeChildren(this.coasterSelection)
     if (points.length < 2) return
+    const preview = smoothTrackDisplayPoints(points)
     const curve = new CatmullRomCurve3(
-      points.map((point) => new Vector3(point.x + 0.5, point.y + 0.27, point.z + 0.5)),
+      preview.map((point) => new Vector3(point.x + 0.5, point.y + 0.27, point.z + 0.5)),
     )
     const marker = new Mesh(
-      new TubeGeometry(curve, Math.max(4, points.length * 3), 0.105, 7, false),
+      new TubeGeometry(curve, Math.max(4, preview.length * 3), 0.105, 7, false),
       new MeshStandardMaterial({
         color: 0xff4fc3,
         emissive: 0x5d123e,
@@ -1542,6 +1569,7 @@ export class WorldView {
       hash = Math.imul(hash, 33) + (item.pathSlope ?? 0) + 4
       hash = Math.imul(hash, 33) + (item.queueDirection ?? 0)
       hash = Math.imul(hash, 33) + (item.queueEntryDirection ?? 0)
+      hash = Math.imul(hash, 33) + (item.queueSplit ? 7 : 1)
       hash = Math.imul(hash, 33) + (item.pathType === 'queue' ? 3 : 1)
       hash = Math.imul(hash, 33) + (item.wayType ? [...item.wayType].reduce((n, c) => n + c.charCodeAt(0), 0) : 0)
       if (item.stageDesign) for (const c of JSON.stringify(item.stageDesign)) hash = Math.imul(hash,33) + c.charCodeAt(0)
@@ -1906,7 +1934,7 @@ export class WorldView {
       roof.position.y = 0.79
       group.add(body, roof)
 
-      if (kind === 'food' || kind === 'alcohol') {
+      if (kind === 'food' || kind === 'alcohol' || kind === 'mascot' || kind === 'shirt') {
         const counterMaterial = new MeshStandardMaterial({ color: 0xfff4d6 })
         for (const [x, z, yaw] of [
           [0, 0.43, 0],
@@ -1940,7 +1968,7 @@ export class WorldView {
       }
     }
 
-    if (['food', 'toilet', 'ride', 'alcohol', 'securityGate'].includes(kind)) {
+    if (['food', 'toilet', 'ride', 'alcohol', 'mascot', 'shirt', 'securityGate'].includes(kind)) {
       const arrow = new Mesh(
         new ConeGeometry(0.13, 0.32, 3),
         new MeshStandardMaterial({ color: 0xffe052, emissive: 0x6b5200 }),
@@ -2149,6 +2177,11 @@ export class WorldView {
       )
       group.add(rails)
       rails.add(left, right)
+      if (path.queueSplit) {
+        const divider = new Mesh(new BoxGeometry(0.04, 0.16, length), material)
+        divider.position.set(0, 0.16, 0)
+        rails.add(divider)
+      }
     } else {
       const openings = new Set<number>()
       if (path.queueDirection !== undefined) openings.add(path.queueDirection)
@@ -2185,18 +2218,37 @@ export class WorldView {
         )
         group.add(wall)
       }
+      if (path.queueSplit && path.queueDirection !== undefined) {
+        const alongZ = path.queueDirection === 0 || path.queueDirection === 2
+        const divider = new Mesh(
+          new BoxGeometry(alongZ ? 0.04 : 0.88, 0.16, alongZ ? 0.88 : 0.04),
+          material,
+        )
+        divider.position.set(0, 0.16, 0)
+        group.add(divider)
+      }
     }
 
     if (path.queueDirection !== undefined) {
-      const arrow = new Mesh(new ConeGeometry(0.09, 0.24, 3), arrowMaterial)
-      arrow.position.y = path.pathSlope ? -path.pathSlope / 2 + 0.15 : 0.12
-      arrow.rotation.set(
-        Math.PI / 2,
-        ((path.queueDirection - (path.pathSlopeDirection ?? 0) + 4) % 4) *
-          (Math.PI / 2),
-        0,
-      )
-      group.add(arrow)
+      const headingSteps =
+        ((path.queueDirection - (path.pathSlope ? path.pathSlopeDirection ?? 0 : 0) + 4) % 4)
+      const heading = headingSteps * (Math.PI / 2)
+      const arrowY = path.pathSlope ? -path.pathSlope / 2 + 0.15 : 0.12
+      const placeArrow = (lane: 'inbound' | 'outbound') => {
+        const arrow = new Mesh(new ConeGeometry(0.09, 0.24, 3), arrowMaterial)
+        const shift = path.queueSplit
+          ? stallQueueLaneOffset(queueDirectionVector(headingSteps), lane)
+          : { x: 0, z: 0 }
+        arrow.position.set(shift.x, arrowY, shift.z)
+        arrow.rotation.set(
+          Math.PI / 2,
+          lane === 'outbound' ? heading + Math.PI : heading,
+          0,
+        )
+        group.add(arrow)
+      }
+      placeArrow('inbound')
+      if (path.queueSplit) placeArrow('outbound')
     }
   }
 
@@ -2224,15 +2276,25 @@ export class WorldView {
       const type = COASTER_TYPES[coaster.typeId]
       const coasterGroup = new Group()
       coasterGroup.userData.coasterId = coaster.id
+      const smoothedPieces = getSmoothedCoasterPiecePoints(coaster)
+      const wrapJoins = Boolean(coaster.closed)
       coaster.pieces.forEach((piece, pieceIndex) => {
         const special = createCoasterSpecial(piece)
         if (special) { special.userData.coasterId = coaster.id; special.userData.pieceIndex = pieceIndex; coasterGroup.add(special) }
-        const centerPoints = piece.points.map(
-          (point) => new Vector3(point.x + 0.5, point.y + 0.24, point.z + 0.5),
-        )
-        const frames = piece.points.map((point, index) => {
-          const previous = piece.points[Math.max(0, index - 1)] ?? point
-          const next = piece.points[Math.min(piece.points.length - 1, index + 1)] ?? point
+        const display = smoothedPieces[pieceIndex] ?? piece.points
+        const prevIndex = pieceIndex > 0 ? pieceIndex - 1 : wrapJoins ? smoothedPieces.length - 1 : -1
+        const nextIndex = pieceIndex + 1 < smoothedPieces.length ? pieceIndex + 1 : wrapJoins ? 0 : -1
+        const prevPoints = prevIndex >= 0 ? smoothedPieces[prevIndex] : undefined
+        const nextPoints = nextIndex >= 0 ? smoothedPieces[nextIndex] : undefined
+        const prevGhost = prevPoints && prevPoints.length >= 2 ? prevPoints[prevPoints.length - 2] : undefined
+        const nextGhost = nextPoints && nextPoints.length >= 2 ? nextPoints[1] : undefined
+        const frames = display.map((point, index) => {
+          const previous =
+            index === 0 && prevGhost ? prevGhost : display[Math.max(0, index - 1)] ?? point
+          const next =
+            index === display.length - 1 && nextGhost
+              ? nextGhost
+              : display[Math.min(display.length - 1, index + 1)] ?? point
           return computeTrackFrame(
             {
               x: next.x - previous.x,
@@ -2244,22 +2306,66 @@ export class WorldView {
             point.frameHeading,
           )
         })
+        const centerPoints = display.map(
+          (point) => new Vector3(point.x + 0.5, point.y + 0.24, point.z + 0.5),
+        )
         const railMaterial = new MeshStandardMaterial({
           color: piece.chainLift || piece.kind === 'station' ? 0xe8a735 : type.railColor,
           metalness: 0.45,
           roughness: 0.45,
         })
         ;[-0.15, 0.15].forEach((offset) => {
-          const railPoints = centerPoints.map((point, index) => {
-            const right = frames[index]?.right ?? { x: 1, y: 0, z: 0 }
-            return point
-              .clone()
-              .add(new Vector3(right.x, right.y, right.z).multiplyScalar(offset))
-          })
+          const railPoints = [
+            ...(prevGhost
+              ? [
+                  new Vector3(
+                    prevGhost.x + 0.5,
+                    prevGhost.y + 0.24,
+                    prevGhost.z + 0.5,
+                  ).add(
+                    new Vector3(
+                      (frames[0]?.right.x ?? 1) * offset,
+                      (frames[0]?.right.y ?? 0) * offset,
+                      (frames[0]?.right.z ?? 0) * offset,
+                    ),
+                  ),
+                ]
+              : []),
+            ...centerPoints.map((point, index) => {
+              const right = frames[index]?.right ?? { x: 1, y: 0, z: 0 }
+              return point
+                .clone()
+                .add(new Vector3(right.x, right.y, right.z).multiplyScalar(offset))
+            }),
+            ...(nextGhost
+              ? [
+                  new Vector3(
+                    nextGhost.x + 0.5,
+                    nextGhost.y + 0.24,
+                    nextGhost.z + 0.5,
+                  ).add(
+                    new Vector3(
+                      (frames.at(-1)?.right.x ?? 1) * offset,
+                      (frames.at(-1)?.right.y ?? 0) * offset,
+                      (frames.at(-1)?.right.z ?? 0) * offset,
+                    ),
+                  ),
+                ]
+              : []),
+          ]
+          if (railPoints.length < 2) return
+          const curve = new CatmullRomCurve3(railPoints)
+          const startT = prevGhost && railPoints.length > 2 ? 1 / (railPoints.length - 1) : 0
+          const endT = nextGhost && railPoints.length > 2 ? 1 - 1 / (railPoints.length - 1) : 1
+          const sampleCount = Math.max(8, display.length * 3)
+          const sampled = Array.from({ length: sampleCount + 1 }, (_, index) =>
+            curve.getPoint(startT + (endT - startT) * (index / sampleCount)),
+          ).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z))
+          if (sampled.length < 2) return
           const rail = new Mesh(
             new TubeGeometry(
-              new CatmullRomCurve3(railPoints),
-              Math.max(4, railPoints.length * 3),
+              new CatmullRomCurve3(sampled),
+              Math.max(4, sampled.length),
               0.035,
               6,
               false,
@@ -2277,9 +2383,9 @@ export class WorldView {
             const frame = frames[sleeperIndex * 2]
             if (!frame) return
             const forwardPoint =
-              piece.points[Math.min(piece.points.length - 1, sleeperIndex * 2 + 1)] ??
-              piece.points[sleeperIndex * 2]
-            const currentPoint = piece.points[sleeperIndex * 2]
+              display[Math.min(display.length - 1, sleeperIndex * 2 + 1)] ??
+              display[sleeperIndex * 2]
+            const currentPoint = display[sleeperIndex * 2]
             if (!forwardPoint || !currentPoint) return
             const forward = new Vector3(
               forwardPoint.x - currentPoint.x,
@@ -2323,7 +2429,7 @@ export class WorldView {
           .filter((_, index) => index % 4 === 0)
           .forEach((point, supportIndex) => {
             if (point.y <= 0.3) return
-            const source = piece.points[supportIndex * 4]
+            const source = display[supportIndex * 4]
             const cellKey = `${Math.round(source?.x ?? point.x - 0.5)}:${Math.round(source?.z ?? point.z - 0.5)}`
             const lowerTrack = (trackHeightsByCell.get(cellKey) ?? []).some(
               (height) => height < point.y - 0.45 && height > 0.15,
@@ -2482,7 +2588,9 @@ export class WorldView {
 
   private updateVisitors(visitors: readonly Visitor[]): void {
     if (this.personDetails.group.parent !== this.visitors) this.visitors.add(this.personDetails.group)
+    if (this.souvenirProps.group.parent !== this.visitors) this.visitors.add(this.souvenirProps.group)
     this.personDetails.begin(Math.max(1, visitors.length))
+    this.souvenirProps.begin(Math.max(1, visitors.length))
     this.ensureVisitorInstances(Math.max(1, visitors.length))
     const meshes = this.visitorPickMeshes
     if (meshes.length === 0) return
@@ -2696,11 +2804,12 @@ export class WorldView {
             ? Math.PI * 0.42
             : stride * (visitor.isDancing ? 1.15 : strength)
       const headTilt = visitor.emotion === 'sad' ? 0.35 : 0
+      const wornShirt = !shirtless ? visitor.wornShirt : undefined
       const shirtColor = shirtless
         ? this.visitorSkinColor
         : fleeing
-          ? this.visitorColor.setHex(visitor.color).lerp(this.visitorPanicTint, 0.55)
-          : this.visitorColor.setHex(visitor.color)
+          ? this.visitorColor.setHex(wornShirt?.color ?? visitor.color).lerp(this.visitorPanicTint, 0.55)
+          : this.visitorColor.setHex(wornShirt?.color ?? visitor.color)
       const legColor = streaking || (appearance.skirt && !shirtless) ? this.visitorSkinColor : this.visitorPantsColor
 
       this.visitorPose.position.set(displayX, displayY, displayZ)
@@ -2715,6 +2824,23 @@ export class WorldView {
       this.setVisitorLimb(index, this.visitorLeftArmInstances, appearance.female ? -.11 : -.128, .485, 0, visitor.isDancing ? -1.7 - stride * .45 : -limbSwing * .65, this.visitorSkinColor)
       this.setVisitorLimb(index, this.visitorRightArmInstances, appearance.female ? .11 : .128, .485, 0, visitor.isDancing ? -1.7 + stride * .45 : limbSwing * .65, this.visitorSkinColor)
       this.personDetails.place(appearance.variant, this.visitorPose.matrix, !shirtless)
+      if (wornShirt) {
+        this.souvenirProps.placeShirt(wornShirt.style, this.visitorPose.matrix, wornShirt.color)
+      }
+      if (visitor.heldMascot && !streaking) {
+        const shoulder = appearance.female ? 0.11 : 0.128
+        const armSwing = visitor.isDancing ? -1.7 + stride * 0.45 : limbSwing * 0.65
+        this.visitorLimb.position.set(shoulder, 0.485, 0)
+        this.visitorLimb.rotation.set(armSwing, 0, 0)
+        this.visitorLimb.scale.set(1, 1, 1)
+        this.visitorLimb.updateMatrix()
+        this.visitorMatrix.multiplyMatrices(this.visitorPose.matrix, this.visitorLimb.matrix)
+        this.visitorLimb.position.set(0, -0.175, 0.03)
+        this.visitorLimb.rotation.set(0, 0, 0)
+        this.visitorLimb.updateMatrix()
+        this.visitorMatrix.multiplyMatrices(this.visitorMatrix, this.visitorLimb.matrix)
+        this.souvenirProps.placeMascot(this.visitorMatrix, mascotVariant(seed))
+      }
       if (appearance.female) {
         if (shirtless) {
           this.setVisitorLimb(index, this.visitorBreastInstances, 0, .39, 0, 0, this.visitorSkinColor)
@@ -2764,6 +2890,7 @@ export class WorldView {
     })
 
     this.personDetails.finish()
+    this.souvenirProps.finish()
     const used = visitors.length
     meshes.forEach((mesh) => {
       mesh.count = used
@@ -3008,9 +3135,8 @@ export class WorldView {
       if (this.walkMode) {
         this.walkLookActive = true
         this.lastPointer.set(event.clientX, event.clientY)
-        if (event.pointerType === 'mouse' && document.pointerLockElement !== this.canvas) {
-          void this.canvas.requestPointerLock()
-        }
+        // Looking around is dragging, not pointer lock: a locked pointer is a hidden
+        // pointer, and the cursor stays visible on foot the same way it does on the map.
         try { this.canvas.setPointerCapture(event.pointerId) } catch { /* already captured */ }
         return
       }
@@ -3090,11 +3216,8 @@ export class WorldView {
     })
     this.canvas.addEventListener('pointermove', (event) => {
       if (this.walkMode) {
-        const locked = document.pointerLockElement === this.canvas
-        if (locked || this.walkLookActive) {
-          const dx = locked ? event.movementX : event.clientX - this.lastPointer.x
-          const dy = locked ? event.movementY : event.clientY - this.lastPointer.y
-          this.lookWalk(dx, dy)
+        if (this.walkLookActive) {
+          this.lookWalk(event.clientX - this.lastPointer.x, event.clientY - this.lastPointer.y)
         }
         this.lastPointer.set(event.clientX, event.clientY)
         return
@@ -3553,7 +3676,7 @@ export class WorldView {
       tool === 'roadDirection' ||
       tool === 'roadSeparator' ||
       tool === 'trafficLight' ||
-      tool === 'pathBarrier'
+      usesGateEdgePlacement(tool)
     const material = this.preview.material as MeshStandardMaterial
     material.color.set(valid ? 0x55dd88 : 0xe84d4d)
 
@@ -3563,7 +3686,7 @@ export class WorldView {
       const directing =
         tool === 'roadDirection' ||
         tool === 'trafficLight' ||
-        tool === 'pathBarrier'
+        usesGateEdgePlacement(tool)
       const arrowMaterial = this.previewArrow.material as MeshBasicMaterial
       if (directing) {
         material.opacity = 0.22

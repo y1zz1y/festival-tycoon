@@ -201,6 +201,8 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           buildingItem('food'),
           buildingItem('toilet'),
           buildingItem('alcohol'),
+          buildingItem('mascot'),
+          buildingItem('shirt'),
           buildingItem('securityGate'),
         ],
       },
@@ -214,7 +216,6 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         label: 'Festival',
         items: [
           buildingItem('stage'),
-          toolItem('stageForecourt', 'Bühnenvorplatz', '🎉', '9 Personen pro Feld'),
           buildingItem('directionalSpeaker'),
           buildingItem('omniSpeaker'),
           toolItem('powerCable', 'Stromkabel', '🔌', '18 € je Feld'),
@@ -271,7 +272,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           toolItem('supplyDepot', 'Depot', '🏪', '400 € · am Fußweg', {
             previewSupply: 'supply',
           }),
-          toolItem('staffGate', 'Personaltor', '🛂', '80 € · nur Personal'),
+          toolItem('staffGate', 'Personaltor', '🛂', '80 € · Personal und Saugroboter'),
         ],
       },
       {
@@ -370,7 +371,6 @@ export function placeableTools(): Tool[] {
     'camping',
     'medicalArea',
     'wasteDump',
-    'stageForecourt',
     'road',
     'parkingArea',
     'roadDirection',

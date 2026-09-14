@@ -82,6 +82,7 @@ export type RoadVehicle = {
   cargo: number
   deliveryId?: string | null
   parkingSearchCursor?: number
+  workZones?: string[]
 }
 
 export const ROAD_VEHICLE_KIND_LABELS: Record<
@@ -599,6 +600,7 @@ function normalizeRoadVehicle(value: unknown): RoadVehicle | null {
     cargo: nonNegativeNumber(source.cargo),
     deliveryId: nullableString(source.deliveryId),
     parkingSearchCursor: Math.floor(nonNegativeNumber(source.parkingSearchCursor)),
+    workZones: Array.isArray(source.workZones) ? stringArray(source.workZones) : undefined,
   }
 }
 

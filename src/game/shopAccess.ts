@@ -1,6 +1,6 @@
 import type { BuildingKind } from './catalog'
 
-export const SHOP_SERVICE_KINDS = ['food', 'alcohol'] as const
+export const SHOP_SERVICE_KINDS = ['food', 'alcohol', 'mascot', 'shirt'] as const
 export type ShopServiceKind = (typeof SHOP_SERVICE_KINDS)[number]
 
 export const CARDINAL_OFFSETS = [
@@ -11,7 +11,7 @@ export const CARDINAL_OFFSETS = [
 ] as const
 
 export function isShopServiceKind(kind: BuildingKind | string): kind is ShopServiceKind {
-  return kind === 'food' || kind === 'alcohol'
+  return kind === 'food' || kind === 'alcohol' || kind === 'mascot' || kind === 'shirt'
 }
 
 export function adjacentCardinalCells(x: number, z: number): Array<{ x: number; z: number }> {

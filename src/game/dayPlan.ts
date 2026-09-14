@@ -2,6 +2,7 @@ export const DAY_PLAN_OFFERS = [
   'food',
   'drinks',
   'toilets',
+  'shops',
   'rides',
   'stages',
   'lights',
@@ -16,6 +17,7 @@ export const DAY_PLAN_OFFER_LABELS: Record<
   food: { icon: '🍔', name: 'Essensbuden' },
   drinks: { icon: '🍺', name: 'Getränkebuden' },
   toilets: { icon: '🚻', name: 'Toiletten' },
+  shops: { icon: '🛍️', name: 'Souvenirläden' },
   rides: { icon: '🎢', name: 'Fahrgeschäfte' },
   stages: { icon: '🎤', name: 'Bühnen & Beschallung' },
   lights: { icon: '💡', name: 'Beleuchtung' },
@@ -33,6 +35,14 @@ export type DayPlan = {
 }
 
 export type FestivalPhase = 'lead' | 'festival' | 'break'
+
+export const FESTIVAL_PHASES = ['lead', 'festival', 'break'] as const
+
+export const FESTIVAL_PHASE_LABELS: Record<FestivalPhase, string> = {
+  lead: 'Vorbereitung',
+  festival: 'Festival',
+  break: 'Pause',
+}
 
 export type FestivalCycleStatus = {
   phase: FestivalPhase
@@ -60,6 +70,7 @@ export function createDefaultDayPlan(): DayPlan {
       food: hoursActive((hour) => hour >= 8 && hour < 23),
       drinks: hoursActive((hour) => hour >= 10 || hour < 2),
       toilets: hoursActive(() => true),
+      shops: hoursActive((hour) => hour >= 8 && hour < 23),
       rides: hoursActive((hour) => hour >= 10 && hour < 23),
       stages: hoursActive((hour) => hour >= 14 || hour < 2),
       lights: hoursActive((hour) => hour >= 18 || hour < 7),

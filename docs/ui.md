@@ -13,7 +13,7 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 | Bandplan | `src/musicPlanner.ts` | |
 | Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold |
 | Bühnenwerkstatt | `src/stageEditor.ts`, `src/stageEditor.css` | |
-| Personaldetails | `src/staffDetailsUI.ts` | |
+| Personaldetails | `src/staffDetailsUI.ts` | Infofenster, Bereiche; Saugroboter wie Reinigung |
 | Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | |
 | Ziehbare Fenster | `src/dragPanel.ts` | |
 | Fokus / Texteingabe | `src/uiFocus.ts` | `isTextEntryTarget` |
@@ -30,13 +30,16 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   (Festival, Bühnenwerkstatt, Logistikverwaltung für Bestellungen/Träger,
   Beschwerden, Besucher, Personal, Mehrspieler),
   **Kartenansichten** (Logistik/Untergrund, Gedränge, Attraktivität,
-  Partystimmung) und **Sitzung** (Gelände betreten, Speichern, Park).
-  Die Iconleiste ist etwa ein Viertel größer als die alten 32-px-Kacheln.
-  Linke Baupaletten enden oberhalb der Debug-/Versionsanzeige unten links.
+  Partystimmung) und **Sitzung** (Finanzen, Gelände betreten, Speichern,
+  Park, Debug-Käfer, Einstellungen). Debug-Käfer und FPS-/Versionszeile
+  sind standardmäßig sichtbar; unter Einstellungen → Debug abschaltbar
+  (`localStorage`, nicht im Spielstand). Die Iconleiste ist etwa ein
+  Viertel größer als die alten 32-px-Kacheln. Linke Baupaletten enden
+  oberhalb der Debug-/Versionsanzeige unten links.
   **Abriss** öffnet
   kein Fenster, sondern schaltet den Abrissmodus sofort ein oder aus.
-  Die übrigen Bau-Icons öffnen ein Rasterfenster; Autostraßen docken
-  rechts, alle linken Paletten füllen die Viewport-Höhe, damit der
+  Autostraßen teilen das linke Wegeditor-Fenster; die übrigen Bau-Icons
+  öffnen Rasterfenster. Linke Paletten füllen die Viewport-Höhe, damit der
   Katalog vollständig sichtbar bleibt. Bauhöhe, Drehen und Ebene sitzen
   nicht mehr im Fensterrand: Shift halten und die Maus hoch/runter
   bewegen setzt `buildElevation` (0–6); ein 7×7-Baugitter um das
@@ -44,17 +47,21 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   ein neues Werkzeug oder ein neuer Katalogklick setzt sie auf 0.
   Drehen bleibt über `R` bzw. den Deko-Button. **Wege**
   öffnet kein Raster, sondern das RCT-Fußwegfenster (`#path-construction`).
-  Oben **Weg** oder **Schlange** (gilt für Ziehen und Stückbau). Belag
+  Oben **Weg** oder **Schlange** (gilt für Ziehen und Stückbau). Stand-Schlangen
+  zeigen eine Mittellinie und zwei Pfeile (Anstehen / Zurück); Attraktionen
+  eine Spur. Belag
   unter **Art** gedrückt halten. Richtung, Neigung und Bauen sind immer
   sichtbar, im Schnellmodus ausgegraut. Unten der Streckenbutton mit
   einem Pfeil (Stückbau, Klick überall) bzw. zwei Pfeilen (frei ziehen).
   **Abreißen** entfernt Wege. Statt Laufrichtung: Schnellzugriff auf Tor
-  (`pathBarrier`), Personaleingang (`staffGate`) und Festival-Einlass
+  (`pathBarrier`), Personaleingang (`staffGate`, Kante wie das Tor) und Festival-Einlass
   (`securityGate`). **Dekoration**, **Attraktionen** und **Logistik** sind
   Bildkataloge: feste 96-px-Kacheln im Raster (`auto-fill`, nicht in die
   Breite gestreckt), Standardbreite 440 px. Name, Zusatztext und **Kosten**
   stehen unten und wechseln beim Darüberfahren. Attraktionen: Fahrgeschäfte,
-  Stände, Camping, Festival (Turmhöhe nur unter Fahrgeschäfte). Logistik:
+  Stände (Imbiss, WC, Getränke, Maskottchen, T-Shirt), Camping, Festival
+  (Turmhöhe nur unter Fahrgeschäfte). Am T-Shirt-Stand stellt das Infofenster
+  Farbe und Schnitt ein. Logistik:
   Waren, Bus, Müll, Krankenhaus (`ambulanceGarage`, `medicalArea`).
   Der Achterbahn-Eintrag öffnet ein RCT2-artiges sequenzielles Fenster:
   Richtung, „Speziell …“, Neigung, Rollen/seitliches Kippen, Bauvorschau
@@ -77,15 +84,28 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   Fahrtrichtung zeigt dieselbe weiße Markierung in der Vorschau.
   Ampel und Wegschranke nutzen dieselbe Richtungspfeil-Vorschau. Nach
   dem Setzen öffnet das Infofenster: vier Modi (Zeit, Sensor, immer
-  offen, immer zu), bei Toren zusätzlich eine/beide Richtungen und
+  offen, immer zu), bei zeitgesteuert zusätzlich **Gilt an**
+  (Vorbereitung / Festival / Pause) und Zeitquelle (Slots je Stunde,
+  Tageszeit-Stundenraster oder Nach Zeitplan aus **Festival planen**),
+  bei Toren zusätzlich eine/beide Richtungen und
   **Im Notfall offen**, Gebiet zeichnen
   (Rechteck addiert, nochmaliges Ziehen über die volle Auswahl entfernt)
   und immer aktuelle Zähler für das Gebiet bzw. die gewählte Regel.
-  Slot-Buttons bleiben im DOM; nur `aria-pressed` und der aktuelle Slot
+  Slot- und Stunden-Buttons bleiben im DOM; nur `aria-pressed` und der
+  aktuelle Slot/die aktuelle Stunde
   werden bei Ticks aktualisiert, damit Klicks nicht verloren gehen.
 - Touch: ein Finger baut/wählt; zwei Finger Kamera. Flächenwerkzeuge: zweiter
   Finger bricht die Auswahl ab.
 - Spieler-sichtbare Steuerung und neue Fenster im Root-`README.md` beschreiben.
+
+Autostraßen: Belag per Art-Hold, freies Linienziehen oder Stückbau mit
+Richtung, Bauen/Enter und Zurück/Backspace. Bestehende Straßen bleiben beim
+Stückbau als Anschluss erhalten und werden durch Zurück nicht entfernt.
+Abriss wirkt auf Straßen. Parkplätze, Pfeile, Ampeln, Trennlinien,
+Zebrastreifen und Tempolimits bleiben im selben linken Fenster. Straßen
+folgen dem Gelände; die Neigungssteuerung ist deshalb deaktiviert.
+Manuell im Browser geprüft: linkes Fenster, Umschalten ohne Werkzeugwechsel
+zu Fußwegen, Startpunkt, nächstes Straßenstück und Rückbau.
 
 ## Tests
 

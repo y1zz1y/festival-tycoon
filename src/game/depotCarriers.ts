@@ -1,8 +1,11 @@
 import { getTerrainHeight } from './terrain'
+import { bookFinance } from './finance'
 import type { GameSnapshot } from './GameState'
 import type { Point, CarryRoute, Depot } from './supplyChain'
 import { emptyStock } from './supplyChain'
+import { shopSupplyKind } from './shopGoods'
 import type { Supply } from './festivalManagement'
+import { SUPPLIES } from './festivalManagement'
 import { CARDINAL_OFFSETS } from './shopAccess'
 import { wayInfo, type WayType } from './wayTypes'
 
@@ -52,7 +55,7 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
   const go = (r:CarryRoute, goals:Point[]) => { const path=findPath(r.position,goals); if(path===null) return false; r.path=path; return true }
   for (const r of i.routes) {
     if (!r.automatic) continue
-    s.money -= dt*.04
+    bookFinance(s, 'staff', -dt*.04)
     const area=r.workArea
     const inside=(p:{x:number;z:number})=>!area||p.x>=area.minX&&p.x<=area.maxX&&p.z>=area.minZ&&p.z<=area.maxZ
     const home=i.depots.find(d=>d.id===r.depotId)
@@ -107,9 +110,10 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
     }
     const nearer=(a:{x:number;z:number},b:{x:number;z:number})=>Math.abs(a.x-home.x)+Math.abs(a.z-home.z)-Math.abs(b.x-home.x)-Math.abs(b.z-home.z)
     const supplyShops=()=>{
-      const shops=s.buildings.filter(b=>['food','alcohol','toilet'].includes(b.kind)&&inside(b)).sort(nearer)
+      const shops=s.buildings.filter(b=>shopSupplyKind(b.kind)&&inside(b)).sort(nearer)
       for(const shop of shops) {
-        const kind:Supply=shop.kind==='food'?'food':shop.kind==='alcohol'?'drinks':'water'
+        const kind=shopSupplyKind(shop.kind)
+        if(!kind) continue
         const need=40-(i.shops[shop.id]?.[kind]??0)-reserved(shop.id,kind)
         if(assign(home,shop,'shop',kind,need)) return true
       }
@@ -118,7 +122,7 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
     if (home.role === 'delivery') {
       if (!supplyShops()) {
         const storages=i.depots.filter(d=>d.id!==home.id && d.role!=='delivery' && inside(d)).sort(nearer)
-        outer: for (const kind of ['food','drinks','water'] as Supply[]) {
+        outer: for (const kind of Object.keys(SUPPLIES) as Supply[]) {
           if(home.stock[kind]-reserved(home.id,kind,true,r)<=0) continue
           for(const storage of storages) {
             const need=storage.minimum[kind]-storage.stock[kind]-reserved(storage.id,kind)
@@ -129,7 +133,7 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
       continue
     }
     let assigned=false
-    for(const kind of ['food','drinks','water'] as Supply[]) {
+    for(const kind of Object.keys(SUPPLIES) as Supply[]) {
       const need=home.minimum[kind]-home.stock[kind]-reserved(home.id,kind)
       if(need<=0) continue
       const sources=i.depots.filter(d=>d.id!==home.id && inside(d) && (d.role==='delivery'||d.distribution==='relay')).sort(nearer)

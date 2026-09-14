@@ -6,7 +6,9 @@ import type { GameSnapshot } from '../game/GameState'
 import { groundInfo } from '../game/ground'
 import { getTerrainHeight } from '../game/terrain'
 import { disposeChildren } from './disposeObject3D'
+import { createCarrierDriver, createCarrierFigure, createPorterModel } from './carrierModels'
 import { createRoadVehicleModel, createSupplyStructure } from './logisticsModels'
+import { staffGateWorldPosition, staffGateYaw } from '../game/supplyChain'
 
 export class SupplyChainView {
   group = new Group()
@@ -33,11 +35,11 @@ export class SupplyChainView {
     this.ground.visible = planning
     const i = s.festival.infrastructure
     const gatePaths=s.buildings.filter(b=>b.kind==='path'&&b.staffOnly)
-    const gateStamp=gatePaths.map(b=>`${b.id}:${b.x}:${b.z}:${b.elevation}:${b.rotation}`).join('|')
+    const gateStamp=gatePaths.map(b=>`${b.id}:${b.x}:${b.z}:${b.elevation}:${b.staffGateDirection ?? 'legacy'}:${b.rotation}`).join('|')
     if(gateStamp!==this.gateStamp) {
       this.gateStamp=gateStamp;disposeChildren(this.gates)
       for(const p of gatePaths) {
-        const gate=new Group();gate.position.set(p.x+.5,p.elevation,p.z+.5);gate.rotation.y=p.rotation*Math.PI/2
+        const gate=new Group();const pos=staffGateWorldPosition(p);gate.position.set(pos.x,pos.y,pos.z);gate.rotation.y=staffGateYaw(p)
         this.box(gate,[.08,.9,.08],[-.4,.45,0],0xe2c35c);this.box(gate,[.08,.9,.08],[.4,.45,0],0xe2c35c)
         this.box(gate,[.8,.16,.06],[0,.7,0],0x334e5a);this.gates.add(gate)
       }
@@ -49,7 +51,7 @@ export class SupplyChainView {
       ;(fill.material as MeshStandardMaterial).color.setHex(ratio<=0?0xe86e53:ratio<.25?0xe4b557:0x70c481)
     }
     for(const b of s.buildings) {
-      const kind=b.kind==='food'?'food':b.kind==='alcohol'?'drinks':b.kind==='toilet'?'water':null
+      const kind=b.kind==='food'?'food':b.kind==='alcohol'?'drinks':b.kind==='toilet'?'water':b.kind==='mascot'||b.kind==='shirt'?'goods':null
       if(!kind) continue
       stockIds.add(b.id)
       let model=this.stockModels.get(b.id)
@@ -57,7 +59,7 @@ export class SupplyChainView {
       model.position.set(b.x+.5,b.elevation+1.1,b.z+.06)
       paintBar(model,1,Math.min(1,(i.shops[b.id]?.[kind]??0)/40),0)
     }
-    const supplies=['food','drinks','water'] as const
+    const supplies=['food','drinks','water','goods'] as const
     for(const depot of i.depots) {
       stockIds.add(depot.id)
       let model=this.stockModels.get(depot.id)
@@ -119,18 +121,20 @@ export class SupplyChainView {
       active.add(id)
       let model = this.actors.get(id)
       if (!model) {
-        model = new Group()
         if (truck) {
-          const body = createRoadVehicleModel('deliveryTruck', id)
-          model.add(body)
+          model = new Group()
+          model.add(createRoadVehicleModel('deliveryTruck', id))
+          const load = new Group(); load.name = 'load'; model.add(load)
+          model.add(createCarrierDriver(id))
+        } else if (id.startsWith('carrier-')) {
+          model = createPorterModel(id)
+          model.traverse(object => { object.userData.staffId = id })
         } else {
-          this.box(model, [.18, .3, .16], [-.13, .34, -.15], 0x37b7a3)
-          this.box(model, [.16, .16, .16], [-.13, .58, -.15], 0xe7bc8c)
-          this.box(model, [.36, .1, .35], [.08, .14, .17], 0x453d31)
+          model = new Group()
+          model.add(createCarrierFigure(id))
+          const load = new Group(); load.name = 'load'; model.add(load)
+          const driver = new Group(); driver.name = 'driver'; driver.visible = false; model.add(driver)
         }
-        const load = new Group(); load.name = 'load'; this.box(load, [.29, .22, .27], [.08, .3, .17], 0xcba16e); model.add(load)
-        const driver = new Group(); driver.name = 'driver'; this.box(driver, [.18, .36, .18], [.4, .3, .38], 0xe39342); this.box(driver, [.16, .16, .16], [.4, .56, .4], 0xe9ba90); model.add(driver)
-        if (!truck && id.startsWith('carrier-')) model.traverse(object=>object.userData.staffId=id)
         model.position.set(x + .5, y, z + .5)
         model.userData.transportTarget = new Vector3(x + .5, y, z + .5)
         model.userData.transportFacing = 0
@@ -171,6 +175,13 @@ export class SupplyChainView {
       if (terrainHeight) model.position.y = terrainHeight(model.position.x, model.position.z, model.position.y)
       const angle=Number(model.userData.transportFacing??0)-model.rotation.y
       model.rotation.y+=Math.atan2(Math.sin(angle),Math.cos(angle))*factor
+      const moving = model.position.distanceToSquared(target) > 4e-4
+      const phase = time * 0.009 + Number(model.userData.walkPhase ?? 0)
+      model.traverse((object) => {
+        if (typeof object.userData.walkLimb === 'number') {
+          object.rotation.x = (moving ? Math.sin(phase) : 0) * 0.55 * object.userData.walkLimb
+        }
+      })
     }
   }
 

@@ -102,7 +102,10 @@ export function mountFestivalUI(
     weather.dataset.weather = f.enabled && !f.finished ? f.weather : 'sun'
     if (f.reports.length > reportCount) { reportCount = f.reports.length; toast('Neue Festival-Tagesabrechnung verfügbar') }
     else reportCount = f.reports.length
-    open.textContent = f.enabled ? (f.finished ? '🎪 Festival · Ergebnis' : `🎪 Festival · ${WEATHER_NAMES[f.weather]}`) : '🎪 Festival planen'
+    // Icon-only, like every other button in the toolbar — the state goes into the tooltip.
+    const openLabel = f.enabled ? (f.finished ? 'Festival · Ergebnis' : `Festival · ${WEATHER_NAMES[f.weather]}`) : 'Festival planen'
+    open.title = openLabel
+    open.setAttribute('aria-label', openLabel)
     if (panel.hidden) return
     if (!force && performance.now() - lastRender < 500) return
     lastRender = performance.now()

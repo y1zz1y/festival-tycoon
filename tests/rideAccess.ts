@@ -29,6 +29,7 @@ export function testRideAccess(fixture: (n?:number)=>GameState): void {
     for (let x=4;x<=10;x++) game.placePathSegment(x,1,0)
     assert.equal(game.getRideAccessIssue(ride),null)
     assert.equal(game.getPathAt(6,0)!.queueDirection,1,'queue points toward selected gate')
+    assert.equal(game.getPathAt(6,0)!.queueSplit, false, 'attraction queues stay a single undivided lane')
     const queue=(game as any).getBuildingQueueCells(ride)
     assert.deepEqual(queue.map((c:any)=>[c.x,c.z]),[[6,0],[5,0]])
     s.dayPlan.offers.rides.fill(true)

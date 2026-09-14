@@ -1,14 +1,57 @@
 import type { Direction } from './logistics'
 import { DIRECTION_OFFSETS, oppositeDirection } from './logistics'
+import {
+  DAY_PLAN_OFFERS,
+  FESTIVAL_PHASES,
+  getFestivalCycleStatus,
+  isFestivalOfferActive,
+  type DayPlan,
+  type DayPlanOffer,
+  type FestivalPhase,
+} from './dayPlan'
 
 export const ACCESS_SLOTS_PER_HOUR = 6
 export const ACCESS_SLOT_MINUTES = 60 / ACCESS_SLOTS_PER_HOUR
+export const ACCESS_HOURS_PER_DAY = 24
+const ACCESS_MINUTES_PER_DAY = ACCESS_HOURS_PER_DAY * 60
 
 export type AccessControlKind = 'trafficLight' | 'pathBarrier'
 export type AccessControlMode = 'schedule' | 'sensor' | 'always' | 'locked'
 export type AccessSignal = 'open' | 'closed'
 export type AccessPolarity = 'open' | 'closed'
 export type BarrierPassage = 'oneWay' | 'both'
+export type AccessScheduleTime = 'hourlySlots' | 'hours' | 'dayPlan'
+
+export const ACCESS_SCHEDULE_TIMES = [
+  'hourlySlots',
+  'hours',
+  'dayPlan',
+] as const
+
+export const ACCESS_SCHEDULE_TIME_LABELS: Record<AccessScheduleTime, string> = {
+  hourlySlots: 'Slots je Stunde',
+  hours: 'Tageszeit',
+  dayPlan: 'Nach Zeitplan',
+}
+
+export type AccessScheduleContext = {
+  day: number
+  dayPlan: Readonly<DayPlan>
+}
+
+export type AccessControlPatch = {
+  mode?: AccessControlMode
+  openSlots?: boolean[]
+  polarity?: AccessPolarity
+  sensorKind?: TrafficSensorKind | PathSensorKind
+  sensorThreshold?: number
+  passage?: BarrierPassage
+  openInEmergency?: boolean
+  scheduleTime?: AccessScheduleTime
+  scheduleHours?: boolean[]
+  scheduleOffer?: DayPlanOffer
+  schedulePhases?: FestivalPhase[]
+}
 
 export type TrafficSensorKind =
   | 'freeParking'
@@ -36,6 +79,10 @@ export type AccessControlBase = {
   sensorThreshold: number
   area: AccessAreaCell[]
   signal: AccessSignal
+  scheduleTime: AccessScheduleTime
+  scheduleHours: boolean[]
+  scheduleOffer: DayPlanOffer
+  schedulePhases: FestivalPhase[]
 }
 
 export type TrafficLight = AccessControlBase & {
@@ -102,6 +149,31 @@ export function accessEdgeKey(x: number, z: number, direction: Direction): strin
   return `${x}:${z}:${direction}`
 }
 
+/** World offset from the tile center onto the outgoing edge, shared by Personentor and Personaleingang. */
+export const GATE_EDGE_OFFSET = 0.42
+
+export function gateEdgeWorldPosition(
+  x: number,
+  z: number,
+  elevation: number,
+  direction: Direction,
+): { x: number; y: number; z: number } {
+  const forward = DIRECTION_OFFSETS[direction]
+  return {
+    x: x + 0.5 + forward.x * GATE_EDGE_OFFSET,
+    y: elevation,
+    z: z + 0.5 + forward.z * GATE_EDGE_OFFSET,
+  }
+}
+
+export function usesGateEdgePlacement(tool: string): boolean {
+  return tool === 'pathBarrier' || tool === 'staffGate'
+}
+
+export function normalizeStaffGateDirection(value: unknown): Direction | undefined {
+  return value === 0 || value === 1 || value === 2 || value === 3 ? value : undefined
+}
+
 export function currentAccessSlot(minute: number): number {
   const minuteOfHour = ((Math.floor(minute) % 60) + 60) % 60
   return Math.min(
@@ -114,11 +186,46 @@ export function defaultOpenSlots(): boolean[] {
   return [true, true, true, false, false, false]
 }
 
+export function defaultScheduleHours(): boolean[] {
+  return Array.from({ length: ACCESS_HOURS_PER_DAY }, (_, hour) => hour >= 8 && hour < 23)
+}
+
+export function defaultSchedulePhases(): FestivalPhase[] {
+  return [...FESTIVAL_PHASES]
+}
+
 export function normalizeOpenSlots(value: unknown): boolean[] {
   const source = Array.isArray(value) ? value : []
   return Array.from({ length: ACCESS_SLOTS_PER_HOUR }, (_, index) =>
     Boolean(source[index]),
   )
+}
+
+export function normalizeScheduleTime(value: unknown): AccessScheduleTime {
+  return value === 'hours' || value === 'dayPlan' ? value : 'hourlySlots'
+}
+
+export function normalizeScheduleHours(value: unknown): boolean[] {
+  const fallback = defaultScheduleHours()
+  const source = Array.isArray(value) ? value : fallback
+  return Array.from({ length: ACCESS_HOURS_PER_DAY }, (_, hour) =>
+    Boolean(source[hour] ?? fallback[hour]),
+  )
+}
+
+export function normalizeScheduleOffer(value: unknown): DayPlanOffer {
+  return DAY_PLAN_OFFERS.includes(value as DayPlanOffer)
+    ? (value as DayPlanOffer)
+    : 'rides'
+}
+
+export function normalizeSchedulePhases(value: unknown): FestivalPhase[] {
+  if (!Array.isArray(value)) return defaultSchedulePhases()
+  return FESTIVAL_PHASES.filter((phase) => value.includes(phase))
+}
+
+export function resolvedScheduleTime(control: AccessControlBase): AccessScheduleTime {
+  return normalizeScheduleTime(control.scheduleTime)
 }
 
 export function minutesUntilScheduleOpen(
@@ -141,6 +248,84 @@ export function minutesUntilScheduleOpen(
 
 export function isScheduleOpen(openSlots: readonly boolean[], minute: number): boolean {
   return Boolean(openSlots[currentAccessSlot(minute)])
+}
+
+export function isScheduleHourOpen(
+  scheduleHours: readonly boolean[],
+  minute: number,
+): boolean {
+  const hour = Math.floor(((minute / 60) % ACCESS_HOURS_PER_DAY + ACCESS_HOURS_PER_DAY) % ACCESS_HOURS_PER_DAY)
+  return Boolean(scheduleHours[hour])
+}
+
+export function isAccessSchedulePhaseOpen(
+  control: AccessControlBase,
+  context?: AccessScheduleContext,
+): boolean {
+  if (!context) return true
+  const phase = getFestivalCycleStatus(context.dayPlan, context.day).phase
+  return control.schedulePhases.includes(phase)
+}
+
+export function isAccessScheduleOpen(
+  control: AccessControlBase,
+  minute: number,
+  context?: AccessScheduleContext,
+): boolean {
+  if (!isAccessSchedulePhaseOpen(control, context)) return false
+  const time = resolvedScheduleTime(control)
+  if (time === 'hours') return isScheduleHourOpen(control.scheduleHours, minute)
+  if (time === 'dayPlan') {
+    if (!context) return false
+    return isFestivalOfferActive(
+      context.dayPlan,
+      control.scheduleOffer,
+      minute,
+      context.day,
+    )
+  }
+  return isScheduleOpen(control.openSlots, minute)
+}
+
+export function minutesUntilAccessScheduleOpen(
+  control: AccessControlBase,
+  minute: number,
+  context?: AccessScheduleContext,
+): number {
+  if (isAccessScheduleOpen(control, minute, context)) return 0
+  const time = resolvedScheduleTime(control)
+  if (time === 'hourlySlots' && isAccessSchedulePhaseOpen(control, context)) {
+    return minutesUntilScheduleOpen(control.openSlots, minute)
+  }
+  const step = time === 'hourlySlots' ? ACCESS_SLOT_MINUTES : 60
+  const minuteOfDay =
+    ((Math.floor(minute) % ACCESS_MINUTES_PER_DAY) + ACCESS_MINUTES_PER_DAY) %
+    ACCESS_MINUTES_PER_DAY
+  const bucketStart = Math.floor(minuteOfDay / step) * step
+  const remainingInBucket = step - (minuteOfDay - bucketStart)
+  const cycleLength = context
+    ? Math.max(
+        1,
+        context.dayPlan.leadDays +
+          context.dayPlan.festivalDays +
+          context.dayPlan.breakDays,
+      )
+    : 1
+  const maxSteps = Math.ceil((cycleLength * ACCESS_MINUTES_PER_DAY) / step)
+  for (let stepIndex = 1; stepIndex <= maxSteps; stepIndex += 1) {
+    const absolute = bucketStart + stepIndex * step
+    const dayOffset = Math.floor(absolute / ACCESS_MINUTES_PER_DAY)
+    const nextMinute =
+      ((absolute % ACCESS_MINUTES_PER_DAY) + ACCESS_MINUTES_PER_DAY) %
+      ACCESS_MINUTES_PER_DAY
+    const nextContext = context
+      ? { dayPlan: context.dayPlan, day: context.day + dayOffset }
+      : undefined
+    if (isAccessScheduleOpen(control, nextMinute, nextContext)) {
+      return remainingInBucket + (stepIndex - 1) * step
+    }
+  }
+  return Number.POSITIVE_INFINITY
 }
 
 export function conditionHolds(
@@ -181,6 +366,7 @@ export function evaluateAccessSignal(
   minute: number,
   stats: AccessAreaStats,
   emergency = false,
+  context?: AccessScheduleContext,
 ): AccessSignal {
   if (
     emergency &&
@@ -192,7 +378,7 @@ export function evaluateAccessSignal(
   if (control.mode === 'always') return 'open'
   if (control.mode === 'locked') return 'closed'
   if (control.mode === 'schedule') {
-    return isScheduleOpen(control.openSlots, minute) ? 'open' : 'closed'
+    return isAccessScheduleOpen(control, minute, context) ? 'open' : 'closed'
   }
   return signalFromCondition(
     control.polarity,
@@ -253,10 +439,11 @@ export function routeUsesClosedEdge(
 export function remainingClosedMinutes(
   control: AccessControl,
   minute: number,
+  context?: AccessScheduleContext,
 ): number {
   if (control.signal === 'open') return 0
   if (control.mode === 'schedule') {
-    return minutesUntilScheduleOpen(control.openSlots, minute)
+    return minutesUntilAccessScheduleOpen(control, minute, context)
   }
   return Number.POSITIVE_INFINITY
 }
@@ -319,12 +506,13 @@ export function closedAccessEdges(
   minute = 0,
   rerouteMinutes = Number.POSITIVE_INFINITY,
   emergency = false,
+  context?: AccessScheduleContext,
 ): Set<string> {
   const edges = new Set<string>()
   for (const control of controls) {
     const skipClosed =
       longOnly &&
-      remainingClosedMinutes(control, minute) <= rerouteMinutes
+      remainingClosedMinutes(control, minute, context) <= rerouteMinutes
     const forward = accessEdgeKey(control.x, control.z, control.direction)
     if (control.kind === 'pathBarrier') {
       if (releasesBarrierForEmergency(control, emergency)) continue
@@ -448,6 +636,10 @@ function normalizeBase(
     sensorThreshold: Math.max(0, Math.round(asNumber(source.sensorThreshold, 5))),
     area: normalizeArea(source.area),
     signal: source.signal === 'closed' ? 'closed' : 'open',
+    scheduleTime: normalizeScheduleTime(source.scheduleTime),
+    scheduleHours: normalizeScheduleHours(source.scheduleHours),
+    scheduleOffer: normalizeScheduleOffer(source.scheduleOffer),
+    schedulePhases: normalizeSchedulePhases(source.schedulePhases),
   }
 }
 
@@ -511,6 +703,10 @@ export function createTrafficLight(
     sensorThreshold: 5,
     area: [],
     signal: 'open',
+    scheduleTime: 'hourlySlots',
+    scheduleHours: defaultScheduleHours(),
+    scheduleOffer: 'rides',
+    schedulePhases: defaultSchedulePhases(),
   }
 }
 
@@ -537,5 +733,9 @@ export function createPathBarrier(
     signal: 'open',
     passage: 'oneWay',
     openInEmergency: true,
+    scheduleTime: 'hourlySlots',
+    scheduleHours: defaultScheduleHours(),
+    scheduleOffer: 'rides',
+    schedulePhases: defaultSchedulePhases(),
   }
 }

@@ -1,4 +1,4 @@
-import { batchCampMeshes } from './batchCampMeshes'
+import { CampMeshBatcher } from './batchCampMeshes'
 import { campingBoundary, campingGrassTexture } from './campingGround'
 import { CAMP_COLORS, campRotation, campSeed, createCampModel } from './campingModels'
 import {
@@ -20,7 +20,10 @@ import type { GameSnapshot } from '../game/GameState'
 import { getTerrainHeight } from '../game/terrain'
 import { disposeChildren, disposeObject3D } from './disposeObject3D'
 
+let handcartTemplate: Group | undefined
+
 export function createHandcartModel(): Group {
+  if (handcartTemplate) return handcartTemplate.clone(true)
   const cart = new Group()
   const body = new Mesh(
     new BoxGeometry(0.25, 0.13, 0.32),
@@ -50,7 +53,13 @@ export function createHandcartModel(): Group {
   handle.rotation.x = -0.18
   cart.add(handle)
   cart.userData.handcart = true
-  return cart
+  cart.traverse(object => {
+    if (!(object instanceof Mesh)) return
+    object.geometry.userData.shared = true
+    ;(object.material as MeshStandardMaterial).userData.shared = true
+  })
+  handcartTemplate = cart
+  return cart.clone(true)
 }
 
 function createSleepSprite(): Sprite {
@@ -89,6 +98,7 @@ const VISIBLE_CAMP_PHASES = new Set([
 export class CampingView {
   readonly group = new Group()
   private readonly props = new Group()
+  private readonly propBatcher = new CampMeshBatcher()
   private readonly batchedProps = new Group()
   private propModels = new Map<string, { stamp: string; model: Group }>()
   private tileFingerprint = ''
@@ -114,12 +124,13 @@ export class CampingView {
   constructor() {
     this.tileGeometry.userData.shared = true
     this.tileMaterial.userData.shared = true
+    this.batchedProps.add(this.propBatcher.group)
     this.group.add(this.props, this.batchedProps)
   }
 
   invalidate(): void {
     disposeChildren(this.props)
-    disposeChildren(this.batchedProps)
+    this.propBatcher.clear()
     this.propModels.clear()
     this.tileFingerprint = ''
     this.camperFingerprint = ''
@@ -199,7 +210,7 @@ export class CampingView {
     }
     let tiles = this.tiles
     if (!tiles || tiles.instanceMatrix.count < cells.length) {
-      if (tiles) this.group.remove(tiles)
+      if (tiles) { this.group.remove(tiles); tiles.dispose() }
       tiles = new InstancedMesh(
         this.tileGeometry,
         this.tileMaterial,
@@ -308,8 +319,7 @@ export class CampingView {
       disposeObject3D(entry.model)
       this.propModels.delete(key)
     }
-    disposeChildren(this.batchedProps)
-    this.batchedProps.add(batchCampMeshes(this.props))
+    this.propBatcher.update(this.props)
   }
 
   private createAbandonedTentModel(color: number, decay: number, id: string): Group {

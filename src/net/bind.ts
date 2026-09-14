@@ -177,6 +177,15 @@ export function enableMultiplayerCommands(game: GameState): void {
   game.setSpeed = wrap(game, game.setSpeed, (speed) => ({ type: 'setSpeed', speed }))
   game.hireStaff = wrap(game, game.hireStaff, (role) => ({ type: 'hireStaff', role }))
   game.fireStaff = wrap(game, game.fireStaff, (role) => ({ type: 'fireStaff', role }))
+  game.fireStaffMember = wrap(game, game.fireStaffMember, (staffId) => ({
+    type: 'fireStaffMember',
+    staffId,
+  }))
+  game.toggleStaffZone = wrap(game, game.toggleStaffZone, (staffId, key) => ({
+    type: 'toggleStaffZone',
+    staffId,
+    key,
+  }))
   game.buyAmbulance = wrap(game, game.buyAmbulance, (garageId) => ({
     type: 'buyAmbulance',
     garageId,
@@ -285,6 +294,16 @@ export function enableMultiplayerCommands(game: GameState): void {
       buildingId,
       price,
       allOfKind,
+    }),
+  )
+  game.configureShirtStall = wrap(
+    game,
+    game.configureShirtStall,
+    (buildingId, settings) => ({
+      type: 'configureShirtStall',
+      buildingId,
+      color: settings.color,
+      style: settings.style,
     }),
   )
   game.updateEntryPrice = wrap(game, game.updateEntryPrice, (price) => ({

@@ -228,3 +228,177 @@ The 1200-step `rtest3` run measured 13.31/24.55/45.88 ms at 1x (1209 visitors),
 15.94/29.99/83.70 at 3x (666), and 14.67/29.37/110.24 at 8x (1).
 The latter ends the festival and empties the park, so it is not a steady-load result.
 Full regression tests and production build pass.
+
+## Follow-up check after gameplay fixes (0.1.86, 2026-09-14)
+
+Measured the current working tree, including concurrent finance/scenario/UI work,
+with the unchanged `rtest3` slot (SHA256
+`42AF6AA49753B0BAA8C9C90A0CAC513873DBDF64CF676EE8C07658591E9761FE`).
+These are local measurements, not an isolated comparison with earlier releases.
+
+Before the render-only optimization, 120 CPU ticks (median/p95/max ms):
+- 1x: 11.91 / 41.02 / 53.54, 1105 visitors.
+- 3x: 18.46 / 42.43 / 103.69, 1119 visitors.
+- 8x: 21.26 / 48.92 / 66.91, 1171 visitors.
+
+The 1200-tick run measured:
+- 1x: 8.73 / 24.74 / 119.97, 1183 visitors.
+- 3x: 14.55 / 35.53 / 177.42, 741 visitors.
+- 8x: 19.09 / 48.66 / 439.31, 16 visitors.
+
+The long 8x run nearly empties the festival and includes a 439 ms CPU outlier;
+it does not demonstrate stable crowded performance. Inclusive method profiling
+of 120 ticks at 8x attributes about 1087 ms to `findPath`, 1023 ms to
+`updateVisitors`, 427 ms to concert selection and 273 ms to `updateLogistics`.
+These overlap. Road-step validation uses cached graph lookups and at most four
+neighbors; the new shop lookup still uses one multi-goal route search.
+
+Browser baseline: `tests/render-performance.html` with the same slot, 180 frames,
+1280x720 Chromium viewport, separately initialized for each speed. Frame interval
+median/p95/max ms was 13.9/55.7/125.0 at 1x (1094 visitors),
+20.8/83.3/132.0 at 3x (1106), and 20.9/111.1/145.8 at 8x (1141).
+Draw counts were 998/953/1016. The harness excludes the main game's DOM panels;
+frame intervals include pacing and are not CPU-tick measurements.
+
+Confirmed bottleneck: `IncidentView.update` destroyed and recreated every incident
+model whenever any severity changed. At 8x this consumed 914.7 ms across 180 frames,
+with a 27.7 ms maximum call. It now retains models by ID and visible shape count,
+rebuilds only changed models, updates transforms in place, and disposes removed
+models. Fire animation uses direct model lookup in the same pass. Fractional
+severity changes with the same visible piece count do not rebuild geometry.
+This does not alter simulation, admission, effects, or time progression.
+Regression tests cover 400 incidents with one change, resource disposal,
+fractional severity, transforms, removal and full invalidation.
+
+Afterward, 120 CPU ticks measured 12.26/37.90/62.39 ms at 1x,
+17.05/45.76/78.43 at 3x and 20.65/48.74/62.80 at 8x, with identical final
+populations. As expected for a view-only change, these differences are noise,
+not evidence of a CPU simulation speedup. `npm test` and `npm run build` pass.
+
+Browser follow-up (same starting save, viewport and 180-frame harness):
+- 1x: frame median/p95/max 13.9/55.5/97.3 ms, 1094 visitors, 997 draws.
+  Incident update total/max 23.1/0.9 ms, previously 242.4/19.0 ms.
+- 3x: frame 14.0/62.5/111.1 ms, 1105 visitors, 934 draws.
+  Incident update total/max 26.4/0.7 ms, previously 597.7/21.1 ms.
+- 8x: frame 20.7/76.4/97.3 ms, 1130 visitors, 964 draws.
+  Incident update total/max 34.7/1.7 ms, previously 914.7/27.7 ms.
+
+Faster frame runs advance less wall-clock simulation time, hence slightly
+different final populations and draw counts. Do not interpret these as a precise
+whole-game speedup percentage. The structural test proves the removed rebuild
+work; the browser results support a substantial reduction in incident updates.
+Remaining hotspots include pathfinding, camping props (25.1 ms maximum update
+in the follow-up 8x run), and roughly a thousand draw calls. Occasional 76–111 ms
+frames remain; this is not a steady 60 FPS result. No personal save was modified.
+
+Final 1200-tick CPU control run (median/p95/max ms): 1x 9.29/25.29/65.17
+(1183 visitors), 3x 13.84/35.86/84.85 (741), 8x 22.67/56.98/502.64 (16).
+Final populations match the pre-change long run exactly. The approximately
+half-second 8x simulation outlier remains unresolved by this render-only fix;
+the short inclusive profile does not identify the cause of that late outlier.
+
+## Broader performance pass (0.1.87, 2026-09-14)
+
+Same `rtest3` fixture as above; its file SHA256 remains unchanged. No visitor,
+render-detail, light/effect or simulation-speed limits were lowered. Concurrent
+finance/scenario/UI changes in this working tree remain present.
+
+Confirmed and fixed:
+- Long profiles locate the former 518 ms tick at 8x in simultaneous camp packing:
+  `updateVisitors` 502 ms, `findPath` 479 ms, `tryDisposeWaste` 420 ms (inclusive).
+  Day-visitor closing also performed many departure searches in one tick.
+  Departure, exit and direct waste-routing callbacks now share the existing
+  16-decision budget and FIFO queue. Immediate state cleanup still runs that tick.
+  Existing waste routes survive closing checks instead of being recomputed.
+  Pending camp packing/waste cannot disappear at the exit; saves resume packing.
+- `findPath` can reject universally forbidden goal nodes before traversal, while
+  preserving cache policy, original heuristic goals and ordinary weighted routing.
+- Camping previously replaced every instanced geometry/material/buffer when any
+  prop changed. `CampMeshBatcher` retains batches, updates matrices/colors, and
+  grows capacity only when needed. Static handcart assets are shared; geometry
+  signatures are cached. No camp detail or sprite is removed.
+- Incident drawing now uses one batch for all litter scraps, one for all vomit
+  patches and two for fire. Geometry dimensions, offsets, colors, piece counts and
+  fire animation match the previous models. Buffers persist across changes.
+- Instanced meshes require their own `dispose()` event to release instance
+  attributes. The common disposal helper now releases these, including replaced
+  camp batches; growing camping ground also releases old instance attributes.
+
+CPU baseline, 120 ticks, median/p95/max ms:
+- 1x: 10.89 / 26.24 / 53.50, 1105 visitors.
+- 3x: 16.20 / 29.92 / 41.13, 1119 visitors.
+- 8x: 20.88 / 35.74 / 43.87, 1171 visitors.
+
+Long baseline with inclusive profiling, 1200 ticks:
+- 1x: 8.52 / 19.65 / 51.37, 1183 visitors.
+- 3x: 14.26 / 27.90 / 111.88, 741 visitors.
+- 8x: 19.33 / 39.78 / 518.23, 16 visitors.
+The uninstrumented pre-change control from 0.1.86 was
+9.29/25.29/65.17, 13.84/35.86/84.85, 22.67/56.98/502.64 respectively.
+
+After the routing/renderer fixes, 120 ticks without instrumentation:
+- 1x: 10.50 / 25.04 / 50.24, 1104 visitors.
+- 3x: 16.70 / 32.22 / 45.46, 1128 visitors.
+- 8x: 20.78 / 30.54 / 45.13, 1185 visitors.
+
+1200 ticks without instrumentation:
+- 1x: 7.53 / 18.33 / 48.88, 1175 visitors.
+- 3x: 15.35 / 34.41 / 79.90, 698 visitors.
+- 8x: 17.23 / 31.06 / 66.86, 7 visitors.
+
+Scheduling changes intentionally alter when routes are chosen, so end-state
+hashes and populations differ from 0.1.86. This is not a visitor-count reduction:
+short 3x/8x runs contain more visitors, while the long 8x run reaches festival end.
+Do not infer a universal CPU percentage from these evolving populations or mix
+instrumented and uninstrumented timings. Median 3x time did not improve; the clear
+win is bounding simultaneous departure/waste work and removing the half-second
+outlier. One intermediate profile had isolated 245/372 ms outliers which did not
+recur in the next run; they are not evidence of another resolved algorithmic bug.
+
+Browser, 1280x720, same starting save, 180 frames at each speed:
+- 1x: frame median/p95/max 13.9/41.7/62.5 ms, 1094 visitors, 771 draws;
+  render 8.7/12.9/19.3 ms, camp update total/max 72.5/13.0 ms.
+- 3x: frame 13.9/48.6/62.6 ms, 1101 visitors, 734 draws;
+  render 8.9/12.0/15.0 ms, camp update total/max 107.5/10.9 ms.
+- 8x: frame 13.9/55.6/97.3 ms, 1134 visitors, 719 draws;
+  render 8.9/12.4/18.7 ms, camp update total/max 219.4/11.8 ms.
+
+The 0.1.86 browser baseline above used 997/934/964 draws, and its 8x frame
+median/p95/max was 20.7/76.4/97.3 ms with a 25.1 ms maximum camping update.
+Final populations depend on elapsed wall time; these runs do not prove a precise
+whole-game percentage. The screenshot retains the full crowd, tents, chairs,
+handcarts and litter. This harness excludes main-game DOM panels. Occasional
+frames above 50 ms remain; a stable 60 FPS or absence of every possible bottleneck
+on every device is not established.
+
+Regression guards cover queued departures/waste, reconstruction on load,
+forbidden goal rejection, unchanged camp/incident shapes and transforms, batch
+counts, buffer growth and disposal. Full `npm test` and `npm run build` pass;
+Vite still reports the existing large-bundle warning (startup/download size,
+not a measured simulation-tick issue).
+
+Longer browser control (1800 frames, 8x, 1280x720): 937 final visitors,
+frame median/p95/max 13.9/48.6/104.3 ms, render 7.5/11.3/54.0 ms,
+scene 3.8/14.2/28.7 ms, 820 draws, 559 geometries, 23 programs.
+Camp update max was 20.1 ms, incident update max 7.5 ms. This remains a
+populated-festival measurement rather than the nearly-empty 1200-tick CPU endpoint.
+
+This longer check exposed NaN bounding spheres in four legacy stage trusses:
+old 2D workshop saves lacked part `y` and stage height. Migration now supplies
+finite ground-level part heights and normal headroom before regridding. It keeps
+all parts and existing coordinates, and does not write the original slot. A browser
+reload verifies that the two NaN errors are gone. Tests cover legacy migration and
+finite geometry for every current stage component in all six directions.
+Manual closure from the UI/network also defers mass departure routing into the
+same tick budget instead of performing unbounded searches inside the command.
+
+Further concurrent sleep/day-plan/access/carrier work arrived during the final
+checks and raised the combined working-tree version to 0.1.88. It is preserved.
+The later run therefore is NOT an isolated before/after measure of this patch:
+120 ticks (median/p95/max, population) were 1x 11.82/28.60/59.62 ms (1104),
+3x 17.33/47.20/83.66 (1128), 8x 21.86/50.35/90.80 (1193).
+1200 ticks were 1x 8.73/24.58/72.65 ms (1176), 3x 19.73/48.61/116.55 (714),
+8x 20.75/54.11/128.99 (36). Concurrent work also makes machine-load comparisons
+less reliable. The previous 67 ms maximum must not be presented as a guarantee
+for the combined tree. No effects, graphics settings or admission limits were
+reduced to produce any of these results. The source save hash remains unchanged.

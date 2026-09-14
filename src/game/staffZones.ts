@@ -53,3 +53,25 @@ export function zonesConnected(keys: string[]): boolean {
   }
   return visited.size === keys.length
 }
+
+export function toggleAssignedWorkZones(
+  zones: string[] | undefined,
+  key: string,
+): { ok: true; next: string[]; removed: boolean } | { ok: false; message: string } {
+  const current = zones ?? []
+  const has = current.includes(key)
+  if (has) {
+    const next = current.filter((zone) => zone !== key)
+    if (!zonesConnected(next)) {
+      return {
+        ok: false,
+        message: 'Bereiche müssen zusammenhängend bleiben - zuerst die trennende Seite entfernen',
+      }
+    }
+    return { ok: true, next, removed: true }
+  }
+  if (current.length && !isZoneAdjacentToAny(key, current)) {
+    return { ok: false, message: 'Bereiche müssen zusammenhängend sein' }
+  }
+  return { ok: true, next: [...current, key], removed: false }
+}

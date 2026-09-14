@@ -8,10 +8,10 @@ sind gerichtete Wege (`pathType: 'queue'`).
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Schienen, Physik, Betrieb | `src/game/coasters.ts` | `TRACK_PIECE_KINDS`, Zug, Dispatch |
+| Schienen, Physik, Betrieb | `src/game/coasters.ts` | `TRACK_PIECE_KINDS`, Zug, Dispatch, `getSmoothedCoasterPiecePoints` |
 | Bauen, Recall, Preis | `src/game/GameState.ts` | `startCoaster`, `recallCoasterTrain`, `setRideAccess` |
 | Queue-Richtung | `src/game/pathFlow.ts` | `allowsPathFlow` |
-| Balancing / SI-Physik | `src/game/simulationConfig.ts` | `coasters`, `classicSteel.physics`, `physicsSimulation` |
+| Balancing / SI-Physik | `src/game/simulationConfig.ts` | `coasters`, `classicSteel.physics`, `physicsSimulation`, `trackJoinSmoothing` |
 | Spezialstücke visuell | `src/view/coasterSpecials.ts` | Loop, Photo, Splash |
 | Wagen | `src/view/coasterCars.ts` | ein gemergtes Mesh, geteilte Geometrie |
 | Bungee-Darstellung | `src/view/bungee.ts` | ein Rider, ein Seil |
@@ -24,10 +24,20 @@ sind gerichtete Wege (`pathType: 'queue'`).
 - Segmentlängen und Frames **pro Bahn cachen**, invalidieren über
   Piece-ID/Chain-Signatur. Nicht alle Sample-Punkte pro Wagen/Substep neu
   scannen.
+- Schienenübergänge werden **zur Mesh-/Pfad-Ableitung** geglättet
+  (`trackJoinSmoothing` in `simulationConfig`): Kurvenstücke mischen zur
+  Viertelkreis-Form (`curveCircularBlend` 0.62), danach ein leichtes
+  Bogenlängen-Gaussian (`sigma` 0.28 Kacheln) über Nachbarstücke und ein
+  kurzes Fillet an noch spitzen Stückgrenzen. Snapshot-`points` bleiben
+  spitz; alte Saves runden sich beim Laden optisch und für die Wagen.
+  Mesh und `sampleCoasterTrack` teilen denselben Cache. Stationen bleiben
+  ungefillet, damit der Bahnsteig sitzt. Keine neuen Snapshot-Felder.
 - Legacy-Fahrgeschäfte ohne Tore bleiben geschlossen, bis Eingang und Ausgang
   gesetzt und verbunden sind.
 - Eingangsqueues nutzen dieselbe gerichtete Traversierung wie Coaster.
   Fehlender Ausgang verzögert die Freigabe, ohne erneut abzukassieren.
+  Attraktionsqueues bleiben **eine** volle Spur; die hälftige
+  Ansteh-/Zurückspur gilt nur für Stand-Queues (`docs/visitors.md`).
 - Queue-Kacheln bilden eine **Kette in Bau-Reihenfolge**. Nebeneinander
   liegende Segmente einer Serpentine werden nicht als Abkürzung verbunden.
 - Gäste dürfen eine Schlange nur vorwärts (anstehen) oder rückwärts
@@ -66,10 +76,10 @@ sind gerichtete Wege (`pathType: 'queue'`).
 
 `tests/rideAccess.ts` (beide Ride-Typen, Queues, Saves, Multiplayer).
 `tests/operations.ts` (Serpentinen-Kette, Rückweg, leerer Stand).
-`tests/festivalAdditions.ts` (1-Feld-Steigungen, flach↔steil-Übergang, Wagen-Mesh).
+`tests/festivalAdditions.ts` (1-Feld-Steigungen, flach↔steil-Übergang, Wagen-Mesh, Schienenjoin-Rundung / Pfadkontinuität).
 `tests/performanceGuards.ts` (Specials, eine Photo-Abrechnung, Bungee-Exklusivität, Wagen-Batch).
 
 ## Bei Änderungen dieses Dokument
 
-Aktualisieren, wenn Track-Kinds, Dispatch-Modi, Gate-Regeln oder Physik-Caches
-ändern. Neue Attraktionsgebäude auch in `docs/buildings.md`.
+Aktualisieren, wenn Track-Kinds, Dispatch-Modi, Gate-Regeln, Join-Glättung
+oder Physik-Caches ändern. Neue Attraktionsgebäude auch in `docs/buildings.md`.

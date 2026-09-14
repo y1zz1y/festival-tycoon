@@ -48,6 +48,13 @@ export const STAFF_DEFINITIONS: Record<StaffRole, StaffDefinition> = {
   medic: { role: 'medic', name: 'Sanitäter', icon: '⚕️', color: 0xf2f2ed, hatColor: 0xd94841, ...SIMULATION_CONFIG.staff.roles.medic },
 }
 
+export const SWEEPER_STAFF_ICON = '🤖'
+
+export function sweeperStaffName(id: string): string {
+  const match = /(\d+)$/.exec(id)
+  return match ? `Saugroboter ${Number(match[1])}` : 'Saugroboter'
+}
+
 export function createStaffMember(
   id: string,
   role: StaffRole,
