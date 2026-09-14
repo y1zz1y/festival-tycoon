@@ -71,7 +71,7 @@ export function prepareGroundArea(s: GameSnapshot, from: { x: number; z: number 
   const cells = groundRectangle(s, from, to)
   // A preview must not touch anything the real snapshot shares with it — the books
   // included, since prepareGround books every euro it spends (see bookFinance).
-  const target = preview ? { ...s, finance: { loan: s.finance.loan, periods: s.finance.periods.map(period => ({ edition: period.edition, entries: { ...period.entries } })) }, festival: { ...s.festival, infrastructure: { ...s.festival.infrastructure, ground: Object.fromEntries(Object.entries(s.festival.infrastructure.ground).map(([k, v]) => [k, { ...v }])) } } } : s
+  const target = preview ? { ...s, finance: { loan: s.finance.loan, periods: s.finance.periods.map(period => ({ edition: period.edition, entries: { ...period.entries } })), today: { ...s.finance.today }, previousDay: s.finance.previousDay }, festival: { ...s.festival, infrastructure: { ...s.festival.infrastructure, ground: Object.fromEntries(Object.entries(s.festival.infrastructure.ground).map(([k, v]) => [k, { ...v }])) } } } : s
   const before = target.money
   let changed = 0, reason = 'Ungültige Fläche'
   for (const cell of cells) {

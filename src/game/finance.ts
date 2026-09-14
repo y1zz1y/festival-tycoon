@@ -9,6 +9,7 @@
  */
 export const FINANCE_CATEGORIES = [
   'tickets',
+  'camping',
   'rides',
   'sales',
   'stock',
@@ -22,7 +23,8 @@ export const FINANCE_CATEGORIES = [
 export type FinanceCategory = (typeof FINANCE_CATEGORIES)[number]
 
 export const FINANCE_CATEGORY_NAMES: Record<FinanceCategory, string> = {
-  tickets: 'Eintritt',
+  tickets: 'Tagestickets',
+  camping: 'Campingtickets',
   rides: 'Fahrgeschäfte',
   sales: 'Essen & Getränke',
   stock: 'Wareneinkauf',
@@ -34,8 +36,18 @@ export const FINANCE_CATEGORY_NAMES: Record<FinanceCategory, string> = {
   interest: 'Kreditzinsen',
 }
 
-export type FinancePeriod = { edition: number; entries: Partial<Record<FinanceCategory, number>> }
-export type FinanceState = { loan: number; periods: FinancePeriod[] }
+export type FinanceEntries = Partial<Record<FinanceCategory, number>>
+export type FinancePeriod = { edition: number; entries: FinanceEntries }
+export type FinanceState = {
+  loan: number
+  periods: FinancePeriod[]
+  /** Booked since midnight, and the last full day — what the forecast column extrapolates from. */
+  today: FinanceEntries
+  previousDay: FinanceEntries
+}
+
+/** What one carrier with a handcart costs per minute on the move (see depotCarriers/supplyChain, which book it as they walk). */
+export const CARRIER_WAGE_PER_MINUTE = .04
 
 /** How many editions the table keeps. Older columns fall off the left the way they do in every tycoon ledger. */
 export const FINANCE_PERIOD_LIMIT = 8
@@ -59,7 +71,22 @@ type FinanceHost = {
 }
 
 export function createFinanceState(loan = 0): FinanceState {
-  return { loan, periods: [] }
+  return { loan, periods: [], today: {}, previousDay: {} }
+}
+
+/**
+ * Categories that recur on their own: the park keeps paying them tomorrow whether
+ * anyone decides anything or not, which is what makes a forecast possible at all.
+ * Building a ride or booking a band is a decision, not a prediction, so those rows
+ * stay out of the forecast.
+ */
+export const FINANCE_FIXED_CATEGORIES: FinanceCategory[] = ['upkeep', 'staff', 'interest']
+export const FINANCE_RECURRING_CATEGORIES: FinanceCategory[] = ['tickets', 'camping', 'rides', 'sales', 'stock']
+
+/** Closes the day's page: yesterday becomes the basis for the forecast, today starts empty. */
+export function rollFinanceDay(finance: FinanceState): void {
+  finance.previousDay = finance.today
+  finance.today = {}
 }
 
 /**
@@ -85,10 +112,36 @@ export function bookFinance(s: FinanceHost, category: FinanceCategory, amount: n
   }
   // Cents, not floating-point dust: wages and interest are fractions of a cent per tick.
   period.entries[category] = Math.round(((period.entries[category] ?? 0) + amount) * 100) / 100
+  finance.today ??= {}
+  finance.today[category] = Math.round(((finance.today[category] ?? 0) + amount) * 100) / 100
+}
+
+export function financeEntriesTotal(entries: FinanceEntries): number {
+  return FINANCE_CATEGORIES.reduce((total, category) => total + (entries[category] ?? 0), 0)
 }
 
 export function financePeriodTotal(period: FinancePeriod): number {
-  return FINANCE_CATEGORIES.reduce((total, category) => total + (period.entries[category] ?? 0), 0)
+  return financeEntriesTotal(period.entries)
+}
+
+/**
+ * What tomorrow is expected to cost and bring in. The running costs are calculated
+ * exactly — they follow from what stands on the site, who is employed and what is
+ * owed. Everything the visitors decide is carried over from the last full day, or,
+ * before a full day has passed, from what today has brought so far.
+ */
+export function financeForecast(finance: FinanceState, fixed: FinanceEntries): FinanceEntries {
+  const basis = financeEntriesTotal(finance.previousDay ?? {}) !== 0 ? finance.previousDay : finance.today
+  const forecast: FinanceEntries = {}
+  for (const category of FINANCE_RECURRING_CATEGORIES) {
+    const value = basis?.[category]
+    if (value) forecast[category] = Math.round(value * 100) / 100
+  }
+  for (const category of FINANCE_FIXED_CATEGORIES) {
+    const value = fixed[category]
+    if (value) forecast[category] = Math.round(value * 100) / 100
+  }
+  return forecast
 }
 
 /** What the bank is willing to lend in total, given what the park is worth. */

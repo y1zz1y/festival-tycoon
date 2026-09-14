@@ -10,7 +10,7 @@ import { createInfrastructure, updateSupplyChain, localStock, consumeLocal } fro
 import { CARDINAL_OFFSETS, isShopServiceKind } from './shopAccess'
 import { groundInfo, groundKey, buildingEfficiency, roadGroundLimit } from './ground'
 import { BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY } from './catalog'
-import { bookFinance, createFinanceState, financeEdition, loanInterest, loanLimit, LOAN, type FinanceCategory, type FinanceState } from './finance'
+import { bookFinance, createFinanceState, financeEdition, financeForecast, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance'
 import { createScenarioProgress, updateScenarioProgress, type ScenarioProgress } from './scenarioGoals'
 import { createFestivalManagement, festivalAction, updateFestival, assignAudience, activeBookings, watchableBookings, showIssue, BANDS } from './festivalManagement'
 import type { FestivalManagement, FestivalAction, Audience, Booking } from './festivalManagement'
@@ -822,6 +822,8 @@ export class GameState {
     this.state.accessControls = normalizeAccessControls(this.state.accessControls)
     this.state.finance ??= createFinanceState()
     this.state.finance.periods ??= []
+    this.state.finance.today ??= {}
+    this.state.finance.previousDay ??= {}
     this.state.scenarioProgress ??= createScenarioProgress(this.state.scenario.goals)
     this.state.version = 28
     this.state.terrain = normalizeTerrain(this.state.terrain)
@@ -2702,6 +2704,7 @@ export class GameState {
   /** Everything the finance window draws, in one place, so the UI never has to know how the books are kept. */
   financeOverview(): {
     periods: FinanceState['periods']
+    forecast: FinanceEntries
     loan: number
     loanLimit: number
     interestPerDay: number
@@ -2713,6 +2716,7 @@ export class GameState {
     const parkValue = this.parkValue()
     return {
       periods: this.state.finance.periods,
+      forecast: this.financeForecast(),
       loan: this.state.finance.loan,
       loanLimit: loanLimit(parkValue),
       interestPerDay: LOAN.interestPerDay,
@@ -4642,6 +4646,7 @@ export class GameState {
     while (this.state.minute >= SIMULATION_CONFIG.time.minutesPerDay) {
       this.state.minute -= SIMULATION_CONFIG.time.minutesPerDay
       this.state.day += 1
+      rollFinanceDay(this.state.finance)
       updateScenarioProgress(this.state, financeEdition(this.state))
       if (
         getFestivalCycleStatus(this.state.dayPlan, this.state.day)
@@ -8740,7 +8745,12 @@ export class GameState {
         logistics: normalizeLogisticsSnapshot(data.logistics),
         scenario: normalizeScenarioSettings(data.scenario),
         finance: data.finance && Array.isArray(data.finance.periods)
-          ? { loan: Math.max(0, Number(data.finance.loan) || 0), periods: data.finance.periods }
+          ? {
+              loan: Math.max(0, Number(data.finance.loan) || 0),
+              periods: data.finance.periods,
+              today: data.finance.today ?? {},
+              previousDay: data.finance.previousDay ?? {},
+            }
           : createFinanceState(),
         scenarioProgress: data.scenarioProgress && Array.isArray(data.scenarioProgress.status)
           ? data.scenarioProgress
@@ -8985,7 +8995,7 @@ export class GameState {
       x: (arrivalMode === 'car' ? this.getRoadEntry().x : this.getEntrance().x) + 0.5,
       y: 0.85,
       z: (arrivalMode === 'car' ? this.getRoadEntry().z : this.getEntrance().z) + 0.5,
-    }, 'tickets')
+    }, ticketType === 'camping' ? 'camping' : 'tickets')
     if (paidEntry) visitor.entryFeePaid = admissionPrice
     this.state.visitors.push(visitor)
     if (tickets) { if (ticketType === 'camping') tickets.usedCamping++; else tickets.usedDay[this.state.day] = (tickets.usedDay[this.state.day] ?? 0) + 1 }
@@ -13084,22 +13094,46 @@ export class GameState {
             : 'neutral'
   }
 
-  private runEconomy(hours: number): void {
-    const hourlyUpkeep = this.state.buildings.reduce(
+  /**
+   * What an hour of simply existing costs the park: the upkeep of everything standing
+   * on it, the wages of everyone employed, the generator when it runs. The economy
+   * tick charges this, and the forecast column multiplies it out to a day, so both
+   * read from the same calculation.
+   */
+  private hourlyRunningCosts(): { upkeep: number; staff: number } {
+    const upkeep = this.state.buildings.reduce(
       (total, item) => total + BUILDINGS[item.kind].upkeep + (item.stageDesign ? stageStats(item.stageDesign).upkeep : 0),
       0,
     )
-    const staffWages = this.state.staff.reduce(
+    const staff = this.state.staff.reduce(
       (total, member) => total + STAFF_DEFINITIONS[member.role].hourlyWage,
       0,
     )
-    bookFinance(this.state, 'upkeep', -hourlyUpkeep * hours)
-    bookFinance(this.state, 'staff', -staffWages * hours)
-    bookFinance(this.state, 'interest', -loanInterest(this.state.finance.loan, hours / 24))
-    if (this.state.power.backupActive) {
-      bookFinance(this.state, 'upkeep', -(SIMULATION_CONFIG.power.backupFuelPerHour * hours))
+    return {
+      upkeep: upkeep + (this.state.power.backupActive ? SIMULATION_CONFIG.power.backupFuelPerHour : 0),
+      // Carriers are paid by the minute while they walk, not by the hour like the rest.
+      staff: staff + this.state.festival.infrastructure.routes.length * CARRIER_WAGE_PER_MINUTE * 60,
     }
+  }
+
+  private runEconomy(hours: number): void {
+    const running = this.hourlyRunningCosts()
+    const carriers = this.state.festival.infrastructure.routes.length * CARRIER_WAGE_PER_MINUTE * 60
+    bookFinance(this.state, 'upkeep', -running.upkeep * hours)
+    // The carriers' own wages are already booked minute by minute as they walk.
+    bookFinance(this.state, 'staff', -(running.staff - carriers) * hours)
+    bookFinance(this.state, 'interest', -loanInterest(this.state.finance.loan, hours / 24))
     this.recalculatePark()
+  }
+
+  /** The forecast column of the finance window: tomorrow's running costs exactly, everything the visitors decide carried over from the last full day. */
+  financeForecast(): FinanceEntries {
+    const running = this.hourlyRunningCosts()
+    return financeForecast(this.state.finance, {
+      upkeep: -running.upkeep * 24,
+      staff: -running.staff * 24,
+      interest: -loanInterest(this.state.finance.loan, 1),
+    })
   }
 
   private recalculatePark(): void {

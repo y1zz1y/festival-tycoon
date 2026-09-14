@@ -7,7 +7,7 @@ import type { Supply } from './festivalManagement'
 import { SUPPLIES } from './festivalManagement'
 import { cellKey, createRoadGraph, findRoadRoute } from './logistics'
 import { getTerrainHeight, isInTerrainWorld } from './terrain'
-import { bookFinance } from './finance'
+import { bookFinance, CARRIER_WAGE_PER_MINUTE } from './finance'
 import { groundInfo, groundKey, prepareGround, prepareGroundArea } from './ground'
 import type { GroundCell, GroundWork } from './ground'
 
@@ -273,7 +273,7 @@ export function updateSupplyChain(s: GameSnapshot, routeWalk: PedestrianRouter, 
   updateDepotCarriers(s, dt, routeWalk, canStep)
   for (const r of i.routes) {
     if (r.automatic) continue
-    bookFinance(s, 'staff', -dt * .04)
+    bookFinance(s, 'staff', -dt * CARRIER_WAGE_PER_MINUTE)
     const depot = i.depots.find(d => d.id === r.depotId), target = s.buildings.find(b => b.id === r.targetId)
     if (!depot) continue
     if (r.path.length) {

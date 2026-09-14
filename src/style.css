@@ -574,6 +574,18 @@ button {
   font-weight: 700;
 }
 
+/* The forecast is set apart from the booked columns: it is an estimate, not a record. */
+.finance-table .finance-forecast {
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  font-style: italic;
+  opacity: .85;
+}
+
+.finance-table thead th.finance-forecast {
+  font-style: normal;
+  color: #cbdcd4;
+}
+
 .finance-in {
   color: #9fe3ac;
 }
@@ -602,9 +614,28 @@ button {
   gap: 6px;
 }
 
+/* The loan row wears the app's own controls rather than the browser's: the plain
+   bevelled button face for the buttons, and the same dark field the scenario form
+   uses for the amount — a white native input glares out of every panel around it. */
+.finance-loan-controls button {
+  padding: 6px 10px;
+  color: #ecf5f0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+}
+
+.finance-loan-controls button:hover {
+  background: #3f715b;
+}
+
 .finance-loan-controls input {
   width: 110px;
+  padding: 6px 8px;
+  color: #eef7f2;
   text-align: right;
+  background: #29463a;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   font-variant-numeric: tabular-nums;
 }
 

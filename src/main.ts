@@ -16,7 +16,7 @@ import { AUDIENCE_NAMES, SUPPLIES } from './game/festivalManagement'
 import type { Supply } from './game/festivalManagement'
 import { snapStockMinimum } from './game/supplyChain'
 import { BUILDINGS } from './game/catalog'
-import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financePeriodTotal } from './game/finance'
+import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financePeriodTotal } from './game/finance'
 import { goalName, goalProgressText } from './game/scenarioGoals'
 import { SCENARIO_PRESETS, scenarioPreset } from './game/scenarioPresets'
 import type { BuildingKind, Tool } from './game/catalog'
@@ -660,6 +660,7 @@ app.innerHTML = `
         <button id="close-finance" class="panel-close-button" aria-label="Finanzen schließen">×</button>
       </div>
       <div class="finance-scroll"><table id="finance-table" class="finance-table"></table></div>
+      <p class="scenario-hint">Prognose morgen: laufende Kosten (Betrieb, Personal, Zinsen) exakt gerechnet, Besuchereinnahmen und Wareneinkauf aus dem letzten vollen Tag. Bau, Gelände und Gagen sind Entscheidungen und werden nicht vorhergesagt.</p>
       <div class="finance-loan">
         <label for="finance-loan-amount">Darlehen</label>
         <div class="finance-loan-controls">
@@ -4448,10 +4449,10 @@ makeDraggable(financePanel.querySelector<HTMLElement>('.panel-header')!, finance
 const euro = (value: number): string =>
   `${value < 0 ? '−' : ''}${Math.abs(Math.round(value)).toLocaleString('de-DE')} €`
 /** Same line the ledger of every tycoon game draws: a signed figure, red when it leaves. */
-const ledgerCell = (value: number | undefined): string =>
+const ledgerCell = (value: number | undefined, extra = ''): string =>
   value === undefined || Math.round(value) === 0
-    ? '<td class="finance-empty"></td>'
-    : `<td class="${value < 0 ? 'finance-out' : 'finance-in'}">${value > 0 ? '+' : '−'}${Math.abs(Math.round(value)).toLocaleString('de-DE')} €</td>`
+    ? `<td class="finance-empty ${extra}"></td>`
+    : `<td class="${value < 0 ? 'finance-out' : 'finance-in'} ${extra}">${value > 0 ? '+' : '−'}${Math.abs(Math.round(value)).toLocaleString('de-DE')} €</td>`
 
 let financeFingerprint = ''
 function updateFinancePanel(force = false): void {
@@ -4463,19 +4464,22 @@ function updateFinancePanel(force = false): void {
   financeFingerprint = fingerprint
   // Columns are festival editions, oldest on the left, like the months in the classics.
   const periods = overview.periods.length ? overview.periods : [{ edition: overview.edition, entries: {} }]
+  const forecast = overview.forecast
   financeTable.innerHTML = `
     <thead><tr><th scope="col">Ausgaben / Einnahmen</th>${periods
       .map((period) => `<th scope="col">${period.edition}. Ausgabe</th>`)
-      .join('')}</tr></thead>
-    <tbody>${FINANCE_CATEGORIES.map((category) => {
-      if (!periods.some((period) => Math.round(period.entries[category] ?? 0) !== 0)) return ''
-      return `<tr><th scope="row">${FINANCE_CATEGORY_NAMES[category]}</th>${periods
+      .join('')}<th scope="col" class="finance-forecast">Prognose morgen</th></tr></thead>
+    <tbody>${FINANCE_CATEGORIES.map(
+      // Every row every time, even the ones standing at zero: what a park could earn and
+      // could be spending is part of the picture, the same way it is in the ledger of the
+      // games this is modelled on.
+      (category) => `<tr><th scope="row">${FINANCE_CATEGORY_NAMES[category]}</th>${periods
         .map((period) => ledgerCell(period.entries[category]))
-        .join('')}</tr>`
-    }).join('')}</tbody>
+        .join('')}${ledgerCell(forecast[category], 'finance-forecast')}</tr>`,
+    ).join('')}</tbody>
     <tfoot><tr><th scope="row">Saldo</th>${periods
       .map((period) => ledgerCell(financePeriodTotal(period)))
-      .join('')}</tr></tfoot>`
+      .join('')}${ledgerCell(financeEntriesTotal(forecast), 'finance-forecast')}</tr></tfoot>`
   financeTotals.innerHTML = [
     ['Guthaben', euro(overview.money)],
     ['Darlehen', euro(-overview.loan)],
