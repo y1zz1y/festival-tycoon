@@ -1257,7 +1257,6 @@ export class WorldView {
       this.walkStickX = 0
       this.walkStickZ = 0
       this.walkLookActive = false
-      if (document.pointerLockElement === this.canvas) document.exitPointerLock()
       this.cameraTarget.set(this.walkX, 0, this.walkZ)
       this.updateCamera()
     }
@@ -3008,9 +3007,8 @@ export class WorldView {
       if (this.walkMode) {
         this.walkLookActive = true
         this.lastPointer.set(event.clientX, event.clientY)
-        if (event.pointerType === 'mouse' && document.pointerLockElement !== this.canvas) {
-          void this.canvas.requestPointerLock()
-        }
+        // Looking around is dragging, not pointer lock: a locked pointer is a hidden
+        // pointer, and the cursor stays visible on foot the same way it does on the map.
         try { this.canvas.setPointerCapture(event.pointerId) } catch { /* already captured */ }
         return
       }
@@ -3090,11 +3088,8 @@ export class WorldView {
     })
     this.canvas.addEventListener('pointermove', (event) => {
       if (this.walkMode) {
-        const locked = document.pointerLockElement === this.canvas
-        if (locked || this.walkLookActive) {
-          const dx = locked ? event.movementX : event.clientX - this.lastPointer.x
-          const dy = locked ? event.movementY : event.clientY - this.lastPointer.y
-          this.lookWalk(dx, dy)
+        if (this.walkLookActive) {
+          this.lookWalk(event.clientX - this.lastPointer.x, event.clientY - this.lastPointer.y)
         }
         this.lastPointer.set(event.clientX, event.clientY)
         return

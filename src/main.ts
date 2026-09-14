@@ -116,9 +116,12 @@ app.innerHTML = `
     <header class="topbar panel">
       <div class="brand">
         <span class="brand-mark">F</span>
-        <div><strong>Festival Tycoon</strong><small>Prototype 0.1</small></div>
-        <button id="toggle-scenario" class="scenario-toggle" aria-expanded="false">⚙️ Szenario</button>
+        <div><strong>Festival Tycoon</strong><small>Prototype 0.2</small></div>
   </div>
+    </header>
+    <!-- The running numbers sit in their own overlay in the bottom-left corner rather than in the
+         top bar, which leaves the top of the screen to the name and the tools. -->
+    <aside id="status-overlay" class="status-overlay panel" aria-label="Überblick">
       <div class="stats">
         <span>💰 <strong id="money">0 €</strong></span>
         <span>👥 <strong id="guests">0</strong></span>
@@ -126,8 +129,8 @@ app.innerHTML = `
         <span>⚡ <strong id="power">0/0 kW</strong></span>
         <span>🗑️ <strong id="waste">0</strong></span>
         <span>📅 <strong id="date">Tag 1 · 08:00</strong></span>
-  </div>
-    </header>
+      </div>
+    </aside>
     <nav class="rct-toolbar" aria-label="Werkzeuge">
       <div id="action-group-build" class="rct-group" aria-label="Bauen">
         ${BUILD_CATEGORIES.filter((category) => !['roads', 'logistics'].includes(category.id)).map((category) => `<button type="button" data-build-category="${category.id}" title="${category.label}" aria-label="${category.label}" aria-expanded="false">${category.icon}</button>`).join('')}
@@ -155,6 +158,7 @@ app.innerHTML = `
         <button id="toggle-save-menu" type="button" title="Spielstand" aria-label="Spielstand" aria-expanded="false" aria-haspopup="true">💾</button>
         <button id="toggle-park" type="button" title="Park schließen" aria-label="Park schließen">🔓</button>
         <button id="toggle-debug-menu" type="button" title="Debug" aria-label="Debug" aria-expanded="false">🐞</button>
+        <button id="toggle-scenario" class="scenario-toggle" type="button" title="Einstellungen" aria-label="Einstellungen" aria-expanded="false">⚙️</button>
       </div>
       <div id="staff-menu-panel" class="dropdown-menu-panel panel">
         ${STAFF_ROLES.map((role) => `<button data-staff-role="${role}">${STAFF_DEFINITIONS[role].icon} ${STAFF_DEFINITIONS[role].name}</button>`).join('')}
@@ -176,10 +180,13 @@ app.innerHTML = `
     <aside id="scenario-panel" class="scenario-panel panel" hidden>
       <div class="panel-header">
         <span class="panel-drag-line" aria-hidden="true"></span>
-        <h2 class="panel-header-title">Szenario</h2>
+        <h2 class="panel-header-title">Einstellungen</h2>
         <span class="panel-drag-line" aria-hidden="true"></span>
-        <button id="close-scenario" class="panel-close-button" aria-label="Szenario schließen">×</button>
+        <button id="close-scenario" class="panel-close-button" aria-label="Einstellungen schließen">×</button>
       </div>
+      <h3 class="scenario-heading">Einstellungen</h3>
+      <label class="scenario-check"><input id="setting-debug-tools" type="checkbox" checked /><span>Debug</span></label>
+      <h3 class="scenario-heading">Szenario</h3>
       <p class="scenario-hint">Diese Werte gelten für ein neues Spiel und werden mitgespeichert.</p>
       <label class="scenario-field"><span>Umgebung</span><select id="scenario-environment">${Object.entries(ENVIRONMENTS).map(([id, e]) => `<option value="${id}">${e.name}</option>`).join('')}</select></label>
       <p id="scenario-ground-details" class="scenario-hint"></p>
@@ -312,9 +319,11 @@ app.innerHTML = `
       </div>
     </aside>
     <aside id="path-construction" class="path-construction panel" aria-label="Fußwege">
-      <div class="construction-title">
-        <div><small>Bauen</small><strong>Fußwege</strong></div>
-        <button id="close-path-editor" aria-label="Wege schließen">×</button>
+      <div class="path-construction-header panel-header">
+        <span class="panel-drag-line" aria-hidden="true"></span>
+        <h2 class="panel-header-title">Fußwege</h2>
+        <span class="panel-drag-line" aria-hidden="true"></span>
+        <button id="close-path-editor" class="panel-close-button" aria-label="Wege schließen">×</button>
       </div>
       <div id="path-tools"></div>
       <section class="rct-editor-section rct-path-art">
@@ -443,7 +452,7 @@ app.innerHTML = `
       </div>
     </aside>
     <section class="time-controls panel" aria-label="Zeitsteuerung">
-      <button data-speed="0" title="Pause">Ⅱ</button>
+      <button data-speed="0" title="Pause">❚❚</button>
       <button data-speed="1" title="Normal">▶</button>
       <button data-speed="2" title="Schnell · 3×">▶▶</button>
       <button data-speed="3" title="Sehr schnell · 8×">▶▶▶</button>
@@ -751,6 +760,7 @@ app.innerHTML = `
 // Left stats bar and the icon toolbar can have different bottoms. Panels
 // spawn below whichever is lower.
 const topbarElement = requireElement<HTMLElement>('.topbar')
+const statusOverlay = requireElement<HTMLElement>('#status-overlay')
 const toolbarElement = requireElement<HTMLElement>('.rct-toolbar')
 const syncTopOffsets = (): void => {
   const topbar = topbarElement.getBoundingClientRect()
@@ -887,6 +897,7 @@ const visitorAttractiveness =
 const visitorParty = requireElement<HTMLElement>('#visitor-party')
 const visitorPreferences = requireElement<HTMLElement>('#visitor-preferences')
 const pathConstruction = requireElement<HTMLElement>('#path-construction')
+makeDraggable(requireElement<HTMLElement>('.path-construction-header'), pathConstruction)
 const constructionStatus = requireElement<HTMLElement>('#construction-status')
 const buildPathButton = requireElement<HTMLButtonElement>('#build-path')
 const undoPathButton = requireElement<HTMLButtonElement>('#undo-path')
@@ -1181,7 +1192,11 @@ const walkStickKnob = requireElement<HTMLElement>('.walk-stick-knob')
 const controlHint = requireElement<HTMLElement>('#control-hint')
 const syncWalkModeUi = (enabled: boolean): void => {
   walkModeButton.setAttribute('aria-pressed', String(enabled))
-  walkModeButton.textContent = enabled ? '🗺️ Zurück zur Karte' : '🚶 Gelände betreten'
+  // Icon-only, like every other button in the toolbar — the wording lives in the tooltip.
+  const walkLabel = enabled ? 'Zurück zur Karte' : 'Gelände betreten'
+  walkModeButton.textContent = enabled ? '🗺️' : '🚶'
+  walkModeButton.title = walkLabel
+  walkModeButton.setAttribute('aria-label', walkLabel)
   walkHud.hidden = !enabled
   document.body.classList.toggle('walk-mode', enabled)
   const coarse = window.matchMedia('(pointer: coarse)').matches
@@ -5645,15 +5660,42 @@ performanceIndicator.className = 'performance-indicator'
 performanceIndicator.textContent = `${versionLabel}\nFPS — · TPS —`
 performanceIndicator.title = 'Bilder und lokal ausgeführte Logik-Ticks pro realer Sekunde. In Pause und auf Multiplayer-Clients laufen keine lokalen Logik-Ticks.'
 document.body.append(performanceIndicator)
+// Bottom-left is a stack: the overview overlay sits on the floor, the debug line rides above it,
+// and anything anchored to the bottom edge (the build menu) clears both.
 const syncDebugViewGap = (): void => {
+  const overview = statusOverlay.getBoundingClientRect().height
+  document.documentElement.style.setProperty('--status-overlay-gap', `${Math.round(overview + 18)}px`)
   const height = performanceIndicator.getBoundingClientRect().height
   document.documentElement.style.setProperty(
     '--debug-view-gap',
-    `${Math.max(48, Math.round(height + 18))}px`,
+    `${Math.max(48, Math.round(overview + height + 30))}px`,
   )
 }
 syncDebugViewGap()
 new ResizeObserver(syncDebugViewGap).observe(performanceIndicator)
+new ResizeObserver(syncDebugViewGap).observe(statusOverlay)
+
+// Whether the game shows its developer readouts at all: the build/frame-rate line
+// in the bottom-left corner and the bug button in the toolbar. Kept in the browser
+// rather than in the save, because it is about this machine, not about the park.
+const DEBUG_TOOLS_KEY = 'festival-debug-tools'
+const debugToolsToggle = requireElement<HTMLInputElement>('#setting-debug-tools')
+const applyDebugTools = (shown: boolean): void => {
+  performanceIndicator.hidden = !shown
+  debugMenuToggle.hidden = !shown
+  if (!shown) closeDebugMenu()
+  syncDebugViewGap()
+}
+try {
+  debugToolsToggle.checked = window.localStorage.getItem(DEBUG_TOOLS_KEY) !== 'off'
+} catch { /* private mode or blocked storage: fall back to showing them */ }
+applyDebugTools(debugToolsToggle.checked)
+debugToolsToggle.addEventListener('change', () => {
+  applyDebugTools(debugToolsToggle.checked)
+  try {
+    window.localStorage.setItem(DEBUG_TOOLS_KEY, debugToolsToggle.checked ? 'on' : 'off')
+  } catch { /* the setting simply does not survive a reload then */ }
+})
 let measurementStart = performance.now()
 let measuredFrames = 0
 let measuredTicks = 0

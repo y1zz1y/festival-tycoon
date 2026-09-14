@@ -37,6 +37,8 @@
   .time-controls { bottom: max(5px, env(safe-area-inset-bottom)); right: max(6px, env(safe-area-inset-right)); z-index: 70; padding: 3px; gap: 2px; }
   .time-controls button { min-width: 38px; min-height: 44px; }
   .performance-indicator { bottom: max(5px, env(safe-area-inset-bottom)); left: max(6px, env(safe-area-inset-left)); max-width: calc(100vw - 178px); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8px; z-index: 70; }
+  /* Too narrow for a corner box: the overview runs as one scrollable strip above the touch controls. */
+  .status-overlay { left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); bottom: calc(104px + env(safe-area-inset-bottom)); max-width: none; padding: 3px 8px; border-radius: 0; z-index: 70; }
   .help { display: none; }
   .crowding-panel { display: none; }
   .game-shell .crowding-panel.mobile-visible { display: block; top: auto; bottom: var(--mobile-bottom); right: 6px; left: auto; max-height: calc(100dvh - var(--topbar-gap-top, 90px) - var(--mobile-bottom)); overflow: auto; z-index: 71; width: 220px; }
