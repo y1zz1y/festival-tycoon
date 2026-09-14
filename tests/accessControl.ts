@@ -1,11 +1,28 @@
 import assert from 'node:assert/strict'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
+import { createRoadGraph, findRoadRoute, type RoadCell } from '../src/game/logistics'
 import {
   areaPreviewText,
+  createTrafficLight,
   currentAccessSlot,
+  evaluateAccessSignal,
+  GATE_EDGE_OFFSET,
+  gateEdgeWorldPosition,
+  minutesUntilAccessScheduleOpen,
+  normalizeAccessControls,
+  normalizeStaffGateDirection,
   previewLabel,
   toggleAreaCells,
+  usesGateEdgePlacement,
 } from '../src/game/accessControl'
+import { createDefaultDayPlan, type DayPlan } from '../src/game/dayPlan'
+
+function useFestivalCycle(plan: DayPlan): void {
+  plan.leadDays = 1
+  plan.festivalDays = 3
+  plan.breakDays = 2
+  plan.cycleStartDay = 1
+}
 
 function usesStep(
   route: Array<{ x: number; z: number }> | null,
@@ -54,6 +71,42 @@ function visitorCar(
 }
 
 export function testAccessControl(fixture: (count?: number) => GameState): void {
+  assert.deepEqual(
+    gateEdgeWorldPosition(3, -20, 1, 0),
+    { x: 3.5, y: 1, z: -19.5 + GATE_EDGE_OFFSET },
+    'direction 0 sits on the +Z tile rim',
+  )
+  assert.deepEqual(
+    gateEdgeWorldPosition(3, -20, 1, 1),
+    { x: 3.5 + GATE_EDGE_OFFSET, y: 1, z: -19.5 },
+    'direction 1 sits on the +X tile rim',
+  )
+  assert.deepEqual(
+    gateEdgeWorldPosition(3, -20, 1, 2),
+    { x: 3.5, y: 1, z: -19.5 - GATE_EDGE_OFFSET },
+    'direction 2 sits on the -Z tile rim',
+  )
+  assert.deepEqual(
+    gateEdgeWorldPosition(3, -20, 1, 3),
+    { x: 3.5 - GATE_EDGE_OFFSET, y: 1, z: -19.5 },
+    'direction 3 sits on the -X tile rim',
+  )
+  assert.ok(usesGateEdgePlacement('pathBarrier'))
+  assert.ok(usesGateEdgePlacement('staffGate'))
+  assert.ok(!usesGateEdgePlacement('securityGate'))
+  assert.equal(normalizeStaffGateDirection(2), 2)
+  assert.equal(normalizeStaffGateDirection(undefined), undefined)
+  assert.equal(normalizeStaffGateDirection(4), undefined)
+
+  const junction: RoadCell[] = [
+    { x: 0, z: 0, allowedDirections: null, blockedEdges: 0, speedLimit: 30, crosswalk: false },
+    { x: 1, z: 0, allowedDirections: 8, blockedEdges: 0, speedLimit: 30, crosswalk: false },
+    { x: 0, z: 1, allowedDirections: 1, blockedEdges: 0, speedLimit: 30, crosswalk: false },
+  ]
+  assert.equal(findRoadRoute({ roadCells: junction, start: junction[0]!, target: junction[1]! }), null,
+    'an undirected junction cannot enter an incoming one-way branch backwards, even as its goal')
+  assert.ok(findRoadRoute({ roadCells: junction, start: junction[1]!, target: junction[2]! }))
+  assert.ok(!createRoadGraph(junction).neighbors.get('0:0')?.some(cell => cell.x === 1))
   const lights = fixture(0)
   const lightState = lights.snapshot as GameSnapshot
   lights.addDebugMoney()
@@ -348,8 +401,8 @@ export function testAccessControl(fixture: (count?: number) => GameState): void 
     id: 'detour-depot',
     x: 2,
     z: -16,
-    stock: { food: 0, drinks: 0, water: 0 },
-    minimum: { food: 0, drinks: 0, water: 0 },
+    stock: { food: 0, drinks: 0, water: 0, goods: 0 },
+    minimum: { food: 0, drinks: 0, water: 0, goods: 0 },
   })
   const lockedService = service.placeTrafficLight(0, -18, 0)
   assert.ok(lockedService.ok && lockedService.placedId)
@@ -619,4 +672,159 @@ export function testAccessControl(fixture: (count?: number) => GameState): void 
   assert.equal(loaded.snapshot.accessControls.trafficLights[0]!.x, 5)
   assert.equal(currentAccessSlot(12 * 60), 0)
   assert.equal(currentAccessSlot(12 * 60 + 25), 2)
+
+  const legacy = normalizeAccessControls({
+    trafficLights: [
+      {
+        id: 'legacy-light',
+        x: 1,
+        z: 2,
+        direction: 0,
+        mode: 'schedule',
+        openSlots: [true, false, false, false, false, false],
+      },
+    ],
+  })
+  const legacyLight = legacy.trafficLights[0]!
+  assert.equal(legacyLight.scheduleTime, 'hourlySlots')
+  assert.deepEqual(legacyLight.schedulePhases, ['lead', 'festival', 'break'])
+  assert.equal(legacyLight.scheduleOffer, 'rides')
+  assert.equal(
+    evaluateAccessSignal(legacyLight, 12 * 60, emptyAccessStats()),
+    'open',
+    'old saves keep the repeating hourly slots',
+  )
+  assert.equal(
+    evaluateAccessSignal(legacyLight, 12 * 60 + 12, emptyAccessStats()),
+    'closed',
+  )
+
+  const hours = fixture(0)
+  const hoursState = hours.snapshot as GameSnapshot
+  useFestivalCycle(hoursState.dayPlan)
+  hours.addDebugMoney()
+  const hourCell = { x: 9, z: -20 }
+  if (!hoursState.logistics.roadCells.some((cell) => cell.x === hourCell.x && cell.z === hourCell.z)) {
+    assert.ok(hours.designateRoad([hourCell]).ok)
+  }
+  const hourLight = hours.placeTrafficLight(hourCell.x, hourCell.z, 0)
+  assert.ok(hourLight.ok && hourLight.placedId)
+  hoursState.minute = 9 * 60
+  hoursState.day = 1
+  assert.ok(
+    hours.configureAccessControl(hourLight.placedId, {
+      mode: 'schedule',
+      scheduleTime: 'hours',
+      scheduleHours: Array.from({ length: 24 }, (_, hour) => hour >= 10 && hour < 18),
+      schedulePhases: ['lead', 'festival', 'break'],
+    }).ok,
+  )
+  assert.equal(hours.getAccessControl(hourLight.placedId)?.signal, 'closed')
+  hoursState.minute = 10 * 60
+  hours.configureAccessControl(hourLight.placedId, { scheduleTime: 'hours' })
+  assert.equal(hours.getAccessControl(hourLight.placedId)?.signal, 'open')
+
+  hoursState.day = 1
+  hoursState.minute = 12 * 60
+  assert.ok(
+    hours.configureAccessControl(hourLight.placedId, {
+      schedulePhases: ['festival'],
+    }).ok,
+  )
+  assert.equal(
+    hours.getAccessControl(hourLight.placedId)?.signal,
+    'closed',
+    'Vorbereitung ignores a festival-only time window',
+  )
+  hoursState.day = 2
+  hours.configureAccessControl(hourLight.placedId, { scheduleTime: 'hours' })
+  assert.equal(
+    hours.getAccessControl(hourLight.placedId)?.signal,
+    'open',
+    'same clock hour opens on a festival day',
+  )
+
+  const follow = fixture(0)
+  const followState = follow.snapshot as GameSnapshot
+  useFestivalCycle(followState.dayPlan)
+  follow.addDebugMoney()
+  const gateCell = { x: 10, z: -18 }
+  if (!follow.getPathAt(gateCell.x, gateCell.z)) {
+    assert.ok(follow.placePathSegment(gateCell.x, gateCell.z, 0).ok)
+  }
+  const followGate = follow.placePathBarrier(gateCell.x, gateCell.z, 0, 1)
+  assert.ok(followGate.ok && followGate.placedId)
+  followState.day = 1
+  followState.minute = 12 * 60
+  assert.ok(
+    follow.configureAccessControl(followGate.placedId, {
+      mode: 'schedule',
+      scheduleTime: 'dayPlan',
+      scheduleOffer: 'rides',
+      schedulePhases: ['lead', 'festival', 'break'],
+    }).ok,
+  )
+  assert.equal(
+    follow.getAccessControl(followGate.placedId)?.signal,
+    'closed',
+    'rides stay closed during Vorbereitung',
+  )
+  followState.day = 2
+  follow.configureAccessControl(followGate.placedId, { scheduleOffer: 'rides' })
+  assert.equal(
+    follow.getAccessControl(followGate.placedId)?.signal,
+    'open',
+    'the gate follows open ride hours on a festival day',
+  )
+  followState.minute = 9 * 60
+  follow.configureAccessControl(followGate.placedId, { scheduleOffer: 'rides' })
+  assert.equal(
+    follow.getAccessControl(followGate.placedId)?.signal,
+    'closed',
+    'the gate follows closed ride hours',
+  )
+  followState.minute = 12 * 60
+  followState.day = 5
+  follow.configureAccessControl(followGate.placedId, { scheduleOffer: 'rides' })
+  assert.equal(
+    follow.getAccessControl(followGate.placedId)?.signal,
+    'closed',
+    'rides stay closed during Pause',
+  )
+  followState.day = 2
+  assert.ok(
+    follow.configureAccessControl(followGate.placedId, {
+      scheduleOffer: 'toilets',
+    }).ok,
+  )
+  assert.equal(follow.getAccessControl(followGate.placedId)?.signal, 'open')
+  followState.day = 5
+  follow.configureAccessControl(followGate.placedId, { scheduleOffer: 'toilets' })
+  assert.equal(
+    follow.getAccessControl(followGate.placedId)?.signal,
+    'open',
+    'toilets stay open during Pause',
+  )
+
+  const probe = createTrafficLight('probe', 0, 0, 0)
+  probe.scheduleTime = 'hours'
+  probe.scheduleHours = Array.from({ length: 24 }, (_, hour) => hour === 11)
+  probe.schedulePhases = ['festival']
+  const dayPlan = createDefaultDayPlan()
+  assert.equal(
+    minutesUntilAccessScheduleOpen(probe, 10 * 60, { day: 1, dayPlan }),
+    25 * 60,
+    'waits until the next festival day and the selected hour',
+  )
+}
+
+function emptyAccessStats() {
+  return {
+    freeParking: 0,
+    occupiedParking: 0,
+    carsOnRoad: 0,
+    freeCamping: 0,
+    occupiedCamping: 0,
+    people: 0,
+  }
 }

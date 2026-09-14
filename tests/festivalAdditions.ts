@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { GameState } from '../src/game/GameState'
-import { TRACK_PITCHES, canTransitionTrackPitch, createTrackPiece, computeTrackFrame, sampleCoasterTrack, usesWidePitchTransition, type Coaster, type TrackAnchor } from '../src/game/coasters'
+import { TRACK_PITCHES, canTransitionTrackPitch, createTrackPiece, computeTrackFrame, getSmoothedCoasterPiecePoints, sampleCoasterTrack, smoothTrackDisplayPoints, trackCornerClearance, trackJoinTangentDot, usesWidePitchTransition, type Coaster, type TrackAnchor } from '../src/game/coasters'
 import { createCoasterCar } from '../src/view/coasterCars'
 import { campingBoundary } from '../src/view/campingGround'
 import { bungeeDrop, createBungeeModel, animateBungee, setBungeeJumper } from '../src/view/bungee'
@@ -10,7 +10,7 @@ import {
   wasteBinCartonCount,
   wasteBinFillRatio,
 } from '../src/view/WasteView'
-import { Box3, InstancedMesh, Mesh, Vector3 } from 'three'
+import { Box3, Color, InstancedMesh, Matrix4, Mesh, Vector3 } from 'three'
 import type { PlacedBuilding } from '../src/game/GameState'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { rollsBungeeNude, visitorLooksFemale } from '../src/game/rng'
@@ -61,6 +61,52 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
   track.pieces.push(createTrackPiece('photo', 'photo', loop.end, false))
   assert.ok(sampleCoasterTrack(track, 0)!.totalLength > length)
   assert.equal(sampleCoasterTrack(track, length + 1)!.pieceKind, 'photo')
+  const joinStart: TrackAnchor = { x: 0, z: 0, elevation: 2, heading: 0, pitch: 0, bank: 0 }
+  const straight = createTrackPiece('join-straight', 'straight', joinStart, false)
+  const curve = createTrackPiece('join-curve', 'curveRight1', straight.end, false)
+  const tail = createTrackPiece('join-tail', 'straight', curve.end, false)
+  const rawCurvePoints = curve.points.map((point) => ({ ...point }))
+  const joinTrack = { pieces: [straight, curve, tail], closed: false } as Coaster
+  const smoothedPieces = getSmoothedCoasterPiecePoints(joinTrack)
+  assert.equal(smoothedPieces.length, 3)
+  assert.ok(smoothedPieces.every((points) => points.every((point) =>
+    Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z),
+  )), 'smoothed joins stay finite')
+  assert.equal(curve.points[1]!.x, rawCurvePoints[1]!.x, 'snapshot curve points stay sharp')
+  assert.ok(
+    trackCornerClearance(smoothedPieces[1]!) > trackCornerClearance(rawCurvePoints) + 0.04,
+    '1×1 curves pull away from the pointed corner',
+  )
+  assert.ok(trackJoinTangentDot(joinTrack, 0) > 0.92, 'straight-to-curve join is C1-ish')
+  assert.ok(trackJoinTangentDot(joinTrack, 1) > 0.92, 'curve-to-straight join is C1-ish')
+  const first = smoothedPieces[0]![0]!
+  const last = smoothedPieces[0]!.at(-1)!
+  const next = smoothedPieces[1]![0]!
+  assert.ok(Math.hypot(last.x - next.x, last.y - next.y, last.z - next.z) < 1e-6, 'derived joins stay welded')
+  assert.equal(first.x, straight.points[0]!.x)
+  assert.equal(first.z, straight.points[0]!.z)
+  const joinLength = sampleCoasterTrack(joinTrack, 0)!.totalLength
+  let previous = sampleCoasterTrack(joinTrack, 0)!
+  for (let i = 1; i <= 64; i++) {
+    const current = sampleCoasterTrack(joinTrack, joinLength * i / 64)!
+    assert.ok(Number.isFinite(current.point.x) && Number.isFinite(current.tangent.x))
+    const travel = Math.hypot(
+      current.point.x - previous.point.x,
+      current.point.y - previous.point.y,
+      current.point.z - previous.point.z,
+    )
+    assert.ok(travel < 2, 'sampled path stays continuous')
+    previous = current
+  }
+  const display = smoothTrackDisplayPoints(rawCurvePoints)
+  assert.ok(trackCornerClearance(display) > trackCornerClearance(rawCurvePoints))
+  const meshSample = sampleCoasterTrack(joinTrack, joinLength * 0.4)!
+  const curvePoints = smoothedPieces[1]!
+  const nearest = curvePoints.reduce((best, point) => {
+    const distance = Math.hypot(point.x - meshSample.point.x, point.y - meshSample.point.y, point.z - meshSample.point.z)
+    return distance < best ? distance : best
+  }, Number.POSITIVE_INFINITY)
+  assert.ok(nearest < 0.35, 'cars follow the same derived centerline as the mesh')
   const construction = fixture(0)
   construction.addDebugMoney()
   const started = construction.startCoaster('classicSteel', 10, -10)
@@ -226,7 +272,7 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
   litterView.update([pile])
   let litterMeshes=0
   litterView.group.traverse((object)=>{if(object instanceof Mesh)litterMeshes+=1})
-  assert.equal(litterMeshes,1,'one draw call per litter pile')
+  assert.equal(litterMeshes,1,'one instanced draw call for litter')
   const light=new Box3().setFromObject(litterView.group.children[0]!)
   litterView.update([{...pile,severity:8}])
   litterMeshes=0
@@ -240,6 +286,40 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
     'heavy litter spreads across the tile instead of stacking',
   )
   assert.equal(wasteBinFillRatio(0, SIMULATION_CONFIG.waste.binCapacity), 0)
+  const manyPiles = Array.from({ length: 400 }, (_, i) => ({ ...pile, id: `pile-${i}`, x: i, severity: 3 }))
+  litterView.update(manyPiles)
+  const litterBatch = litterView.group.getObjectByName('litter') as InstancedMesh
+  assert.equal(litterBatch.count, 1200, 'all 400 piles keep every scrap in one draw')
+  assert.equal(litterView.group.children.length, 1)
+  let disposed = 0
+  litterBatch.geometry.addEventListener('dispose', () => disposed++)
+  const retainedMatrix = new Matrix4(), actualMatrix = new Matrix4()
+  litterBatch.getMatrixAt(3, retainedMatrix)
+  litterView.update(manyPiles.map((item, i) => i === 0 ? { ...item, severity: 4 } : item))
+  assert.equal(disposed, 0, 'changing a pile reuses geometry and GPU capacity')
+  assert.equal(litterView.group.getObjectByName('litter'), litterBatch)
+  assert.equal(litterBatch.count, 1201)
+  litterBatch.getMatrixAt(4, actualMatrix)
+  assert.deepEqual(actualMatrix, retainedMatrix, 'unaffected scraps retain their exact transform')
+  litterView.update([{ ...manyPiles[1]!, severity: 3.1, x: 9, elevation: 2 }])
+  assert.equal(litterBatch.count, 3, 'removed incidents disappear from the active instance range')
+  litterBatch.getMatrixAt(0, actualMatrix)
+  assert.ok(Math.abs(actualMatrix.elements[12]! - (9.5 + litterGroundOffset('pile-1', 0).x)) < 1e-5)
+  assert.ok(Math.abs(actualMatrix.elements[13]! - 2.052) < 1e-5)
+  const tint = new Color()
+  litterBatch.getColorAt(0, tint)
+  assert.ok(Math.abs(tint.r - new Color(0x7a6238).r) < 1e-6, 'scrap colors remain unchanged')
+  litterView.update([{ ...pile, kind: 'vomit', severity: 8 }, { ...pile, id: 'fire', kind: 'fire' }])
+  assert.equal(litterBatch.count, 0)
+  assert.equal((litterView.group.getObjectByName('vomit') as InstancedMesh).count, 10)
+  assert.equal((litterView.group.getObjectByName('fire-outer') as InstancedMesh).count, 1)
+  assert.equal((litterView.group.getObjectByName('fire-inner') as InstancedMesh).count, 1)
+  assert.equal(litterView.group.children.length, 4, 'draw count is bounded by effect kind')
+  litterView.invalidate()
+  assert.equal(disposed, 1, 'invalidation releases owned geometry')
+  assert.equal(litterView.group.children.length, 0)
+  litterView.update([pile])
+  assert.equal(litterView.group.children.length, 1, 'invalidation rebuilds correctly on the next update')
   assert.equal(
     wasteBinFillRatio(
       SIMULATION_CONFIG.waste.binCapacity,

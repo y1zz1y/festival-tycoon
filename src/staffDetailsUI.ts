@@ -1,5 +1,6 @@
 import type { GameState, GameSnapshot } from './game/GameState'
-import { STAFF_DEFINITIONS } from './game/staff'
+import { STAFF_DEFINITIONS, SWEEPER_STAFF_ICON, sweeperStaffName } from './game/staff'
+import { describeRoadVehicleActivity } from './game/logistics'
 import { zoneKey } from './game/staffZones'
 import type { WorldView } from './view/WorldView'
 import { makeDraggable, makeResizable } from './dragPanel'
@@ -64,12 +65,12 @@ export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(
     const staffId=selected
     if(!staffId)return
     release();getGame().setTool('inspect');zoneEditing=true
-    view.showStaffZones(getGame().snapshot.staff.find(p=>p.id===staffId)?.workZones ?? [])
+    view.showStaffZones(assignedZones(getGame().snapshot,staffId))
     view.setGroundAreaTool((_from,to,preview)=>{
       if(preview)return
       const result=getGame().toggleStaffZone(staffId,zoneKey(to.x,to.z))
       toast(result.message,!result.ok)
-      if(result.ok)view.showStaffZones(getGame().snapshot.staff.find(p=>p.id===staffId)?.workZones ?? [])
+      if(result.ok)view.showStaffZones(assignedZones(getGame().snapshot,staffId))
       update(getGame().snapshot)
     })
     update(getGame().snapshot)
@@ -107,20 +108,34 @@ export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(
   function update(s:Readonly<GameSnapshot>) {
     if(!selected)return
     const carrier=s.festival.infrastructure.routes.find(r=>r.id===selected)
-    const member=s.staff.find(p=>p.id===selected) ?? (carrier ? {name:'Träger mit Handkarren',role:null,state:'carrying' as const,cellX:carrier.position.x,cellZ:carrier.position.z,carryingWaste:0,workArea:carrier.workArea} : null)
+    const sweeper=s.logistics.roadVehicles.find(vehicle=>vehicle.id===selected && vehicle.kind==='sweeper')
+    const member=s.staff.find(p=>p.id===selected) ?? (sweeper ? {
+      name:sweeperStaffName(sweeper.id),
+      role:'cleaner' as const,
+      state:'patrolling' as const,
+      cellX:sweeper.cell?.x ?? sweeper.position.x,
+      cellZ:sweeper.cell?.z ?? sweeper.position.z,
+      carryingWaste:sweeper.cargo,
+      workZones:sweeper.workZones,
+      workArea:undefined,
+    } : (carrier ? {name:'Träger mit Handkarren',role:null,state:'carrying' as const,cellX:carrier.position.x,cellZ:carrier.position.z,carryingWaste:0,workArea:carrier.workArea} : null))
     if(!member){close();return}
     const isStaff=!!member.role
+    const isSweeper=!!sweeper
     view.showStaffArea(isStaff?null:member.workArea??null)
-    panel.querySelector('[data-name]')!.textContent=`${member.role ? STAFF_DEFINITIONS[member.role].icon : '📦'} ${member.name}`
-    panel.querySelector('[data-state]')!.textContent=`${{patrolling:'Kontrollgang',responding:'Auf dem Weg zum Einsatz',working:'Arbeitet',carrying:'Transportiert',stationed:'An Sicherheitskontrolle'}[member.state]} · Feld ${member.cellX}, ${member.cellZ}`
-    panel.querySelector('[data-load]')!.textContent=carrier ? `${carrier.status} · Ladung ${carrier.cargo}` : `Müllladung: ${member.carryingWaste} · Lohn ${STAFF_DEFINITIONS[member.role!].hourlyWage} €/h`
+    panel.querySelector('[data-name]')!.textContent=`${isSweeper ? SWEEPER_STAFF_ICON : member.role ? STAFF_DEFINITIONS[member.role].icon : '📦'} ${member.name}`
+    panel.querySelector('[data-state]')!.textContent=`${isSweeper ? describeRoadVehicleActivity(sweeper) : {patrolling:'Kontrollgang',responding:'Auf dem Weg zum Einsatz',working:'Arbeitet',carrying:'Transportiert',stationed:'An Sicherheitskontrolle'}[member.state]} · Feld ${member.cellX}, ${member.cellZ}`
+    panel.querySelector('[data-load]')!.textContent=isSweeper
+      ? `Reinigungskraft · Saugroboter · Müllladung ${sweeper.cargo}`
+      : carrier ? `${carrier.status} · Ladung ${carrier.cargo}` : `Müllladung: ${member.carryingWaste} · Lohn ${STAFF_DEFINITIONS[member.role!].hourlyWage} €/h`
     panel.querySelector<HTMLElement>('[data-area]')!.hidden=isStaff
     panel.querySelector<HTMLElement>('[data-area-draw]')!.hidden=isStaff
     panel.querySelector<HTMLElement>('[data-area-clear]')!.hidden=isStaff
     panel.querySelector<HTMLElement>('[data-zones]')!.hidden=!isStaff
     panel.querySelector<HTMLElement>('[data-manage-zones]')!.hidden=!isStaff
-    panel.querySelector<HTMLElement>('[data-grab]')!.hidden=!isStaff
+    panel.querySelector<HTMLElement>('[data-grab]')!.hidden=!isStaff || isSweeper
     panel.querySelector<HTMLElement>('[data-fire-member]')!.hidden=!isStaff
+    panel.querySelector('[data-fire-member]')!.textContent=isSweeper?'Verkaufen':'Entlassen'
     if(isStaff){
       const zoneCount=('workZones' in member ? member.workZones?.length : 0)??0
       panel.querySelector('[data-zones]')!.textContent=zoneCount?`Bereiche: ${zoneCount} zugewiesen`:'Kein Bereich zugewiesen'
@@ -130,4 +145,10 @@ export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(
     panel.querySelector('[data-follow]')!.textContent=following?'Verfolgen beenden':'Folgen'
   }
   return {update,open,close}
+}
+
+function assignedZones(snapshot:Readonly<GameSnapshot>,staffId:string):string[] {
+  return snapshot.staff.find(p=>p.id===staffId)?.workZones
+    ?? snapshot.logistics.roadVehicles.find(vehicle=>vehicle.id===staffId && vehicle.kind==='sweeper')?.workZones
+    ?? []
 }

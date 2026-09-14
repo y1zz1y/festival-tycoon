@@ -4,6 +4,11 @@
    so this overlay looks like every other standardized window. */
 .supply-planner { position: absolute; z-index: 24; top: auto; bottom: 64px; right: 6px; left: auto; width: 320px; max-height: min(620px, calc(100dvh - 170px)); padding: 12px; overflow-y: auto; }
 .terrain-planner { right: auto; left: 6px; }
+.road-editor .path-type-palette, .road-editor .path-access-links { display: none; }
+.road-editor #road-editor-tools .piece-palette { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.road-editor #road-editor-tools button { min-width: 0; }
+.road-editor #road-editor-tools small { display: block; font-size: 10px; }
+.path-surface-popup [hidden] { display: none; }
 .supply-planner[hidden] { display: none; }
 .supply-planner small { color: #9eb6ac; }
 .supply-planner p { margin: 7px 0; }

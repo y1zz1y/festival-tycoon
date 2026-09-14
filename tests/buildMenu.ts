@@ -57,7 +57,7 @@ export function testBuildMenu(): void {
   )
   assert.equal(
     BUILD_CATEGORIES.find((category) => category.id === 'roads')?.dock,
-    'right',
+    'left',
   )
   for (const category of BUILD_CATEGORIES) {
     if (category.id !== 'roads') assert.equal(category.dock, 'left')

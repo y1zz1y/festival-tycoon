@@ -10,10 +10,10 @@ hält die Simulationsuhr an, bis **Festival starten**.
 | --- | --- | --- |
 | Zustand, Aktionen, Wetter, Ruf | `src/game/festivalManagement.ts` | `FestivalManagement`, `FestivalAction`, `updateFestival`, `BANDS` |
 | Command-Einstieg | `src/game/GameState.ts` | `manageFestival` |
-| Tages-/Campingzyklus | `src/game/dayPlan.ts` | `getFestivalCycleStatus`, Angebote |
+| Tages-/Campingzyklus | `src/game/dayPlan.ts` | `getFestivalCycleStatus`, `FestivalPhase` (`lead` Vorbereitung, `festival`, `break` Pause), Angebote |
 | Musikgeschmack, Basis-Evolution | `src/game/musicTaste.ts` | `evolveMusicAudience`, `GENRES` |
 | Automatischer Spielplan | `src/game/autoLineup.ts` | `planAutoLineup` |
-| Waren im Festivalkontext | `src/game/supplyChain.ts` | über `infrastructureAction` |
+| Waren im Festivalkontext | `src/game/supplyChain.ts`, `src/game/festivalManagement.ts` | `Supply` inkl. `goods` (Allgemeine Waren) |
 | Spielplan-UI | `src/musicPlanner.ts` | Band ziehen, Raster |
 | Festival-Fenster | `src/festivalUI.ts` | Tickets, Preise, Tagesplan, Auswertung, Ausbauten |
 | Balancing | `src/game/simulationConfig.ts` | `visitors.festivalArrivals`, `economy.defaultEntryPrice`, `economy.defaultCampingTicketPrice` |
@@ -27,6 +27,9 @@ hält die Simulationsuhr an, bis **Festival starten**.
   `entryPrice` ist der Tagesticketpreis, `campingTicketPrice` der
   Campingpreis (fehlende Saves übernehmen den bisherigen Eintritt).
   Tagesplan, Zyklus und Preise stellt ihr im Fenster **Festival planen**.
+  Ampeln und Personentore können dieselben Angebote (`DayPlanOffer`, inkl.
+  `shops` für Souvenirläden) sowie die Zyklusphasen als Zeitsteuerung nutzen.
+  Fehlendes `shops` im Tagesplan nutzt den Default 8–23 Uhr.
 - Wetter und `wetness` sind deterministisch (`festival.seed`) und müssen
   gespeichert werden. Nässe kann Navigation invalidieren (`groundWetBucket`).
 - Musikbasis entwickelt sich einmalig nach der Ausgabe; ausgefallene Slots

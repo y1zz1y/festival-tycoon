@@ -3310,6 +3310,26 @@ button {
   gap: 6px;
 }
 
+.shirt-color-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.shirt-color-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.shirt-color-swatch.selected {
+  border-color: #f2e6b8;
+  box-shadow: 0 0 0 1px #1b2a22;
+}
+
 .entity-action-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3373,14 +3393,27 @@ button {
   grid-template-columns: 1fr 1fr 1fr;
 }
 
+.access-phases,
+.access-schedule-time {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.access-hours {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
+
 .access-mode-row button[aria-pressed='true'],
-.access-slots button[aria-pressed='true'] {
+.access-slots button[aria-pressed='true'],
+.access-hours button[aria-pressed='true'] {
   background: #3f715b;
   color: #edf7f1;
   border-color: #7dba96;
 }
 
-.access-slots button.current {
+.access-slots button.current,
+.access-hours button.current {
   box-shadow: inset 0 0 0 1px #e2c57e;
 }
 

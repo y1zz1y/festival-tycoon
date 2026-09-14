@@ -6,13 +6,14 @@ import type { Direction, RoadPosition, SpeedLimit } from '../game/logistics'
 import type {
   AccessControlMode,
   AccessPolarity,
+  AccessScheduleTime,
   BarrierPassage,
   PathSensorKind,
   TrafficSensorKind,
 } from '../game/accessControl'
 import type { CoasterOperationMode, CoasterTypeId, DispatchMode, TrackBuildOptions, TrackPieceKind } from '../game/coasters'
 import type { StaffRole } from '../game/staff'
-import type { DayPlanOffer } from '../game/dayPlan'
+import type { DayPlanOffer, FestivalPhase } from '../game/dayPlan'
 import type { SecurityGateConfig } from '../game/security'
 import type { CashEffect, GameSnapshot, Visitor } from '../game/GameState'
 import type { StaffMember } from '../game/staff'
@@ -20,6 +21,7 @@ import type { RoadVehicle } from '../game/logistics'
 import type { GroundIncident } from '../game/incidents'
 import type { FireworkEffect } from '../game/fireworks'
 import type { FestivalAction } from '../game/festivalManagement'
+import type { ShirtStyle } from '../game/shopGoods'
 
 export type CellRef = { x: number; z: number }
 
@@ -84,6 +86,10 @@ type GameCommandAction =
       sensorThreshold?: number
       passage?: BarrierPassage
       openInEmergency?: boolean
+      scheduleTime?: AccessScheduleTime
+      scheduleHours?: boolean[]
+      scheduleOffer?: DayPlanOffer
+      schedulePhases?: FestivalPhase[]
     }
   | { type: 'toggleAccessControlArea'; id: string; from: CellRef; to: CellRef }
   | { type: 'clearAccessControlArea'; id: string }
@@ -95,6 +101,8 @@ type GameCommandAction =
   | { type: 'setSpeed'; speed: number }
   | { type: 'hireStaff'; role: StaffRole }
   | { type: 'fireStaff'; role: StaffRole }
+  | { type: 'fireStaffMember'; staffId: string }
+  | { type: 'toggleStaffZone'; staffId: string; key: string }
   | { type: 'buyAmbulance'; garageId: string }
   | { type: 'buyBus'; depotId: string }
   | { type: 'sellBus'; depotId: string }
@@ -134,6 +142,7 @@ type GameCommandAction =
   | { type: 'setCoasterOperationMode'; coasterId: string; mode: CoasterOperationMode }
   | { type: 'recallCoasterTrain'; coasterId: string }
   | { type: 'updateBuildingPrice'; buildingId: string; price: number; allOfKind?: boolean }
+  | { type: 'configureShirtStall'; buildingId: string; color?: number; style?: ShirtStyle }
   | { type: 'updateEntryPrice'; price: number }
   | { type: 'updateCampingTicketPrice'; price: number }
   | { type: 'updateSecurityGate'; id: string; config: Partial<SecurityGateConfig> }
@@ -171,6 +180,9 @@ export type PackedVisitor = Pick<
   | 'streakingMinutes'
   | 'toplessMinutes'
   | 'bungeeNude'
+  | 'ownedMascot'
+  | 'heldMascot'
+  | 'wornShirt'
   | 'tileOffsetX'
   | 'tileOffsetZ'
   | 'isDancing'

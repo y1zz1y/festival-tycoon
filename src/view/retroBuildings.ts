@@ -45,7 +45,7 @@ const ink = 0x28363b, cream = 0xf2dfb5, timber = 0x936141, steel = 0x92a6a5
 const material = new MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: .05 })
 material.userData.shared = true
 const geometries = new Map<BuildingKind, BufferGeometry>()
-export const DETAILED_BUILDINGS: readonly BuildingKind[] = ['food', 'alcohol', 'toilet', 'bench', 'wasteBin', 'generator', 'backupGenerator', 'foh', 'delayTower', 'securityGate', 'ride', ...SCENERY_KINDS]
+export const DETAILED_BUILDINGS: readonly BuildingKind[] = ['food', 'alcohol', 'mascot', 'shirt', 'toilet', 'bench', 'wasteBin', 'generator', 'backupGenerator', 'foh', 'delayTower', 'securityGate', 'ride', ...SCENERY_KINDS]
 
 function build(kind: BuildingKind, variant?: string): BufferGeometry {
   const k = new ModelKit()
@@ -169,8 +169,8 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
       k.box(-.07, .89, side * .036, .23, .035, .014, cream)
       k.box(.12, 1.04, side * .036, .035, .16, .014, cream)
     }
-  } else if (kind === 'food' || kind === 'alcohol') {
-    const accent = kind === 'food' ? 0xd95b3e : 0x3c8775
+  } else if (kind === 'food' || kind === 'alcohol' || kind === 'mascot' || kind === 'shirt') {
+    const accent = kind === 'food' ? 0xd95b3e : kind === 'alcohol' ? 0x3c8775 : kind === 'mascot' ? 0xe8a07a : 0x2f6fdb
     k.box(0, .045, 0, .88, .09, .86, ink)
     k.box(0, .29, -.05, .76, .48, .66, timber)
     // Board siding, serving recess, rear shelf and raised fascia.
@@ -207,7 +207,7 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
       k.cylinder(.31, .58, .3, .025, .085, 0xecc44e)
       k.box(-.27, .94, -.26, .09, .22, .1, steel)
       k.box(-.27, 1.06, -.26, .14, .035, .14, ink)
-    } else {
+    } else if (kind === 'alcohol') {
       k.box(-.02, .97, -.05, .12, .12, .03, 0xe9b64b)
       k.box(-.02, 1.04, -.05, .14, .03, .035, 0xfff7de)
       k.box(.065, .965, -.05, .035, .07, .03, 0xe9b64b)
@@ -219,6 +219,21 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
         k.cylinder(x, .55, .34, .027, .055, cream)
         k.beam([x, .54, .1], [x, .67, .1], .018, steel)
         k.box(x, .68, .13, .025, .045, .075, ink)
+      }
+    } else if (kind === 'mascot') {
+      k.box(0, 1.02, -.04, .1, .09, .08, 0xe8a07a)
+      for (const x of [-.028, .028]) k.box(x, 1.07, -.05, .028, .024, .024, 0xe8a07a)
+      k.box(-.018, 1.01, -.005, .012, .01, .008, ink)
+      k.box(.018, 1.01, -.005, .012, .01, .008, ink)
+      k.box(0, .545, .3, .16, .07, .12, 0xf2d36b)
+      k.box(.18, .58, .3, .05, .05, .05, 0x7ec8c4)
+      k.box(-.16, .575, .3, .044, .044, .044, 0xe8a07a)
+    } else {
+      k.box(0, .99, -.05, .2, .08, .03, 0x2f6fdb)
+      k.box(0, 1.04, -.05, .12, .03, .03, 0x2f6fdb)
+      for (const x of [-.2, 0, .2]) {
+        k.box(x, .56, .3, .12, .07, .09, [0xe23b3b, 0x2f6fdb, 0x3d9b5c][(x + 2) % 3]!)
+        k.box(x, .6, .3, .05, .02, .04, cream)
       }
     }
   } else if (kind === 'toilet') {

@@ -23,10 +23,24 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
 - Incidents nicht über die Karte ausbreiten, sofern nicht ausdrücklich
   implementiert (Feuer bleibt lokal).
 - Saugreiniger räumen `litter` und `vomit` auf Wegen und Bühnenvorplätzen;
-  sie fahren auf den Vorplatz, statt am Wegrand zu halten. Personal-Cleaner
-  bleiben der Fußweg-Fallback.
+  sie fahren auf den Vorplatz, statt am Wegrand zu halten, und dürfen
+  Personaleingänge wie Personal queren, um Schmutz, Ablage oder Depot zu
+  erreichen. Zugewiesene Einsatzgebiete (`workZones`) begrenzen Suche und
+  Aufnahme wie bei Reinigungskräften; Entladen an der Ablage bleibt
+  außerhalb erlaubt.
+  Personal-Cleaner bleiben der Fußweg-Fallback.
 - Debug-Cleanup: ein Owner-Index, aktive Camp-Objekte und Feuer erhalten.
 - Views speichern keine Simulationsentscheidungen (kein Panik-Flag nur im Mesh).
+- `IncidentView` zeichnet alle Müllstücke in einem Instanz-Batch, alle
+  Erbrochenen-Flecken in einem weiteren und Feuer in zwei Kegel-Batches.
+  Stückzahl, Form, Farbe, Position und Feueranimation bleiben vollständig erhalten.
+  Statische Instanzen werden nur bei sichtbaren Änderungen aktualisiert; Geometrie,
+  Material und GPU-Kapazität bleiben erhalten. `instanceId` wird über
+  `userData.incidentIds` der Vorfall-ID zugeordnet. Wachstum ersetzt nur Instanzpuffer;
+  `invalidate()` gibt die eigenen Ressourcen frei.
+- Müllwegentscheidungen aus direkten Interaktions-/Abbau-Callbacks teilen das
+  Besucherbudget. Bis zur Bearbeitung bleibt `pendingWaste` erhalten; bereits
+  laufende Wege zum Eimer werden nicht bei jeder Abreiseprüfung neu gesucht.
 - Mülleimer zeigen `wasteFill` nur über grob gestufte Kartons am Boden
   (0 / 1 / 2 / 3 / 4 bei 0, 1–3, 4–6, 7–9, 10–12). Kein Balken.
   `WasteView` batched Tiles, Ablage-Säcke und Kartons.

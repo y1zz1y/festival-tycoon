@@ -28,8 +28,19 @@ dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
   Ampeln/Schranken: `placeTrafficLight`, `placePathBarrier`,
   `configureAccessControl`, `toggleAccessControlArea`,
   `clearAccessControlArea`; Snapshot-Feld `accessControls`.
+  `configureAccessControl` darf `scheduleTime`, `scheduleHours`,
+  `scheduleOffer` und `schedulePhases` mitsenden.
   Ticketpreise: `entryPrice` (Tag) und `campingTicketPrice` (Camping);
   Commands `updateEntryPrice` und `updateCampingTicketPrice`.
+  T-Shirt-Stand: `configureShirtStall` (`color`, `style`). Gäste-Felder
+  `ownedMascot`, `heldMascot`, `wornShirt` liegen im PackedVisitor.
+  Personalzonen: `toggleStaffZone` und `fireStaffMember` (auch für
+  Saugroboter anhand der Fahrzeug-ID). `workZones` liegt am Staff-Mitglied
+  bzw. am Saugroboter in `logistics.roadVehicles` und kommt über Sim-Pakete.
+  `queueSplit` an Queue-Wegen ist kein Command, sondern Host-seitig
+  abgeleitet wie `queueDirection` und kommt mit dem Gebäude-Snapshot.
+  Festival-Action `staffGate` darf `direction` (Baurichtung, Kante) mitsenden;
+  fehlend gilt 0. Alte Clients ohne Feld bleiben gültig.
 - Clients dürfen Construction optimistic zeigen, aber der Host bleibt
   maßgeblich (`resolveOptimisticCommand`, Reconciliation).
 - Besucher feldweise updaten; unveränderte Bereiche nicht erneut senden.

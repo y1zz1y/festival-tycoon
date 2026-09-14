@@ -5,7 +5,12 @@ import { SIMULATION_CONFIG } from './simulationConfig'
 import type { ActionResult, GameSnapshot } from './GameState'
 import type { Supply } from './festivalManagement'
 import { SUPPLIES } from './festivalManagement'
-import { cellKey, createRoadGraph, findRoadRoute } from './logistics'
+import { shopSupplyKind } from './shopGoods'
+import { cellKey, createRoadGraph, findRoadRoute, type Direction } from './logistics'
+import {
+  gateEdgeWorldPosition,
+  normalizeStaffGateDirection,
+} from './accessControl'
 import { getTerrainHeight, isInTerrainWorld } from './terrain'
 import { bookFinance, CARRIER_WAGE_PER_MINUTE } from './finance'
 import { groundInfo, groundKey, prepareGround, prepareGroundArea } from './ground'
@@ -13,7 +18,24 @@ import type { GroundCell, GroundWork } from './ground'
 
 export type Point = { x: number; z: number; elevation: number }
 export type Stock = Record<Supply, number>
-export const emptyStock = (): Stock => ({ food: 0, drinks: 0, water: 0 })
+export const emptyStock = (): Stock => ({ food: 0, drinks: 0, water: 0, goods: 0 })
+export function normalizeStock(value?: Partial<Stock> | null): Stock {
+  const stock = emptyStock()
+  if (!value || typeof value !== 'object') return stock
+  for (const kind of Object.keys(SUPPLIES) as Supply[]) {
+    const n = Number(value[kind])
+    stock[kind] = Number.isFinite(n) ? Math.max(0, n) : 0
+  }
+  return stock
+}
+export function normalizeInfrastructure(i: Infrastructure): Infrastructure {
+  for (const depot of i.depots) {
+    depot.stock = normalizeStock(depot.stock)
+    depot.minimum = normalizeStock(depot.minimum)
+  }
+  for (const id of Object.keys(i.shops)) i.shops[id] = normalizeStock(i.shops[id])
+  return i
+}
 export const STOCK_MINIMUM_STEP = 20
 export const STOCK_MINIMUM_MAX = 800
 export function snapStockMinimum(quantity: number): number {
@@ -34,11 +56,32 @@ export type InfrastructureAction =
   | { type: 'depot'; x: number; z: number; role?: 'delivery' | 'storage' }
   | { type: 'depotSettings'; depotId: string; distribution: 'relay' | 'shops'; workers: number }
   | { type: 'staffArea'; staffId: string; from: {x:number;z:number} | null; to: {x:number;z:number} | null }
-  | { type: 'staffGate'; x: number; z: number; elevation: number }
+  | { type: 'staffGate'; x: number; z: number; elevation: number; direction?: Direction }
   | { type: 'removeDepot'; depotId: string }
   | { type: 'minimum'; depotId: string; kind: Supply; quantity: number }
   | { type: 'route'; depotId: string; targetId: string; kind: Supply | 'waste'; minimum: number; waypoints: Point[] }
   | { type: 'removeRoute'; id: string }
+
+export function staffGateWorldPosition(path: {
+  x: number
+  z: number
+  elevation: number
+  staffGateDirection?: number
+}): { x: number; y: number; z: number } {
+  const direction = normalizeStaffGateDirection(path.staffGateDirection)
+  if (direction === undefined) {
+    return { x: path.x + 0.5, y: path.elevation, z: path.z + 0.5 }
+  }
+  return gateEdgeWorldPosition(path.x, path.z, path.elevation, direction)
+}
+
+export function staffGateYaw(path: {
+  rotation: number
+  staffGateDirection?: number
+}): number {
+  const facing = normalizeStaffGateDirection(path.staffGateDirection) ?? path.rotation
+  return facing * (Math.PI / 2)
+}
 
 export function infrastructureAction(s: GameSnapshot, a: InfrastructureAction): ActionResult {
   const i = s.festival.infrastructure, fail = (message: string) => ({ ok: false, message })
@@ -57,10 +100,16 @@ export function infrastructureAction(s: GameSnapshot, a: InfrastructureAction): 
   if (a.type === 'staffGate') {
     const path = s.buildings.find(b => b.kind === 'path' && b.x === a.x && b.z === a.z && b.elevation === a.elevation)
     if (!path) return fail('Personaltor auf einem Fußweg platzieren')
-    if (!path.staffOnly && s.money < 80) return fail('Personaltor kostet 80 €')
-    if (!path.staffOnly) bookFinance(s, 'construction', -80)
-    path.staffOnly = !path.staffOnly
-    return {ok:true,message:path.staffOnly ? 'Personaltor gesetzt: nur Personal und Logistik' : 'Personaltor entfernt'}
+    if (path.staffOnly) {
+      path.staffOnly = false
+      delete path.staffGateDirection
+      return {ok:true,message:'Personaltor entfernt'}
+    }
+    if (s.money < 80) return fail('Personaltor kostet 80 €')
+    bookFinance(s, 'construction', -80)
+    path.staffOnly = true
+    path.staffGateDirection = normalizeStaffGateDirection(a.direction) ?? 0
+    return {ok:true,message:'Personaltor gesetzt: Personal, Saugroboter und Warenlogistik'}
   }
   if (a.type === 'groundArea') return prepareGroundArea(s, a.from, a.to, a.kind)
   if (a.type === 'ground') return prepareGround(s, a.x, a.z, a.kind)
@@ -118,7 +167,13 @@ export function infrastructureAction(s: GameSnapshot, a: InfrastructureAction): 
     return { ok: true, message: 'Mindestbestand gespeichert; Fehlmengen werden kostenpflichtig nachbestellt (45 € je Lieferung).' }
   }
   const target = s.buildings.find(b => b.id === a.targetId)
-  if (!target || !(a.kind === 'food' && target.kind === 'food' || a.kind === 'drinks' && target.kind === 'alcohol' || a.kind === 'water' && target.kind === 'toilet' || a.kind === 'waste' && target.kind === 'wasteBin')) return fail('Passenden Stand, WC (Trinkwasser) oder Mülleimer wählen')
+  if (
+    !target ||
+    !(
+      (a.kind === 'waste' && target.kind === 'wasteBin') ||
+      shopSupplyKind(target.kind) === a.kind
+    )
+  ) return fail('Passenden Stand, WC (Trinkwasser) oder Mülleimer wählen')
   if (!Number.isInteger(a.minimum) || a.minimum < 1 || a.minimum > (a.kind === 'waste' ? SIMULATION_CONFIG.waste.binCapacity : 200) || a.waypoints.length > 12 || a.waypoints.some(p => !s.buildings.some(b => b.kind === 'path' && b.x === p.x && b.z === p.z && b.elevation === p.elevation))) return fail('Zielbestand 1–200 und maximal zwölf Wegpunkte auf Fußwegen wählen')
   if (i.routes.some(r => r.targetId === a.targetId && r.kind === a.kind)) return fail('Für dieses Ziel besteht bereits eine Route')
   if (s.money < 120) return fail('Träger mit Handkarren kostet 120 €')

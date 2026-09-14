@@ -7,6 +7,38 @@ import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCel
 import { createStageModel, animateStageModel, disposeStageModel } from '../src/view/stageModel'
 import { showIssue } from '../src/game/festivalManagement'
 export function testStageInteraction(fixture:(count?:number)=>GameState){
+  const legacy2d = defaultStageDesign()
+  delete (legacy2d as any).height
+  delete legacy2d.tileHeight
+  legacy2d.parts = Array.from({length:4},(_,i)=>({id:`old-truss-${i}`,kind:'truss',brand:'touring',x:i*2,z:1,rotation:0,color:'#e69759'} as StagePart))
+  const upgraded2d = migrateStageDesign(legacy2d)
+  assert.ok(Number.isFinite(upgraded2d.height))
+  assert.equal(upgraded2d.parts.length,4,'migration retains every old 2D truss')
+  assert.ok(upgraded2d.parts.every(part=>part.y===0))
+  assert.equal((legacy2d.parts[0] as any).y,undefined,'migration does not overwrite the original save object')
+  const legacyModel = createStageModel(upgraded2d)
+  legacyModel.traverse(object=>{
+    if (!(object instanceof Mesh)) return
+    for(const value of object.geometry.getAttribute('position').array) assert.ok(Number.isFinite(value),'legacy stage geometry stays finite')
+    object.geometry.computeBoundingSphere()
+    assert.ok(Number.isFinite(object.geometry.boundingSphere!.radius))
+  })
+  disposeStageModel(legacyModel)
+  for (const kind of Object.keys(COMPONENTS) as StagePart['kind'][]) for (const rotation of [0,1,2,3,4,5]) {
+    const design = defaultStageDesign()
+    design.parts = [
+      { id:'finite-host', kind:'truss', x:0, y:2, z:0, rotation:0, attachedTo:null, brand:'budget', color:'#ffffff' },
+      { id:`finite-${kind}`, kind, x:0, y:1, z:0, rotation, attachedTo:'finite-host', brand:'budget', color:'#ffffff' },
+    ]
+    const model = createStageModel(design, { floor:false })
+    model.traverse(object => {
+      if (!(object instanceof Mesh || object instanceof LineSegments)) return
+      for (const value of object.geometry.getAttribute('position').array) {
+        assert.ok(Number.isFinite(value), `${kind} rotation ${rotation}: every model vertex must be finite`)
+      }
+    })
+    disposeStageModel(model)
+  }
   const performerDesign=defaultStageDesign()
   assert.equal(bandPositions(performerDesign).length,0,'bare stage floor is not a performer podium')
   for(let x=0;x<performerDesign.width;x++)performerDesign.parts.push({id:`deck-${x}`,kind:'deck',x,y:0,z:2,rotation:0,attachedTo:null,brand:'budget',color:'#ffffff'})

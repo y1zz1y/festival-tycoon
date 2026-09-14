@@ -1,5 +1,6 @@
 import { testMusicPlanning } from './musicPlanning'
 import { testPixelPeople } from './pixelPeople'
+import { testCarrierModels } from './carrierModels'
 import { testCampingModels } from './campingModels'
 import { testRideAccess } from './rideAccess'
 import { testFestivalAdditions } from './festivalAdditions'
@@ -34,6 +35,9 @@ import { scenePixelRatio } from '../src/view/renderResolution'
 import { testFestival } from './festival'
 import { testBuildMenu } from './buildMenu'
 import { testFinance } from './finance'
+import { testVisitorSleep } from './visitorSleep'
+import { testQueueLanes } from './queueLanes'
+import { testShopGoods } from './shopGoods'
 
 function test(name: string, run: () => void) {
   run()
@@ -41,7 +45,9 @@ function test(name: string, run: () => void) {
 }
 
 testMobileTouch()
+testQueueLanes()
 testPixelPeople()
+testCarrierModels()
 testCampingModels()
 test('build menu lists every placeable tool once', () => {
   testBuildMenu()
@@ -169,10 +175,10 @@ test('transport rendering moves between cells smoothly and respects pause', () =
   assert.equal(model.position.x,paused,'pause freezes visual movement')
   view.animate(false,300)
   assert.ok(model.position.x>paused)
-  snapshot.festival.infrastructure.depots.push({id:'fill-depot',x:2,z:-18,role:'storage',distribution:'shops',stock:{food:150,drinks:0,water:50},minimum:{food:200,drinks:200,water:200}})
+  snapshot.festival.infrastructure.depots.push({id:'fill-depot',x:2,z:-18,role:'storage',distribution:'shops',stock:{food:150,drinks:0,water:50,goods:0},minimum:{food:200,drinks:200,water:200,goods:0}})
   view.update(snapshot,false)
   const bars=(view as any).stockModels.get('fill-depot')
-  assert.equal(bars.children.length,6,'depots and receiving bays show three fill planks')
+  assert.equal(bars.children.length,8,'depots and receiving bays show four fill planks')
   assert.ok(bars.children[1].scale.x>bars.children[3].scale.x,'fuller supplies read as longer planks')
   let at60=0,at144=0
   for(let n=0;n<60;n++)at60+=(1-at60)*transportMotionFactor(1/60)
@@ -183,8 +189,12 @@ test('transport rendering moves between cells smoothly and respects pause', () =
 testEnvironments()
 testSupplyChain(fixture)
 testFestival(fixture)
+test('festival sleep rhythm, tents and circadian energy', () => {
+  testVisitorSleep(fixture)
+})
 testMusicPlanning(fixture)
 testOperations(fixture)
+testShopGoods(fixture)
 testStageTickets(fixture)
 testStageInteraction(fixture)
 

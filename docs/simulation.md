@@ -21,6 +21,16 @@ interpoliert nur. Entscheidungen und Zustandsänderungen dürfen nicht an FPS,
 Festival, Logistik, Personal und Needs. `decisionBudget` wird **pro Tick** aus
 `SIMULATION_CONFIG.pathfinding.decisionsPerTick` gesetzt.
 
+Abreise-, Ausgangs- und Müllrouten aus direkten Callbacks teilen ebenfalls dieses
+Budget. `pendingVisitorRouting` ergänzt die FIFO-Besucherqueue um den Auftragstyp;
+eine Abreise hat innerhalb desselben Besucherauftrags Vorrang. Verschachtelte
+Suchschritte derselben Entscheidung zählen als ein Auftrag. Aktivitäts-/Medizin-
+Freigaben und der Abreisestatus werden sofort gesetzt, nur das Ziel wird verzögert
+ermittelt. Bewegung, Needs, Zulassungen und Spielzeit laufen unverändert weiter.
+Ein Besucher mit noch abzubauendem Camp oder ausstehendem Müll verlässt den Park
+erst nach Bearbeitung. Aufträge enthalten nur IDs, keine Snapshot-Referenzen;
+Abreisen werden nach Laden aus Besucherzustand, Camp und Müll rekonstruiert.
+
 ## Wichtige Regeln
 
 - Speed skaliert Spielminuten und Bewegung, nicht die Tick-Länge.
@@ -43,3 +53,8 @@ Last: `npm run test:performance -- rtest3 120` — siehe `docs/performance.md`.
 Aktualisieren, wenn Tick-Länge, Speed-Indizes, die Reihenfolge in
 `simulateFixedStep`, das Entscheidungsbudget oder die Pause-/Planungslogik
 ändern. Neue pro-Tick-Systeme in die Tabelle „Wo finden“ aufnehmen.
+
+Auch `setParkOpen(false)` aus UI-/Netzwerk-Commands stellt Abreiseaufträge in
+ dieselbe Queue, statt außerhalb eines Simulationsticks für die ganze Menge Wege
+zu suchen. In Pause werden die Zustände sofort aktualisiert und die Routen erst
+nach Fortsetzen unter dem normalen Budget geplant.

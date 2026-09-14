@@ -9,6 +9,7 @@ import type { Infrastructure, InfrastructureAction } from './supplyChain'
 import type { GameSnapshot, Visitor, ActionResult } from './GameState'
 import { hashStringSeed } from './rng'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import { applyFamilyFestivalBedtime } from './visitorSleep'
 import { CONCERT_TOPLESS_CROWD_THOUGHT, CONCERT_TOPLESS_THOUGHT } from './visitorThoughts'
 
 export const AUDIENCES = ['music', 'party', 'family', 'comfort', 'camping'] as const
@@ -42,8 +43,13 @@ export const BANDS = [
   { id: 'confetti', name: 'Confetti Club', genre: 'Pop', audience: 'party', fee: 500, draw: 22, speakers: 0, reputation: 0 },
   { id: 'aurora', name: 'Aurora Avenue', genre: 'Indie · Headliner', audience: 'music', fee: 2800, draw: 100, speakers: 3, reputation: 65 },
 ] as const
-export type Supply = 'food' | 'drinks' | 'water'
-export const SUPPLIES: Record<Supply, { name: string; price: number }> = { food: { name: 'Essen', price: 2 }, drinks: { name: 'Getränke', price: 1.5 }, water: { name: 'Trinkwasser', price: 0.3 } }
+export type Supply = 'food' | 'drinks' | 'water' | 'goods'
+export const SUPPLIES: Record<Supply, { name: string; price: number }> = {
+  food: { name: 'Essen', price: 2 },
+  drinks: { name: 'Getränke', price: 1.5 },
+  water: { name: 'Trinkwasser', price: 0.3 },
+  goods: { name: 'Allgemeine Waren', price: 1.2 },
+}
 export const UPGRADES = {
   drainage: { name: 'Entwässerung & Wegmatten', cost: 900, detail: 'Halbiert die Schlammwirkung auf unbefestigten Flächen.' },
   shelter: { name: 'Überdachte Ruheplätze', cost: 700, detail: 'Schützt bis zu 250 Gäste vor Regen und Hitze.' },
@@ -89,7 +95,7 @@ const clamp = (n: number) => Math.max(0, Math.min(100, n))
 export const festivalTime = (s: Readonly<GameSnapshot>) => s.day * 1440 + s.minute
 export function createFestivalManagement(): FestivalManagement {
   return { infrastructure: createInfrastructure(), enabled: false, finished: false, edition: 0, startDay: 1, reportDay: 1, openingMoney: 0,
-    bookings: [], supplies: { food: 0, drinks: 0, water: 0 },
+    bookings: [], supplies: { food: 0, drinks: 0, water: 0, goods: 0 },
     upgrades: { drainage: false, shelter: false, rigging: false, water: false, quiet: false, warehouse: false },
     deliveries: [], reputation: { music: 40, atmosphere: 50, comfort: 50, organization: 50 }, reports: [],
     weather: 'sun', wetness: 0, seed: 1, nextId: 1, metrics: metrics(), lastUpdate: 0,
@@ -127,7 +133,14 @@ export function assignAudience(visitor: Visitor, f: FestivalManagement): void {
   visitor.budget *= group === 'comfort' ? 1.35 : group === 'family' ? 1.15 : group === 'camping' ? 0.9 : 1
   visitor.partyPreference = group === 'party' ? 0.95 : group === 'family' || group === 'comfort' ? 0.25 : 0.65
   visitor.beautyPreference = group === 'comfort' || group === 'family' ? 0.9 : 0.45
-  if (group === 'family') { visitor.alcoholDesire = 0; visitor.preferredBedtime = 21 }
+  if (group === 'family') {
+    visitor.alcoholDesire = 0
+    applyFamilyFestivalBedtime(
+      visitor,
+      SIMULATION_CONFIG.camping.sleepSchedule,
+      SIMULATION_CONFIG.time.minutesPerDay,
+    )
+  }
 }
 export function activeBookings(s: Readonly<GameSnapshot>): Booking[] {
   if (!s.festival.enabled || s.festival.finished) return []

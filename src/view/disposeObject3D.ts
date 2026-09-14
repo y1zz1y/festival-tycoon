@@ -1,5 +1,6 @@
 import {
   Material,
+  InstancedMesh,
   Object3D,
   Texture,
 } from 'three'
@@ -13,6 +14,8 @@ export function disposeObject3D(
   const textures = new Set<Texture>()
 
   root.traverse((object) => {
+    // Instance attributes belong to the mesh, separately from geometry/material.
+    if (object instanceof InstancedMesh) object.dispose()
     const geometry = (object as Object3D & {
       geometry?: { dispose: () => void; userData?: { shared?: boolean } }
     }).geometry

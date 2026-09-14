@@ -14,6 +14,13 @@ import './style.css'
 import { mountFestivalUI } from './festivalUI'
 import { AUDIENCE_NAMES, SUPPLIES } from './game/festivalManagement'
 import type { Supply } from './game/festivalManagement'
+import {
+  SHIRT_COLORS,
+  SHIRT_STYLE_LABELS,
+  SHIRT_STYLES,
+  isPricedShopKind,
+  shopSupplyKind,
+} from './game/shopGoods'
 import { snapStockMinimum } from './game/supplyChain'
 import { BUILDINGS } from './game/catalog'
 import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financePeriodTotal } from './game/finance'
@@ -44,12 +51,17 @@ import type {
 } from './game/coasters'
 import { GameState } from './game/GameState'
 import {
+  ACCESS_HOURS_PER_DAY,
+  ACCESS_SCHEDULE_TIME_LABELS,
   areaPreviewText,
   currentAccessSlot,
+  isAccessScheduleOpen,
   previewLabel,
+  resolvedScheduleTime,
   toggleAreaCells,
   type AccessControl,
   type AccessControlMode,
+  type AccessScheduleTime,
 } from './game/accessControl'
 import type { PlacedBuilding } from './game/GameState'
 import {
@@ -68,16 +80,18 @@ import {
 } from './game/scenario'
 import type { ScenarioSettings } from './game/scenario'
 import { INVENTORY_ITEMS } from './game/inventory'
-import { STAFF_DEFINITIONS, STAFF_ROLES } from './game/staff'
+import { STAFF_DEFINITIONS, STAFF_ROLES, SWEEPER_STAFF_ICON, sweeperStaffName } from './game/staff'
 import type { StaffRole, StaffState } from './game/staff'
 import {
   DAY_PLAN_OFFERS,
   DAY_PLAN_OFFER_LABELS,
+  FESTIVAL_PHASE_LABELS,
+  FESTIVAL_PHASES,
   getFestivalCycleStatus,
   isDayVisitorAdmissionOpen,
   isFestivalOfferActive,
 } from './game/dayPlan'
-import type { DayPlanOffer } from './game/dayPlan'
+import type { DayPlanOffer, FestivalPhase } from './game/dayPlan'
 import {
   COMPLAINT_LABELS,
   COMPLAINT_TOPICS,
@@ -333,6 +347,10 @@ app.innerHTML = `
         <button id="close-path-editor" class="panel-close-button" aria-label="Wege schließen">×</button>
       </div>
       <div id="path-tools"></div>
+      <section id="road-editor-tools" class="rct-editor-section" hidden>
+        <label>Straßen & Verkehr</label>
+        <div class="piece-palette">${buildCategoryById('roads').groups.flatMap(group => group.items).map(item => `<button type="button" data-road-editor-tool="${item.tool}" title="${item.detail}">${item.icon}<small>${item.name}</small></button>`).join('')}</div>
+      </section>
       <section class="rct-editor-section rct-path-art">
         <label>Art</label>
         <div class="piece-palette path-type-palette">
@@ -378,7 +396,7 @@ app.innerHTML = `
         <label>Zugänge</label>
         <div class="path-access-grid">
           <button type="button" data-path-access="pathBarrier" title="Personentor auf einen Weg">🚧<small>Tor</small></button>
-          <button type="button" data-path-access="staffGate" title="Nur Personal und Logistik">🛂<small>Personaleingang</small></button>
+          <button type="button" data-path-access="staffGate" title="Personal, Saugroboter und Warenlogistik">🛂<small>Personaleingang</small></button>
           <button type="button" data-path-access="securityGate" title="Sicherheitsschleuse / Festival-Einlass">🎟️<small>Festival-Einlass</small></button>
         </div>
       </section>
@@ -547,6 +565,12 @@ app.innerHTML = `
           <div class="price-input"><input id="entity-price" type="number" min="0" max="1000000" step="1" /> <b>€</b></div>
           <button id="apply-price-to-kind" type="button">Für alle gleichen Läden übernehmen</button>
         </div>
+        <div id="shirt-options" class="coaster-options">
+          <label>T-Shirt-Farbe</label>
+          <div id="shirt-color-palette" class="shirt-color-palette"></div>
+          <label for="shirt-style">Schnitt</label>
+          <select id="shirt-style">${SHIRT_STYLES.map((style) => `<option value="${style}">${SHIRT_STYLE_LABELS[style]}</option>`).join('')}</select>
+        </div>
         <div id="coaster-options" class="coaster-options">
           <label for="operation-mode">Betriebsmodus</label>
           <select id="operation-mode">
@@ -584,8 +608,32 @@ app.innerHTML = `
             </div>
           </div>
           <div id="access-schedule">
-            <label>Grüne Slots je Stunde</label>
-            <div id="access-slots" class="access-slots"></div>
+            <label>Gilt an</label>
+            <div class="access-mode-row access-phases">
+              <button type="button" data-access-phase="lead">Vorbereitung</button>
+              <button type="button" data-access-phase="festival">Festival</button>
+              <button type="button" data-access-phase="break">Pause</button>
+            </div>
+            <label>Zeit</label>
+            <div class="access-mode-row access-schedule-time">
+              <button type="button" data-access-schedule-time="hourlySlots">Slots je Stunde</button>
+              <button type="button" data-access-schedule-time="hours">Tageszeit</button>
+              <button type="button" data-access-schedule-time="dayPlan">Nach Zeitplan</button>
+            </div>
+            <div id="access-slots-wrap">
+              <label>Grüne Slots je Stunde</label>
+              <div id="access-slots" class="access-slots"></div>
+            </div>
+            <div id="access-hours" hidden>
+              <label>Offene Stunden</label>
+              <div id="access-hour-grid" class="access-hours"></div>
+            </div>
+            <div id="access-day-plan" hidden>
+              <label for="access-schedule-offer">Zeitplan</label>
+              <select id="access-schedule-offer"></select>
+              <p class="scenario-hint">Folgt den Öffnungszeiten aus Festival planen.</p>
+            </div>
+            <p id="access-schedule-hint" class="scenario-hint"></p>
           </div>
           <div id="access-sensor" hidden>
             <label>Signal wenn die Regel zutrifft</label>
@@ -625,6 +673,8 @@ app.innerHTML = `
           <input id="depot-min-drinks" data-depot-min="drinks" type="range" min="0" max="800" step="20" value="0" />
           <label>Wasser Mindestbestand: <b id="depot-min-water-value">0</b></label>
           <input id="depot-min-water" data-depot-min="water" type="range" min="0" max="800" step="20" value="0" />
+          <label>Allgemeine Waren Mindestbestand: <b id="depot-min-goods-value">0</b></label>
+          <input id="depot-min-goods" data-depot-min="goods" type="range" min="0" max="800" step="20" value="0" />
           <button id="depot-remove" type="button">Leeres Depot abbauen · +200 €</button>
         </div>
         <div id="security-options" class="coaster-options">
@@ -770,6 +820,8 @@ app.innerHTML = `
         <input id="supply-min-drinks" data-supply-min="drinks" type="range" min="0" max="800" step="20" value="0" />
         <label>Wasser Mindestbestand: <b id="supply-min-water-value">0</b></label>
         <input id="supply-min-water" data-supply-min="water" type="range" min="0" max="800" step="20" value="0" />
+        <label>Allgemeine Waren Mindestbestand: <b id="supply-min-goods-value">0</b></label>
+        <input id="supply-min-goods" data-supply-min="goods" type="range" min="0" max="800" step="20" value="0" />
         <button id="supply-remove-depot" type="button">Leeres Depot abbauen · +200 €</button>
         <p id="supply-status" class="scenario-hint"></p>
         <div id="supply-deliveries"></div>
@@ -938,6 +990,7 @@ const pathDemolishButton = requireElement<HTMLButtonElement>('#path-demolish')
 const pathConstructionTypeSelect =
   requireElement<HTMLSelectElement>('#path-construction-type')
 const PATH_WINDOW_TOOLS: Tool[] = ['path', 'pathBarrier', 'staffGate', 'securityGate']
+const ROAD_WINDOW_TOOLS: Tool[] = buildCategoryById('roads').groups.flatMap(group => group.items.map(item => item.tool))
 const coasterBuilder = requireElement<HTMLElement>('#coaster-builder')
 const coasterConstructionTitle = requireElement<HTMLElement>('#coaster-construction-title')
 const coasterStatus = requireElement<HTMLElement>('#coaster-status')
@@ -972,6 +1025,9 @@ const priceOptions = requireElement<HTMLElement>('#price-options')
 const entityPriceInput = requireElement<HTMLInputElement>('#entity-price')
 const applyPriceToKindButton =
   requireElement<HTMLButtonElement>('#apply-price-to-kind')
+const shirtOptions = requireElement<HTMLElement>('#shirt-options')
+const shirtColorPalette = requireElement<HTMLElement>('#shirt-color-palette')
+const shirtStyleSelect = requireElement<HTMLSelectElement>('#shirt-style')
 const coasterOptions = requireElement<HTMLElement>('#coaster-options')
 const dispatchModeSelect = requireElement<HTMLSelectElement>('#dispatch-mode')
 const dispatchIntervalInput = requireElement<HTMLInputElement>('#dispatch-interval')
@@ -981,7 +1037,13 @@ const accessControlOptions = requireElement<HTMLElement>('#access-control-option
 const accessSignal = requireElement<HTMLElement>('#access-signal')
 const accessSchedule = requireElement<HTMLElement>('#access-schedule')
 const accessSensor = requireElement<HTMLElement>('#access-sensor')
+const accessSlotsWrap = requireElement<HTMLElement>('#access-slots-wrap')
 const accessSlots = requireElement<HTMLElement>('#access-slots')
+const accessHours = requireElement<HTMLElement>('#access-hours')
+const accessHourGrid = requireElement<HTMLElement>('#access-hour-grid')
+const accessDayPlan = requireElement<HTMLElement>('#access-day-plan')
+const accessScheduleOffer = requireElement<HTMLSelectElement>('#access-schedule-offer')
+const accessScheduleHint = requireElement<HTMLElement>('#access-schedule-hint')
 const accessSensorKind = requireElement<HTMLSelectElement>('#access-sensor-kind')
 const accessThreshold = requireElement<HTMLInputElement>('#access-threshold')
 const accessThresholdLabel = requireElement<HTMLElement>('#access-threshold-label')
@@ -1131,6 +1193,7 @@ dayEntryHour.innerHTML = hourOptions
 dayExitHour.innerHTML = hourOptions
 let securityItemsFingerprint = ''
 let pathWindowOpen = false
+let roadEditorOpen = false
 let pathEditorActive = false
 let pathDemolishActive = false
 let pathAnchor: PathAnchor | null = null
@@ -1141,6 +1204,7 @@ let pathHistory: Array<{
   from: PathAnchor
   to: PathAnchor
   previousPath?: PlacedBuilding
+  roadExisted?: boolean
 }> = []
 let dragPathStart: CellPosition | null = null
 let dragPathEnd: CellPosition | null = null
@@ -1259,7 +1323,14 @@ const setFestivalWalk = (enabled: boolean): void => {
   }
   view.setWalkMode(enabled)
 }
-view.setVehicleClickHandler((vehicleId) => openEntityInfoForVehicle(vehicleId))
+view.setVehicleClickHandler((vehicleId) => {
+  const vehicle = game.snapshot.logistics.roadVehicles.find((entry) => entry.id === vehicleId)
+  if (vehicle?.kind === 'sweeper') {
+    openSweeperStaff(vehicleId)
+    return
+  }
+  openEntityInfoForVehicle(vehicleId)
+})
 view.setAccessControlClickHandler((accessId) => openEntityInfoForAccess(accessId))
 view.setWalkModeListener(syncWalkModeUi)
 walkModeButton.addEventListener('click', () => setFestivalWalk(!view.isWalkMode()))
@@ -1406,7 +1477,7 @@ function bindGameState(nextGame: GameState): void {
       requireElement<HTMLElement>('#cancel-ride-access').hidden=true
     }
     if (activeRideId && snapshot.selectedTool!=='ride' && snapshot.selectedTool!=='inspect') closeRideBuilder(false)
-    if (pathWindowOpen && !PATH_WINDOW_TOOLS.includes(snapshot.selectedTool)) closePathEditor()
+    if (pathWindowOpen && !(roadEditorOpen ? ROAD_WINDOW_TOOLS : PATH_WINDOW_TOOLS).includes(snapshot.selectedTool)) closePathEditor()
     else if (pathWindowOpen) updatePathEditor()
     document.querySelectorAll<HTMLElement>('[data-tool]').forEach((button) => {
       button.classList.toggle('active', button.dataset.tool === snapshot.selectedTool && (snapshot.selectedTool !== 'ride' || (button.dataset.bungee === 'true') === (view.bungeePreviewHeight !== null)))
@@ -1453,23 +1524,33 @@ function openStaffOverview(role: StaffRole): void {
   updateStaffOverview(true)
 }
 
+function openSweeperStaff(vehicleId: string): void {
+  closeEntityPanel()
+  openStaffOverview('cleaner')
+  staffDetails.open(vehicleId)
+}
+
 function updateStaffOverview(force = false): void {
   if (!staffPanel.classList.contains('visible')) return
   const role = currentStaffRole
   const definition = STAFF_DEFINITIONS[role]
   const members = game.snapshot.staff.filter((member) => member.role === role)
+  const sweepers = role === 'cleaner'
+    ? game.snapshot.logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'sweeper')
+    : []
   const working = members.filter((member) => member.state !== 'patrolling').length
-  const fingerprint = `${role}:${working}:` + members
-    .map((member) => `${member.id}:${member.state}:${(member.workZones ?? []).join(',')}`)
-    .sort()
-    .join('|')
+    + sweepers.filter((vehicle) => vehicle.state !== 'idle').length
+  const fingerprint = `${role}:${working}:` + [
+    ...members.map((member) => `${member.id}:${member.state}:${(member.workZones ?? []).join(',')}`),
+    ...sweepers.map((vehicle) => `${vehicle.id}:${vehicle.state}:${vehicle.cargo}:${(vehicle.workZones ?? []).join(',')}`),
+  ].sort().join('|')
   if (!force && fingerprint === staffPanelFingerprint && staffList.childElementCount > 0) return
   staffPanelFingerprint = fingerprint
   requireElement<HTMLElement>('#staff-panel-title').textContent = `Übersicht ${definition.name}`
   document.querySelectorAll<HTMLButtonElement>('.staff-role-tabs [data-staff-role]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.staffRole === role))
   })
-  const rows = members.map((member) => {
+  const staffRows = members.map((member) => {
     const hired = member.hiredDay != null && member.hiredMinute != null
       ? `Tag ${member.hiredDay} · ${formatTime(member.hiredMinute)}`
       : '—'
@@ -1481,14 +1562,33 @@ function updateStaffOverview(force = false): void {
       <td>${zoneCount ? `${zoneCount} Bereich${zoneCount === 1 ? '' : 'e'}` : 'Kein Bereich'}</td>
       <td><button class="staff-remove" data-fire-member="${member.id}" aria-label="${escapeHtml(member.name)} entlassen">🗑️</button></td>
     </tr>`
-  }).join('')
+  })
+  const sweeperRows = sweepers.map((vehicle) => {
+    const name = sweeperStaffName(vehicle.id)
+    const zoneCount = vehicle.workZones?.length ?? 0
+    return `<tr data-inspect-staff="${vehicle.id}" tabindex="0" role="button" aria-label="${escapeHtml(name)} öffnen">
+      <td>${SWEEPER_STAFF_ICON} ${escapeHtml(name)}</td>
+      <td>Saugroboter</td>
+      <td>${escapeHtml(describeRoadVehicleActivity(vehicle))}</td>
+      <td>${zoneCount ? `${zoneCount} Bereich${zoneCount === 1 ? '' : 'e'}` : 'Kein Bereich'}</td>
+      <td><button class="staff-remove" data-fire-member="${vehicle.id}" aria-label="${escapeHtml(name)} verkaufen">🗑️</button></td>
+    </tr>`
+  })
+  const rows = [...staffRows, ...sweeperRows].join('')
+  const listed = members.length + sweepers.length
+  const wageText = sweepers.length
+    ? `${listed} · ${formatMoney(members.length * definition.hourlyWage)}/h`
+    : `${members.length} · ${formatMoney(members.length * definition.hourlyWage)}/h`
+  const hint = sweepers.length
+    ? `${working} im Einsatz · ${formatMoney(definition.hourlyWage)}/h je Person · Saugroboter ohne Lohn`
+    : `${working} im Einsatz · ${formatMoney(definition.hourlyWage)}/h je Person`
   staffList.innerHTML = `
-    <div><span>${definition.icon}</span><strong>${definition.name}</strong><b>${members.length} · ${formatMoney(members.length * definition.hourlyWage)}/h</b></div>
-    <small>${working} im Einsatz · ${formatMoney(definition.hourlyWage)}/h je Person</small>
+    <div><span>${definition.icon}</span><strong>${definition.name}</strong><b>${wageText}</b></div>
+    <small>${hint}</small>
     <div class="staff-actions">
       <button data-hire-staff="${role}">Einstellen · ${formatMoney(definition.hireCost)}</button>
     </div>
-    ${members.length ? `<hr class="staff-divider"><table class="staff-table"><thead><tr><th>Name</th><th>Wann eingestellt</th><th>Aktuelle Tätigkeit</th><th>Bereich zugewiesen</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : ''}
+    ${listed ? `<hr class="staff-divider"><table class="staff-table"><thead><tr><th>Name</th><th>Wann eingestellt</th><th>Aktuelle Tätigkeit</th><th>Bereich zugewiesen</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : ''}
   `
 }
 
@@ -1968,6 +2068,17 @@ function handleCellClick(cell: CellPosition): void {
   }
 
   if (pathEditorActive) {
+    if (roadEditorOpen) {
+      const existing = game.getRoadCellAt(cell.x, cell.z)
+      const result = existing ? { ok: true, message: 'Startpunkt gewählt' } : buildRoadCell(cell)
+      if (result.ok) {
+        pathAnchor = { x: cell.x, z: cell.z, elevation: game.getTerrainHeight(cell.x, cell.z) }
+        pathHistory = []
+        updatePathEditor()
+      }
+      showToast(result.message, !result.ok)
+      return
+    }
     const path =
       game.getPathAt(cell.x, cell.z, game.snapshot.buildElevation) ??
       game.getPathAt(cell.x, cell.z)
@@ -2014,6 +2125,10 @@ function handleCellClick(cell: CellPosition): void {
   if (tool === 'inspect') {
     const vehicle = game.getVehicleAt(cell.x, cell.z)
     if (vehicle) {
+      if (vehicle.kind === 'sweeper') {
+        openSweeperStaff(vehicle.id)
+        return
+      }
       openEntityInfoForVehicle(vehicle.id)
       return
     }
@@ -2072,7 +2187,7 @@ function handleCellClick(cell: CellPosition): void {
   }
 
   if (tool === 'road') {
-    const result = game.designateRoad([cell])
+    const result = buildRoadCell(cell)
     showToast(result.message, !result.ok)
     return
   }
@@ -2151,6 +2266,7 @@ function handleCellClick(cell: CellPosition): void {
       type: 'staffGate',
       ...cell,
       elevation: path?.elevation ?? 0,
+      direction: game.snapshot.buildRotation as 0 | 1 | 2 | 3,
     })
     showToast(result.message, !result.ok)
     return
@@ -2364,8 +2480,12 @@ function finishPathDrag(): void {
     return
   }
   if (game.snapshot.selectedTool === 'road') {
-    const result = game.designateRoad(cells)
-    showToast(result.message, !result.ok)
+    if (pathDemolishActive) {
+      for (const cell of cells) if (demolishPathAt(cell, true)) built++
+    } else {
+      for (const cell of cells) if (buildRoadCell(cell).ok) built++
+    }
+    showToast(`${built} Straßenfelder ${pathDemolishActive ? 'entfernt' : 'gebaut'}`, built === 0)
     dragPathStart = null
     dragPathEnd = null
     view.setPathDragPreview([], 0)
@@ -2550,6 +2670,13 @@ function getIsoDirectionIcon(direction: number): string {
 }
 
 function demolishPathAt(cell: CellPosition, quiet = false): boolean {
+  if (roadEditorOpen) {
+    if (!game.getRoadCellAt(cell.x, cell.z)) return false
+    const result = game.bulldoze(cell.x, cell.z)
+    if (!quiet) showToast(result.message, !result.ok)
+    if (result.ok) { pathAnchor = null; pathHistory = []; updatePathEditor() }
+    return result.ok
+  }
   const path =
     game.getPathAt(cell.x, cell.z, game.snapshot.buildElevation) ??
     game.getPathAt(cell.x, cell.z)
@@ -2569,7 +2696,8 @@ function demolishPathAt(cell: CellPosition, quiet = false): boolean {
 
 function resumePathPlacement(): void {
   pathDemolishActive = false
-  if (game.snapshot.selectedTool !== 'path') game.setTool('path')
+  supplyPlanner.releaseTool()
+  game.setTool(roadEditorOpen ? 'road' : 'path')
 }
 
 function setPathConstructMode(construct: boolean): void {
@@ -2578,17 +2706,21 @@ function setPathConstructMode(construct: boolean): void {
   pathHistory = []
   pathDemolishActive = false
   supplyPlanner.releaseTool()
-  game.setTool('path')
+  game.setTool(roadEditorOpen ? 'road' : 'path')
   updatePathEditor()
 }
 
-function openPathWindow(construct = false): void {
+function openPathWindow(construct = false, road = false): void {
   closeRideBuilder(false)
   if (coasterBuilderActive) closeCoasterBuilder()
   pathWindowOpen = true
   closeBuildMenu()
+  roadEditorOpen = road
+  pathSlope = 0
+  supplyPlanner.setEditorRoad(road)
   setPathConstructMode(construct)
-  setToolbarCategoryOpen('paths')
+  pathConstruction.scrollTop = 0
+  setToolbarCategoryOpen(road ? 'roads' : 'paths')
   buildMenuToggle.setAttribute('aria-expanded', 'true')
 }
 
@@ -2600,6 +2732,7 @@ function closePathEditor(): void {
   pathHistory = []
   pathConstruction.classList.remove('visible', 'path-mode-construct', 'path-mode-paint')
   view.setPathConstructionPreview(false, null, pathDirection, pathSlope)
+  view.setPathDragPreview([], 0)
   if (buildMenuPanel.hidden) {
     setToolbarCategoryOpen(null)
     buildMenuToggle.setAttribute('aria-expanded', 'false')
@@ -2612,7 +2745,7 @@ function rotatePathDirection(delta: number): void {
 }
 
 function setPathSlope(value: number): void {
-  pathSlope = Math.max(-1, Math.min(1, value)) as -1 | 0 | 1
+  pathSlope = roadEditorOpen ? 0 : Math.max(-1, Math.min(1, value)) as -1 | 0 | 1
   updatePathEditor()
 }
 
@@ -2624,6 +2757,18 @@ function buildNextPathSegment(): void {
     x: pathAnchor.x + direction.x,
     z: pathAnchor.z + direction.z,
     elevation: pathAnchor.elevation + pathSlope,
+  }
+  if (roadEditorOpen) {
+    next.elevation = game.getTerrainHeight(next.x, next.z)
+    const existed = Boolean(game.getRoadCellAt(next.x, next.z))
+    const result = existed ? { ok: true, message: 'Straße verbunden' } : buildRoadCell(next)
+    if (result.ok) {
+      pathHistory.push({ from: { ...pathAnchor }, to: next, roadExisted: existed })
+      pathAnchor = next
+      updatePathEditor()
+    }
+    showToast(result.message, !result.ok)
+    return
   }
   const candidateBase = Math.min(pathAnchor.elevation, next.elevation)
   const candidateTop =
@@ -2665,7 +2810,9 @@ function buildNextPathSegment(): void {
 function undoLastPathSegment(): void {
   const entry = pathHistory.pop()
   if (!entry) return
-  const result = game.undoPathSegment(
+  const result = roadEditorOpen
+    ? entry.roadExisted ? { ok: true, message: 'Vorheriges Straßenfeld' } : game.bulldoze(entry.to.x, entry.to.z)
+    : game.undoPathSegment(
     entry.to.x,
     entry.to.z,
     entry.to.elevation,
@@ -2682,6 +2829,12 @@ function undoLastPathSegment(): void {
 }
 
 function updatePathEditor(): void {
+  pathConstruction.classList.toggle('road-editor', roadEditorOpen)
+  pathConstruction.querySelector('.panel-header-title')!.textContent = roadEditorOpen ? 'Autostraßen' : 'Fußwege'
+  pathConstruction.setAttribute('aria-label', roadEditorOpen ? 'Autostraßen' : 'Fußwege')
+  requireElement<HTMLElement>('#road-editor-tools').hidden = !roadEditorOpen
+  pathDemolishButton.title = roadEditorOpen ? 'Straßen abreißen' : 'Wege abreißen'
+  requireElement<HTMLButtonElement>('#close-path-editor').setAttribute('aria-label', roadEditorOpen ? 'Straßen schließen' : 'Wege schließen')
   pathConstruction.classList.toggle('visible', pathWindowOpen)
   pathConstruction.classList.toggle('path-mode-construct', pathWindowOpen && pathEditorActive)
   pathConstruction.classList.toggle('path-mode-paint', pathWindowOpen && !pathEditorActive)
@@ -2707,7 +2860,7 @@ function updatePathEditor(): void {
       button.disabled = !pathEditorActive || !pathAnchor
       return
     }
-    button.disabled = !pathEditorActive
+    button.disabled = !pathEditorActive || (roadEditorOpen && button.hasAttribute('data-slope'))
   })
   constructionStatus.textContent = pathDemolishActive
     ? 'Weg anklicken oder ziehen zum Abreißen.'
@@ -2731,7 +2884,17 @@ function updatePathEditor(): void {
     const icon = button.querySelector('span')
     if (icon) icon.textContent = getIsoDirectionIcon(direction)
   })
-  view.setPathConstructionPreview(pathEditorActive, pathAnchor, pathDirection, pathSlope)
+  view.setPathConstructionPreview(pathEditorActive && !roadEditorOpen, pathAnchor, pathDirection, pathSlope)
+  if (roadEditorOpen && pathEditorActive && pathAnchor) {
+    const direction = PATH_DIRECTIONS[pathDirection]!
+    view.setPathDragPreview([{ x: pathAnchor.x + direction.x, z: pathAnchor.z + direction.z }], pathAnchor.elevation)
+  } else if (roadEditorOpen) {
+    view.setPathDragPreview([], 0)
+  }
+}
+
+function buildRoadCell(cell: { x: number; z: number }) {
+  return game.manageFestival({ type: 'wayArea', from: cell, to: cell, kind: supplyPlanner.getRoadType() })
 }
 
 function openCoasterBuilder(coasterId: string | null = null): void {
@@ -3038,10 +3201,14 @@ function updateContextHelp(): void {
     return
   }
   if (pathWindowOpen && pathDemolishActive) {
-    contextHelp.textContent = 'Weg anklicken oder ziehen, um ihn abzureißen.'
+    contextHelp.textContent = roadEditorOpen ? 'Straße anklicken oder ziehen, um sie abzureißen.' : 'Weg anklicken oder ziehen, um ihn abzureißen.'
     return
   }
   if (pathWindowOpen && pathEditorActive) {
+    if (roadEditorOpen) {
+      contextHelp.textContent = pathAnchor ? 'Richtung wählen, dann Bauen oder Enter. Zurück mit Backspace.' : 'Feld anklicken, um das erste Straßenstück zu setzen.'
+      return
+    }
     contextHelp.textContent = pathAnchor
       ? 'Richtung und Neigung wählen, dann „Bauen“ oder das nächste Feld anklicken.'
       : 'Feld anklicken, um das erste Wegstück zu setzen.'
@@ -3143,7 +3310,7 @@ function updateContextHelp(): void {
   } else if (tool === 'supplyDepot') {
     contextHelp.textContent = 'Depot an einem Fußweg auf verdichtetem Boden setzen (400 €).'
   } else if (tool === 'staffGate') {
-    contextHelp.textContent = 'Fußweg anklicken: Personaltor nur für Personal und Logistik (80 €). Nochmaliger Klick entfernt es.'
+    contextHelp.textContent = 'Fußweg anklicken: Personaleingang an die Kante in der aktuellen Baurichtung setzen (80 €). Nochmaliger Klick entfernt es.'
   } else if (tool === 'roadSeparator') {
     contextHelp.textContent = 'Straße anklicken: Kante in aktueller Baurichtung sperren.'
   } else if (tool === 'fence') {
@@ -3301,7 +3468,21 @@ function updateVisitorPanel(): void {
             return `<span title="${definition.name}${deployed}">${definition.icon} ${definition.name} ×${item.quantity}${deployed}</span>`
           })
           .join('')
-      : '<small>Keine Gegenstände</small>'
+      : ''
+  const souvenirBits: string[] = []
+  if (visitor.ownedMascot) {
+    souvenirBits.push(
+      `<span title="Maskottchen">${visitor.heldMascot ? '🧸 Maskottchen · in der Hand' : '🧸 Maskottchen'}</span>`,
+    )
+  }
+  if (visitor.wornShirt) {
+    souvenirBits.push(
+      `<span title="Festival-Shirt">👕 ${SHIRT_STYLE_LABELS[visitor.wornShirt.style]}</span>`,
+    )
+  }
+  visitorInventory.innerHTML =
+    [visitorInventory.innerHTML, ...souvenirBits].filter(Boolean).join('') ||
+    '<small>Keine Gegenstände</small>'
 
   const needKeys = ['hunger', 'toilet', 'fun', 'energy'] as const
   needKeys.forEach((key) => {
@@ -3573,6 +3754,7 @@ function updateEntityPanel(): void {
     entityOverview.hidden = false
     entityDynamics.classList.remove('visible')
     priceOptions.classList.remove('visible')
+    shirtOptions.classList.remove('visible')
     applyPriceToKindButton.hidden = true
     securityOptions.classList.remove('visible')
     coasterOptions.classList.remove('visible')
@@ -3604,6 +3786,7 @@ function updateEntityPanel(): void {
     entityOverview.hidden = false
     entityDynamics.classList.remove('visible')
     priceOptions.classList.remove('visible')
+    shirtOptions.classList.remove('visible')
     applyPriceToKindButton.hidden = true
     securityOptions.classList.remove('visible')
     coasterOptions.classList.remove('visible')
@@ -3647,6 +3830,7 @@ function updateEntityPanel(): void {
     entityOverview.hidden = false
     entityDynamics.classList.remove('visible')
     priceOptions.classList.remove('visible')
+    shirtOptions.classList.remove('visible')
     applyPriceToKindButton.hidden = true
     securityOptions.classList.remove('visible')
     coasterOptions.classList.remove('visible')
@@ -3694,7 +3878,7 @@ function updateEntityPanel(): void {
       ${building.stageDesign ? `<span>Eigene Bühne <b>${escapeHtml(building.stageDesign.name)}</b></span><span>Party / Umgebung <b>${stageStats(building.stageDesign).party} / ${stageStats(building.stageDesign).beauty}</b></span><span>Technik zusätzlich <b>${stageStats(building.stageDesign).power} kW · ${stageStats(building.stageDesign).upkeep} €/h</b></span>` : ''}
       <span>Unterhalt <b>${formatMoney(definition.upkeep)}/h</b></span>
       <span>Kapazität <b>${building.rideType === 'bungee' ? '1 Springer' : definition.capacity}</b></span>
-      ${['food','alcohol','toilet'].includes(building.kind) ? `<span>Warenbestand <b>${Math.floor(game.snapshot.festival.infrastructure.shops[building.id]?.[building.kind==='food'?'food':building.kind==='alcohol'?'drinks':'water']??0)} / Ziel 40</b></span>` : ''}
+      ${shopSupplyKind(building.kind) ? `<span>Warenbestand <b>${Math.floor(game.snapshot.festival.infrastructure.shops[building.id]?.[shopSupplyKind(building.kind)!]??0)} / Ziel 40</b></span>` : ''}
       ${
         building.kind === 'wasteBin'
           ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity}</b></span>`
@@ -3711,9 +3895,26 @@ function updateEntityPanel(): void {
     entityTabs.classList.remove('visible')
     entityOverview.hidden = false
     entityDynamics.classList.remove('visible')
-    const hasPrice =
-      building.kind === 'food' || building.kind === 'ride' || building.kind === 'alcohol'
+    const hasPrice = isPricedShopKind(building.kind)
+    const isShirtStall = building.kind === 'shirt'
     priceOptions.classList.toggle('visible', hasPrice)
+    shirtOptions.classList.toggle('visible', isShirtStall)
+    if (isShirtStall) {
+      const selectedColor = building.shirtColor ?? SHIRT_COLORS[0]!.color
+      if (shirtColorPalette.dataset.built !== '1') {
+        shirtColorPalette.innerHTML = SHIRT_COLORS.map(
+          (swatch) =>
+            `<button type="button" class="shirt-color-swatch" data-shirt-color="${swatch.color}" title="${swatch.name}" style="background:#${swatch.color.toString(16).padStart(6, '0')}"></button>`,
+        ).join('')
+        shirtColorPalette.dataset.built = '1'
+      }
+      shirtColorPalette.querySelectorAll<HTMLButtonElement>('[data-shirt-color]').forEach((button) => {
+        button.classList.toggle('selected', Number(button.dataset.shirtColor) === selectedColor)
+      })
+      if (document.activeElement !== shirtStyleSelect) {
+        shirtStyleSelect.value = building.shirtStyle ?? 'basic'
+      }
+    }
     applyPriceToKindButton.hidden = !hasPrice
     if (hasPrice) {
       applyPriceToKindButton.textContent =
@@ -3796,6 +3997,7 @@ function updateEntityPanel(): void {
     <span>Geschwindigkeit <b>${Math.abs(train.speed * 3.6).toFixed(1)} km/h</b></span>
   `
   coasterOptions.classList.add('visible')
+  shirtOptions.classList.remove('visible')
   securityOptions.classList.remove('visible')
   depotOptions.classList.remove('visible')
   entityTabs.classList.add('visible')
@@ -4012,6 +4214,47 @@ function ensureAccessSlotButtons(): void {
   )
 }
 
+function ensureAccessHourButtons(): void {
+  if (accessHourGrid.childElementCount === ACCESS_HOURS_PER_DAY) return
+  accessHourGrid.replaceChildren(
+    ...Array.from({ length: ACCESS_HOURS_PER_DAY }, (_, hour) => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.dataset.accessHour = String(hour)
+      button.textContent = `${String(hour).padStart(2, '0')}`
+      return button
+    }),
+  )
+}
+
+function fillAccessScheduleOfferOptions(): void {
+  if (accessScheduleOffer.childElementCount === DAY_PLAN_OFFERS.length) return
+  accessScheduleOffer.replaceChildren(
+    ...DAY_PLAN_OFFERS.map((offer) => {
+      const option = document.createElement('option')
+      option.value = offer
+      option.textContent = `${DAY_PLAN_OFFER_LABELS[offer].icon} ${DAY_PLAN_OFFER_LABELS[offer].name}`
+      return option
+    }),
+  )
+}
+
+function accessScheduleHintText(control: AccessControl): string {
+  const snapshot = game.snapshot
+  const cycle = getFestivalCycleStatus(snapshot.dayPlan, snapshot.day)
+  const phaseLabel = FESTIVAL_PHASE_LABELS[cycle.phase]
+  const open = isAccessScheduleOpen(control, snapshot.minute, {
+    day: snapshot.day,
+    dayPlan: snapshot.dayPlan,
+  })
+  const time = resolvedScheduleTime(control)
+  const timeLabel =
+    time === 'dayPlan'
+      ? `folgt ${DAY_PLAN_OFFER_LABELS[control.scheduleOffer].name}`
+      : ACCESS_SCHEDULE_TIME_LABELS[time]
+  return `Aktuell ${phaseLabel} · ${timeLabel} · ${open ? (control.kind === 'trafficLight' ? 'grün' : 'offen') : control.kind === 'trafficLight' ? 'rot' : 'zu'}`
+}
+
 function fillAccessSensorOptions(kind: AccessControl['kind']): void {
   if (accessSensorKind.dataset.accessKind === kind) return
   accessSensorKind.dataset.accessKind = kind
@@ -4068,7 +4311,11 @@ function accessStatusText(control: AccessControl): string {
 }
 
 function renderAccessControlForm(control: AccessControl): void {
+  const scheduleTime = resolvedScheduleTime(control)
   accessSchedule.hidden = control.mode !== 'schedule'
+  accessSlotsWrap.hidden = scheduleTime !== 'hourlySlots'
+  accessHours.hidden = scheduleTime !== 'hours'
+  accessDayPlan.hidden = scheduleTime !== 'dayPlan'
   accessSensor.hidden = control.mode !== 'sensor'
   accessPassage.hidden = control.kind !== 'pathBarrier'
   accessEmergency.hidden = control.kind !== 'pathBarrier'
@@ -4080,6 +4327,18 @@ function renderAccessControlForm(control: AccessControl): void {
   }
   accessControlOptions.querySelectorAll<HTMLButtonElement>('[data-access-mode]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.accessMode === control.mode))
+  })
+  accessControlOptions.querySelectorAll<HTMLButtonElement>('[data-access-phase]').forEach((button) => {
+    button.setAttribute(
+      'aria-pressed',
+      String(control.schedulePhases.includes(button.dataset.accessPhase as FestivalPhase)),
+    )
+  })
+  accessControlOptions.querySelectorAll<HTMLButtonElement>('[data-access-schedule-time]').forEach((button) => {
+    button.setAttribute(
+      'aria-pressed',
+      String(button.dataset.accessScheduleTime === scheduleTime),
+    )
   })
   accessControlOptions.querySelectorAll<HTMLButtonElement>('[data-access-polarity]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.accessPolarity === control.polarity))
@@ -4094,6 +4353,7 @@ function renderAccessControlForm(control: AccessControl): void {
     )
   })
   const slot = currentAccessSlot(game.snapshot.minute)
+  const currentHour = Math.floor(((game.snapshot.minute / 60) % 24 + 24) % 24)
   ensureAccessSlotButtons()
   accessSlots.querySelectorAll<HTMLButtonElement>('[data-access-slot]').forEach((button) => {
     const index = Number(button.dataset.accessSlot)
@@ -4106,6 +4366,22 @@ function renderAccessControlForm(control: AccessControl): void {
     }`
     if (button.textContent !== label) button.textContent = label
   })
+  ensureAccessHourButtons()
+  accessHourGrid.querySelectorAll<HTMLButtonElement>('[data-access-hour]').forEach((button) => {
+    const hour = Number(button.dataset.accessHour)
+    const open = Boolean(control.scheduleHours[hour])
+    button.setAttribute('aria-pressed', String(open))
+    button.classList.toggle('current', hour === currentHour)
+    const label = `${String(hour).padStart(2, '0')}${
+      open ? (control.kind === 'trafficLight' ? ' Grün' : ' Offen') : ''
+    }`
+    if (button.textContent !== label) button.textContent = label
+  })
+  fillAccessScheduleOfferOptions()
+  if (document.activeElement !== accessScheduleOffer) {
+    accessScheduleOffer.value = control.scheduleOffer
+  }
+  accessScheduleHint.textContent = accessScheduleHintText(control)
   fillAccessSensorOptions(control.kind)
   if (document.activeElement !== accessSensorKind) {
     accessSensorKind.value = control.sensorKind
@@ -4277,7 +4553,7 @@ function closeBuildMenu(): void {
   buildMenuPanel.hidden = true
   closeBuildSubmenus()
   if (pathWindowOpen) {
-    setToolbarCategoryOpen('paths')
+    setToolbarCategoryOpen(roadEditorOpen ? 'roads' : 'paths')
     buildMenuToggle.setAttribute('aria-expanded', 'true')
     return
   }
@@ -4311,13 +4587,13 @@ function openBuildCategory(categoryId: BuildCategoryId, groupId?: string): void 
   }
   if (activeRideId) closeRideBuilder()
   lastBuildCategory = categoryId
-  if (categoryId === 'paths') {
-    if (pathWindowOpen) {
+  if (categoryId === 'paths' || categoryId === 'roads') {
+    if (pathWindowOpen && roadEditorOpen === (categoryId === 'roads')) {
       closePathEditor()
       game.setTool('inspect')
       return
     }
-    openPathWindow(false)
+    openPathWindow(false, categoryId === 'roads')
     return
   }
   if (pathWindowOpen) closePathEditor()
@@ -4360,7 +4636,7 @@ document.querySelectorAll<HTMLButtonElement>('.rct-toolbar [data-build-category]
       return
     }
     if (button.classList.contains('open')) {
-      if (category === 'paths') {
+      if (category === 'paths' || category === 'roads') {
         closePathEditor()
         game.setTool('inspect')
         return
@@ -5205,6 +5481,20 @@ entityPriceInput.addEventListener('change', () => {
   }
 })
 
+shirtColorPalette.addEventListener('click', (event) => {
+  if (selectedEntity?.type !== 'building') return
+  const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-shirt-color]')
+  if (!button) return
+  game.configureShirtStall(selectedEntity.id, { color: Number(button.dataset.shirtColor) })
+})
+
+shirtStyleSelect.addEventListener('change', () => {
+  if (selectedEntity?.type !== 'building') return
+  game.configureShirtStall(selectedEntity.id, {
+    style: shirtStyleSelect.value as (typeof SHIRT_STYLES)[number],
+  })
+})
+
 applyPriceToKindButton.addEventListener('click', () => {
   if (selectedEntity?.type !== 'building') return
   const building = game.snapshot.buildings.find(
@@ -5263,8 +5553,21 @@ document.querySelectorAll<HTMLButtonElement>('[data-path-type]').forEach((button
 
 pathDemolishButton.addEventListener('click', () => {
   pathDemolishActive = !pathDemolishActive
-  if (pathDemolishActive) game.setTool('path')
+  supplyPlanner.releaseTool()
+  if (pathDemolishActive) game.setTool(roadEditorOpen ? 'road' : 'path')
   updatePathEditor()
+})
+
+document.querySelectorAll<HTMLButtonElement>('[data-road-editor-tool]').forEach(button => {
+  button.addEventListener('click', () => {
+    supplyPlanner.releaseTool()
+    pathDemolishActive = false
+    pathEditorActive = false
+    pathAnchor = null
+    pathHistory = []
+    game.setTool(button.dataset.roadEditorTool as Tool)
+    updatePathEditor()
+  })
 })
 
 document.querySelectorAll<HTMLButtonElement>('[data-path-access]').forEach((button) => {
@@ -5652,6 +5955,45 @@ accessSlots.addEventListener('pointerdown', (event) => {
   const openSlots = control.openSlots.map((open, slot) => (slot === index ? !open : open))
   patchSelectedAccess({ openSlots })
 })
+accessControlOptions.querySelectorAll<HTMLButtonElement>('[data-access-phase]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const control = selectedAccessControl()
+    const phase = button.dataset.accessPhase as FestivalPhase | undefined
+    if (!control || !phase || !FESTIVAL_PHASES.includes(phase)) return
+    const schedulePhases = FESTIVAL_PHASES.filter((entry) =>
+      entry === phase
+        ? !control.schedulePhases.includes(entry)
+        : control.schedulePhases.includes(entry),
+    )
+    patchSelectedAccess({ schedulePhases })
+  })
+})
+accessControlOptions.querySelectorAll<HTMLButtonElement>('[data-access-schedule-time]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const time = button.dataset.accessScheduleTime as AccessScheduleTime | undefined
+    if (time === 'hourlySlots' || time === 'hours' || time === 'dayPlan') {
+      patchSelectedAccess({ scheduleTime: time })
+    }
+  })
+})
+accessHourGrid.addEventListener('pointerdown', (event) => {
+  const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-access-hour]')
+  const control = selectedAccessControl()
+  if (!button || !control) return
+  const hour = Number(button.dataset.accessHour)
+  if (!Number.isInteger(hour) || hour < 0 || hour >= control.scheduleHours.length) return
+  const scheduleHours = control.scheduleHours.map((open, index) =>
+    index === hour ? !open : open,
+  )
+  patchSelectedAccess({ scheduleHours })
+})
+accessScheduleOffer.addEventListener('change', () => {
+  const control = selectedAccessControl()
+  if (!control) return
+  const offer = accessScheduleOffer.value as DayPlanOffer
+  if (!DAY_PLAN_OFFERS.includes(offer)) return
+  patchSelectedAccess({ scheduleOffer: offer })
+})
 accessSensorKind.addEventListener('change', () => {
   const control = selectedAccessControl()
   if (!control) return
@@ -5826,10 +6168,9 @@ syncDebugViewGap()
 new ResizeObserver(syncDebugViewGap).observe(performanceIndicator)
 new ResizeObserver(syncDebugViewGap).observe(statusOverlay)
 
-// Whether the game shows its developer readouts at all: the build/frame-rate line
-// in the bottom-left corner and the bug button in the toolbar. Off unless it was
-// switched on here before, and kept in the browser rather than in the save, because
-// it is about this machine, not about the park.
+// Developer readouts: FPS/build line bottom-left and the bug button in the toolbar.
+// On by default; only hides after the player turns Debug off in Einstellungen.
+// Kept in the browser rather than the save — it is about this machine, not the park.
 const DEBUG_TOOLS_KEY = 'festival-debug-tools'
 const debugToolsToggle = requireElement<HTMLInputElement>('#setting-debug-tools')
 const applyDebugTools = (shown: boolean): void => {
@@ -5839,7 +6180,7 @@ const applyDebugTools = (shown: boolean): void => {
   syncDebugViewGap()
 }
 try {
-  debugToolsToggle.checked = window.localStorage.getItem(DEBUG_TOOLS_KEY) === 'on'
+  debugToolsToggle.checked = window.localStorage.getItem(DEBUG_TOOLS_KEY) !== 'off'
 } catch { /* private mode or blocked storage: fall back to showing them */ }
 applyDebugTools(debugToolsToggle.checked)
 debugToolsToggle.addEventListener('change', () => {

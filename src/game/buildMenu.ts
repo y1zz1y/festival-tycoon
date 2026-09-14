@@ -201,6 +201,8 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           buildingItem('food'),
           buildingItem('toilet'),
           buildingItem('alcohol'),
+          buildingItem('mascot'),
+          buildingItem('shirt'),
           buildingItem('securityGate'),
         ],
       },
@@ -232,7 +234,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
     id: 'roads',
     label: 'Autostraßen',
     icon: '🛣️',
-    dock: 'right',
+    dock: 'left',
     extra: 'roads',
     groups: [
       {
@@ -270,7 +272,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           toolItem('supplyDepot', 'Depot', '🏪', '400 € · am Fußweg', {
             previewSupply: 'supply',
           }),
-          toolItem('staffGate', 'Personaltor', '🛂', '80 € · nur Personal'),
+          toolItem('staffGate', 'Personaltor', '🛂', '80 € · Personal und Saugroboter'),
         ],
       },
       {

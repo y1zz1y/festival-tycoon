@@ -584,6 +584,322 @@ export function getCoasterTrackPoints(coaster: Coaster): TrackPoint[] {
   )
 }
 
+function copyTrackPoint(point: TrackPoint): TrackPoint {
+  return { ...point }
+}
+
+function pointsAreFinite(points: readonly TrackPoint[]): boolean {
+  return points.every(
+    (point) =>
+      Number.isFinite(point.x) &&
+      Number.isFinite(point.y) &&
+      Number.isFinite(point.z) &&
+      (point.pitch === undefined || Number.isFinite(point.pitch)) &&
+      (point.bank === undefined || Number.isFinite(point.bank)),
+  )
+}
+
+function hypot2(
+  left: Pick<TrackPoint, 'x' | 'z'>,
+  right: Pick<TrackPoint, 'x' | 'z'>,
+): number {
+  return Math.hypot(left.x - right.x, left.z - right.z)
+}
+
+/** Distance from the polyline midpoint to the axis-aligned 90° corner. Higher = rounder. */
+export function trackCornerClearance(points: readonly TrackPoint[]): number {
+  if (points.length < 3) return 0
+  const start = points[0]!
+  const end = points.at(-1)!
+  const first = { x: start.x, z: end.z }
+  const second = { x: end.x, z: start.z }
+  const mid = points[Math.floor(points.length / 2)]!
+  const corner = hypot2(mid, first) <= hypot2(mid, second) ? first : second
+  return hypot2(mid, corner)
+}
+
+function blendCurvePieceTowardCircularArc(piece: TrackPiece): TrackPoint[] {
+  const definition = TRACK_PIECES[piece.kind]
+  const radius = definition.radius
+  const turn = definition.turn
+  if (!radius || !turn || piece.points.length < 3) {
+    return piece.points.map(copyTrackPoint)
+  }
+  const blend = SIMULATION_CONFIG.coasters.trackJoinSmoothing.curveCircularBlend
+  const start = piece.start
+  const forward = HEADINGS[start.heading] ?? HEADINGS[0]!
+  const centerX = start.x + forward.x * radius
+  const centerZ = start.z + forward.z * radius
+  const fromX = start.x - centerX
+  const fromZ = start.z - centerZ
+  const arcLength = (Math.PI / 2) * radius
+  const rawEndY = start.elevation + arcLength * Math.tan(start.pitch)
+  const yCorrection = piece.end.elevation - rawEndY
+  const last = piece.points.length - 1
+  return piece.points.map((point, index) => {
+    const t = last === 0 ? 0 : index / last
+    const angle = -turn * t * Math.PI / 2
+    const cosine = Math.cos(angle)
+    const sine = Math.sin(angle)
+    const arcX = centerX + fromX * cosine - fromZ * sine
+    const arcZ = centerZ + fromX * sine + fromZ * cosine
+    const arcY =
+      start.elevation + arcLength * t * Math.tan(start.pitch) + yCorrection * smoothStep(t)
+    if (index === 0 || index === last) return copyTrackPoint(point)
+    return {
+      ...point,
+      x: lerp(point.x, arcX, blend),
+      y: lerp(point.y, arcY, blend),
+      z: lerp(point.z, arcZ, blend),
+    }
+  })
+}
+
+function blendInferredQuarterCircle(points: readonly TrackPoint[]): TrackPoint[] {
+  if (points.length < 4) return points.map(copyTrackPoint)
+  const start = points[0]!
+  const end = points.at(-1)!
+  const dx = end.x - start.x
+  const dz = end.z - start.z
+  if (Math.abs(dx) < 0.55 || Math.abs(dz) < 0.55) return points.map(copyTrackPoint)
+  if (Math.abs(Math.abs(dx) - Math.abs(dz)) > 0.2) return points.map(copyTrackPoint)
+  const first = { x: start.x, z: end.z }
+  const second = { x: end.x, z: start.z }
+  const mid = points[Math.floor(points.length / 2)]!
+  const corner = hypot2(mid, first) <= hypot2(mid, second) ? first : second
+  const radius = (Math.abs(dx) + Math.abs(dz)) / 2
+  const startAngle = Math.atan2(start.z - corner.z, start.x - corner.x)
+  const endAngle = Math.atan2(end.z - corner.z, end.x - corner.x)
+  let sweep = endAngle - startAngle
+  while (sweep > Math.PI) sweep -= Math.PI * 2
+  while (sweep < -Math.PI) sweep += Math.PI * 2
+  if (Math.abs(Math.abs(sweep) - Math.PI / 2) > 0.2) return points.map(copyTrackPoint)
+  const blend = SIMULATION_CONFIG.coasters.trackJoinSmoothing.curveCircularBlend
+  const last = points.length - 1
+  return points.map((point, index) => {
+    const t = last === 0 ? 0 : index / last
+    const angle = startAngle + sweep * t
+    const arcX = corner.x + Math.cos(angle) * radius
+    const arcZ = corner.z + Math.sin(angle) * radius
+    if (index === 0 || index === last) return copyTrackPoint(point)
+    return { ...point, x: lerp(point.x, arcX, blend), z: lerp(point.z, arcZ, blend) }
+  })
+}
+
+function hypot3(left: TrackPoint, right: TrackPoint): number {
+  return Math.hypot(left.x - right.x, left.y - right.y, left.z - right.z)
+}
+
+function gaussianSmoothTrackPoints(
+  points: TrackPoint[],
+  sigma: number,
+  pinEnds: boolean,
+): TrackPoint[] {
+  if (points.length < 3 || sigma <= 0) return points.map(copyTrackPoint)
+  const radius = sigma * 3
+  const out: TrackPoint[] = []
+  for (let index = 0; index < points.length; index += 1) {
+    if (pinEnds && (index === 0 || index === points.length - 1)) {
+      out.push(copyTrackPoint(points[index]!))
+      continue
+    }
+    let weightSum = 0
+    let x = 0
+    let y = 0
+    let z = 0
+    let pitch = 0
+    let bank = 0
+    let distance = 0
+    for (let look = index; look >= 0; look -= 1) {
+      if (look < index) distance += hypot3(points[look]!, points[look + 1]!)
+      if (distance > radius) break
+      const weight = Math.exp(-0.5 * (distance / sigma) ** 2)
+      const point = points[look]!
+      weightSum += weight
+      x += point.x * weight
+      y += point.y * weight
+      z += point.z * weight
+      pitch += (point.pitch ?? 0) * weight
+      bank += (point.bank ?? 0) * weight
+    }
+    distance = 0
+    for (let look = index + 1; look < points.length; look += 1) {
+      distance += hypot3(points[look - 1]!, points[look]!)
+      if (distance > radius) break
+      const weight = Math.exp(-0.5 * (distance / sigma) ** 2)
+      const point = points[look]!
+      weightSum += weight
+      x += point.x * weight
+      y += point.y * weight
+      z += point.z * weight
+      pitch += (point.pitch ?? 0) * weight
+      bank += (point.bank ?? 0) * weight
+    }
+    if (weightSum < 1e-12 || !Number.isFinite(x / weightSum)) {
+      out.push(copyTrackPoint(points[index]!))
+      continue
+    }
+    out.push({
+      ...points[index]!,
+      x: x / weightSum,
+      y: y / weightSum,
+      z: z / weightSum,
+      pitch: pitch / weightSum,
+      bank: bank / weightSum,
+    })
+  }
+  return out
+}
+
+const JOIN_FILLET_ANGLE = (18 * Math.PI) / 180
+const JOIN_FILLET_FRACTION = 0.36
+const JOIN_FILLET_SAMPLES = 4
+
+function insertJoinFillet(left: TrackPoint[], right: TrackPoint[]): void {
+  const prev = left.at(-2)
+  const join = left.at(-1)
+  const next = right[1]
+  if (!prev || !join || !next) return
+  const incoming = { x: join.x - prev.x, y: join.y - prev.y, z: join.z - prev.z }
+  const outgoing = { x: next.x - join.x, y: next.y - join.y, z: next.z - join.z }
+  const inLength = Math.hypot(incoming.x, incoming.y, incoming.z)
+  const outLength = Math.hypot(outgoing.x, outgoing.y, outgoing.z)
+  if (inLength < 1e-5 || outLength < 1e-5) return
+  const alignment =
+    (incoming.x * outgoing.x + incoming.y * outgoing.y + incoming.z * outgoing.z) /
+    (inLength * outLength)
+  const turn = Math.acos(Math.min(1, Math.max(-1, alignment)))
+  if (turn < JOIN_FILLET_ANGLE) return
+  const radius = Math.min(0.24, JOIN_FILLET_FRACTION * inLength, JOIN_FILLET_FRACTION * outLength)
+  const start: TrackPoint = {
+    ...join,
+    x: join.x - incoming.x * (radius / inLength),
+    y: join.y - incoming.y * (radius / inLength),
+    z: join.z - incoming.z * (radius / inLength),
+  }
+  const end: TrackPoint = {
+    ...join,
+    x: join.x + outgoing.x * (radius / outLength),
+    y: join.y + outgoing.y * (radius / outLength),
+    z: join.z + outgoing.z * (radius / outLength),
+  }
+  const control = {
+    x: join.x * 0.32 + (start.x + end.x) * 0.34,
+    y: join.y * 0.32 + (start.y + end.y) * 0.34,
+    z: join.z * 0.32 + (start.z + end.z) * 0.34,
+  }
+  const samples: TrackPoint[] = []
+  for (let index = 0; index <= JOIN_FILLET_SAMPLES; index += 1) {
+    const t = index / JOIN_FILLET_SAMPLES
+    const inverse = 1 - t
+    samples.push({
+      ...join,
+      x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+      y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y,
+      z: inverse * inverse * start.z + 2 * inverse * t * control.z + t * t * end.z,
+      pitch: lerp(start.pitch ?? 0, end.pitch ?? 0, t),
+      bank: lerp(start.bank ?? 0, end.bank ?? 0, t),
+    })
+  }
+  if (!pointsAreFinite(samples)) return
+  left.pop()
+  left.push(...samples)
+  right[0] = { ...samples.at(-1)! }
+}
+
+function smoothCoasterTrackPieces(coaster: Coaster): TrackPoint[][] {
+  const pieces = coaster.pieces
+  if (pieces.length === 0) return []
+  const closed = Boolean(coaster.closed)
+  const prepared = pieces.map((piece) => blendCurvePieceTowardCircularArc(piece))
+  const sigma = SIMULATION_CONFIG.coasters.trackJoinSmoothing.sigma
+  const ghostCount = 6
+  const smoothed = prepared.map((points, index) => {
+    const previous = prepared[(index - 1 + prepared.length) % prepared.length]!
+    const following = prepared[(index + 1) % prepared.length]!
+    const usePrevious = closed || index > 0
+    const useFollowing = closed || index < prepared.length - 1
+    const prefix = usePrevious ? previous.slice(-ghostCount) : []
+    const suffix = useFollowing ? following.slice(0, ghostCount) : []
+    const blurred = gaussianSmoothTrackPoints(
+      [...prefix, ...points, ...suffix],
+      sigma,
+      !usePrevious || !useFollowing,
+    )
+    const slice = blurred.slice(prefix.length, prefix.length + points.length)
+    return pointsAreFinite(slice) ? slice : points
+  })
+
+  const firstStored = pieces[0]?.points[0]
+  if (firstStored && smoothed[0]?.[0]) {
+    Object.assign(smoothed[0][0], { x: firstStored.x, y: firstStored.y, z: firstStored.z })
+  }
+  const lastSmoothed = smoothed.at(-1)?.at(-1)
+  if (lastSmoothed) {
+    const pin = closed ? firstStored : pieces.at(-1)?.points.at(-1)
+    if (pin) Object.assign(lastSmoothed, { x: pin.x, y: pin.y, z: pin.z })
+  }
+
+  const weldCount = closed ? smoothed.length : Math.max(0, smoothed.length - 1)
+  for (let index = 0; index < weldCount; index += 1) {
+    const nextIndex = (index + 1) % smoothed.length
+    const left = smoothed[index]
+    const right = smoothed[nextIndex]
+    if (!left?.length || !right?.length) continue
+    const leftTip = left.at(-1)!
+    const rightTip = right[0]!
+    const welded = {
+      ...leftTip,
+      x: (leftTip.x + rightTip.x) / 2,
+      y: (leftTip.y + rightTip.y) / 2,
+      z: (leftTip.z + rightTip.z) / 2,
+      pitch: ((leftTip.pitch ?? 0) + (rightTip.pitch ?? 0)) / 2,
+      bank: ((leftTip.bank ?? 0) + (rightTip.bank ?? 0)) / 2,
+    }
+    Object.assign(leftTip, welded)
+    Object.assign(rightTip, welded)
+    const leftKind = pieces[index]?.kind
+    const rightKind = pieces[nextIndex]?.kind
+    if (leftKind === 'station' || rightKind === 'station') continue
+    insertJoinFillet(left, right)
+  }
+  return smoothed
+}
+
+/** Preview / selection path for a lone piece. Does not write snapshot points. */
+export function smoothTrackDisplayPoints(points: readonly TrackPoint[]): TrackPoint[] {
+  const prepared = blendInferredQuarterCircle(points)
+  const smoothed = gaussianSmoothTrackPoints(
+    prepared,
+    SIMULATION_CONFIG.coasters.trackJoinSmoothing.sigma,
+    true,
+  )
+  return pointsAreFinite(smoothed) ? smoothed : prepared
+}
+
+export function getSmoothedCoasterPiecePoints(coaster: Coaster): TrackPoint[][] {
+  return cachedTrack(coaster).smoothedPieces
+}
+
+/** Incoming vs outgoing unit-tangent dot at a derived join. 1 = colinear. */
+export function trackJoinTangentDot(coaster: Coaster, afterPieceIndex: number): number {
+  const pieces = getSmoothedCoasterPiecePoints(coaster)
+  const left = pieces[afterPieceIndex]
+  const right = pieces[afterPieceIndex + 1] ?? (coaster.closed ? pieces[0] : undefined)
+  if (!left || left.length < 2 || !right || right.length < 2) return 1
+  const incoming = normalize({
+    x: left[left.length - 1]!.x - left[left.length - 2]!.x,
+    y: left[left.length - 1]!.y - left[left.length - 2]!.y,
+    z: left[left.length - 1]!.z - left[left.length - 2]!.z,
+  })
+  const outgoing = normalize({
+    x: right[1]!.x - right[0]!.x,
+    y: right[1]!.y - right[0]!.y,
+    z: right[1]!.z - right[0]!.z,
+  })
+  return incoming.x * outgoing.x + incoming.y * outgoing.y + incoming.z * outgoing.z
+}
+
 export type TrackSample = {
   pieceKind: TrackPieceKind
   pieceId: string
@@ -638,11 +954,17 @@ function cross(left: TrackPoint, right: TrackPoint): TrackPoint {
   }
 }
 
+function trackSignature(coaster: Coaster): string {
+  return `${coaster.closed ? 'C' : 'O'}|${coaster.pieces.map((piece) => `${piece.id}:${piece.chainLift}:${piece.points.length}`).join('|')}`
+}
+
 function buildSegments(coaster: Coaster) {
+  const smoothedPieces = smoothCoasterTrackPieces(coaster)
   const segments = coaster.pieces
-    .flatMap((piece) =>
-      piece.points.slice(0, -1).map((start, index) => {
-        const end = piece.points[index + 1]!
+    .flatMap((piece, pieceIndex) => {
+      const points = smoothedPieces[pieceIndex] ?? piece.points
+      return points.slice(0, -1).map((start, index) => {
+        const end = points[index + 1]!
         const dx = end.x - start.x
         const dy = end.y - start.y
         const dz = end.z - start.z
@@ -659,21 +981,29 @@ function buildSegments(coaster: Coaster) {
           startPitch: start.pitch ?? piece.start.pitch,
           endPitch: end.pitch ?? piece.end.pitch,
         }
-      }),
-    )
+      })
+    })
     .filter((segment) => segment.length > 0.0001)
   const totalLength = segments.reduce((total, segment) => total + segment.length, 0)
   let accumulated = 0
   const ends = segments.map(s => accumulated += s.length)
-  return { segments, totalLength, ends, signature: coaster.pieces.map(p => `${p.id}:${p.chainLift}`).join('|') }
+  return { segments, totalLength, ends, smoothedPieces, signature: trackSignature(coaster) }
 }
 
 const trackCache = new WeakMap<Coaster, ReturnType<typeof buildSegments>>()
-export function sampleCoasterTrack(coaster: Coaster, distance: number): TrackSample | null {
-  const signature = coaster.pieces.map(p => `${p.id}:${p.chainLift}`).join('|')
+
+function cachedTrack(coaster: Coaster): ReturnType<typeof buildSegments> {
+  const signature = trackSignature(coaster)
   let cached = trackCache.get(coaster)
-  if (!cached || cached.signature !== signature) { cached = buildSegments(coaster); trackCache.set(coaster, cached) }
-  const { segments, totalLength, ends } = cached
+  if (!cached || cached.signature !== signature) {
+    cached = buildSegments(coaster)
+    trackCache.set(coaster, cached)
+  }
+  return cached
+}
+
+export function sampleCoasterTrack(coaster: Coaster, distance: number): TrackSample | null {
+  const { segments, totalLength, ends } = cachedTrack(coaster)
   if (segments.length === 0 || totalLength <= 0) return null
 
   let remaining = coaster.closed
