@@ -6,6 +6,7 @@ import { testRideAccess } from './rideAccess'
 import { testFestivalAdditions } from './festivalAdditions'
 import { testTerrainSurface } from './terrainSurface'
 import { testScenery } from './scenery'
+import { testPicking } from './picking'
 import { testMobileTouch } from './mobileTouch'
 import { testPerformanceGuards } from './performanceGuards'
 import { testStageInteraction } from './stageInteraction'
@@ -13,6 +14,7 @@ import { testStageTickets } from './stageTickets'
 import { SupplyChainView } from '../src/view/SupplyChainView'
 import { transportMotionFactor } from '../src/view/transportMotion'
 import { testOperations } from './operations'
+import { testStaffZonePaint } from './staffZones'
 import { testAccessControl } from './accessControl'
 import { CampingView } from '../src/view/CampingView'
 import { Color } from 'three'
@@ -20,6 +22,7 @@ import { readFileSync } from 'node:fs'
 import { encodeSaveText, decodeSaveText } from '../src/game/saveText'
 import { testEnvironments } from './environments'
 import { testSupplyChain } from './supplyChain'
+import { testWayElevation } from './wayElevation'
 import assert from 'node:assert/strict'
 import { performance } from 'node:perf_hooks'
 import { GameState } from '../src/game/GameState'
@@ -34,10 +37,12 @@ import type { GameCommand } from '../src/net/protocol'
 import { scenePixelRatio } from '../src/view/renderResolution'
 import { testFestival } from './festival'
 import { testBuildMenu } from './buildMenu'
+import { testPlacementPreview } from './placementPreview'
 import { testFinance } from './finance'
 import { testVisitorSleep } from './visitorSleep'
 import { testQueueLanes } from './queueLanes'
 import { testShopGoods } from './shopGoods'
+import { testTickerAndWasteCaps } from './ticker'
 
 function test(name: string, run: () => void) {
   run()
@@ -51,6 +56,9 @@ testCarrierModels()
 testCampingModels()
 test('build menu lists every placeable tool once', () => {
   testBuildMenu()
+})
+test('placement height snaps to half-steps and reports the ground cell', () => {
+  testPlacementPreview()
 })
 test('books, loans, prepared scenarios and their goals', () => {
   testFinance()
@@ -80,6 +88,8 @@ function fixture(count = 20): GameState {
 testPerformanceGuards(fixture)
 testAccessControl(fixture)
 testScenery(fixture)
+testPicking(fixture)
+testTickerAndWasteCaps()
 testFestivalAdditions(fixture)
 testRideAccess(fixture)
 testTerrainSurface(fixture)
@@ -187,6 +197,7 @@ test('transport rendering moves between cells smoothly and respects pause', () =
 })
 
 testEnvironments()
+testWayElevation()
 testSupplyChain(fixture)
 testFestival(fixture)
 test('festival sleep rhythm, tents and circadian energy', () => {
@@ -194,6 +205,7 @@ test('festival sleep rhythm, tents and circadian energy', () => {
 })
 testMusicPlanning(fixture)
 testOperations(fixture)
+testStaffZonePaint(fixture)
 testShopGoods(fixture)
 testStageTickets(fixture)
 testStageInteraction(fixture)

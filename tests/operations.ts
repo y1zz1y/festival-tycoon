@@ -23,6 +23,8 @@ import {
 } from '../src/game/visitorBubbles'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import {
+  chooseParkingDisembarkPath,
+  collectSeatedPassengerIds,
   describeRoadVehicleActivity,
   describeRoadVehicleDestination,
 } from '../src/game/logistics'
@@ -586,6 +588,24 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     incidents:[{id:'nearby-litter',kind:'litter',x:0,z:1,elevation:0,severity:1,ageMinutes:0}],
   },.1)
   assert.equal(picker.targetId,overflowing.id,'full bins are emptied before nearer half-full bins or litter')
+  const idle=createStaffMember('idle-cleaner','cleaner',{x:0,z:0,elevation:0})
+  idle.workZones=[zoneKey(1,0)]
+  const halfFull={id:'half-bin',x:1,z:0,elevation:0,stored:Math.ceil(SIMULATION_CONFIG.waste.binCapacity/2)}
+  staff.update({...context,staff:[idle],wasteBins:[halfFull],incidents:[]},.1)
+  assert.equal(idle.targetId,halfFull.id,'idle cleaners empty half-full bins inside their zone')
+  const crumb=createStaffMember('crumb-cleaner','cleaner',{x:0,z:0,elevation:0})
+  const belowIdle={id:'crumb-bin',x:1,z:0,elevation:0,stored:SIMULATION_CONFIG.waste.cleanerIdleEmptyFill-1}
+  staff.update({...context,staff:[crumb],wasteBins:[belowIdle],incidents:[]},.1)
+  assert.equal(crumb.targetId,null,'bins below the idle empty fill stay untouched even when idle')
+  const litterFirst=createStaffMember('litter-first','cleaner',{x:0,z:0,elevation:0})
+  const barely={id:'barely-bin',x:1,z:0,elevation:0,stored:SIMULATION_CONFIG.waste.cleanerIdleEmptyFill}
+  staff.update({
+    ...context,
+    staff:[litterFirst],
+    wasteBins:[barely],
+    incidents:[{id:'ground-litter',kind:'litter',x:0,z:1,elevation:0,severity:1,ageMinutes:0}],
+  },.1)
+  assert.equal(litterFirst.targetId,'ground-litter','litter stays ahead of a barely used bin')
   const hauled=createStaffMember('bin-hauler','cleaner',{x:0,z:0,elevation:0})
   const fullBin={id:'haul-bin',x:1,z:0,elevation:0,stored:SIMULATION_CONFIG.waste.binCapacity}
   const haulDump={x:2,z:0,elevation:0,stored:0}
@@ -627,6 +647,72 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.deepEqual(cleaner.workArea,{minX:2,maxX:4,minZ:-20,maxZ:-16})
   assert.ok(game.manageFestival({type:'staffArea',staffId:cleaner.id,from:null,to:null}).ok)
   assert.equal(cleaner.workArea,null)
+
+  const patientAt = (id: string, cellX: number, cellZ: number, extra: Record<string, unknown> = {}) => ({
+    id,
+    state: 'injured',
+    x: cellX + 0.5,
+    y: 0,
+    z: cellZ + 0.5,
+    cellX,
+    cellZ,
+    cellElevation: 0,
+    route: [],
+    medicalCell: null,
+    medicalSlot: null,
+    thought: '',
+    nausea: 0,
+    injuryVehicleId: null,
+    rescueVehicleId: null,
+    ...extra,
+  })
+  const medicContext = {
+    ...context,
+    findPath: (_start: { x: number; z: number }, goals: Array<{ x: number; z: number }>) =>
+      goals.map((goal) => ({ ...goal, elevation: 0 })),
+  }
+  const nearMedic = createStaffMember('medic-near', 'medic', { x: 1, z: 0, elevation: 0 })
+  const farMedic = createStaffMember('medic-far', 'medic', { x: 20, z: 0, elevation: 0 })
+  const busyMedic = createStaffMember('medic-busy', 'medic', { x: 0, z: 0, elevation: 0 })
+  busyMedic.state = 'carrying'
+  busyMedic.targetId = 'other-patient'
+  busyMedic.route = [{ x: 0, z: 4, elevation: 0 }]
+  const injury = patientAt('injured-guest', 2, 0)
+  staff.update({
+    ...medicContext,
+    staff: [farMedic, busyMedic, nearMedic],
+    visitors: [injury, patientAt('other-patient', 0, 4, { state: 'medical-transport' })],
+  }, 0.1)
+  assert.equal(nearMedic.targetId, 'injured-guest', 'the nearest idle medic takes the injury')
+  assert.equal(nearMedic.state, 'responding')
+  assert.equal(farMedic.targetId, null, 'a farther idle medic stays free')
+  assert.equal(busyMedic.targetId, 'other-patient', 'a medic already carrying is not reassigned')
+  const blockedNear = createStaffMember('medic-blocked', 'medic', { x: 1, z: 0, elevation: 0 })
+  const reachableFar = createStaffMember('medic-reachable', 'medic', { x: 12, z: 0, elevation: 0 })
+  staff.update({
+    ...medicContext,
+    staff: [reachableFar, blockedNear],
+    visitors: [patientAt('fenced-guest', 2, 0)],
+    findPath: (start: { x: number }, goals: Array<{ x: number; z: number }>) =>
+      start.x === 1 ? null : goals.map((goal) => ({ ...goal, elevation: 0 })),
+  }, 0.1)
+  assert.equal(reachableFar.targetId, 'fenced-guest', 'an unreachable closer medic is skipped for a free reachable one')
+  assert.equal(blockedNear.targetId, null)
+  const chooser = createStaffMember('medic-chooser', 'medic', { x: 0, z: 0, elevation: 0 })
+  staff.update({
+    ...medicContext,
+    staff: [chooser],
+    visitors: [patientAt('far-injury', 18, 0), patientAt('near-injury', 3, 0)],
+  }, 0.1)
+  assert.equal(chooser.targetId, 'near-injury', 'a free medic picks the nearest unclaimed patient, not the first in list')
+  const cabinMedic = createStaffMember('medic-cabin', 'medic', { x: 1, z: 0, elevation: 0 })
+  staff.update({
+    ...medicContext,
+    staff: [cabinMedic],
+    seatedPassengerIds: new Set(['car-passenger']),
+    visitors: [patientAt('car-passenger', 2, 0)],
+  }, 0.1)
+  assert.equal(cabinMedic.targetId, null, 'a medic does not target someone still seated in a vehicle')
 
   const exitGame=fixture(1), leaver=exitGame.snapshot.visitors[0]!, door=createScenarioEntrance(exitGame.snapshot.scenario.worldSize)
   leaver.state='leaving'
@@ -1041,6 +1127,49 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.equal(crashed.state,'driving','once the guest is off the road the car continues')
   assert.equal(crashed.route[0]?.z,-18,'it uses the route it already had')
 
+  const ambulanceDispatch=fixture(0), ambulanceState=ambulanceDispatch.snapshot as GameSnapshot
+  ambulanceDispatch.addDebugMoney()
+  const ambulanceEdge=-ambulanceState.scenario.worldSize/2
+  for (let z=ambulanceEdge+1; z<=-16; z+=1) {
+    if (!ambulanceState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(ambulanceDispatch.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  const ambulanceVictim=(ambulanceDispatch as any).spawnVisitorMember('day','ambulance-group','pedestrian',false)
+  assert.ok(ambulanceVictim)
+  Object.assign(ambulanceVictim,{state:'injured',cellX:0,cellZ:-16,x:0.5,z:-15.5,route:[],rescueVehicleId:null})
+  const idleAmbulance = (id: string, z: number) => ({
+    id,
+    kind: 'ambulance' as const,
+    position: { x: 0, z },
+    cell: { x: 0, z },
+    route: [],
+    state: 'idle' as const,
+    speed: 0,
+    passengerIds: [],
+    groupId: null,
+    parkingCell: null,
+    target: null,
+    facing: 0,
+    waitMinutes: 0,
+    resumeState: null,
+    lineId: null,
+    nextStopIndex: 0,
+    cargo: 0,
+  })
+  const farAmbulance=idleAmbulance('amb-far', ambulanceEdge+1)
+  const nearAmbulance=idleAmbulance('amb-near', -17)
+  const busyAmbulance=idleAmbulance('amb-busy', -20)
+  busyAmbulance.state='responding'
+  busyAmbulance.route=[{x:0,z:-19}]
+  busyAmbulance.passengerIds=['other-casualty']
+  ambulanceState.logistics.roadVehicles.push(farAmbulance, busyAmbulance, nearAmbulance)
+  ;(ambulanceDispatch as any).updateLogistics(0.1)
+  assert.equal(nearAmbulance.state,'responding','the nearest idle ambulance is dispatched')
+  assert.equal(ambulanceVictim.rescueVehicleId,'amb-near')
+  assert.equal(farAmbulance.state,'idle','a farther idle ambulance stays in the garage')
+  assert.equal(busyAmbulance.passengerIds[0],'other-casualty','an occupied ambulance is not stolen')
+
   const against=fixture(0), againstState=against.snapshot as GameSnapshot
   against.addDebugMoney()
   const againstEdge=-againstState.scenario.worldSize/2
@@ -1142,6 +1271,180 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.equal(arriving.position.x,1)
   assert.equal(arriving.position.z,-16)
   assert.notEqual(rider.state,'vehicle-arrival','guests leave only after the car is in the bay')
+  assert.deepEqual(arriving.passengerIds, [], 'the parked car unloads every arrival passenger')
+  assert.equal(rider.cellX, 2, 'guests step onto the bordering footpath, not the stall')
+  assert.equal(rider.cellZ, -16)
+  assert.notEqual(rider.cellX, 1)
+  assert.notEqual(rider.cellX, 0, 'they do not appear on the approach road when a path borders the bay')
+  for (let n = 0; n < 20; n += 1) arrival.tick(0.1)
+  assert.equal(arriving.state, 'parked', 'the car stays parked after guests step out')
+  assert.deepEqual(arriving.passengerIds, [], 'they do not climb back into the car from the sidewalk')
+  assert.notEqual(rider.state, 'vehicle-arrival', 'after parking they stay on foot')
+  assert.ok(
+    rider.cellX !== arriving.position.x || rider.cellZ !== arriving.position.z,
+    'they remain on the path, not in the stall',
+  )
+
+  assert.deepEqual(
+    chooseParkingDisembarkPath(
+      { x: 1, z: -16 },
+      [
+        { x: 0, z: -16, elevation: 0, onRoad: true },
+        { x: 2, z: -16, elevation: 0, onRoad: false },
+        { x: 1, z: -15, elevation: 0, onRoad: false },
+      ],
+      [{ x: 0, z: -16 }],
+    ),
+    { x: 2, z: -16, elevation: 0, onRoad: false },
+    'among several paths prefer the sidewalk opposite the road',
+  )
+  assert.equal(
+    chooseParkingDisembarkPath({ x: 1, z: -16 }, [], [{ x: 0, z: -16 }]),
+    null,
+    'no bordering path leaves the road fallback to GameState',
+  )
+
+  const isolated=fixture(0), isolatedState=isolated.snapshot as GameSnapshot
+  isolated.addDebugMoney()
+  const isolatedEdge=-isolatedState.scenario.worldSize/2
+  for (let z=isolatedEdge+1; z<=-16; z+=1) {
+    if (!isolatedState.logistics.roadCells.some(cell=>cell.x===-1 && cell.z===z)) {
+      assert.ok(isolated.designateRoad([{x:-1,z}]).ok)
+    }
+  }
+  assert.ok(isolated.designateParkingArea([{x:-2,z:-16}]).ok)
+  const noPathRider=(isolated as any).spawnVisitorMember('day','no-path-group','car',true)
+  assert.ok(noPathRider)
+  noPathRider.state='vehicle-arrival'
+  const isolatedBay=isolatedState.logistics.parkingCells.find(cell=>cell.x===-2 && cell.z===-16)
+  assert.ok(isolatedBay, 'isolated stall is designated away from the default path column')
+  isolatedBay.occupiedBy='isolated-car'
+  const isolatedCar={
+    id:'isolated-car',kind:'visitorCar' as const,position:{x:-1,z:-16},cell:{x:-1,z:-16},
+    route:[],state:'driving' as const,speed:10,passengerIds:[noPathRider.id],groupId:'no-path-group',
+    parkingCell:{x:-2,z:-16},target:{kind:'parking' as const,parkingCell:{x:-2,z:-16}},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  isolatedState.logistics.arrivalGroups.push({
+    id:'no-path-group',memberIds:[noPathRider.id],vehicleId:isolatedCar.id,mode:'car',state:'approaching',
+    arrivedMinute:0,parkingWaitMinutes:0,entryFeesPaid:true,
+  })
+  isolatedState.logistics.roadVehicles.push(isolatedCar)
+  ;(isolated as any).completeVisitorCarArrival(isolatedCar)
+  for (let n=0;n<8 && isolatedCar.state!=='parked'; n+=1) (isolated as any).updateLogistics(1)
+  assert.equal(isolatedCar.state,'parked')
+  assert.equal(noPathRider.cellX, -1, 'without a bordering path guests still leave onto the approach road')
+  assert.equal(noPathRider.cellZ, -16)
+  assert.notEqual(noPathRider.cellX, -2, 'they do not stay in the parking stall')
+
+  const crossing=fixture(0), crossingState=crossing.snapshot as GameSnapshot
+  crossing.addDebugMoney()
+  const crossingEdge=-crossingState.scenario.worldSize/2
+  for (let z=crossingEdge+1; z<=-16; z+=1) {
+    if (!crossingState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(crossing.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  assert.ok(crossing.designateParkingArea([{x:1,z:-16}]).ok)
+  assert.ok(crossing.placePathSegment(0, -16, 0).ok, 'zebra on the approach road')
+  const zebraRider=(crossing as any).spawnVisitorMember('day','zebra-group','car',true)
+  assert.ok(zebraRider)
+  zebraRider.state='vehicle-arrival'
+  crossingState.logistics.parkingCells[0]!.occupiedBy='zebra-car'
+  const zebraCar={
+    id:'zebra-car',kind:'visitorCar' as const,position:{x:0,z:-16},cell:{x:0,z:-16},
+    route:[],state:'driving' as const,speed:10,passengerIds:[zebraRider.id],groupId:'zebra-group',
+    parkingCell:{x:1,z:-16},target:{kind:'parking' as const,parkingCell:{x:1,z:-16}},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  crossingState.logistics.arrivalGroups.push({
+    id:'zebra-group',memberIds:[zebraRider.id],vehicleId:zebraCar.id,mode:'car',state:'approaching',
+    arrivedMinute:0,parkingWaitMinutes:0,entryFeesPaid:true,
+  })
+  crossingState.logistics.roadVehicles.push(zebraCar)
+  ;(crossing as any).completeVisitorCarArrival(zebraCar)
+  for (let n=0;n<8 && zebraCar.state!=='parked'; n+=1) (crossing as any).updateLogistics(1)
+  assert.equal(zebraCar.state,'parked')
+  assert.equal(zebraRider.cellX, 2, 'a sidewalk beats a zebra on the approach road')
+  assert.equal(zebraRider.cellZ, -16)
+
+  const cabin=fixture(0), cabinState=cabin.snapshot as GameSnapshot
+  cabin.addDebugMoney()
+  const cabinEdge=-cabinState.scenario.worldSize/2
+  for (let z=cabinEdge+1; z<=-16; z+=1) {
+    if (!cabinState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(cabin.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  const riderInCar=(cabin as any).spawnVisitorMember('day','cabin-group','car',true)
+  assert.ok(riderInCar)
+  Object.assign(riderInCar,{
+    state:'entering',
+    cellX:0,
+    cellZ:-17,
+    x:0.5,
+    z:-16.5,
+    route:[{x:1,z:-16,elevation:0}],
+  })
+  const cabinCar={
+    id:'cabin-car',kind:'visitorCar' as const,position:{x:0,z:-19},cell:{x:0,z:-19},
+    route:[{x:0,z:-18}],state:'driving' as const,speed:0,passengerIds:[riderInCar.id],groupId:'cabin-group',
+    parkingCell:{x:1,z:-16},target:{kind:'parking' as const,parkingCell:{x:1,z:-16}},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  cabinState.logistics.arrivalGroups.push({
+    id:'cabin-group',memberIds:[riderInCar.id],vehicleId:cabinCar.id,mode:'car',state:'approaching',
+    arrivedMinute:0,parkingWaitMinutes:0,entryFeesPaid:true,
+  })
+  const oncoming={
+    id:'oncoming-car',kind:'visitorCar' as const,position:{x:0,z:-18},cell:{x:0,z:-18},
+    route:[{x:0,z:-17}],state:'driving' as const,speed:10,passengerIds:[],groupId:null,
+    parkingCell:null,target:{kind:'cruise' as const},facing:0,waitMinutes:5.9,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  cabinState.logistics.roadVehicles.push(cabinCar, oncoming)
+  assert.deepEqual([...collectSeatedPassengerIds(cabinState.logistics.roadVehicles)], [riderInCar.id])
+  const rng = (cabin as any).rng
+  const previousNext = rng.next.bind(rng)
+  rng.next = () => 0.99
+  ;(cabin as any).walkVisitors(0.2)
+  const seatedKey = (cabin as any).visitorOccupancyKey(riderInCar)
+  assert.equal((cabin as any).movementOccupancy.get(seatedKey) ?? 0, 0, 'a seated passenger does not occupy the road as a pedestrian')
+  ;(cabin as any).updateLogistics(0.2)
+  rng.next = previousNext
+  assert.notEqual(riderInCar.state, 'injured', 'a passenger still in a moving car cannot be injured on the road')
+  assert.equal(riderInCar.injuryVehicleId, null)
+  assert.equal(oncoming.resumeState, null, 'an incoming car does not start an incident against a seated passenger')
+  assert.equal(oncoming.cell?.z, -17, 'the incoming car is not held by a seated passenger on the road')
+
+  riderInCar.state = 'injured'
+  riderInCar.injuryVehicleId = 'oncoming-car'
+  oncoming.state = 'driving'
+  oncoming.resumeState = null
+  oncoming.waitMinutes = 0
+  oncoming.speed = 10
+  oncoming.cell = { x: 0, z: -18 }
+  oncoming.position = { x: 0, z: -18 }
+  oncoming.route = [{ x: 0, z: -17 }]
+  cabinCar.state = 'parked'
+  cabinCar.cell = null
+  cabinCar.position = { x: 1, z: -16 }
+  ;(cabin as any).updateLogistics(0.2)
+  assert.equal(oncoming.cell?.z, -17, 'an injured passenger still listed in a parked car does not hold traffic')
+  assert.equal(oncoming.resumeState, null)
+
+  cabinCar.passengerIds = []
+  riderInCar.state = 'entering'
+  riderInCar.injuryVehicleId = null
+  riderInCar.route = []
+  oncoming.state = 'driving'
+  oncoming.waitMinutes = 5.9
+  oncoming.speed = 10
+  oncoming.cell = { x: 0, z: -18 }
+  oncoming.position = { x: 0, z: -18 }
+  oncoming.route = [{ x: 0, z: -17 }]
+  rng.next = () => 0.99
+  ;(cabin as any).walkVisitors(0.2)
+  assert.ok(((cabin as any).movementOccupancy.get(seatedKey) ?? 0) > 0, 'after leaving the car they occupy the path as pedestrians')
+  ;(cabin as any).updateLogistics(0.2)
+  rng.next = previousNext
+  assert.equal(riderInCar.state, 'injured', 'once they have disembarked they can be injured on the road')
 
   const sweepGame=fixture(0)
   sweepGame.addDebugMoney()
@@ -1554,6 +1857,69 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   const soldAway = leaving.game.sellGarbageTruck(leaving.depot.id)
   assert.ok(soldAway.ok, soldAway.message)
   assert.equal(leaving.depot.truckIds.length, 0)
+
+  const occupancyTile = (label: string) => {
+    const game = new GameState()
+    game.addDebugMoney()
+    return { game, label, x: 8, z: -16 }
+  }
+
+  const parkingDemolish = occupancyTile('parking')
+  assert.ok(parkingDemolish.game.designateParkingArea([{ x: parkingDemolish.x, z: parkingDemolish.z }]).ok)
+  assert.ok(
+    parkingDemolish.game.snapshot.logistics.parkingCells.some(
+      (cell) => cell.x === parkingDemolish.x && cell.z === parkingDemolish.z,
+    ),
+  )
+  const parkingRemoved = parkingDemolish.game.bulldoze(parkingDemolish.x, parkingDemolish.z)
+  assert.ok(parkingRemoved.ok, parkingRemoved.message)
+  assert.equal(
+    parkingDemolish.game.snapshot.logistics.parkingCells.some(
+      (cell) => cell.x === parkingDemolish.x && cell.z === parkingDemolish.z,
+    ),
+    false,
+  )
+  assert.ok(parkingDemolish.game.canPlace('food', parkingDemolish.x, parkingDemolish.z).ok)
+  assert.ok(parkingDemolish.game.place('food', parkingDemolish.x, parkingDemolish.z).ok)
+
+  const bedDemolish = occupancyTile('bed')
+  assert.ok(bedDemolish.game.designateMedicalArea([{ x: bedDemolish.x, z: bedDemolish.z }]).ok)
+  assert.ok(bedDemolish.game.getMedicalCellAt(bedDemolish.x, bedDemolish.z))
+  const bedRemoved = bedDemolish.game.bulldoze(bedDemolish.x, bedDemolish.z)
+  assert.ok(bedRemoved.ok, bedRemoved.message)
+  assert.equal(bedDemolish.game.getMedicalCellAt(bedDemolish.x, bedDemolish.z), undefined)
+  assert.ok(bedDemolish.game.canPlace('food', bedDemolish.x, bedDemolish.z).ok)
+  assert.ok(bedDemolish.game.place('food', bedDemolish.x, bedDemolish.z).ok)
+
+  const leftoverParking = occupancyTile('leftover-parking')
+  assert.ok(leftoverParking.game.designateParkingArea([{ x: leftoverParking.x, z: leftoverParking.z }]).ok)
+  leftoverParking.game.snapshot.logistics.parkingCells[0]!.occupiedBy = 'missing-car'
+  const leftoverParkingCleared = leftoverParking.game.bulldoze(
+    leftoverParking.x,
+    leftoverParking.z,
+    'stale-building',
+  )
+  assert.ok(leftoverParkingCleared.ok, leftoverParkingCleared.message)
+  assert.equal(leftoverParking.game.snapshot.logistics.parkingCells.length, 0)
+  assert.ok(leftoverParking.game.canPlace('food', leftoverParking.x, leftoverParking.z).ok)
+
+  const leftoverBed = occupancyTile('leftover-bed')
+  assert.ok(leftoverBed.game.designateMedicalArea([{ x: leftoverBed.x, z: leftoverBed.z }]).ok)
+  leftoverBed.game.snapshot.medicalCells[0]!.occupants[0] = 'missing-patient'
+  assert.ok(leftoverBed.game.place('food', leftoverBed.x, leftoverBed.z).ok, 'vacant leftover beds can be built over')
+  assert.equal(leftoverBed.game.getMedicalCellAt(leftoverBed.x, leftoverBed.z), undefined)
+
+  const ghostSave = structuredClone(new GameState().snapshot) as GameSnapshot
+  ghostSave.logistics.parkingCells = [{ x: 9, z: -16, occupiedBy: 'gone-car' }]
+  ghostSave.medicalCells = [{ x: 10, z: -16, elevation: 0, occupants: ['gone-patient', null, null] }]
+  const repaired = new GameState(ghostSave)
+  repaired.addDebugMoney()
+  assert.equal(repaired.snapshot.logistics.parkingCells[0]!.occupiedBy, null)
+  assert.ok(repaired.snapshot.medicalCells[0]!.occupants.every((occupant) => occupant === null))
+  assert.ok(repaired.bulldoze(9, -16).ok)
+  assert.ok(repaired.place('food', 10, -16).ok)
+  assert.equal(repaired.snapshot.logistics.parkingCells.length, 0)
+  assert.equal(repaired.snapshot.medicalCells.length, 0)
 
   console.log('PASS planned festival start, stand clearance, staff gates, automatic depot delivery, stock conservation and cleaning chain')
 }

@@ -20,10 +20,16 @@ Tageslicht und Öffnungszeiten kommen aus `dayPlan` / `dayNight`, nicht aus der 
 
 ## Wichtige Quellen (Atmosphäre)
 
-Feste Gebäude (Bäume, Bühnen, Lautsprecher, Lampen) und mobile Quellen
-(Tänzer, Musikboxen, Gespräche). Addition flacht ab; Feuer, Kotze und
-Schlafende wirken lokal negativ. Details der Gewichte stehen in
-`SIMULATION_CONFIG.atmosphere`.
+Feste Gebäude (Bäume, Bühnen, Lautsprecher, Lampen, **Deko je Art**) und mobile
+Quellen (Tänzer, Musikboxen, Gespräche). Addition flacht ab
+(`diminishingSaturation`); Feuer, Kotze und Schlafende wirken lokal negativ.
+Details der Gewichte stehen in `SIMULATION_CONFIG.atmosphere.sources`
+(`beauty`, `party`, `range`). Beitrag fällt linear mit der Distanz
+(`1 - distance / range`). Mehrere Quellen auf derselben Zelle addieren roh
+und werden erst danach saturiert — zwei Statuen sind stärker als eine, aber
+nicht doppelt so stark. Kleine Deko (Leitkegel `beauty` 2, `range` 1) bleibt
+lokal; Blickfänge (Willkommensbogen 18 / 4, Kristallstele 16 / 4) färben
+mehrere Felder. Gäste lesen `localAttractiveness` aus diesem Feld.
 
 ## Wichtige Regeln
 
@@ -44,6 +50,7 @@ Schlafende wirken lokal negativ. Details der Gewichte stehen in
 
 `tests/performanceGuards.ts` (Licht-Pool, 0/1/514 Quellen).
 `tests/festival.ts` (Strom für Shows). `tests/operations.ts`.
+`tests/scenery.ts` (Deko-`beauty` unterscheidet sich je Art, Stapel und Reichweite).
 
 ## Bei Änderungen dieses Dokument
 

@@ -22,20 +22,25 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, Lights, Achterbahnwagen, Logistik-Modelle |
 | `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf |
 | `tests/visitorSleep.ts` | Festival-Schlafzeiten, Legacy-Remap, zirkadiane Energie, Zelt- und Abreiseziele |
-| `tests/festivalAdditions.ts` | spätere Festival-Systeme, Eimer-Karton-Batches, 1-Feld-Steigungen, Wagen-Mesh, gerundete Schienenjoins |
+| `tests/festivalAdditions.ts` | spätere Festival-Systeme, Eimer-Karton-Batches, zusammenhängende Müllablage-Füllstände, Müllwagen-Ladungsanzeige, 1-Feld-Steigungen, Wagen-Mesh, gerundete Schienenjoins, Achterbahn-Komplettabriss |
+| `tests/ticker.ts` | Müllwagen 90, Ablage 180, kein Overflow, Ticker >90 % / Feuer / Panik, keine Verletztenmeldung für Insassen |
 | `tests/musicPlanning.ts` | Spielplan, Genres |
 | `tests/stageTickets.ts` | Tickets, Bühnenfläche |
 | `tests/stageInteraction.ts` | Werkstatt / Interaktion |
 | `tests/supplyChain.ts` | Waren, Umwege, Ground, Mindestbestand in 20er-Schritten |
-| `tests/operations.ts` | Betrieb, Personal, Alltag, Saugroboter durch Personaleingang, Einsatzgebiete, Müllwagen-Erhalt / Wiedereinfahrt, Queue-Kette / Rückweg / leerer Stand / Stand-Spuren, Nachschub von allen Seiten und Verkauf nur vorne |
+| `tests/operations.ts` | Betrieb, Personal, Alltag, Saugroboter durch Personaleingang, Einsatzgebiete, Reinigung leert volle Eimer zuerst und idle auch halbvolle, Verletzte an den nächsten freien Sanitäter / Krankenwagen (ohne Insassen im Auto), Müllwagen-Erhalt / Wiedereinfahrt, Queue-Kette / Rückweg / leerer Stand / Stand-Spuren, Nachschub von allen Seiten und Verkauf nur vorne, Parkplatz-Aussteigen auf Nachbarweg (bleiben ausgestiegen), Insassen erst nach dem Aussteigen verletzbar / belegend, Parkplatz- und Krankenfeld-Abriss inkl. Restbelegung |
+| `tests/staffZones.ts` | 3×3-Einsatzgebiete: Ziehen weist zwei Blöcke zu, Start auf aktivem Block entfernt, `setStaffZone` flackert nicht, Saugroboter dieselbe Farbe |
 | `tests/queueLanes.ts` | Hälftige Stand-Queue-Geometrie, Spurwahl, keine Attraktionsänderung |
 | `tests/shopGoods.ts` | Allgemeine Waren, Maskottchen-Kauf/Hand-Chance, Shirt-Farbe/Schnitt, Save-Defaults |
 | `tests/accessControl.ts` | Ampeln, Tore, Sensoren, Einweg, Notfallöffnung, Halt vor Rot, opportunistisches Parken, Trennlinie, Liefer-/Müllwagen-Umweg, Tageszeit / Festivalphase / Zeitplan |
 | `tests/rideAccess.ts` | Tore, Queues, Bungee/Karussell |
-| `tests/scenery.ts` | Deko-Slots, Kanten-Fahnen, Tageslichtballon als Vollfeld |
+| `tests/scenery.ts` | Deko-Slots, Kanten-Fahnen, Tageslichtballon als Vollfeld, neue Arten, Attraktivität je Kind, Stapel/Reichweite, unbekannte Katalog-Arten |
+| `tests/picking.ts` | Abriss-Raycast: Instanz-IDs, getroffenes Mesh vs. Nachbar/Kachelmitte, Reittor-Zelle |
 | `tests/buildMenu.ts` | Jedes platzierbare Tool außer `inspect` genau einmal im Baumenü; Deko/Attraktionen/Logistik als Katalog; Camping- und Krankenhaus-Tabs; Bauhöhe bleibt beim gleichen Tool und fällt bei neuem `setTool` auf 0 |
-| `tests/terrainSurface.ts` | Gelände-Mesh, Pads |
+| `tests/placementPreview.ts` | Bauhöhe rastet auf 0.5; Vorschau meldet die Bodenkachel (`y` = Gelände, nicht Ghost-Höhe) |
+| `tests/terrainSurface.ts` | Gelände-Mesh, Pads, Parkplatz-Asphalt nur auf Parkfeldern |
 | `tests/environments.ts` | Umgebungen |
+| `tests/wayElevation.ts` | Halbstufen-Rampen für Fußweg und Straße, Autodach 1.0, Legacy-Höhe 1 bleibt 1.0, Shift-Ausgang bleibt beim Rampenstreichen, Fußweg auf Autostraße behält die Straße, gestapelte Autostraße / Brücke, ein Straßenfeld übermalen löscht keine Nachbarn |
 | `tests/pixelPeople.ts` | Personen-Batches |
 | `tests/carrierModels.ts` | Träger: geteilte Gästeteile, Warnweste, Karren |
 | `tests/campingModels.ts` | Zelt-/Pavillon-Batches |

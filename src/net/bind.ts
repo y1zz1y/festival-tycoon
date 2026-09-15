@@ -59,6 +59,26 @@ export function enableMultiplayerCommands(game: GameState): void {
       previousPath,
     }),
   )
+  game.placeRoadSegment = wrap(
+    game,
+    game.placeRoadSegment,
+    (x, z, elevation, slope = 0, slopeDirection = 0, wayType) => ({
+      type: 'placeRoad',
+      x,
+      z,
+      elevation,
+      slope,
+      slopeDirection,
+      wayType,
+    }),
+  )
+  game.undoRoadSegment = wrap(game, game.undoRoadSegment, (x, z, previousRoad, elevation) => ({
+    type: 'undoRoad',
+    x,
+    z,
+    previousRoad,
+    elevation,
+  }))
   game.bulldoze = wrap(game, game.bulldoze, (x, z, buildingId) => ({ type: 'bulldoze', x, z, buildingId }))
   game.bulldozeArea = wrap(game, game.bulldozeArea, (cells) => ({
     type: 'bulldozeArea',
@@ -186,6 +206,12 @@ export function enableMultiplayerCommands(game: GameState): void {
     staffId,
     key,
   }))
+  game.setStaffZone = wrap(game, game.setStaffZone, (staffId, key, active) => ({
+    type: 'setStaffZone',
+    staffId,
+    key,
+    active,
+  }))
   game.buyAmbulance = wrap(game, game.buyAmbulance, (garageId) => ({
     type: 'buyAmbulance',
     garageId,
@@ -251,6 +277,10 @@ export function enableMultiplayerCommands(game: GameState): void {
     game.deleteCoasterPiece,
     (coasterId, pieceIndex) => ({ type: 'deleteCoasterPiece', coasterId, pieceIndex }),
   )
+  game.removeCoaster = wrap(game, game.removeCoaster, (coasterId) => ({
+    type: 'removeCoaster',
+    coasterId,
+  }))
   game.setCoasterAccess = wrap(
     game,
     game.setCoasterAccess,

@@ -35,6 +35,7 @@
   .mobile-controls button { flex-shrink: 0; min-width: 44px; min-height: 44px; color: #f2e8cb; background: #365747; border: 1px solid #819a7e; }
   .mobile-controls button[aria-pressed=true] { background: #9b7135; }
   .time-controls { bottom: max(5px, env(safe-area-inset-bottom)); right: max(6px, env(safe-area-inset-right)); z-index: 70; padding: 3px; gap: 2px; }
+  .ticker-bar { left: 50%; right: auto; bottom: calc(var(--mobile-bottom) + 8px); max-width: calc(100vw - 24px); z-index: 68; }
   .time-controls button { min-width: 38px; min-height: 44px; }
   .performance-indicator { bottom: max(5px, env(safe-area-inset-bottom)); left: max(6px, env(safe-area-inset-left)); max-width: calc(100vw - 178px); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8px; z-index: 70; }
   /* Too narrow for a corner box: the overview runs as one scrollable strip above the touch controls. */
@@ -45,7 +46,7 @@
   .game-shell .build-menu, .game-shell .scenario-panel, .game-shell .multiplayer-panel,
   .game-shell .path-construction, .game-shell .coaster-builder, .game-shell .visitor-panel,
   .game-shell .staff-panel, .game-shell .staff-details, .game-shell .day-plan-panel,
-  .game-shell .complaints-panel, .game-shell .visitor-overview-panel, .game-shell .festival-management,
+  .game-shell .complaints-panel, .game-shell .ticker-panel, .game-shell .visitor-overview-panel, .game-shell .festival-management,
   .game-shell .supply-planner {
     position: fixed; top: var(--topbar-gap-top, 90px) !important;
     left: max(6px, env(safe-area-inset-left)) !important; right: max(6px, env(safe-area-inset-right)) !important;

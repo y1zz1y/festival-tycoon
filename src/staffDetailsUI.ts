@@ -1,12 +1,13 @@
 import type { GameState, GameSnapshot } from './game/GameState'
 import { STAFF_DEFINITIONS, SWEEPER_STAFF_ICON, sweeperStaffName } from './game/staff'
 import { describeRoadVehicleActivity } from './game/logistics'
-import { zoneKey } from './game/staffZones'
+import { zoneKey, zonePaintActive } from './game/staffZones'
 import type { WorldView } from './view/WorldView'
 import { makeDraggable, makeResizable } from './dragPanel'
 
 export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(message:string,error?:boolean)=>void, release:()=>void) {
   let selected:string|null=null, following=false, drawing=false, zoneEditing=false, grabbing=false, previewMode:'map'|'front'='map'
+  let zonePaint: { active: boolean; lastKey: string | null } | null = null
   const panel=document.createElement('aside');panel.className='panel staff-details';panel.hidden=true
   panel.innerHTML='<div class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 class="panel-header-title" data-name>Personal</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Personalinfo schließen">×</button></div><nav class="person-preview-modes" aria-label="Ansicht"><button type="button" data-preview-mode="map" aria-pressed="true">Karte</button><button type="button" data-preview-mode="front" aria-pressed="false">Person</button></nav><div class="staff-minimap-row"><div class="staff-minimap"><canvas data-minimap></canvas></div><div class="staff-minimap-controls"><button data-zoom-in aria-label="Ansicht vergrößern">+</button><button data-zoom-out aria-label="Ansicht verkleinern">−</button><button data-grab aria-label="Personal greifen und platzieren">✋</button></div></div><p data-state></p><p data-load></p><p data-area></p><p data-zones hidden></p><button data-follow>Folgen</button><button data-manage-zones>Bereiche verwalten</button><button data-area-draw>Arbeitsbereich ziehen</button><button data-area-clear>Gesamtes Gelände</button><button data-fire-member>Entlassen</button>'
   document.querySelector('.game-shell')!.append(panel)
@@ -28,8 +29,9 @@ export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(
   panel.querySelector('[data-zoom-in]')!.addEventListener('click',()=>view.zoomMinimap(0.8))
   panel.querySelector('[data-zoom-out]')!.addEventListener('click',()=>view.zoomMinimap(1.25))
   const cancel=()=>{
-    if(drawing||zoneEditing)view.setGroundAreaTool(null)
-    if(zoneEditing)view.showStaffZones(null)
+    if(drawing)view.setGroundAreaTool(null)
+    if(zoneEditing){view.setStaffZonePaintTool(null);view.showStaffZones(null)}
+    zonePaint=null
     if(grabbing)view.setStaffPlacementTool(null)
     drawing=false;zoneEditing=false;grabbing=false
   }
@@ -66,11 +68,18 @@ export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(
     if(!staffId)return
     release();getGame().setTool('inspect');zoneEditing=true
     view.showStaffZones(assignedZones(getGame().snapshot,staffId))
-    view.setGroundAreaTool((_from,to,preview)=>{
-      if(preview)return
-      const result=getGame().toggleStaffZone(staffId,zoneKey(to.x,to.z))
-      toast(result.message,!result.ok)
-      if(result.ok)view.showStaffZones(assignedZones(getGame().snapshot,staffId))
+    view.setStaffZonePaintTool((cell,phase)=>{
+      if(phase==='end'){zonePaint=null;return}
+      if(!cell)return
+      const key=zoneKey(cell.x,cell.z)
+      if(phase==='start'){
+        zonePaint={active:zonePaintActive(assignedZones(getGame().snapshot,staffId),key),lastKey:null}
+      }
+      if(!zonePaint || zonePaint.lastKey===key)return
+      zonePaint.lastKey=key
+      const result=getGame().setStaffZone(staffId,key,zonePaint.active)
+      if(!result.ok)toast(result.message,true)
+      view.showStaffZones(assignedZones(getGame().snapshot,staffId))
       update(getGame().snapshot)
     })
     update(getGame().snapshot)

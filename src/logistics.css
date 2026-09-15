@@ -24,7 +24,7 @@
 .supply-card { padding: 9px; background: #18312b; border: 1px solid #506c5b; margin: 7px 0; }
 .supply-card button { margin-top: 5px; display: block; }
 /* Planning supplements the existing build tools. Inspectors temporarily take the right slot. */
-.game-shell:has(.visitor-panel.visible, .staff-panel.visible, .day-plan-panel.visible, .visitor-overview-panel.visible, .complaints-panel.visible, #festival-management:not([hidden])) .supply-planner { visibility: hidden; pointer-events: none; }
+.game-shell:has(.visitor-panel.visible, .staff-panel.visible, .day-plan-panel.visible, .visitor-overview-panel.visible, .complaints-panel.visible, .ticker-panel.visible, #festival-management:not([hidden])) .supply-planner { visibility: hidden; pointer-events: none; }
 @media (max-width: 780px) { .supply-planner { width: min(230px, 37vw); max-height: calc(100dvh - 195px); font-size: 11px; padding: 7px; } .supply-tools, .supply-planner form { grid-template-columns: 1fr; } }
 
 .supply-planner button:disabled { opacity: .45; cursor: default; }

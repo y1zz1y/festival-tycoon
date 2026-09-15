@@ -9,6 +9,27 @@ export type MedicalCell = {
   occupants: Array<string | null>
 }
 
+export function normalizeMedicalCell(
+  source: Partial<MedicalCell> & Pick<MedicalCell, 'x' | 'z'>,
+  visitorIds?: ReadonlySet<string>,
+): MedicalCell {
+  return {
+    x: source.x,
+    z: source.z,
+    elevation: Number.isFinite(source.elevation) ? Number(source.elevation) : 0,
+    occupants: Array.from({ length: MEDICAL_BEDS_PER_CELL }, (_, slot) => {
+      const id = source.occupants?.[slot]
+      return typeof id === 'string' && id && (!visitorIds || visitorIds.has(id))
+        ? id
+        : null
+    }),
+  }
+}
+
+export function medicalCellIsVacant(cell: MedicalCell): boolean {
+  return cell.occupants.every((occupant) => occupant === null)
+}
+
 export class MedicalSystem {
   getCellAt(cells: readonly MedicalCell[], x: number, z: number): MedicalCell | undefined {
     return cells.find((cell) => cell.x === x && cell.z === z)

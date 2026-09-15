@@ -13,7 +13,8 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
 | Crowd-Kosten und Belegung | `src/game/crowding.ts` | Crowd-Index, Kosten |
 | Gerichtete Wege / Queues | `src/game/pathFlow.ts`, `src/game/queueLanes.ts`, `GameState.recalculateQueueDirections` | `allowsPathFlow`, Queue-Kette, Stand-Spuren |
 | Weg-Darstellung | `src/view/PathFlowView.ts` | Bodenmarkierungen |
-| Straßen-Graph (Fahrzeuge) | `src/game/logistics.ts` | `createRoadGraph`, `findRoadRoute` |
+| Straßen-Graph (Fahrzeuge) | `src/game/logistics.ts` | `createRoadGraph`, `findRoadRoute`; Nachbarn nur bei passender Kantenhöhe / Rampe |
+| Rampen / Halbstufen | `src/game/wayElevation.ts` | `canTraverseWayElevation`, `packWayElevation` |
 | Ampeln / Wegschranken | `src/game/accessControl.ts` | `closedAccessEdges`, `accessEdgeKey` |
 | Camping-Multi-Goal | `src/game/camping.ts` | `CampingSystem.findRouteToGathering` |
 | Wegtypen und Anforderungen | `src/game/wayTypes.ts` | `WAY_TYPES`, `wayInfo`, `wayIssue` |
@@ -22,7 +23,13 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
 ## Wichtige Regeln
 
 - Topology- und Zugangsänderungen (`worldRevision`) invalidieren Navigation
-  sofort.
+  sofort. Neue Weg- oder Straßenrampen gehören dazu (`placePath` / `placeRoad`).
+  Ein Fußweg auf einer Autostraße bleibt ein gemeinsames Feld (`NAV_PATH` und
+  `NAV_ROAD`, Kosten wie Pflaster); die Straße wird nicht entfernt.
+  Der Straßengraph speichert Lagen mit `roadLayerKey` (`x:z:Höhe`); zwei
+  Straßen auf einer Kachel verbinden sich nur bei passender Kantenhöhe.
+- `packCell` kodiert Höhen in Halbstufen (`elevation * 2`), damit 0.5 und 1.0
+  nicht kollidieren. Alte volle Stufen (`pathSlope` ±1) bleiben begehbar.
 - Crowd-Kosten ändern sich häufiger: gecachte Routen **gestaffelt** nach
   30–59 Ticks verfallen lassen. Nicht den ganzen Cache bei jedem Crowd-Update
   oder bei Cap leeren; bei Cap eine Eintrag entfernen.
@@ -88,6 +95,8 @@ Rücksetzbewegungen sowie bestehende Fahrzeugrouten.
 `tests/performanceGuards.ts` (Budget, eine Suche für viele Camp-Ziele,
 Crowd-Expiry, Bau-Invalidierung). `tests/supplyChain.ts` (Umwege nach
 Cache-Expiry). `tests/regression.ts` (Wegschlüssel inkl. Höhe `0`).
+`tests/wayElevation.ts` (Halbstufen, Fuß- und Straßenrampen, Legacy-Volleinheit,
+Fußweg-Kreuzung behält die Autostraße).
 `tests/accessControl.ts` (rote Ampel, geschlossene Schranke, Umparken,
 Liefer- und Müllwagen-Umweg). `tests/operations.ts` (Queue-Kette ohne
 Shortcuts, Rückwärtsgehen, Stand-Spuren, Saugroboter durch `staffOnly`).

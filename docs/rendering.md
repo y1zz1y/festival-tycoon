@@ -8,19 +8,20 @@ Draw-Call oder Material pro Detailstück oder Besucher.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Szene, Kamera, Picking | `src/view/WorldView.ts` | Haupt-View; ein `LineSegments`-Baugitter 7×7 auf `buildElevation` (Shift oder Höhe ≠ 0) |
+| Szene, Kamera, Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | Haupt-View; `pickPlacedObject` für Info/Abriss (Batches, Tore, Ampeln, Logistik); ein `LineSegments`-Baugitter 7×7 auf `buildElevation` (Shift oder Höhe ≠ 0); Personalzonen: ein InstancedMesh für zugewiesene 3×3 plus Hover-Vorschau (`setStaffZonePaintTool`) |
 | Pixel-Personen | `src/view/pixelPeople.ts` | 6 Visitor-Batches + Accessoires |
 | Souvenir-Props | `src/view/souvenirMeshes.ts` | 1 Maskottchen- + 4 Shirt-Schnitt-Batches, Instanzfarbe |
-| Gebäude-Instancing | `src/view/retroBuildings.ts` | |
+| Gebäude-Instancing | `src/view/retroBuildings.ts` | ein gemergtes Vertex-Color-Mesh je `DETAILED_BUILDINGS`-Art inkl. aller `SCENERY_KINDS`; Instanz-`buildingIds` für Picking |
 | Camping-Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts` | 14 Camping-Batches |
-| Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call |
+| Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call; Parkfelder als Atlas-`parking` |
 | Lichter | `src/view/FestivalLightsView.ts` | fester PointLight-Pool; warm gelb vs. weiße Tageslichtballons über Instanzfarben |
 | Auflösungscaps | `src/view/renderResolution.ts` | max. 1440×810 intern |
 | Touch-Kamera | `src/view/touchCamera.ts` | Zwei-Finger-Pan/Zoom |
 | Dispose | `src/view/disposeObject3D.ts` | GPU-Ressourcen |
 | Browser-Messharness | `tests/render-performance.html` | |
-| Logistik-Einbahn-Overlay | `src/view/LogisticsView.ts`, `src/view/roadDirectionArrow.ts` | Weiße StVO-Pfeile nach den Fahrzeugen; kompaktes InstancedMesh-Overlay nur bei Werkzeug Fahrtrichtung |
+| Logistik-Einbahn-Overlay | `src/view/LogisticsView.ts`, `src/view/roadDirectionArrow.ts` | Weiße StVO-Pfeile nach den Fahrzeugen; kompaktes InstancedMesh-Overlay nur bei Werkzeug Fahrtrichtung. Parkflächen: geteiltes Asphaltmaterial plus `parkingTexture` (Stelllinien in der Textur). Grün/Orange und das P nur in der Autostraßen-Bauansicht oder im Logistik-Overlay (`showParkingHelpers`) |
 | Logistik-Modelle | `src/view/logisticsModels.ts` | ModelKit-Gebäude und Fahrzeuge; Besucherautos teilen Geometrie je Lackfarbe |
+| Straßenrampen | `src/view/LogisticsView.ts` | Deck kippt um `roadSlope`; Stützen bei Erhöhung; Fahrzeuge folgen `waySurfaceY` |
 | Depot-Träger | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts` | dieselbe Personen-Geometrie wie Gäste; eine gemergte Warnwesten-/Mützen-Kit, ein Handkarren, ein Ladungsstapel |
 | Ampeln / Wegschranken | `src/view/AccessControlView.ts` | Geteilte Geometrie, Signalfarbe, Picking über `accessId`. Ampeln rechts an der Fahrbahn, Lampe zum Gegenverkehr. Personentor auf der Ausgangskante (`gateEdgeWorldPosition`), Flügel klappen in die erlaubte Richtung auf |
 | Personaleingang | `src/view/SupplyChainView.ts` | Goldene Pfosten auf derselben Kante via `staffGateWorldPosition`; fehlendes `staffGateDirection` bleibt Legacy-Mitte |
@@ -48,6 +49,9 @@ Snapshot nicht autoritativ schreiben.
   Geometrie-/Material-Disposal allein gibt diese GPU-Puffer nicht frei.
 - Sechs Visitor-Instance-Batches bleiben die Picking-Ziele. Accessoires in
   zusätzlichen kompakten Batches, unabhängig von der Population.
+  Abriss/Info wählen zuerst das nächste Mesh mit `buildingId` /
+  `buildingIds[instanceId]` bzw. `accessId`; ein unbeschrifteter Treffer
+  (Straße, Parkfeld) beendet die Suche, damit nichts dahinter fällt.
   Maskottchen und gekaufte Shirts sind solche Accessoire-Batches (kein Mesh
   pro Figur). Darstellung interpoliert nur aus dem Snapshot.
 - Weibliche/männliche Varianten: höchstens 32 Instance-Batches insgesamt.
@@ -66,7 +70,7 @@ Snapshot nicht autoritativ schreiben.
 ## Tests
 
 `tests/performanceGuards.ts`, `tests/pixelPeople.ts`, `tests/carrierModels.ts`,
-`tests/campingModels.ts`, `tests/terrainSurface.ts`. Messungen: `docs/performance.md`.
+`tests/campingModels.ts`, `tests/terrainSurface.ts`, `tests/picking.ts`. Messungen: `docs/performance.md`.
 
 ## Bei Änderungen dieses Dokument
 

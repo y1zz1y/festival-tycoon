@@ -46,12 +46,41 @@ export function designateWasteDumps(
   }
 }
 
+export function wasteDumpRemaining(
+  dump: WasteDumpCell,
+  capacity = SIMULATION_CONFIG.waste.dumpCapacity,
+): number {
+  return Math.max(0, capacity - Math.max(0, dump.stored))
+}
+
+/** Deposit without exceeding the per-tile cap. Returns the accepted amount. */
+export function acceptWasteAtDump(
+  dump: WasteDumpCell,
+  amount: number,
+  capacity = SIMULATION_CONFIG.waste.dumpCapacity,
+): number {
+  if (amount <= 0) return 0
+  const added = Math.min(amount, wasteDumpRemaining(dump, capacity))
+  dump.stored += added
+  return added
+}
+
+export function clampWasteDumpStored(
+  dump: WasteDumpCell,
+  capacity = SIMULATION_CONFIG.waste.dumpCapacity,
+): WasteDumpCell {
+  dump.stored = Math.min(capacity, Math.max(0, Number(dump.stored) || 0))
+  return dump
+}
+
 export function findNearestWasteDump(
   from: { x: number; z: number },
   dumps: readonly WasteDumpCell[],
+  capacity = SIMULATION_CONFIG.waste.dumpCapacity,
 ): WasteDumpCell | null {
   return (
     dumps
+      .filter((dump) => wasteDumpRemaining(dump, capacity) > 0)
       .slice()
       .sort(
         (left, right) =>
@@ -100,6 +129,105 @@ export function normalizeWasteDumpCell(value: unknown): WasteDumpCell | null {
     x: Number(source.x),
     z: Number(source.z),
     elevation: Number.isFinite(source.elevation) ? Number(source.elevation) : 0,
-    stored: Math.max(0, Number(source.stored) || 0),
+    stored: Math.min(
+      SIMULATION_CONFIG.waste.dumpCapacity,
+      Math.max(0, Number(source.stored) || 0),
+    ),
   }
+}
+
+const CARDINAL_OFFSETS = [
+  { x: 1, z: 0 },
+  { x: -1, z: 0 },
+  { x: 0, z: 1 },
+  { x: 0, z: -1 },
+] as const
+
+export type WasteDumpAreaStats = {
+  cells: number
+  stored: number
+  capacity: number
+  remaining: number
+  percent: number
+}
+
+/** 4-way flood fill of dump tiles; fill stays per-tile in sim, display sums the component. */
+export function connectedWasteDumpStats(
+  dumps: readonly WasteDumpCell[],
+  origin: { x: number; z: number },
+  capacityPerCell = SIMULATION_CONFIG.waste.dumpCapacity,
+): WasteDumpAreaStats | null {
+  const index = new Map<string, WasteDumpCell>()
+  dumps.forEach((cell) => {
+    index.set(`${cell.x}:${cell.z}`, cell)
+  })
+  const start = index.get(`${origin.x}:${origin.z}`)
+  if (!start) return null
+  const seen = new Set<string>([`${start.x}:${start.z}`])
+  const queue = [start]
+  let stored = 0
+  while (queue.length > 0) {
+    const cell = queue.pop()!
+    stored += Math.max(0, cell.stored)
+    CARDINAL_OFFSETS.forEach((offset) => {
+      const key = `${cell.x + offset.x}:${cell.z + offset.z}`
+      if (seen.has(key)) return
+      const next = index.get(key)
+      if (!next) return
+      seen.add(key)
+      queue.push(next)
+    })
+  }
+  const cells = seen.size
+  const capacity = cells * capacityPerCell
+  const remaining = Math.max(0, capacity - stored)
+  const percent =
+    capacity <= 0 ? 0 : Math.min(100, Math.round((stored / capacity) * 100))
+  return { cells, stored, capacity, remaining, percent }
+}
+
+export function formatWasteDumpAreaInspect(stats: WasteDumpAreaStats): {
+  status: string
+  lines: Array<{ label: string; value: string }>
+} {
+  return {
+    status:
+      stats.cells === 1
+        ? 'Zusammenhängende Fläche · 1 Feld'
+        : `Zusammenhängende Fläche · ${stats.cells} Felder`,
+    lines: [
+      { label: 'Gelagert', value: `${stats.stored} / ${stats.capacity}` },
+      { label: 'Frei', value: String(stats.remaining) },
+      { label: 'Auslastung', value: `${stats.percent} %` },
+    ],
+  }
+}
+
+export function formatWasteDumpAreaHover(stats: WasteDumpAreaStats): string {
+  return `Müllablage · ${stats.stored}/${stats.capacity} gelagert · ${stats.remaining} frei`
+}
+
+/** Park-wide dump fill (every designated tile). Missing dumps yield null. */
+export function parkWasteDumpFill(
+  dumps: readonly WasteDumpCell[],
+  capacityPerCell = SIMULATION_CONFIG.waste.dumpCapacity,
+): WasteDumpAreaStats | null {
+  if (dumps.length === 0) return null
+  const stored = dumps.reduce((sum, cell) => sum + Math.max(0, cell.stored), 0)
+  const cells = dumps.length
+  const capacity = cells * capacityPerCell
+  const remaining = Math.max(0, capacity - stored)
+  const percent =
+    capacity <= 0 ? 0 : Math.min(100, Math.round((stored / capacity) * 100))
+  return { cells, stored, capacity, remaining, percent }
+}
+
+export function isParkWasteDumpOverFull(
+  dumps: readonly WasteDumpCell[],
+  ratio = SIMULATION_CONFIG.waste.dumpFullRatio,
+  capacityPerCell = SIMULATION_CONFIG.waste.dumpCapacity,
+): boolean {
+  const fill = parkWasteDumpFill(dumps, capacityPerCell)
+  if (!fill || fill.capacity <= 0) return false
+  return fill.stored / fill.capacity > ratio
 }

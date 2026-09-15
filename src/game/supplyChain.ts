@@ -1,3 +1,4 @@
+import { acceptWasteAtDump } from './waste'
 import { occupiesBuildingCell } from './stageDesign'
 import { updateDepotCarriers } from './depotCarriers'
 import { wayInfo } from './wayTypes'
@@ -368,7 +369,7 @@ export function updateSupplyChain(s: GameSnapshot, routeWalk: PedestrianRouter, 
       if (r.kind === 'waste' && r.cargo) {
         const dump = dumps.find(d => near(d, r.position))
         if (!dump) continue
-        const amount = Math.min(r.cargo, SIMULATION_CONFIG.waste.dumpCapacity - dump.stored); dump.stored += amount; r.cargo -= amount
+        const amount = acceptWasteAtDump(dump, r.cargo); r.cargo -= amount
         if (r.cargo) continue
         // The empty cart must return physically to its home depot before another collection.
         r.path = connect(r.position, [], adjacentPaths(depot)) ?? []; if (r.path.length) continue

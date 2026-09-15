@@ -29,6 +29,17 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
         command.elevation,
         command.previousPath,
       )
+    case 'placeRoad':
+      return game.placeRoadSegment(
+        command.x,
+        command.z,
+        command.elevation,
+        command.slope,
+        command.slopeDirection,
+        command.wayType,
+      )
+    case 'undoRoad':
+      return game.undoRoadSegment(command.x, command.z, command.previousRoad, command.elevation)
     case 'bulldoze':
       return game.bulldoze(command.x, command.z, command.buildingId)
     case 'bulldozeArea':
@@ -91,6 +102,8 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.fireStaffMember(command.staffId)
     case 'toggleStaffZone':
       return game.toggleStaffZone(command.staffId, command.key)
+    case 'setStaffZone':
+      return game.setStaffZone(command.staffId, command.key, command.active)
     case 'buyAmbulance':
       return game.buyAmbulance(command.garageId)
     case 'buyBus':
@@ -129,6 +142,8 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.undoCoasterPiece(command.coasterId)
     case 'deleteCoasterPiece':
       return game.deleteCoasterPiece(command.coasterId, command.pieceIndex)
+    case 'removeCoaster':
+      return game.removeCoaster(command.coasterId)
     case 'setCoasterAccess':
       return game.setCoasterAccess(
         command.coasterId,

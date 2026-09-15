@@ -156,8 +156,12 @@ Fußgänger zum Umlaufen.
    oder Bühnenvorplatz, nicht nur von der Vorderseite.
    Jeder Stand verkauft ausschließlich seinen eigenen angelieferten Vorrat.
 5. Müllrouten leeren Eimer ab ihrer Abholschwelle (maximal 12) und bringen die
-   Ladung zu einer erreichbaren Müllablage. Eine Ablage fasst 40 Einheiten;
-   die vorhandenen Müllwagen übernehmen den weiteren Abtransport.
+   Ladung zu einer erreichbaren Müllablage. Eine Ablagekachel fasst 180 Einheiten
+   und nimmt keinen weiteren Müll an, wenn sie voll ist. Müllwagen fassen 90
+   Einheiten und übernehmen den weiteren Abtransport.
+   Ein Klick auf ein Müllfahrzeug zeigt die geladene Müllmenge (aktuell /
+   Kapazität), nicht Insassen. Ein Klick auf eine Müllablage zeigt, wie voll
+   die gesamte zusammenhängende Fläche ist und wie viel Platz noch frei ist.
 
 Bestellungen benötigen zunächst 90 Spielminuten bis zum Kartenrand. Danach fährt
 ein sichtbarer Lastwagen zum Depot, entlädt dort und verlässt das Gelände wieder.
@@ -199,7 +203,30 @@ Tor, Personaleingang und Festival-Einlass (Sicherheitsschleuse) liegen als
 Schnellzugriff im selben Fenster. Autostraßen öffnen ebenfalls links den
 Editor mit Belagwahl (Feldstraße, Schotterstraße, Fahrplatten, Asphalt),
 Richtung, Stückbau, Zurück und Abriss. Parkplätze und Verkehrszeichen stehen
-im selben Fenster. Straßen folgen dem Gelände; Neigung ist deaktiviert.
+im selben Fenster.   Parkplätze liegen als graue Asphaltflächen mit
+Stellplatzmarkierung in der normalen Weltansicht; die grün/orange
+Belegung und das P erscheinen nur im Autostraßen-Fenster oder im
+Logistik-Overlay. Gäste steigen nach dem Parken immer auf einen
+angrenzenden Fußweg aus (nicht auf die Fahrbahn, die Bucht oder ins
+Gras), sofern ein Weg die Bucht orthogonal berührt; im Auto bleiben sie
+bis dahin inaktiv und können dort nicht als Verletzte auf der Straße
+zählen. Abriss (Leiste oder Autostraßen-Abreißen) hebt die
+Bucht auf; die Kachel wird wieder zu Wiese und ist bebaubar. Dasselbe
+gilt für Krankenbereiche. Ein Klick im Abrissmodus entfernt das
+**3D-Objekt unter dem Mauszeiger** (Gebäude, Deko-Viertel, Tor, Ampel),
+nicht die Nachbarkachel hinter dem Mesh; Rechteckziehen bleibt flächig. Alte Restkacheln nach einem fehlgeschlagenen
+Abriss lassen sich abreißen oder direkt überbauen. Fußwege und Autostraßen können im Stückmodus Rampen
+in **halben Höhenstufen** bauen (weniger steil als die frühere volle Stufe).
+Fußwege dürfen weiter höher liegen; Autos höchstens **eine** Höhenstufe
+über dem Gelände (zwei Halbstufen). Alte Parks mit vollen Stufen bleiben
+gleich hoch. Frei gezogene Linien bleiben flach auf der gewählten Ebene. Im Stückmodus
+hält Shift die Ausgangskachel fest, während Nachbarn die Rampe bekommen.
+Ein Fußweg auf einer Autostraße bleibt ein **Übergang**: die Autostraße
+liegt weiter, mit Zebrastreifen; ein Steg eine Ebene darüber verdeckt sie
+nicht. Eine Autostraße **auf derselben Höhe** ändert nur Belag oder
+Neigung dieses Felds. Eine Autostraße **eine halbe Stufe oder höher**
+über einer anderen bleibt eine **Brücke**: die untere Straße bleibt
+befahrbar. Parkplätze, Müllablagen und Personaltore daneben bleiben liegen.
 Tooltips beschreiben Preis pro Feld und Anforderungen. Dezente
 Materialtexturen zeigen Holzbohlen, Pflasterfugen, Schotter und Fahrplatten
 ohne zusätzliche Planungsmarkierungen. Mit dem Straßenwerkzeug werden Linien
@@ -317,7 +344,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Baukosten, stündlicher Unterhalt und einfache Einnahmen
 - Gästezahl, Attraktivität und Reputation
 - pausierbare Simulation mit drei Geschwindigkeiten
-- Bauvorschau, Belegungsprüfung, Abriss- und Info-Werkzeug
+- Bauvorschau, Belegungsprüfung, Abriss- und Info-Werkzeug (Abriss trifft das Mesh unter dem Zeiger)
 - Parkeingang und autonom erscheinende Besucher
 - Wegfindung über zusammenhängende Wege
 - Besucherbedürfnisse für Sättigung, Toilette, Spaß und Energie
@@ -338,7 +365,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - unbegrenzter Besucherzustrom mit lokaler Gedränge- und Festivallust-Simulation
 - zuschaltbares Gedränge-Overlay mit durchschnittlicher Parkauslastung
 - getrennte Karten-Overlays für lokale Attraktivität und Partystimmung mit abflachender Quellenaddition
-- Dekoration mit Bäumen, Hecken, Bannern, Wimpeln, Totems, Fahnen, Lampions, Bierfässern, Luftfiguren, Gebetsfahnen, Feuerschalen, automatisch am Wegrand ausgerichteten Bänken, Mastleuchten und großen weißen Tageslichtballons
+- Dekoration mit Bäumen, Hecken, Bannern, Wimpeln, Totems, Fahnen, Lampions, Bierfässern, Luftfiguren, Gebetsfahnen, Feuerschalen, Lattenzaun, Absperrseil, Luftschlangen, Leitkegeln, Kisten, Ölfässern, Windrädern, Windsäcken, Blumenampeln, Kakteen, Zwergen, Windspielen, Kreidetafeln, Liegestühlen, Sitzsäcken, Fackeln, Deko-Boxen, Boomboxen, Selfie-Rahmen, Diskokugeln, Luftkakteen, Riesenpilzen, Kristallstelen, Willkommensbögen, automatisch am Wegrand ausgerichteten Bänken, Mastleuchten und großen weißen Tageslichtballons. Jede Art hat eine eigene Attraktivität: kleine billige Stücke wirken nur nah, teure Blickfänge stärker und weiter (Karten-Overlay Attraktivität)
 - Festivalbühnen, gerichtete sowie omnidirektionale Lautsprecher und ausweisbare Bühnenvorplätze
 - maximal neun feiernde Besucher je Vorplatzfeld, lokale Tanz-Hotspots und Stimmungsverstärkung durch Tänzer
 - individuelle Vorlieben für schöne Umgebung und Partystimmung sowie Meidung von Feuer, Kotze und Schlafenden
@@ -358,6 +385,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - gedrängebewusste A*-Wegsuche, die freie Alternativen ohne große Umwege bevorzugt
 - Personalverwaltung für Reinigung, Sicherheit, Feuerwehr und Sanitäter mit laufenden Lohnkosten
 - Sanitäter wählen für Transporte stets das über die Wegstrecke nächstgelegene freie Krankenbett
+- Bei Verletzten rückt immer der nächste freie Sanitäter oder Krankenwagen aus; wer schon einen Patienten hat, bleibt bei ihm
 - deutlich erkennbare Personalmodelle mit rollenabhängigen Uniformen und Mützen
 - Träger (Transportkräfte) in derselben Figurenqualität wie Besucher, mit gelber Warnweste und Handkarren
 - gerichtete normale Wege mit dreh- und entfernbaren Bodenmarkierungen
@@ -365,7 +393,8 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - ausweisbare Krankenbereiche mit drei Liegen pro Feld und Sanitätertransport für Bewusstlose
 - alkohol- und toilettenabhängige Übelkeit sowie zusätzliche Übelkeit nach alkoholisierten Fahrten
 - sichtbare Verschmutzungen, die von Reinigungskräften und Saugreinigern
-  gesucht und beseitigt werden; Saugreiniger fahren dazu auch auf Bühnenvorplätze
+  gesucht und beseitigt werden; Reinigungskräfte leeren volle Eimer zuerst
+  und bei Leerlauf auch teilweise gefüllte; Saugreiniger fahren dazu auch auf Bühnenvorplätze
   und stehen in der Personalverwaltung als Reinigungskraft (Saugroboter)
 - versetzte Kotzeflecken pro Feld und vollständige Reinigung des nächstgelegenen Feldes
 - lokales, nicht ausbreitendes Brandrisiko durch betrunken gezündetes Feuerwerk
@@ -414,7 +443,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Mausrad: zoomen
 - Q / E: Kamera um 90 Grad drehen
 - R: Gebäudezugang um 90 Grad drehen
-- Shift halten und Maus hoch/runter (oder Mausrad / Bild hoch/runter): Bauhöhe ändern. Um das Gebäude erscheint ein 7×7-Baugitter auf dieser Ebene. Shift loslassen behält die Höhe; ein neues Bauwerkzeug setzt sie auf 0.
+- Shift halten und Maus hoch/runter (oder Mausrad / Bild hoch/runter): Bauhöhe in halben Stufen (0.5, 0–6) ändern. Um das Gebäude erscheint ein 7×7-Baugitter auf dieser Ebene. Die Bodenkachel unter dem Zeiger bleibt immer gelb umrandet, auch wenn das Objekt angehoben ist. Shift loslassen behält die Höhe; ein neues Bauwerkzeug setzt sie auf 0.
 - 1–9: Werkzeug wählen, 0: Achterbahn
 - Leertaste: pausieren / fortsetzen
 - Besucher anklicken: Gedanken und Bedürfnisse öffnen
@@ -424,7 +453,10 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 1. In der Iconleiste **Wege** öffnen (frei ziehen, zwei Pfeile).
 2. Unten den Streckenbutton auf einen Pfeil stellen.
 3. Ein beliebiges Feld anklicken; das erste Stück liegt dort.
-4. Richtung und Neigung für das nächste Segment wählen.
+4. Richtung und Neigung für das nächste Segment wählen. Shift halten sperrt
+   die Ausgangskachel: weitere Felder bekommen die Rampe relativ dazu, der
+   Start ändert weder Ort noch Höhe. Die Vorschau zeigt die Rampe vom festen
+   Ausgang zum Zeiger. Shift loslassen löst die Sperre.
 5. „Bauen“ drücken oder das nächste Feld setzen.
 6. „Zurück“ entfernt das letzte Segment.
 7. **Abreißen** entfernt angeklickte oder gezogene Wege.
@@ -452,7 +484,7 @@ Eine Bahn fährt erst, wenn Strecke, Eingang und Ausgang vollständig sind. Mit 
 
 Eine noch nicht vollständige Achterbahn kann mit dem Info-Werkzeug angeklickt werden. Sie wird dadurch erneut im Achterbahn-Editor geöffnet und am Endanker des letzten vorhandenen Schienenelements fortgesetzt.
 
-Im Attraktionsfenster kann eine geschlossene Strecke geöffnet oder ohne Besucher im kontinuierlichen Testbetrieb gefahren werden. „Wagen zurückholen“ setzt den Zug sicher an die Station; vorhandene Fahrgäste werden dabei über den Ausgang zurück in den Park geführt.
+Im Attraktionsfenster kann eine geschlossene Strecke geöffnet oder ohne Besucher im kontinuierlichen Testbetrieb gefahren werden. „Wagen zurückholen“ setzt den Zug sicher an die Station; vorhandene Fahrgäste werden dabei über den Ausgang zurück in den Park geführt. **Achterbahn abreißen** entfernt die gesamte Bahn: Schiene, Stützen, Zug, Station, Ein- und Ausgang sowie die angeschlossene Warteschlange. Das Infofenster schließt danach. Denselben Knopf gibt es im Konstruktionsfenster, solange die Bahn noch unvollständig ist. Abriss auf der Stations- oder Zugangskachel entfernt ebenfalls die ganze Bahn.
 
 Über „Strecke bearbeiten“ lässt sich jede Bahn erneut öffnen. Vor- und Zurück-Schaltflächen markieren die vorhandenen Elemente nacheinander. „Markiertes Element löschen“ entfernt ausschließlich dieses Element und setzt den Bauanker auf das davorliegende Segment. Die späteren Segmente bleiben erhalten; die Strecke gilt als unterbrochen, bis neue Elemente die Lücke geometrisch korrekt schließen.
 
@@ -492,9 +524,9 @@ Neue Szenarien beginnen geschlossen in der Planung. Unter **Festival planen** le
 
 Unter **Logistik** in der Iconleiste einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen. Das Paket-Icon in der Gruppe **Verwalten** öffnet die Logistikverwaltung für Bestellungen und Träger. Mindestbestände (in 20er-Schritten) und Trägerzahl stellt ihr dort im Reiter **Waren & Träger** oder im Infofenster des Lagers ein. Bestellungen kosten Warenpreis plus 45 € Fracht. Lastwagen liefern zum Anlieferungsplatz; Träger holen dort Waren physisch ab und bringen sie ins Depot. Depots versorgen Stände automatisch bis zum Zielbestand von 40 Einheiten. Als **Zwischenlager** freigegebene Depots geben zusätzlich Ware an andere Depots ab. Träger kosten einmalig 120 € und anschließend 0,04 €/Spielminute.
 
-Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als farbigen Balken und als Zahl im Infofenster. An Mülleimern liegt der Füllstand als grobe Zahl Kartons am Boden (leer keine, voll vier). Reinigungskräfte bringen gesammelten Bodenmüll zuerst zum nächsten erreichbaren Mülleimer; Eimerinhalte werden von Reinigungskräften zur Müllablage gebracht, Müllwagen übernehmen die weitere Abfuhr. Saugreiniger vom Betriebshof fahren auf Wegen und Bühnenvorplätzen, dürfen den Personaleingang wie Personal nutzen, halten vor Besuchern und entladen an der Müllablage; Eimer lassen sie stehen. In der Personalverwaltung erscheinen sie unter **Reinigungskraft** als Saugroboter und bekommen dieselben Einsatzgebiete wie Reinigungskräfte. Alte Müllträger beenden vorhandene Ladungen und werden anschließend aus dem Logistiksystem entfernt.
+Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als farbigen Balken und als Zahl im Infofenster. An Mülleimern liegt der Füllstand als grobe Zahl Kartons am Boden (leer keine, voll vier). Ein Klick auf eine Müllablage öffnet das Infofenster mit Füllstand, Kapazität und freiem Platz der **gesamten zusammenhängenden Fläche**. Ablagen lassen sich nicht überfüllen. Müllfahrzeuge zeigen im Infofenster die geladene Müllmenge statt Insassen. Unten am Bildrand erscheint ein **Meldungs-Ticker** bei Feuer, Massenpanik und wenn alle Müllflächen über 90 % voll sind; **Hin** springt zur Stelle. Die letzten Meldungen öffnet der Button **Meldungen** links neben Mehrspieler. Reinigungskräfte bringen gesammelten Bodenmüll zuerst zum nächsten erreichbaren Mülleimer; volle Eimer leeren sie vorrangig und bringen den Inhalt zur Müllablage. Haben sie keinen Bodenmüll, keine Kotze und keinen vollen Eimer, leeren sie auch teilweise gefüllte Eimer (ab einem Viertel), statt herumzustehen. Müllwagen übernehmen die weitere Abfuhr. Saugreiniger vom Betriebshof fahren auf Wegen und Bühnenvorplätzen, dürfen den Personaleingang wie Personal nutzen, halten vor Besuchern und entladen an der Müllablage; Eimer lassen sie stehen. In der Personalverwaltung erscheinen sie unter **Reinigungskraft** als Saugroboter und bekommen dieselben Einsatzgebiete wie Reinigungskräfte. Alte Müllträger beenden vorhandene Ladungen und werden anschließend aus dem Logistiksystem entfernt.
 
-**Personaltore** werden auf Fußwege gesetzt, sitzen wie Personentore auf der Kante der aktuellen Baurichtung (`R`) und sperren diese Kachel für Besucher; Personal, Saugroboter und Warenlogistik dürfen passieren. Lastwagen bleiben auf der Straße. Alte zentrierte Personaleingänge bleiben beim Laden gültig. Für einen vollständig getrennten Bereich muss das Tor mit Zäunen bzw. geschlossenen Grenzen kombiniert werden. Personalfiguren, Saugroboter oder Namen in der Personalverwaltung anklicken: Das Infofenster bietet Verfolgen und Einsatzgebiete (3×3-Felder, zusammenhängend). Der Bereich wird bei Auswahl markiert. Abhol-/Einsatzorte liegen im zugewiesenen Bereich; notwendige Entsorgungs-, Rettungs- und Rückwege dürfen hinausführen. Automatische Träger können ebenfalls angeklickt und einem rechteckigen Bereich zugewiesen werden.
+**Personaltore** werden auf Fußwege gesetzt, sitzen wie Personentore auf der Kante der aktuellen Baurichtung (`R`) und sperren diese Kachel für Besucher; Personal, Saugroboter und Warenlogistik dürfen passieren. Lastwagen bleiben auf der Straße. Alte zentrierte Personaleingänge bleiben beim Laden gültig. Für einen vollständig getrennten Bereich muss das Tor mit Zäunen bzw. geschlossenen Grenzen kombiniert werden. Personalfiguren, Saugroboter oder Namen in der Personalverwaltung anklicken: Das Infofenster bietet Verfolgen und Einsatzgebiete (3×3-Felder, zusammenhängend). Unter **Bereiche verwalten** lassen sich die Blöcke per Klick oder Ziehen bemalen; der erste 3×3-Block legt fest, ob der Strich zuweist oder entfernt. Die 3×3-Kachel unter dem Zeiger wird hervorgehoben. Der zugewiesene Bereich wird markiert. Abhol-/Einsatzorte liegen im zugewiesenen Bereich; notwendige Entsorgungs-, Rettungs- und Rückwege dürfen hinausführen. Automatische Träger können ebenfalls angeklickt und einem rechteckigen Bereich zugewiesen werden.
 
 
 ### Ticketplanung und Bühnenwerkstatt

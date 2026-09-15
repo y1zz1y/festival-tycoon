@@ -9,7 +9,7 @@ sind gerichtete Wege (`pathType: 'queue'`).
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Schienen, Physik, Betrieb | `src/game/coasters.ts` | `TRACK_PIECE_KINDS`, Zug, Dispatch, `getSmoothedCoasterPiecePoints` |
-| Bauen, Recall, Preis | `src/game/GameState.ts` | `startCoaster`, `recallCoasterTrain`, `setRideAccess` |
+| Bauen, Recall, Preis, Abriss | `src/game/GameState.ts` | `startCoaster`, `recallCoasterTrain`, `setRideAccess`, `removeCoaster` |
 | Queue-Richtung | `src/game/pathFlow.ts` | `allowsPathFlow` |
 | Balancing / SI-Physik | `src/game/simulationConfig.ts` | `coasters`, `classicSteel.physics`, `physicsSimulation`, `trackJoinSmoothing` |
 | Spezialstücke visuell | `src/view/coasterSpecials.ts` | Loop, Photo, Splash |
@@ -25,13 +25,13 @@ sind gerichtete Wege (`pathType: 'queue'`).
   Piece-ID/Chain-Signatur. Nicht alle Sample-Punkte pro Wagen/Substep neu
   scannen.
 - Schienenübergänge werden **zur Mesh-/Pfad-Ableitung** geglättet
-  (`trackJoinSmoothing` in `simulationConfig`): Kurvenstücke mischen zur
-  Viertelkreis-Form (`curveCircularBlend` 0.62), danach ein leichtes
-  Bogenlängen-Gaussian (`sigma` 0.28 Kacheln) über Nachbarstücke und ein
-  kurzes Fillet an noch spitzen Stückgrenzen. Snapshot-`points` bleiben
-  spitz; alte Saves runden sich beim Laden optisch und für die Wagen.
-  Mesh und `sampleCoasterTrack` teilen denselben Cache. Stationen bleiben
-  ungefillet, damit der Bahnsteig sitzt. Keine neuen Snapshot-Felder.
+  (`trackJoinSmoothing` in `simulationConfig`): horizontale Kurven bleiben
+  ein Viertelkreis in der Draufsicht (mehr Samples, kein Gaussian auf X/Z,
+  kein Fillet in die Kurve). Neigungsstöße glättet ein Bogenlängen-Gaussian
+  (`sigma` 0.28 Kacheln) plus ein kurzes Fillet nur bei fast gleicher
+  Heading. Snapshot-`points` bleiben unverändert; alte Saves runden sich
+  beim Laden. Mesh und `sampleCoasterTrack` teilen denselben Cache.
+  Stationen und Loops bleiben ungefillet. Keine neuen Snapshot-Felder.
 - Legacy-Fahrgeschäfte ohne Tore bleiben geschlossen, bis Eingang und Ausgang
   gesetzt und verbunden sind.
 - Eingangsqueues nutzen dieselbe gerichtete Traversierung wie Coaster.
@@ -48,12 +48,22 @@ sind gerichtete Wege (`pathType: 'queue'`).
   anlaufenden Reservierungen. Freie Plätze lösen deshalb sofortiges,
   kontinuierliches Nachrücken aus und keine gruppenweise Freigabe.
 - Gate-Edits invalidieren Spatial-Index und Navigation.
+- Vollständiger Abriss (`removeCoaster` / Command `removeCoaster`) entfernt
+  Schiene, Station, Zug, Ein-/Ausgang und die angeschlossene
+  Eingangsqueue. Fahrgäste und Anstehende werden zuerst wie beim Recall
+  ausgeladen bzw. freigegeben. Refund wie bei Gebäuden
+  (`demolitionRefundRate`). Queue- und Stationswechsel invalidieren
+  Navigation über `emit()` / `worldRevision`. Das Infofenster und der
+  Konstruktionseditor bieten **Achterbahn abreißen**; Abriss auf einer
+  Stations- oder Zugangs-Kachel ruft dieselbe Methode auf. Das Infofenster
+  schließt danach.
 - Photo-Käufe und Brems-/Wasserwiderstand laufen im Tick, nicht im Render.
 - Bungee: ein statisches Mesh, ein Rider, ein Seil, ein aktiver Besucher.
   Visuals aus dem autoritativen Interaktions-Timer.
 - Loops behalten eine feste Referenz-Heading durch vertikale Tangenten.
 - Steigungsstücke (sanft und steil) belegen **ein** Feld und werden direkt aus
   der Station gesetzt. Halbe Höhenstufen (`0.5`) sind für sanfte Stücke zulässig.
+  Die Startplattform nutzt dieselbe Bauhöhe (`buildElevation`, Snap 0.5).
 - Das Konstruktionsfenster folgt dem RCT2-Ablauf: Richtung/Kurvenradius,
   „Speziell …“, Neigung, Rollen/seitliches Kippen, große Vorschau mit Kosten,
   Rückbau/Bauen und Eingang/Ausgang. Nicht anschließbare Teile sind deaktiviert.
@@ -76,10 +86,11 @@ sind gerichtete Wege (`pathType: 'queue'`).
 
 `tests/rideAccess.ts` (beide Ride-Typen, Queues, Saves, Multiplayer).
 `tests/operations.ts` (Serpentinen-Kette, Rückweg, leerer Stand).
-`tests/festivalAdditions.ts` (1-Feld-Steigungen, flach↔steil-Übergang, Wagen-Mesh, Schienenjoin-Rundung / Pfadkontinuität).
+`tests/festivalAdditions.ts` (1-Feld-Steigungen, flach↔steil-Übergang, Wagen-Mesh, Schienenjoin-Rundung / Pfadkontinuität, vollständiger Abriss inkl. Queue und Command).
 `tests/performanceGuards.ts` (Specials, eine Photo-Abrechnung, Bungee-Exklusivität, Wagen-Batch).
 
 ## Bei Änderungen dieses Dokument
 
-Aktualisieren, wenn Track-Kinds, Dispatch-Modi, Gate-Regeln, Join-Glättung
-oder Physik-Caches ändern. Neue Attraktionsgebäude auch in `docs/buildings.md`.
+Aktualisieren, wenn Track-Kinds, Dispatch-Modi, Gate-Regeln, Join-Glättung,
+Physik-Caches oder Abriss ändern. Neue Attraktionsgebäude auch in
+`docs/buildings.md`.

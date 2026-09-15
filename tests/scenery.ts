@@ -1,9 +1,37 @@
 import assert from 'node:assert/strict'
+import { AtmosphereSystem } from '../src/game/atmosphere'
 import { GameState } from '../src/game/GameState'
-import { scenerySlot, sceneryTransform, sceneryOverlaps } from '../src/game/scenery'
+import { BUILDINGS } from '../src/game/catalog'
+import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
+import { isEdgeScenery, SCENERY_KINDS, scenerySlot, sceneryTransform, sceneryOverlaps } from '../src/game/scenery'
 import { enableMultiplayerCommands } from '../src/net/bind'
 import { packWorld } from '../src/net/codec'
 import type { GameCommand } from '../src/net/protocol'
+
+const NEW_DECO_KINDS = [
+  'picketFence', 'ropeFence', 'streamers',
+  'trafficCone', 'crateStack', 'oilDrum', 'pinwheel', 'windSock',
+  'hangingBasket', 'cactusPot', 'gnome', 'windChimes', 'chalkboard',
+  'loungeChair', 'beanBag', 'tikiTorch', 'decoSpeaker', 'boombox', 'photoFrame',
+  'discoBall', 'inflatableCactus', 'giantMushroom', 'crystalTotem', 'welcomeArch',
+] as const
+
+function atmosphereAt(
+  kind: (typeof SCENERY_KINDS)[number],
+  x = 0,
+  z = 0,
+  extra: Array<{ kind: (typeof SCENERY_KINDS)[number]; x: number; z: number }> = [],
+) {
+  const buildings = [{ id: 'a', kind, x, z, elevation: 0, rotation: 0 }, ...extra.map((item, index) => ({
+    id: `b${index}`,
+    kind: item.kind,
+    x: item.x,
+    z: item.z,
+    elevation: 0,
+    rotation: 0,
+  }))]
+  return new AtmosphereSystem().calculate(buildings, [], [], [])
+}
 
 export function testScenery(fixture: (count?: number) => GameState): void {
   const game = fixture(0), s = game.snapshot
@@ -71,5 +99,66 @@ export function testScenery(fixture: (count?: number) => GameState): void {
   assert.equal(built.decorationSlot, 3); assert.equal(built.rotation, 1)
   client.applyNetworkWorld(structuredClone(packWorld(host.snapshot)))
   assert.equal(client.snapshot.buildings.find(b => b.id === built.id)!.decorationSlot, 3)
-  console.log('PASS quarter/edge scenery, exact picking/removal, walkable paths, legacy saves and optimistic multiplayer placement')
+
+  const sources = SIMULATION_CONFIG.atmosphere.sources
+  const beauties = new Set<number>()
+  for (const kind of SCENERY_KINDS) {
+    const source = sources[kind as keyof typeof sources]
+    assert.ok(source, `${kind} needs an atmosphere source`)
+    assert.ok(source.range >= 1, `${kind} needs a reach`)
+    beauties.add(source.beauty)
+  }
+  assert.ok(beauties.size >= 12, 'scenery attractiveness must differ by kind')
+  assert.ok(sources.trafficCone.beauty < sources.photoFrame.beauty)
+  assert.ok(sources.photoFrame.beauty < sources.welcomeArch.beauty)
+  assert.ok(sources.hayBale.beauty < sources.statue.beauty)
+
+  const cheap = atmosphereAt('trafficCone')
+  const centerpiece = atmosphereAt('welcomeArch')
+  const cheapHere = cheap.attractivenessValues.get('0,0,0') ?? 0
+  const archHere = centerpiece.attractivenessValues.get('0,0,0') ?? 0
+  const archFar = centerpiece.attractivenessValues.get('3,0,0') ?? 0
+  const cheapFar = cheap.attractivenessValues.get('3,0,0') ?? 0
+  assert.ok(archHere > cheapHere, 'centerpiece deco must outshine a cheap cone')
+  assert.ok(archFar > cheapFar, 'longer range must still be felt three tiles away')
+  assert.equal(cheapFar, 0, 'tiny deco stays local')
+
+  const oneStatue = atmosphereAt('statue')
+  const stacked = atmosphereAt('statue', 0, 0, [{ kind: 'statue', x: 0, z: 0 }])
+  const one = oneStatue.attractivenessValues.get('0,0,0') ?? 0
+  const two = stacked.attractivenessValues.get('0,0,0') ?? 0
+  assert.ok(two > one, 'stacked deco still adds attractiveness')
+  assert.ok(two < one * 2, 'stacked beauty uses diminishing returns')
+
+  const decoGame = fixture(0)
+  for (const [index, kind] of NEW_DECO_KINDS.entries()) {
+    const x = -8 + (index % 8)
+    const z = 6 + Math.floor(index / 8)
+    const result = decoGame.place(kind, x, z, isEdgeScenery(kind) ? 0 : index % 4)
+    assert.ok(result.ok, `${kind}: ${result.message}`)
+    const placed = decoGame.snapshot.buildings.find((building) => building.kind === kind && building.x === x)
+    assert.ok(placed)
+    assert.equal(placed.decorationSlot !== undefined, true, `${kind} stores a decoration slot`)
+    assert.equal(BUILDINGS[kind].appeal > 0, true)
+  }
+  assert.ok(decoGame.place('picketFence', 16, 2, 1).ok)
+  assert.equal(decoGame.canPlace('ropeFence', 16, 2, 1).ok, false, 'deco fences share edge slots')
+  assert.ok(decoGame.place('streamers', 16, 2, 0).ok)
+  assert.ok(decoGame.place('gnome', 16, 2, 0).ok, 'quarter gnome can sit with unused edges')
+
+  const stale = fixture(0)
+  stale.snapshot.buildings.push({
+    id: 'ghost-deco',
+    kind: 'unknownFutureDeco' as any,
+    x: 0,
+    z: 4,
+    elevation: 0,
+    rotation: 0,
+    price: 0,
+  })
+  const reloaded = GameState.fromJSON(JSON.stringify(stale.snapshot))!
+  assert.equal(reloaded.snapshot.buildings.some((building) => building.id === 'ghost-deco'), false)
+  assert.equal(reloaded.snapshot.buildings.some((building) => (building.kind as string) === 'unknownFutureDeco'), false)
+
+  console.log('PASS quarter/edge scenery, exact picking/removal, walkable paths, legacy saves, deco attractiveness and optimistic multiplayer placement')
 }

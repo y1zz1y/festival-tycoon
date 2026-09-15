@@ -9,6 +9,12 @@ import {
   type LogisticsFacilityKind,
   type SupplyStructureKind,
 } from './logisticsModels'
+import {
+  accessIdFromObject,
+  buildingIdFromObject,
+  cellFromWorldPoint,
+  resolvePickedBuilding,
+} from './picking'
 import { createAttractionAccess } from './attractionAccess'
 import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
@@ -71,7 +77,7 @@ import {
   WebGLRenderer,
   WebGLRenderTarget,
 } from 'three'
-import { BUILDINGS, WORLD_SIZE } from '../game/catalog'
+import { BUILDINGS, WORLD_SIZE, isRoadBuildTool } from '../game/catalog'
 import type { BuildingKind } from '../game/catalog'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { isFestivalOfferActive } from '../game/dayPlan'
@@ -108,7 +114,7 @@ import {
   disposeObject3D,
 } from './disposeObject3D'
 import { LogisticsView } from './LogisticsView'
-import { zoneCellRange } from '../game/staffZones'
+import { zoneCellRange, zoneKey } from '../game/staffZones'
 import { WasteView } from './WasteView'
 import { PowerView } from './PowerView'
 import { LaserView } from './LaserView'
@@ -118,6 +124,11 @@ import {
   terrainFingerprint,
   WATER_HEIGHT,
 } from '../game/terrain'
+import { wayOverlapsRoadGrade } from '../game/wayElevation'
+import {
+  placementGroundCell,
+  showsPlacementGroundMarker,
+} from '../game/placementPreview'
 
 export type CellPosition = { x: number; z: number; localX?: number; localZ?: number; buildingId?: string }
 export type PathAnchor = CellPosition & { elevation: number }
@@ -211,6 +222,53 @@ function createConstructionGrid(): LineSegments {
   grid.renderOrder = 9
   grid.frustumCulled = false
   return grid
+}
+
+function createGroundTileMarker(): Group {
+  const group = new Group()
+  const half = 0.48
+  const outlineGeometry = new BufferGeometry()
+  outlineGeometry.setAttribute(
+    'position',
+    new Float32BufferAttribute(
+      [
+        -half, 0, -half, half, 0, -half,
+        half, 0, -half, half, 0, half,
+        half, 0, half, -half, 0, half,
+        -half, 0, half, -half, 0, -half,
+      ],
+      3,
+    ),
+  )
+  const outline = new LineSegments(
+    outlineGeometry,
+    new LineBasicMaterial({
+      color: 0xfff2a8,
+      transparent: true,
+      opacity: 0.98,
+      depthWrite: false,
+    }),
+  )
+  outline.renderOrder = 11
+  outline.frustumCulled = false
+  const fill = new Mesh(
+    new PlaneGeometry(0.96, 0.96),
+    new MeshBasicMaterial({
+      color: 0xffe566,
+      transparent: true,
+      opacity: 0.2,
+      depthWrite: false,
+      depthTest: true,
+      side: DoubleSide,
+    }),
+  )
+  fill.rotation.x = -Math.PI / 2
+  fill.renderOrder = 10
+  fill.frustumCulled = false
+  group.add(fill, outline)
+  group.visible = false
+  group.frustumCulled = false
+  return group
 }
 
 const WALK_EYE_HEIGHT = 0.68
@@ -437,6 +495,7 @@ export class WorldView {
   private preview: Mesh
   private previewArrow: Mesh
   private constructionGrid = createConstructionGrid()
+  private groundTileMarker = createGroundTileMarker()
   private shiftHeightActive = false
   private shiftHeightY = 0
   private sceneryPreview = new Group()
@@ -531,6 +590,11 @@ export class WorldView {
   private workAreaStamp = ''
   private workZonesOverlay: InstancedMesh | null = null
   private workZonesStamp = ''
+  private staffZonePaintHandler: ((cell: CellPosition | null, phase: 'start' | 'move' | 'end') => void) | null = null
+  private staffZonePainting = false
+  private staffZonePaintKey = ''
+  private staffZoneHoverKey = ''
+  private staffZoneHoverOverlay: InstancedMesh | null = null
   private staffPlacementHandler: ((cell: CellPosition) => void) | null = null
   private staffPlacementPreview: Mesh | null = null
   private staffPlacementColor = 0x5ad4e5
@@ -656,6 +720,7 @@ export class WorldView {
       this.rideGatePreview,
       this.preview,
       this.constructionGrid,
+      this.groundTileMarker,
       this.sceneryPreview,
       this.constructionAnchor,
       this.constructionNext,
@@ -770,6 +835,7 @@ export class WorldView {
       snapshot.speed === 0,
       undefined,
       snapshot.selectedTool === 'roadDirection',
+      this.logisticsMode || isRoadBuildTool(snapshot.selectedTool),
     )
     this.accessControlView.update(
       snapshot.accessControls ?? { trafficLights: [], pathBarriers: [] },
@@ -996,6 +1062,72 @@ export class WorldView {
     mesh.frustumCulled=false;this.scene.add(mesh);this.workZonesOverlay=mesh
   }
 
+  setStaffZonePaintTool(handler: ((cell: CellPosition | null, phase: 'start' | 'move' | 'end') => void) | null): void {
+    this.staffZonePaintHandler = handler
+    this.staffZonePainting = false
+    this.staffZonePaintKey = ''
+    this.staffZoneHoverKey = ''
+    this.clearStaffZoneHover()
+    if (handler) this.updateStaffZoneHover(this.hoveredCell)
+  }
+
+  private clearStaffZoneHover(): void {
+    if (!this.staffZoneHoverOverlay) return
+    this.scene.remove(this.staffZoneHoverOverlay)
+    this.staffZoneHoverOverlay.geometry.dispose()
+    ;(this.staffZoneHoverOverlay.material as MeshBasicMaterial).dispose()
+    this.staffZoneHoverOverlay.dispose()
+    this.staffZoneHoverOverlay = null
+  }
+
+  private updateStaffZoneHover(cell: CellPosition | null): void {
+    if (!this.staffZonePaintHandler || !cell || !this.currentSnapshot) {
+      this.staffZoneHoverKey = ''
+      this.clearStaffZoneHover()
+      return
+    }
+    const key = zoneKey(cell.x, cell.z)
+    if (key === this.staffZoneHoverKey && this.staffZoneHoverOverlay) return
+    this.staffZoneHoverKey = key
+    this.clearStaffZoneHover()
+    const half = this.worldSize / 2
+    const area = zoneCellRange(key)
+    const cells: Array<{ x: number; z: number }> = []
+    for (let z = Math.max(-half, area.minZ); z <= Math.min(half - 1, area.maxZ); z++) {
+      for (let x = Math.max(-half, area.minX); x <= Math.min(half - 1, area.maxX); x++) cells.push({ x, z })
+    }
+    if (!cells.length) return
+    const mesh = new InstancedMesh(
+      new PlaneGeometry(0.94, 0.94),
+      new MeshBasicMaterial({ color: 0x8cf0ff, transparent: true, opacity: 0.42, depthWrite: false }),
+      cells.length,
+    )
+    const pose = new Object3D()
+    pose.rotation.x = -Math.PI / 2
+    cells.forEach((entry, index) => {
+      pose.position.set(entry.x + 0.5, getTerrainHeight(this.currentSnapshot!.terrain, entry.x, entry.z) + 0.19, entry.z + 0.5)
+      pose.updateMatrix()
+      mesh.setMatrixAt(index, pose.matrix)
+    })
+    mesh.frustumCulled = false
+    this.scene.add(mesh)
+    this.staffZoneHoverOverlay = mesh
+  }
+
+  private staffZonePaintAt(cell: CellPosition, phase: 'start' | 'move'): void {
+    const key = zoneKey(cell.x, cell.z)
+    if (phase === 'move' && key === this.staffZonePaintKey) return
+    this.staffZonePaintKey = key
+    this.staffZonePaintHandler?.(cell, phase)
+  }
+
+  private endStaffZonePaint(): void {
+    if (!this.staffZonePainting) return
+    this.staffZonePainting = false
+    this.staffZonePaintKey = ''
+    this.staffZonePaintHandler?.(this.hoveredCell, 'end')
+  }
+
   setStaffPlacementTool(handler: ((cell: CellPosition) => void) | null, color = 0x5ad4e5): void {
     this.staffPlacementHandler = handler
     this.staffPlacementColor = color
@@ -1066,6 +1198,15 @@ export class WorldView {
       this.followedVisitorId = null
       if (this.walkMode) this.setWalkMode(false)
     }
+  }
+
+  /** Jump the orbit camera to a world position (visitor/staff click, ticker). */
+  focusWorldPosition(x: number, z: number): void {
+    this.followVisitor(null)
+    this.followedStaffId = null
+    if (this.walkMode) this.setWalkMode(false)
+    this.cameraTarget.set(x, 0, z)
+    this.updateCamera()
   }
 
   private resolveStaffPosition(id: string, snapshot: Readonly<GameSnapshot>): { x: number; y: number; z: number } | null {
@@ -1566,7 +1707,7 @@ export class WorldView {
         hash=Math.imul(hash,33)+(gate ? 1 : 0)
         if (gate) {hash=Math.imul(hash,33)+gate.x;hash=Math.imul(hash,33)+gate.z;hash=Math.imul(hash,33)+gate.y}
       }
-      hash = Math.imul(hash, 33) + (item.pathSlope ?? 0) + 4
+      hash = Math.imul(hash, 33) + Math.round((item.pathSlope ?? 0) * 2) + 4
       hash = Math.imul(hash, 33) + (item.queueDirection ?? 0)
       hash = Math.imul(hash, 33) + (item.queueEntryDirection ?? 0)
       hash = Math.imul(hash, 33) + (item.queueSplit ? 7 : 1)
@@ -1622,10 +1763,11 @@ export class WorldView {
         item.kind,
         item.elevation,
         item.pathType,
-        item.pathSlope,
+        item.pathSlope ?? 0,
         item.kind === 'path' ? wayInfo(this.currentSnapshot!, item.x, item.z, 'foot', item.wayType).color : undefined,
         item.wayType ?? this.currentSnapshot?.festival.infrastructure.ground[`${item.x},${item.z}`]?.footway,
         fohVariants.get(item.id),
+        item.kind === 'path' && this.pathSharesRoadGrade(item),
       )
       if (item.stageDesign) { model.scale.set((stageSize(item.stageDesign).width-.04)/item.stageDesign.width, item.stageDesign.tileWidth ? .5 : .96/Math.max(item.stageDesign.width,item.stageDesign.depth), (stageSize(item.stageDesign).depth-.04)/item.stageDesign.depth); model.userData.stageDesign = item.stageDesign }
       model.position.set(item.x + stageSize(item.stageDesign,item.rotation).width/2, item.elevation, item.z + stageSize(item.stageDesign,item.rotation).depth/2)
@@ -1664,14 +1806,25 @@ export class WorldView {
     this.buildings.add(this.staticBuildingBatches)
   }
 
+  private pathSharesRoadGrade(item: PlacedBuilding): boolean {
+    if (!this.currentSnapshot) return false
+    return this.currentSnapshot.logistics.roadCells.some((cell) => {
+      if (cell.x !== item.x || cell.z !== item.z) return false
+      const roadElevation =
+        cell.elevation ?? getTerrainHeight(this.currentSnapshot!.terrain, item.x, item.z)
+      return wayOverlapsRoadGrade(item.elevation, item.pathSlope ?? 0, roadElevation)
+    })
+  }
+
   private createBuildingModel(
     kind: BuildingKind,
     elevation: number,
     pathType: 'normal' | 'queue' = 'normal',
-    pathSlope: -1 | 0 | 1 = 0,
+    pathSlope = 0,
     surfaceColor?: number,
     wayType?: WayType,
     variant?: string,
+    onRoad = false,
   ): Group {
     if ((LOGISTICS_FACILITY_KINDS as readonly string[]).includes(kind)) {
       const facility = createLogisticsFacility(kind as LogisticsFacilityKind)
@@ -1698,9 +1851,13 @@ export class WorldView {
           : material
       pathMaterial.map = wayTexture(wayType)
       const surface = new Group()
-      const pathLength = pathSlope === 0 ? 0.94 : Math.sqrt(2)
-      const path = new Mesh(new BoxGeometry(0.94, 0.08, pathLength), pathMaterial)
-      path.position.y = 0.04
+      const crossing = onRoad && pathType !== 'queue'
+      const pathLength = pathSlope === 0 ? 0.94 : Math.hypot(1, pathSlope)
+      const path = new Mesh(
+        new BoxGeometry(crossing ? 0.42 : 0.94, crossing ? 0.04 : 0.08, pathLength),
+        pathMaterial,
+      )
+      path.position.y = crossing ? 0.03 : 0.04
       path.receiveShadow = true
       surface.add(path)
       if (pathSlope !== 0) {
@@ -2165,7 +2322,7 @@ export class WorldView {
 
     if (path.pathSlope) {
       const rails = new Group()
-      const length = Math.sqrt(2) - 0.1
+      const length = Math.hypot(1, path.pathSlope) - 0.1
       const left = new Mesh(new BoxGeometry(0.055, 0.18, length), material)
       const right = left.clone()
       left.position.set(-0.42, 0.16, 0)
@@ -2623,7 +2780,6 @@ export class WorldView {
     const hiddenMatrix = this.visitorHiddenMatrix
     const hiddenPassengers = new Set<string>()
     for (const vehicle of this.currentSnapshot?.logistics.roadVehicles ?? []) {
-      if (vehicle.state === 'parked') continue
       for (const passengerId of vehicle.passengerIds) hiddenPassengers.add(passengerId)
     }
 
@@ -3116,10 +3272,11 @@ export class WorldView {
     bindTouchCamera(this.canvas, {
       pan: (x, y) => { if (!this.walkMode) this.panCamera(x, y) },
       zoom: factor => { if (!this.walkMode) this.zoomBy(factor) },
-      panWithOneFinger: () => !this.walkMode && (this.touchPanMode || (this.currentSnapshot?.selectedTool === 'inspect' && !this.groundAreaHandler)),
+      panWithOneFinger: () => !this.walkMode && (this.touchPanMode || (this.currentSnapshot?.selectedTool === 'inspect' && !this.groundAreaHandler && !this.staffZonePaintHandler)),
       cancelBuild: () => {
         this.groundAreaStart = null
         this.groundAreaEndKey = ''
+        this.endStaffZonePaint()
         this.leftPointerDown = false
         this.painting = false
         this.dragging = false
@@ -3130,7 +3287,12 @@ export class WorldView {
       },
     })
     this.canvas.addEventListener('contextmenu', (event) => event.preventDefault())
-    this.canvas.addEventListener('pointerleave', () => { if (!this.pointerDownCell) this.hoveredCell = null })
+    this.canvas.addEventListener('pointerleave', () => {
+      if (!this.pointerDownCell) {
+        this.hoveredCell = null
+        if (!this.staffZonePainting) this.updateStaffZoneHover(null)
+      }
+    })
     this.canvas.addEventListener('pointerdown', (event) => {
       if (this.walkMode) {
         this.walkLookActive = true
@@ -3151,7 +3313,11 @@ export class WorldView {
       this.lastPointer.set(event.clientX, event.clientY)
       this.pointerDown.copy(this.lastPointer)
       this.canvas.setPointerCapture(event.pointerId)
-      if (event.button === 0 && !(event.pointerType === 'touch' && this.touchPanMode) && this.groundAreaHandler && this.hoveredCell) {
+      if (event.button === 0 && !(event.pointerType === 'touch' && this.touchPanMode) && this.staffZonePaintHandler && this.hoveredCell) {
+        this.staffZonePainting = true
+        this.staffZonePaintKey = ''
+        this.staffZonePaintAt(this.hoveredCell, 'start')
+      } else if (event.button === 0 && !(event.pointerType === 'touch' && this.touchPanMode) && this.groundAreaHandler && this.hoveredCell) {
         this.groundAreaStart = { ...this.hoveredCell }; this.groundAreaEndKey = ''; this.updateGroundAreaPreview()
       }
     })
@@ -3161,6 +3327,14 @@ export class WorldView {
         return
       }
       if (this.groundAreaCancelled) { this.groundAreaCancelled = false; return }
+      if (event.button === 0 && this.staffZonePainting) {
+        this.pickCell(event)
+        if (this.hoveredCell) this.staffZonePaintAt(this.hoveredCell, 'move')
+        this.endStaffZonePaint()
+        this.leftPointerDown = false
+        this.pointerDownCell = null
+        return
+      }
       if (event.button === 0 && this.groundAreaStart) {
         this.pickCell(event)
         if (this.hoveredCell) this.groundAreaHandler?.(this.groundAreaStart, this.hoveredCell, false)
@@ -3182,7 +3356,10 @@ export class WorldView {
         const visitorId = inspecting ? this.pickVisitor(event) : null
         const vehicleId = inspecting ? this.pickVehicle() : null
         const accessId = inspecting ? this.pickAccessControl() : null
-        const scenery = inspecting || this.currentSnapshot?.selectedTool === 'bulldoze' ? this.pickScenery() : null
+        const placed =
+          inspecting || this.currentSnapshot?.selectedTool === 'bulldoze'
+            ? this.pickPlacedObject()
+            : null
         if (typeof staffId === 'string') this.onStaffClick(staffId)
         else if (visitorId) {
           this.onVisitorClick(visitorId)
@@ -3190,8 +3367,8 @@ export class WorldView {
           this.onVehicleClick(vehicleId)
         } else if (accessId) {
           this.onAccessControlClick(accessId)
-        } else if (scenery) {
-          this.onCellClick(scenery)
+        } else if (placed) {
+          this.onCellClick(placed)
         } else if (this.hoveredCell) {
           this.onCellClick(this.hoveredCell)
         }
@@ -3211,7 +3388,7 @@ export class WorldView {
     })
     this.canvas.addEventListener('pointercancel', () => {
       this.walkLookActive = false
-      this.groundAreaStart = null; this.groundAreaEndKey = ''; this.leftPointerDown = false
+      this.groundAreaStart = null; this.groundAreaEndKey = ''; this.endStaffZonePaint(); this.leftPointerDown = false
       this.painting = false; this.dragging = false; this.sceneryDragLock = null; this.setPathDragPreview([], 0)
     })
     this.canvas.addEventListener('pointermove', (event) => {
@@ -3220,6 +3397,11 @@ export class WorldView {
           this.lookWalk(event.clientX - this.lastPointer.x, event.clientY - this.lastPointer.y)
         }
         this.lastPointer.set(event.clientX, event.clientY)
+        return
+      }
+      if (this.staffZonePainting) {
+        this.pickCell(event)
+        if (this.hoveredCell) this.staffZonePaintAt(this.hoveredCell, 'move')
         return
       }
       if (this.groundAreaStart) { this.pickCell(event); this.updateGroundAreaPreview(); return }
@@ -3247,7 +3429,7 @@ export class WorldView {
         this.shiftHeightActive = false
         this.updateConstructionGrid()
       }
-      this.pickCell(event)
+      this.pickCell(event, !this.leftPointerDown)
       const moved = this.pointerDown.distanceTo(new Vector2(event.clientX, event.clientY))
       if (
         this.leftPointerDown &&
@@ -3315,6 +3497,12 @@ export class WorldView {
         this.shiftHeightY = this.lastPointer.y
         this.updateConstructionGrid()
       }
+      if (event.key === 'Escape' && this.staffZonePainting) {
+        this.endStaffZonePaint()
+        this.leftPointerDown = false
+        this.pointerDownCell = null
+        return
+      }
       if (event.key !== 'Escape' || !this.groundAreaStart) return
       this.setGroundAreaTool(this.groundAreaHandler)
       this.groundAreaCancelled = true; this.leftPointerDown = false; this.pointerDownCell = null
@@ -3365,8 +3553,26 @@ export class WorldView {
     this.lastPaintCell = { ...cell }
   }
 
-  private pickCell(event: PointerEvent): void {
+  private pickCell(event: PointerEvent, preferMesh = false): void {
     this.setRayFromPointer(event)
+    const tool = this.currentSnapshot?.selectedTool
+    if (
+      preferMesh &&
+      (tool === 'inspect' || tool === 'bulldoze') &&
+      !this.painting &&
+      !this.groundAreaStart &&
+      !this.staffZonePaintHandler
+    ) {
+      const mesh = this.pickPlacedObject()
+      if (mesh) {
+        this.hoveredCell = mesh
+        this.onCellHover(this.hoveredCell)
+        this.updatePreview()
+        if (this.staffPlacementHandler) this.updateStaffPlacementPreview(this.hoveredCell)
+        this.updateStaffZoneHover(this.hoveredCell)
+        return
+      }
+    }
     const point = new Vector3()
     const terrainHit = this.raycaster.intersectObject(this.terrainGroup, true)[0]
     if (terrainHit) {
@@ -3376,6 +3582,7 @@ export class WorldView {
       this.onCellHover(this.hoveredCell)
       this.updatePreview()
       if (this.staffPlacementHandler) this.updateStaffPlacementPreview(null)
+      this.updateStaffZoneHover(null)
       return
     }
     const x = Math.floor(point.x)
@@ -3385,15 +3592,31 @@ export class WorldView {
     this.onCellHover(this.hoveredCell)
     this.updatePreview()
     if (this.staffPlacementHandler) this.updateStaffPlacementPreview(this.hoveredCell)
+    this.updateStaffZoneHover(this.hoveredCell)
   }
 
-  private pickScenery(): CellPosition | null {
-    const hit = this.raycaster.intersectObjects(this.staticBuildingBatches.children, false)[0]
-    const id = hit?.instanceId === undefined ? undefined : hit.object.userData.buildingIds?.[hit.instanceId]
-    const building = id ? this.currentSnapshot?.buildings.find(b => b.id === id) : undefined
-    if (!building || !isScenery(building.kind)) return null
-    const position = sceneryTransform(building)
-    return { x: building.x, z: building.z, localX: position.x, localZ: position.z, buildingId: building.id }
+  private pickPlacedObject(): CellPosition | null {
+    const snapshot = this.currentSnapshot
+    if (!snapshot) return null
+    const hits = this.raycaster.intersectObjects(
+      [
+        this.buildings,
+        this.rideGates,
+        this.accessControlView.getPickRoot(),
+        this.logisticsView.getStaticPickRoot(),
+      ],
+      true,
+    )
+    for (const hit of hits) {
+      if (accessIdFromObject(hit.object)) return cellFromWorldPoint(hit.point.x, hit.point.z)
+      const buildingId = buildingIdFromObject(hit.object, hit.instanceId)
+      if (buildingId) {
+        const picked = resolvePickedBuilding(snapshot.buildings, buildingId, hit.point.x, hit.point.z)
+        if (picked) return picked
+      }
+      return cellFromWorldPoint(hit.point.x, hit.point.z)
+    }
+    return null
   }
 
   private pickVehicle(): string | null {
@@ -3480,8 +3703,25 @@ export class WorldView {
     )
   }
 
+  private updateGroundTileMarker(): void {
+    const snapshot = this.currentSnapshot
+    const cell = this.hoveredCell
+    const show =
+      Boolean(snapshot && cell) &&
+      showsPlacementGroundMarker(snapshot?.selectedTool, this.walkMode)
+    this.groundTileMarker.visible = show
+    if (!show || !snapshot || !cell) return
+    const ground = this.terrainShape
+      ? this.terrainShape.sample(cell.x + 0.5, cell.z + 0.5)
+      : getTerrainHeight(snapshot.terrain, cell.x, cell.z)
+    const marker = placementGroundCell(cell, ground)
+    if (!marker) return
+    this.groundTileMarker.position.set(marker.x + 0.5, marker.y + 0.035, marker.z + 0.5)
+  }
+
   private updatePreview(): void {
     this.updateConstructionGrid()
+    this.updateGroundTileMarker()
     this.sceneryPreview.visible = false
     if (this.walkMode) {
       this.preview.visible = false
@@ -3549,6 +3789,46 @@ export class WorldView {
       marker.emissive.copy(marker.color); marker.emissiveIntensity = .3
       return
     }
+    if (tool === 'bulldoze' && this.hoveredCell.buildingId) {
+      const picked = this.currentSnapshot.buildings.find((item) => item.id === this.hoveredCell!.buildingId)
+      if (picked) {
+        const material = this.preview.material as MeshStandardMaterial
+        material.color.setHex(0xe84d4d)
+        material.emissive.copy(material.color)
+        material.emissiveIntensity = 0.28
+        material.opacity = 0.55
+        this.preview.visible = true
+        this.previewArrow.visible = false
+        if (isScenery(picked.kind)) {
+          const placement = sceneryTransform(picked)
+          const groundY = this.terrainShape
+            ? this.terrainShape.sample(picked.x + placement.x, picked.z + placement.z)
+            : getTerrainHeight(this.currentSnapshot.terrain, picked.x, picked.z)
+          this.preview.position.set(picked.x + placement.x, groundY + 0.07, picked.z + placement.z)
+          this.preview.rotation.y = placement.rotation * Math.PI / 2
+          const edge = isEdgeScenery(picked.kind)
+          this.preview.scale.set(edge ? 0.98 : 0.5, 0.12, edge ? 0.2 : 0.5)
+        } else if (occupiesBuildingCell(picked, this.hoveredCell.x, this.hoveredCell.z)) {
+          const footprint = stageSize(picked.stageDesign, picked.rotation)
+          this.preview.rotation.y = 0
+          this.preview.scale.set(footprint.width, 1, footprint.depth)
+          this.preview.position.set(
+            picked.x + footprint.width / 2,
+            picked.elevation + 0.07,
+            picked.z + footprint.depth / 2,
+          )
+        } else {
+          this.preview.rotation.y = 0
+          this.preview.scale.set(1, 1, 1)
+          this.preview.position.set(
+            this.hoveredCell.x + 0.5,
+            picked.elevation + 0.07,
+            this.hoveredCell.z + 0.5,
+          )
+        }
+        return
+      }
+    }
     this.preview.rotation.y = 0
     ;(this.preview.material as MeshStandardMaterial).emissiveIntensity = 0
     const objectsAtCell = this.currentSnapshot.buildings
@@ -3560,6 +3840,9 @@ export class WorldView {
       (cell) => cell.x === hovered?.x && cell.z === hovered?.z,
     )
     const medicalOccupied = this.currentSnapshot.medicalCells.some(
+      (cell) => cell.x === this.hoveredCell?.x && cell.z === this.hoveredCell?.z,
+    )
+    const parkingOccupied = this.currentSnapshot.logistics.parkingCells.some(
       (cell) => cell.x === this.hoveredCell?.x && cell.z === this.hoveredCell?.z,
     )
     const forecourtOccupied = this.currentSnapshot.stageForecourtCells.some(
@@ -3590,11 +3873,31 @@ export class WorldView {
       elevation + 0.07,
       this.hoveredCell.z + footprint.depth/2,
     )
+    const accessOccupied =
+      this.currentSnapshot.accessControls.trafficLights.some(
+        (item) => item.x === hovered.x && item.z === hovered.z,
+      ) ||
+      this.currentSnapshot.accessControls.pathBarriers.some(
+        (item) => item.x === hovered.x && item.z === hovered.z,
+      )
+    const roadOccupied = this.currentSnapshot.logistics.roadCells.some(
+      (road) => road.x === hovered.x && road.z === hovered.z,
+    )
+    const wasteOccupied = (this.currentSnapshot.wasteDumpCells ?? []).some(
+      (cell) => cell.x === hovered.x && cell.z === hovered.z,
+    )
+    const cableOccupied = this.currentSnapshot.power.cableCells.some(
+      (cell) => cell.x === hovered.x && cell.z === hovered.z,
+    )
     const occupied =
       Boolean(existing) ||
+      Boolean(hovered.buildingId) ||
       campingOccupied ||
       medicalOccupied ||
-      forecourtOccupied
+      parkingOccupied ||
+      forecourtOccupied ||
+      (tool === 'bulldoze' &&
+        (accessOccupied || roadOccupied || wasteOccupied || cableOccupied))
     const buildingDefinition = BUILDINGS[tool as BuildingKind]
     const validBusStopPosition =
       tool === 'busStop' &&

@@ -36,3 +36,24 @@ export function wayTexture(kind?: WayType): CanvasTexture | null {
   textures.set(kind, texture)
   return texture
 }
+
+let parkingSurface: CanvasTexture | null = null
+/** Shared asphalt grain plus stall paint; tinted by the parking material, no extra line meshes. */
+export function parkingTexture(): CanvasTexture {
+  if (parkingSurface) return parkingSurface
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 32
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 32, 32)
+  ctx.fillStyle = '#ececec'
+  for (let n = 0; n < 28; n++) ctx.fillRect((n * 13 + 5) % 32, (n * 7 + 2) % 32, 1, 1)
+  ctx.fillStyle = '#f7f7f2'
+  ctx.fillRect(2, 2, 2, 28)
+  ctx.fillRect(2, 2, 18, 2)
+  ctx.fillRect(2, 15, 14, 2)
+  ctx.fillRect(2, 28, 18, 2)
+  const texture = new CanvasTexture(canvas)
+  texture.magFilter = NearestFilter; texture.minFilter = NearestFilter
+  texture.colorSpace = SRGBColorSpace; texture.generateMipmaps = false
+  parkingSurface = texture
+  return texture
+}

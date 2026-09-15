@@ -67,9 +67,9 @@ export function testBuildMenu(): void {
   game.setTool('food')
   game.adjustBuildElevation(1)
   game.adjustBuildElevation(1)
-  assert.equal(game.snapshot.buildElevation, 2)
+  assert.equal(game.snapshot.buildElevation, 1)
   game.setTool('food')
-  assert.equal(game.snapshot.buildElevation, 2, 'gleiche Auswahl behält die Bauhöhe')
+  assert.equal(game.snapshot.buildElevation, 1, 'gleiche Auswahl behält die Bauhöhe')
   game.setTool('toilet')
   assert.equal(game.snapshot.buildElevation, 0, 'neues Werkzeug setzt die Bauhöhe zurück')
   game.setBuildElevation(4)
@@ -78,4 +78,6 @@ export function testBuildMenu(): void {
   assert.equal(game.snapshot.buildElevation, 6)
   game.setBuildElevation(-2)
   assert.equal(game.snapshot.buildElevation, 0)
+  game.setBuildElevation(0.6)
+  assert.equal(game.snapshot.buildElevation, 0.5)
 }

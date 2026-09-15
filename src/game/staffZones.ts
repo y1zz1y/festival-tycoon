@@ -54,24 +54,53 @@ export function zonesConnected(keys: string[]): boolean {
   return visited.size === keys.length
 }
 
+export function zonePaintActive(zones: string[] | undefined, key: string): boolean {
+  return !(zones ?? []).includes(key)
+}
+
+export function setAssignedWorkZones(
+  zones: string[] | undefined,
+  key: string,
+  active: boolean,
+): { ok: true; next: string[]; changed: boolean } | { ok: false; message: string } {
+  const current = zones ?? []
+  const has = current.includes(key)
+  if (active === has) return { ok: true, next: current, changed: false }
+  if (active) {
+    if (current.length && !isZoneAdjacentToAny(key, current)) {
+      return { ok: false, message: 'Bereiche müssen zusammenhängend sein' }
+    }
+    return { ok: true, next: [...current, key], changed: true }
+  }
+  const next = current.filter((zone) => zone !== key)
+  if (!zonesConnected(next)) {
+    return {
+      ok: false,
+      message: 'Bereiche müssen zusammenhängend bleiben - zuerst die trennende Seite entfernen',
+    }
+  }
+  return { ok: true, next, changed: true }
+}
+
 export function toggleAssignedWorkZones(
   zones: string[] | undefined,
   key: string,
 ): { ok: true; next: string[]; removed: boolean } | { ok: false; message: string } {
-  const current = zones ?? []
-  const has = current.includes(key)
-  if (has) {
-    const next = current.filter((zone) => zone !== key)
-    if (!zonesConnected(next)) {
-      return {
-        ok: false,
-        message: 'Bereiche müssen zusammenhängend bleiben - zuerst die trennende Seite entfernen',
-      }
-    }
-    return { ok: true, next, removed: true }
+  const active = zonePaintActive(zones, key)
+  const result = setAssignedWorkZones(zones, key, active)
+  if (!result.ok) return result
+  return { ok: true, next: result.next, removed: !active }
+}
+
+/** Collapse a pointer path onto unique 3×3 keys and lock paint mode from the first cell. */
+export function staffZonePaintStroke(
+  zones: string[] | undefined,
+  cells: Array<{ x: number; z: number }>,
+): { active: boolean; keys: string[] } {
+  const keys: string[] = []
+  for (const cell of cells) {
+    const key = zoneKey(cell.x, cell.z)
+    if (keys.at(-1) !== key) keys.push(key)
   }
-  if (current.length && !isZoneAdjacentToAny(key, current)) {
-    return { ok: false, message: 'Bereiche müssen zusammenhängend sein' }
-  }
-  return { ok: true, next: [...current, key], removed: false }
+  return { active: zonePaintActive(zones, keys[0] ?? ''), keys }
 }
