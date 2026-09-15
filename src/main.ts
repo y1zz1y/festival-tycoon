@@ -132,8 +132,8 @@ app.innerHTML = `
     <canvas id="game-canvas" aria-label="Festivalgelände"></canvas>
     <header class="topbar panel">
       <div class="brand">
-        <span class="brand-mark">F</span>
-        <div><strong>Festival Tycoon</strong><small>Prototype 0.2</small></div>
+        <span class="brand-mark">H</span>
+        <div><strong>Headliner Inc.</strong><small>Prototype 0.2</small></div>
   </div>
     </header>
     <!-- The running numbers sit in their own overlay in the bottom-left corner rather than in the
@@ -204,48 +204,10 @@ app.innerHTML = `
       </div>
       <h3 class="scenario-heading">Einstellungen</h3>
       <label class="scenario-check"><input id="setting-debug-tools" type="checkbox" /><span>Debug</span></label>
-      <h3 class="scenario-heading">Szenario</h3>
-      <p class="scenario-hint">Diese Werte gelten für ein neues Spiel und werden mitgespeichert.</p>
-      <label class="scenario-field"><span>Vorlage</span><select id="scenario-preset"><option value="">Leere Karte · freies Spiel</option>${SCENARIO_PRESETS.map((entry) => `<option value="${entry.id}">${entry.name}</option>`).join('')}</select></label>
-      <p id="scenario-preset-detail" class="scenario-hint"></p>
-      <label class="scenario-field"><span>Umgebung</span><select id="scenario-environment">${Object.entries(ENVIRONMENTS).map(([id, e]) => `<option value="${id}">${e.name}</option>`).join('')}</select></label>
-      <p id="scenario-ground-details" class="scenario-hint"></p>
-      <label class="scenario-field"><span>Geländeunebenheit <b id="scenario-unevenness-value">50 %</b></span><small>0 %: vollständig flach · 100 %: stark hügelig. Eingang und Zufahrt bleiben eben.</small><input id="scenario-unevenness" type="range" min="0" max="100" step="5" value="50" /></label>
-      <label class="scenario-field">
-        <span>Autobesucher <b id="scenario-car-value">78%</b></span>
-        <small>Fußgänger ← → Autos</small>
-        <input id="scenario-car-share" type="range" min="0" max="100" step="1" value="78" />
-      </label>
-      <label class="scenario-field">
-        <span>Party-Affinität <b id="scenario-party-value">55%</b></span>
-        <small>ruhig ← → partyaffin</small>
-        <input id="scenario-party" type="range" min="0" max="100" step="1" value="55" />
-      </label>
-      <label class="scenario-field">
-        <span>Schönheits-Affinität <b id="scenario-beauty-value">55%</b></span>
-        <small>egal ← → schönheitsaffin</small>
-        <input id="scenario-beauty" type="range" min="0" max="100" step="1" value="55" />
-      </label>
-      <label class="scenario-field">
-        <span>Gewaltbereitschaft <b id="scenario-aggression-value">28%</b></span>
-        <small>friedlich ← → gewaltbereit</small>
-        <input id="scenario-aggression" type="range" min="0" max="100" step="1" value="28" />
-      </label>
-      <label class="scenario-field">
-        <span>Startgeld <b id="scenario-money-value">10.000 €</b></span>
-        <input id="scenario-money" type="range" min="5000" max="250000" step="5000" value="10000" />
-      </label>
-      <label class="scenario-field">
-        <span>Kartengröße</span>
-        <select id="scenario-world-size">
-          <option value="32">Klein (32×32)</option>
-          <option value="48">Normal (48×48)</option>
-          <option value="64">Groß (64×64)</option>
-          <option value="80">Sehr groß (80×80)</option>
-          <option value="265">Riesig (265×265)</option>
-        </select>
-      </label>
-      <button id="start-scenario" type="button">Neues Szenario starten</button>
+      <button id="open-title-screen" type="button">🏠 Titelbildschirm</button>
+      <h3 class="scenario-heading">Dieses Festival</h3>
+      <p class="scenario-hint">Gelände und Publikum werden beim Start festgelegt und stehen für die ganze Partie fest. Ein neues Festival startest du über den Titelbildschirm.</p>
+      <dl id="scenario-summary" class="scenario-summary"></dl>
     </aside>
     <aside id="multiplayer-panel" class="multiplayer-panel panel" hidden>
       <div class="panel-header">
@@ -838,6 +800,79 @@ app.innerHTML = `
         <div id="bus-lines-list"></div>
       </section>
     </aside>
+    <div id="title-screen" class="title-screen" role="dialog" aria-modal="true" aria-labelledby="title-screen-name">
+      <div class="title-grain" aria-hidden="true"></div>
+      <div class="title-stage">
+        <div class="title-plaque">
+          <div class="title-kicker">AIGamesWatch Studios präsentiert</div>
+          <h1 id="title-screen-name" class="title-name">Headliner Inc.</h1>
+          <div class="title-subtitle">Ein Gelände, ein Wochenende, euer Publikum</div>
+        </div>
+        <nav class="title-menu" aria-label="Hauptmenü">
+          <button type="button" data-title-menu="new" aria-haspopup="true"><span class="title-menu-label">Neues Spiel</span><span class="title-menu-meta">${SCENARIO_PRESETS.length + 1} Szenarien</span></button>
+          <button type="button" data-title-menu="load"><span class="title-menu-label">Spielstand laden</span><span class="title-menu-meta">Archiv öffnen</span></button>
+          <button type="button" data-title-menu="settings"><span class="title-menu-label">Einstellungen</span><span class="title-menu-meta">Debug · Festivaldaten</span></button>
+        </nav>
+        <div class="title-footer">
+          <span>Prototype 0.2</span>
+          <span class="title-hint"><i class="title-caret" aria-hidden="true"></i>Pfeiltasten · Enter bestätigt</span>
+        </div>
+      </div>
+      <div id="title-submenu" class="title-submenu" hidden>
+        <div class="title-submenu-card">
+          <div class="title-submenu-head">
+            <span class="title-submenu-title">Neues Spiel</span>
+            <span class="title-submenu-kicker">Szenario wählen</span>
+          </div>
+          <div class="title-submenu-rows">
+            <button type="button" data-title-scenario=""><span class="title-row-text"><span class="title-row-label">Freies Spiel</span><span class="title-row-meta">Gelände, Publikum und Startkapital selbst festlegen — ohne Vorgaben und ohne Ziele.</span></span><span class="title-row-value">frei</span></button>
+            ${SCENARIO_PRESETS.map((entry) => `<button type="button" data-title-scenario="${entry.id}"${entry.price ? ` data-title-locked="${entry.price}" aria-disabled="true"` : ''}><span class="title-row-text"><span class="title-row-label">${entry.name}</span><span class="title-row-meta">${entry.detail}</span></span><span class="title-row-value">${entry.price ? `<span class="title-row-lock" aria-hidden="true">🔒</span>${entry.price}` : `${entry.settings.worldSize} × ${entry.settings.worldSize}`}</span></button>`).join('')}
+          </div>
+        <div id="title-freeplay" class="title-freeplay" hidden>
+          <p class="scenario-hint">Diese Werte gelten für die ganze Partie und lassen sich später nicht mehr ändern.</p>
+      <label class="scenario-field"><span>Umgebung</span><select id="scenario-environment">${Object.entries(ENVIRONMENTS).map(([id, e]) => `<option value="${id}">${e.name}</option>`).join('')}</select></label>
+      <p id="scenario-ground-details" class="scenario-hint"></p>
+      <label class="scenario-field"><span>Geländeunebenheit <b id="scenario-unevenness-value">50 %</b></span><small>0 %: vollständig flach · 100 %: stark hügelig. Eingang und Zufahrt bleiben eben.</small><input id="scenario-unevenness" type="range" min="0" max="100" step="5" value="50" /></label>
+      <label class="scenario-field">
+        <span>Autobesucher <b id="scenario-car-value">78%</b></span>
+        <small>Fußgänger ← → Autos</small>
+        <input id="scenario-car-share" type="range" min="0" max="100" step="1" value="78" />
+      </label>
+      <label class="scenario-field">
+        <span>Party-Affinität <b id="scenario-party-value">55%</b></span>
+        <small>ruhig ← → partyaffin</small>
+        <input id="scenario-party" type="range" min="0" max="100" step="1" value="55" />
+      </label>
+      <label class="scenario-field">
+        <span>Schönheits-Affinität <b id="scenario-beauty-value">55%</b></span>
+        <small>egal ← → schönheitsaffin</small>
+        <input id="scenario-beauty" type="range" min="0" max="100" step="1" value="55" />
+      </label>
+      <label class="scenario-field">
+        <span>Gewaltbereitschaft <b id="scenario-aggression-value">28%</b></span>
+        <small>friedlich ← → gewaltbereit</small>
+        <input id="scenario-aggression" type="range" min="0" max="100" step="1" value="28" />
+      </label>
+      <label class="scenario-field">
+        <span>Startgeld <b id="scenario-money-value">10.000 €</b></span>
+        <input id="scenario-money" type="range" min="5000" max="250000" step="5000" value="10000" />
+      </label>
+      <label class="scenario-field">
+        <span>Kartengröße</span>
+        <select id="scenario-world-size">
+          <option value="32">Klein (32×32)</option>
+          <option value="48">Normal (48×48)</option>
+          <option value="64">Groß (64×64)</option>
+          <option value="80">Sehr groß (80×80)</option>
+          <option value="265">Riesig (265×265)</option>
+        </select>
+      </label>
+      <button id="start-scenario" type="button">▶ Freies Spiel starten</button>
+        </div>
+          <button type="button" data-title-back>Zurück</button>
+        </div>
+      </div>
+    </div>
     <div id="toast" role="status" aria-live="polite"></div>
   </main>
 `
@@ -1270,7 +1305,7 @@ try {
     <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px;box-sizing:border-box;background:#17241f;color:#edf7f1;font:14px/1.6 Tahoma, Verdana, system-ui, sans-serif;">
       <div style="max-width:480px;">
         <h1 style="font-size:20px;margin:0 0 12px;">3D-Grafik nicht verfügbar</h1>
-        <p>Festival Tycoon benötigt WebGL, das dieser Browser oder dieses System gerade nicht bereitstellt.</p>
+        <p>Headliner Inc. benötigt WebGL, das dieser Browser oder dieses System gerade nicht bereitstellt.</p>
         <p>Mögliche Ursachen: WebGL ist im Browser deaktiviert (in Firefox unter <code>about:config</code> die Einstellung <code>webgl.disabled</code> prüfen), eine Sicherheits- oder Unternehmensrichtlinie blockiert es, oder die Grafiktreiber sind veraltet bzw. von der Blockliste des Browsers betroffen.</p>
         <p>Bitte aktuelle Grafiktreiber sicherstellen oder einen anderen Browser probieren.</p>
       </div>
@@ -1391,6 +1426,9 @@ syncVisitorPreviewMode()
 function bindGameState(nextGame: GameState): void {
   unsubscribe()
   closeRideBuilder(false)
+  // Whichever way a game arrives — a scenario, a save, a multiplayer join — it is a
+  // game now, so the title screen steps out of the way.
+  setTitleScreenOpen(false)
   game = nextGame
   enableMultiplayerCommands(game)
   multiplayer.attach(game)
@@ -4759,7 +4797,7 @@ function updateFinancePanel(force = false): void {
   financeTotals.innerHTML = [
     ['Guthaben', euro(overview.money)],
     ['Darlehen', euro(-overview.loan)],
-    ['Parkwert', euro(overview.parkValue)],
+    ['Festivalwert', euro(overview.parkValue)],
     ['Firmenwert', euro(overview.companyValue)],
   ]
     .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
@@ -4939,9 +4977,7 @@ const scenarioUnevenness = requireElement<HTMLInputElement>('#scenario-unevennes
 const scenarioGroundDetails = requireElement<HTMLElement>('#scenario-ground-details')
 const scenarioUnevennessValue = requireElement<HTMLElement>('#scenario-unevenness-value')
 const scenarioWorldSize = requireElement<HTMLSelectElement>('#scenario-world-size')
-const scenarioPresetSelect = requireElement<HTMLSelectElement>('#scenario-preset')
-const scenarioPresetDetail = requireElement<HTMLElement>('#scenario-preset-detail')
-scenarioPresetSelect.addEventListener('change', () => applyScenarioPreset())
+const scenarioSummary = requireElement<HTMLElement>('#scenario-summary')
 scenarioEnvironment.addEventListener('change', () => updateScenarioLabels())
 const scenarioCarValue = requireElement<HTMLElement>('#scenario-car-value')
 const scenarioPartyValue = requireElement<HTMLElement>('#scenario-party-value')
@@ -4949,15 +4985,10 @@ const scenarioBeautyValue = requireElement<HTMLElement>('#scenario-beauty-value'
 const scenarioAggressionValue = requireElement<HTMLElement>('#scenario-aggression-value')
 const scenarioMoneyValue = requireElement<HTMLElement>('#scenario-money-value')
 
+/** The free-play form on the title screen: a site without a template, without debt and without goals. */
 function readScenarioForm(): ScenarioSettings {
   const worldSize = Number(scenarioWorldSize.value)
-  // A template contributes what the sliders cannot express — the debt the site comes
-  // with and what it asks of the player. The terrain values stay editable afterwards.
-  const preset = scenarioPreset(scenarioPresetSelect.value)
   return normalizeScenarioSettings({
-    preset: preset?.id,
-    startingLoan: preset?.settings.startingLoan ?? 0,
-    goals: preset?.settings.goals ?? [],
     environment: scenarioEnvironment.value as Environment,
     unevenness: Number(scenarioUnevenness.value) / 100,
     carArrivalShare: Number(scenarioCarShare.value) / 100,
@@ -4982,28 +5013,34 @@ function fillScenarioForm(settings: ScenarioSettings): void {
   scenarioAggression.value = String(Math.round(settings.aggressiveShare * 100))
   scenarioMoney.value = String(settings.startingMoney)
   scenarioWorldSize.value = String(settings.worldSize)
-  scenarioPresetSelect.value = settings.preset ?? ''
   updateScenarioLabels()
-  updateScenarioPresetDetail()
 }
 
-/** Pouring a template into the form: everything it prescribes, with the description and the goals underneath. */
-function applyScenarioPreset(): void {
-  const preset = scenarioPreset(scenarioPresetSelect.value)
-  if (preset) {
-    const { preset: _preset, ...values } = preset.settings
-    fillScenarioForm({ ...values, preset: preset.id })
-    scenarioPresetSelect.value = preset.id
-  }
-  updateScenarioPresetDetail()
-}
-
-function updateScenarioPresetDetail(): void {
-  const preset = scenarioPreset(scenarioPresetSelect.value)
-  const goals = preset?.settings.goals ?? []
-  scenarioPresetDetail.innerHTML = preset
-    ? `${preset.detail}${goals.length ? `<br><b>Ziel:</b> ${goals.map((goal) => `${goalName(goal)} bis zur ${goal.edition}. Ausgabe`).join(' · ')}` : ''}${preset.settings.startingLoan > 0 ? `<br><b>Startdarlehen:</b> ${preset.settings.startingLoan.toLocaleString('de-DE')} €` : ''}`
-    : 'Leeres Gelände ohne Vorgaben: Größe, Boden und Startkapital frei wählen, keine Ziele.'
+/**
+ * What the running festival was started on. Read-only by design: the ground, the crowd
+ * and the starting capital are decided once, at the start, and the park is played with
+ * what it was given — so the settings window reports them instead of offering them.
+ */
+function updateScenarioSummary(): void {
+  const settings = game.snapshot.scenario
+  const preset = scenarioPreset(settings.preset)
+  const goals = settings.goals
+  const rows: [string, string][] = [
+    ['Szenario', preset?.name ?? 'Freies Spiel'],
+    ['Umgebung', ENVIRONMENTS[settings.environment].name],
+    ['Kartengröße', `${settings.worldSize}×${settings.worldSize}`],
+    ['Unebenheit', `${Math.round(settings.unevenness * 100)} %`],
+    ['Autobesucher', `${Math.round(settings.carArrivalShare * 100)} %`],
+    ['Party-Affinität', `${Math.round(settings.partyAffinity * 100)} %`],
+    ['Schönheits-Affinität', `${Math.round(settings.beautyAffinity * 100)} %`],
+    ['Gewaltbereitschaft', `${Math.round(settings.aggressiveShare * 100)} %`],
+    ['Startkapital', `${settings.startingMoney.toLocaleString('de-DE')} €`],
+  ]
+  if (settings.startingLoan > 0) rows.push(['Startdarlehen', `${settings.startingLoan.toLocaleString('de-DE')} €`])
+  if (goals.length) rows.push(['Ziele', goals.map((goal) => `${goalName(goal)} bis zur ${goal.edition}. Ausgabe`).join(' · ')])
+  scenarioSummary.innerHTML = rows
+    .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
+    .join('')
 }
 
 function updateScenarioLabels(): void {
@@ -5021,7 +5058,7 @@ function setScenarioPanelOpen(open: boolean): void {
   scenarioToggle.setAttribute('aria-expanded', String(open))
   if (open) {
     setMultiplayerPanelOpen(false)
-    fillScenarioForm(game.snapshot.scenario)
+    updateScenarioSummary()
   }
 }
 
@@ -5132,20 +5169,139 @@ requireElement<HTMLButtonElement>('#close-scenario').addEventListener('click', (
 })
 makeDraggable(scenarioPanel.querySelector<HTMLElement>('.panel-header')!, scenarioPanel)
 makeResizable(scenarioPanel)
-requireElement<HTMLButtonElement>('#start-scenario').addEventListener(
-  'click',
-  () => {
-    if (multiplayer.status.mode === 'client') {
-      showToast('Nur der Host kann ein neues Szenario starten', true)
-      return
+/**
+ * The title screen: the first thing the game shows, and the way back to a clean start.
+ * It reuses what is already there rather than duplicating it — the prepared scenarios,
+ * the save management and the settings window are the same ones the running game uses,
+ * lifted above the backdrop while it is open so closing them returns here.
+ */
+const titleScreen = requireElement<HTMLElement>('#title-screen')
+const titleScreenOpen = (): boolean => titleScreen.classList.contains('visible')
+function setTitleScreenOpen(open: boolean): void {
+  titleScreen.classList.toggle('visible', open)
+  if (open) {
+    titleScreen.querySelector('[data-title-scenario=""]')?.setAttribute('aria-expanded', 'false')
+    openTitleSubmenu(false)
+  }
+  // The start screen is the whole screen: every readout, toolbar and hint of the running
+  // game is hidden behind it (see the body.title-open rules), and the keyboard shortcuts
+  // that would otherwise reach the world are switched off.
+  document.body.classList.toggle('title-open', open)
+  if (!open) {
+    for (const panel of [scenarioPanel, saveSlotsPanel]) panel.classList.remove('above-title')
+  }
+}
+/** Opens one of the existing windows on top of the title screen instead of behind it. */
+function openAboveTitle(panel: HTMLElement, open: () => void): void {
+  if (titleScreenOpen()) panel.classList.add('above-title')
+  open()
+}
+const titleFreeplay = requireElement<HTMLElement>('#title-freeplay')
+const titleSubmenu = requireElement<HTMLElement>('#title-submenu')
+const titleMenuButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-menu]')]
+const titleRowButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-scenario]')]
+
+/**
+ * The menu is keyboard-first, the way the design draws it: one entry is always the
+ * current one, the arrow keys move between them and Enter opens. Which list the keys
+ * walk depends on whether the scenario submenu is open.
+ */
+let titleSelection = 0
+function titleEntries(): HTMLButtonElement[] {
+  return titleSubmenu.hidden ? titleMenuButtons : titleRowButtons
+}
+function markTitleSelection(index: number): void {
+  const entries = titleEntries()
+  if (!entries.length) return
+  titleSelection = (index + entries.length) % entries.length
+  entries.forEach((entry, position) => entry.classList.toggle('selected', position === titleSelection))
+  entries[titleSelection]?.scrollIntoView({ block: 'nearest' })
+}
+function openTitleSubmenu(open: boolean): void {
+  titleSubmenu.hidden = !open
+  if (!open) titleFreeplay.hidden = true
+  markTitleSelection(0)
+}
+// Only a pointer that actually moves takes the selection over. `pointerover` alone
+// would also fire when the list shifts under a resting cursor — opening the submenu
+// or scrolling a row into view would then snap the selection back under the mouse.
+let titlePointer = { x: -1, y: -1 }
+titleScreen.addEventListener('pointermove', (event) => {
+  if (event.clientX === titlePointer.x && event.clientY === titlePointer.y) return
+  titlePointer = { x: event.clientX, y: event.clientY }
+  const entry = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-title-menu], [data-title-scenario]')
+  const index = entry ? titleEntries().indexOf(entry) : -1
+  if (index >= 0) markTitleSelection(index)
+})
+titleScreen.addEventListener('click', (event) => {
+  const target = event.target as HTMLElement
+  if (target.closest('[data-title-back]')) { openTitleSubmenu(false); return }
+  const menu = target.closest<HTMLButtonElement>('[data-title-menu]')
+  if (menu) {
+    if (menu.dataset.titleMenu === 'new') openTitleSubmenu(true)
+    else if (menu.dataset.titleMenu === 'load') openAboveTitle(saveSlotsPanel, () => { void openSaveSlots() })
+    else openAboveTitle(scenarioPanel, () => setScenarioPanelOpen(true))
+    return
+  }
+  const scenario = target.closest<HTMLButtonElement>('[data-title-scenario]')
+  if (!scenario) return
+  if (multiplayer.status.mode === 'client') {
+    showToast('Nur der Host kann ein neues Szenario starten', true)
+    return
+  }
+  // A scenario that carries a price is not part of the base game: it is shown, it can
+  // be read, and that is all — nothing here charges anyone or collects anything.
+  if (scenario.dataset.titleLocked) {
+    showToast(`Dieses Szenario gehört nicht zum Grundspiel · ${scenario.dataset.titleLocked}`, true)
+    return
+  }
+  const preset = scenarioPreset(scenario.dataset.titleScenario || undefined)
+  // A prepared scenario brings its own site and starts straight away; free play first
+  // asks what the site should look like, because afterwards none of it can be changed.
+  if (!preset) {
+    const show = titleFreeplay.hidden
+    titleFreeplay.hidden = !show
+    scenario.setAttribute('aria-expanded', String(show))
+    if (show) {
+      fillScenarioForm(game.snapshot.scenario)
+      titleFreeplay.scrollIntoView({ block: 'nearest' })
     }
-    if (pathWindowOpen) closePathEditor()
-    hideVisitorPanel()
-    bindGameState(GameState.startNew(readScenarioForm()))
-    setScenarioPanelOpen(false)
-    showToast('Neues Szenario gestartet')
-  },
-)
+    return
+  }
+  startFestival(normalizeScenarioSettings({ ...preset.settings, preset: preset.id }), `${preset.name} gestartet`)
+})
+window.addEventListener('keydown', (event) => {
+  if (!titleScreenOpen() || !scenarioPanel.hidden || !saveSlotsPanel.hidden) return
+  if (isTextEntryTarget(event.target) || isTextEntryTarget(document.activeElement)) return
+  if (event.key === 'Escape' || event.key === 'Backspace') {
+    if (!titleSubmenu.hidden) { event.preventDefault(); openTitleSubmenu(false) }
+    return
+  }
+  if (event.key === 'ArrowDown' || event.key === 'ArrowRight') { event.preventDefault(); markTitleSelection(titleSelection + 1) }
+  else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') { event.preventDefault(); markTitleSelection(titleSelection - 1) }
+  else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); titleEntries()[titleSelection]?.click() }
+})
+function startFestival(settings: ScenarioSettings, message: string): void {
+  if (pathWindowOpen) closePathEditor()
+  hideVisitorPanel()
+  bindGameState(GameState.startNew(settings))
+  setScenarioPanelOpen(false)
+  setSaveSlotsPanelOpen(false)
+  setTitleScreenOpen(false)
+  showToast(message)
+}
+requireElement<HTMLButtonElement>('#open-title-screen').addEventListener('click', () => {
+  setScenarioPanelOpen(false)
+  setTitleScreenOpen(true)
+})
+
+requireElement<HTMLButtonElement>('#start-scenario').addEventListener('click', () => {
+  if (multiplayer.status.mode === 'client') {
+    showToast('Nur der Host kann ein neues Szenario starten', true)
+    return
+  }
+  startFestival(readScenarioForm(), 'Freies Spiel gestartet')
+})
 fillScenarioForm(game.snapshot.scenario)
 requireElement<HTMLButtonElement>('#close-logistics').addEventListener('click', () => {
   setPanelOpen(logisticsPanel, logisticsPanelToggle, false)
@@ -6078,6 +6234,9 @@ dispatchIntervalInput.addEventListener('input', () => {
 
 window.addEventListener('keydown', (event) => {
   if (isTextEntryTarget(event.target) || isTextEntryTarget(document.activeElement)) return
+  // Nothing reaches the world while the start screen is up — not the build shortcuts,
+  // not the camera keys, not the speed keys.
+  if (titleScreenOpen()) return
   if (event.key === 'Escape' && view.isWalkMode()) {
     event.preventDefault()
     setFestivalWalk(false)
@@ -6249,3 +6408,7 @@ function formatTime(minute: number): string {
   const minutes = Math.floor(minute % 60)
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
 }
+
+// The game opens on its title screen. Last thing in the module, so everything it can
+// reach — the scenario form, the save management — has been built by the time it shows.
+setTitleScreenOpen(true)

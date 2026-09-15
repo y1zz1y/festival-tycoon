@@ -10,6 +10,8 @@ export type ScenarioPreset = {
   id: string
   name: string
   detail: string
+  /** Set on a scenario that is not part of the base game: the title screen shows the price and refuses to start it. */
+  price?: string
   settings: ScenarioSettings
 }
 
@@ -18,7 +20,8 @@ const preset = (
   name: string,
   detail: string,
   settings: Partial<ScenarioSettings>,
-): ScenarioPreset => ({ id, name, detail, settings: { ...DEFAULT_SCENARIO, ...settings } })
+  price?: string,
+): ScenarioPreset => ({ id, name, detail, price, settings: { ...DEFAULT_SCENARIO, ...settings } })
 
 export const SCENARIO_PRESETS: ScenarioPreset[] = [
   preset(
@@ -54,6 +57,7 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
         { kind: 'guests', target: 900, edition: 3 },
       ],
     },
+    '0,99 €',
   ),
   preset(
     'rock-am-ring',
