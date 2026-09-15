@@ -5,7 +5,7 @@ import { mountStageEditor } from './stageEditor'
 import { stageStats } from './game/stageDesign'
 import { mountStaffDetails } from './staffDetailsUI'
 import { encodeSaveText, decodeSaveText } from './game/saveText'
-import { deleteServerSave, listServerSaves, loadServerSave, saveServerSave, type ServerSaveSlot } from './game/serverSaves'
+import { deleteServerSave, listServerSaves, loadServerSave, saveServerSave, shareServerSave, type ServerSaveSlot } from './game/serverSaves'
 import { ENVIRONMENTS } from './game/environments'
 import { groundInfo } from './game/ground'
 import type { Environment } from './game/environments'
@@ -141,6 +141,21 @@ function closeBuildSubmenus(): void {
     .forEach((element) => element.classList.remove('open'))
 }
 
+/** How often the game saves by itself. Fifteen minutes unless the player says otherwise. */
+const AUTOSAVE_INTERVALS = [
+  { minutes: 5, label: 'Alle 5 Minuten' },
+  { minutes: 10, label: 'Alle 10 Minuten' },
+  { minutes: 15, label: 'Alle 15 Minuten' },
+  { minutes: 30, label: 'Alle 30 Minuten' },
+  { minutes: 60, label: 'Jede Stunde' },
+  { minutes: 120, label: 'Alle 2 Stunden' },
+  { minutes: 0, label: 'Aus' },
+] as const
+const AUTOSAVE_DEFAULT_MINUTES = 15
+const AUTOSAVE_KEY = 'festival-autosave-minutes'
+/** The one slot the automatic save writes to, over and over. */
+const AUTOSAVE_NAME = 'Autospeichern'
+
 const app = requireElement<HTMLDivElement>('#app')
 
 app.innerHTML = `
@@ -221,6 +236,7 @@ app.innerHTML = `
       </div>
       <h3 class="scenario-heading">Einstellungen</h3>
       <label class="scenario-check"><input id="setting-debug-tools" type="checkbox" /><span>Debug</span></label>
+      <label class="scenario-field"><span>Autospeichern</span><select id="setting-autosave">${AUTOSAVE_INTERVALS.map((option) => `<option value="${option.minutes}">${option.label}</option>`).join('')}</select></label>
       <button id="open-title-screen" type="button">🏠 Titelbildschirm</button>
       <h3 class="scenario-heading">Dieses Festival</h3>
       <p class="scenario-hint">Gelände und Publikum werden beim Start festgelegt und stehen für die ganze Partie fest. Ein neues Festival startest du über den Titelbildschirm.</p>
@@ -829,6 +845,7 @@ app.innerHTML = `
           <div class="title-subtitle">Ein Gelände, ein Wochenende, euer Publikum</div>
         </div>
         <nav class="title-menu" aria-label="Hauptmenü">
+          <button type="button" data-title-menu="resume" disabled><span class="title-menu-label">Fortsetzen</span><span id="title-resume-meta" class="title-menu-meta">Noch nicht gespielt</span></button>
           <button type="button" data-title-menu="new" aria-haspopup="true"><span class="title-menu-label">Neues Spiel</span><span class="title-menu-meta">${SCENARIO_PRESETS.length + 1} Szenarien</span></button>
           <button type="button" data-title-menu="quickload"><span class="title-menu-label">Schnell laden</span><span class="title-menu-meta">Letzter Einzelspielstand</span></button>
           <button type="button" data-title-menu="load"><span class="title-menu-label">Spielstand laden</span><span class="title-menu-meta">Archiv öffnen</span></button>
@@ -5502,6 +5519,7 @@ function setTitleScreenOpen(open: boolean): void {
     setScenarioPanelOpen(false)
     setSaveSlotsPanelOpen(false)
     syncAccountBar()
+    void refreshResumeEntry()
   }
   // The start screen is the whole screen: every readout, toolbar and hint of the running
   // game is hidden behind it (see the body.title-open rules), and the keyboard shortcuts
@@ -5585,6 +5603,52 @@ accountForm.addEventListener('submit', (event) => {
 })
 
 const titleMenuButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-menu]')]
+const titleResumeButton = requireElement<HTMLButtonElement>('[data-title-menu="resume"]')
+const titleResumeMeta = requireElement<HTMLElement>('#title-resume-meta')
+
+/**
+ * Picking the game back up. The last save that was written or opened is remembered
+ * here — by id, not by content — and the title screen offers exactly that one. If it
+ * is gone, or nothing has been played yet, the plate stays greyed out.
+ */
+const LAST_SAVE_KEY = 'festival-last-save'
+type LastSave = { id: string; source: 'server' | 'browser'; name: string }
+let resumeSlot: SaveSlotView | null = null
+function rememberLastSave(slot: { id: string; source: 'server' | 'browser'; name: string }): void {
+  try {
+    window.localStorage.setItem(LAST_SAVE_KEY, JSON.stringify({ id: slot.id, source: slot.source, name: slot.name } satisfies LastSave))
+  } catch { /* without storage the button simply falls back to the newest save */ }
+}
+function readLastSave(): LastSave | null {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(LAST_SAVE_KEY) ?? 'null') as LastSave | null
+    return stored && typeof stored.id === 'string' ? stored : null
+  } catch { return null }
+}
+async function refreshResumeEntry(): Promise<void> {
+  const archive = await fetchSaveSlots()
+  const pointer = readLastSave()
+  // The remembered one if it is still there, otherwise the newest of your own —
+  // clearing the browser's storage should not hide an archive full of festivals.
+  resumeSlot = (pointer ? findSaveSlot(pointer.id) : undefined) ?? archive.own[0] ?? null
+  titleResumeButton.disabled = !resumeSlot
+  titleResumeMeta.textContent = resumeSlot
+    ? `${resumeSlot.name} · ${formatSaveTime(resumeSlot.savedAt)}`
+    : 'Noch nicht gespielt'
+  if (titleResumeButton.disabled && titleResumeButton.classList.contains('selected')) markTitleSelection(0)
+}
+async function resumeLastGame(): Promise<void> {
+  if (!resumeSlot) return
+  const loaded = await readSaveSlot(resumeSlot)
+  if (!loaded) {
+    // It was there when the screen opened and is not any more: say so and re-read.
+    showToast('Dieser Spielstand ist nicht mehr vorhanden', true)
+    void refreshResumeEntry()
+    return
+  }
+  bindLoadedGame(loaded, `„${resumeSlot.name}“ fortgesetzt`)
+  setTitleScreenOpen(false)
+}
 const titleRowButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-scenario]')]
 
 /**
@@ -5595,32 +5659,39 @@ const titleRowButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[da
 let titleSelection = 0
 function titleEntries(): HTMLButtonElement[] {
   if (!titleLoadMask.hidden) return [...titleLoadRows.querySelectorAll<HTMLButtonElement>('[data-title-load-slot]')]
-  return titleSubmenu.hidden ? titleMenuButtons : titleRowButtons
+  return (titleSubmenu.hidden ? titleMenuButtons : titleRowButtons).filter((entry) => !entry.disabled)
 }
 
 /**
- * The title screen's own archive. It reads the same saves the in-game management does
- * — the server's folder when it answers, this browser's slots when it does not — but
- * shows them as plates of this screen, and only offers the one thing that belongs
- * here: picking one up. Renaming, overwriting and deleting stay in the running game.
+ * The title screen's own archive: your saves first, then everything other people
+ * have made public, each with the name behind it. It only offers the one thing that
+ * belongs here — picking one up. Naming, sharing and deleting stay in the running
+ * game, and a public festival you take from here is never written back to: saving it
+ * puts a copy in your own archive.
  */
+function titleSlotRow(slot: SaveSlotView, withOwner: boolean): string {
+  const meta = withOwner ? `von ${escapeHtml(slot.owner)} · ${formatSaveTime(slot.savedAt)}` : formatSaveTime(slot.savedAt)
+  return `<button type="button" data-title-load-slot="${slot.id}"><span class="title-row-text"><span class="title-row-label">${escapeHtml(slot.name)}</span><span class="title-row-meta">${meta}</span></span><span class="title-row-value">Laden</span></button>`
+}
 async function openTitleLoad(): Promise<void> {
   titleLoadMask.hidden = false
   titleLoadRows.innerHTML = '<p class="title-load-empty">Spielstände werden gelesen …</p>'
   titleLoadNote.textContent = ''
   markTitleSelection(0)
-  const { slots, onServer } = await fetchSaveSlots()
-  titleLoadKicker.textContent = slots.length
-    ? `${slots.length} ${slots.length === 1 ? 'Archiv' : 'Archive'} · ${onServer ? 'Spielserver' : 'dieser Browser'}`
+  const archive = await fetchSaveSlots()
+  const total = archive.own.length + archive.shared.length
+  titleLoadKicker.textContent = total
+    ? `${archive.own.length} eigene · ${archive.shared.length} öffentlich`
     : 'Archiv leer'
-  titleLoadRows.innerHTML = slots.length
-    ? slots
-        .map((slot) => `<button type="button" data-title-load-slot="${slot.id}"><span class="title-row-text"><span class="title-row-label">${escapeHtml(slot.name)}</span><span class="title-row-meta">${formatSaveTime(slot.savedAt)}</span></span><span class="title-row-value">Laden</span></button>`)
-        .join('')
-    : `<p class="title-load-empty">Noch keine benannten Spielstände ${onServer ? 'auf dem Spielserver' : 'in diesem Browser'}. Im laufenden Spiel legst du sie über „Spielstand“ an.</p>`
-  titleLoadNote.textContent = onServer
-    ? 'Die Spielstände liegen im Ordner „saves“ des Spielservers.'
-    : 'Der Spielserver ist nicht erreichbar — gelesen wird, was in diesem Browser liegt.'
+  const own = archive.own.length
+    ? `<h3 class="title-submenu-heading">${archive.onServer ? `Deine Spielstände · ${escapeHtml(archive.account ?? '')}` : 'Spielstände in diesem Browser'}</h3>${archive.own.map((slot) => titleSlotRow(slot, false)).join('')}`
+    : ''
+  const shared = archive.shared.length
+    ? `<h3 class="title-submenu-heading">Öffentliche Spielstände</h3>${archive.shared.map((slot) => titleSlotRow(slot, true)).join('')}`
+    : ''
+  titleLoadRows.innerHTML = own + shared ||
+    `<p class="title-load-empty">Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto' : 'in diesem Browser'}. Im laufenden Spiel legst du sie über „Spielstand“ an.</p>`
+  titleLoadNote.textContent = saveStorageNote(archive)
   markTitleSelection(0)
 }
 function closeTitleLoad(): void {
@@ -5628,18 +5699,15 @@ function closeTitleLoad(): void {
   markTitleSelection(0)
 }
 async function loadTitleSlot(id: string): Promise<void> {
-  let loaded: GameState | null
-  try {
-    loaded = serverSaveSlots ? GameState.fromJSON((await loadServerSave(id)).snapshot) : GameState.loadSlot(id)
-  } catch {
-    loaded = null
-  }
-  if (!loaded) {
+  const slot = findSaveSlot(id)
+  const loaded = slot ? await readSaveSlot(slot) : null
+  if (!slot || !loaded) {
     titleLoadNote.textContent = 'Dieser Spielstand ist ungültig oder nicht mehr vorhanden.'
     void openTitleLoad()
     return
   }
-  bindLoadedGame(loaded, 'Spielstand geladen')
+  const foreign = !saveArchive.own.some((own) => own.id === id)
+  bindLoadedGame(loaded, foreign ? `Öffentlicher Spielstand von ${slot.owner} geladen` : 'Spielstand geladen')
   closeTitleLoad()
   setTitleScreenOpen(false)
 }
@@ -5686,7 +5754,8 @@ titleScreen.addEventListener('click', (event) => {
   if (slot) { void loadTitleSlot(slot.dataset.titleLoadSlot!); return }
   const menu = target.closest<HTMLButtonElement>('[data-title-menu]')
   if (menu) {
-    if (menu.dataset.titleMenu === 'new') openTitleSubmenu(true)
+    if (menu.dataset.titleMenu === 'resume') void resumeLastGame()
+    else if (menu.dataset.titleMenu === 'new') openTitleSubmenu(true)
     else if (menu.dataset.titleMenu === 'quickload') {
       if (tryQuickLoad()) setTitleScreenOpen(false)
     }
@@ -6292,7 +6361,32 @@ function setSaveSlotsPanelOpen(open: boolean): void {
   }
 }
 const formatSaveTime = (value: number) => new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' }).format(value)
-let serverSaveSlots: ServerSaveSlot[] | null = null
+
+/**
+ * Where the game's saves come from. With an account they live on the server, under
+ * that account; without one - no login, or no server at all - they stay in this
+ * browser. Public saves other people shared are read along either way, and every
+ * slot carries where it came from, so loading one asks the right archive.
+ */
+type SaveSlotView = ServerSaveSlot & { source: 'server' | 'browser' }
+type SaveArchiveView = {
+  own: SaveSlotView[]
+  shared: SaveSlotView[]
+  account: string | null
+  /** True when writing goes to the server: it answers and someone is signed in. */
+  onServer: boolean
+  reachable: boolean
+}
+let saveArchive: SaveArchiveView = { own: [], shared: [], account: null, onServer: false, reachable: false }
+const browserSlots = (): SaveSlotView[] =>
+  GameState.listSaveSlots().map((slot) => ({ ...slot, public: false, owner: '', source: 'browser' as const }))
+const findSaveSlot = (id: string): SaveSlotView | undefined =>
+  saveArchive.own.find((slot) => slot.id === id) ?? saveArchive.shared.find((slot) => slot.id === id)
+function saveStorageNote(archive: SaveArchiveView): string {
+  if (archive.onServer) return `Deine Spielstände liegen beim Konto „${archive.account}“ auf dem Spielserver — bis zu 20 Stück.`
+  if (archive.reachable) return 'Ohne Konto bleiben Spielstände nur in diesem Browser. Melde dich im Titelbildschirm an, damit sie unter deinem Namen auf dem Spielserver liegen.'
+  return 'Der Spielserver ist nicht erreichbar. Bis zu 20 Spielstände werden stattdessen in diesem Browser gespeichert.'
+}
 function bindLoadedGame(loaded: GameState, message: string): void {
   if (pathWindowOpen) closePathEditor()
   bindGameState(loaded)
@@ -6313,26 +6407,37 @@ function tryQuickLoad(): boolean {
   bindLoadedGame(loaded, 'Spielstand geladen')
   return true
 }
-function showSaveSlots(slots: ServerSaveSlot[], onServer: boolean): void {
-  saveSlotsList.innerHTML = slots.length
-    ? slots.map(slot => `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}</small></div><div><button data-load-slot="${slot.id}">Laden</button><button data-overwrite-slot="${slot.id}">Überschreiben</button><button data-delete-slot="${slot.id}" aria-label="${escapeHtml(slot.name)} löschen">×</button></div></article>`).join('')
-    : `<p class="save-slots-empty">Noch keine benannten Spielstände ${onServer ? 'auf dem lokalen Server' : 'im Browser'}. „Schnell speichern“ und „Schnell laden“ bleiben der schnelle Einzelspielstand.</p>`
+/** One row of the public list: someone else's festival, with the name behind it. */
+const sharedSlotRow = (slot: SaveSlotView): string =>
+  `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>von ${escapeHtml(slot.owner)} · ${formatSaveTime(slot.savedAt)}</small></div><div><button data-load-slot="${slot.id}">Laden</button></div></article>`
+
+function showSaveSlots(archive: SaveArchiveView): void {
+  const own = archive.own.length
+    ? archive.own.map((slot) => `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}</small></div><div><button data-load-slot="${slot.id}">Laden</button><button data-overwrite-slot="${slot.id}">Überschreiben</button>${archive.onServer ? `<button data-share-slot="${slot.id}">${slot.public ? 'Nicht mehr teilen' : 'Teilen'}</button>` : ''}<button data-delete-slot="${slot.id}" aria-label="${escapeHtml(slot.name)} löschen">×</button></div></article>`).join('')
+    : `<p class="save-slots-empty">Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto' : 'in diesem Browser'}. Der Button „Speichern“ bleibt der schnelle Einzelspielstand.</p>`
+  // The shared ones are a section of their own, and they offer nothing but loading:
+  // what you save afterwards lands in your archive, the original stays as it is.
+  const shared = archive.shared.length
+    ? `<h3 class="save-slots-heading">Öffentliche Spielstände</h3><p class="save-slots-empty">Laden ja, überschreiben nein — gespeichert wird immer unter deinem eigenen Konto.</p>${archive.shared.map(sharedSlotRow).join('')}`
+    : ''
+  saveSlotsList.innerHTML = own + shared
 }
-async function fetchSaveSlots(): Promise<{ slots: ServerSaveSlot[], onServer: boolean }> {
+async function fetchSaveSlots(): Promise<SaveArchiveView> {
   try {
-    serverSaveSlots = await listServerSaves()
-    return { slots: serverSaveSlots, onServer: true }
+    const archive = await listServerSaves()
+    const shared = archive.shared.map((slot) => ({ ...slot, source: 'server' as const }))
+    saveArchive = archive.account
+      ? { own: archive.own.map((slot) => ({ ...slot, source: 'server' as const })), shared, account: archive.account, onServer: true, reachable: true }
+      : { own: browserSlots(), shared, account: null, onServer: false, reachable: true }
   } catch {
-    serverSaveSlots = null
-    return { slots: GameState.listSaveSlots(), onServer: false }
+    saveArchive = { own: browserSlots(), shared: [], account: null, onServer: false, reachable: false }
   }
+  return saveArchive
 }
 async function renderSaveSlots(): Promise<void> {
-  const { slots, onServer } = await fetchSaveSlots()
-  saveStorageInfo.textContent = onServer
-    ? 'Bis zu 20 Spielstände liegen lokal im Ordner „saves“ des Spielservers.'
-    : 'Der Spielserver ist nicht erreichbar. Bis zu 20 Spielstände werden stattdessen in diesem Browser gespeichert.'
-  showSaveSlots(slots, onServer)
+  const archive = await fetchSaveSlots()
+  saveStorageInfo.textContent = saveStorageNote(archive)
+  showSaveSlots(archive)
 }
 async function openSaveSlots(): Promise<void> {
   if (multiplayer.status.mode === 'client') { showToast('Nur der Host kann Spielstände verwalten', true); return }
@@ -6346,46 +6451,125 @@ saveSlotsPanel.querySelector('[data-close]')!.addEventListener('click', () => se
 saveSlotsPanel.querySelector<HTMLFormElement>('[data-save-slot]')!.addEventListener('submit', async event => {
   event.preventDefault()
   try {
-    if (serverSaveSlots) {
+    if (saveArchive.onServer) {
       const saved = await saveServerSave(saveSlotName.value, JSON.stringify(game.snapshot))
-      saveSlotsMessage.textContent = `Spielstand „${saved.name}“ auf dem lokalen Server gespeichert`
+      rememberLastSave({ ...saved, source: 'server' })
+      saveSlotsMessage.textContent = `Spielstand „${saved.name}“ unter deinem Konto gespeichert`
     } else {
       const result = game.saveSlot(saveSlotName.value)
       saveSlotsMessage.textContent = result.message
       if (!result.ok) return
+      rememberBrowserSave(saveSlotName.value)
     }
     saveSlotName.value = ''
     await renderSaveSlots()
   } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht gespeichert werden' }
 })
+/** Reads one slot back, from wherever it came from, and makes it the one to resume. */
+async function readSaveSlot(slot: SaveSlotView): Promise<GameState | null> {
+  try {
+    const loaded = slot.source === 'server' ? GameState.fromJSON((await loadServerSave(slot.id)).snapshot) : GameState.loadSlot(slot.id)
+    if (loaded) rememberLastSave(slot)
+    return loaded
+  } catch {
+    return null
+  }
+}
+/** A browser slot has no id until it exists, so it is looked up after the write. */
+function rememberBrowserSave(name: string): void {
+  const slot = browserSlots().find((entry) => entry.name === name.trim().replace(/\s+/g, ' '))
+  if (slot) rememberLastSave(slot)
+}
+
+/**
+ * The automatic save. It always writes to one slot of its own — never over a save
+ * the player named — and that slot is what „Fortsetzen“ then offers. The clock is
+ * real time, not festival time, and it only runs while a game is actually being
+ * played: not behind the title screen, and not as a multiplayer guest, whose host
+ * owns the world anyway.
+ */
+let autosaveTimer: ReturnType<typeof setInterval> | undefined
+let autosaveRunning = false
+async function runAutosave(): Promise<void> {
+  if (autosaveRunning || titleScreenOpen() || multiplayer.status.mode === 'client') return
+  autosaveRunning = true
+  try {
+    const archive = await fetchSaveSlots()
+    const existing = archive.own.find((slot) => slot.name === AUTOSAVE_NAME)
+    if (archive.onServer) {
+      const saved = await saveServerSave(AUTOSAVE_NAME, JSON.stringify(game.snapshot), existing?.id)
+      rememberLastSave({ ...saved, source: 'server' })
+    } else {
+      const result = game.saveSlot(AUTOSAVE_NAME, existing?.id)
+      if (!result.ok) throw new Error(result.message)
+      rememberBrowserSave(AUTOSAVE_NAME)
+    }
+    showToast('Automatisch gespeichert')
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Automatisches Speichern fehlgeschlagen', true)
+  } finally {
+    autosaveRunning = false
+  }
+}
+const autosaveSelect = requireElement<HTMLSelectElement>('#setting-autosave')
+function applyAutosaveInterval(minutes: number): void {
+  if (autosaveTimer) clearInterval(autosaveTimer)
+  autosaveTimer = minutes > 0 ? setInterval(() => void runAutosave(), minutes * 60_000) : undefined
+}
+function readAutosaveSetting(): number {
+  try {
+    const stored = Number(window.localStorage.getItem(AUTOSAVE_KEY))
+    return AUTOSAVE_INTERVALS.some((option) => option.minutes === stored) ? stored : AUTOSAVE_DEFAULT_MINUTES
+  } catch { return AUTOSAVE_DEFAULT_MINUTES }
+}
+autosaveSelect.value = String(readAutosaveSetting())
+applyAutosaveInterval(Number(autosaveSelect.value))
+autosaveSelect.addEventListener('change', () => {
+  const minutes = Number(autosaveSelect.value)
+  applyAutosaveInterval(minutes)
+  try { window.localStorage.setItem(AUTOSAVE_KEY, String(minutes)) } catch { /* then it lasts for this session */ }
+  showToast(minutes > 0 ? `Autospeichern: ${AUTOSAVE_INTERVALS.find((option) => option.minutes === minutes)?.label.toLowerCase()}` : 'Autospeichern aus')
+})
 saveSlotsPanel.addEventListener('click', async event => {
-  const button = (event.target as Element).closest<HTMLButtonElement>('[data-load-slot],[data-overwrite-slot],[data-delete-slot]')
+  const button = (event.target as Element).closest<HTMLButtonElement>('[data-load-slot],[data-overwrite-slot],[data-share-slot],[data-delete-slot]')
   if (!button) return
-  const id = button.dataset.loadSlot ?? button.dataset.overwriteSlot ?? button.dataset.deleteSlot!
+  const id = button.dataset.loadSlot ?? button.dataset.overwriteSlot ?? button.dataset.shareSlot ?? button.dataset.deleteSlot!
   if (button.dataset.loadSlot) {
-    let loaded: GameState | null
-    try { loaded = serverSaveSlots ? GameState.fromJSON((await loadServerSave(id)).snapshot) : GameState.loadSlot(id) } catch { loaded = null }
-    if (!loaded) { saveSlotsMessage.textContent = 'Dieser Spielstand ist ungültig oder nicht mehr vorhanden.'; renderSaveSlots(); return }
-    bindLoadedGame(loaded, 'Lokaler Spielstand geladen')
+    const slot = findSaveSlot(id)
+    const loaded = slot ? await readSaveSlot(slot) : null
+    if (!slot || !loaded) { saveSlotsMessage.textContent = 'Dieser Spielstand ist ungültig oder nicht mehr vorhanden.'; renderSaveSlots(); return }
+    const foreign = !saveArchive.own.some((own) => own.id === id)
+    bindLoadedGame(loaded, foreign ? `Öffentlicher Spielstand von ${slot.owner} geladen` : 'Spielstand geladen')
     setSaveSlotsPanelOpen(false)
     return
   }
+  // Overwriting, sharing and deleting are offered on your own rows only, so an id
+  // from anywhere else is simply not there.
+  const slot = saveArchive.own.find((item) => item.id === id)
+  if (!slot) { renderSaveSlots(); return }
   if (button.dataset.overwriteSlot) {
-    const slot = (serverSaveSlots ?? GameState.listSaveSlots()).find(item => item.id === id)
-    if (!slot) { renderSaveSlots(); return }
     try {
-      if (serverSaveSlots) await saveServerSave(slot.name, JSON.stringify(game.snapshot), id)
+      if (slot.source === 'server') await saveServerSave(slot.name, JSON.stringify(game.snapshot), id)
       else { const result = game.saveSlot(slot.name, id); if (!result.ok) throw new Error(result.message) }
+      rememberLastSave(slot)
       saveSlotsMessage.textContent = `Spielstand „${slot.name}“ überschrieben`
       await renderSaveSlots()
     } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht überschrieben werden' }
     return
   }
-  const slot = (serverSaveSlots ?? GameState.listSaveSlots()).find(item => item.id === id)
-  if (!slot) { renderSaveSlots(); return }
+  if (button.dataset.shareSlot) {
+    try {
+      const updated = await shareServerSave(id, !slot.public)
+      saveSlotsMessage.textContent = updated.public
+        ? `Spielstand „${slot.name}“ ist jetzt öffentlich — andere können ihn laden, aber nicht überschreiben.`
+        : `Spielstand „${slot.name}“ ist wieder privat`
+      await renderSaveSlots()
+    } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Sichtbarkeit konnte nicht geändert werden' }
+    return
+  }
   if (!window.confirm(`Spielstand „${slot.name}“ wirklich löschen?`)) return
   try {
-    if (serverSaveSlots) await deleteServerSave(id)
+    if (slot.source === 'server') await deleteServerSave(id)
     else { const result = GameState.deleteSaveSlot(id); if (!result.ok) throw new Error(result.message) }
     saveSlotsMessage.textContent = 'Spielstand gelöscht'
     await renderSaveSlots()
@@ -6408,14 +6592,16 @@ function setSaveAsPanelOpen(open: boolean): void {
     game.setSpeed(saveAsPausedSpeed)
   }
 }
+/**
+ * Only your own saves are listed here: this window overwrites, and that is the one
+ * thing a public save of someone else's never allows.
+ */
 async function renderSaveAsSlots(): Promise<void> {
-  const { slots, onServer } = await fetchSaveSlots()
-  saveAsStorageInfo.textContent = onServer
-    ? 'Bis zu 20 Spielstände liegen lokal im Ordner „saves“ des Spielservers.'
-    : 'Der Spielserver ist nicht erreichbar. Bis zu 20 Spielstände werden stattdessen in diesem Browser gespeichert.'
-  saveAsList.innerHTML = slots.length
-    ? slots.map(slot => `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}</small></div><div><button data-overwrite-slot="${slot.id}">Überschreiben</button></div></article>`).join('')
-    : `<p class="save-slots-empty">Noch keine benannten Spielstände ${onServer ? 'auf dem lokalen Server' : 'im Browser'}.</p>`
+  const archive = await fetchSaveSlots()
+  saveAsStorageInfo.textContent = saveStorageNote(archive)
+  saveAsList.innerHTML = archive.own.length
+    ? archive.own.map((slot) => `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}</small></div><div><button data-overwrite-slot="${slot.id}">Überschreiben</button></div></article>`).join('')
+    : `<p class="save-slots-empty">Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto' : 'in diesem Browser'}.</p>`
 }
 async function openSaveAs(): Promise<void> {
   if (multiplayer.status.mode === 'client') { showToast('Nur der Host kann Spielstände verwalten', true); return }
@@ -6431,13 +6617,15 @@ makeResizable(saveAsPanel)
 saveAsPanel.querySelector<HTMLFormElement>('[data-save-as]')!.addEventListener('submit', async event => {
   event.preventDefault()
   try {
-    if (serverSaveSlots) {
+    if (saveArchive.onServer) {
       const saved = await saveServerSave(saveAsName.value, JSON.stringify(game.snapshot))
-      saveAsMessage.textContent = `Spielstand „${saved.name}“ auf dem lokalen Server gespeichert`
+      rememberLastSave({ ...saved, source: 'server' })
+      saveAsMessage.textContent = `Spielstand „${saved.name}“ unter deinem Konto gespeichert`
     } else {
       const result = game.saveSlot(saveAsName.value)
       saveAsMessage.textContent = result.message
       if (!result.ok) return
+      rememberBrowserSave(saveAsName.value)
     }
     saveAsName.value = ''
     await renderSaveAsSlots()
@@ -6446,11 +6634,12 @@ saveAsPanel.querySelector<HTMLFormElement>('[data-save-as]')!.addEventListener('
 saveAsPanel.addEventListener('click', async event => {
   const button = (event.target as Element).closest<HTMLButtonElement>('[data-overwrite-slot]'); if (!button) return
   const id = button.dataset.overwriteSlot!
-  const slot = (serverSaveSlots ?? GameState.listSaveSlots()).find(item => item.id === id)
+  const slot = saveArchive.own.find((item) => item.id === id)
   if (!slot) { renderSaveAsSlots(); return }
   try {
-    if (serverSaveSlots) await saveServerSave(slot.name, JSON.stringify(game.snapshot), id)
+    if (slot.source === 'server') await saveServerSave(slot.name, JSON.stringify(game.snapshot), id)
     else { const result = game.saveSlot(slot.name, id); if (!result.ok) throw new Error(result.message) }
+    rememberLastSave(slot)
     saveAsMessage.textContent = `Spielstand „${slot.name}“ überschrieben`
     await renderSaveAsSlots()
   } catch (error) { saveAsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht überschrieben werden' }

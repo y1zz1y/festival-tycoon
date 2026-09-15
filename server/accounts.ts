@@ -1,12 +1,11 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { DatabaseSync } from 'node:sqlite'
-import { resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import type { DatabaseSync } from 'node:sqlite'
+import { closeDatabase, db as sharedDatabase } from './database.ts'
 
 /**
- * Player accounts, kept in SQLite next to the save folder.
+ * Player accounts, kept in the server's SQLite database alongside the saves that
+ * belong to them.
  *
  * What is stored is a scrypt hash of the password with its own random salt — never
  * the password. Sessions are random tokens; only their SHA-256 is written down, so a
@@ -18,14 +17,6 @@ import { fileURLToPath } from 'node:url'
  */
 export type PublicAccount = { id: string; name: string; createdAt: number }
 
-/**
- * Where the database lives. Read when the database is first opened, not when this
- * module loads, so a test can point HEADLINER_DATA_DIR at a directory of its own.
- */
-const dataDirectory = (): string =>
-  process.env.HEADLINER_DATA_DIR
-    ? resolve(process.env.HEADLINER_DATA_DIR)
-    : resolve(fileURLToPath(new URL('../data', import.meta.url)))
 const NAME_PATTERN = /^[\p{L}\p{N} _.-]{3,24}$/u
 const SESSION_DAYS = 30
 const SESSION_COOKIE = 'headliner_session'
@@ -39,14 +30,9 @@ const MAX_ATTEMPTS = 8
 const ATTEMPT_WINDOW_MS = 5 * 60 * 1000
 const SCRYPT = { N: 1 << 15, r: 8, p: 1, keylen: 64, maxmem: 64 * 1024 * 1024 }
 
-let database: DatabaseSync | null = null
-function db(): DatabaseSync {
-  if (database) return database
-  const directory = dataDirectory()
-  mkdirSync(directory, { recursive: true })
-  database = new DatabaseSync(resolve(directory, 'accounts.db'))
-  database.exec(`
-    PRAGMA journal_mode = WAL;
+const SCHEMA = {
+  name: 'accounts',
+  ddl: `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -62,9 +48,9 @@ function db(): DatabaseSync {
       expires_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
-  `)
-  return database
+  `,
 }
+const db = (): DatabaseSync => sharedDatabase(SCHEMA)
 
 const normalizeName = (name: string): string => name.trim().replace(/\s+/g, ' ')
 const nameKey = (name: string): string => normalizeName(name).toLocaleLowerCase()
@@ -125,6 +111,14 @@ function originOf(request: IncomingMessage): string {
   return (first ?? request.socket.remoteAddress ?? 'unknown').trim()
 }
 
+/**
+ * The account behind a request's session cookie, or null for a guest. This is the
+ * one way the rest of the server learns who is calling.
+ */
+export function accountOfRequest(request: IncomingMessage): PublicAccount | null {
+  return accountOfToken(cookieOf(request, SESSION_COOKIE))
+}
+
 function cookieOf(request: IncomingMessage, name: string): string | null {
   const header = request.headers.cookie
   if (!header) return null
@@ -173,7 +167,7 @@ export async function handleAccountRequest(request: IncomingMessage, response: S
   const action = pathname.split('/').filter(Boolean)[2] ?? ''
   try {
     if (request.method === 'GET' && action === 'me') {
-      const account = accountOfToken(cookieOf(request, SESSION_COOKIE))
+      const account = accountOfRequest(request)
       send(response, 200, { ok: !!account, name: account?.name ?? null })
       return true
     }
@@ -227,6 +221,5 @@ export async function handleAccountRequest(request: IncomingMessage, response: S
 
 /** For tests and tooling: closes the database so the file can be removed. */
 export function closeAccountDatabase(): void {
-  database?.close()
-  database = null
+  closeDatabase()
 }
