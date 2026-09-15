@@ -2,14 +2,14 @@ import assert from 'node:assert/strict'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { normalizeScenarioSettings } from '../src/game/scenario'
 import { SCENARIO_PRESETS, scenarioPreset } from '../src/game/scenarioPresets'
-import { bookFinance, financeEdition, financePeriodTotal, loanInterest, loanLimit, LOAN } from '../src/game/finance'
+import { bookFinance, financeEdition, financePeriodTotal, loanInterest, loanLimit, rollFinanceDay, LOAN } from '../src/game/finance'
 import { goalName, updateScenarioProgress } from '../src/game/scenarioGoals'
 
 export function testFinance(): void {
   // Every euro that moves is booked, and the columns are festival editions.
   const game = GameState.startNew(normalizeScenarioSettings({ worldSize: 32, unevenness: 0, startingMoney: 50_000 }))
   const s = game.snapshot as GameSnapshot
-  assert.deepEqual(s.finance, { loan: 0, periods: [] }, 'a fresh park owes nothing and has booked nothing')
+  assert.deepEqual(s.finance, { loan: 0, periods: [], today: {}, previousDay: {} }, 'a fresh park owes nothing and has booked nothing')
   assert.equal(financeEdition(s), 1, 'everything before the first festival belongs to the first edition')
 
   const before = s.money
@@ -64,6 +64,32 @@ export function testFinance(): void {
   assert.equal(bank.manageLoan({ type: 'repay', amount: 999_999 }).ok, true, 'repaying more than is owed pays off the rest')
   assert.equal(b.finance.loan, 0)
   assert.equal(bank.manageLoan({ type: 'repay', amount: 100 }).ok, false, 'with nothing owed there is nothing to repay')
+
+  // The forecast: running costs calculated, visitor income carried over from the last full day.
+  const forecastGame = GameState.startNew(normalizeScenarioSettings({ worldSize: 32, unevenness: 0, startingMoney: 80_000 }))
+  const f = forecastGame.snapshot as GameSnapshot
+  const bare = forecastGame.financeForecast()
+  assert.ok((bare.upkeep ?? 0) < 0, 'what already stands on the site costs upkeep tomorrow')
+  assert.equal(bare.tickets, undefined, 'without a day of takings there is nothing to carry over')
+  assert.ok(forecastGame.place('food', 4, 4).ok)
+  const withStand = forecastGame.financeForecast()
+  assert.ok((withStand.upkeep ?? 0) < (bare.upkeep ?? 0), 'one more stand is one more day of upkeep')
+  assert.equal(withStand.construction, undefined, 'what was built today is not predicted for tomorrow')
+  assert.ok(forecastGame.manageLoan({ type: 'borrow', amount: 10_000 }).ok)
+  assert.equal(
+    Math.round((forecastGame.financeForecast().interest ?? 0) * 100) / 100,
+    -loanInterest(10_000, 1),
+    'tomorrow costs exactly one day of interest',
+  )
+  // Yesterday's takings are what tomorrow is expected to bring.
+  bookFinance(f, 'tickets', 400)
+  bookFinance(f, 'sales', 90)
+  rollFinanceDay(f.finance)
+  assert.equal(forecastGame.financeForecast().tickets, 400)
+  assert.equal(forecastGame.financeForecast().sales, 90)
+  assert.deepEqual(f.finance.today, {}, 'the new day starts with an empty page')
+  bookFinance(f, 'tickets', 10)
+  assert.equal(forecastGame.financeForecast().tickets, 400, 'the forecast keeps to the last full day')
 
   // Prepared scenarios carry their own site, debt and goals.
   assert.equal(SCENARIO_PRESETS.length, 4)

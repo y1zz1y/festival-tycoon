@@ -43,6 +43,7 @@ import { testVisitorSleep } from './visitorSleep'
 import { testQueueLanes } from './queueLanes'
 import { testShopGoods } from './shopGoods'
 import { testTickerAndWasteCaps } from './ticker'
+import { testAccounts } from './accounts'
 
 function test(name: string, run: () => void) {
   run()
@@ -63,6 +64,8 @@ test('placement height snaps to half-steps and reports the ground cell', () => {
 test('books, loans, prepared scenarios and their goals', () => {
   testFinance()
 })
+await testAccounts()
+console.log('PASS accounts: registration, sessions, hashed passwords and throttled guessing')
 
 function fixture(count = 20): GameState {
   const initial = structuredClone(new GameState().snapshot)

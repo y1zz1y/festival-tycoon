@@ -12,6 +12,7 @@ dist
 .claude
 dist-ssr
 saves
+data
 *.local
 
 # Editor directories and files

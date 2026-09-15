@@ -511,6 +511,533 @@ button {
   line-height: 1.4;
 }
 
+/* -- Title screen ---------------------------------------------------------
+   Built to the "TitleScreen v3" design: a lit plaque over a scanlined ground,
+   chunky bevelled menu plates of which one at a time is the current entry, and
+   the scenario choice as a plate on top of it. The design's blue ramp is swapped
+   for the game's greens - same steps, same contrasts, the palette every other
+   panel already uses. */
+.title-screen {
+  --ts-900: #101a16;
+  --ts-800: #17241f;
+  --ts-700: #29463a;
+  --ts-600: #344d48;
+  --ts-500: #3f715b;
+  --ts-400: #58756a;
+  --ts-300: #91aaa0;
+  --ts-200: #cbdcd4;
+  --ts-100: #edf7f1;
+  --ts-gold: #efcf86;
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: none;
+  /* The world itself is the backdrop: it keeps rendering behind the screen and is
+     blurred and dimmed here, so the plates stay readable over it. */
+  background: rgba(16, 26, 22, .38);
+  backdrop-filter: blur(10px) saturate(1.05) brightness(.82);
+  overflow: auto;
+  user-select: none;
+}
+
+.title-screen.visible {
+  display: block;
+}
+
+/* The lit ground: two pixel grids and a glow from above, the three layers the
+   design stacks behind everything else. */
+.title-grain {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(70% 55% at 50% 26%, rgba(145, 170, 160, 0.22) 0%, rgba(0, 0, 0, 0) 65%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.16) 0 4px, transparent 4px 8px);
+  pointer-events: none;
+}
+
+.title-stage {
+  position: relative;
+  min-height: 100%;
+  /* Room above the plaque for the crowd walking on its top edge. */
+  padding: clamp(60px, 11vh, 120px) clamp(16px, 6vw, 96px) clamp(16px, 3vh, 40px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(16px, 3vh, 40px);
+  color: var(--ts-100);
+  text-align: center;
+}
+
+/* Every plate on this screen wears the same bevel: lit from the top left, with a
+   hard offset shadow instead of a blur. */
+.title-plaque,
+.title-menu button,
+.title-submenu-card,
+.title-submenu-rows button,
+.title-submenu [data-title-back],
+.title-submenu [data-title-load-close] {
+  border-style: solid;
+  border-color: var(--ts-400) var(--ts-900) var(--ts-900) var(--ts-400);
+  border-radius: 0;
+}
+
+.title-plaque {
+  position: relative;
+  padding: clamp(14px, 2.4vh, 26px) clamp(24px, 6vw, 74px) clamp(16px, 2.8vh, 32px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--ts-700);
+  border-width: 5px;
+  box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* The crowd's strip: it stands on the plaque's top edge and reaches up out of it. */
+.title-crowd {
+  position: absolute;
+  left: 0;
+  /* A canvas is a replaced element: without an explicit width it keeps its buffer's
+     intrinsic size and `right` is simply ignored. */
+  width: 100%;
+  bottom: 100%;
+  height: clamp(52px, 8vw, 96px);
+  margin-bottom: -5px;
+  pointer-events: none;
+}
+
+.title-kicker {
+  font-size: clamp(10px, 1.1vw, 14px);
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--ts-gold);
+}
+
+.title-name {
+  margin: 0;
+  font-size: clamp(40px, 8vw, 104px);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow: 5px 5px 0 var(--ts-900);
+}
+
+.title-subtitle {
+  font-size: clamp(12px, 1.7vw, 22px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ts-200);
+  text-shadow: 2px 2px 0 var(--ts-900);
+}
+
+.title-menu {
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.title-menu button {
+  width: 100%;
+  padding: clamp(10px, 1.6vh, 18px) 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #ffffff;
+  background: var(--ts-600);
+  border-width: 4px;
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+
+.title-menu-label {
+  font-size: clamp(18px, 2.6vw, 30px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.title-menu-meta {
+  font-size: clamp(9px, 1vw, 12px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ts-200);
+  opacity: 0;
+}
+
+/* One entry at a time is the current one - brighter plate, brighter bevel, a
+   deeper shadow, and only then does its note appear. */
+.title-menu button.selected,
+.title-submenu-rows button.selected {
+  background: var(--ts-500);
+  border-color: var(--ts-300) var(--ts-900) var(--ts-900) var(--ts-300);
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.42);
+}
+
+.title-menu button.selected .title-menu-meta {
+  opacity: 1;
+}
+
+.title-footer {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: clamp(9px, 1vw, 12px);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ts-300);
+}
+
+/* The submenu: the scenario choice, on a plate above the menu it came from. */
+.title-submenu {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(12px, 3vh, 32px);
+  background: rgba(0, 0, 0, 0.6);
+  overflow: auto;
+}
+
+.title-submenu[hidden] {
+  display: none;
+}
+
+.title-submenu-card {
+  width: min(880px, 100%);
+  padding: clamp(16px, 3vh, 34px) clamp(16px, 3vw, 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--ts-100);
+  background: var(--ts-700);
+  border-width: 5px;
+  box-shadow: 12px 12px 0 rgba(0, 0, 0, 0.45);
+}
+
+.title-submenu-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 12px;
+  border-bottom: 3px solid var(--ts-900);
+}
+
+.title-submenu-title {
+  font-size: clamp(20px, 3vw, 36px);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow: 3px 3px 0 var(--ts-900);
+}
+
+.title-submenu-kicker {
+  font-size: clamp(10px, 1.1vw, 13px);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ts-gold);
+}
+
+.title-submenu-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.title-submenu-rows button {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  text-align: left;
+  color: var(--ts-100);
+  background: var(--ts-800);
+  border-width: 3px;
+  border-color: var(--ts-600) var(--ts-900) var(--ts-900) var(--ts-600);
+  cursor: pointer;
+}
+
+.title-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.title-row-label {
+  font-size: clamp(14px, 1.8vw, 20px);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.title-row-meta {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ts-200);
+}
+
+.title-row-value {
+  flex-shrink: 0;
+  font-size: clamp(11px, 1.2vw, 15px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ts-gold);
+}
+
+.title-submenu [data-title-back],
+.title-submenu [data-title-load-close] {
+  align-self: flex-start;
+  padding: 9px 22px;
+  color: #ffffff;
+  background: var(--ts-600);
+  border-width: 4px;
+  font-size: clamp(11px, 1.2vw, 14px);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.title-submenu [data-title-back]:hover,
+.title-submenu [data-title-load-close]:hover {
+  background: var(--ts-500);
+}
+
+/* The account bar under the menu, and the mask it opens. Both wear the plates and
+   bevels of the rest of the screen. */
+.title-account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.title-account button {
+  padding: 8px 18px;
+  color: var(--ts-100);
+  background: var(--ts-700);
+  border: 3px solid;
+  border-color: var(--ts-400) var(--ts-900) var(--ts-900) var(--ts-400);
+  border-radius: 0;
+  font-size: clamp(10px, 1.1vw, 13px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.title-account button:hover {
+  background: var(--ts-500);
+}
+
+.title-account button[hidden] {
+  display: none;
+}
+
+.title-account-name {
+  font-size: clamp(10px, 1.1vw, 13px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ts-gold);
+}
+
+.title-account-card {
+  width: min(520px, 100%);
+  text-align: left;
+}
+
+.title-account-card .scenario-field span {
+  color: var(--ts-200);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.title-account-card input {
+  width: 100%;
+  padding: 8px 10px;
+  color: var(--ts-100);
+  background: var(--ts-900);
+  border: 3px solid;
+  border-color: var(--ts-600) var(--ts-900) var(--ts-900) var(--ts-600);
+  border-radius: 0;
+  font: inherit;
+}
+
+.title-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.title-account-actions button {
+  padding: 9px 20px;
+  color: var(--ts-100);
+  background: var(--ts-600);
+  border: 4px solid;
+  border-color: var(--ts-400) var(--ts-900) var(--ts-900) var(--ts-400);
+  border-radius: 0;
+  font-size: clamp(10px, 1.1vw, 13px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.title-account-actions button[type='submit'] {
+  color: #ffffff;
+  background: var(--ts-500);
+  border-color: var(--ts-300) var(--ts-900) var(--ts-900) var(--ts-300);
+}
+
+.title-account-actions button:hover:not(:disabled) {
+  background: var(--ts-500);
+}
+
+.title-account-actions button:disabled {
+  opacity: .6;
+  cursor: progress;
+}
+
+/* The archive plate on the title screen: the saves as rows of this screen. Managing
+   them — naming, overwriting, deleting — stays in the running game's own window. */
+.title-load-empty {
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--ts-200);
+  background: var(--ts-800);
+  border: 3px solid;
+  border-color: var(--ts-600) var(--ts-900) var(--ts-900) var(--ts-600);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* A scenario that is not part of the base game: readable, marked with its price, and
+   inert — the row shows what it would cost and refuses to start. */
+.title-submenu-rows button[data-title-locked] {
+  cursor: not-allowed;
+}
+
+.title-submenu-rows button[data-title-locked] .title-row-label,
+.title-submenu-rows button[data-title-locked] .title-row-meta {
+  opacity: .55;
+}
+
+.title-submenu-rows button[data-title-locked] .title-row-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  color: var(--ts-900);
+  background: var(--ts-gold);
+  border: 2px solid;
+  border-color: #fbe9bb var(--ts-900) var(--ts-900) #fbe9bb;
+}
+
+.title-row-lock {
+  font-size: 0.9em;
+  filter: grayscale(1);
+}
+
+/* The free-play form, folded out under its row: the one place where a site is
+   configured, since a running festival keeps what it was started with. */
+.title-freeplay {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--ts-800);
+  border: 3px solid;
+  border-color: var(--ts-600) var(--ts-900) var(--ts-900) var(--ts-600);
+}
+
+.title-freeplay[hidden] {
+  display: none;
+}
+
+.title-freeplay #start-scenario {
+  justify-self: start;
+  padding: 8px 18px;
+  color: #ffffff;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  background: var(--ts-500);
+  border: 4px solid;
+  border-color: var(--ts-300) var(--ts-900) var(--ts-900) var(--ts-300);
+  cursor: pointer;
+}
+
+/* What the running festival was started on - read-only, two columns. */
+.scenario-summary {
+  margin: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.scenario-summary div {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.scenario-summary dt {
+  color: #9eb6ac;
+}
+
+.scenario-summary dd {
+  margin: 0;
+  color: #edf7f1;
+}
+
+/* A window opened from the title screen sits on top of its backdrop. */
+.above-title {
+  z-index: 70;
+}
+
+/* While the start screen is up it is the only thing on screen: every readout, toolbar,
+   panel and hint of the running game is out of the way, so nothing behind the backdrop
+   can be read or clicked by accident. Only what the start screen itself opens stays. */
+body.title-open .topbar,
+body.title-open .rct-toolbar,
+body.title-open .status-overlay,
+body.title-open .help,
+body.title-open .time-controls,
+body.title-open .crowding-panel,
+body.title-open .performance-indicator,
+body.title-open .update-notice,
+body.title-open .build-menu,
+body.title-open .path-construction,
+body.title-open .coaster-builder,
+body.title-open .visitor-panel,
+body.title-open .entity-panel,
+body.title-open .staff-panel,
+body.title-open .staff-details,
+body.title-open .day-plan-panel,
+body.title-open .visitor-overview-panel,
+body.title-open .complaints-panel,
+body.title-open .finance-panel,
+body.title-open .logistics-panel,
+body.title-open .festival-management,
+body.title-open .supply-planner,
+body.title-open .multiplayer-panel,
+body.title-open .mobile-controls,
+body.title-open .mobile-menu-toggle,
+body.title-open #app-install-hint {
+  display: none !important;
+}
+
 /* The books, laid out the way a tycoon ledger is: one row per kind of money, one
    column per festival edition, money out in red and money in in green. */
 .finance-panel {
@@ -574,6 +1101,18 @@ button {
   font-weight: 700;
 }
 
+/* The forecast is set apart from the booked columns: it is an estimate, not a record. */
+.finance-table .finance-forecast {
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  font-style: italic;
+  opacity: .85;
+}
+
+.finance-table thead th.finance-forecast {
+  font-style: normal;
+  color: #cbdcd4;
+}
+
 .finance-in {
   color: #9fe3ac;
 }
@@ -602,9 +1141,28 @@ button {
   gap: 6px;
 }
 
+/* The loan row wears the app's own controls rather than the browser's: the plain
+   bevelled button face for the buttons, and the same dark field the scenario form
+   uses for the amount — a white native input glares out of every panel around it. */
+.finance-loan-controls button {
+  padding: 6px 10px;
+  color: #ecf5f0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+}
+
+.finance-loan-controls button:hover {
+  background: #3f715b;
+}
+
 .finance-loan-controls input {
   width: 110px;
+  padding: 6px 8px;
+  color: #eef7f2;
   text-align: right;
+  background: #29463a;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   font-variant-numeric: tabular-nums;
 }
 
