@@ -47,7 +47,10 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   Partystimmung) und **Sitzung** (Finanzen, Gelände betreten, Speichern,
   Park, Debug-Käfer, Einstellungen). Debug-Käfer und FPS-/Versionszeile
   sind standardmäßig sichtbar; unter Einstellungen → Debug abschaltbar
-  (`localStorage`, nicht im Spielstand). Die Iconleiste ist etwa ein
+  (`localStorage`, nicht im Spielstand). **Autos entfernen** löscht alle
+  Besucherautos (nicht Abriss, nicht Flottenfahrzeuge), räumt Parkbelegung
+  und setzt Insassen zu Fuß auf den Nachbarweg; die Gäste gehen heim.
+  Die Iconleiste ist etwa ein
   Viertel größer als die alten 32-px-Kacheln. Linke Baupaletten enden
   oberhalb der Debug-/Versionsanzeige unten links.
   **Abriss** öffnet
@@ -155,6 +158,8 @@ Hellcyan-Vorschau (`staffZoneHoverOverlay`). Träger-Rechtecke bleiben bei
 `tests/stageInteraction.ts`, `tests/musicPlanning.ts`.
 Infotexte für Müllwagen-Ladung und zusammenhängende Ablagen:
 `tests/festivalAdditions.ts`. Ticker und Müllkappen: `tests/ticker.ts`.
+Debug **Autos entfernen** (Autos weg, Belegung frei, Insassen zu Fuß):
+`tests/operations.ts`.
 Abriss-Picking (Mesh vor Nachbar/Kachelmitte): `tests/picking.ts`.
 Achterbahn-Komplettabriss aus Infofenster/Command: `tests/festivalAdditions.ts`.
 Bauhöhe 0.5 und Bodenkachel der Vorschau: `tests/placementPreview.ts`.

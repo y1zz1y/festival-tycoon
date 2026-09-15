@@ -1284,6 +1284,54 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     rider.cellX !== arriving.position.x || rider.cellZ !== arriving.position.z,
     'they remain on the path, not in the stall',
   )
+  const sidewalk = { x: rider.cellX, z: rider.cellZ, elevation: rider.cellElevation }
+  const sidewalkNeighbors = (arrival as any).getPedestrianNeighbors(sidewalk)
+  assert.ok(
+    !sidewalkNeighbors.some((cell: { x: number; z: number }) => cell.x === 1 && cell.z === -16),
+    'the parking stall is not a pedestrian step from the sidewalk',
+  )
+  assert.ok(arrival.place('food', 5, -20).ok)
+  assert.ok(arrival.placePathSegment(5, -19, 0).ok)
+  assert.ok(arrival.placePathSegment(4, -19, 0).ok)
+  const snack = arrivalState.buildings.find((building) => building.kind === 'food')!
+  arrivalState.festival.infrastructure.shops[snack.id] = {
+    food: 8, drinks: 0, water: 0, goods: 0,
+  }
+  Object.assign(rider.needs, { hunger: 2, toilet: 80, fun: 80, energy: 80 })
+  rider.motivation = 100
+  rider.state = 'entering'
+  rider.targetId = null
+  ;(arrival as any).placeVisitorOnDisembarkCell(rider, {
+    x: 2, z: -16, elevation: 0,
+  })
+  ;(arrival as any).decideNextAction(rider)
+  ;(arrival as any).keepDisembarkRouteOnFoot(rider)
+  assert.ok(rider.route.length > 0, 'after getting out they receive a pedestrian route')
+  assert.ok(
+    rider.route.every((cell: { x: number; z: number }) => !(cell.x === 1 && cell.z === -16)),
+    'the first route does not go through the parking bay',
+  )
+  const distToSnack = () => Math.abs(rider.cellX - 5) + Math.abs(rider.cellZ + 19)
+  const startDist = distToSnack()
+  let bounced = 0
+  let previous = `${rider.cellX}:${rider.cellZ}`
+  for (let n = 0; n < 40; n += 1) {
+    arrival.tick(0.1)
+    const here = `${rider.cellX}:${rider.cellZ}`
+    assert.notEqual(here, '1:-16', 'they never step onto the stall after leaving the car')
+    if (
+      (previous === '2:-16' && here === '1:-16') ||
+      (previous === '1:-16' && here === '2:-16')
+    ) {
+      bounced += 1
+    }
+    previous = here
+  }
+  assert.equal(bounced, 0, 'they do not oscillate between sidewalk and stall')
+  assert.ok(
+    distToSnack() < startDist || rider.cellX !== 2 || rider.cellZ !== -16,
+    'they walk away toward a real destination instead of spinning on the exit tile',
+  )
 
   assert.deepEqual(
     chooseParkingDisembarkPath(
@@ -1365,6 +1413,75 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.equal(zebraCar.state,'parked')
   assert.equal(zebraRider.cellX, 2, 'a sidewalk beats a zebra on the approach road')
   assert.equal(zebraRider.cellZ, -16)
+  for (let n = 0; n < 20; n += 1) crossing.tick(0.1)
+  assert.notEqual(
+    `${zebraRider.cellX}:${zebraRider.cellZ}`,
+    '1:-16',
+    'a zebra next to the bay does not pull them back onto the stall',
+  )
+  assert.notEqual(zebraRider.state, 'vehicle-arrival')
+
+  const depart=fixture(0), departState=depart.snapshot as GameSnapshot
+  depart.addDebugMoney()
+  const departEdge=-departState.scenario.worldSize/2
+  for (let z=departEdge+1; z<=-16; z+=1) {
+    if (!departState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(depart.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  assert.ok(depart.designateParkingArea([{x:1,z:-16}]).ok)
+  const firstLeaver=(depart as any).spawnVisitorMember('day','depart-group','car',true)
+  const secondLeaver=(depart as any).spawnVisitorMember('day','depart-group','car',true)
+  assert.ok(firstLeaver && secondLeaver)
+  departState.logistics.parkingCells[0]!.occupiedBy='depart-car'
+  const departCar={
+    id:'depart-car',kind:'visitorCar' as const,position:{x:1,z:-16},cell:null,
+    route:[],state:'parked' as const,speed:10,passengerIds:[] as string[],groupId:'depart-group',
+    parkingCell:{x:1,z:-16},target:{kind:'parking' as const,parkingCell:{x:1,z:-16}},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  departState.logistics.arrivalGroups.push({
+    id:'depart-group',memberIds:[firstLeaver.id,secondLeaver.id],vehicleId:departCar.id,mode:'car',state:'arrived',
+    arrivedMinute:0,parkingWaitMinutes:0,entryFeesPaid:true,
+  })
+  departState.logistics.roadVehicles.push(departCar)
+  Object.assign(firstLeaver, {
+    state:'leaving', targetId:departCar.id, cellX:2, cellZ:-16, cellElevation:0,
+    x:2.5, z:-15.5, route:[],
+  })
+  Object.assign(secondLeaver, {
+    state:'leaving', targetId:departCar.id, cellX:2, cellZ:-20, cellElevation:0,
+    x:2.5, z:-19.5, route:[],
+  })
+  assert.ok(
+    (depart as any).isVisitorAtParkedCarDoor(firstLeaver, departCar),
+    'leavers can board from the sidewalk next to the stall',
+  )
+  assert.ok((depart as any).tryBoardDepartureCar(firstLeaver), 'the first leaver sits down from the Gehweg')
+  assert.deepEqual(departCar.passengerIds, [firstLeaver.id])
+  assert.equal(firstLeaver.state, 'leaving', 'departure waiters stay leaving, not a leftover arrival')
+  assert.ok(
+    (depart as any).isVisitorSeatedInVehicle(
+      firstLeaver,
+      collectSeatedPassengerIds(departState.logistics.roadVehicles),
+    ),
+    'the first leaver is seated until the rest of the group arrives',
+  )
+  for (let n = 0; n < 8; n += 1) (depart as any).updateLogistics(1)
+  ;(depart as any).walkVisitors(0.2)
+  assert.equal(departCar.state, 'parked', 'the car waits for the rest of the group')
+  assert.deepEqual(departCar.passengerIds, [firstLeaver.id], 'the first leaver is not unloaded while waiting')
+  assert.equal(firstLeaver.state, 'leaving')
+  Object.assign(secondLeaver, {
+    cellX:2, cellZ:-16, cellElevation:0, x:2.5, z:-15.5, route:[],
+    state:'leaving', targetId:departCar.id,
+  })
+  assert.ok((depart as any).tryBoardDepartureCar(secondLeaver), 'the second member also boards from the sidewalk')
+  assert.ok(departCar.passengerIds.includes(firstLeaver.id))
+  assert.ok(departCar.passengerIds.includes(secondLeaver.id))
+  for (let n = 0; n < 8 && departCar.state === 'parked'; n += 1) {
+    (depart as any).updateLogistics(1)
+  }
+  assert.notEqual(departCar.state, 'parked', 'once the group is seated the car drives off')
 
   const cabin=fixture(0), cabinState=cabin.snapshot as GameSnapshot
   cabin.addDebugMoney()
@@ -1445,6 +1562,126 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   ;(cabin as any).updateLogistics(0.2)
   rng.next = previousNext
   assert.equal(riderInCar.state, 'injured', 'once they have disembarked they can be injured on the road')
+
+  const debugCars = fixture(0)
+  debugCars.addDebugMoney()
+  const debugState = debugCars.snapshot as GameSnapshot
+  const debugEdge = -debugState.scenario.worldSize / 2
+  for (let z = debugEdge + 1; z <= -16; z += 1) {
+    if (!debugState.logistics.roadCells.some((cell) => cell.x === 0 && cell.z === z)) {
+      assert.ok(debugCars.designateRoad([{ x: 0, z }]).ok)
+    }
+  }
+  assert.ok(debugCars.designateParkingArea([{ x: 1, z: -16 }]).ok)
+  const seatedRider = (debugCars as any).spawnVisitorMember(
+    'day',
+    'debug-car-group',
+    'car',
+    true,
+  )
+  const walker = (debugCars as any).spawnVisitorMember(
+    'day',
+    'debug-walk-group',
+    'car',
+    false,
+  )
+  assert.ok(seatedRider && walker)
+  seatedRider.state = 'vehicle-arrival'
+  walker.arrivalMode = 'car'
+  walker.arrivalGroupId = 'debug-walk-group'
+  walker.state = 'exploring'
+  const debugBay = debugState.logistics.parkingCells[0]!
+  debugBay.occupiedBy = 'debug-parked-car'
+  const parkedDebugCar = {
+    id: 'debug-parked-car',
+    kind: 'visitorCar' as const,
+    position: { x: 1, z: -16 },
+    cell: null,
+    route: [],
+    state: 'parked' as const,
+    speed: 0,
+    passengerIds: [seatedRider.id],
+    groupId: 'debug-car-group',
+    parkingCell: { x: 1, z: -16 },
+    target: { kind: 'parking' as const, parkingCell: { x: 1, z: -16 } },
+    facing: 0,
+    waitMinutes: 0,
+    resumeState: null,
+    lineId: null,
+    nextStopIndex: 0,
+    cargo: 0,
+  }
+  const drivingDebugCar = {
+    id: 'debug-driving-car',
+    kind: 'visitorCar' as const,
+    position: { x: 0, z: -18 },
+    cell: { x: 0, z: -18 },
+    route: [{ x: 0, z: -17 }],
+    state: 'driving' as const,
+    speed: 10,
+    passengerIds: [],
+    groupId: null,
+    parkingCell: null,
+    target: { kind: 'cruise' as const },
+    facing: 0,
+    waitMinutes: 0,
+    resumeState: null,
+    lineId: null,
+    nextStopIndex: 0,
+    cargo: 0,
+  }
+  debugState.logistics.arrivalGroups.push(
+    {
+      id: 'debug-car-group',
+      memberIds: [seatedRider.id],
+      vehicleId: parkedDebugCar.id,
+      mode: 'car',
+      state: 'arrived',
+      arrivedMinute: 0,
+      parkingWaitMinutes: 0,
+      entryFeesPaid: true,
+    },
+    {
+      id: 'debug-walk-group',
+      memberIds: [walker.id],
+      vehicleId: null,
+      mode: 'car',
+      state: 'arrived',
+      arrivedMinute: 0,
+      parkingWaitMinutes: 0,
+      entryFeesPaid: true,
+    },
+  )
+  debugState.logistics.roadVehicles.push(parkedDebugCar, drivingDebugCar)
+  const debugRemoved = debugCars.removeVisitorCarsForDebug()
+  assert.ok(debugRemoved.ok, debugRemoved.message)
+  assert.equal(
+    debugState.logistics.roadVehicles.some((vehicle) => vehicle.kind === 'visitorCar'),
+    false,
+    'debug remove deletes every visitor car',
+  )
+  assert.equal(debugBay.occupiedBy, null, 'debug remove frees parking occupancy')
+  assert.equal(
+    debugState.logistics.arrivalGroups.some((group) => group.mode === 'car'),
+    false,
+  )
+  assert.deepEqual(
+    [...collectSeatedPassengerIds(debugState.logistics.roadVehicles)],
+    [],
+    'no passenger stays listed on a vehicle',
+  )
+  assert.notEqual(seatedRider.state, 'vehicle-arrival', 'seated guests are put on foot')
+  assert.notEqual(seatedRider.cellX, 1, 'they leave the stall instead of standing in the bay')
+  assert.equal(seatedRider.arrivalMode, 'pedestrian')
+  assert.equal(walker.arrivalMode, 'pedestrian')
+  debugState.scenario.carArrivalShare = 0
+  for (let n = 0; n < 8; n += 1) debugCars.tick(0.1)
+  assert.equal(
+    debugState.logistics.roadVehicles.some((vehicle) => vehicle.kind === 'visitorCar'),
+    false,
+    'removed cars do not come back on the next ticks',
+  )
+  assert.equal(debugBay.occupiedBy, null)
 
   const sweepGame=fixture(0)
   sweepGame.addDebugMoney()
@@ -1920,6 +2157,107 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.ok(repaired.place('food', 10, -16).ok)
   assert.equal(repaired.snapshot.logistics.parkingCells.length, 0)
   assert.equal(repaired.snapshot.medicalCells.length, 0)
+
+  const wasteGuest = (game: GameState, z: number) => {
+    const guest = game.snapshot.visitors[0]!
+    Object.assign(guest, {
+      state: 'exploring',
+      route: [],
+      targetId: null,
+      cellX: 3,
+      cellZ: z,
+      cellElevation: 0,
+      x: 3.5,
+      z: z + 0.5,
+      pendingWaste: 0,
+    })
+    return guest
+  }
+  const packedBinGame = fixture(1)
+  packedBinGame.addDebugMoney()
+  const packedGuest = wasteGuest(packedBinGame, -20)
+  assert.ok(packedBinGame.place('wasteBin', 3, -20).ok)
+  const packedBin = packedBinGame.snapshot.buildings.find((building) => building.kind === 'wasteBin')!
+  packedBin.wasteFill = SIMULATION_CONFIG.waste.binCapacity
+  const litterBefore = packedBinGame.snapshot.incidents.filter((incident) => incident.kind === 'litter').length
+  ;(packedBinGame as any).giveWaste(packedGuest, 1)
+  assert.equal(packedGuest.pendingWaste, 0, 'a full nearby bin makes guests drop litter immediately')
+  assert.ok(
+    packedBinGame.snapshot.incidents.some(
+      (incident) =>
+        incident.kind === 'litter' &&
+        incident.x === packedGuest.cellX &&
+        incident.z === packedGuest.cellZ,
+    ),
+    'dropped waste becomes ground litter on the current cell',
+  )
+  assert.ok(
+    packedBinGame.snapshot.incidents.filter((incident) => incident.kind === 'litter').length > litterBefore,
+  )
+  assert.notEqual(packedGuest.state, 'seeking', 'they do not keep seeking a full bin')
+  assert.equal(packedGuest.targetId, null)
+  for (let i = 0; i < 8; i++) packedBinGame.tick(0.1)
+  assert.equal(packedGuest.pendingWaste, 0)
+  assert.ok(
+    packedGuest.route.length > 0 ||
+      packedGuest.state === 'relaxing' ||
+      packedGuest.state === 'partying' ||
+      packedGuest.state === 'bench-resting' ||
+      packedGuest.state === 'seeking',
+    'after dropping they take another action instead of standing idle',
+  )
+  if (packedGuest.state === 'seeking') {
+    assert.notEqual(packedGuest.targetId, packedBin.id, 'they do not wait at the full bin')
+    assert.ok(packedGuest.route.length > 0, 'a later seek has a real route')
+  }
+
+  const emptyBinGame = fixture(1)
+  emptyBinGame.addDebugMoney()
+  const emptyGuest = wasteGuest(emptyBinGame, -18)
+  assert.ok(emptyBinGame.place('wasteBin', 3, -16).ok)
+  const emptyBin = emptyBinGame.snapshot.buildings.find((building) => building.kind === 'wasteBin')!
+  emptyBin.wasteFill = 0
+  const emptyLitter = emptyBinGame.snapshot.incidents.filter((incident) => incident.kind === 'litter').length
+  ;(emptyBinGame as any).giveWaste(emptyGuest, 1)
+  assert.equal(emptyGuest.pendingWaste, 1, 'guests keep waste while walking to a bin with space')
+  assert.equal(emptyGuest.targetId, emptyBin.id)
+  assert.ok(emptyGuest.route.length > 0, 'they route to the empty bin')
+  assert.equal(
+    emptyBinGame.snapshot.incidents.filter((incident) => incident.kind === 'litter').length,
+    emptyLitter,
+    'an empty nearby bin is used instead of dropping litter',
+  )
+  for (let i = 0; i < 40; i++) emptyBinGame.tick(0.1)
+  assert.equal(emptyGuest.pendingWaste, 0)
+  assert.ok((emptyBin.wasteFill ?? 0) >= 1, 'the empty bin receives the waste')
+  assert.equal(
+    emptyBinGame.snapshot.incidents.filter((incident) => incident.kind === 'litter').length,
+    emptyLitter,
+    'using a bin with space does not spawn litter',
+  )
+
+  const huntGame = fixture(1)
+  huntGame.addDebugMoney()
+  const huntGuest = wasteGuest(huntGame, -20)
+  assert.ok(huntGame.place('wasteBin', 3, -20).ok)
+  assert.ok(huntGame.place('wasteBin', 3, -14).ok)
+  const nearFull = huntGame.snapshot.buildings.find(
+    (building) => building.kind === 'wasteBin' && building.z === -20,
+  )!
+  const farEmpty = huntGame.snapshot.buildings.find(
+    (building) => building.kind === 'wasteBin' && building.z === -14,
+  )!
+  nearFull.wasteFill = SIMULATION_CONFIG.waste.binCapacity
+  farEmpty.wasteFill = 0
+  ;(huntGame as any).giveWaste(huntGuest, 1)
+  assert.equal(huntGuest.pendingWaste, 0, 'a full local bin is not skipped to hunt a farther one')
+  assert.notEqual(huntGuest.targetId, farEmpty.id)
+  assert.equal(farEmpty.wasteFill, 0)
+  assert.ok(
+    huntGame.snapshot.incidents.some(
+      (incident) => incident.kind === 'litter' && incident.x === 3 && incident.z === -20,
+    ),
+  )
 
   console.log('PASS planned festival start, stand clearance, staff gates, automatic depot delivery, stock conservation and cleaning chain')
 }

@@ -9,7 +9,7 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Übelkeit, Incident-Spawn | `src/game/incidents.ts` | `IncidentSystem`, `GroundIncident` |
-| Müllablagen, Eimer | `src/game/waste.ts` | `WasteDumpCell`, `findNearestWasteBin`, `connectedWasteDumpStats`, `acceptWasteAtDump`, `parkWasteDumpFill` |
+| Müllablagen, Eimer | `src/game/waste.ts` | `WasteDumpCell`, `findNearestWasteBin`, `findNearestWasteBinInRange`, `wasteBinHasRoom`, `connectedWasteDumpStats`, `acceptWasteAtDump`, `parkWasteDumpFill` |
 | Meldungs-Ticker | `src/game/ticker.ts`, `src/tickerUI.ts` | `observeTickerEvents`, `mountTickerUI` |
 | Debug-Räumung | `src/game/GameState.ts` | `clearWasteForDebug` |
 | Feuerwerk (Sim) | `src/game/fireworks.ts` | `FireworksSystem` |
@@ -48,6 +48,12 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
 - Müllwegentscheidungen aus direkten Interaktions-/Abbau-Callbacks teilen das
   Besucherbudget. Bis zur Bearbeitung bleibt `pendingWaste` erhalten; bereits
   laufende Wege zum Eimer werden nicht bei jeder Abreiseprüfung neu gesucht.
+  Ist der nächste Eimer in `waste.binRange` voll (`visitorDropIfBinFull`)
+  oder gibt es keinen begehbaren Eimer mit Platz, wird der Müll lokal als
+  `litter` fallen gelassen; Gäste warten nicht auf einen vollen Eimer und
+  suchen keinen weiter entfernten. Eimer mit Platz werden weiter benutzt.
+  Die Eimerliste wird einmal pro Tick gebaut, nicht je Besucher über alle
+  Gebäude.
 - Mülleimer zeigen `wasteFill` nur über grob gestufte Kartons am Boden
   (0 / 1 / 2 / 3 / 4 bei 0, 1–3, 4–6, 7–9, 10–12). Kein Balken.
   `WasteView` batched Tiles, Ablage-Säcke und Kartons.
@@ -83,7 +89,9 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
 
 `tests/performanceGuards.ts` (Debug-Cleanup). `tests/operations.ts`
 (Eimer-Priorität: voll vor halbvoll/Litter, idle leert halbvolle Eimer,
-Litter vor kaum gefüllten Eimern; Verletzte an den nächsten freien
+Litter vor kaum gefüllten Eimern; voller Nachbar-Eimer: Gäste lassen
+Müll fallen statt stehen zu bleiben, leerer Eimer wird benutzt;
+Verletzte an den nächsten freien
 Sanitäter bzw. Krankenwagen).
 Festival-Zusätze: `tests/festivalAdditions.ts` (Eimer-Kartonzahl und
 Batch-Grenze, zusammenhängende Ablage-Füllstände, Müllwagen-Ladung
@@ -95,5 +103,5 @@ verletzte Insassen noch im Fahrzeug).
 ## Bei Änderungen dieses Dokument
 
 Aktualisieren, wenn Incident-Arten, Müllkapazitäten, Ticker-Regeln, Eimer-Darstellung,
-Reinigungs-Eimer-Priorität, Verletzten-Zuweisung, Panikformeln oder Pyro-Trigger ändern.
+Reinigungs-Eimer-Priorität, Gäste-Müll-bei-vollem-Eimer, Verletzten-Zuweisung, Panikformeln oder Pyro-Trigger ändern.
 Bühnen-Pyro zusätzlich in `docs/stages.md`. Sanitäter/Krankenwagen in `docs/staff.md`.

@@ -9,7 +9,8 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Straßengraph, Fahrzeuge, Ankunft | `src/game/logistics.ts` | `LogisticsSnapshot`, `findRoadRoute`, `RoadVehicle`; `RoadCell.elevation` / `roadSlope` |
-| Aussteigen am Parkplatz | `src/game/logistics.ts`, `src/game/GameState.ts` | `chooseParkingDisembarkPath`, `finishVehicleParking`, `collectSeatedPassengerIds` |
+| Aussteigen am Parkplatz | `src/game/logistics.ts`, `src/game/GameState.ts` | `chooseParkingDisembarkPath`, `finishVehicleParking`, `collectSeatedPassengerIds`, `tryBoardDepartureCar`, `canParkedCarDepart` |
+| Debug: Autos entfernen | `src/game/GameState.ts`, `src/main.ts` | `removeVisitorCarsForDebug` — alle `visitorCar`, Belegung, Insassen zu Fuß; nicht Abriss |
 | Straßenrampen | `src/game/GameState.ts`, `src/game/wayElevation.ts` | `placeRoadSegment`, Autodach `MAX_ROAD_RAISE` 1, Shift-Ausgang `planLockedOriginRamp` |
 | Saugreiniger | `src/game/GameState.ts` | `isSweeperDriveCell`, `findSweeperRoute`, `updateSweeper`, `getSweeperDirtAccesses` |
 | Krankenwagen-Einsatz | `src/game/GameState.ts` | `dispatchIdleAmbulances` — nächster freier Wagen zum Verletzten |
@@ -102,8 +103,21 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   Bis dahin zählen Insassen (`passengerIds`) nicht als Fußgänger auf
   der Fahrbahn: sie laufen nicht, belegen die Straße nicht, werden
   nicht verletzt und ziehen keinen Sanitäter/Ticker. Nach dem
-  Einparken steigen Anreise-Insassen trotzdem aus; das Auto fährt
-  nicht sofort wieder ab, nur weil sie noch `vehicle-arrival` wären.
+  Einparken steigen Anreise-Insassen trotzdem aus (`placeVisitorOnDisembarkCell`
+  auf die Fuß-Zelle, dann Zielwahl, dann `keepDisembarkRouteOnFoot`).
+  Parkbuchten ohne Weg (`NAV_PARKING` ohne `NAV_PATH`) sind keine
+  Fußgänger-Kanten, damit niemand zwischen Stellplatz und Gehweg oszilliert.
+  Debug **Autos entfernen** (`removeVisitorCarsForDebug`) löscht zuerst alle
+  `visitorCar` und `occupiedBy`, dann setzt Insassen (`vehicle-arrival` /
+  `passengerIds`) auf den Ausstiegsweg und schickt sie zu Fuß heim.
+  Solange das Auto noch existiert, gilt ein Insasse als im Fahrzeug
+  (`isVisitorInDepartureVehicle`) — deshalb darf die Abreise nicht vor dem
+  Löschen laufen, sonst bleiben die Wagen stehen. Bus, Krankenwagen,
+  Müllwagen und Saugreiniger bleiben. Abriss trifft weiter keine Autos.
+  Das Auto fährt nicht sofort wieder ab, nur weil sie noch `vehicle-arrival`
+  wären. Abreisende steigen vom Nachbarweg wieder ein, bleiben `leaving`
+  im Auto und warten auf die Gruppe (`canParkedCarDepart`); Anreise und
+  Abfahrt sind getrennt.
 - Personaltore sperren die Kachel für Besucher, nicht für Personal,
   Saugroboter oder Waren-Träger. Lastwagen nutzen das Straßennetz und
   fahren nicht durch Personaleingänge.
@@ -235,7 +249,10 @@ und hinter der Karte erhalten, Wiedereinfahrt sobald Einstiege frei
 sind, Rückfahrt vom Ausgang, Buden-Nachschub von der Seite/hinten,
 Personaleingang auf der Kante, Parkplatz-Abriss inkl. Restbelegung,
 Aussteigen auf den angrenzenden Fußweg bzw. Zufahrts-Fallback,
-Insassen erst nach dem Aussteigen aktiv / verletzbar).
+laufen ohne Parkbucht-Jitter zum Ziel, Zebrastreifen neben der Bucht,
+Abreise wartet im Auto auf die Gruppe (Einstieg vom Gehweg),
+Insassen erst nach dem Aussteigen aktiv / verletzbar,
+Debug Autos entfernen löscht Wagen und Belegung).
 `tests/accessControl.ts` (Ampel/Schranke, Slots, Tageszeit, Festivalphase, Zeitplan, Sensor, Halt vor Rot,
 opportunistisches Parken inkl. Einbahn-Nebenbucht, Trennlinie,
 Liefer- und Müllwagen-Umweg bei Dauer-Rot, Gebiet).
