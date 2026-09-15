@@ -106,7 +106,7 @@ export function testAccessControl(fixture: (count?: number) => GameState): void 
   assert.equal(findRoadRoute({ roadCells: junction, start: junction[0]!, target: junction[1]! }), null,
     'an undirected junction cannot enter an incoming one-way branch backwards, even as its goal')
   assert.ok(findRoadRoute({ roadCells: junction, start: junction[1]!, target: junction[2]! }))
-  assert.ok(!createRoadGraph(junction).neighbors.get('0:0')?.some(cell => cell.x === 1))
+  assert.ok(!createRoadGraph(junction).neighbors.get('0:0:0')?.some(cell => cell.x === 1))
   const lights = fixture(0)
   const lightState = lights.snapshot as GameSnapshot
   lights.addDebugMoney()

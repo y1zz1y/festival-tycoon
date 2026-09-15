@@ -2,7 +2,7 @@ import type { WayType } from '../game/wayTypes'
 import type { BuildingKind, Tool } from '../game/catalog'
 import type { ActionResult, PlacedBuilding } from '../game/GameState'
 import type { TerrainEditMode } from '../game/terrain'
-import type { Direction, RoadPosition, SpeedLimit } from '../game/logistics'
+import type { Direction, RoadCell, RoadPosition, SpeedLimit } from '../game/logistics'
 import type {
   AccessControlMode,
   AccessPolarity,
@@ -46,7 +46,23 @@ type GameCommandAction =
       wayType?: WayType
       pathType: 'normal' | 'queue'
       queueDirection: number
-      slope: -1 | 0 | 1
+      slope: number
+    }
+  | {
+      type: 'placeRoad'
+      x: number
+      z: number
+      elevation: number
+      slope: number
+      slopeDirection: number
+      wayType?: WayType
+    }
+  | {
+      type: 'undoRoad'
+      x: number
+      z: number
+      previousRoad?: RoadCell
+      elevation?: number
     }
   | {
       type: 'undoPath'
@@ -103,6 +119,7 @@ type GameCommandAction =
   | { type: 'fireStaff'; role: StaffRole }
   | { type: 'fireStaffMember'; staffId: string }
   | { type: 'toggleStaffZone'; staffId: string; key: string }
+  | { type: 'setStaffZone'; staffId: string; key: string; active: boolean }
   | { type: 'buyAmbulance'; garageId: string }
   | { type: 'buyBus'; depotId: string }
   | { type: 'sellBus'; depotId: string }
@@ -130,6 +147,7 @@ type GameCommandAction =
     }
   | { type: 'undoCoasterPiece'; coasterId: string }
   | { type: 'deleteCoasterPiece'; coasterId: string; pieceIndex: number }
+  | { type: 'removeCoaster'; coasterId: string }
   | {
       type: 'setCoasterAccess'
       coasterId: string

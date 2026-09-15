@@ -12,6 +12,7 @@ import type { Environment } from './game/environments'
 import { mountLogisticsUI } from './logisticsUI'
 import './style.css'
 import { mountFestivalUI } from './festivalUI'
+import { mountTickerUI } from './tickerUI'
 import { AUDIENCE_NAMES, SUPPLIES } from './game/festivalManagement'
 import type { Supply } from './game/festivalManagement'
 import {
@@ -66,11 +67,20 @@ import {
   type AccessScheduleTime,
 } from './game/accessControl'
 import type { PlacedBuilding } from './game/GameState'
+import type { RoadCell } from './game/logistics'
 import {
   describeRoadVehicleActivity,
   describeRoadVehicleDestination,
+  formatRoadVehicleInspectLoad,
   ROAD_VEHICLE_KIND_LABELS,
 } from './game/logistics'
+import {
+  connectedWasteDumpStats,
+  formatWasteDumpAreaHover,
+  formatWasteDumpAreaInspect,
+  parseWasteDumpId,
+  wasteDumpId,
+} from './game/waste'
 import { groupVisitorsByThought } from './game/visitorThoughts'
 import { enableMultiplayerCommands } from './net/bind'
 import { MultiplayerSession } from './net/session'
@@ -98,6 +108,10 @@ import {
   COMPLAINT_LABELS,
   COMPLAINT_TOPICS,
 } from './game/complaints'
+import {
+  lockShiftElevationOrigin,
+  planLockedOriginRamp,
+} from './game/wayElevation'
 import { WorldView } from './view/WorldView'
 import type { CellPosition, PathAnchor } from './view/WorldView'
 import { isTextEntryTarget } from './uiFocus'
@@ -164,6 +178,7 @@ app.innerHTML = `
         <button id="open-complaints" type="button" title="Beschwerden" aria-label="Beschwerden" aria-expanded="false">📣</button>
         <button id="open-visitors" type="button" title="Besucher" aria-label="Besucher" aria-expanded="false">👥</button>
         <button id="toggle-staff-menu" type="button" title="Personal" aria-label="Personal" aria-expanded="false">🧑‍💼</button>
+        <button id="toggle-ticker" type="button" title="Meldungen" aria-label="Meldungen" aria-expanded="false">📢</button>
         <button id="toggle-multiplayer" type="button" title="Mehrspieler" aria-label="Mehrspieler" aria-expanded="false">🌐</button>
       </div>
       <div class="rct-group" aria-label="Kartenansichten">
@@ -346,9 +361,9 @@ app.innerHTML = `
       <section class="rct-editor-section rct-path-advanced">
         <label>Neigung</label>
         <div class="path-slope-grid">
-          <button data-slope="-1" class="path-slope-tile" title="Abwärts"><span class="path-ramp path-ramp-down">↘</span><small>Runter</small></button>
+          <button data-slope="-0.5" class="path-slope-tile" title="Abwärts um eine halbe Stufe"><span class="path-ramp path-ramp-down">↘</span><small>Runter</small></button>
           <button data-slope="0" class="path-slope-tile active" title="Ebener Weg"><span class="path-ramp path-ramp-flat">→</span><small>Flach</small></button>
-          <button data-slope="1" class="path-slope-tile" title="Aufwärts"><span class="path-ramp path-ramp-up">↗</span><small>Hoch</small></button>
+          <button data-slope="0.5" class="path-slope-tile" title="Aufwärts um eine halbe Stufe"><span class="path-ramp path-ramp-up">↗</span><small>Hoch</small></button>
         </div>
       </section>
       <div class="path-cost-row">
@@ -438,6 +453,7 @@ app.innerHTML = `
         <button id="place-coaster-entrance" disabled>🚪 Eingang</button>
         <button id="place-coaster-exit" disabled>🚶 Ausgang</button>
       </div>
+      <button id="demolish-coaster-construction" class="demolish-coaster" type="button" hidden>🚜 Achterbahn abreißen</button>
     </aside>
     <section class="time-controls panel" aria-label="Zeitsteuerung">
       <button data-speed="0" title="Pause">❚❚</button>
@@ -545,6 +561,7 @@ app.innerHTML = `
             <button id="recall-train">↩ Wagen zurückholen</button>
             <button id="edit-coaster-track">🛠 Strecke bearbeiten</button>
           </div>
+          <button id="demolish-coaster" class="demolish-coaster" type="button">🚜 Achterbahn abreißen</button>
           <label for="dispatch-mode">Abfahrt</label>
           <select id="dispatch-mode">
             <option value="full-or-timed">Voll oder nach Wartezeit</option>
@@ -1073,6 +1090,9 @@ const coasterBuildButton = requireElement<HTMLButtonElement>('#coaster-build-pie
 const coasterUndoButton = requireElement<HTMLButtonElement>('#coaster-undo')
 const coasterEntranceButton = requireElement<HTMLButtonElement>('#place-coaster-entrance')
 const coasterExitButton = requireElement<HTMLButtonElement>('#place-coaster-exit')
+const demolishCoasterConstructionButton = requireElement<HTMLButtonElement>(
+  '#demolish-coaster-construction',
+)
 const chainLiftInput = requireElement<HTMLInputElement>('#chain-lift')
 const chainLiftButton = requireElement<HTMLButtonElement>('#toggle-chain-lift')
 const trackPreviousButton = requireElement<HTMLButtonElement>('#track-previous')
@@ -1268,13 +1288,17 @@ let roadEditorOpen = false
 let pathEditorActive = false
 let pathDemolishActive = false
 let pathAnchor: PathAnchor | null = null
+let shiftElevationHeld = false
+let shiftElevationOrigin: PathAnchor | null = null
+let lastShiftPaintKey = ''
 let pathDirection = 0
-let pathSlope: -1 | 0 | 1 = 0
+let pathSlope = 0
 let pathConstructionType: 'normal' | 'queue' = 'normal'
 let pathHistory: Array<{
   from: PathAnchor
   to: PathAnchor
   previousPath?: PlacedBuilding
+  previousRoad?: RoadCell
   roadExisted?: boolean
 }> = []
 let dragPathStart: CellPosition | null = null
@@ -1290,7 +1314,7 @@ let coasterEditIndex = -1
 let coasterAccessMode: 'entrance' | 'exit' | null = null
 let coasterTargetPitch = 0
 let coasterTargetBank = 0
-let selectedEntity: { type: 'building' | 'coaster' | 'vehicle' | 'access' | 'depot'; id: string } | null = null
+let selectedEntity: { type: 'building' | 'coaster' | 'vehicle' | 'access' | 'depot' | 'wasteDump'; id: string } | null = null
 let logisticsOverlayVisible = false
 let accessAreaDrawing = false
 let entityTab: 'overview' | 'dynamics' = 'overview'
@@ -1308,6 +1332,10 @@ try {
     (cell) => {
       hoveredCell = cell
       updateRideAccessPreview(cell)
+      if (shiftElevationApplies()) {
+        beginShiftElevationLock(cell)
+        previewShiftElevation(cell)
+      }
       updateContextHelp()
     },
     (visitorId) => selectVisitor(visitorId),
@@ -1353,6 +1381,9 @@ try {
 const supplyPlanner = mountLogisticsUI(() => game, view, showToast)
 view.setPlacementValidator((kind, x, z, slot) => game.canPlace(kind, x, z, slot).ok)
 const staffDetails = mountStaffDetails(() => game, view, showToast, () => supplyPlanner.releaseTool())
+const tickerUI = mountTickerUI({
+  focusWorld: (x, z) => view.focusWorldPosition(x, z),
+})
 const walkModeButton = requireElement<HTMLButtonElement>('#toggle-walk-mode')
 const walkHud = requireElement<HTMLElement>('#walk-hud')
 const walkStick = requireElement<HTMLElement>('#walk-stick')
@@ -1469,6 +1500,7 @@ function bindGameState(nextGame: GameState): void {
   enableMultiplayerCommands(game)
   multiplayer.attach(game)
   view.invalidate()
+  tickerUI.reset()
   unsubscribe = game.subscribe((snapshot) => {
     const stageTool = document.querySelector<HTMLElement>('[data-tool="stage"] em')
     const template = snapshot.festival.stageTemplates?.find(t=>t.name===snapshot.festival.selectedStageTemplate)
@@ -1478,6 +1510,7 @@ function bindGameState(nextGame: GameState): void {
     festivalUI.update(snapshot)
     supplyPlanner.update(snapshot)
     staffDetails.update(snapshot)
+    tickerUI.update(snapshot)
     money.textContent = formatMoney(snapshot.money)
     guests.textContent = snapshot.guests.toLocaleString('de-DE')
     reputation.textContent = `${snapshot.reputation}%`
@@ -2141,13 +2174,25 @@ function handleCellClick(cell: CellPosition): void {
     return
   }
 
+  if (shiftElevationApplies() && shiftElevationHeld && shiftElevationOrigin) {
+    applyShiftElevationPaint(cell)
+    return
+  }
+
   if (pathEditorActive) {
     if (roadEditorOpen) {
       const existing = game.getRoadCellAt(cell.x, cell.z)
       const result = existing ? { ok: true, message: 'Startpunkt gewählt' } : buildRoadCell(cell)
       if (result.ok) {
-        pathAnchor = { x: cell.x, z: cell.z, elevation: game.getTerrainHeight(cell.x, cell.z) }
+        pathAnchor = {
+          x: cell.x,
+          z: cell.z,
+          elevation: existing?.elevation ?? game.getTerrainHeight(cell.x, cell.z),
+        }
         pathHistory = []
+        if (shiftElevationHeld) {
+          shiftElevationOrigin = lockShiftElevationOrigin(shiftElevationOrigin, pathAnchor)
+        }
         updatePathEditor()
       }
       showToast(result.message, !result.ok)
@@ -2159,6 +2204,9 @@ function handleCellClick(cell: CellPosition): void {
     if (path) {
       pathAnchor = { x: path.x, z: path.z, elevation: path.elevation }
       pathHistory = []
+      if (shiftElevationHeld) {
+        shiftElevationOrigin = lockShiftElevationOrigin(shiftElevationOrigin, pathAnchor)
+      }
       updatePathEditor()
       showToast('Startpunkt gewählt')
       return
@@ -2190,6 +2238,9 @@ function handleCellClick(cell: CellPosition): void {
     }
     pathAnchor = { x: cell.x, z: cell.z, elevation }
     pathHistory = []
+    if (shiftElevationHeld) {
+      shiftElevationOrigin = lockShiftElevationOrigin(shiftElevationOrigin, pathAnchor)
+    }
     updatePathEditor()
     showToast(result.message)
     return
@@ -2227,6 +2278,7 @@ function handleCellClick(cell: CellPosition): void {
     else if (building) openEntityInfoForBuilding(building.id)
     else if (depot) openEntityInfoForDepot(depot.id)
     else if (game.getCampingCellAt(cell.x, cell.z)) showToast('Ausgewiesener Zeltbereich')
+    else if (game.getWasteDumpAt(cell.x, cell.z)) openEntityInfoForWasteDump(cell.x, cell.z)
     else {
       const height = game.getTerrainHeight(cell.x, cell.z)
       const label =
@@ -2745,10 +2797,14 @@ function getIsoDirectionIcon(direction: number): string {
 
 function demolishPathAt(cell: CellPosition, quiet = false): boolean {
   if (roadEditorOpen) {
-    if (!game.getRoadCellAt(cell.x, cell.z)) return false
+    const hasRoad = Boolean(game.getRoadCellAt(cell.x, cell.z))
+    const hasParking = game.snapshot.logistics.parkingCells.some(
+      (parking) => parking.x === cell.x && parking.z === cell.z,
+    )
+    if (!hasRoad && !hasParking) return false
     const result = game.bulldoze(cell.x, cell.z)
     if (!quiet) showToast(result.message, !result.ok)
-    if (result.ok) { pathAnchor = null; pathHistory = []; updatePathEditor() }
+    if (result.ok) { pathAnchor = null; clearShiftElevationOrigin(); pathHistory = []; updatePathEditor() }
     return result.ok
   }
   const path =
@@ -2761,6 +2817,7 @@ function demolishPathAt(cell: CellPosition, quiet = false): boolean {
   const result = game.bulldoze(path.x, path.z, path.id)
   if (pathAnchor && pathAnchor.x === path.x && pathAnchor.z === path.z) {
     pathAnchor = null
+    clearShiftElevationOrigin()
     pathHistory = []
     updatePathEditor()
   }
@@ -2774,9 +2831,129 @@ function resumePathPlacement(): void {
   game.setTool(roadEditorOpen ? 'road' : 'path')
 }
 
+function shiftElevationApplies(): boolean {
+  return pathEditorActive && !pathDemolishActive
+}
+
+function resolveWayElevationAnchor(cell: CellPosition): PathAnchor {
+  if (roadEditorOpen) {
+    const road = game.getRoadCellAt(cell.x, cell.z)
+    return {
+      x: cell.x,
+      z: cell.z,
+      elevation: road?.elevation ?? game.getTerrainHeight(cell.x, cell.z),
+    }
+  }
+  const path =
+    game.getPathAt(cell.x, cell.z, game.snapshot.buildElevation) ??
+    game.getPathAt(cell.x, cell.z)
+  return {
+    x: cell.x,
+    z: cell.z,
+    elevation: path?.elevation ?? game.snapshot.buildElevation,
+  }
+}
+
+function beginShiftElevationLock(cell?: CellPosition | null): void {
+  if (!shiftElevationApplies() || !shiftElevationHeld || shiftElevationOrigin) return
+  const candidate = pathAnchor ?? (cell ? resolveWayElevationAnchor(cell) : null)
+  shiftElevationOrigin = lockShiftElevationOrigin(shiftElevationOrigin, candidate)
+  if (shiftElevationOrigin) pathAnchor = { ...shiftElevationOrigin }
+}
+
+function clearShiftElevationOrigin(): void {
+  shiftElevationOrigin = null
+  lastShiftPaintKey = ''
+}
+
+function clearShiftElevationLock(): void {
+  shiftElevationHeld = false
+  clearShiftElevationOrigin()
+}
+
+function ensureShiftElevationOriginWay(): void {
+  if (!shiftElevationOrigin) return
+  const { x, z, elevation } = shiftElevationOrigin
+  if (roadEditorOpen) {
+    if (!game.getRoadCellAt(x, z)) {
+      game.placeRoadSegment(x, z, elevation, 0, pathDirection, supplyPlanner.getRoadType())
+    }
+    return
+  }
+  if (!game.getPathAt(x, z, elevation)) {
+    game.placePathSegment(
+      x,
+      z,
+      elevation,
+      pathConstructionType,
+      pathDirection,
+      0,
+      supplyPlanner.getFootType(),
+    )
+  }
+}
+
+function previewShiftElevation(cell: CellPosition | null): void {
+  if (!shiftElevationApplies() || !shiftElevationOrigin) return
+  pathAnchor = { ...shiftElevationOrigin }
+  if (cell) {
+    const plan = planLockedOriginRamp(shiftElevationOrigin, cell, pathSlope)
+    if (plan.direction != null) pathDirection = plan.direction
+  }
+  updatePathEditor()
+}
+
+function applyShiftElevationPaint(cell: CellPosition, quiet = false): void {
+  beginShiftElevationLock(cell)
+  if (!shiftElevationOrigin) return
+  if (cell.x === shiftElevationOrigin.x && cell.z === shiftElevationOrigin.z) {
+    pathAnchor = { ...shiftElevationOrigin }
+    updatePathEditor()
+    return
+  }
+  const paintKey = `${cell.x},${cell.z},${pathSlope}`
+  if (paintKey === lastShiftPaintKey) return
+  lastShiftPaintKey = paintKey
+  ensureShiftElevationOriginWay()
+  const plan = planLockedOriginRamp(shiftElevationOrigin, cell, pathSlope)
+  if (plan.direction != null) pathDirection = plan.direction
+  let built = 0
+  let lastMessage = 'Rampe vom festen Ausgang'
+  for (const step of plan.steps) {
+    const result = roadEditorOpen
+      ? game.placeRoadSegment(
+          step.x,
+          step.z,
+          step.elevation,
+          step.slope,
+          step.direction,
+          supplyPlanner.getRoadType(),
+        )
+      : game.placePathSegment(
+          step.x,
+          step.z,
+          step.elevation,
+          pathConstructionType,
+          step.direction,
+          step.slope,
+          supplyPlanner.getFootType(),
+        )
+    lastMessage = result.message
+    if (!result.ok) {
+      if (built === 0) showToast(result.message, true)
+      break
+    }
+    built += 1
+  }
+  pathAnchor = { ...shiftElevationOrigin }
+  updatePathEditor()
+  if (built > 0 && !quiet) showToast(lastMessage)
+}
+
 function setPathConstructMode(construct: boolean): void {
   pathEditorActive = construct
   pathAnchor = null
+  clearShiftElevationOrigin()
   pathHistory = []
   pathDemolishActive = false
   supplyPlanner.releaseTool()
@@ -2803,6 +2980,7 @@ function closePathEditor(): void {
   pathEditorActive = false
   pathDemolishActive = false
   pathAnchor = null
+  clearShiftElevationLock()
   pathHistory = []
   pathConstruction.classList.remove('visible', 'path-mode-construct', 'path-mode-paint')
   view.setPathConstructionPreview(false, null, pathDirection, pathSlope)
@@ -2819,7 +2997,8 @@ function rotatePathDirection(delta: number): void {
 }
 
 function setPathSlope(value: number): void {
-  pathSlope = roadEditorOpen ? 0 : Math.max(-1, Math.min(1, value)) as -1 | 0 | 1
+  const stepped = Math.round(value * 2) / 2
+  pathSlope = Math.max(-0.5, Math.min(0.5, stepped))
   updatePathEditor()
 }
 
@@ -2833,12 +3012,24 @@ function buildNextPathSegment(): void {
     elevation: pathAnchor.elevation + pathSlope,
   }
   if (roadEditorOpen) {
-    next.elevation = game.getTerrainHeight(next.x, next.z)
-    const existed = Boolean(game.getRoadCellAt(next.x, next.z))
-    const result = existed ? { ok: true, message: 'Straße verbunden' } : buildRoadCell(next)
+    const previousRoad = game.getRoadCellAt(next.x, next.z, next.elevation)
+    const previousRoadSnapshot = previousRoad ? structuredClone(previousRoad) : undefined
+    const result = game.placeRoadSegment(
+      next.x,
+      next.z,
+      next.elevation,
+      pathSlope,
+      pathDirection,
+      supplyPlanner.getRoadType(),
+    )
     if (result.ok) {
-      pathHistory.push({ from: { ...pathAnchor }, to: next, roadExisted: existed })
-      pathAnchor = next
+      pathHistory.push({
+        from: { ...pathAnchor },
+        to: next,
+        roadExisted: Boolean(previousRoad),
+        previousRoad: previousRoadSnapshot,
+      })
+      pathAnchor = shiftElevationOrigin ? { ...shiftElevationOrigin } : next
       updatePathEditor()
     }
     showToast(result.message, !result.ok)
@@ -2876,7 +3067,7 @@ function buildNextPathSegment(): void {
     to: { ...next },
     previousPath: previousPathSnapshot,
   })
-  pathAnchor = next
+  pathAnchor = shiftElevationOrigin ? { ...shiftElevationOrigin } : next
   updatePathEditor()
   showToast(result.message)
 }
@@ -2885,7 +3076,7 @@ function undoLastPathSegment(): void {
   const entry = pathHistory.pop()
   if (!entry) return
   const result = roadEditorOpen
-    ? entry.roadExisted ? { ok: true, message: 'Vorheriges Straßenfeld' } : game.bulldoze(entry.to.x, entry.to.z)
+    ? game.undoRoadSegment(entry.to.x, entry.to.z, entry.previousRoad, entry.to.elevation)
     : game.undoPathSegment(
     entry.to.x,
     entry.to.z,
@@ -2897,7 +3088,7 @@ function undoLastPathSegment(): void {
     showToast(result.message, true)
     return
   }
-  pathAnchor = entry.from
+  pathAnchor = shiftElevationOrigin ? { ...shiftElevationOrigin } : entry.from
   updatePathEditor()
   showToast(result.message)
 }
@@ -2934,13 +3125,14 @@ function updatePathEditor(): void {
       button.disabled = !pathEditorActive || !pathAnchor
       return
     }
-    button.disabled = !pathEditorActive || (roadEditorOpen && button.hasAttribute('data-slope'))
+    button.disabled = !pathEditorActive
   })
   constructionStatus.textContent = pathDemolishActive
     ? 'Weg anklicken oder ziehen zum Abreißen.'
     : pathEditorActive
       ? pathAnchor
-        ? `Aktuelles Feld: ${pathAnchor.x}, ${pathAnchor.z} · Ebene ${pathAnchor.elevation}` +
+        ? `${shiftElevationOrigin ? 'Ausgang fest' : 'Aktuelles Feld'}: ${pathAnchor.x}, ${pathAnchor.z} · Ebene ${pathAnchor.elevation}` +
+          (shiftElevationOrigin ? ' · Shift: Rampe zum Zeiger, Ausgang bleibt' : '') +
           (pathConstructionType === 'queue' ? ' · Schlange zum Eingang' : '')
         : 'Feld anklicken: setzt das erste Stück. Bauen setzt das nächste.'
       : pathConstructionType === 'queue'
@@ -2958,11 +3150,8 @@ function updatePathEditor(): void {
     const icon = button.querySelector('span')
     if (icon) icon.textContent = getIsoDirectionIcon(direction)
   })
-  view.setPathConstructionPreview(pathEditorActive && !roadEditorOpen, pathAnchor, pathDirection, pathSlope)
-  if (roadEditorOpen && pathEditorActive && pathAnchor) {
-    const direction = PATH_DIRECTIONS[pathDirection]!
-    view.setPathDragPreview([{ x: pathAnchor.x + direction.x, z: pathAnchor.z + direction.z }], pathAnchor.elevation)
-  } else if (roadEditorOpen) {
+  view.setPathConstructionPreview(pathEditorActive, pathAnchor, pathDirection, pathSlope)
+  if (roadEditorOpen && !pathEditorActive) {
     view.setPathDragPreview([], 0)
   }
 }
@@ -3146,6 +3335,7 @@ function updateCoasterBuilder(): void {
   coasterUndoButton.disabled = !coaster || coaster.pieces.length <= 1
   coasterEntranceButton.disabled = !coaster
   coasterExitButton.disabled = !coaster
+  demolishCoasterConstructionButton.hidden = !coaster
   trackPieceSelect.disabled = !coaster
   const selectedPiece = TRACK_PIECES[trackPieceSelect.value as TrackPieceKind]
   document.querySelectorAll<HTMLButtonElement>('[data-track-piece]').forEach((button) => {
@@ -3306,26 +3496,50 @@ function updateContextHelp(): void {
     contextHelp.textContent = 'Bewege den Mauszeiger über das Gelände.'
     return
   }
+  const cell = hoveredCell
 
-  const existing = game.getAt(hoveredCell.x, hoveredCell.z, undefined, hoveredCell.localX, hoveredCell.localZ)
+  const rideAccess = cell.buildingId
+    ? game.getRideAccessAt(cell.x, cell.z)
+    : undefined
+  const existing =
+    rideAccess && rideAccess.building.id === cell.buildingId
+      ? undefined
+      : cell.buildingId
+        ? game.snapshot.buildings.find((building) => building.id === cell.buildingId)
+        : game.getAt(cell.x, cell.z, undefined, cell.localX, cell.localZ)
   if (tool === 'inspect') {
     const height = game.getTerrainHeight(hoveredCell.x, hoveredCell.z)
     const dump = game.getWasteDumpAt(hoveredCell.x, hoveredCell.z)
+    const dumpArea = dump
+      ? connectedWasteDumpStats(game.snapshot.wasteDumpCells ?? [], dump)
+      : null
     const ground = groundInfo(game.snapshot, hoveredCell.x, hoveredCell.z)
     const soilName = { field: 'Ackerboden', clay: 'Lehmboden', gravel: 'Kiesboden', sand: 'Sandboden', grass: 'Wiesenboden', urban: 'Stadtboden' }[ground.type]
-    const surfaceName = ground.surface === 'paved' ? 'Gepflastert' : ground.surface === 'gravel' ? 'Geschottert' : ground.compacted ? 'Verdichtet' : 'Unbefestigt'
+    const cellX = hoveredCell.x
+    const cellZ = hoveredCell.z
+    const parking = game.snapshot.logistics.parkingCells.some(
+      (cell) => cell.x === cellX && cell.z === cellZ,
+    )
+    const surfaceName = parking
+      ? 'Parkfläche'
+      : ground.surface === 'paved' ? 'Gepflastert' : ground.surface === 'gravel' ? 'Geschottert' : ground.compacted ? 'Verdichtet' : 'Unbefestigt'
     const depot = game.getDepotAt(hoveredCell.x, hoveredCell.z)
-    contextHelp.textContent = existing
+    contextHelp.textContent =
+      rideAccess && rideAccess.building.id === hoveredCell.buildingId
+      ? `${rideAccess.type === 'entrance' ? 'Eingang' : 'Ausgang'} auswählen`
+      : existing
       ? `${BUILDINGS[existing.kind].name} auswählen`
       : depot
         ? `${depot.role === 'delivery' ? 'Anlieferungsplatz' : 'Depot'} auswählen`
+      : dumpArea
+        ? formatWasteDumpAreaHover(dumpArea)
       : dump
         ? `Müllablage · ${dump.stored} Säcke gelagert`
       : height <= -2
         ? 'Wasser'
         : height === -1
           ? 'Schlamm – Bewegung sehr langsam'
-          : `${game.getCampingCellAt(hoveredCell.x, hoveredCell.z) ? 'Zeltbereich · ' : ''}${soilName} · ${surfaceName}${ground.drained ? ' · Entwässert' : ''} · Tragfähigkeit ${ground.bearing}/3${height > 0 ? ` · Ebene ${height}` : ''}`
+          : `${game.getCampingCellAt(hoveredCell.x, hoveredCell.z) ? 'Zeltbereich · ' : ''}${parking ? 'Parkplatz · ' : ''}${soilName} · ${surfaceName}${ground.drained ? ' · Entwässert' : ''} · Tragfähigkeit ${ground.bearing}/3${height > 0 ? ` · Ebene ${height}` : ''}`
   } else if (tool === 'terrainRaise') {
     contextHelp.textContent =
       'Klicken oder ziehen, um Hügel zu formen. Nachbarn bleiben begehbar.'
@@ -3336,15 +3550,32 @@ function updateContextHelp(): void {
     contextHelp.textContent =
       'Klicken oder ziehen, um das Gelände auf Ebene 0 einzuebnen.'
   } else if (tool === 'bulldoze') {
-    contextHelp.textContent = existing
-      ? existing.kind === 'tree'
-        ? `Baum entfernen (${SIMULATION_CONFIG.economy.treeClearCost} €)`
-        : `${BUILDINGS[existing.kind].name} abreißen`
-      : game.getCampingCellAt(hoveredCell.x, hoveredCell.z)
-        ? 'Zeltbereich aufheben'
-        : game.getWasteDumpAt(hoveredCell.x, hoveredCell.z)
-          ? 'Müllablage aufheben'
-        : 'Leeres Feld'
+    const access = game.getAccessControlAt(hoveredCell.x, hoveredCell.z)
+    const removableCoaster = game.getRemovableCoasterAt(hoveredCell.x, hoveredCell.z)
+    contextHelp.textContent =
+      rideAccess && rideAccess.building.id === hoveredCell.buildingId
+        ? `${rideAccess.type === 'entrance' ? 'Eingang' : 'Ausgang'} entfernen`
+        : existing
+          ? existing.kind === 'tree'
+            ? `Baum entfernen (${SIMULATION_CONFIG.economy.treeClearCost} €)`
+            : `${BUILDINGS[existing.kind].name} abreißen`
+          : removableCoaster
+            ? `${removableCoaster.name} abreißen`
+          : access
+            ? 'Kontrolle entfernen'
+          : game.getCampingCellAt(hoveredCell.x, hoveredCell.z)
+            ? 'Zeltbereich aufheben'
+            : game.snapshot.logistics.parkingCells.some(
+                (parking) => parking.x === cell.x && parking.z === cell.z,
+              )
+              ? 'Parkplatz aufheben'
+            : game.getMedicalCellAt(hoveredCell.x, hoveredCell.z)
+              ? 'Krankenbereich aufheben'
+            : game.getWasteDumpAt(hoveredCell.x, hoveredCell.z)
+              ? 'Müllablage aufheben'
+            : game.getRoadCellAt(hoveredCell.x, hoveredCell.z)
+              ? 'Straße entfernen'
+            : 'Leeres Feld'
     contextHelp.textContent += ' · Klicken oder rechteckig ziehen'
   } else if (tool === 'coaster') {
     contextHelp.textContent = 'Öffne den Achterbahn-Editor, um eine Bahn zu bauen.'
@@ -3782,6 +4013,17 @@ function openEntityInfoForVehicle(vehicleId: string): void {
   updateEntityPanel()
 }
 
+function openEntityInfoForWasteDump(x: number, z: number): void {
+  closeRideBuilder(false)
+  selectedEntity = { type: 'wasteDump', id: wasteDumpId({ x, z }) }
+  entityTab = 'overview'
+  hideVisitorPanel()
+  staffDetails.close()
+  view.setInspectedVehicle(null)
+  entityPanel.hidden = false
+  updateEntityPanel()
+}
+
 function updateEntityPanel(): void {
   requireElement<HTMLElement>('#open-ride-construction').hidden=true
   editStageButton.hidden = true
@@ -3888,18 +4130,43 @@ function updateEntityPanel(): void {
       <span>Status <b>${describeRoadVehicleActivity(vehicle)}</b></span>
       ${destination ? `<span>Ziel <b>${destination}</b></span>` : ''}
       <span>Route <b>${vehicle.route.length} Felder</b></span>
-      <span>Insassen <b>${vehicle.passengerIds.length}</b></span>
+      ${formatRoadVehicleInspectLoad(vehicle)
+        .map((stat) => `<span>${stat.label} <b>${stat.value}</b></span>`)
+        .join('')}
       ${
         vehicle.waitMinutes > 0
           ? `<span>Wartet seit <b>${vehicle.waitMinutes.toFixed(1)} min</b></span>`
           : ''
       }
-      ${
-        vehicle.cargo > 0
-          ? `<span>Ladung <b>${vehicle.cargo}</b></span>`
-          : ''
-      }
     `
+    entityTabs.classList.remove('visible')
+    entityOverview.hidden = false
+    entityDynamics.classList.remove('visible')
+    priceOptions.classList.remove('visible')
+    shirtOptions.classList.remove('visible')
+    applyPriceToKindButton.hidden = true
+    securityOptions.classList.remove('visible')
+    coasterOptions.classList.remove('visible')
+    depotOptions.classList.remove('visible')
+    return
+  }
+  if (selectedEntity.type === 'wasteDump') {
+    const origin = parseWasteDumpId(selectedEntity.id)
+    const stats =
+      origin &&
+      connectedWasteDumpStats(game.snapshot.wasteDumpCells ?? [], origin)
+    if (!stats) {
+      closeEntityPanel()
+      return
+    }
+    const inspect = formatWasteDumpAreaInspect(stats)
+    entityIcon.textContent = '🗑️'
+    entityType.textContent = 'Müllsammelplatz'
+    entityName.textContent = 'Müllablage'
+    entityStatus.textContent = inspect.status
+    entityStats.innerHTML = inspect.lines
+      .map((line) => `<span>${line.label} <b>${line.value}</b></span>`)
+      .join('')
     entityTabs.classList.remove('visible')
     entityOverview.hidden = false
     entityDynamics.classList.remove('visible')
@@ -5808,7 +6075,7 @@ function setMapOverlay(
 }
 
 entityPriceInput.addEventListener('change', () => {
-  if (!selectedEntity || selectedEntity.type === 'depot' || selectedEntity.type === 'access' || selectedEntity.type === 'vehicle') return
+  if (!selectedEntity || selectedEntity.type === 'depot' || selectedEntity.type === 'access' || selectedEntity.type === 'vehicle' || selectedEntity.type === 'wasteDump') return
   if (selectedEntity.type === 'coaster') {
     game.updateCoasterPrice(selectedEntity.id, Number(entityPriceInput.value))
   } else {
@@ -5899,6 +6166,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-road-editor-tool]').forEach(
     pathDemolishActive = false
     pathEditorActive = false
     pathAnchor = null
+    clearShiftElevationOrigin()
     pathHistory = []
     game.setTool(button.dataset.roadEditorTool as Tool)
     updatePathEditor()
@@ -6388,6 +6656,26 @@ document.querySelector<HTMLButtonElement>('#edit-coaster-track')?.addEventListen
   openCoasterBuilder(coasterId)
 })
 
+function demolishCoasterById(coasterId: string): void {
+  const result = game.removeCoaster(coasterId)
+  showToast(result.message, !result.ok)
+  if (!result.ok) return
+  if (activeCoasterId === coasterId) closeCoasterBuilder()
+  if (selectedEntity?.type === 'coaster' && selectedEntity.id === coasterId) {
+    closeEntityPanel()
+  }
+}
+
+document.querySelector<HTMLButtonElement>('#demolish-coaster')?.addEventListener('click', () => {
+  if (selectedEntity?.type !== 'coaster') return
+  demolishCoasterById(selectedEntity.id)
+})
+
+demolishCoasterConstructionButton.addEventListener('click', () => {
+  if (!activeCoasterId) return
+  demolishCoasterById(activeCoasterId)
+})
+
 dispatchIntervalInput.addEventListener('input', () => {
   dispatchValue.textContent = `${dispatchIntervalInput.value} min`
   if (selectedEntity?.type !== 'coaster') return
@@ -6403,6 +6691,12 @@ window.addEventListener('keydown', (event) => {
   // Nothing reaches the world while the start screen is up — not the build shortcuts,
   // not the camera keys, not the speed keys.
   if (titleScreenOpen()) return
+  if (event.key === 'Shift') {
+    shiftElevationHeld = true
+    beginShiftElevationLock(hoveredCell)
+    previewShiftElevation(hoveredCell)
+    return
+  }
   if (event.key === 'Escape' && view.isWalkMode()) {
     event.preventDefault()
     setFestivalWalk(false)
@@ -6454,6 +6748,24 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault()
     game.setSpeed(game.snapshot.speed === 0 ? 1 : 0)
   }
+})
+
+window.addEventListener('keyup', (event) => {
+  if (event.key !== 'Shift') return
+  clearShiftElevationLock()
+  updatePathEditor()
+})
+
+window.addEventListener('blur', () => {
+  if (!shiftElevationHeld && !shiftElevationOrigin) return
+  clearShiftElevationLock()
+  updatePathEditor()
+})
+
+window.addEventListener('pointermove', (event) => {
+  if (!shiftElevationApplies() || !shiftElevationHeld || (event.buttons & 1) === 0) return
+  if (!hoveredCell || !shiftElevationOrigin) return
+  applyShiftElevationPaint(hoveredCell, true)
 })
 
 bindGameState(game)

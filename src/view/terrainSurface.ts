@@ -4,7 +4,7 @@ import { groundInfo } from '../game/ground'
 import { getTerrainHeight, isMudHeight, isWaterHeight } from '../game/terrain'
 import { TerrainShape } from './terrainShape'
 
-export const TERRAIN_MATERIALS = ['field', 'clay', 'gravel', 'sand', 'grass', 'paved', 'compact', 'mud'] as const
+export const TERRAIN_MATERIALS = ['field', 'clay', 'gravel', 'sand', 'grass', 'paved', 'compact', 'mud', 'parking'] as const
 export type TerrainMaterial = typeof TERRAIN_MATERIALS[number]
 const PALETTE: Record<TerrainMaterial, number[]> = {
   field: [0x99915e, 0x887b51, 0xa89b6a, 0x7f8755],
@@ -15,6 +15,7 @@ const PALETTE: Record<TerrainMaterial, number[]> = {
   paved: [0xaca99b, 0x85877c, 0xbab7a9, 0xa19f91],
   compact: [0xa29473, 0x928365, 0xb0a180, 0x9a8c70],
   mud: [0x766149, 0x67543f, 0x806b51, 0x70624d],
+  parking: [0x5a5f66, 0x454a50, 0xc8c6bc, 0x6e737a],
 }
 const TILE = 64, VARIANTS = 4, WIDTH = TILE * VARIANTS, HEIGHT = TILE * TERRAIN_MATERIALS.length
 const BASE_COLORS = Object.fromEntries(TERRAIN_MATERIALS.map(kind => [kind, new Color(PALETTE[kind][0])])) as Record<TerrainMaterial, Color>
@@ -35,8 +36,18 @@ function patchShade(x: number, z: number): number {
   return .94 + (a * (1 - tz) + b * tz) * .12
 }
 
-export function terrainMaterialAt(s: Readonly<GameSnapshot>, x: number, z: number): TerrainMaterial {
+export function parkingCellKeys(s: Readonly<GameSnapshot>): ReadonlySet<string> {
+  return new Set((s.logistics?.parkingCells ?? []).map((cell) => `${cell.x},${cell.z}`))
+}
+
+export function terrainMaterialAt(
+  s: Readonly<GameSnapshot>,
+  x: number,
+  z: number,
+  parking = parkingCellKeys(s),
+): TerrainMaterial {
   if (isMudHeight(getTerrainHeight(s.terrain, x, z))) return 'mud'
+  if (parking.has(`${x},${z}`)) return 'parking'
   const g = groundInfo(s, x, z)
   return g.surface === 'paved' ? 'paved' : g.surface === 'gravel' ? 'gravel' : g.compacted ? 'compact' : g.type === 'urban' ? 'paved' : g.type
 }
@@ -64,6 +75,9 @@ export function createTerrainAtlas(): DataTexture {
         } else if (kind === 'paved') {
           if (y % 32 === 0 || (x + (Math.floor(y / 32) % 2) * 16) % 32 === 0) tone = 1
           else if (y % 32 === 1) tone = 2
+        } else if (kind === 'parking') {
+          tone = n > .88 ? 3 : n < .08 ? 1 : 0
+          if (x <= 2 || ((y <= 3 || (y >= 30 && y <= 33) || y >= 60) && x < 40)) tone = 2
         } else if (kind === 'clay' || kind === 'mud') {
           if (hash(Math.floor(x / 6) + variant * 11, Math.floor(y / 5)) > .8 && n > .3) tone = 1
         } else if (kind === 'compact' && y % 16 === 0 && n > .6) tone = 1
@@ -88,9 +102,15 @@ export function createTerrainSurface(s: Readonly<GameSnapshot>, material: MeshSt
   const positions: number[] = [], colors: number[] = [], uv: number[] = [], indices: number[] = []
   const half = s.scenario.worldSize / 2
   const cells = new Map<string, { kind: TerrainMaterial; height: number; prepared: boolean }>()
+  const parking = parkingCellKeys(s)
   for (let z = -half; z < half; z++) for (let x = -half; x < half; x++) {
     const work = s.festival.infrastructure.ground[`${x},${z}`]
-    cells.set(`${x},${z}`, { kind: terrainMaterialAt(s, x, z), height: getTerrainHeight(s.terrain, x, z), prepared: !!(work?.surface || work?.compacted) })
+    const parked = parking.has(`${x},${z}`)
+    cells.set(`${x},${z}`, {
+      kind: terrainMaterialAt(s, x, z, parking),
+      height: getTerrainHeight(s.terrain, x, z),
+      prepared: parked || !!(work?.surface || work?.compacted),
+    })
   }
   const tint = new Color()
   for (let z = -half; z < half; z++) for (let x = -half; x < half; x++) {

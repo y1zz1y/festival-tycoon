@@ -55,6 +55,8 @@ export class CrowdingSystem {
     const active = visitors.filter(
       (visitor) =>
         visitor.state !== 'riding' &&
+        visitor.state !== 'vehicle-arrival' &&
+        visitor.state !== 'bus-riding' &&
         visitor.state !== 'sleeping' &&
         !(visitor.state === 'camping' && visitor.campingPhase === 'resting'),
     )

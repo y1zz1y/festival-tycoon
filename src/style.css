@@ -2358,6 +2358,22 @@ body.title-open #app-install-hint {
   border-color: rgba(224, 91, 91, 0.4);
 }
 
+.demolish-coaster {
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 9px;
+  color: #ffd4d0;
+  background: #6f3330;
+  border: 1px solid #ad5b52;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.demolish-coaster:hover {
+  background: #85403c;
+}
+
 .coaster-build-actions button.primary {
   background: #a4424b;
   border-color: #dd6973;
@@ -3116,6 +3132,134 @@ body.title-open #app-install-hint {
 
 .complaints-panel.visible {
   display: block;
+}
+
+.ticker-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 28;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(520px, calc(100vw - 280px));
+  padding: 8px 10px 8px 12px;
+  color: #f3eed6;
+  background: #2c463c;
+  border: 1px solid #8a9e82;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.ticker-bar[hidden] {
+  display: none;
+}
+
+.ticker-bar.ticker-alert {
+  background: #5a2e2e;
+  border-color: #d38a7a;
+}
+
+.ticker-bar.ticker-warning {
+  background: #5a4630;
+  border-color: #d4b56a;
+}
+
+.ticker-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.ticker-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ticker-title {
+  font-size: 13px;
+}
+
+.ticker-message {
+  color: #d5decc;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ticker-bar button {
+  flex-shrink: 0;
+  min-width: 40px;
+  height: 32px;
+  padding: 0 8px;
+}
+
+.ticker-panel {
+  position: absolute;
+  top: 88px;
+  right: 18px;
+  width: 420px;
+  max-width: calc(100vw - 36px);
+  padding: 14px;
+  border-radius: 13px;
+  display: none;
+  z-index: 26;
+}
+
+.ticker-panel.visible {
+  display: block;
+}
+
+.ticker-history-summary {
+  margin: 12px 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ticker-history-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(420px, calc(100dvh - 220px));
+  overflow: auto;
+}
+
+.ticker-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  background: #263e35;
+  border: 1px solid #577364;
+}
+
+.ticker-history-item.ticker-alert {
+  border-color: #c57a6e;
+}
+
+.ticker-history-item.ticker-warning {
+  border-color: #c4ab64;
+}
+
+.ticker-history-item strong,
+.ticker-history-item span,
+.ticker-history-item small {
+  display: block;
+}
+
+.ticker-history-item span {
+  margin-top: 4px;
+  color: #c3d3c6;
+}
+
+.ticker-history-item small {
+  margin-top: 4px;
+  color: #9eb6ac;
+}
+
+.rct-group button.has-ticker {
+  box-shadow: inset 0 0 0 1px #e6bd6b;
 }
 
 .complaints-summary {
@@ -4090,8 +4234,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .visitor-panel { top: 100px; right: 6px; max-height: calc(100dvh - 158px); overflow-y: auto; z-index: 22; }
 .staff-panel { max-height: calc(100dvh - 158px); }
 .game-shell:has(.visitor-panel.visible, #entity-panel:not([hidden])) .crowding-panel { right: 388px; }
-.game-shell:has(.day-plan-panel.visible, .visitor-overview-panel.visible, .complaints-panel.visible) .crowding-panel { display: none; }
-.day-plan-panel, .visitor-overview-panel, .complaints-panel { top: 100px; max-height: calc(100dvh - 116px); overflow-y: auto; }
+.game-shell:has(.day-plan-panel.visible, .visitor-overview-panel.visible, .complaints-panel.visible, .ticker-panel.visible) .crowding-panel { display: none; }
+.day-plan-panel, .visitor-overview-panel, .complaints-panel, .ticker-panel { top: 100px; max-height: calc(100dvh - 116px); overflow-y: auto; }
 @media (max-width: 1100px) {
   .game-shell:has(.visitor-panel.visible, #entity-panel:not([hidden])) .crowding-panel { display: none; }
 }
@@ -4103,7 +4247,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   .build-menu { top: 125px; width: min(300px, calc(100vw - 12px)); }
   .build-menu.build-menu-catalog { width: min(440px, calc(100vw - 12px)); }
   .crowding-panel { top: 125px; width: 144px; }
-  .visitor-panel, .day-plan-panel, .visitor-overview-panel, .complaints-panel, .entity-panel { top: 125px; max-height: calc(100dvh - 181px); }
+  .visitor-panel, .day-plan-panel, .visitor-overview-panel, .complaints-panel, .ticker-panel, .entity-panel { top: 125px; max-height: calc(100dvh - 181px); }
   .staff-panel { max-height: calc(100dvh - 181px); }
 }
 
@@ -4132,6 +4276,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .staff-details,
 .day-plan-panel,
 .complaints-panel,
+.ticker-panel,
 .visitor-overview-panel,
 .entity-panel,
 #toast {

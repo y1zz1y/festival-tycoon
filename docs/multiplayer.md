@@ -34,13 +34,26 @@ dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
   Commands `updateEntryPrice` und `updateCampingTicketPrice`.
   T-Shirt-Stand: `configureShirtStall` (`color`, `style`). Gäste-Felder
   `ownedMascot`, `heldMascot`, `wornShirt` liegen im PackedVisitor.
-  Personalzonen: `toggleStaffZone` und `fireStaffMember` (auch für
-  Saugroboter anhand der Fahrzeug-ID). `workZones` liegt am Staff-Mitglied
-  bzw. am Saugroboter in `logistics.roadVehicles` und kommt über Sim-Pakete.
+  Personalzonen: `toggleStaffZone`, `setStaffZone` (`active` an/aus für
+  genau einen 3×3-Schlüssel) und `fireStaffMember` (auch für Saugroboter
+  anhand der Fahrzeug-ID). Ziehen sendet idempotente `setStaffZone`-Schritte
+  statt Toggle, damit der gesperrte Malmodus nicht flackert. `workZones` liegt
+  am Staff-Mitglied bzw. am Saugroboter in `logistics.roadVehicles` und kommt
+  über Sim-Pakete.
   `queueSplit` an Queue-Wegen ist kein Command, sondern Host-seitig
   abgeleitet wie `queueDirection` und kommt mit dem Gebäude-Snapshot.
+  Der Vorfall-Ticker wird auf jedem Client aus `incidents`, Panik-Gästen
+  und `wasteDumpCells` abgeleitet; kein `GameCommand` und kein extra
+  Snapshot-Feld.
   Festival-Action `staffGate` darf `direction` (Baurichtung, Kante) mitsenden;
   fehlend gilt 0. Alte Clients ohne Feld bleiben gültig.
+  `placePath.slope` ist eine Zahl (neu ±0.5, Legacy ±1). Neue Commands
+  `placeRoad` und `undoRoad` setzen Straßenrampen host-autoritativ.
+  `undoRoad` darf optionales `elevation` mitsenden, damit nur eine Lage
+  einer gestapelten Autostraße zurückgenommen wird.
+  `removeCoaster` (`coasterId`) reißt Schiene, Station, Zug, Tore und die
+  angeschlossene Eingangsqueue host-autoritativ ab; optimistic wie die
+  übrigen Coaster-Baucommands.
 - Clients dürfen Construction optimistic zeigen, aber der Host bleibt
   maßgeblich (`resolveOptimisticCommand`, Reconciliation).
 - Besucher feldweise updaten; unveränderte Bereiche nicht erneut senden.

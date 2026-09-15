@@ -8,17 +8,21 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Straßengraph, Fahrzeuge, Ankunft | `src/game/logistics.ts` | `LogisticsSnapshot`, `findRoadRoute`, `RoadVehicle` |
+| Straßengraph, Fahrzeuge, Ankunft | `src/game/logistics.ts` | `LogisticsSnapshot`, `findRoadRoute`, `RoadVehicle`; `RoadCell.elevation` / `roadSlope` |
+| Aussteigen am Parkplatz | `src/game/logistics.ts`, `src/game/GameState.ts` | `chooseParkingDisembarkPath`, `finishVehicleParking`, `collectSeatedPassengerIds` |
+| Straßenrampen | `src/game/GameState.ts`, `src/game/wayElevation.ts` | `placeRoadSegment`, Autodach `MAX_ROAD_RAISE` 1, Shift-Ausgang `planLockedOriginRamp` |
 | Saugreiniger | `src/game/GameState.ts` | `isSweeperDriveCell`, `findSweeperRoute`, `updateSweeper`, `getSweeperDirtAccesses` |
+| Krankenwagen-Einsatz | `src/game/GameState.ts` | `dispatchIdleAmbulances` — nächster freier Wagen zum Verletzten |
 | Müllwagen-Erhalt | `src/game/GameState.ts` | `restoreMissingGarbageTrucks`, `reenterGarbageTruck`, `holdGarbageTruckOffMap`, `sellGarbageTruck` |
 | Depots, Bestellungen, Lastwagen | `src/game/supplyChain.ts` | `Infrastructure`, `infrastructureAction`, `updateSupplyChain` |
 | Automatische Träger | `src/game/depotCarriers.ts` | `updateDepotCarriers` |
 | Bude: alle Seiten | `src/game/shopAccess.ts` | `isShopServiceKind`, `CARDINAL_OFFSETS` |
-| Müllablagen / Eimer-Suche | `src/game/waste.ts` | `designateWasteDumps`, `findNearestWasteDump` |
+| Müllablagen / Eimer-Suche | `src/game/waste.ts` | `designateWasteDumps`, `findNearestWasteDump`, `connectedWasteDumpStats` |
+| Fahrzeug-Infofenster | `src/game/logistics.ts` | `formatRoadVehicleInspectLoad`, `roadVehicleCarriesPeople` |
 | Boden für Straßen/Depots | `src/game/ground.ts` | Tragfähigkeit, Nässe, Tempo-Limits |
 | Festival-Bestellungen | `src/game/festivalManagement.ts` | `orderGoods`, Supplies |
 | Straßen-UI | `src/logisticsUI.ts` | Geländeplaner, Straßenbelag; Fußweg-Art-Hold in `#path-construction` |
-| Straßen-/Depot-Darstellung | `src/view/LogisticsView.ts`, `src/view/SupplyChainView.ts`, `src/view/logisticsModels.ts` | Retro-ModelKit: Haltestellen, Depots, Anlieferung, Lager; Fahrzeuge |
+| Straßen-/Depot-Darstellung | `src/view/LogisticsView.ts`, `src/view/SupplyChainView.ts`, `src/view/logisticsModels.ts` | Retro-ModelKit: Haltestellen, Depots, Anlieferung, Lager; Fahrzeuge. Parkplätze: graue Asphaltfläche in der normalen Ansicht; Belegung (grün/orange, P) nur als Bauhelfer |
 | Träger-Figuren | `src/view/carrierModels.ts` | Gäste-Personen-Teile, Warnweste, Handkarren, Kistenstapel; Picking über `staffId` |
 | StVO-Fahrtrichtungspfeil | `src/view/roadDirectionArrow.ts` | Weiße Markierung (`paint`) auf Straße und in der Vorschau; kompaktes Overlay (`overlay`) |
 | Ampeln und Wegschranken | `src/game/accessControl.ts` | Slots, Tageszeit, Festivalphase, Tagesplan, Sensoren, Gebiet, `evaluateAccessSignal` |
@@ -30,7 +34,20 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 ## Wichtige Regeln
 
 - Trägerwege über `findPath` (Fußgänger), Fahrzeuge über `findRoadRoute`.
-  Nicht mischen. Saugreiniger (`sweeper`) sind die Ausnahme: sie nutzen
+  Nicht mischen.   Straßen und Fußwege können Rampen in **halben** Höhenstufen
+  bauen (`planLockedOriginRamp` in `wayElevation.ts`). Im Stückmodus bleibt
+  bei gehaltenem Shift die Ausgangskachel fest; nur Nachbarn bekommen die
+  Rampe. Autos bleiben höchstens eine Höhenstufe über dem lokalen Gelände;
+  der Graph verbindet nur Kanten mit passender Höhe. Alte Straßen ohne
+  Höhenfeld liegen nach dem Laden auf dem Gelände.
+  Ein Fußweg auf einer Autostraße (`placePathSegment`) löscht die Straße
+  nicht: gleiche Höhe wird zum Übergang (`RoadCell.crosswalk`), eine
+  Ebene darüber zum Steg. Zwei Autostraßen dürfen dieselbe Kachel auf
+  **verschiedenen** Höhen teilen (`getRoadCellsAt`, Graph-Schlüssel
+  `roadLayerKey`): gleiche Höhe aktualisiert nur diese Lage (Belag,
+  Neigung), eine halbe Stufe oder mehr darüber legt eine Brücke; die
+  untere Lage bleibt befahrbar. Nachbarn, Parkplätze und Tore bleiben.
+  `getRoadCellAt(x, z, elevation?)` ohne Höhe nimmt die unterste Lage. Saugreiniger (`sweeper`) sind die Ausnahme: sie nutzen
   den Fußgängergraphen, fahren aber nur auf normalen Wegen **und**
   Bühnenvorplätzen (`isSweeperDriveCell`). `findSweeperRoute` setzt
   `allowStaff`, damit Personaleingänge (`staffOnly`) passierbar sind;
@@ -65,6 +82,28 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   **Verwalten**; das Lkw-Icon im Baubereich bleibt dem Baukatalog vorbehalten.
 - Die Logistikansicht mit Untergrund ist ein Overlay
   (`setLogisticsMode`), unabhängig vom Geländeplaner.
+- Parkplätze sind ausgewiesene Felder, kein eigener Wegtyp. Im normalen
+  Blick (ohne Autostraßen-Fenster und ohne Logistik-Overlay) liegt grauer
+  Asphalt im Terrain-Atlas und als geteilte Overlay-Fläche mit
+  Stellplatzlinien. Straßen, Pfade und Wiese bleiben unverändert. Die
+  grün/orange Belegung und das P bleiben Hilfen der Autostraßen-Bauansicht.
+  Abriss (auch Autostraßen-Abreißen) entfernt die Bucht, räumt
+  `occupiedBy` und ungültige Reservierungen und gibt die Kachel frei;
+  leere oder verwaiste Restbelegung darf überbaut werden. Nach dem
+  Entfernen wird die Navigation sofort ungültig. Der Asphalt im Atlas
+  hängt nur an `parkingCells`.
+  Nach dem Einparken steigen Gäste auf eine **orthogonal angrenzende**
+  normale Fußwegkachel aus (`chooseParkingDisembarkPath`): zuerst ein
+  Weg ohne Fahrbahnüberlappung, sonst der Weg gegenüber der Zufahrt,
+  sonst irgendein 4er-Nachbar. Ein Zebrastreifen (Fußweg auf der
+  Autostraße) zählt als begehbare Lage, wird aber gemieden, wenn ein
+  reiner Gehweg anliegt. Ohne Nachbarweg bleibt der bisherige Fallback
+  (Zufahrt, sonst Eingang); niemand bleibt in der Bucht stehen.
+  Bis dahin zählen Insassen (`passengerIds`) nicht als Fußgänger auf
+  der Fahrbahn: sie laufen nicht, belegen die Straße nicht, werden
+  nicht verletzt und ziehen keinen Sanitäter/Ticker. Nach dem
+  Einparken steigen Anreise-Insassen trotzdem aus; das Auto fährt
+  nicht sofort wieder ab, nur weil sie noch `vehicle-arrival` wären.
 - Personaltore sperren die Kachel für Besucher, nicht für Personal,
   Saugroboter oder Waren-Träger. Lastwagen nutzen das Straßennetz und
   fahren nicht durch Personaleingänge.
@@ -85,6 +124,15 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   Zelle frei ist. Ein gesperrter Rückwärts-Schritt wird verworfen; ist
   beides blockiert, gilt die normale Fahrtrichtung. Nach dem Entladen
   dreht der Lieferwagen in die Ausfahrt.
+- Das Infofenster eines Müllfahrzeugs zeigt die **Müllladung**
+  (`cargo` / `garbageTruckCapacity` 90, inkl. Prozent), nicht Insassen.
+  Insassen nur bei Fahrzeugen, die Personen tragen (`visitorCar`, Bus,
+  Krankenwagen). Lieferwagen behalten die Warenladung. Saugroboter
+  bleiben im Personal-Infofenster (`Müllladung`).
+- Idle-Krankenwagen fahren nicht den ersten Verletzten in der Gästeliste
+  an: `dispatchIdleAmbulances` paart jeden Verletzten mit dem nächsten
+  freien Wagen (Manhattan, dann **eine** Straßenroute). Ein Wagen auf
+  dem Weg oder mit Patient bleibt zugewiesen. Sanitäter: `docs/staff.md`.
 - Gekaufte Flottenfahrzeuge (`garbageTruck`, Bus, Krankenwagen,
   Saugreiniger) dürfen beim Stau-Timeout nicht wie abfahrende
   Besucherautos gelöscht werden. `unstickVehicle` und das Leeren der
@@ -181,13 +229,20 @@ werden im Tick korrigiert. Ausparken richtet die Nase beim Einfahren aus.
 `tests/supplyChain.ts` (Lieferung, Umwege, Cache-Recovery).
 `tests/festival.ts` (Lager, Bestellungen). `tests/operations.ts` (Betrieb,
 Saugreiniger auf Wegen, Bühnenvorplatz und durch Personaleingang,
+nächster freier Krankenwagen zum Verletzten,
 Müllwagen bleiben im Stau
 und hinter der Karte erhalten, Wiedereinfahrt sobald Einstiege frei
 sind, Rückfahrt vom Ausgang, Buden-Nachschub von der Seite/hinten,
-Personaleingang auf der Kante).
+Personaleingang auf der Kante, Parkplatz-Abriss inkl. Restbelegung,
+Aussteigen auf den angrenzenden Fußweg bzw. Zufahrts-Fallback,
+Insassen erst nach dem Aussteigen aktiv / verletzbar).
 `tests/accessControl.ts` (Ampel/Schranke, Slots, Tageszeit, Festivalphase, Zeitplan, Sensor, Halt vor Rot,
 opportunistisches Parken inkl. Einbahn-Nebenbucht, Trennlinie,
 Liefer- und Müllwagen-Umweg bei Dauer-Rot, Gebiet).
+`tests/wayElevation.ts` (Straßenrampen, Autodach 1.0, Save ohne Höhenfeld, fester Shift-Ausgang,
+Fußweg auf Autostraße, gestapelte Autostraße / Brücke, ein Feld übermalen ohne Nachbarverlust).
+`tests/festivalAdditions.ts` (Müllwagen-Ladung statt Insassen,
+zusammenhängende Müllablage-Füllstände).
 
 ## Bei Änderungen dieses Dokument
 

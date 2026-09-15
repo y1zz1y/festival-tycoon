@@ -1,5 +1,12 @@
 import { WORLD_SIZE } from './catalog'
 import { findWeightedPath } from './pathfinding'
+import { SIMULATION_CONFIG } from './simulationConfig'
+import {
+  canTraverseWayElevation,
+  elevationsMatch,
+  packWayElevation,
+  snapWayElevation,
+} from './wayElevation'
 
 export type Direction = 0 | 1 | 2 | 3
 export type SpeedLimit = 10 | 30 | 50
@@ -7,6 +14,8 @@ export type SpeedLimit = 10 | 30 | 50
 export type RoadPosition = {
   x: number
   z: number
+  /** Layer height; missing means the lowest road on that tile. */
+  elevation?: number
 }
 
 export type RoadCell = RoadPosition & {
@@ -14,6 +23,11 @@ export type RoadCell = RoadPosition & {
   blockedEdges: number
   speedLimit: SpeedLimit
   crosswalk: boolean
+  /** End height of the tile; missing in old saves means “on terrain”. */
+  elevation?: number
+  /** Height change across the tile (−1 / −0.5 / 0 / 0.5 / 1). */
+  roadSlope?: number
+  roadSlopeDirection?: Direction
 }
 
 export type ParkingCell = RoadPosition & {
@@ -169,6 +183,99 @@ export function describeRoadVehicleActivity(vehicle: RoadVehicle): string {
   }
 }
 
+export function roadVehicleCarriesPeople(kind: RoadVehicleKind): boolean {
+  return kind === 'visitorCar' || kind === 'bus' || kind === 'ambulance'
+}
+
+/** People still listed on a car, bus or ambulance are not on-foot yet. */
+export function collectSeatedPassengerIds(
+  vehicles: readonly { passengerIds?: readonly string[] }[] | undefined,
+): Set<string> {
+  const seated = new Set<string>()
+  if (!vehicles) return seated
+  for (const vehicle of vehicles) {
+    const ids = vehicle.passengerIds
+    if (!ids) continue
+    for (const id of ids) seated.add(id)
+  }
+  return seated
+}
+
+export type ParkingDisembarkCandidate = {
+  x: number
+  z: number
+  elevation: number
+  onRoad: boolean
+}
+
+/** Prefer an orthogonal path beside a stall: off the roadway, then opposite the approach. */
+export function chooseParkingDisembarkPath(
+  parking: { x: number; z: number },
+  candidates: readonly ParkingDisembarkCandidate[],
+  approachRoads: readonly { x: number; z: number }[],
+): ParkingDisembarkCandidate | null {
+  if (candidates.length === 0) return null
+  const opposite = new Set(
+    approachRoads.map(
+      (road) => `${parking.x * 2 - road.x}:${parking.z * 2 - road.z}`,
+    ),
+  )
+  let best = candidates[0]!
+  let bestIndex = 0
+  for (let index = 1; index < candidates.length; index += 1) {
+    const candidate = candidates[index]!
+    const betterThanBest =
+      Number(best.onRoad) - Number(candidate.onRoad) ||
+      Number(opposite.has(`${candidate.x}:${candidate.z}`)) -
+        Number(opposite.has(`${best.x}:${best.z}`)) ||
+      bestIndex - index
+    if (betterThanBest > 0) {
+      best = candidate
+      bestIndex = index
+    }
+  }
+  return best
+}
+
+export function roadVehicleWasteCapacity(kind: RoadVehicleKind): number | null {
+  if (kind === 'garbageTruck') return SIMULATION_CONFIG.logistics.garbageTruckCapacity
+  if (kind === 'sweeper') return SIMULATION_CONFIG.logistics.sweeperCapacity
+  return null
+}
+
+export type RoadVehicleInspectStat = {
+  label: string
+  value: string
+}
+
+export function formatRoadVehicleInspectLoad(
+  vehicle: Pick<RoadVehicle, 'kind' | 'passengerIds' | 'cargo'>,
+): RoadVehicleInspectStat[] {
+  const stats: RoadVehicleInspectStat[] = []
+  if (roadVehicleCarriesPeople(vehicle.kind)) {
+    stats.push({
+      label: 'Insassen',
+      value: String(vehicle.passengerIds.length),
+    })
+  }
+  const wasteCapacity = roadVehicleWasteCapacity(vehicle.kind)
+  if (wasteCapacity !== null) {
+    const percent =
+      wasteCapacity <= 0
+        ? 0
+        : Math.min(100, Math.round((vehicle.cargo / wasteCapacity) * 100))
+    stats.push({
+      label: 'Müll',
+      value: `${vehicle.cargo} / ${wasteCapacity} (${percent} %)`,
+    })
+    return stats
+  }
+  if (vehicle.kind === 'deliveryTruck') {
+    stats.push({ label: 'Ladung', value: String(vehicle.cargo) })
+  }
+  return stats
+}
+
 export function describeRoadVehicleDestination(vehicle: RoadVehicle): string | null {
   if (vehicle.parkingCell && vehicle.state !== 'parked') {
     return `Parkplatz ${vehicle.parkingCell.x}, ${vehicle.parkingCell.z}`
@@ -237,6 +344,7 @@ export type LogisticsSnapshot = {
 export type RoadGraph = {
   cells: readonly RoadCell[]
   byKey: ReadonlyMap<string, RoadCell>
+  byXZ: ReadonlyMap<string, readonly RoadCell[]>
   neighbors: ReadonlyMap<string, readonly RoadCell[]>
 }
 
@@ -311,6 +419,31 @@ export function cellKey(x: number, z: number): string {
   return `${x}:${z}`
 }
 
+export function roadLayerElevation(cell: Pick<RoadCell, 'elevation'>, fallback = 0): number {
+  return cell.elevation ?? fallback
+}
+
+export function roadLayerKey(x: number, z: number, elevation = 0): string {
+  return `${x}:${z}:${packWayElevation(elevation)}`
+}
+
+export function toRoadPosition(cell: Pick<RoadCell, 'x' | 'z' | 'elevation'>): RoadPosition {
+  return cell.elevation === undefined
+    ? { x: cell.x, z: cell.z }
+    : { x: cell.x, z: cell.z, elevation: cell.elevation }
+}
+
+export function resolveRoadLayer(
+  layers: readonly RoadCell[],
+  elevation?: number,
+): RoadCell | undefined {
+  if (elevation !== undefined) {
+    return layers.find((cell) => elevationsMatch(roadLayerElevation(cell), elevation))
+  }
+  if (layers.length <= 1) return layers[0]
+  return [...layers].sort((a, b) => roadLayerElevation(a) - roadLayerElevation(b))[0]
+}
+
 export function edgeKey(x: number, z: number, direction: Direction): string {
   const offset = DIRECTION_OFFSETS[direction]
   const otherX = x + offset.x
@@ -362,17 +495,26 @@ export function createRoadGraph(
   roadCells: readonly RoadCell[],
   worldSize = WORLD_SIZE,
 ): RoadGraph {
-  const byKey = new Map(
-    roadCells.map((roadCell) => [cellKey(roadCell.x, roadCell.z), roadCell]),
-  )
+  const byKey = new Map<string, RoadCell>()
+  const byXZ = new Map<string, RoadCell[]>()
+  for (const roadCell of roadCells) {
+    const xz = cellKey(roadCell.x, roadCell.z)
+    const layers = byXZ.get(xz) ?? []
+    layers.push(roadCell)
+    byXZ.set(xz, layers)
+    byKey.set(
+      roadLayerKey(roadCell.x, roadCell.z, roadLayerElevation(roadCell)),
+      roadCell,
+    )
+  }
   const neighbors = new Map<string, RoadCell[]>()
   for (const cell of roadCells) {
     neighbors.set(
-      cellKey(cell.x, cell.z),
-      collectRoadNeighbors(cell, byKey, worldSize),
+      roadLayerKey(cell.x, cell.z, roadLayerElevation(cell)),
+      collectRoadNeighbors(cell, byXZ, worldSize),
     )
   }
-  return { cells: roadCells, byKey, neighbors }
+  return { cells: roadCells, byKey, byXZ, neighbors }
 }
 
 export function getRoadNeighbors(
@@ -380,16 +522,19 @@ export function getRoadNeighbors(
   roadCells: readonly RoadCell[],
   worldSize = WORLD_SIZE,
 ): RoadCell[] {
-  return collectRoadNeighbors(
-    cell,
-    new Map(roadCells.map((roadCell) => [cellKey(roadCell.x, roadCell.z), roadCell])),
-    worldSize,
-  )
+  const byXZ = new Map<string, RoadCell[]>()
+  for (const roadCell of roadCells) {
+    const xz = cellKey(roadCell.x, roadCell.z)
+    const layers = byXZ.get(xz) ?? []
+    layers.push(roadCell)
+    byXZ.set(xz, layers)
+  }
+  return collectRoadNeighbors(cell, byXZ, worldSize)
 }
 
 function collectRoadNeighbors(
   cell: RoadCell,
-  roadsByKey: ReadonlyMap<string, RoadCell>,
+  roadsByXZ: ReadonlyMap<string, readonly RoadCell[]>,
   worldSize: number,
 ): RoadCell[] {
   const half = worldSize / 2
@@ -409,19 +554,29 @@ function collectRoadNeighbors(
     ) {
       return []
     }
-    const neighbor = roadsByKey.get(cellKey(position.x, position.z))
-    if (
-      !neighbor ||
-      (neighbor.allowedDirections !== null &&
-        isRoadDirectionAllowed(neighbor, oppositeDirection(direction)) &&
-        !isRoadDirectionAllowed(neighbor, direction)) ||
-      (neighbor.blockedEdges &
-        directionBit(oppositeDirection(direction))) !==
-        0
-    ) {
-      return []
-    }
-    return [neighbor]
+    const candidates = roadsByXZ.get(cellKey(position.x, position.z)) ?? []
+    return candidates.filter((neighbor) => {
+      if (
+        (neighbor.allowedDirections !== null &&
+          isRoadDirectionAllowed(neighbor, oppositeDirection(direction)) &&
+          !isRoadDirectionAllowed(neighbor, direction)) ||
+        (neighbor.blockedEdges &
+          directionBit(oppositeDirection(direction))) !==
+          0 ||
+        !canTraverseWayElevation(
+          roadLayerElevation(cell),
+          cell.roadSlope ?? 0,
+          cell.roadSlopeDirection,
+          roadLayerElevation(neighbor),
+          neighbor.roadSlope ?? 0,
+          neighbor.roadSlopeDirection,
+          direction,
+        )
+      ) {
+        return false
+      }
+      return true
+    })
   })
 }
 
@@ -431,16 +586,28 @@ export function findRoadRoute(
   const graph =
     options.graph ??
     createRoadGraph(options.roadCells, options.worldSize ?? WORLD_SIZE)
-  const start = graph.byKey.get(cellKey(options.start.x, options.start.z))
+  const start = resolveRoadLayer(
+    graph.byXZ.get(cellKey(options.start.x, options.start.z)) ?? [],
+    options.start.elevation,
+  )
   const targets = [
     ...(options.targets ?? []),
     ...(options.target ? [options.target] : []),
   ]
-  const targetKeys = new Set(
-    targets
-      .map((target) => cellKey(target.x, target.z))
-      .filter((key) => graph.byKey.has(key)),
-  )
+  const targetKeys = new Set<string>()
+  for (const target of targets) {
+    const layers = graph.byXZ.get(cellKey(target.x, target.z)) ?? []
+    if (target.elevation !== undefined) {
+      const layer = resolveRoadLayer(layers, target.elevation)
+      if (layer) {
+        targetKeys.add(roadLayerKey(layer.x, layer.z, roadLayerElevation(layer)))
+      }
+      continue
+    }
+    for (const layer of layers) {
+      targetKeys.add(roadLayerKey(layer.x, layer.z, roadLayerElevation(layer)))
+    }
+  }
   if (!start || targetKeys.size === 0) return null
 
   type RouteNode = {
@@ -453,11 +620,14 @@ export function findRoadRoute(
       direction: options.initialDirection ?? null,
     },
     key: (node) =>
-      `${cellKey(node.cell.x, node.cell.z)}:${node.direction ?? 'start'}`,
-    isGoal: (node) => targetKeys.has(cellKey(node.cell.x, node.cell.z)),
+      `${roadLayerKey(node.cell.x, node.cell.z, roadLayerElevation(node.cell))}:${node.direction ?? 'start'}`,
+    isGoal: (node) =>
+      targetKeys.has(roadLayerKey(node.cell.x, node.cell.z, roadLayerElevation(node.cell))),
     neighbors: (node) => {
       const adjacent =
-        graph.neighbors.get(cellKey(node.cell.x, node.cell.z)) ?? []
+        graph.neighbors.get(
+          roadLayerKey(node.cell.x, node.cell.z, roadLayerElevation(node.cell)),
+        ) ?? []
       return adjacent.flatMap((neighbor) => {
         const direction = directionFromDelta(
           neighbor.x - node.cell.x,
@@ -539,12 +709,22 @@ function normalizeRoadCell(value: unknown): RoadCell | null {
       : source.allowedDirections === undefined
         ? null
         : normalizeMask(source.allowedDirections, 15)
+  const elevation =
+    Number.isFinite(source.elevation) ? snapWayElevation(Number(source.elevation)) : undefined
+  const roadSlope =
+    Number.isFinite(source.roadSlope) ? snapWayElevation(Number(source.roadSlope)) : undefined
+  const slopeDirection = Number.isFinite(source.roadSlopeDirection)
+    ? (((Math.round(Number(source.roadSlopeDirection)) % 4) + 4) % 4) as Direction
+    : undefined
   return {
     ...position,
     allowedDirections,
     blockedEdges: normalizeMask(source.blockedEdges, 0),
     speedLimit: memberOf(source.speedLimit, SPEED_LIMITS) ?? 30,
     crosswalk: source.crosswalk === true,
+    ...(elevation === undefined ? {} : { elevation }),
+    ...(roadSlope === undefined ? {} : { roadSlope }),
+    ...(slopeDirection === undefined ? {} : { roadSlopeDirection: slopeDirection }),
   }
 }
 

@@ -30,6 +30,7 @@ type Patient = {
 type StaffContext = {
   staff: StaffMember[]
   visitors: Patient[]
+  seatedPassengerIds?: ReadonlySet<string>
   incidents: GroundIncident[]
   medicalCells: MedicalCell[]
   wasteDumps: WasteDumpCell[]
@@ -62,6 +63,7 @@ export class StaffSimulation {
       )
       if (incident) claimed.add(this.incidentFieldKey(incident))
     })
+    this.assignNearestFreeMedics(context, claimed)
     context.staff.forEach((member) => {
       if (member.role === 'security' && member.assignedBuildingId) return
       if (member.state === 'working' && !member.targetId) {
@@ -157,22 +159,115 @@ export class StaffSimulation {
     })
   }
 
+  private assignNearestFreeMedics(context: StaffContext, claimed: Set<string>): void {
+    const medics = context.staff.filter((member) => this.medicIsFree(member))
+    if (medics.length === 0) return
+    const patients = context.visitors.filter((visitor) =>
+      this.visitorNeedsMedic(visitor, claimed, context.seatedPassengerIds),
+    )
+    if (patients.length === 0) return
+    const pairs: Array<{ medic: StaffMember; patient: Patient; distance: number }> = []
+    for (const medic of medics) {
+      for (const patient of patients) {
+        if (!isInAnyZone(medic.workZones, patient.cellX, patient.cellZ)) continue
+        pairs.push({
+          medic,
+          patient,
+          distance: this.patientDistance(medic, patient),
+        })
+      }
+    }
+    pairs.sort(
+      (left, right) =>
+        left.distance - right.distance ||
+        left.medic.id.localeCompare(right.medic.id) ||
+        left.patient.id.localeCompare(right.patient.id),
+    )
+    const usedMedics = new Set<string>()
+    const usedPatients = new Set<string>()
+    for (const pair of pairs) {
+      if (usedMedics.has(pair.medic.id) || usedPatients.has(pair.patient.id)) continue
+      const route = context.findPath(
+        this.staffCell(pair.medic),
+        [
+          {
+            x: pair.patient.cellX,
+            z: pair.patient.cellZ,
+            elevation: pair.patient.cellElevation,
+          },
+        ],
+        true,
+      )
+      if (!route) continue
+      pair.medic.targetId = pair.patient.id
+      pair.medic.state = 'responding'
+      pair.medic.route = route
+      claimed.add(pair.patient.id)
+      usedMedics.add(pair.medic.id)
+      usedPatients.add(pair.patient.id)
+    }
+  }
+
+  private medicIsFree(member: StaffMember): boolean {
+    return (
+      member.role === 'medic' &&
+      !member.targetId &&
+      member.state !== 'carrying' &&
+      member.state !== 'working' &&
+      member.state !== 'responding'
+    )
+  }
+
+  private visitorNeedsMedic(
+    visitor: Patient,
+    claimed: Set<string>,
+    seated?: ReadonlySet<string>,
+  ): boolean {
+    if (
+      seated?.has(visitor.id) ||
+      visitor.state === 'vehicle-arrival' ||
+      visitor.state === 'bus-riding'
+    ) {
+      return false
+    }
+    return (
+      (visitor.state === 'sleeping' ||
+        visitor.state === 'injured' ||
+        visitor.state === 'vomiting' ||
+        visitor.nausea >= SIMULATION_CONFIG.staff.medicNauseaThreshold) &&
+      !visitor.rescueVehicleId &&
+      !visitor.medicalCell &&
+      !claimed.has(visitor.id)
+    )
+  }
+
+  private nearestMedicPatient(
+    member: StaffMember,
+    context: StaffContext,
+    claimed: Set<string>,
+  ): Patient | null {
+    return context.visitors
+      .filter((visitor) =>
+        this.visitorNeedsMedic(visitor, claimed, context.seatedPassengerIds),
+      )
+      .sort(
+        (left, right) =>
+          this.patientDistance(member, left) - this.patientDistance(member, right) ||
+          left.id.localeCompare(right.id),
+      )[0] ?? null
+  }
+
+  private patientDistance(member: StaffMember, patient: Patient): number {
+    return Math.abs(patient.cellX - member.cellX) + Math.abs(patient.cellZ - member.cellZ)
+  }
+
   private findTarget(
     member: StaffMember,
     context: StaffContext,
     claimed: Set<string>,
   ): { id: string; cell: Cell; allowMedical?: boolean; kind?: string } | null {
     if (member.role === 'medic') {
-      const patient = context.visitors.find(
-        (visitor) =>
-          (visitor.state === 'sleeping' ||
-            visitor.state === 'injured' ||
-            visitor.state === 'vomiting' ||
-            visitor.nausea >= SIMULATION_CONFIG.staff.medicNauseaThreshold) &&
-          !visitor.rescueVehicleId &&
-          !visitor.medicalCell &&
-          !claimed.has(visitor.id),
-      )
+      const patient = this.nearestMedicPatient(member, context, claimed)
       return patient
         ? {
             id: patient.id,
@@ -186,12 +281,15 @@ export class StaffSimulation {
         return null
       }
       const binCapacity = SIMULATION_CONFIG.waste.binCapacity
+      const idleEmptyFill = SIMULATION_CONFIG.waste.cleanerIdleEmptyFill
       const binDistance = (bin: { x: number; z: number }) =>
         Math.abs(bin.x - member.cellX) + Math.abs(bin.z - member.cellZ)
+      // Priority: full/overflowing bins, then litter/vomit/abandoned camps, then
+      // idle emptying of bins at/above cleanerIdleEmptyFill. Sweepers never empty bins.
       const bin = context.wasteBins
         .filter(
           (candidate) =>
-            candidate.stored >= binCapacity &&
+            candidate.stored >= idleEmptyFill &&
             !claimed.has(candidate.id) &&
             member.carryingWaste + candidate.stored <=
               SIMULATION_CONFIG.waste.cleanerMaxCarry,
@@ -242,7 +340,7 @@ export class StaffSimulation {
         .filter((job): job is NonNullable<typeof job> => Boolean(job))
         .sort((left, right) => left.distance - right.distance)
       const job = jobs[0]
-      if (bin && (!job || bin.stored >= binCapacity || binDistance(bin) <= job.distance + 2)) {
+      if (bin && (!job || bin.stored >= binCapacity)) {
         return {
           id: bin.id,
           cell: { x: bin.x, z: bin.z, elevation: bin.elevation },

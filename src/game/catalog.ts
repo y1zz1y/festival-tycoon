@@ -19,6 +19,11 @@ export const BUILDING_KINDS = [
   'banner',
   'bunting', 'stringLights', 'hayBale', 'parasol', 'picnicTable', 'festivalSign',
   'totem', 'flagPole', 'lanternPole', 'kegStack', 'inflatable', 'prayerFlags', 'fireBowl',
+  'picketFence', 'ropeFence', 'streamers',
+  'trafficCone', 'crateStack', 'oilDrum', 'pinwheel', 'windSock',
+  'hangingBasket', 'cactusPot', 'gnome', 'windChimes', 'chalkboard',
+  'loungeChair', 'beanBag', 'tikiTorch', 'decoSpeaker', 'boombox', 'photoFrame',
+  'discoBall', 'inflatableCactus', 'giantMushroom', 'crystalTotem', 'welcomeArch',
   'fence',
   'bench',
   'lighting',
@@ -68,6 +73,24 @@ export type Tool =
   | 'powerCable'
   | 'bulldoze'
   | 'inspect'
+
+/** Autostraßen window and overlays: occupancy/P helpers stay here, not in the default camera. */
+export const ROAD_BUILD_TOOLS = [
+  'road',
+  'parkingArea',
+  'roadDirection',
+  'trafficLight',
+  'pathBarrier',
+  'roadSeparator',
+  'crosswalk',
+  'roadSpeed10',
+  'roadSpeed30',
+  'roadSpeed50',
+] as const satisfies readonly Tool[]
+
+export function isRoadBuildTool(tool: string | undefined): boolean {
+  return (ROAD_BUILD_TOOLS as readonly string[]).includes(tool ?? '')
+}
 
 export type BuildingDefinition = {
   kind: BuildingKind
@@ -342,6 +365,30 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
   inflatable: { kind: 'inflatable', name: 'Luftfigur', cost: 80, upkeep: 2, capacity: 0, appeal: 7, defaultPrice: 0, height: 1.25, color: 0xe86a8a, icon: '🦩' },
   prayerFlags: { kind: 'prayerFlags', name: 'Gebetsfahnen', cost: 40, upkeep: 1, capacity: 0, appeal: 6, defaultPrice: 0, height: 1.3, color: 0xe4b754, icon: '🎐' },
   fireBowl: { kind: 'fireBowl', name: 'Feuerschale', cost: 70, upkeep: 2, capacity: 0, appeal: 5, defaultPrice: 0, height: .55, color: 0xd4652a, icon: '🔥' },
+  picketFence: { kind: 'picketFence', name: 'Lattenzaun', cost: 22, upkeep: 0, capacity: 0, appeal: 2, defaultPrice: 0, height: .75, color: 0xe8d8b0, icon: '🏡' },
+  ropeFence: { kind: 'ropeFence', name: 'Absperrseil', cost: 20, upkeep: 0, capacity: 0, appeal: 1, defaultPrice: 0, height: .7, color: 0xc9a15b, icon: '🪢' },
+  streamers: { kind: 'streamers', name: 'Luftschlangen', cost: 18, upkeep: 1, capacity: 0, appeal: 2, defaultPrice: 0, height: 1.25, color: 0xe86a8a, icon: '🎀' },
+  trafficCone: { kind: 'trafficCone', name: 'Leitkegel', cost: 8, upkeep: 0, capacity: 0, appeal: 1, defaultPrice: 0, height: .45, color: 0xe67a22, icon: '🚧' },
+  crateStack: { kind: 'crateStack', name: 'Kistenstapel', cost: 15, upkeep: 0, capacity: 0, appeal: 1, defaultPrice: 0, height: .55, color: 0xb28053, icon: '📦' },
+  oilDrum: { kind: 'oilDrum', name: 'Ölfass', cost: 18, upkeep: 0, capacity: 0, appeal: 1, defaultPrice: 0, height: .6, color: 0x4a6a72, icon: '🛢️' },
+  pinwheel: { kind: 'pinwheel', name: 'Windrad', cost: 12, upkeep: 0, capacity: 0, appeal: 2, defaultPrice: 0, height: .85, color: 0x5da397, icon: '🌀' },
+  windSock: { kind: 'windSock', name: 'Windsack', cost: 16, upkeep: 0, capacity: 0, appeal: 2, defaultPrice: 0, height: 1.15, color: 0xe4b754, icon: '🎐' },
+  hangingBasket: { kind: 'hangingBasket', name: 'Blumenampel', cost: 40, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: 1.05, color: 0xd981a0, icon: '💐' },
+  cactusPot: { kind: 'cactusPot', name: 'Kaktus', cost: 28, upkeep: 1, capacity: 0, appeal: 3, defaultPrice: 0, height: .7, color: 0x4f9a62, icon: '🌵' },
+  gnome: { kind: 'gnome', name: 'Gartenzwerg', cost: 45, upkeep: 0, capacity: 0, appeal: 4, defaultPrice: 0, height: .7, color: 0xc43d55, icon: '🧙' },
+  windChimes: { kind: 'windChimes', name: 'Windspiel', cost: 38, upkeep: 0, capacity: 0, appeal: 4, defaultPrice: 0, height: 1.15, color: 0xc0a468, icon: '🔔' },
+  chalkboard: { kind: 'chalkboard', name: 'Kreidetafel', cost: 25, upkeep: 0, capacity: 0, appeal: 2, defaultPrice: 0, height: 1.05, color: 0x3d4a3a, icon: '🖍️' },
+  loungeChair: { kind: 'loungeChair', name: 'Liegestuhl', cost: 50, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: .45, color: 0xd75b79, icon: '⛱️' },
+  beanBag: { kind: 'beanBag', name: 'Sitzsack', cost: 35, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .4, color: 0x5da397, icon: '🛋️' },
+  tikiTorch: { kind: 'tikiTorch', name: 'Fackel', cost: 48, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: 1.25, color: 0xd4652a, icon: '🕯️' },
+  decoSpeaker: { kind: 'decoSpeaker', name: 'Deko-Box', cost: 55, upkeep: 1, capacity: 0, appeal: 3, defaultPrice: 0, height: .75, color: 0x292b32, icon: '🔈' },
+  boombox: { kind: 'boombox', name: 'Boombox', cost: 70, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: .4, color: 0x383a43, icon: '📻' },
+  photoFrame: { kind: 'photoFrame', name: 'Selfie-Rahmen', cost: 85, upkeep: 1, capacity: 0, appeal: 6, defaultPrice: 0, height: 1.35, color: 0xe4b754, icon: '🖼️' },
+  discoBall: { kind: 'discoBall', name: 'Diskokugel', cost: 95, upkeep: 2, capacity: 0, appeal: 7, defaultPrice: 0, height: 1.45, color: 0xc8d4ee, icon: '🪩' },
+  inflatableCactus: { kind: 'inflatableCactus', name: 'Luftkaktus', cost: 75, upkeep: 2, capacity: 0, appeal: 6, defaultPrice: 0, height: 1.2, color: 0x4f9a62, icon: '🎈' },
+  giantMushroom: { kind: 'giantMushroom', name: 'Riesenpilz', cost: 110, upkeep: 1, capacity: 0, appeal: 8, defaultPrice: 0, height: 1.15, color: 0xce5677, icon: '🍄' },
+  crystalTotem: { kind: 'crystalTotem', name: 'Kristallstele', cost: 130, upkeep: 1, capacity: 0, appeal: 8, defaultPrice: 0, height: 1.5, color: 0x7ec8c4, icon: '💎' },
+  welcomeArch: { kind: 'welcomeArch', name: 'Willkommensbogen', cost: 160, upkeep: 2, capacity: 0, appeal: 10, defaultPrice: 0, height: 1.7, color: 0xc95670, icon: '⛩' },
 }
 
 export const STARTING_MONEY = SIMULATION_CONFIG.economy.startingMoney

@@ -40,7 +40,7 @@ Neue oder geänderte Funktionen sind erst fertig, wenn die Doku stimmt:
 | Gelände, Boden, Wege, Umgebung | [terrain.md](terrain.md) | Höhen, Ground-Prep, Way-Types |
 | Straßen, Fahrzeuge, Waren, Depots | [logistics.md](logistics.md) | Roads, Träger, Lastwagen, Ampeln, Schranken |
 | Personal, Zonen, Sanität, Security | [staff.md](staff.md) | Rollen, Arbeitsbereiche, Tore |
-| Müll, Vorfälle, Feuerwerk, Panik | [incidents.md](incidents.md) | Incidents, Waste-Dumps, Bubbles |
+| Müll, Vorfälle, Feuerwerk, Panik | [incidents.md](incidents.md) | Incidents, Waste-Dumps, Ticker, Bubbles |
 | Festivalwochenende, Bands, Tickets | [festival.md](festival.md) | Buchungen, Wetter, Ruf, Tagesplan |
 | Bühnenwerkstatt, Show, Publikum | [stages.md](stages.md) | Designs, Vorlagen, Zuschauerflächen |
 | Achterbahn, Karussell, Bungee | [attractions.md](attractions.md) | Schienen, Queues, Ride-Zugang |

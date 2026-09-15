@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { Raycaster, Vector3, MeshStandardMaterial } from 'three'
 import type { GameState } from '../src/game/GameState'
-import { createTerrainAtlas, createTerrainBase, createTerrainMaterial, createTerrainSurface, terrainMaterialAt } from '../src/view/terrainSurface'
+import { createTerrainAtlas, createTerrainBase, createTerrainMaterial, createTerrainSurface, TERRAIN_MATERIALS, terrainMaterialAt } from '../src/view/terrainSurface'
 import { TerrainShape } from '../src/view/terrainShape'
 import { applyTerrainChanges, planTerrainEdit } from '../src/game/terrain'
 
@@ -37,6 +37,22 @@ export function testTerrainSurface(fixture: (count?: number) => GameState): void
   assert.equal(terrainMaterialAt(snapshot, 2, 2), 'gravel')
   snapshot.festival.infrastructure.ground['2,2']!.surface = 'paved'
   assert.equal(terrainMaterialAt(snapshot, 2, 2), 'paved')
+  snapshot.logistics.parkingCells = [{ x: 3, z: 3, occupiedBy: null }]
+  assert.equal(terrainMaterialAt(snapshot, 3, 3), 'parking')
+  assert.equal(terrainMaterialAt(snapshot, 2, 2), 'paved', 'parking does not recolor neighboring paved or way tiles')
+  snapshot.festival.infrastructure.ground['4,3'] = { footway: 'footDirt', roadway: 'roadAsphalt' }
+  assert.notEqual(terrainMaterialAt(snapshot, 4, 3), 'parking', 'roads and paths stay on their own materials')
+  const parkingLot = createTerrainSurface(snapshot, material)
+  const parkingUv = parkingLot.geometry.getAttribute('uv')
+  const half = snapshot.scenario.worldSize / 2
+  const parkingIndex = ((3 + half) * snapshot.scenario.worldSize + (3 + half)) * 5
+  const parkingRow = TERRAIN_MATERIALS.indexOf('parking')
+  assert.ok(
+    Math.abs(parkingUv.getY(parkingIndex) - (parkingRow * 64 + 0.5) / (64 * TERRAIN_MATERIALS.length)) < 1e-6,
+    'designated parking uses the asphalt atlas row, not grass or dirt',
+  )
+  parkingLot.geometry.dispose()
+  snapshot.logistics.parkingCells = []
   const atlas = createTerrainAtlas()
   assert.deepEqual(atlas.image.data, material.map!.image.data, 'patterns are deterministic without consuming simulation RNG')
   for (const mesh of [surface, restored, wet]) mesh.geometry.dispose()

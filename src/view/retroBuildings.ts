@@ -131,6 +131,187 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
     k.cylinder(0, .34, 0, .07, .16, 0xd4652a, .02, 5)
     k.cylinder(0, .4, 0, .045, .14, 0xf2b35a, .01, 5)
     k.cylinder(0, .44, 0, .02, .1, cream, .01, 5)
+  } else if (kind === 'picketFence') {
+    for (const x of [-.4, -.13, .13, .4]) {
+      k.box(x, .36, 0, .05, .72, .04, cream)
+      k.box(x, .74, 0, .04, .08, .035, 0xe8d8b0)
+    }
+    for (const y of [.22, .48]) k.box(0, y, 0, .86, .045, .03, timber)
+    for (const x of [-.4, .4]) k.box(x, .03, 0, .1, .06, .1, ink)
+  } else if (kind === 'ropeFence') {
+    for (const x of [-.4, .4]) {
+      k.box(x, .36, 0, .045, .72, .045, timber)
+      k.box(x, .03, 0, .12, .06, .12, ink)
+      k.cylinder(x, .74, 0, .04, .04, 0xc9a15b)
+    }
+    for (const y of [.28, .5]) k.beam([-.4, y, 0], [.4, y, 0], .028, 0xc9a15b)
+    k.box(0, .4, 0, .06, .08, .03, 0xe4b754)
+  } else if (kind === 'streamers') {
+    for (const x of [-.42, .42]) { k.box(x, .62, 0, .04, 1.24, .05, timber); k.box(x, .03, 0, .1, .06, .2, ink) }
+    k.beam([-.42, 1.22, 0], [.42, 1.22, 0], .018, ink)
+    const stream = [0xe86a8a, 0x5da397, 0xe4b754, 0x3d7cc7, 0xce5677]
+    for (let n = 0; n < 5; n++) {
+      const x = -.32 + n * .16
+      k.box(x, .95, 0, .04, .52, .015, stream[n]!)
+      k.box(x + .03, .78, 0, .03, .28, .012, stream[n]!)
+    }
+  } else if (kind === 'trafficCone') {
+    k.cylinder(0, .04, 0, .16, .06, ink, .16, 8)
+    k.cylinder(0, .2, 0, .12, .28, 0xe67a22, .04, 8)
+    k.cylinder(0, .22, 0, .11, .05, cream, .09, 8)
+    k.cylinder(0, .36, 0, .035, .04, 0xe67a22, .02, 6)
+  } else if (kind === 'crateStack') {
+    k.box(0, .16, 0, .42, .32, .38, 0xb28053)
+    k.box(.08, .42, -.04, .36, .28, .34, 0x9a6c42)
+    for (const y of [.16, .42]) {
+      k.box(0, y, .2, .4, .02, .02, timber)
+      k.box(.18, y, 0, .02, .26, .34, timber)
+    }
+    k.box(.08, .56, -.04, .12, .03, .12, 0xe4b754)
+  } else if (kind === 'oilDrum') {
+    k.cylinder(0, .28, 0, .18, .52, 0x4a6a72, .18, 8)
+    k.cylinder(0, .52, 0, .185, .04, steel, .185, 8)
+    k.cylinder(0, .06, 0, .185, .04, steel, .185, 8)
+    k.cylinder(0, .28, 0, .19, .03, 0xe67a22, .19, 8)
+    k.box(.14, .4, 0, .04, .08, .04, ink)
+    k.box(0, .55, 0, .08, .03, .08, ink)
+  } else if (kind === 'pinwheel') {
+    k.box(0, .03, 0, .16, .06, .16, ink)
+    k.cylinder(0, .4, 0, .018, .74, timber)
+    k.sphere(0, .78, 0, .04, 0xe4b754, 6)
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2
+      k.box(Math.cos(a) * .12, .78 + Math.sin(a) * .04, Math.sin(a) * .12, .16, .03, .08, [0xce5677, 0x5da397, 0xe4b754, 0x3d7cc7][i]!)
+    }
+  } else if (kind === 'windSock') {
+    k.box(0, .04, 0, .2, .08, .2, ink)
+    k.cylinder(0, .58, 0, .02, 1.08, steel)
+    k.cylinder(.16, 1.05, 0, .09, .22, 0xe4b754, .05, 6)
+    k.cylinder(.3, 1.05, 0, .05, .18, 0xc43d55, .03, 6)
+    k.box(.16, 1.05, 0, .04, .24, .04, cream)
+    k.cylinder(0, 1.14, 0, .035, .04, 0xe4b754)
+  } else if (kind === 'hangingBasket') {
+    k.box(0, .03, 0, .18, .06, .18, ink)
+    k.cylinder(0, .42, 0, .018, .78, timber)
+    k.beam([0, .82, 0], [0, .62, .12], .015, steel)
+    k.cylinder(0, .52, .12, .12, .1, 0xbb7956, .1, 7)
+    k.cylinder(0, .58, .12, .1, .08, 0x48784a, .08, 6)
+    for (const [x, z] of [[-.05, .1], [.05, .14], [0, .08]] as const) {
+      k.box(x, .64, z, .05, .04, .05, [0xd981a0, 0xe9be59, 0xcf6c93][(x > 0 ? 1 : 0)]!)
+    }
+  } else if (kind === 'cactusPot') {
+    k.cylinder(0, .12, 0, .16, .22, 0xbb7956, .14, 7)
+    k.box(0, .24, 0, .28, .04, .28, cream)
+    k.cylinder(0, .46, 0, .08, .36, 0x4f9a62, .07, 6)
+    k.cylinder(-.1, .42, .02, .045, .16, 0x3f7b42, .04, 5)
+    k.cylinder(.09, .4, -.03, .04, .14, 0x3f7b42, .035, 5)
+    k.box(0, .66, 0, .03, .04, .03, 0xce5677)
+  } else if (kind === 'gnome') {
+    k.cylinder(0, .08, 0, .14, .12, 0x4d8b46, .14, 7)
+    k.cylinder(0, .22, 0, .1, .18, 0xc43d55, .1, 7)
+    k.sphere(0, .38, 0, .09, 0xf2dfb5, 7)
+    k.cylinder(0, .5, 0, .1, .16, 0xc43d55, .01, 7)
+    k.box(0, .3, .1, .08, .04, .04, cream)
+    k.box(-.03, .4, .08, .02, .015, .015, ink)
+    k.box(.03, .4, .08, .02, .015, .015, ink)
+    k.box(-.1, .22, .02, .04, .12, .04, 0xc43d55)
+    k.box(.1, .22, .02, .04, .12, .04, 0xc43d55)
+  } else if (kind === 'windChimes') {
+    k.box(0, .03, 0, .16, .06, .16, ink)
+    k.cylinder(0, .5, 0, .016, .9, timber)
+    k.box(0, .96, 0, .28, .04, .28, 0xc0a468)
+    for (const [x, z, h] of [[-.08, -.06, .28], [.08, -.04, .34], [-.04, .08, .22], [.06, .08, .3]] as const) {
+      k.cylinder(x, .96 - h / 2 - .04, z, .018, h, steel, .018, 6)
+    }
+  } else if (kind === 'chalkboard') {
+    k.box(0, .5, 0, .06, 1, .06, timber)
+    k.box(0, .03, 0, .16, .06, .16, ink)
+    k.box(0, .78, .04, .52, .36, .03, 0x3d4a3a)
+    k.box(0, .78, .04, .56, .4, .02, timber)
+    k.box(-.08, .8, .06, .18, .02, .012, cream)
+    k.box(.1, .74, .06, .12, .02, .012, 0xe4b754)
+  } else if (kind === 'loungeChair') {
+    k.box(0, .16, .08, .42, .04, .7, 0xd75b79)
+    k.box(0, .28, -.22, .42, .04, .28, 0xe86a8a)
+    for (const x of [-.18, .18]) {
+      k.beam([x, .03, .36], [x, .16, .08], .04, timber)
+      k.beam([x, .03, -.28], [x, .28, -.22], .04, timber)
+    }
+    k.box(0, .34, -.3, .36, .03, .08, cream)
+  } else if (kind === 'beanBag') {
+    k.sphere(0, .16, 0, .22, 0x5da397, 8)
+    k.sphere(0, .2, .06, .16, 0x4f8a82, 7)
+    k.box(0, .28, 0, .18, .04, .18, 0x3d7cc7)
+  } else if (kind === 'tikiTorch') {
+    k.box(0, .03, 0, .16, .06, .16, ink)
+    k.cylinder(0, .5, 0, .03, .92, timber)
+    k.cylinder(0, .98, 0, .08, .1, 0x6a5340, .06, 7)
+    k.cylinder(0, 1.1, 0, .05, .16, 0xd4652a, .02, 5)
+    k.cylinder(0, 1.16, 0, .03, .12, 0xf2b35a, .01, 5)
+    k.cylinder(0, 1.2, 0, .015, .08, cream, .01, 5)
+  } else if (kind === 'decoSpeaker') {
+    k.box(0, .04, 0, .28, .08, .22, ink)
+    k.box(0, .36, 0, .32, .56, .24, 0x292b32)
+    k.cylinder(0, .42, .13, .1, .04, 0x4c6063, .1, 8)
+    k.cylinder(0, .22, .13, .06, .03, 0x4c6063, .06, 7)
+    k.box(0, .62, .13, .18, .04, .02, cream)
+    k.box(.14, .5, 0, .03, .12, .08, steel)
+  } else if (kind === 'boombox') {
+    k.box(0, .16, 0, .52, .28, .22, 0x383a43)
+    for (const x of [-.16, .16]) k.cylinder(x, .16, .12, .08, .04, 0x4c6063, .08, 8)
+    k.box(0, .22, .12, .12, .08, .02, 0x6aa6b3)
+    k.box(0, .1, .12, .1, .03, .02, cream)
+    for (const x of [-.24, .24]) k.box(x, .3, 0, .04, .08, .08, ink)
+  } else if (kind === 'photoFrame') {
+    k.box(-.32, .7, 0, .08, 1.4, .08, timber)
+    k.box(.32, .7, 0, .08, 1.4, .08, timber)
+    k.box(0, 1.36, 0, .72, .08, .08, timber)
+    k.box(0, .08, 0, .72, .08, .12, timber)
+    k.box(0, 1.36, .05, .4, .22, .03, 0xe4b754)
+    k.box(0, 1.36, .07, .28, .08, .02, 0xc43d55)
+    for (const x of [-.32, .32]) k.box(x, .03, 0, .14, .06, .16, ink)
+  } else if (kind === 'discoBall') {
+    k.box(0, .03, 0, .2, .06, .2, ink)
+    k.cylinder(0, .55, 0, .02, 1.02, steel)
+    k.sphere(0, 1.18, 0, .16, 0xc8d4ee, 8)
+    k.box(-.08, 1.2, .12, .05, .05, .02, cream)
+    k.box(.08, 1.16, .12, .05, .05, .02, 0x7ec8c4)
+    k.box(0, 1.08, .12, .05, .05, .02, 0xe4b754)
+    k.box(0, 1.34, 0, .04, .04, .04, steel)
+  } else if (kind === 'inflatableCactus') {
+    k.cylinder(0, .08, 0, .16, .12, 0xbb7956, .16, 7)
+    k.cylinder(0, .5, 0, .12, .72, 0x4f9a62, .1, 7)
+    k.cylinder(-.16, .42, 0, .07, .28, 0x3f7b42, .06, 6)
+    k.cylinder(.16, .5, 0, .07, .24, 0x3f7b42, .06, 6)
+    k.box(0, .88, 0, .04, .04, .04, 0xce5677)
+    k.box(-.16, .58, 0, .03, .03, .03, 0xe4b754)
+    k.sphere(0, .12, 0, .08, 0xe86a8a, 6)
+  } else if (kind === 'giantMushroom') {
+    k.cylinder(0, .28, 0, .1, .5, cream, .12, 7)
+    k.cylinder(0, .62, 0, .32, .18, 0xce5677, .08, 8)
+    k.sphere(0, .7, 0, .22, 0xd981a0, 7)
+    for (const [x, z] of [[-.12, .08], [.1, -.06], [.04, .12]] as const) {
+      k.sphere(x, .68, z, .05, cream, 5)
+    }
+    k.box(0, .04, 0, .22, .06, .22, 0x4d8b46)
+  } else if (kind === 'crystalTotem') {
+    k.box(0, .06, 0, .4, .1, .4, 0x657774)
+    k.cylinder(0, .32, 0, .12, .4, 0x7ec8c4, .08, 6)
+    k.box(0, .62, 0, .18, .28, .16, 0x5da397)
+    k.box(-.08, .88, 0, .1, .24, .1, 0xc8d4ee)
+    k.box(.06, .82, .04, .08, .2, .08, 0x7ec8c4)
+    k.box(0, 1.08, 0, .06, .16, .06, cream)
+    k.box(0, .24, .16, .12, .04, .02, 0xe4b754)
+  } else if (kind === 'welcomeArch') {
+    for (const x of [-.36, .36]) {
+      k.box(x, .7, 0, .1, 1.4, .1, timber)
+      k.box(x, .03, 0, .16, .06, .16, ink)
+    }
+    k.box(0, 1.42, 0, .82, .12, .12, timber)
+    k.box(0, 1.28, .06, .7, .22, .04, 0xc95670)
+    k.box(0, 1.28, .08, .4, .06, .02, cream)
+    for (let i = 0; i < 3; i++) k.box(-.22 + i * .22, 1.56, 0, .08, .12, .04, [0xe4b754, 0x5da397, 0xce5677][i]!)
+    k.box(0, 1.68, 0, .2, .08, .08, 0xe4b754)
   } else if (kind === 'shrub' || kind === 'flowerbed' || kind === 'planter') {
     const base = kind === 'planter' ? .35 : .06
     k.box(0, base / 2, 0, .8, base, .8, kind === 'planter' ? 0xb37751 : 0x88754f)

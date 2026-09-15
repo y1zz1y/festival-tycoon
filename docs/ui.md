@@ -8,12 +8,17 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Orchestrierung, Tasten, Tools | `src/main.ts` | RCT-Iconleiste `.rct-toolbar` |
+| Abriss-/Info-Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | `pickPlacedObject`, `resolvePickedBuilding` |
+| Infofenster Müllwagen / Ablage | `src/main.ts`, `src/game/logistics.ts`, `src/game/waste.ts` | `formatRoadVehicleInspectLoad`, `connectedWasteDumpStats` |
+| Meldungs-Ticker | `src/tickerUI.ts`, `src/game/ticker.ts` | `mountTickerUI`, `observeTickerEvents` |
 | Bau-Kategorien und Raster | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` |
 | Festival-Verwaltung | `src/festivalUI.ts`, `src/festival.css` | |
 | Bandplan | `src/musicPlanner.ts` | |
 | Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold |
+| Shift-Rampen-Ausgang | `src/main.ts`, `src/game/wayElevation.ts` | `lockShiftElevationOrigin`, `planLockedOriginRamp` |
+| Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/view/WorldView.ts` | Halbstufen `snapBuildElevation`; `groundTileMarker` auf der Hover-Kachel |
 | Bühnenwerkstatt | `src/stageEditor.ts`, `src/stageEditor.css` | |
-| Personaldetails | `src/staffDetailsUI.ts` | Infofenster, Bereiche; Saugroboter wie Reinigung |
+| Personaldetails | `src/staffDetailsUI.ts` | Infofenster, Bereiche; Saugroboter wie Reinigung; 3×3-Zonen per Klick/Ziehen |
 | Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | |
 | Ziehbare Fenster | `src/dragPanel.ts` | |
 | Fokus / Texteingabe | `src/uiFocus.ts` | `isTextEntryTarget` |
@@ -25,10 +30,19 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 ## Wichtige Regeln
 
 - UI sendet `GameCommand`s bzw. `GameState`-Methoden, berechnet die Welt nicht.
+  Infofenster lesen den Snapshot: Müllfahrzeuge zeigen geladenen Müll
+  statt Insassen; ein Klick auf eine Müllablage summiert die
+  zusammenhängende Fläche (`connectedWasteDumpStats`) zu Gelagert/Frei.
+  Der Vorfall-Ticker hängt unten am Bildrand und liest nur den Snapshot
+  (Feuer, Massenpanik, volle Müllflächen, Verletzte). Mit Position gibt
+  es **Hin** (Kamera wie bei Personal-/Besucherklick). **Meldungen**
+  links neben Mehrspieler öffnet die letzten Einträge. Keine
+  Sim-Mutation, kein neues Command. Auf Mobile sitzt die Leiste über
+  den Touch-Steuerungen.
   Oben rechts sitzt eine RCT-Iconleiste in vier Gruppen: **Bauen** (Abriss,
-  Gelände, Deko, Wege, Attraktionen, Autostraßen, Logistik), **Verwalten**
+  Gelände, Deko, Wege, Attraktionen, Autostraßen, Logistik),   **Verwalten**
   (Festival, Bühnenwerkstatt, Logistikverwaltung für Bestellungen/Träger,
-  Beschwerden, Besucher, Personal, Mehrspieler),
+  Beschwerden, Besucher, Personal, Meldungen, Mehrspieler),
   **Kartenansichten** (Logistik/Untergrund, Gedränge, Attraktivität,
   Partystimmung) und **Sitzung** (Finanzen, Gelände betreten, Speichern,
   Park, Debug-Käfer, Einstellungen). Debug-Käfer und FPS-/Versionszeile
@@ -38,34 +52,55 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   oberhalb der Debug-/Versionsanzeige unten links.
   **Abriss** öffnet
   kein Fenster, sondern schaltet den Abrissmodus sofort ein oder aus.
+  Hover und Klick nutzen denselben Mesh-Raycast wie Info
+  (`pickPlacedObject`, Building-IDs auf Instanzen); es fällt das
+  getroffene Objekt, nicht die Bodenkachel oder der Nachbar. Vorschau
+  folgt Slot/Footprint des Treffers. Rechteckziehen bleibt kachelbasiert.
+  Hover nennt Parkplatz und Krankenbereich; Abriss räumt die Kachel
+  vollständig (auch verwaiste Belegung). Autostraßen-Abreißen wirkt
+  auf Parkbuchten. Touch-Tipp nutzt dieselbe Trefferprüfung.
   Autostraßen teilen das linke Wegeditor-Fenster; die übrigen Bau-Icons
   öffnen Rasterfenster. Linke Paletten füllen die Viewport-Höhe, damit der
   Katalog vollständig sichtbar bleibt. Bauhöhe, Drehen und Ebene sitzen
   nicht mehr im Fensterrand: Shift halten und die Maus hoch/runter
-  bewegen setzt `buildElevation` (0–6); ein 7×7-Baugitter um das
-  Gebäude liegt auf dieser Ebene. Shift loslassen behält die Höhe;
+  bewegen setzt `buildElevation` in **halben Stufen (0.5, 0–6)**; ein
+  7×7-Baugitter um das Gebäude liegt auf dieser Ebene. Die aktuelle
+  Bodenkachel behält immer eine gelbe Umriss-Markierung, auch wenn das
+  Geisterobjekt angehoben ist. Shift loslassen behält die Höhe;
   ein neues Werkzeug oder ein neuer Katalogklick setzt sie auf 0.
   Drehen bleibt über `R` bzw. den Deko-Button. **Wege**
   öffnet kein Raster, sondern das RCT-Fußwegfenster (`#path-construction`).
   Oben **Weg** oder **Schlange** (gilt für Ziehen und Stückbau). Stand-Schlangen
   zeigen eine Mittellinie und zwei Pfeile (Anstehen / Zurück); Attraktionen
   eine Spur. Belag
-  unter **Art** gedrückt halten. Richtung, Neigung und Bauen sind immer
-  sichtbar, im Schnellmodus ausgegraut. Unten der Streckenbutton mit
+  unter **Art** gedrückt halten. Richtung, Neigung (halbe Stufe) und Bauen
+  sind immer sichtbar, im Schnellmodus ausgegraut; Autostraßen nutzen
+  dieselbe Neigung (max. eine Stufe über Gelände). Shift halten sperrt die
+  Ausgangskachel; Ziehen oder Klick setzt nur die Rampe auf den anderen
+  Feldern, der Ausgang bleibt liegen. Shift loslassen oder Werkzeugwechsel
+  löst die Sperre.   Die Vorschau zeigt die Rampe vom festen Ausgang zum
+  Zeiger. Ein Fußweg über eine Autostraße bleibt gültig und legt einen
+  Übergang, ohne die Straße zu löschen. Eine Autostraße eine Stufe über
+  einer anderen stapelt eine Brücke statt zu ersetzen. Unten der Streckenbutton mit
   einem Pfeil (Stückbau, Klick überall) bzw. zwei Pfeilen (frei ziehen).
   **Abreißen** entfernt Wege. Statt Laufrichtung: Schnellzugriff auf Tor
   (`pathBarrier`), Personaleingang (`staffGate`, Kante wie das Tor) und Festival-Einlass
-  (`securityGate`). **Dekoration**, **Attraktionen** und **Logistik** sind
+  (`securityGate`).   **Dekoration**, **Attraktionen** und **Logistik** sind
   Bildkataloge: feste 96-px-Kacheln im Raster (`auto-fill`, nicht in die
   Breite gestreckt), Standardbreite 440 px. Name, Zusatztext und **Kosten**
-  stehen unten und wechseln beim Darüberfahren. Attraktionen: Fahrgeschäfte,
+  stehen unten und wechseln beim Darüberfahren. Deko-Gruppen: Pflanzen, Möbel,
+  Licht, Fest, Kulisse, Zaun — je Objekt eigene Attraktivität (Overlay
+  Attraktivität). Attraktionen: Fahrgeschäfte,
   Stände (Imbiss, WC, Getränke, Maskottchen, T-Shirt), Camping, Festival
   (Turmhöhe nur unter Fahrgeschäfte). Am T-Shirt-Stand stellt das Infofenster
   Farbe und Schnitt ein. Logistik:
   Waren, Bus, Müll, Krankenhaus (`ambulanceGarage`, `medicalArea`).
   Der Achterbahn-Eintrag öffnet ein RCT2-artiges sequenzielles Fenster:
   Richtung, „Speziell …“, Neigung, Rollen/seitliches Kippen, Bauvorschau
-  mit Kosten, Rückbau/Bauen sowie Eingang/Ausgang.
+  mit Kosten, Rückbau/Bauen sowie Eingang/Ausgang. Eine fertige Bahn
+  öffnet das Infofenster: Betrieb, Preis, **Achterbahn abreißen**
+  (Command `removeCoaster`, schließt das Fenster). Unfertige Bahnen
+  haben denselben Knopf im Konstruktionsfenster.
   Untergruppen der übrigen Kategorien stehen in `buildMenu.ts`. Info bleibt
   das Standardwerkzeug.
   Tagesplan und Ticketpreise liegen unter **Festival planen**. Deko-Hilfe
@@ -102,15 +137,27 @@ Autostraßen: Belag per Art-Hold, freies Linienziehen oder Stückbau mit
 Richtung, Bauen/Enter und Zurück/Backspace. Bestehende Straßen bleiben beim
 Stückbau als Anschluss erhalten und werden durch Zurück nicht entfernt.
 Abriss wirkt auf Straßen. Parkplätze, Pfeile, Ampeln, Trennlinien,
-Zebrastreifen und Tempolimits bleiben im selben linken Fenster. Straßen
+Zebrastreifen und Tempolimits bleiben im selben linken Fenster.
+Außerhalb dieser Bauansicht (und ohne Logistik-Overlay) bleiben Parkfelder
+grauer Asphalt mit Stelllinien; Belegungsfarbe und P sind nur dort Hilfen. Straßen
 folgen dem Gelände; die Neigungssteuerung ist deshalb deaktiviert.
 Manuell im Browser geprüft: linkes Fenster, Umschalten ohne Werkzeugwechsel
 zu Fußwegen, Startpunkt, nächstes Straßenstück und Rückbau.
 
 ## Tests
 
-`tests/mobileTouch.ts`. UI-lastige Festival-/Stage-Flows in
+Personal-Einsatzgebiete: **Bereiche verwalten** setzt `WorldView.setStaffZonePaintTool`.
+Ziehen bemalt das 3×3-Raster; die Kachel unter dem Zeiger bekommt eine
+Hellcyan-Vorschau (`staffZoneHoverOverlay`). Träger-Rechtecke bleiben bei
+**Arbeitsbereich ziehen** (`setGroundAreaTool`).
+
+`tests/staffZones.ts` (Zonen-Ziehen). `tests/mobileTouch.ts`. UI-lastige Festival-/Stage-Flows in
 `tests/stageInteraction.ts`, `tests/musicPlanning.ts`.
+Infotexte für Müllwagen-Ladung und zusammenhängende Ablagen:
+`tests/festivalAdditions.ts`. Ticker und Müllkappen: `tests/ticker.ts`.
+Abriss-Picking (Mesh vor Nachbar/Kachelmitte): `tests/picking.ts`.
+Achterbahn-Komplettabriss aus Infofenster/Command: `tests/festivalAdditions.ts`.
+Bauhöhe 0.5 und Bodenkachel der Vorschau: `tests/placementPreview.ts`.
 
 ## Bei Änderungen dieses Dokument
 

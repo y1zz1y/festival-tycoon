@@ -39,6 +39,13 @@ Saves niemals committen oder überschreiben.
   `RoadVehicle.parkingSearchCursor` bleibt 0.
   Optionales `RoadVehicle.workZones` gilt für Saugroboter; fehlend
   bedeutet wie bisher das gesamte Gelände.
+  Optionale `RoadCell.elevation` / `roadSlope` / `roadSlopeDirection`:
+  fehlend heißt Geländehöhe und flach. Alte ganzzahlige Weghöhen und
+  `pathSlope` ±1 bleiben 1.0 Welteinheiten, neue Stufen sind 0.5.
+  Mehrere `roadCells` dürfen dieselbe `x,z`-Kachel auf verschiedenen
+  Höhen belegen (Brücke); alte Stände mit einer Lage bleiben gültig.
+  `wasteDumpCells[].stored` wird beim Laden auf `waste.dumpCapacity` (180)
+  geklemmt; kein neues Snapshot-Feld. Ticker-Verlauf ist nur UI.
   Optionales `staffGateDirection` (0–3) liegt am Fußweg mit `staffOnly`;
   fehlend bleibt ein mittig dargestelltes Legacy-Personaltor, der
   Kachelzugang ändert sich nicht.
@@ -48,16 +55,29 @@ Saves niemals committen oder überschreiben.
   Optionales `queueSplit` an Queue-Wegen ist abgeleitet
   (`recalculateQueueDirections`): Stand-Queues wahr, Attraktionsqueues
   falsch. Alte Saves ohne das Feld brauchen keinen Neuaufbau.
+- Neue Katalog-Arten (Deko) liegen nur als `building.kind`-String im Snapshot.
+  Alte Stände ohne diese Arten bleiben unverändert. Unbekannte `kind`-Werte
+  (neuerer Stand in älterem Client) werden beim Laden verworfen, nicht in
+  Vollfelder umgeschrieben. Fehlendes `decorationSlot` bleibt Legacy-Vollfeld.
 - Legacy-Verhalten bewusst beibehalten (fehlende Ticketkontingente, fehlende
   Scenery-Slots, fehlende Ride-Gates, braune Abandoned-Tents).
   Fehlendes `campingTicketPrice` übernimmt den gespeicherten `entryPrice`.
 - Terrain wird beim Laden nicht neu generiert.
+- Verwaiste Parkplatz-`occupiedBy` und Krankenfeld-`occupants` ohne
+  Fahrzeug bzw. Besucher werden beim Laden geleert. Kein neues
+  Snapshot-Feld. Restkacheln bleiben abriss- und überbaubar.
 - Bei leeren Ladenschlangen speichert `interactionRemaining` die verstrichene
   Wartezeit negativ; kein neues Snapshot-Feld. Alte Mehrfach-Oberteilereignisse
   werden im Besucherpass auf eine Person reduziert. Alte Fahrzeugrouten und
   Gegenrichtung auf Einbahnen werden vor dem Fahren geprüft und korrigiert.
 - Debug- und Performance-Fixtures dürfen persönliche Saves nicht anfassen
   (`docs/performance.md`).
+- `removeCoaster` ist nur ein Command; es kommen keine Snapshot-Felder
+  hinzu. Nach dem Abriss fehlen die Bahn, ihre Tore und die zugehörige
+  Eingangsqueue im nächsten Save.
+- `setStaffZone` ist nur ein Command (`staffId`, 3×3-`key`, `active`);
+  keine neuen Snapshot-Felder. `workZones` bleibt wie bisher am Personal
+  bzw. Saugroboter. `toggleStaffZone` bleibt für ältere Clients gültig.
 
 ## Tests
 

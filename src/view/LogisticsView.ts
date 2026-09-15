@@ -1,9 +1,10 @@
 import { transportMotionFactor } from './transportMotion'
-import { wayTexture } from './wayTextures'
+import { parkingTexture, wayTexture } from './wayTextures'
 import type { WayType } from '../game/wayTypes'
 import {
   BoxGeometry,
   BufferGeometry,
+  CylinderGeometry,
   Group,
   InstancedMesh,
   Line,
@@ -17,6 +18,7 @@ import {
   Quaternion,
   Vector3,
 } from 'three'
+import { canTraverseWayElevation, waySurfaceY } from '../game/wayElevation'
 import type {
   AmbulanceGarage,
   BusDepot,
@@ -29,6 +31,7 @@ import type {
   RoadCell,
   RoadVehicle,
 } from '../game/logistics'
+import { resolveRoadLayer, roadLayerElevation } from '../game/logistics'
 import { disposeObject3D } from './disposeObject3D'
 import {
   createLogisticsFacility,
@@ -65,6 +68,9 @@ function structureFingerprint(logistics: Readonly<LogisticsSnapshot>): string {
       road.blockedEdges,
       road.speedLimit,
       Number(road.crosswalk),
+      road.elevation ?? '',
+      road.roadSlope ?? 0,
+      road.roadSlopeDirection ?? 0,
     ].join(':')
   }).join('|')
   const itemPart = (
@@ -94,6 +100,10 @@ const FLOW_UP = new Vector3(0, 1, 0)
 const flowArrowGeometry = createRoadDirectionArrowGeometry('overlay')
 const roadArrowGeometry = createRoadDirectionArrowGeometry('paint')
 roadArrowGeometry.userData.shared = true
+const roadSupportGeometry = new CylinderGeometry(0.07, 0.09, 1, 6)
+roadSupportGeometry.userData.shared = true
+const roadSupportMaterial = new MeshStandardMaterial({ color: 0x59665f, roughness: 0.9 })
+roadSupportMaterial.userData.shared = true
 const flowMaterial = new MeshBasicMaterial({
   color: 0xffd56a,
   transparent: true,
@@ -109,6 +119,41 @@ const roadArrowMaterial = new MeshBasicMaterial({
   side: DoubleSide,
 })
 roadArrowMaterial.userData.shared = true
+
+const PARKING_ASPHALT = 0x555960
+const parkingAsphaltGeometry = new PlaneGeometry(0.94, 0.94)
+parkingAsphaltGeometry.userData.shared = true
+const parkingHelperGeometry = new PlaneGeometry(0.82, 0.82)
+parkingHelperGeometry.userData.shared = true
+let parkingAsphaltMaterial: MeshStandardMaterial | null = null
+function getParkingAsphaltMaterial(): MeshStandardMaterial {
+  if (parkingAsphaltMaterial) return parkingAsphaltMaterial
+  parkingAsphaltMaterial = new MeshStandardMaterial({
+    color: PARKING_ASPHALT,
+    map: parkingTexture(),
+    roughness: 1,
+  })
+  parkingAsphaltMaterial.userData.shared = true
+  return parkingAsphaltMaterial
+}
+const parkingMarkMaterial = new MeshStandardMaterial({ color: 0xf4f4ec, roughness: 0.85 })
+parkingMarkMaterial.userData.shared = true
+const parkingFreeMaterial = new MeshStandardMaterial({
+  color: 0x4c9b63,
+  transparent: true,
+  opacity: 0.42,
+  depthWrite: false,
+})
+parkingFreeMaterial.userData.shared = true
+const parkingOccupiedMaterial = new MeshStandardMaterial({
+  color: 0xd4884d,
+  transparent: true,
+  opacity: 0.42,
+  depthWrite: false,
+})
+parkingOccupiedMaterial.userData.shared = true
+
+type ParkingHelper = { group: Group; free: Mesh; occupied: Mesh }
 
 type DirectionFlowMark = {
   x: number
@@ -133,12 +178,24 @@ function addBox(
   return mesh
 }
 
+function addSharedMark(
+  parent: Group,
+  size: readonly [number, number, number],
+  position: readonly [number, number, number],
+): Mesh {
+  const mesh = new Mesh(new BoxGeometry(...size), parkingMarkMaterial)
+  mesh.position.set(...position)
+  parent.add(mesh)
+  return mesh
+}
+
 export class LogisticsView {
   readonly group = new Group()
   private readonly staticGroup = new Group()
   private readonly vehicleGroup = new Group()
   private readonly vehicleModels = new Map<string, Group>()
-  private readonly parkingTiles = new Map<string, Mesh>()
+  private readonly parkingHelpers = new Map<string, ParkingHelper>()
+  private showParkingHelpers = false
   private roadSurface: (x: number, z: number) => WayType | undefined = () => undefined
   private roadColor: (x: number, z: number) => number = () => 0x50555a
   private lastAnimationTime: number | null = null
@@ -148,6 +205,7 @@ export class LogisticsView {
   private inspectStamp = ''
   private inspectRoute: Line | null = null
   private getGroundY: (x: number, z: number) => number = () => 0
+  private roadsByKey = new Map<string, RoadCell[]>()
   private readonly marksGroup = new Group()
   private readonly flowGroup = new Group()
   private flowMarks: DirectionFlowMark[] = []
@@ -177,6 +235,10 @@ export class LogisticsView {
     return this.vehicleGroup
   }
 
+  getStaticPickRoot(): Group {
+    return this.staticGroup
+  }
+
   update(
     logistics: Readonly<LogisticsSnapshot>,
     getGroundY: (x: number, z: number) => number = () => 0,
@@ -185,6 +247,7 @@ export class LogisticsView {
     paused = false,
     time = performance.now(),
     showDirectionFlow = false,
+    showParkingHelpers = false,
   ): void {
     const seconds=this.lastAnimationTime===null?0:Math.min(.25,Math.max(0,(time-this.lastAnimationTime)/1000))
     this.lastAnimationTime=time
@@ -193,8 +256,15 @@ export class LogisticsView {
     this.getGroundY = getGroundY
     this.roadColor = roadColor
     this.roadSurface = roadSurface
+    this.roadsByKey = new Map()
+    for (const cell of logistics.roadCells) {
+      const key = `${cell.x}:${cell.z}`
+      const layers = this.roadsByKey.get(key)
+      if (layers) layers.push(cell)
+      else this.roadsByKey.set(key, [cell])
+    }
     const heightPart = [
-      ...logistics.roadCells.map((cell) => getGroundY(cell.x, cell.z)),
+      ...logistics.roadCells.map((cell) => `${getGroundY(cell.x, cell.z)}:${cell.elevation ?? ''}:${cell.roadSlope ?? 0}`),
       ...logistics.parkingCells.map((cell) => getGroundY(cell.x, cell.z)),
       ...logistics.ambulanceGarages.map((cell) => getGroundY(cell.x, cell.z)),
       ...logistics.busDepots.map((cell) => getGroundY(cell.x, cell.z)),
@@ -206,6 +276,12 @@ export class LogisticsView {
     if (fingerprint !== this.staticFingerprint) {
       this.staticFingerprint = fingerprint
       this.rebuildStatic(logistics)
+    }
+    if (this.showParkingHelpers !== showParkingHelpers) {
+      this.showParkingHelpers = showParkingHelpers
+      this.parkingHelpers.forEach((helper) => {
+        helper.group.visible = showParkingHelpers
+      })
     }
     this.updateParkingOccupancy(logistics.parkingCells)
     this.updateVehicles(logistics.roadVehicles)
@@ -221,8 +297,20 @@ export class LogisticsView {
     return this.getGroundY(x, z)
   }
 
+  private roadY(road: Pick<RoadCell, 'x' | 'z' | 'elevation' | 'roadSlope'>): number {
+    const elevation = road.elevation ?? this.groundY(road.x, road.z)
+    return waySurfaceY(elevation, road.roadSlope ?? 0)
+  }
+
+  private roadAt(x: number, z: number, elevation?: number): RoadCell | undefined {
+    return resolveRoadLayer(
+      this.roadsByKey.get(`${Math.round(x)}:${Math.round(z)}`) ?? [],
+      elevation,
+    )
+  }
+
   private rebuildStatic(logistics: Readonly<LogisticsSnapshot>): void {
-    this.parkingTiles.clear()
+    this.parkingHelpers.clear()
     this.staticGroup.children.slice().forEach((child) => {
       this.staticGroup.remove(child)
       disposeObject3D(child)
@@ -231,11 +319,8 @@ export class LogisticsView {
       this.marksGroup.remove(child)
       disposeObject3D(child)
     })
-    const roadKeys = new Set(
-      logistics.roadCells.map((road) => `${road.x}:${road.z}`),
-    )
     logistics.roadCells.forEach((road) => {
-      this.staticGroup.add(this.createRoad(road, roadKeys))
+      this.staticGroup.add(this.createRoad(road, logistics.roadCells))
     })
     logistics.parkingCells.forEach((space) => {
       this.staticGroup.add(this.createParkingSpace(space))
@@ -258,16 +343,39 @@ export class LogisticsView {
     this.rebuildDirectionFlow(logistics)
   }
 
-  private createRoad(road: RoadCell, roadKeys: ReadonlySet<string>): Group {
+  private createRoad(road: RoadCell, roads: readonly RoadCell[]): Group {
     const group = new Group()
-    group.position.set(road.x + 0.5, this.groundY(road.x, road.z) + 0.012, road.z + 0.5)
+    const slope = road.roadSlope ?? 0
+    const elevation = road.elevation ?? this.groundY(road.x, road.z)
+    group.position.set(road.x + 0.5, elevation + 0.012, road.z + 0.5)
+    const deck = new Group()
+    if (slope !== 0) {
+      deck.position.set(0, -slope / 2, 0)
+      deck.quaternion.setFromUnitVectors(
+        new Vector3(0, 0, 1),
+        new Vector3(0, slope, 1).normalize(),
+      )
+      group.rotation.y = DIRECTION_ANGLE[(road.roadSlopeDirection ?? 0) as Direction]
+    }
+    group.add(deck)
     const asphalt = new Mesh(
-      new PlaneGeometry(0.94, 0.94),
+      new PlaneGeometry(0.94, slope === 0 ? 0.94 : Math.hypot(0.94, slope)),
       new MeshStandardMaterial({ color: this.roadColor(road.x, road.z), map: wayTexture(this.roadSurface(road.x, road.z)), roughness: 1 }),
     )
     asphalt.rotation.x = -HALF_PI
     asphalt.receiveShadow = true
-    group.add(asphalt)
+    deck.add(asphalt)
+    const ground = this.groundY(road.x, road.z)
+    if (elevation - ground > 0.2) {
+      const height = Math.max(0.16, elevation - ground)
+      for (const [x, z] of [[-0.32, -0.32], [0.32, -0.32], [-0.32, 0.32], [0.32, 0.32]] as const) {
+        const support = new Mesh(roadSupportGeometry, roadSupportMaterial)
+        support.position.set(x, -height / 2, z)
+        support.scale.y = height
+        support.castShadow = true
+        group.add(support)
+      }
+    }
 
     const offsets: Readonly<Record<Direction, readonly [number, number]>> = {
       0: [0, 1],
@@ -277,28 +385,41 @@ export class LogisticsView {
     }
     const connections = ([0, 1, 2, 3] as const).filter((direction) => {
       const [offsetX, offsetZ] = offsets[direction]
-      return roadKeys.has(`${road.x + offsetX}:${road.z + offsetZ}`)
+      return roads.some((other) => {
+        if (other.x !== road.x + offsetX || other.z !== road.z + offsetZ) return false
+        return canTraverseWayElevation(
+          roadLayerElevation(road),
+          road.roadSlope ?? 0,
+          road.roadSlopeDirection,
+          roadLayerElevation(other),
+          other.roadSlope ?? 0,
+          other.roadSlopeDirection,
+          direction,
+        )
+      })
     })
-    connections.forEach((direction) => {
-      const connector = new Mesh(
-        new PlaneGeometry(0.36, 0.13),
-        new MeshStandardMaterial({ color: 0x72777b, roughness: 1 }),
-      )
-      connector.rotation.x = -HALF_PI
-      connector.rotation.z = -DIRECTION_ANGLE[direction]
-      connector.position.y = 0.004
-      connector.position.z = 0.405
-      connector.position.applyAxisAngle(
-        { x: 0, y: 1, z: 0 },
-        DIRECTION_ANGLE[direction],
-      )
-      group.add(connector)
-    })
+    if (slope === 0) {
+      connections.forEach((direction) => {
+        const connector = new Mesh(
+          new PlaneGeometry(0.36, 0.13),
+          new MeshStandardMaterial({ color: 0x72777b, roughness: 1 }),
+        )
+        connector.rotation.x = -HALF_PI
+        connector.rotation.z = -DIRECTION_ANGLE[direction]
+        connector.position.y = 0.004
+        connector.position.z = 0.405
+        connector.position.applyAxisAngle(
+          { x: 0, y: 1, z: 0 },
+          DIRECTION_ANGLE[direction],
+        )
+        group.add(connector)
+      })
+    }
 
     const speed = road.speedLimit
     const zoneColor = speed <= 10 ? 0x35bb66 : speed <= 30 ? 0xf2cf45 : 0xe64b45
     const zone = new Mesh(
-      new PlaneGeometry(0.78, 0.78),
+      new PlaneGeometry(0.78, slope === 0 ? 0.78 : Math.hypot(0.78, slope)),
       new MeshStandardMaterial({
         color: zoneColor,
         transparent: true,
@@ -308,11 +429,11 @@ export class LogisticsView {
     )
     zone.rotation.x = -HALF_PI
     zone.position.y = 0.008
-    group.add(zone)
+    deck.add(zone)
 
     if (road.crosswalk) {
       for (let index = -3; index <= 3; index += 1) {
-        addBox(group, [0.08, 0.012, 0.68], [index * 0.115, 0.026, 0], 0xf7f7ef)
+        addBox(deck, [0.08, 0.012, 0.68], [index * 0.115, 0.026, 0], 0xf7f7ef)
       }
     }
 
@@ -322,7 +443,7 @@ export class LogisticsView {
     ).forEach((direction) => {
       const arrow = new Mesh(roadArrowGeometry, roadArrowMaterial)
       arrow.rotation.y = DIRECTION_ANGLE[direction]
-      arrow.position.set(road.x + 0.5, this.groundY(road.x, road.z) + 0.018, road.z + 0.5)
+      arrow.position.set(road.x + 0.5, this.roadY(road) + 0.018, road.z + 0.5)
       arrow.scale.setScalar(0.72)
       this.marksGroup.add(arrow)
     })
@@ -349,7 +470,7 @@ export class LogisticsView {
   private rebuildDirectionFlow(logistics: Readonly<LogisticsSnapshot>): void {
     this.flowMarks = logistics.roadCells.flatMap((road) => {
       if (road.allowedDirections === null) return []
-      const y = this.groundY(road.x, road.z)
+      const y = this.roadY(road)
       return directionsFromMask(road.allowedDirections).map((direction) => ({
         x: road.x,
         z: road.z,
@@ -420,37 +541,49 @@ export class LogisticsView {
 
   private updateParkingOccupancy(spaces: readonly ParkingCell[]): void {
     spaces.forEach((space) => {
-      const tile = this.parkingTiles.get(`${space.x}:${space.z}`)
-      if (!tile) return
-      const material = tile.material as MeshStandardMaterial
-      material.color.set(space.occupiedBy ? 0xd4884d : 0x4c9b63)
+      const helper = this.parkingHelpers.get(`${space.x}:${space.z}`)
+      if (!helper) return
+      const occupied = Boolean(space.occupiedBy)
+      helper.free.visible = !occupied
+      helper.occupied.visible = occupied
     })
   }
 
   private createParkingSpace(space: ParkingCell): Group {
     const group = new Group()
     const occupied = Boolean(space.occupiedBy)
-    group.position.set(space.x + 0.5, this.groundY(space.x, space.z) + 0.016, space.z + 0.5)
-    const tile = new Mesh(
-      new PlaneGeometry(0.86, 0.86),
-      new MeshStandardMaterial({
-        color: occupied ? 0xd4884d : 0x4c9b63,
-        roughness: 0.95,
-      }),
-    )
-    tile.rotation.x = -HALF_PI
-    this.parkingTiles.set(`${space.x}:${space.z}`, tile)
-    group.add(tile)
-    addBox(group, [0.07, 0.018, 0.5], [-0.17, 0.018, 0], 0xf4f4ec)
-    addBox(group, [0.3, 0.018, 0.07], [-0.02, 0.018, -0.215], 0xf4f4ec)
-    addBox(group, [0.3, 0.018, 0.07], [-0.02, 0.018, 0], 0xf4f4ec)
-    addBox(group, [0.07, 0.018, 0.22], [0.13, 0.018, -0.11], 0xf4f4ec)
+    group.position.set(space.x + 0.5, this.groundY(space.x, space.z) + 0.012, space.z + 0.5)
+    const asphalt = new Mesh(parkingAsphaltGeometry, getParkingAsphaltMaterial())
+    asphalt.rotation.x = -HALF_PI
+    asphalt.receiveShadow = true
+    group.add(asphalt)
+    const helpers = new Group()
+    helpers.visible = this.showParkingHelpers
+    const free = new Mesh(parkingHelperGeometry, parkingFreeMaterial)
+    free.rotation.x = -HALF_PI
+    free.position.y = 0.004
+    free.visible = !occupied
+    const busy = new Mesh(parkingHelperGeometry, parkingOccupiedMaterial)
+    busy.rotation.x = -HALF_PI
+    busy.position.y = 0.004
+    busy.visible = occupied
+    helpers.add(free, busy)
+    addSharedMark(helpers, [0.07, 0.018, 0.5], [-0.17, 0.018, 0])
+    addSharedMark(helpers, [0.3, 0.018, 0.07], [-0.02, 0.018, -0.215])
+    addSharedMark(helpers, [0.3, 0.018, 0.07], [-0.02, 0.018, 0])
+    addSharedMark(helpers, [0.07, 0.018, 0.22], [0.13, 0.018, -0.11])
+    group.add(helpers)
+    this.parkingHelpers.set(`${space.x}:${space.z}`, { group: helpers, free, occupied: busy })
     return group
   }
 
   private placeFacility(facility: FacilityLike, kind: LogisticsFacilityKind): Group {
     const size = logisticsFacilityFootprint(kind)
     const group = createLogisticsFacility(kind)
+    group.userData.buildingId = facility.id
+    group.traverse((object) => {
+      object.userData.buildingId = facility.id
+    })
     group.position.set(
       facility.x + size / 2,
       this.groundY(facility.x, facility.z),
@@ -469,8 +602,16 @@ export class LogisticsView {
     vehicles.forEach((vehicle) => {
       const kind = vehicle.kind
       const targetX = vehicle.position.x + 0.5
-      const targetY = this.groundY(vehicle.position.x, vehicle.position.z)
       const targetZ = vehicle.position.z + 0.5
+      const parked = vehicle.state === 'parked'
+      const road = parked
+        ? undefined
+        : this.roadAt(
+            vehicle.position.x,
+            vehicle.position.z,
+            vehicle.position.elevation ?? vehicle.cell?.elevation,
+          )
+      const targetY = road ? this.roadY(road) : this.groundY(vehicle.position.x, vehicle.position.z)
       let model = this.vehicleModels.get(vehicle.id)
       if (model && model.userData.vehicleKind !== kind) {
         this.vehicleGroup.remove(model)

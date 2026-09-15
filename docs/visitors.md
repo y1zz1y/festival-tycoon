@@ -20,7 +20,7 @@ sind abgeleitete Darstellung desselben Zustands.
 | Stabile Optik (Geschlecht, Hash) | `src/game/rng.ts` | `visitorLooksFemale`, `hashStringSeed` |
 | Pixel-Personen | `src/view/pixelPeople.ts` | geteilte Geometrien, Accessory-Batches |
 | Souvenirs | `src/game/shopGoods.ts`, `src/view/souvenirMeshes.ts` | `ownedMascot`/`heldMascot`, `wornShirt`; Instanz-Batches |
-| Ankunft per Auto/Fuß | `src/game/logistics.ts` | `ArrivalGroup` |
+| Ankunft per Auto/Fuß | `src/game/logistics.ts`, `src/game/GameState.ts` | `ArrivalGroup`, `collectSeatedPassengerIds`, `chooseParkingDisembarkPath`, `finishVehicleParking` |
 
 ## Wichtige Regeln
 
@@ -35,6 +35,18 @@ sind abgeleitete Darstellung desselben Zustands.
   Warenträger dürfen weiterhin von allen vier Seiten liefern.
 - Tages- vs. Campinggäste haben getrennte Tickets, Einlassfenster und
   Abreisewege. Fahrzeug-Abreise hängt an `logistics`.
+  Beim Aussteigen aus einem geparkten Auto erscheinen Gäste auf einem
+  orthogonal angrenzenden normalen Fußweg (Punkt mit `tileOffset` auf
+  dieser Kachel, nicht in der Bucht). Mehrere Nachbarwege: zuerst ohne
+  Fahrbahn, dann gegenüber der Zufahrt. Ohne Nachbarweg bleibt der
+  Zufahrts-/Eingangs-Fallback.
+  Solange jemand in `RoadVehicle.passengerIds` steht (Anreiseauto, Bus,
+  Krankenwagen) oder `vehicle-arrival` / `bus-riding` ist, ist er kein
+  Fußgänger: keine Bewegung, keine Weg-Belegung, keine Verletzung, kein
+  Sanitäter, kein Ticker. Beim Einparken lädt `finishVehicleParking`
+  Anreise-Insassen trotzdem aus (erst Platz auf dem Nachbarweg, dann
+  Zielwahl). Zurück ins Auto nur von der Zufahrt/Bucht, nicht vom
+  Gehweg. Eine im Auto gesetzte Verletzung gilt erst auf dem Fußweg.
 - Wer eine Schlange verlässt (Abreise, geschlossenes Angebot, Ausverkauf)
   oder am Essen-/Getränkestand bedient wurde, geht die Queue-Kette
   rückwärts zum Eingang. An **Stand-Queues** (Imbiss, Getränke, WC, Souvenirs)
@@ -87,7 +99,9 @@ Bereits begonnene Müllwege werden beim wiederholten Schließzeit-Check beibehal
 Hand-Chance, Shirt vom Stand, Save). `tests/regression.ts`
 (Spawn, Needs, Speed-Partition). Festival-Anreisen: `tests/festival.ts`,
 `tests/stageTickets.ts`. Queue-Reihenfolge, kontinuierliches Nachrücken,
-Queue-Rückweg, geteilte Stand-Spuren und leere Stände: `tests/operations.ts`,
+Queue-Rückweg, geteilte Stand-Spuren, leere Stände, Aussteigen auf den
+Nachbarweg, Insassen steigen nach dem Parken aus und bleiben zu Fuß
+(keine Verletzung/Belegung vor dem Aussteigen): `tests/operations.ts`,
 `tests/queueLanes.ts`.
 Festival-Schlafzeiten, Legacy-Remap, zirkadianer Energieverbrauch und
 Zelt-/Abreiseziele: `tests/visitorSleep.ts`.

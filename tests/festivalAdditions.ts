@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { GameState } from '../src/game/GameState'
-import { TRACK_PITCHES, canTransitionTrackPitch, createTrackPiece, computeTrackFrame, getSmoothedCoasterPiecePoints, sampleCoasterTrack, smoothTrackDisplayPoints, trackCornerClearance, trackJoinTangentDot, usesWidePitchTransition, type Coaster, type TrackAnchor } from '../src/game/coasters'
+import { TRACK_PITCHES, canTransitionTrackPitch, createTrackPiece, computeTrackFrame, getSmoothedCoasterPiecePoints, sampleCoasterTrack, smoothTrackDisplayPoints, trackCurveRadiusError, trackJoinTangentDot, usesWidePitchTransition, type Coaster, type TrackAnchor } from '../src/game/coasters'
 import { createCoasterCar } from '../src/view/coasterCars'
 import { campingBoundary } from '../src/view/campingGround'
 import { bungeeDrop, createBungeeModel, animateBungee, setBungeeJumper } from '../src/view/bungee'
@@ -13,6 +13,13 @@ import {
 import { Box3, Color, InstancedMesh, Matrix4, Mesh, Vector3 } from 'three'
 import type { PlacedBuilding } from '../src/game/GameState'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
+import { formatRoadVehicleInspectLoad } from '../src/game/logistics'
+import {
+  connectedWasteDumpStats,
+  formatWasteDumpAreaHover,
+  formatWasteDumpAreaInspect,
+  type WasteDumpCell,
+} from '../src/game/waste'
 import { rollsBungeeNude, visitorLooksFemale } from '../src/game/rng'
 import { applyGameCommand } from '../src/net/commands'
 import { enableMultiplayerCommands } from '../src/net/bind'
@@ -73,12 +80,40 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
     Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z),
   )), 'smoothed joins stay finite')
   assert.equal(curve.points[1]!.x, rawCurvePoints[1]!.x, 'snapshot curve points stay sharp')
+  const curveCenter = { x: curve.start.x - 1, z: curve.start.z }
   assert.ok(
-    trackCornerClearance(smoothedPieces[1]!) > trackCornerClearance(rawCurvePoints) + 0.04,
-    '1×1 curves pull away from the pointed corner',
+    trackCurveRadiusError(smoothedPieces[1]!, curveCenter, 1) < 0.08,
+    'horizontal curves stay circular instead of polygonal',
   )
+  const curveMid = smoothedPieces[1]![Math.floor(smoothedPieces[1]!.length / 2)]!
+  assert.ok(
+    Math.abs(Math.hypot(curveMid.x - curveCenter.x, curveMid.z - curveCenter.z) - 1) < 0.08,
+    '1×1 curve midpoint stays on the quarter-circle',
+  )
+  let previousHeading: number | undefined
+  let maxHeadingJump = 0
+  const curvePlan = smoothedPieces[1]!
+  for (let index = 2; index < curvePlan.length - 1; index += 1) {
+    const heading = Math.atan2(
+      curvePlan[index]!.x - curvePlan[index - 1]!.x,
+      curvePlan[index]!.z - curvePlan[index - 1]!.z,
+    )
+    if (previousHeading !== undefined) {
+      let delta = heading - previousHeading
+      while (delta > Math.PI) delta -= Math.PI * 2
+      while (delta < -Math.PI) delta += Math.PI * 2
+      maxHeadingJump = Math.max(maxHeadingJump, Math.abs(delta))
+    }
+    previousHeading = heading
+  }
+  assert.ok(maxHeadingJump < 0.26, 'curve heading steps stay fine, not boxy')
   assert.ok(trackJoinTangentDot(joinTrack, 0) > 0.92, 'straight-to-curve join is C1-ish')
   assert.ok(trackJoinTangentDot(joinTrack, 1) > 0.92, 'curve-to-straight join is C1-ish')
+  const inclineStart: TrackAnchor = { x: 8, z: 0, elevation: 2, heading: 0, pitch: 0, bank: 0 }
+  const inclineFlat = createTrackPiece('incline-flat', 'straight', inclineStart, false)
+  const inclineSlope = createTrackPiece('incline-slope', 'slopeUp', inclineFlat.end, false)
+  const inclineTrack = { pieces: [inclineFlat, inclineSlope], closed: false } as Coaster
+  assert.ok(trackJoinTangentDot(inclineTrack, 0) > 0.92, 'slope joins stay rounded')
   const first = smoothedPieces[0]![0]!
   const last = smoothedPieces[0]!.at(-1)!
   const next = smoothedPieces[1]![0]!
@@ -99,7 +134,7 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
     previous = current
   }
   const display = smoothTrackDisplayPoints(rawCurvePoints)
-  assert.ok(trackCornerClearance(display) > trackCornerClearance(rawCurvePoints))
+  assert.ok(trackCurveRadiusError(display, curveCenter, 1) < 0.08)
   const meshSample = sampleCoasterTrack(joinTrack, joinLength * 0.4)!
   const curvePoints = smoothedPieces[1]!
   const nearest = curvePoints.reduce((best, point) => {
@@ -372,5 +407,167 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
     assert.ok(!(object instanceof Mesh) || object instanceof InstancedMesh)
   })
   assert.equal(wasteView.group.children.length, 1, 'no fill bar or per-carton meshes')
-  console.log('PASS one-tile coaster slopes, flat-to-steep clothoids, car meshes, inversions, camping perimeter, scenery lines, bungee and debug cleanup')
+
+  const dumpCell = (x: number, z: number, stored: number): WasteDumpCell => ({
+    x,
+    z,
+    elevation: 0,
+    stored,
+  })
+  const dumpCapacity = SIMULATION_CONFIG.waste.dumpCapacity
+  const connectedDumps = [
+    dumpCell(0, 0, 10),
+    dumpCell(1, 0, 20),
+    dumpCell(1, 1, 5),
+    dumpCell(3, 0, 8),
+    dumpCell(2, 2, 4),
+  ]
+  const area = connectedWasteDumpStats(connectedDumps, { x: 0, z: 0 })
+  assert.ok(area)
+  assert.equal(area.cells, 3, 'L-shaped dumps form one 4-way component')
+  assert.equal(area.stored, 35)
+  assert.equal(area.capacity, 3 * dumpCapacity)
+  assert.equal(area.remaining, 3 * dumpCapacity - 35)
+  assert.equal(area.percent, Math.round((35 / (3 * dumpCapacity)) * 100))
+  const isolated = connectedWasteDumpStats(connectedDumps, { x: 3, z: 0 })
+  assert.ok(isolated)
+  assert.equal(isolated.cells, 1, 'a gap keeps a dump tile in its own area')
+  assert.equal(isolated.stored, 8)
+  assert.equal(isolated.capacity, dumpCapacity)
+  assert.equal(isolated.remaining, dumpCapacity - 8)
+  const diagonal = connectedWasteDumpStats(connectedDumps, { x: 2, z: 2 })
+  assert.ok(diagonal)
+  assert.equal(diagonal.cells, 1, 'diagonal tiles are not connected')
+  assert.equal(connectedWasteDumpStats(connectedDumps, { x: 9, z: 9 }), null)
+  const overflow = connectedWasteDumpStats([dumpCell(0, 0, dumpCapacity + 12)], { x: 0, z: 0 })
+  assert.ok(overflow)
+  assert.equal(overflow.remaining, 0)
+  assert.equal(overflow.percent, 100)
+  const inspect = formatWasteDumpAreaInspect(area)
+  assert.equal(inspect.status, 'Zusammenhängende Fläche · 3 Felder')
+  assert.deepEqual(
+    inspect.lines.map((line) => line.label),
+    ['Gelagert', 'Frei', 'Auslastung'],
+  )
+  assert.equal(inspect.lines[0]!.value, `${area.stored} / ${area.capacity}`)
+  assert.equal(inspect.lines[1]!.value, String(area.remaining))
+  assert.equal(inspect.lines[2]!.value, `${area.percent} %`)
+  assert.equal(
+    formatWasteDumpAreaHover(area),
+    `Müllablage · ${area.stored}/${area.capacity} gelagert · ${area.remaining} frei`,
+  )
+
+  const truckLoad = formatRoadVehicleInspectLoad({
+    kind: 'garbageTruck',
+    cargo: 12,
+    passengerIds: ['ghost'],
+  })
+  assert.deepEqual(truckLoad, [
+    {
+      label: 'Müll',
+      value: `12 / ${SIMULATION_CONFIG.logistics.garbageTruckCapacity} (${Math.round((12 / SIMULATION_CONFIG.logistics.garbageTruckCapacity) * 100)} %)`,
+    },
+  ])
+  assert.ok(!truckLoad.some((stat) => stat.label === 'Insassen'))
+  const emptyTruck = formatRoadVehicleInspectLoad({
+    kind: 'garbageTruck',
+    cargo: 0,
+    passengerIds: [],
+  })
+  assert.equal(
+    emptyTruck[0]!.value,
+    `0 / ${SIMULATION_CONFIG.logistics.garbageTruckCapacity} (0 %)`,
+  )
+  const busLoad = formatRoadVehicleInspectLoad({
+    kind: 'bus',
+    cargo: 0,
+    passengerIds: ['a', 'b'],
+  })
+  assert.deepEqual(busLoad, [{ label: 'Insassen', value: '2' }])
+  const deliveryLoad = formatRoadVehicleInspectLoad({
+    kind: 'deliveryTruck',
+    cargo: 7,
+    passengerIds: ['ghost'],
+  })
+  assert.deepEqual(deliveryLoad, [{ label: 'Ladung', value: '7' }])
+  const demolish = fixture(2)
+  demolish.addDebugMoney()
+  const demolishStart = demolish.startCoaster('classicSteel', 8, 0)
+  assert.ok(demolishStart.ok && demolishStart.id, demolishStart.message)
+  const demolishId = demolishStart.id!
+  assert.ok(demolish.appendCoasterPiece(demolishId, 'straight', false).ok)
+  const demolishStation = demolish.getCoaster(demolishId)!.pieces[0]!
+  const accessCells = [
+    { x: demolishStation.start.x - 1, z: demolishStation.start.z },
+    { x: demolishStation.start.x + 1, z: demolishStation.start.z },
+    { x: demolishStation.start.x, z: demolishStation.start.z - 1 },
+    { x: demolishStation.start.x, z: demolishStation.start.z + 1 },
+  ]
+  assert.ok(demolish.setCoasterAccess(demolishId, 'entrance', accessCells[0]!.x, accessCells[0]!.z).ok)
+  assert.ok(demolish.setCoasterAccess(demolishId, 'exit', accessCells[1]!.x, accessCells[1]!.z).ok)
+  const entrance = demolish.getCoaster(demolishId)!.entrance!
+  const queueCell = {
+    x: entrance.x + (entrance.x - demolishStation.start.x),
+    z: entrance.z + (entrance.z - demolishStation.start.z),
+  }
+  assert.ok(demolish.placePathSegment(queueCell.x, queueCell.z, 0, 'queue').ok)
+  const rider = demolish.snapshot.visitors[0]!
+  const waiter = demolish.snapshot.visitors[1]!
+  const ride = demolish.getCoaster(demolishId)!
+  ride.queue.push(waiter.id)
+  waiter.state = 'queuing'
+  waiter.targetId = demolishId
+  waiter.cellX = queueCell.x
+  waiter.cellZ = queueCell.z
+  waiter.cellElevation = 0
+  waiter.x = queueCell.x + 0.5
+  waiter.z = queueCell.z + 0.5
+  ride.train.passengerIds = [rider.id]
+  ride.train.passengers = 1
+  rider.state = 'riding'
+  rider.targetId = demolishId
+  const moneyBefore = demolish.snapshot.money
+  const pieceCount = ride.pieces.length
+  const demolishResult = applyGameCommand(demolish, { type: 'removeCoaster', coasterId: demolishId })
+  assert.ok(demolishResult.ok, demolishResult.message)
+  assert.equal(demolish.getCoaster(demolishId), undefined)
+  assert.equal(demolish.snapshot.coasters.length, 0)
+  assert.equal(demolish.getCoasterAt(demolishStation.start.x, demolishStation.start.z), undefined)
+  assert.equal(demolish.getRemovableCoasterAt(demolishStation.start.x, demolishStation.start.z), undefined)
+  assert.equal(demolish.getPathAt(queueCell.x, queueCell.z), undefined)
+  assert.notEqual(rider.state, 'riding')
+  assert.notEqual(waiter.targetId, demolishId)
+  assert.ok(demolish.snapshot.money > moneyBefore, 'demolish refunds a share of the ride')
+  assert.equal((demolish as any).coasterOccupiesVolume(demolishStation.start.x, demolishStation.start.z, 0, 2), false)
+  assert.equal(pieceCount > 1, true)
+
+  const leftover = fixture(0)
+  leftover.addDebugMoney()
+  const leftoverStart = leftover.startCoaster('classicSteel', 10, -10)
+  assert.ok(leftoverStart.ok && leftoverStart.id, leftoverStart.message)
+  assert.ok(leftover.bulldoze(10, -10).ok, 'station tile demolish removes the whole ride')
+  assert.equal(leftover.snapshot.coasters.length, 0)
+  assert.equal(leftover.getCoasterAt(10, -10), undefined)
+
+  const hostRide = fixture(0)
+  hostRide.addDebugMoney()
+  const hostStart = hostRide.startCoaster('classicSteel', 10, -8)
+  assert.ok(hostStart.ok && hostStart.id, hostStart.message)
+  const clientRide = new GameState(structuredClone(hostRide.snapshot) as never)
+  const demolishCommands: GameCommand[] = []
+  clientRide.networkMode = 'client'
+  enableMultiplayerCommands(clientRide)
+  clientRide.commandOutbox = (command) => demolishCommands.push(command)
+  assert.ok(clientRide.removeCoaster(hostStart.id!).ok)
+  assert.equal(demolishCommands.length, 1)
+  assert.equal(demolishCommands[0]!.type, 'removeCoaster')
+  assert.equal(
+    demolishCommands[0]!.type === 'removeCoaster' ? demolishCommands[0].coasterId : '',
+    hostStart.id,
+  )
+  assert.ok(applyGameCommand(hostRide, demolishCommands[0]!).ok)
+  assert.equal(hostRide.snapshot.coasters.length, 0)
+  assert.equal(clientRide.snapshot.coasters.length, 0)
+
+  console.log('PASS one-tile coaster slopes, flat-to-steep clothoids, car meshes, inversions, camping perimeter, scenery lines, bungee, debug cleanup and coaster demolish')
 }
