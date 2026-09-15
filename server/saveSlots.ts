@@ -1,54 +1,89 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { dirname, extname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import type { DatabaseSync } from 'node:sqlite'
+import { db as sharedDatabase } from './database.ts'
+import { accountOfRequest } from './accounts.ts'
 
-export type ServerSaveSlot = { id: string; name: string; savedAt: number }
-type StoredSaveSlot = ServerSaveSlot & { snapshot: string }
+/**
+ * Saved games, one row each, in the same database the accounts live in.
+ *
+ * Every save belongs to the account that wrote it. A save can additionally be made
+ * public, which lets anyone open it — but only open it: writing always goes to the
+ * caller's own rows, so someone who picks up a public festival and saves it ends up
+ * with a copy of their own instead of overwriting the original.
+ */
+export type ServerSaveSlot = {
+  id: string
+  name: string
+  savedAt: number
+  public: boolean
+  /** The account the save belongs to, shown in the public list. */
+  owner: string
+}
+type SaveRow = { id: string; name: string; savedAt: number; isPublic: number; owner: string; userId: string }
 
-const SAVE_DIRECTORY = resolve(fileURLToPath(new URL('../saves', import.meta.url)))
 const MAX_SAVE_BYTES = 24 * 1024 * 1024
-const validId = (id: string) => /^[a-f0-9-]{36}$/i.test(id)
+const SLOTS_PER_USER = 20
+const SIGN_IN_REQUIRED = 'Dafür musst du angemeldet sein'
 
-function fileOf(id: string): string {
-  if (!validId(id)) throw new Error('Ungültige Spielstand-ID')
-  return join(SAVE_DIRECTORY, `${id}.json`)
+const SCHEMA = {
+  name: 'saves',
+  ddl: `
+    CREATE TABLE IF NOT EXISTS saves (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      snapshot TEXT NOT NULL,
+      is_public INTEGER NOT NULL DEFAULT 0,
+      saved_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS saves_user ON saves(user_id, saved_at);
+    CREATE INDEX IF NOT EXISTS saves_public ON saves(is_public, saved_at);
+  `,
 }
+const db = (): DatabaseSync => sharedDatabase(SCHEMA)
 
-function publicSlot(slot: StoredSaveSlot): ServerSaveSlot {
-  return { id: slot.id, name: slot.name, savedAt: slot.savedAt }
-}
+/** Everything about a save except the snapshot itself, which is far too big to list. */
+const SELECT_SLOT = `
+  SELECT saves.id AS id, saves.name AS name, saves.saved_at AS savedAt,
+         saves.is_public AS isPublic, saves.user_id AS userId, users.name AS owner
+  FROM saves JOIN users ON users.id = saves.user_id
+`
+
+const publicSlot = (row: SaveRow): ServerSaveSlot =>
+  ({ id: row.id, name: row.name, savedAt: row.savedAt, public: row.isPublic === 1, owner: row.owner })
 
 function cleanName(value: unknown): string {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, 40) : ''
 }
 
-async function readSlot(id: string): Promise<StoredSaveSlot | null> {
-  try {
-    const parsed = JSON.parse(await readFile(fileOf(id), 'utf8')) as StoredSaveSlot
-    return parsed && parsed.id === id && typeof parsed.name === 'string' &&
-      typeof parsed.savedAt === 'number' && typeof parsed.snapshot === 'string' ? parsed : null
-  } catch { return null }
+function readSnapshot(value: unknown): string {
+  if (typeof value !== 'string' || !value) throw new Error('Name und Spielstand sind erforderlich')
+  if (Buffer.byteLength(value, 'utf8') > MAX_SAVE_BYTES) throw new Error('Spielstand ist zu groß')
+  try { JSON.parse(value) } catch { throw new Error('Spielstand ist ungültig') }
+  return value
 }
 
-export async function listServerSaves(): Promise<ServerSaveSlot[]> {
-  await mkdir(SAVE_DIRECTORY, { recursive: true })
-  const files = await readdir(SAVE_DIRECTORY)
-  const slots = await Promise.all(files.filter(file => extname(file) === '.json').map(async file => readSlot(file.slice(0, -5))))
-  return slots.filter((slot): slot is StoredSaveSlot => slot !== null).map(publicSlot).sort((a, b) => b.savedAt - a.savedAt)
+/** The saves of one account, newest first. */
+function ownSlots(userId: string): ServerSaveSlot[] {
+  return (db().prepare(`${SELECT_SLOT} WHERE saves.user_id = ? ORDER BY saves.saved_at DESC`).all(userId) as SaveRow[])
+    .map(publicSlot)
 }
 
-async function writeSlot(id: string, name: string, snapshot: string): Promise<ServerSaveSlot> {
-  if (!snapshot || Buffer.byteLength(snapshot, 'utf8') > MAX_SAVE_BYTES) throw new Error('Spielstand ist leer oder zu groß')
-  try { JSON.parse(snapshot) } catch { throw new Error('Spielstand ist ungültig') }
-  await mkdir(SAVE_DIRECTORY, { recursive: true })
-  const slot: StoredSaveSlot = { id, name, savedAt: Date.now(), snapshot }
-  const target = fileOf(id), temporary = `${target}.${randomUUID()}.tmp`
-  await writeFile(temporary, JSON.stringify(slot), 'utf8')
-  await rename(temporary, target)
-  return publicSlot(slot)
+/**
+ * Everything other people have shared. Your own public saves stay out of it — they
+ * already stand in your own list, marked as shared.
+ */
+function sharedSlots(userId: string | null): ServerSaveSlot[] {
+  const rows = userId
+    ? db().prepare(`${SELECT_SLOT} WHERE saves.is_public = 1 AND saves.user_id <> ? ORDER BY saves.saved_at DESC`).all(userId)
+    : db().prepare(`${SELECT_SLOT} WHERE saves.is_public = 1 ORDER BY saves.saved_at DESC`).all()
+  return (rows as SaveRow[]).map(publicSlot)
 }
+
+const slotRow = (id: string): SaveRow | undefined =>
+  db().prepare(`${SELECT_SLOT} WHERE saves.id = ?`).get(id) as SaveRow | undefined
 
 async function bodyOf(request: IncomingMessage): Promise<unknown> {
   let body = ''
@@ -64,34 +99,85 @@ function send(response: ServerResponse, status: number, payload: unknown): void 
   response.end(JSON.stringify(payload))
 }
 
-/** Local-only JSON API. Saves are stored in the project's `saves` directory. */
+/**
+ * JSON API for saved games. Opening a public save needs nothing; everything else
+ * needs an account, because every row has an owner.
+ */
 export async function handleSaveRequest(request: IncomingMessage, response: ServerResponse): Promise<boolean> {
   const pathname = new URL(request.url ?? '/', 'http://localhost').pathname.replace(/\/+$/, '') || '/'
   if (!pathname.startsWith('/api/saves')) return false
   const parts = pathname.split('/').filter(Boolean)
   const id = parts[2]
+  const account = accountOfRequest(request)
+  /** The caller's own id, or an end to the request: rows without an owner cannot exist. */
+  const mine = (): string => {
+    if (!account) throw new Error(SIGN_IN_REQUIRED)
+    return account.id
+  }
   try {
-    if (request.method === 'GET' && parts.length === 2) { send(response, 200, await listServerSaves()); return true }
-    if (request.method === 'GET' && id) { const slot = await readSlot(id); send(response, slot ? 200 : 404, slot ?? { error: 'Nicht gefunden' }); return true }
+    if (request.method === 'GET' && parts.length === 2) {
+      send(response, 200, {
+        account: account?.name ?? null,
+        own: account ? ownSlots(account.id) : [],
+        shared: sharedSlots(account?.id ?? null),
+      })
+      return true
+    }
+    if (request.method === 'GET' && id) {
+      const row = slotRow(id)
+      if (!row || (row.isPublic !== 1 && row.userId !== account?.id)) { send(response, 404, { error: 'Nicht gefunden' }); return true }
+      const stored = db().prepare('SELECT snapshot FROM saves WHERE id = ?').get(id) as { snapshot: string }
+      send(response, 200, { ...publicSlot(row), snapshot: stored.snapshot })
+      return true
+    }
     if (request.method === 'POST' && parts.length === 2) {
-      const body = await bodyOf(request) as { name?: unknown; snapshot?: unknown }
+      const userId = mine()
+      const body = await bodyOf(request) as { name?: unknown; snapshot?: unknown; public?: unknown }
       const name = cleanName(body.name)
-      if (!name || typeof body.snapshot !== 'string') { send(response, 400, { error: 'Name und Spielstand sind erforderlich' }); return true }
-      const slots = await listServerSaves()
-      if (slots.length >= 20) { send(response, 409, { error: 'Maximal 20 Spielstände möglich' }); return true }
-      send(response, 201, await writeSlot(randomUUID(), name, body.snapshot)); return true
+      if (!name) { send(response, 400, { error: 'Name und Spielstand sind erforderlich' }); return true }
+      const snapshot = readSnapshot(body.snapshot)
+      const { n } = db().prepare('SELECT COUNT(*) AS n FROM saves WHERE user_id = ?').get(userId) as { n: number }
+      if (n >= SLOTS_PER_USER) { send(response, 409, { error: `Maximal ${SLOTS_PER_USER} Spielstände je Konto` }); return true }
+      const slotId = randomUUID()
+      db()
+        .prepare('INSERT INTO saves (id, user_id, name, snapshot, is_public, saved_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(slotId, userId, name, snapshot, body.public === true ? 1 : 0, Date.now())
+      send(response, 201, publicSlot(slotRow(slotId)!))
+      return true
     }
-    if (request.method === 'PUT' && id) {
-      if (!await readSlot(id)) { send(response, 404, { error: 'Nicht gefunden' }); return true }
-      const body = await bodyOf(request) as { name?: unknown; snapshot?: unknown }
+    // Writing only ever touches your own rows. A public save someone else made is
+    // readable and nothing more, so loading one and saving leaves the original alone
+    // and puts a copy in the loader's own archive.
+    if ((request.method === 'PUT' || request.method === 'PATCH') && id) {
+      const userId = mine()
+      const row = slotRow(id)
+      if (!row || row.userId !== userId) { send(response, 404, { error: 'Nicht gefunden' }); return true }
+      const body = await bodyOf(request) as { name?: unknown; snapshot?: unknown; public?: unknown }
+      if (request.method === 'PATCH') {
+        if (typeof body.public !== 'boolean') { send(response, 400, { error: 'Sichtbarkeit fehlt' }); return true }
+        db().prepare('UPDATE saves SET is_public = ? WHERE id = ?').run(body.public ? 1 : 0, id)
+        send(response, 200, publicSlot(slotRow(id)!))
+        return true
+      }
       const name = cleanName(body.name)
-      if (!name || typeof body.snapshot !== 'string') { send(response, 400, { error: 'Name und Spielstand sind erforderlich' }); return true }
-      send(response, 200, await writeSlot(id, name, body.snapshot)); return true
+      if (!name) { send(response, 400, { error: 'Name und Spielstand sind erforderlich' }); return true }
+      const snapshot = readSnapshot(body.snapshot)
+      db().prepare('UPDATE saves SET name = ?, snapshot = ?, saved_at = ? WHERE id = ?').run(name, snapshot, Date.now(), id)
+      send(response, 200, publicSlot(slotRow(id)!))
+      return true
     }
-    if (request.method === 'DELETE' && id) { await rm(fileOf(id), { force: true }); send(response, 200, { ok: true }); return true }
+    if (request.method === 'DELETE' && id) {
+      const userId = mine()
+      const row = slotRow(id)
+      if (!row || row.userId !== userId) { send(response, 404, { error: 'Nicht gefunden' }); return true }
+      db().prepare('DELETE FROM saves WHERE id = ?').run(id)
+      send(response, 200, { ok: true })
+      return true
+    }
     send(response, 405, { error: 'Methode nicht erlaubt' })
   } catch (error) {
-    send(response, 400, { error: error instanceof Error ? error.message : 'Spielstand konnte nicht verarbeitet werden' })
+    const message = error instanceof Error ? error.message : 'Spielstand konnte nicht verarbeitet werden'
+    send(response, message === SIGN_IN_REQUIRED ? 401 : 400, { error: message })
   }
   return true
 }

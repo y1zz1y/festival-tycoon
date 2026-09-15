@@ -2,39 +2,8 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Readable } from 'node:stream'
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import { handleAccountRequest, closeAccountDatabase } from '../server/accounts'
-
-type Reply = { status: number; body: { ok?: boolean; message?: string; name?: string | null }; cookie: string | null }
-
-/** A request the handler can read: a body stream plus the headers it looks at. */
-function request(method: string, url: string, body?: unknown, cookie?: string): IncomingMessage {
-  const stream = Readable.from(body === undefined ? [] : [JSON.stringify(body)]) as unknown as IncomingMessage
-  stream.method = method
-  stream.url = url
-  stream.headers = cookie ? { cookie } : {}
-  Object.defineProperty(stream, 'socket', { value: { remoteAddress: '127.0.0.1' }, configurable: true })
-  return stream
-}
-
-function reply(): { response: ServerResponse; read(): Reply } {
-  let status = 0
-  let cookie: string | null = null
-  let payload = ''
-  const response = {
-    writeHead(code: number, headers: Record<string, string>) {
-      status = code
-      cookie = (headers['Set-Cookie'] as string | undefined) ?? null
-      return response
-    },
-    end(chunk?: string) {
-      payload = chunk ?? ''
-      return response
-    },
-  } as unknown as ServerResponse
-  return { response, read: () => ({ status, cookie, body: JSON.parse(payload || '{}') }) }
-}
+import { request, reply, type Reply } from './serverApi'
 
 export async function testAccounts(): Promise<void> {
   const directory = mkdtempSync(join(tmpdir(), 'headliner-accounts-'))

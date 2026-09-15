@@ -44,6 +44,7 @@ import { testQueueLanes } from './queueLanes'
 import { testShopGoods } from './shopGoods'
 import { testTickerAndWasteCaps } from './ticker'
 import { testAccounts } from './accounts'
+import { testSaves } from './saves'
 
 function test(name: string, run: () => void) {
   run()
@@ -66,6 +67,8 @@ test('books, loans, prepared scenarios and their goals', () => {
 })
 await testAccounts()
 console.log('PASS accounts: registration, sessions, hashed passwords and throttled guessing')
+await testSaves()
+console.log('PASS saves belong to their account, public ones are readable by all and writable by none')
 
 function fixture(count = 20): GameState {
   const initial = structuredClone(new GameState().snapshot)
