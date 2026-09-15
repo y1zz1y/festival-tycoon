@@ -38,6 +38,7 @@ import { testFinance } from './finance'
 import { testVisitorSleep } from './visitorSleep'
 import { testQueueLanes } from './queueLanes'
 import { testShopGoods } from './shopGoods'
+import { testAccounts } from './accounts'
 
 function test(name: string, run: () => void) {
   run()
@@ -55,6 +56,8 @@ test('build menu lists every placeable tool once', () => {
 test('books, loans, prepared scenarios and their goals', () => {
   testFinance()
 })
+await testAccounts()
+console.log('PASS accounts: registration, sessions, hashed passwords and throttled guessing')
 
 function fixture(count = 20): GameState {
   const initial = structuredClone(new GameState().snapshot)

@@ -26,7 +26,7 @@ import { BUILDINGS } from './game/catalog'
 import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financePeriodTotal } from './game/finance'
 import { goalName, goalProgressText } from './game/scenarioGoals'
 import { SCENARIO_PRESETS, scenarioPreset } from './game/scenarioPresets'
-import { currentAccount, registerAccount, signIn, signOut } from './accounts'
+import { currentAccount, refreshAccount, registerAccount, signIn, signOut } from './accounts'
 import { mountTitleCrowd } from './titleCrowd'
 import type { BuildingKind, Tool } from './game/catalog'
 import {
@@ -836,7 +836,7 @@ app.innerHTML = `
           <label class="scenario-field"><span>Passwort</span><input id="account-password" name="password" type="password" autocomplete="current-password" maxlength="200" required /></label>
           <label id="account-repeat-field" class="scenario-field" hidden><span>Passwort wiederholen</span><input id="account-repeat" name="password-repeat" type="password" autocomplete="new-password" maxlength="200" /></label>
           <p id="account-message" class="scenario-hint" role="status"></p>
-          <p class="scenario-hint">Das Konto liegt nur in diesem Browser — es gibt keinen Kontoserver. Gespeichert wird ausschließlich eine Prüfsumme des Passworts, nie das Passwort selbst. Nimm trotzdem kein Passwort, das du anderswo benutzt.</p>
+          <p class="scenario-hint">Das Konto liegt auf dem Spielserver; gespeichert wird dort nur ein scrypt-Hash des Passworts, nie das Passwort selbst. Die Verbindung läuft unverschlüsselt über HTTP — nimm also kein Passwort, das du anderswo benutzt.</p>
           <div class="title-account-actions">
             <button id="account-submit" type="submit">Anmelden</button>
             <button id="account-switch" type="button">Noch kein Konto? Registrieren</button>
@@ -5400,9 +5400,10 @@ titleScreen.addEventListener('click', (event) => {
   if (account) {
     const mode = account.dataset.account
     if (mode === 'logout') {
-      signOut()
-      syncAccountBar()
-      showToast('Abgemeldet')
+      void signOut().then((result) => {
+        syncAccountBar()
+        showToast(result.message, !result.ok)
+      })
     } else setAccountMaskOpen(true, mode === 'register' ? 'register' : 'login')
     return
   }
@@ -6591,3 +6592,7 @@ function formatTime(minute: number): string {
 // The game opens on its title screen. Last thing in the module, so everything it can
 // reach — the scenario form, the save management — has been built by the time it shows.
 setTitleScreenOpen(true)
+
+// Who the session cookie belongs to. Asked once, after everything is wired, and the
+// account bar redraws itself when the answer arrives.
+void refreshAccount().then(() => syncAccountBar())
