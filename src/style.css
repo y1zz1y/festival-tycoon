@@ -533,9 +533,10 @@ button {
   z-index: 60;
   display: none;
   /* The world itself is the backdrop: it keeps rendering behind the screen and is
-     blurred and dimmed here, so the plates stay readable over it. */
-  background: rgba(16, 26, 22, .38);
-  backdrop-filter: blur(10px) saturate(1.05) brightness(.82);
+     only blurred here - no dimming veil over it, the plates carry their own
+     contrast. */
+  background: transparent;
+  backdrop-filter: blur(10px) saturate(1.05);
   overflow: auto;
   user-select: none;
 }
@@ -544,15 +545,14 @@ button {
   display: block;
 }
 
-/* The lit ground: two pixel grids and a glow from above, the three layers the
-   design stacks behind everything else. */
+/* The light above the plaque. The design's two pixel grids used to lie here as
+   well, but over the real game world they read as a texture stretched across the
+   picture, so only the glow is left. */
 .title-grain {
   position: absolute;
   inset: 0;
   background-image:
-    radial-gradient(70% 55% at 50% 26%, rgba(145, 170, 160, 0.22) 0%, rgba(0, 0, 0, 0) 65%),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 2px, transparent 2px 4px),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.16) 0 4px, transparent 4px 8px);
+    radial-gradient(70% 55% at 50% 26%, rgba(145, 170, 160, 0.22) 0%, rgba(0, 0, 0, 0) 65%);
   pointer-events: none;
 }
 
@@ -1359,6 +1359,9 @@ body.title-open #app-install-hint {
   gap: 6px;
 }
 
+/* The rows in a dropdown are full-width and left-aligned; everything else about
+   them - face, border, padding, hover - comes from the shared overlay-button rule
+   further down, the same one the toolbar and the panels use. */
 .debug-menu-panel button,
 .dropdown-menu-panel button {
   width: 100%;
@@ -1453,6 +1456,8 @@ body.title-open #app-install-hint {
 
 .game-actions button,
 .time-controls button,
+.debug-menu-panel button,
+.dropdown-menu-panel button,
 .festival-management button,
 .supply-planner button,
 .save-as-panel button,
@@ -1472,6 +1477,8 @@ body.title-open #app-install-hint {
 .game-actions button:hover,
 .time-controls button:hover,
 .time-controls button.active,
+.debug-menu-panel button:hover,
+.dropdown-menu-panel button:hover,
 .festival-management button:hover,
 .supply-planner button:hover,
 .save-as-panel button:hover,
@@ -4052,7 +4059,7 @@ body.title-open #app-install-hint {
 .game-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .action-group { gap: 4px; }
 .action-divider { display: none; }
-.game-actions button, .festival-management button, .supply-planner button, .save-as-panel button, .entity-panel button, .staff-panel button, .staff-details button, .scenario-panel button, .save-slots-panel button { padding: 5px 9px; font-size: 11px; }
+.game-actions button, .debug-menu-panel button, .dropdown-menu-panel button, .festival-management button, .supply-planner button, .save-as-panel button, .entity-panel button, .staff-panel button, .staff-details button, .scenario-panel button, .save-slots-panel button { padding: 5px 9px; font-size: 11px; }
 .panel button, .rct-group button {
   border-top-color: #819b8c; border-left-color: #819b8c;
   border-right-color: #1b322c; border-bottom-color: #1b322c;
@@ -4092,7 +4099,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   .topbar { gap: 5px; }
   .brand { min-width: 130px; }
   .stats { gap: 7px; font-size: 10px; flex-wrap: wrap; }
-  .game-actions button, .festival-management button, .supply-planner button, .save-as-panel button, .entity-panel button, .staff-panel button, .staff-details button, .scenario-panel button, .save-slots-panel button { padding: 4px 6px; font-size: 10px; }
+  .game-actions button, .debug-menu-panel button, .dropdown-menu-panel button, .festival-management button, .supply-planner button, .save-as-panel button, .entity-panel button, .staff-panel button, .staff-details button, .scenario-panel button, .save-slots-panel button { padding: 4px 6px; font-size: 10px; }
   .build-menu { top: 125px; width: min(300px, calc(100vw - 12px)); }
   .build-menu.build-menu-catalog { width: min(440px, calc(100vw - 12px)); }
   .crowding-panel { top: 125px; width: 144px; }

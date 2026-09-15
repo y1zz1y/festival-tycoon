@@ -191,8 +191,7 @@ app.innerHTML = `
       <div id="save-menu-panel" class="dropdown-menu-panel panel">
         <button id="save">💾 Schnell speichern</button>
         <button id="save-as" title="Spielstand benennen oder einen vorhandenen überschreiben">💾 Speichern unter …</button>
-        <button id="load">📂 Schnell laden</button>
-        <button id="save-slots" title="Lokale Spielstände verwalten">🗂️ Spielstände verwalten</button>
+        <button id="save-slots" title="Gespeicherte Spielstände öffnen und verwalten">📂 Spielstand laden</button>
         <button id="copy-save" title="Spielstand als Base64 kopieren">⧉ Als Text kopieren</button>
         <button id="paste-save" title="Base64-Spielstand einfügen">📋 Text einfügen</button>
       </div>
@@ -6213,19 +6212,6 @@ saveTextImport.addEventListener('click', () => {
 toggleParkButton.addEventListener('click', () => {
   const result = game.setParkOpen(!game.snapshot.parkOpen)
   showToast(result.message)
-})
-
-document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', () => {
-  if (multiplayer.status.mode === 'client') {
-    showToast('Nur der Host kann einen Spielstand laden', true)
-    return
-  }
-  const loaded = GameState.load()
-  if (!loaded) {
-    showToast('Kein gültiger Spielstand gefunden', true)
-    return
-  }
-  bindLoadedGame(loaded, 'Spielstand geladen')
 })
 
 document.querySelector<HTMLButtonElement>('#close-visitor')?.addEventListener('click', () => {
