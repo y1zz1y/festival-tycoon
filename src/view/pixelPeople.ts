@@ -167,11 +167,31 @@ export function createPersonDetails(variant: number, clothing = true) {
   const geometry = k.finish(); detailCache.set(key, geometry); return geometry
 }
 
+/** A built figure together with the parts worth animating — the same joints the crowd on the map swings. */
+export type PersonRig = {
+  group: Group
+  body: Mesh
+  head: Mesh
+  leftLeg: Mesh
+  rightLeg: Mesh
+  leftArm: Mesh
+  rightArm: Mesh
+  shoulder: number
+}
+
 export function createPersonFigure(
   id: string,
   shirtColor: number,
   options: { nude?: boolean } = {},
 ): Group {
+  return createPersonRig(id, shirtColor, options).group
+}
+
+export function createPersonRig(
+  id: string,
+  shirtColor: number,
+  options: { nude?: boolean } = {},
+): PersonRig {
   const appearance = personStyle(personSeed(id))
   const nude = Boolean(options.nude)
   const skin = new MeshStandardMaterial({ color: appearance.skin, vertexColors: true, roughness: 0.9 })
@@ -214,7 +234,7 @@ export function createPersonFigure(
   }
   group.scale.set(appearance.width, appearance.height, appearance.width)
   group.position.y = -.38
-  return group
+  return { group, body, head, leftLeg, rightLeg, leftArm, rightArm, shoulder }
 }
 
 export class PersonDetailsView {

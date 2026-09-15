@@ -26,6 +26,8 @@ import { BUILDINGS } from './game/catalog'
 import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financePeriodTotal } from './game/finance'
 import { goalName, goalProgressText } from './game/scenarioGoals'
 import { SCENARIO_PRESETS, scenarioPreset } from './game/scenarioPresets'
+import { currentAccount, registerAccount, signIn, signOut } from './accounts'
+import { mountTitleCrowd } from './titleCrowd'
 import type { BuildingKind, Tool } from './game/catalog'
 import {
   BUILD_CATEGORIES,
@@ -804,6 +806,7 @@ app.innerHTML = `
       <div class="title-grain" aria-hidden="true"></div>
       <div class="title-stage">
         <div class="title-plaque">
+          <canvas id="title-crowd" class="title-crowd" aria-hidden="true"></canvas>
           <div class="title-kicker">AIGamesWatch Studios präsentiert</div>
           <h1 id="title-screen-name" class="title-name">Headliner Inc.</h1>
           <div class="title-subtitle">Ein Gelände, ein Wochenende, euer Publikum</div>
@@ -813,9 +816,43 @@ app.innerHTML = `
           <button type="button" data-title-menu="load"><span class="title-menu-label">Spielstand laden</span><span class="title-menu-meta">Archiv öffnen</span></button>
           <button type="button" data-title-menu="settings"><span class="title-menu-label">Einstellungen</span><span class="title-menu-meta">Debug · Festivaldaten</span></button>
         </nav>
+        <div class="title-account">
+          <span id="title-account-name" class="title-account-name" hidden></span>
+          <button type="button" data-account="login">Anmelden</button>
+          <button type="button" data-account="register">Registrieren</button>
+          <button type="button" data-account="logout" hidden>Abmelden</button>
+        </div>
         <div class="title-footer">
           <span>Prototype 0.2</span>
-          <span class="title-hint"><i class="title-caret" aria-hidden="true"></i>Pfeiltasten · Enter bestätigt</span>
+        </div>
+      </div>
+      <div id="title-account-mask" class="title-submenu" hidden>
+        <form id="title-account-form" class="title-submenu-card title-account-card">
+          <div class="title-submenu-head">
+            <span id="title-account-title" class="title-submenu-title">Anmelden</span>
+            <span class="title-submenu-kicker">Konto</span>
+          </div>
+          <label class="scenario-field"><span>Name</span><input id="account-name" name="username" type="text" autocomplete="username" maxlength="24" required /></label>
+          <label class="scenario-field"><span>Passwort</span><input id="account-password" name="password" type="password" autocomplete="current-password" maxlength="200" required /></label>
+          <label id="account-repeat-field" class="scenario-field" hidden><span>Passwort wiederholen</span><input id="account-repeat" name="password-repeat" type="password" autocomplete="new-password" maxlength="200" /></label>
+          <p id="account-message" class="scenario-hint" role="status"></p>
+          <p class="scenario-hint">Das Konto liegt nur in diesem Browser — es gibt keinen Kontoserver. Gespeichert wird ausschließlich eine Prüfsumme des Passworts, nie das Passwort selbst. Nimm trotzdem kein Passwort, das du anderswo benutzt.</p>
+          <div class="title-account-actions">
+            <button id="account-submit" type="submit">Anmelden</button>
+            <button id="account-switch" type="button">Noch kein Konto? Registrieren</button>
+            <button type="button" data-account-close>Zurück</button>
+          </div>
+        </form>
+      </div>
+      <div id="title-load-mask" class="title-submenu" hidden>
+        <div class="title-submenu-card">
+          <div class="title-submenu-head">
+            <span class="title-submenu-title">Spielstand laden</span>
+            <span id="title-load-kicker" class="title-submenu-kicker">Archiv</span>
+          </div>
+          <div id="title-load-rows" class="title-submenu-rows"></div>
+          <p id="title-load-note" class="scenario-hint"></p>
+          <button type="button" data-title-load-close>Zurück</button>
         </div>
       </div>
       <div id="title-submenu" class="title-submenu" hidden>
@@ -5176,20 +5213,28 @@ makeResizable(scenarioPanel)
  * lifted above the backdrop while it is open so closing them returns here.
  */
 const titleScreen = requireElement<HTMLElement>('#title-screen')
+const titleCrowd = mountTitleCrowd(requireElement<HTMLCanvasElement>('#title-crowd'))
 const titleScreenOpen = (): boolean => titleScreen.classList.contains('visible')
 function setTitleScreenOpen(open: boolean): void {
   titleScreen.classList.toggle('visible', open)
+  // The crowd on the heading only walks while anyone can see it.
+  titleCrowd.setRunning(open)
   if (open) {
     titleScreen.querySelector('[data-title-scenario=""]')?.setAttribute('aria-expanded', 'false')
     openTitleSubmenu(false)
+    closeTitleLoad()
+    setAccountMaskOpen(false)
+    // The running game's own windows belong to the running game: whatever was left
+    // open behind the start screen is closed, so nothing of it still holds the keys.
+    setScenarioPanelOpen(false)
+    setSaveSlotsPanelOpen(false)
+    syncAccountBar()
   }
   // The start screen is the whole screen: every readout, toolbar and hint of the running
   // game is hidden behind it (see the body.title-open rules), and the keyboard shortcuts
   // that would otherwise reach the world are switched off.
   document.body.classList.toggle('title-open', open)
-  if (!open) {
-    for (const panel of [scenarioPanel, saveSlotsPanel]) panel.classList.remove('above-title')
-  }
+  if (!open) scenarioPanel.classList.remove('above-title')
 }
 /** Opens one of the existing windows on top of the title screen instead of behind it. */
 function openAboveTitle(panel: HTMLElement, open: () => void): void {
@@ -5198,6 +5243,74 @@ function openAboveTitle(panel: HTMLElement, open: () => void): void {
 }
 const titleFreeplay = requireElement<HTMLElement>('#title-freeplay')
 const titleSubmenu = requireElement<HTMLElement>('#title-submenu')
+const titleLoadMask = requireElement<HTMLElement>('#title-load-mask')
+const titleLoadRows = requireElement<HTMLElement>('#title-load-rows')
+const titleLoadKicker = requireElement<HTMLElement>('#title-load-kicker')
+const titleLoadNote = requireElement<HTMLElement>('#title-load-note')
+const accountMask = requireElement<HTMLElement>('#title-account-mask')
+const accountForm = requireElement<HTMLFormElement>('#title-account-form')
+const accountTitle = requireElement<HTMLElement>('#title-account-title')
+const accountNameInput = requireElement<HTMLInputElement>('#account-name')
+const accountPasswordInput = requireElement<HTMLInputElement>('#account-password')
+const accountRepeatField = requireElement<HTMLElement>('#account-repeat-field')
+const accountRepeatInput = requireElement<HTMLInputElement>('#account-repeat')
+const accountMessage = requireElement<HTMLElement>('#account-message')
+const accountSubmit = requireElement<HTMLButtonElement>('#account-submit')
+const accountSwitch = requireElement<HTMLButtonElement>('#account-switch')
+const accountNameLabel = requireElement<HTMLElement>('#title-account-name')
+
+/** Which of the two the mask is showing; the fields and the buttons follow from it. */
+let accountMode: 'login' | 'register' = 'login'
+function setAccountMode(mode: 'login' | 'register'): void {
+  accountMode = mode
+  const register = mode === 'register'
+  accountTitle.textContent = register ? 'Registrieren' : 'Anmelden'
+  accountSubmit.textContent = register ? 'Konto anlegen' : 'Anmelden'
+  accountSwitch.textContent = register ? 'Konto vorhanden? Anmelden' : 'Noch kein Konto? Registrieren'
+  accountRepeatField.hidden = !register
+  accountRepeatInput.required = register
+  accountPasswordInput.autocomplete = register ? 'new-password' : 'current-password'
+  accountMessage.textContent = ''
+}
+function setAccountMaskOpen(open: boolean, mode: 'login' | 'register' = accountMode): void {
+  accountMask.hidden = !open
+  if (!open) return
+  setAccountMode(mode)
+  accountForm.reset()
+  accountMessage.textContent = ''
+  accountNameInput.focus()
+}
+/** The bar under the menu: either the two ways in, or who is signed in and the way out. */
+function syncAccountBar(): void {
+  const name = currentAccount()
+  accountNameLabel.hidden = !name
+  accountNameLabel.textContent = name ? `Angemeldet als ${name}` : ''
+  titleScreen.querySelectorAll<HTMLButtonElement>('[data-account="login"], [data-account="register"]').forEach((button) => {
+    button.hidden = !!name
+  })
+  titleScreen.querySelector<HTMLButtonElement>('[data-account="logout"]')!.hidden = !name
+}
+accountSwitch.addEventListener('click', () => setAccountMode(accountMode === 'login' ? 'register' : 'login'))
+accountForm.addEventListener('submit', (event) => {
+  event.preventDefault()
+  const name = accountNameInput.value
+  const password = accountPasswordInput.value
+  accountSubmit.disabled = true
+  accountMessage.textContent = 'Einen Moment …'
+  const done = (result: { ok: boolean; message: string }): void => {
+    accountSubmit.disabled = false
+    accountMessage.textContent = result.message
+    if (!result.ok) return
+    syncAccountBar()
+    setAccountMaskOpen(false)
+    showToast(result.message)
+  }
+  void (accountMode === 'register'
+    ? registerAccount(name, password, accountRepeatInput.value)
+    : signIn(name, password)
+  ).then(done, () => done({ ok: false, message: 'Konto konnte nicht geprüft werden' }))
+})
+
 const titleMenuButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-menu]')]
 const titleRowButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-scenario]')]
 
@@ -5208,7 +5321,54 @@ const titleRowButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[da
  */
 let titleSelection = 0
 function titleEntries(): HTMLButtonElement[] {
+  if (!titleLoadMask.hidden) return [...titleLoadRows.querySelectorAll<HTMLButtonElement>('[data-title-load-slot]')]
   return titleSubmenu.hidden ? titleMenuButtons : titleRowButtons
+}
+
+/**
+ * The title screen's own archive. It reads the same saves the in-game management does
+ * — the server's folder when it answers, this browser's slots when it does not — but
+ * shows them as plates of this screen, and only offers the one thing that belongs
+ * here: picking one up. Renaming, overwriting and deleting stay in the running game.
+ */
+async function openTitleLoad(): Promise<void> {
+  titleLoadMask.hidden = false
+  titleLoadRows.innerHTML = '<p class="title-load-empty">Spielstände werden gelesen …</p>'
+  titleLoadNote.textContent = ''
+  markTitleSelection(0)
+  const { slots, onServer } = await fetchSaveSlots()
+  titleLoadKicker.textContent = slots.length
+    ? `${slots.length} ${slots.length === 1 ? 'Archiv' : 'Archive'} · ${onServer ? 'Spielserver' : 'dieser Browser'}`
+    : 'Archiv leer'
+  titleLoadRows.innerHTML = slots.length
+    ? slots
+        .map((slot) => `<button type="button" data-title-load-slot="${slot.id}"><span class="title-row-text"><span class="title-row-label">${escapeHtml(slot.name)}</span><span class="title-row-meta">${formatSaveTime(slot.savedAt)}</span></span><span class="title-row-value">Laden</span></button>`)
+        .join('')
+    : `<p class="title-load-empty">Noch keine benannten Spielstände ${onServer ? 'auf dem Spielserver' : 'in diesem Browser'}. Im laufenden Spiel legst du sie über „Spielstand“ an.</p>`
+  titleLoadNote.textContent = onServer
+    ? 'Die Spielstände liegen im Ordner „saves“ des Spielservers.'
+    : 'Der Spielserver ist nicht erreichbar — gelesen wird, was in diesem Browser liegt.'
+  markTitleSelection(0)
+}
+function closeTitleLoad(): void {
+  titleLoadMask.hidden = true
+  markTitleSelection(0)
+}
+async function loadTitleSlot(id: string): Promise<void> {
+  let loaded: GameState | null
+  try {
+    loaded = serverSaveSlots ? GameState.fromJSON((await loadServerSave(id)).snapshot) : GameState.loadSlot(id)
+  } catch {
+    loaded = null
+  }
+  if (!loaded) {
+    titleLoadNote.textContent = 'Dieser Spielstand ist ungültig oder nicht mehr vorhanden.'
+    void openTitleLoad()
+    return
+  }
+  bindLoadedGame(loaded, 'Spielstand geladen')
+  closeTitleLoad()
+  setTitleScreenOpen(false)
 }
 function markTitleSelection(index: number): void {
   const entries = titleEntries()
@@ -5235,11 +5395,25 @@ titleScreen.addEventListener('pointermove', (event) => {
 })
 titleScreen.addEventListener('click', (event) => {
   const target = event.target as HTMLElement
+  if (target.closest('[data-account-close]')) { setAccountMaskOpen(false); return }
+  const account = target.closest<HTMLButtonElement>('[data-account]')
+  if (account) {
+    const mode = account.dataset.account
+    if (mode === 'logout') {
+      signOut()
+      syncAccountBar()
+      showToast('Abgemeldet')
+    } else setAccountMaskOpen(true, mode === 'register' ? 'register' : 'login')
+    return
+  }
   if (target.closest('[data-title-back]')) { openTitleSubmenu(false); return }
+  if (target.closest('[data-title-load-close]')) { closeTitleLoad(); return }
+  const slot = target.closest<HTMLButtonElement>('[data-title-load-slot]')
+  if (slot) { void loadTitleSlot(slot.dataset.titleLoadSlot!); return }
   const menu = target.closest<HTMLButtonElement>('[data-title-menu]')
   if (menu) {
     if (menu.dataset.titleMenu === 'new') openTitleSubmenu(true)
-    else if (menu.dataset.titleMenu === 'load') openAboveTitle(saveSlotsPanel, () => { void openSaveSlots() })
+    else if (menu.dataset.titleMenu === 'load') void openTitleLoad()
     else openAboveTitle(scenarioPanel, () => setScenarioPanelOpen(true))
     return
   }
@@ -5272,9 +5446,14 @@ titleScreen.addEventListener('click', (event) => {
 })
 window.addEventListener('keydown', (event) => {
   if (!titleScreenOpen() || !scenarioPanel.hidden || !saveSlotsPanel.hidden) return
+  if (!accountMask.hidden) {
+    if (event.key === 'Escape') setAccountMaskOpen(false)
+    return
+  }
   if (isTextEntryTarget(event.target) || isTextEntryTarget(document.activeElement)) return
   if (event.key === 'Escape' || event.key === 'Backspace') {
-    if (!titleSubmenu.hidden) { event.preventDefault(); openTitleSubmenu(false) }
+    if (!titleLoadMask.hidden) { event.preventDefault(); closeTitleLoad() }
+    else if (!titleSubmenu.hidden) { event.preventDefault(); openTitleSubmenu(false) }
     return
   }
   if (event.key === 'ArrowDown' || event.key === 'ArrowRight') { event.preventDefault(); markTitleSelection(titleSelection + 1) }

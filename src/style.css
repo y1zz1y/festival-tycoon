@@ -532,7 +532,10 @@ button {
   inset: 0;
   z-index: 60;
   display: none;
-  background: var(--ts-800);
+  /* The world itself is the backdrop: it keeps rendering behind the screen and is
+     blurred and dimmed here, so the plates stay readable over it. */
+  background: rgba(16, 26, 22, .38);
+  backdrop-filter: blur(10px) saturate(1.05) brightness(.82);
   overflow: auto;
   user-select: none;
 }
@@ -548,15 +551,16 @@ button {
   inset: 0;
   background-image:
     radial-gradient(70% 55% at 50% 26%, rgba(145, 170, 160, 0.22) 0%, rgba(0, 0, 0, 0) 65%),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 4px),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.22) 0 4px, transparent 4px 8px);
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.16) 0 4px, transparent 4px 8px);
   pointer-events: none;
 }
 
 .title-stage {
   position: relative;
   min-height: 100%;
-  padding: clamp(18px, 4vh, 48px) clamp(16px, 6vw, 96px) clamp(16px, 3vh, 40px);
+  /* Room above the plaque for the crowd walking on its top edge. */
+  padding: clamp(60px, 11vh, 120px) clamp(16px, 6vw, 96px) clamp(16px, 3vh, 40px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -571,13 +575,15 @@ button {
 .title-menu button,
 .title-submenu-card,
 .title-submenu-rows button,
-.title-submenu [data-title-back] {
+.title-submenu [data-title-back],
+.title-submenu [data-title-load-close] {
   border-style: solid;
   border-color: var(--ts-400) var(--ts-900) var(--ts-900) var(--ts-400);
   border-radius: 0;
 }
 
 .title-plaque {
+  position: relative;
   padding: clamp(14px, 2.4vh, 26px) clamp(24px, 6vw, 74px) clamp(16px, 2.8vh, 32px);
   display: flex;
   flex-direction: column;
@@ -586,6 +592,19 @@ button {
   background: var(--ts-700);
   border-width: 5px;
   box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* The crowd's strip: it stands on the plaque's top edge and reaches up out of it. */
+.title-crowd {
+  position: absolute;
+  left: 0;
+  /* A canvas is a replaced element: without an explicit width it keeps its buffer's
+     intrinsic size and `right` is simply ignored. */
+  width: 100%;
+  bottom: 100%;
+  height: clamp(52px, 8vw, 96px);
+  margin-bottom: -5px;
+  pointer-events: none;
 }
 
 .title-kicker {
@@ -676,24 +695,6 @@ button {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--ts-300);
-}
-
-.title-hint {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.title-caret {
-  width: 7px;
-  height: 14px;
-  background: var(--ts-300);
-  animation: title-caret 1.1s steps(1) infinite;
-}
-
-@keyframes title-caret {
-  0%, 55% { opacity: 1; }
-  56%, 100% { opacity: 0; }
 }
 
 /* The submenu: the scenario choice, on a plate above the menu it came from. */
@@ -797,7 +798,8 @@ button {
   color: var(--ts-gold);
 }
 
-.title-submenu [data-title-back] {
+.title-submenu [data-title-back],
+.title-submenu [data-title-load-close] {
   align-self: flex-start;
   padding: 9px 22px;
   color: #ffffff;
@@ -809,8 +811,116 @@ button {
   cursor: pointer;
 }
 
-.title-submenu [data-title-back]:hover {
+.title-submenu [data-title-back]:hover,
+.title-submenu [data-title-load-close]:hover {
   background: var(--ts-500);
+}
+
+/* The account bar under the menu, and the mask it opens. Both wear the plates and
+   bevels of the rest of the screen. */
+.title-account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.title-account button {
+  padding: 8px 18px;
+  color: var(--ts-100);
+  background: var(--ts-700);
+  border: 3px solid;
+  border-color: var(--ts-400) var(--ts-900) var(--ts-900) var(--ts-400);
+  border-radius: 0;
+  font-size: clamp(10px, 1.1vw, 13px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.title-account button:hover {
+  background: var(--ts-500);
+}
+
+.title-account button[hidden] {
+  display: none;
+}
+
+.title-account-name {
+  font-size: clamp(10px, 1.1vw, 13px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ts-gold);
+}
+
+.title-account-card {
+  width: min(520px, 100%);
+  text-align: left;
+}
+
+.title-account-card .scenario-field span {
+  color: var(--ts-200);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.title-account-card input {
+  width: 100%;
+  padding: 8px 10px;
+  color: var(--ts-100);
+  background: var(--ts-900);
+  border: 3px solid;
+  border-color: var(--ts-600) var(--ts-900) var(--ts-900) var(--ts-600);
+  border-radius: 0;
+  font: inherit;
+}
+
+.title-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.title-account-actions button {
+  padding: 9px 20px;
+  color: var(--ts-100);
+  background: var(--ts-600);
+  border: 4px solid;
+  border-color: var(--ts-400) var(--ts-900) var(--ts-900) var(--ts-400);
+  border-radius: 0;
+  font-size: clamp(10px, 1.1vw, 13px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.title-account-actions button[type='submit'] {
+  color: #ffffff;
+  background: var(--ts-500);
+  border-color: var(--ts-300) var(--ts-900) var(--ts-900) var(--ts-300);
+}
+
+.title-account-actions button:hover:not(:disabled) {
+  background: var(--ts-500);
+}
+
+.title-account-actions button:disabled {
+  opacity: .6;
+  cursor: progress;
+}
+
+/* The archive plate on the title screen: the saves as rows of this screen. Managing
+   them — naming, overwriting, deleting — stays in the running game's own window. */
+.title-load-empty {
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--ts-200);
+  background: var(--ts-800);
+  border: 3px solid;
+  border-color: var(--ts-600) var(--ts-900) var(--ts-900) var(--ts-600);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 /* A scenario that is not part of the base game: readable, marked with its price, and
