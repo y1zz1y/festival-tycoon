@@ -86,5 +86,5 @@ server.on('upgrade', (request, socket, head) => {
 })
 
 server.listen(PORT, HOST, () => {
-  console.log(`Festival Tycoon: http://${HOST}:${PORT}`)
+  console.log(`Headliner Tycoon: http://${HOST}:${PORT}`)
 })

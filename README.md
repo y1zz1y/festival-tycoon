@@ -1,4 +1,4 @@
-# Festival Tycoon
+# Headliner Tycoon
 
 Spielbare technische Basis für ein isometrisches Aufbau- und Wirtschaftsspiel mit Node.js, TypeScript und Three.js.
 
@@ -210,7 +210,17 @@ Logistik-Overlay. Gäste steigen nach dem Parken immer auf einen
 angrenzenden Fußweg aus (nicht auf die Fahrbahn, die Bucht oder ins
 Gras), sofern ein Weg die Bucht orthogonal berührt; im Auto bleiben sie
 bis dahin inaktiv und können dort nicht als Verletzte auf der Straße
-zählen. Abriss (Leiste oder Autostraßen-Abreißen) hebt die
+zählen. Zur Abreise nimmt jede Fahrgemeinschaft wieder ihr ursprüngliches
+Auto; sobald alle ursprünglichen Insassen sitzen, setzt es rückwärts auf
+die angrenzende Straße und fährt zur Ausfahrt. Gibt es keine erlaubte
+Ausfahrtroute, bleiben die Insassen sitzen; das Auto zeigt
+„Keine Ausfahrtroute – Straßenpfeile und Verbindungen prüfen“.
+Der Hinweis erscheint auch, wenn die Route erst während der Abfahrt verloren
+geht. Nach Korrektur der Verbindung fährt es automatisch weiter. Bei Stau
+wartet ein besetztes Auto; beim Ausparken wartet es auf eine freie Zufahrt.
+Auf Überführungen bleiben Fahrzeuge, Verkehrsregeln und Belegung nach
+Straßenebene getrennt, auch nach dem Laden. Abriss (Leiste oder
+Autostraßen-Abreißen) hebt die
 Bucht auf; die Kachel wird wieder zu Wiese und ist bebaubar. Dasselbe
 gilt für Krankenbereiche. Ein Klick im Abrissmodus entfernt das
 **3D-Objekt unter dem Mauszeiger** (Gebäude, Deko-Viertel, Tor, Ampel),
@@ -359,7 +369,8 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - soziale Treffpunkte zwischen den Zelten sowie sichtbare Gespräche und Schlafanzeigen
 - inventarabhängig belegte Nachbarparzellen mit Campingstühlen, Pavillons oder kleinen Musikboxen
 - gemeinsame Stuhlfelder für bis zu fünf nahe Camper und Pavillons für sechs Personen
-- begehbare Campingflächen mit Sitzen, Gesprächen sowie Verzehr mitgebrachter Vorräte
+- jederzeit begehbare Campingflächen mit Sitzen, Gesprächen sowie Verzehr
+  mitgebrachter Vorräte; bei der Abreise dürfen Gäste sie als Weg-Fallback queren
 - individuelle Besucher-Inventare mit Zelt, Stühlen, Pavillon, Musikbox, Alkohol, Essen und Feuerwerkskörpern
 - zufälliges Zünden mit Verbrauch und sichtbaren Feuerwerkseffekten
 - unbegrenzter Besucherzustrom mit lokaler Gedränge- und Festivallust-Simulation
@@ -557,7 +568,7 @@ Nach dem Festival entwickelt sich die Basis einmalig aus 80 % bisheriger Basis, 
 
 ### Mehrere lokale Spielstände
 
-Über **Spielstände** in der oberen Leiste lassen sich bis zu 20 benannte Spielstände speichern, laden, überschreiben und löschen. Beim lokalen Entwicklungs- oder Spielserver liegen sie als einzelne JSON-Dateien im Ordner `saves` neben dem Projekt und stehen damit allen Browsern zur Verfügung, die diesen Server verwenden. Ohne erreichbaren Spielserver verwendet das Spiel automatisch einen gleichwertigen Browser-Speicher als Ausweichlösung. **Speichern** und **Laden** bleiben als schneller Einzelspielstand erhalten; Base64-Export und -Import bleiben unabhängig davon nutzbar.
+Über **Spielstände** in der oberen Leiste lassen sich bis zu 20 benannte Spielstände speichern, laden, überschreiben und löschen. Beim lokalen Entwicklungs- oder Spielserver liegen sie als einzelne JSON-Dateien im Ordner `saves` neben dem Projekt und stehen damit allen Browsern zur Verfügung, die diesen Server verwenden. Ohne erreichbaren Spielserver verwendet das Spiel automatisch einen gleichwertigen Browser-Speicher als Ausweichlösung. **Schnell speichern** und **Schnell laden** bleiben als schneller Einzelspielstand erhalten — in der Leiste unter Spielstand und **Schnell laden** auch auf dem Titelbildschirm, ohne das Archiv zu öffnen. Base64-Export und -Import bleiben unabhängig davon nutzbar.
 
 ### Performance bei großen Festivals
 

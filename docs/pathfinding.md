@@ -39,9 +39,13 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
 - Ein budgetbegrenzter Miss ist **kein** Beweis für Unerreichbarkeit; den
   Reachability-Cache nicht damit vergiften.
 - `findPath` erkennt vor A*, wenn alle Zielknoten fehlen oder wegen fester
-  Zugangsflags unbetretbar sind (Solid/Wasser/Camp/Medizin/Vorplatz/Staff).
+  Zugangsflags unbetretbar sind (Solid/Wasser/Medizin/Vorplatz/Staff).
   Start=Ziel bleibt erlaubt. Die ursprüngliche Zielliste für Heuristik und
   Cache-Reihenfolge bleibt erhalten; andere Ziele werden normal gewichtet gesucht.
+- Camping-Ausweisungen sind keine Wände: Nach dem normalen Weg-Pass darf die
+  Wegsuche ausgewiesenen Campingboden als Fallback queren. Wege bleiben durch
+  ihre niedrigeren Oberflächenkosten bevorzugt; Gelände-, Gedränge- und
+  Zugangskosten gelten weiter. Feste Objekte bleiben blockierend.
 - Abreise-, Ausgangs- und Müllentscheidungen benutzen dieselbe faire Budgetqueue
   wie normale Besucherziele, auch aus direkten Callbacks; siehe `simulation.md`.
 - Volle Wege-Scans nicht in Besucher-/Camp-/Staff-Schleifen nesten. Indizes
@@ -97,7 +101,8 @@ Rücksetzbewegungen sowie bestehende Fahrzeugrouten.
 
 `tests/performanceGuards.ts` (Budget, eine Suche für viele Camp-Ziele,
 Crowd-Expiry, Bau-Invalidierung). `tests/supplyChain.ts` (Umwege nach
-Cache-Expiry). `tests/regression.ts` (Wegschlüssel inkl. Höhe `0`).
+Cache-Expiry). `tests/regression.ts` (Wegschlüssel inkl. Höhe `0`; Abreise
+eines von Camping-Ausweisungen eingeschlossenen Besuchers nach Festivalende).
 `tests/wayElevation.ts` (Halbstufen, Fuß- und Straßenrampen, Legacy-Volleinheit,
 Fußweg-Kreuzung behält die Autostraße). `tests/operations.ts` (nach dem
 Aussteigen laufen Gäste vom Nachbarweg zum Ziel, nicht in die Parkbucht;

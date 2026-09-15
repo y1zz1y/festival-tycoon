@@ -13,7 +13,7 @@ child.stdout.on('data', data => { output += data })
 child.stderr.on('data', data => { output += data })
 try {
   const deadline = Date.now() + 10000
-  while (!output.includes('Festival Tycoon:')) {
+  while (!output.includes('Headliner Tycoon:')) {
     assert.ok(child.exitCode === null && Date.now() < deadline, output || 'Server start timed out')
     await new Promise(resolve => setTimeout(resolve, 50))
   }

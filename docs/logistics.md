@@ -30,7 +30,7 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Trennlinie / Kante sperren | `src/game/GameState.ts` | `toggleRoadSeparator`, `road.blockedEdges` |
 | Ampel-/Schranken-Darstellung | `src/view/AccessControlView.ts` | eine Richtung, Grün/Rot bzw. offen/zu |
 | Fahrzeug-Interpolation | `src/view/transportMotion.ts` | nur Darstellung |
-| Balancing | `src/game/simulationConfig.ts` | `logistics`, `waste` |
+| Balancing | `src/game/simulationConfig.ts` | `logistics` (`visitorCarCapacity` 6 = max. Anreisegruppe, `groupSizeWeights` 1–6), `waste` |
 
 ## Wichtige Regeln
 
@@ -48,6 +48,14 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   `roadLayerKey`): gleiche Höhe aktualisiert nur diese Lage (Belag,
   Neigung), eine halbe Stufe oder mehr darüber legt eine Brücke; die
   untere Lage bleibt befahrbar. Nachbarn, Parkplätze und Tore bleiben.
+  Fahrzeugbelegung, Vorfahrt und Ausweich-/Rückwärtsmanöver verwenden
+  ebenfalls `roadLayerKey` über `GameState.roadPositionKey`. Pfeile,
+  Geschwindigkeitsregeln, Fußgängerkollisionen und Parkplatzanschlüsse
+  gelten nur auf der jeweiligen Ebene. Eine Pfeiländerung richtet nur
+  Fahrzeuge auf der geänderten Straßenlage neu aus. `findRoadRoute`
+  versteht belegte Ebenenschlüssel; alte zweidimensionale `cellKey`-Sperren
+  sperren weiterhin die gesamte Kachel. Routen behalten `elevation` auch
+  beim Laden, Ausweichen und Rückwärtssetzen auf Rampen.
   `getRoadCellAt(x, z, elevation?)` ohne Höhe nimmt die unterste Lage. Saugreiniger (`sweeper`) sind die Ausnahme: sie nutzen
   den Fußgängergraphen, fahren aber nur auf normalen Wegen **und**
   Bühnenvorplätzen (`isSweeperDriveCell`). `findSweeperRoute` setzt
@@ -115,9 +123,35 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   Löschen laufen, sonst bleiben die Wagen stehen. Bus, Krankenwagen,
   Müllwagen und Saugreiniger bleiben. Abriss trifft weiter keine Autos.
   Das Auto fährt nicht sofort wieder ab, nur weil sie noch `vehicle-arrival`
-  wären. Abreisende steigen vom Nachbarweg wieder ein, bleiben `leaving`
-  im Auto und warten auf die Gruppe (`canParkedCarDepart`); Anreise und
-  Abfahrt sind getrennt.
+  wären. Wer mit einem Auto kam, fährt **nur mit genau diesem Auto**
+  wieder; niemals zu Fuß oder in einem anderen Wagen. Manifest ist
+  `arrivalGroups.memberIds` (lebende IDs mit derselben
+  `arrivalGroupId`; tote IDs und fremde Claims werden gestrichen).
+  Kapazität `visitorCarCapacity` 6 entspricht der größten Anreisegruppe.
+  Das Auto fährt erst, wenn jeder noch vorhandene Original-Insasse wieder
+  in `passengerIds` sitzt. Verletzte/in Behandlung halten den Wagen;
+  nach der Genesung gehen sie zu ihrem Auto. Fehlt die Ausfahrtroute,
+  bleiben die Insassen sitzen und die Suche wird wiederholt. Beim
+  fehlgeschlagenen Abfahrtsversuch markiert `waitMinutes > 0` am geparkten
+  Besucherauto die fehlende Ausfahrtroute; dieselbe Anzeige gilt bei einem
+  bereits abfahrenden Auto ohne Route. Infofenster und Fahrzeugliste
+  zeigen dann „Keine Ausfahrtroute – Straßenpfeile und Verbindungen prüfen“.
+  Fehlen wieder Mitfahrer oder beginnt die Abfahrt, wird dieser Status
+  zurückgesetzt. Pfeiländerungen invalidieren den Straßengraphen sofort;
+  die nächste Logistik-Aktualisierung startet die nun mögliche Abfahrt.
+  Ein falsch gerichteter Pfeil in einer Parkplatzkurve darf nicht durch
+  Fahren gegen die Einbahnrichtung umgangen werden. Eine belegte Zufahrt
+  lässt das Auto in der Bucht warten und zählt nicht als fehlende Route.
+  Die Zufahrt wird während des Rückwärtsmanövers reserviert. Belegte
+  Besucherautos verschwinden weder durch den Stau-Timeout noch durch
+  eine verlorene Route im Park; reguläre Abreise endet an der Kartenkante.
+  Beim
+  tatsächlichen Ausparken startet das Auto in der Bucht, setzt rückwärts
+  auf die gewählte angrenzende Fahrbahn und dreht erst dort in die
+  berechnete Ausfahrtroute ein; ein angezeigtes `3 / 3` genügt damit nicht
+  nur für den Zustandswechsel, sondern führt auch aus der Parkbucht heraus.
+  Anreise und Abfahrt sind getrennt. Das Infofenster zeigt
+  `Insassen` als `sitzen / Manifest`.
 - Personaltore sperren die Kachel für Besucher, nicht für Personal,
   Saugroboter oder Waren-Träger. Lastwagen nutzen das Straßennetz und
   fahren nicht durch Personaleingänge.
@@ -165,7 +199,7 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   für verschwundene oder noch off-map stehende Müllwagen; unterwegs
   auf der Karte bleibt der Verkauf gesperrt, solange der Wagen nicht
   idle und leer ist.
-- `setRoadDirection` dreht alle Straßenfahrzeuge auf der Kachel
+- `setRoadDirection` dreht alle Straßenfahrzeuge auf der geänderten Straßenlage
   (Autos, Bus, Liefer- und Müllwagen) und berechnet die Route neu.
   Einbahnen liegen als weiße StVO-Fahrstreifenpfeile über den Fahrzeugen.
   Das Werkzeug Fahrtrichtung zeigt dieselbe weiße Markierung in der
@@ -250,7 +284,7 @@ sind, Rückfahrt vom Ausgang, Buden-Nachschub von der Seite/hinten,
 Personaleingang auf der Kante, Parkplatz-Abriss inkl. Restbelegung,
 Aussteigen auf den angrenzenden Fußweg bzw. Zufahrts-Fallback,
 laufen ohne Parkbucht-Jitter zum Ziel, Zebrastreifen neben der Bucht,
-Abreise wartet im Auto auf die Gruppe (Einstieg vom Gehweg),
+Abreise nur im eigenen Anreiseauto (5er/6er-Gruppe steigt vollständig wieder ein, tote/fremde IDs blockieren nicht),
 Insassen erst nach dem Aussteigen aktiv / verletzbar,
 Debug Autos entfernen löscht Wagen und Belegung).
 `tests/accessControl.ts` (Ampel/Schranke, Slots, Tageszeit, Festivalphase, Zeitplan, Sensor, Halt vor Rot,

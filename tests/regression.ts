@@ -276,6 +276,59 @@ test('unfinished camper setup recovers from a saved exploring state', () => {
   assert.equal(restored.hasHandcart, false)
 })
 
+test('festival-end departures cross camping designations instead of idling', () => {
+  const setup = fixture(1)
+  assert.ok(setup.designateCampingArea([
+    { x: 5, z: -20 },
+    { x: 7, z: -20 },
+    { x: 6, z: -21 },
+    { x: 6, z: -19 },
+  ]).ok)
+  const game = new GameState(setup.snapshot)
+  const internal = game as any
+  const visitor = game.snapshot.visitors[0]!
+  Object.assign(visitor, {
+    state: 'exploring',
+    campsite: null,
+    campingPhase: 'none',
+    pendingWaste: 0,
+    arrivalGroupId: null,
+    targetId: null,
+    route: [],
+    cellX: 6,
+    cellZ: -20,
+    cellElevation: 0,
+    x: 6.5,
+    y: 0,
+    z: -19.5,
+  })
+  internal.pendingVisitorRouting.clear()
+  internal.visitorsAwaitingDecision.clear()
+  const route = internal.findPath(
+    { x: 6, z: -20, elevation: 0 },
+    [internal.getEntrance()],
+  )
+  assert.ok(route?.length, 'designated camping ground must be available as a fallback')
+  assert.ok(
+    route!.some((step: { x: number; z: number }) =>
+      game.snapshot.campingCells.some(
+        (cell) => cell.x === step.x && cell.z === step.z,
+      ),
+    ),
+    'an enclosed visitor route must cross the surrounding camping designation',
+  )
+
+  game.snapshot.festival.finished = true
+  game.snapshot.parkOpen = false
+  game.tick(0.1)
+  assert.equal(visitor.state, 'leaving')
+  assert.ok(visitor.route.length > 0, 'festival-end routing must not enter an empty-route loop')
+  for (let tick = 0; tick < 400 && game.getVisitor(visitor.id); tick += 1) {
+    game.tick(0.1)
+  }
+  assert.equal(game.getVisitor(visitor.id), undefined, 'the visitor must reach and leave through the exit')
+})
+
 test('simulation is independent of render frame partition at all speeds', () => {
   const snapshot = fixture().snapshot
   for (const speed of [1, 2, 3]) {

@@ -1,4 +1,4 @@
-# Festival simulator: project rules for every coding agent
+# Headliner Tycoon: project rules for every coding agent
 
 ## Documentation map (read and keep current)
 

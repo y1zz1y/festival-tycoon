@@ -137,6 +137,10 @@ export function isVehicleReversing(vehicle: RoadVehicle): boolean {
 
 export function describeRoadVehicleActivity(vehicle: RoadVehicle): string {
   if ((vehicle.stuckMinutes ?? 0) > 0) return 'Steckt im Schlamm fest'
+  if (vehicle.kind === 'visitorCar' && vehicle.waitMinutes > 0 &&
+    (vehicle.state === 'parked' || (vehicle.state === 'returning' && vehicle.route.length === 0))) {
+    return 'Keine Ausfahrtroute – Straßenpfeile und Verbindungen prüfen'
+  }
   if (isVehicleReversing(vehicle)) return 'Setzt zurück'
   const queued =
     vehicle.route.length > 0 &&
@@ -250,12 +254,17 @@ export type RoadVehicleInspectStat = {
 
 export function formatRoadVehicleInspectLoad(
   vehicle: Pick<RoadVehicle, 'kind' | 'passengerIds' | 'cargo'>,
+  expectedPassengers?: number,
 ): RoadVehicleInspectStat[] {
   const stats: RoadVehicleInspectStat[] = []
   if (roadVehicleCarriesPeople(vehicle.kind)) {
+    const seated = vehicle.passengerIds.length
     stats.push({
       label: 'Insassen',
-      value: String(vehicle.passengerIds.length),
+      value:
+        expectedPassengers && expectedPassengers > 0
+          ? `${seated} / ${expectedPassengers}`
+          : String(seated),
     })
   }
   const wasteCapacity = roadVehicleWasteCapacity(vehicle.kind)
@@ -353,6 +362,7 @@ export type FindRoadRouteOptions = {
   start: RoadPosition
   target?: RoadPosition
   targets?: readonly RoadPosition[]
+  /** roadLayerKey blocks one layer; legacy cellKey blocks every layer on the tile. */
   blockedCells?: ReadonlySet<string>
   blockedEdges?: ReadonlySet<string>
   worldSize?: number
@@ -639,6 +649,7 @@ export function findRoadRoute(
             node.direction !== null &&
             direction === oppositeDirection(node.direction)) ||
           options.blockedCells?.has(cellKey(neighbor.x, neighbor.z)) ||
+          options.blockedCells?.has(roadLayerKey(neighbor.x, neighbor.z, roadLayerElevation(neighbor))) ||
           options.blockedEdges?.has(
             `${node.cell.x}:${node.cell.z}:${direction}`,
           )
@@ -888,7 +899,10 @@ function normalizePosition(value: unknown): RoadPosition | null {
   ) {
     return null
   }
-  return { x: Number(source.x), z: Number(source.z) }
+  return {
+    x: Number(source.x), z: Number(source.z),
+    ...(Number.isFinite(source.elevation) ? { elevation: snapWayElevation(Number(source.elevation)) } : {}),
+  }
 }
 
 function normalizeMask(value: unknown, fallback: number): number {

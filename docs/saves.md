@@ -22,6 +22,11 @@ Lokal im Dev-Server: bis zu 20 benannte Slots als JSON in `saves/`
 (gitignored). Ohne Server: gleichwertiger Browser-Speicher. Persönliche
 Saves niemals committen oder überschreiben.
 
+**Schnell speichern** / **Schnell laden** (Iconleiste → Spielstand, plus
+**Schnell laden** auf dem Titelbildschirm) nutzen den einzelnen
+`SAVE_KEY`-Slot (`GameState.save` / `GameState.load`). Das ist nicht das
+benannte Archiv (`SAVE_SLOTS_KEY` / Server-`saves/`).
+
 ## Wichtige Regeln
 
 - Neue Snapshot-Felder: Default im Blank-Snapshot, Normalize beim Laden,
@@ -37,6 +42,9 @@ Saves niemals committen oder überschreiben.
   Festivalphasen, fehlendes `scheduleOffer` ist `rides`, fehlende
   `scheduleHours` werden 8–23. Optionales
   `RoadVehicle.parkingSearchCursor` bleibt 0.
+  Das Abreise-Manifest eines Besucherautos ist `arrivalGroups.memberIds`
+  (keine neues Fahrzeugfeld); beim Tick werden tote IDs und fremde
+  `arrivalGroupId`s gestrichen.
   Optionales `RoadVehicle.workZones` gilt für Saugroboter; fehlend
   bedeutet wie bisher das gesamte Gelände.
   Optionale `RoadCell.elevation` / `roadSlope` / `roadSlopeDirection`:
@@ -44,6 +52,11 @@ Saves niemals committen oder überschreiben.
   `pathSlope` ±1 bleiben 1.0 Welteinheiten, neue Stufen sind 0.5.
   Mehrere `roadCells` dürfen dieselbe `x,z`-Kachel auf verschiedenen
   Höhen belegen (Brücke); alte Stände mit einer Lage bleiben gültig.
+  `RoadPosition.elevation` bleibt in Fahrzeug-`cell` / `position`, Routen
+  und Zielpositionen beim Normalisieren erhalten (auch 0.5). Fehlende
+  Höhen bleiben optional und wählen wie bisher die unterste Straßenlage.
+  Kein neues Speicherfeld; vorhandene Höhen dürfen beim Laden nicht
+  entfernt werden, sonst wechseln Brückenfahrzeuge auf die Straße darunter.
   `wasteDumpCells[].stored` wird beim Laden auf `waste.dumpCapacity` (180)
   geklemmt; kein neues Snapshot-Feld. Ticker-Verlauf ist nur UI.
   Optionales `staffGateDirection` (0–3) liegt am Fußweg mit `staffOnly`;

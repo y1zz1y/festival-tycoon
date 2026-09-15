@@ -36,6 +36,9 @@ Snapshot nicht autoritativ schreiben.
 ## Wichtige Regeln
 
 - Statische Details: shared/merged Geometry, Vertex Colors, Instancing.
+- Die Inspektionsroute in `LogisticsView` berücksichtigt die Straßenlage
+  und Rampenhöhe jedes Wegpunkts. Ihr Cache-Schlüssel enthält `elevation`;
+  die Linie liegt auch auf Überführungen auf der Fahrbahn.
 - Geteilte Stand-Queues bekommen eine Mittelschiene und einen zweiten
   Richtungspfeil am bestehenden Queue-Mesh, nicht extra Draw-Calls pro Gast.
 - `IncidentView` verwendet höchstens vier Instanz-Batches für alle Müllstücke,

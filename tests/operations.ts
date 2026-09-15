@@ -27,6 +27,8 @@ import {
   collectSeatedPassengerIds,
   describeRoadVehicleActivity,
   describeRoadVehicleDestination,
+  formatRoadVehicleInspectLoad,
+  isVehicleReversing,
 } from '../src/game/logistics'
 import { CrowdingSystem } from '../src/game/crowding'
 
@@ -1482,6 +1484,301 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     (depart as any).updateLogistics(1)
   }
   assert.notEqual(departCar.state, 'parked', 'once the group is seated the car drives off')
+
+  assert.equal(SIMULATION_CONFIG.logistics.visitorCarCapacity, 6)
+
+  const boardOriginals = (
+    game: GameState,
+    size: number,
+    groupId: string,
+    carId: string,
+    blockedExit = false,
+  ) => {
+    const state = game.snapshot as GameSnapshot
+    game.addDebugMoney()
+    const edge = -state.scenario.worldSize / 2
+    for (let z = edge + 1; z <= -16; z += 1) {
+      if (!state.logistics.roadCells.some((cell) => cell.x === 0 && cell.z === z)) {
+        assert.ok(game.designateRoad([{ x: 0, z }]).ok)
+      }
+    }
+    assert.ok(game.designateParkingArea([{ x: 1, z: -16 }]).ok)
+    const riders = Array.from({ length: size }, () =>
+      (game as any).spawnVisitorMember('day', groupId, 'car', true),
+    )
+    assert.ok(riders.every(Boolean))
+    state.logistics.parkingCells[0]!.occupiedBy = carId
+    const car = {
+      id: carId,
+      kind: 'visitorCar' as const,
+      position: { x: 1, z: -16 },
+      cell: null,
+      route: [],
+      state: 'parked' as const,
+      speed: 10,
+      passengerIds: [] as string[],
+      groupId,
+      parkingCell: { x: 1, z: -16 },
+      target: { kind: 'parking' as const, parkingCell: { x: 1, z: -16 } },
+      facing: 0,
+      waitMinutes: 0,
+      resumeState: null,
+      lineId: null,
+      nextStopIndex: 0,
+      cargo: 0,
+    }
+    const group = {
+      id: groupId,
+      memberIds: riders.map((rider: { id: string }) => rider.id),
+      vehicleId: car.id,
+      mode: 'car' as const,
+      state: 'arrived',
+      arrivedMinute: 0,
+      parkingWaitMinutes: 0,
+      entryFeesPaid: true,
+    }
+    state.logistics.arrivalGroups.push(group)
+    state.logistics.roadVehicles.push(car)
+    for (const rider of riders) {
+      Object.assign(rider, {
+        state: 'leaving',
+        targetId: car.id,
+        cellX: 2,
+        cellZ: -16,
+        cellElevation: 0,
+        x: 2.5,
+        z: -15.5,
+        route: [],
+      })
+      assert.ok(
+        (game as any).tryBoardDepartureCar(rider),
+        `every original passenger of a ${size}-person car can reboard`,
+      )
+      assert.notEqual(rider.state, 'exploring')
+    }
+    assert.equal(car.passengerIds.length, size)
+    assert.ok(riders.every((rider: { id: string }) => car.passengerIds.includes(rider.id)))
+    assert.deepEqual(
+      formatRoadVehicleInspectLoad(car, group.memberIds.length),
+      [{ label: 'Insassen', value: `${size} / ${size}` }],
+    )
+    car.speed = 0
+    assert.equal(describeRoadVehicleActivity(car), 'Steht auf dem Parkplatz')
+    if (blockedExit) {
+      assert.ok(game.setRoadDirection(0, -17, 0).ok)
+      ;(game as any).updateLogistics(0.01)
+      assert.equal(car.state, 'parked', 'a wrong-way arrow blocks departure even with a complete manifest')
+      assert.equal(car.passengerIds.length, size, 'a missing exit never discards the seated passengers')
+      assert.equal(
+        describeRoadVehicleActivity(car),
+        'Keine Ausfahrtroute – Straßenpfeile und Verbindungen prüfen',
+        'the car explains why a complete group cannot leave',
+      )
+      const restored = GameState.fromJSON(JSON.stringify(game.snapshot))!
+      assert.equal(
+        describeRoadVehicleActivity(restored.snapshot.logistics.roadVehicles.find(v => v.id === carId)!),
+        describeRoadVehicleActivity(car),
+        'the blocked-departure status survives save loading',
+      )
+      const passengerId = car.passengerIds.pop()!
+      ;(game as any).updateLogistics(0.01)
+      assert.equal(describeRoadVehicleActivity(car), 'Steht auf dem Parkplatz', 'waiting for a passenger clears an outdated exit warning')
+      car.passengerIds.push(passengerId)
+      assert.ok(game.setRoadDirection(0, -17, 2).ok)
+      const blocker = { ...car, id: 'departure-blocker', kind: 'bus' as const,
+        state: 'at-stop' as const, cell: { x: 0, z: -16 }, position: { x: 0, z: -16 },
+        passengerIds: [], groupId: null, parkingCell: null, target: null }
+      state.logistics.roadVehicles.push(blocker)
+      ;(game as any).updateLogistics(SIMULATION_CONFIG.logistics.vehicleAbandonMinutes + 1)
+      assert.equal(car.state, 'parked', 'an occupied access keeps the car in its bay even when listed after it')
+      assert.equal(car.passengerIds.length, size, 'waiting to unpark does not abandon the passengers')
+      assert.equal(describeRoadVehicleActivity(car), 'Steht auf dem Parkplatz', 'traffic does not masquerade as a missing exit route')
+      state.logistics.roadVehicles = state.logistics.roadVehicles.filter(v=>v.id!==blocker.id)
+    }
+    ;(game as any).updateLogistics(0.01)
+    assert.equal(car.state, 'returning', `a ${size}/${size} car starts its departure`)
+    assert.equal(car.waitMinutes, 0, 'a corrected exit clears the blocked-departure status')
+    assert.deepEqual(
+      car.cell,
+      car.position,
+      'the car begins the maneuver in its parking bay',
+    )
+    assert.ok(
+      isVehicleReversing(car),
+      'a nose-in car reverses onto the adjacent road before driving away',
+    )
+    for (let n = 0; n < 8 && car.state === 'parked'; n += 1) {
+      ;(game as any).updateLogistics(1)
+    }
+    assert.notEqual(car.state, 'parked', `a ${size}-person original group departs together`)
+    return { game, state, riders, car, group }
+  }
+
+  const threeOriginals = boardOriginals(
+    fixture(0),
+    3,
+    'three-group',
+    'three-car',
+    true,
+  )
+  const jammedCar = threeOriginals.car
+  const trafficBlocker = { ...jammedCar, id: 'return-blocker', kind: 'bus' as const,
+    state: 'at-stop' as const, cell: { ...jammedCar.route[0]! }, position: { ...jammedCar.route[0]! },
+    route: [], passengerIds: [], groupId: null, parkingCell: null, target: null }
+  threeOriginals.state.logistics.roadVehicles.push(trafficBlocker)
+  jammedCar.waitMinutes = SIMULATION_CONFIG.logistics.vehicleAbandonMinutes + 1
+  ;(threeOriginals.game as any).updateLogistics(0.01)
+  assert.ok(threeOriginals.state.logistics.roadVehicles.includes(jammedCar), 'a traffic timeout cannot delete an occupied departing car')
+  assert.equal(jammedCar.passengerIds.length, 3)
+  threeOriginals.state.logistics.roadVehicles = threeOriginals.state.logistics.roadVehicles.filter(v=>v.id!==trafficBlocker.id)
+  for (
+    let n = 0;
+    n < 240 &&
+    threeOriginals.state.logistics.roadVehicles.some(
+      (vehicle) => vehicle.id === threeOriginals.car.id,
+    );
+    n += 1
+  ) {
+    threeOriginals.game.tick(0.1)
+  }
+  assert.ok(
+    !threeOriginals.state.logistics.roadVehicles.some(
+      (vehicle) => vehicle.id === threeOriginals.car.id,
+    ),
+    'a 3/3 car reverses from an adjacent bay and leaves the map',
+  )
+  boardOriginals(fixture(0), 5, 'five-group', 'five-car')
+  boardOriginals(fixture(0), 6, 'six-group', 'six-car')
+
+  const emptyPark=fixture(0), emptyState=emptyPark.snapshot as GameSnapshot
+  emptyPark.addDebugMoney()
+  const emptyEdge=-emptyState.scenario.worldSize/2
+  for (let z=emptyEdge+1; z<=-16; z+=1) {
+    if (!emptyState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(emptyPark.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  assert.ok(emptyPark.designateParkingArea([{x:1,z:-16},{x:-1,z:-16}]).ok)
+  const seatedA=(emptyPark as any).spawnVisitorMember('day','stale-group','car',true)
+  const seatedB=(emptyPark as any).spawnVisitorMember('day','stale-group','car',true)
+  const otherCarRider=(emptyPark as any).spawnVisitorMember('day','other-group','car',true)
+  assert.ok(seatedA && seatedB && otherCarRider)
+  emptyState.logistics.parkingCells.find(cell=>cell.x===1 && cell.z===-16)!.occupiedBy='stale-car'
+  emptyState.logistics.parkingCells.find(cell=>cell.x===-1 && cell.z===-16)!.occupiedBy='other-car'
+  const staleCar={
+    id:'stale-car',kind:'visitorCar' as const,position:{x:1,z:-16},cell:null,
+    route:[],state:'parked' as const,speed:10,passengerIds:[seatedA.id,seatedB.id],groupId:'stale-group',
+    parkingCell:{x:1,z:-16},target:{kind:'parking' as const,parkingCell:{x:1,z:-16}},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  const otherParkedCar={
+    id:'other-car',kind:'visitorCar' as const,position:{x:-1,z:-16},cell:null,
+    route:[],state:'parked' as const,speed:10,passengerIds:[otherCarRider.id],groupId:'other-group',
+    parkingCell:{x:-1,z:-16},target:{kind:'parking' as const,parkingCell:{x:-1,z:-16}},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  const staleGroup={
+    id:'stale-group',memberIds:[seatedA.id,seatedB.id,'ghost-departed',otherCarRider.id],vehicleId:staleCar.id,mode:'car' as const,state:'arrived',
+    arrivedMinute:0,parkingWaitMinutes:0,entryFeesPaid:true,
+  }
+  emptyState.logistics.arrivalGroups.push(staleGroup, {
+    id:'other-group',memberIds:[otherCarRider.id],vehicleId:otherParkedCar.id,mode:'car',state:'arrived',
+    arrivedMinute:0,parkingWaitMinutes:0,entryFeesPaid:true,
+  })
+  emptyState.logistics.roadVehicles.push(staleCar, otherParkedCar)
+  Object.assign(seatedA, {
+    state:'leaving', targetId:staleCar.id, cellX:1, cellZ:-16, cellElevation:0,
+    x:1.5, z:-15.5, route:[],
+  })
+  Object.assign(seatedB, {
+    state:'leaving', targetId:staleCar.id, cellX:1, cellZ:-16, cellElevation:0,
+    x:1.5, z:-15.5, route:[],
+  })
+  Object.assign(otherCarRider, {
+    state:'leaving', targetId:staleCar.id, cellX:-1, cellZ:-16, cellElevation:0,
+    x:-0.5, z:-15.5, route:[],
+  })
+  assert.equal(
+    emptyState.visitors.filter((visitor) =>
+      !staleCar.passengerIds.includes(visitor.id) &&
+      !otherParkedCar.passengerIds.includes(visitor.id),
+    ).length,
+    0,
+    'the park has no on-foot visitors',
+  )
+  assert.ok(
+    (emptyPark as any).canParkedCarDepart(staleCar, staleGroup),
+    'stale unrelated claims and ghost IDs do not block the original passengers',
+  )
+  assert.deepEqual(staleGroup.memberIds, [seatedA.id, seatedB.id])
+  for (let n = 0; n < 8 && staleCar.state === 'parked'; n += 1) {
+    (emptyPark as any).updateLogistics(1)
+  }
+  assert.notEqual(staleCar.state, 'parked', 'park empty and everyone seated: the car starts leaving')
+  assert.ok(
+    staleCar.passengerIds.includes(seatedA.id) && staleCar.passengerIds.includes(seatedB.id),
+    'a failed or delayed exit does not dump seated guests onto the path',
+  )
+  for (let n = 0; n < 8 && otherParkedCar.state === 'parked'; n += 1) {
+    (emptyPark as any).updateLogistics(1)
+  }
+  assert.notEqual(otherParkedCar.state, 'parked', 'the other seated car also leaves')
+  for (let n = 0; n < 240 && emptyState.logistics.roadVehicles.some((vehicle) => vehicle.id === 'stale-car'); n += 1) {
+    emptyPark.tick(0.1)
+  }
+  assert.ok(
+    !emptyState.logistics.roadVehicles.some((vehicle) => vehicle.id === 'stale-car'),
+    'the loaded car leaves the map instead of sitting parked forever',
+  )
+  assert.equal(
+    (emptyPark as any).tryBoardDepartureCar(otherCarRider),
+    false,
+    'a guest from another car cannot take this car home',
+  )
+
+  const hurtGame=fixture(0), hurtState=hurtGame.snapshot as GameSnapshot
+  hurtGame.addDebugMoney()
+  const hurtEdge=-hurtState.scenario.worldSize/2
+  for (let z=hurtEdge+1; z<=-16; z+=1) {
+    if (!hurtState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(hurtGame.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  assert.ok(hurtGame.designateParkingArea([{x:1,z:-16}]).ok)
+  const healthy=(hurtGame as any).spawnVisitorMember('day','hurt-group','car',true)
+  const hurt=(hurtGame as any).spawnVisitorMember('day','hurt-group','car',true)
+  assert.ok(healthy && hurt)
+  hurtState.logistics.parkingCells[0]!.occupiedBy='hurt-car'
+  const hurtCar={
+    id:'hurt-car',kind:'visitorCar' as const,position:{x:1,z:-16},cell:null,
+    route:[],state:'parked' as const,speed:10,passengerIds:[] as string[],groupId:'hurt-group',
+    parkingCell:{x:1,z:-16},target:{kind:'parking' as const,parkingCell:{x:1,z:-16}},facing:0,waitMinutes:0,resumeState:null,lineId:null,nextStopIndex:0,cargo:0,
+  }
+  const hurtGroup={
+    id:'hurt-group',memberIds:[healthy.id,hurt.id],vehicleId:hurtCar.id,mode:'car' as const,state:'arrived',
+    arrivedMinute:0,parkingWaitMinutes:0,entryFeesPaid:true,
+  }
+  hurtState.logistics.arrivalGroups.push(hurtGroup)
+  hurtState.logistics.roadVehicles.push(hurtCar)
+  Object.assign(healthy, {
+    state:'leaving', targetId:hurtCar.id, cellX:2, cellZ:-16, cellElevation:0,
+    x:2.5, z:-15.5, route:[],
+  })
+  Object.assign(hurt, {
+    state:'injured', targetId:hurtCar.id, cellX:2, cellZ:-17, cellElevation:0,
+    x:2.5, z:-16.5, route:[],
+  })
+  assert.ok((hurtGame as any).tryBoardDepartureCar(healthy))
+  assert.equal((hurtGame as any).canParkedCarDepart(hurtCar, hurtGroup), false, 'the car waits for an injured original passenger')
+  for (let n = 0; n < 6; n += 1) (hurtGame as any).updateLogistics(1)
+  assert.equal(hurtCar.state, 'parked')
+  Object.assign(hurt, {
+    state:'leaving', targetId:hurtCar.id, cellX:2, cellZ:-16, cellElevation:0,
+    x:2.5, z:-15.5, route:[],
+  })
+  assert.ok((hurtGame as any).tryBoardDepartureCar(hurt), 'after recovery they reboard their own car')
+  for (let n = 0; n < 8 && hurtCar.state === 'parked'; n += 1) {
+    (hurtGame as any).updateLogistics(1)
+  }
+  assert.notEqual(hurtCar.state, 'parked', 'the car leaves once the recovered original is seated')
 
   const cabin=fixture(0), cabinState=cabin.snapshot as GameSnapshot
   cabin.addDebugMoney()

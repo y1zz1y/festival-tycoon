@@ -254,6 +254,7 @@ export const SIMULATION_CONFIG = {
     worldUnitMeters: 8,
     carArrivalShare: 0.78,
     groupSizeWeights: [0.08, 0.2, 0.27, 0.23, 0.14, 0.08],
+    visitorCarCapacity: 6,
     parkingSearchTimeoutMinutes: 24 * 60,
     parkingRetryMinutes: 2,
     parkingRouteCandidateLimit: 8,

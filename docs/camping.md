@@ -38,6 +38,10 @@ Multi-Goal-Suche, kein A* pro Objekt.
   Bollerwagen teilen statische Geometrie/Materialien; Sprites bleiben eigenständig.
 - Gleichzeitige Camp-Abreisen teilen das Besucher-Entscheidungsbudget. Ein noch
   abzubauendes Camp wird bei verzögerter Routenplanung auch am Ausgang erhalten.
+- Die Camping-Ausweisung selbst bleibt immer begehbarer Boden, auch bei
+  Parkschließung und nach Festivalende. Normale Wege sind günstiger, aber ein
+  eingeschlossener Besucher darf als Fallback über freie Campingzellen zum
+  Weg beziehungsweise Ausgang laufen; feste Installationen bleiben unverändert.
 - Geplanter Schlaf schickt Camper mit `findRouteToCampsite` zurück ins eigene
   Zelt (`campingPhase: returning` → `resting`). Das Ziel bleibt das
   bestehende Camp; neu ist nur das Festival-Fenster in
@@ -50,6 +54,7 @@ Multi-Goal-Suche, kein A* pro Objekt.
 `tests/performanceGuards.ts` (eine Route für 335 Ziele, belegte Sitze).
 `tests/campingModels.ts` (Batches, Vertices, stabile IDs).
 Schlafziel Zelt vs. nächtliches Wachbleiben: `tests/visitorSleep.ts`.
+Abreise durch umgebende Camping-Ausweisungen: `tests/regression.ts`.
 Visuelle Fixture: `tests/camping-preview.html`.
 
 ## Bei Änderungen dieses Dokument

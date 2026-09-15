@@ -30,6 +30,11 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 ## Wichtige Regeln
 
 - UI sendet `GameCommand`s bzw. `GameState`-Methoden, berechnet die Welt nicht.
+  `describeRoadVehicleActivity` zeigt bei einem geparkten Besucherauto mit
+  fehlgeschlagenem Abfahrtsversuch sowie einem abfahrenden Auto ohne Route
+  (`waitMinutes > 0`) die fehlende
+  Ausfahrtroute samt Hinweis auf Straßenpfeile und Verbindungen. Die Anzeige
+  nutzt den bestehenden Snapshot und führt selbst keine Wegsuche aus.
   Infofenster lesen den Snapshot: Müllfahrzeuge zeigen geladenen Müll
   statt Insassen; ein Klick auf eine Müllablage summiert die
   zusammenhängende Fläche (`connectedWasteDumpStats`) zu Gelagert/Frei.
@@ -45,8 +50,13 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   Beschwerden, Besucher, Personal, Meldungen, Mehrspieler),
   **Kartenansichten** (Logistik/Untergrund, Gedränge, Attraktivität,
   Partystimmung) und **Sitzung** (Finanzen, Gelände betreten, Speichern,
-  Park, Debug-Käfer, Einstellungen). Debug-Käfer und FPS-/Versionszeile
-  sind standardmäßig sichtbar; unter Einstellungen → Debug abschaltbar
+  Park, Debug-Käfer, Einstellungen). Das Speicher-Dropdown hält
+  **Schnell speichern** / **Schnell laden** für den einzelnen
+  `SAVE_KEY`-Slot (`GameState.save` / `GameState.load`) neben benannten
+  Ständen, Base64-Export und -Import. Auf dem Titelbildschirm lädt
+  **Schnell laden** denselben Einzelspielstand, ohne das Archiv.
+  Debug-Käfer und FPS-/Versionszeile sind standardmäßig sichtbar;
+  unter Einstellungen → Debug abschaltbar
   (`localStorage`, nicht im Spielstand). **Autos entfernen** löscht alle
   Besucherautos (nicht Abriss, nicht Flottenfahrzeuge), räumt Parkbelegung
   und setzt Insassen zu Fuß auf den Nachbarweg; die Gäste gehen heim.

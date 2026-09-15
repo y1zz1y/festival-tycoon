@@ -35,6 +35,9 @@ sind abgeleitete Darstellung desselben Zustands.
   Warenträger dürfen weiterhin von allen vier Seiten liefern.
 - Tages- vs. Campinggäste haben getrennte Tickets, Einlassfenster und
   Abreisewege. Fahrzeug-Abreise hängt an `logistics`.
+  Bei der Abreise nach Park- oder Festivalende ist ausgewiesener Campingboden
+  ein begehbarer Fallback: Auch ein davon eingeschlossener Gast erreicht den
+  normalen Weg und Ausgang, statt ohne Route stehen zu bleiben.
   Beim Aussteigen aus einem geparkten Auto erscheinen Gäste auf einem
   orthogonal angrenzenden normalen Fußweg (Punkt mit `tileOffset` auf
   dieser Kachel, nicht in der Bucht). Mehrere Nachbarwege: zuerst ohne
@@ -47,10 +50,14 @@ sind abgeleitete Darstellung desselben Zustands.
   Anreise-Insassen trotzdem aus (erst Platz auf dem Nachbarweg mit
   gültiger Fuß-Zelle/`tileOffset`, dann Zielwahl auf dem Wegnetz).
   Die erste Route darf nicht durch die Parkbucht. Anreise-Insassen
-  steigen aus und bleiben draußen. Wer abreisen will, steigt vom
-  Nachbarweg (Gehweg neben der Bucht) wieder ein, bleibt `leaving` in
-  `passengerIds` und wartet dort, bis die restliche Gruppe sitzt; erst
-  dann fährt das Auto. Zufahrt und Bucht bleiben gültige Türen.
+  steigen aus und bleiben draußen. Wer mit dem Auto kam, geht zur
+  Abreise nur zu **diesem** Wagen (Nachbarweg/Zufahrt/Bucht), nie zu Fuß
+  zum Ausgang und nie in ein anderes Auto. Das Auto wartet, bis jeder
+  noch lebende Original-Insasse (`arrivalGroups.memberIds`) wieder sitzt
+  — auch 5 oder 6 Personen (`visitorCarCapacity` 6). Verletzte halten
+  den Wagen; nach der Behandlung zurück zum eigenen Auto. Tote IDs und
+  fremde Claims werden aus dem Manifest gestrichen.
+  Zufahrt und Bucht bleiben gültige Türen.
   Eine im Auto gesetzte Verletzung gilt erst auf dem Fußweg.
   Debug **Autos entfernen** löscht die Wagen zuerst, setzt Insassen auf
   den Ausstiegsweg und schickt sie zu Fuß heim — sonst bleibt
@@ -115,12 +122,13 @@ Bereits begonnene Müllwege werden beim wiederholten Schließzeit-Check beibehal
 
 `tests/pixelPeople.ts` (Batches, stabile Optik). `tests/shopGoods.ts` (Kauf,
 Hand-Chance, Shirt vom Stand, Save). `tests/regression.ts`
-(Spawn, Needs, Speed-Partition). Festival-Anreisen: `tests/festival.ts`,
+(Spawn, Needs, Speed-Partition, Festivalende-Abreise durch Campingflächen).
+Festival-Anreisen: `tests/festival.ts`,
 `tests/stageTickets.ts`. Queue-Reihenfolge, kontinuierliches Nachrücken,
 Queue-Rückweg, geteilte Stand-Spuren, leere Stände, Aussteigen auf den
 Nachbarweg, Insassen steigen nach dem Parken aus und bleiben zu Fuß
 (keine Verletzung/Belegung vor dem Aussteigen), Abreise wartet im Auto
-auf die Gruppe (Einstieg vom Gehweg), voller Nachbar-Eimer
+nur im eigenen Anreiseauto (5er/6er steigen vollständig wieder ein), voller Nachbar-Eimer
 ergibt Bodenmüll statt Stillstand, leerer Eimer wird weiter benutzt:
 `tests/operations.ts`,
 `tests/queueLanes.ts`.

@@ -23,6 +23,10 @@ dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
 - Neue spielerseitige Aktion: `GameCommand` in `protocol.ts`, Zweig in
   `commands.ts`, autoritative Methode in `GameState`, ggf. Optimistic-Flags.
 - Neue persistente Weltfelder: Codec / `worldUpdates` und Join-Vollsync.
+  Fahrzeugpositionen und Routen behalten das bestehende optionale
+  `RoadPosition.elevation` auch beim Laden/Normalisieren. Der Host berechnet
+  Straßenbelegung und Vorfahrt pro Ebene; keine zusätzlichen Commands oder
+  Snapshot-Felder für Überführungen.
   Lieferwagen liegen in `logistics.roadVehicles` (`deliveryTruck` /
   `deliveryId`) und weiter in `festival.infrastructure.trucks`.
   Ampeln/Schranken: `placeTrafficLight`, `placePathBarrier`,

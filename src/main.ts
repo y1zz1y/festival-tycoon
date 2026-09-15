@@ -149,7 +149,7 @@ app.innerHTML = `
     <header class="topbar panel">
       <div class="brand">
         <span class="brand-mark">H</span>
-        <div><strong>Headliner Inc.</strong><small>Prototype 0.2</small></div>
+        <div><strong>Headliner Tycoon</strong><small>Prototype 0.2</small></div>
   </div>
     </header>
     <!-- The running numbers sit in their own overlay in the bottom-left corner rather than in the
@@ -205,6 +205,7 @@ app.innerHTML = `
       </div>
       <div id="save-menu-panel" class="dropdown-menu-panel panel">
         <button id="save">💾 Schnell speichern</button>
+        <button id="load" title="Den schnellen Einzelspielstand laden">📂 Schnell laden</button>
         <button id="save-as" title="Spielstand benennen oder einen vorhandenen überschreiben">💾 Speichern unter …</button>
         <button id="save-slots" title="Gespeicherte Spielstände öffnen und verwalten">📂 Spielstand laden</button>
         <button id="copy-save" title="Spielstand als Base64 kopieren">⧉ Als Text kopieren</button>
@@ -824,11 +825,12 @@ app.innerHTML = `
         <div class="title-plaque">
           <canvas id="title-crowd" class="title-crowd" aria-hidden="true"></canvas>
           <div class="title-kicker">AIGamesWatch Studios präsentiert</div>
-          <h1 id="title-screen-name" class="title-name">Headliner Inc.</h1>
+          <h1 id="title-screen-name" class="title-name">Headliner Tycoon</h1>
           <div class="title-subtitle">Ein Gelände, ein Wochenende, euer Publikum</div>
         </div>
         <nav class="title-menu" aria-label="Hauptmenü">
           <button type="button" data-title-menu="new" aria-haspopup="true"><span class="title-menu-label">Neues Spiel</span><span class="title-menu-meta">${SCENARIO_PRESETS.length + 1} Szenarien</span></button>
+          <button type="button" data-title-menu="quickload"><span class="title-menu-label">Schnell laden</span><span class="title-menu-meta">Letzter Einzelspielstand</span></button>
           <button type="button" data-title-menu="load"><span class="title-menu-label">Spielstand laden</span><span class="title-menu-meta">Archiv öffnen</span></button>
           <button type="button" data-title-menu="settings"><span class="title-menu-label">Einstellungen</span><span class="title-menu-meta">Debug · Festivaldaten</span></button>
         </nav>
@@ -1369,7 +1371,7 @@ try {
     <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px;box-sizing:border-box;background:#17241f;color:#edf7f1;font:14px/1.6 Tahoma, Verdana, system-ui, sans-serif;">
       <div style="max-width:480px;">
         <h1 style="font-size:20px;margin:0 0 12px;">3D-Grafik nicht verfügbar</h1>
-        <p>Headliner Inc. benötigt WebGL, das dieser Browser oder dieses System gerade nicht bereitstellt.</p>
+        <p>Headliner Tycoon benötigt WebGL, das dieser Browser oder dieses System gerade nicht bereitstellt.</p>
         <p>Mögliche Ursachen: WebGL ist im Browser deaktiviert (in Firefox unter <code>about:config</code> die Einstellung <code>webgl.disabled</code> prüfen), eine Sicherheits- oder Unternehmensrichtlinie blockiert es, oder die Grafiktreiber sind veraltet bzw. von der Blockliste des Browsers betroffen.</p>
         <p>Bitte aktuelle Grafiktreiber sicherstellen oder einen anderen Browser probieren.</p>
       </div>
@@ -4130,7 +4132,12 @@ function updateEntityPanel(): void {
       <span>Status <b>${describeRoadVehicleActivity(vehicle)}</b></span>
       ${destination ? `<span>Ziel <b>${destination}</b></span>` : ''}
       <span>Route <b>${vehicle.route.length} Felder</b></span>
-      ${formatRoadVehicleInspectLoad(vehicle)
+      ${formatRoadVehicleInspectLoad(
+        vehicle,
+        game.snapshot.logistics.arrivalGroups.find(
+          (group) => group.id === vehicle.groupId,
+        )?.memberIds.length,
+      )
         .map((stat) => `<span>${stat.label} <b>${stat.value}</b></span>`)
         .join('')}
       ${
@@ -5680,6 +5687,9 @@ titleScreen.addEventListener('click', (event) => {
   const menu = target.closest<HTMLButtonElement>('[data-title-menu]')
   if (menu) {
     if (menu.dataset.titleMenu === 'new') openTitleSubmenu(true)
+    else if (menu.dataset.titleMenu === 'quickload') {
+      if (tryQuickLoad()) setTitleScreenOpen(false)
+    }
     else if (menu.dataset.titleMenu === 'load') void openTitleLoad()
     else openAboveTitle(scenarioPanel, () => setScenarioPanelOpen(true))
     return
@@ -6260,6 +6270,9 @@ coasterExitButton.addEventListener('click', () => {
 document.querySelector<HTMLButtonElement>('#save')?.addEventListener('click', () => {
   showToast(game.save().message)
 })
+document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', () => {
+  tryQuickLoad()
+})
 
 const saveSlotsPanel = requireElement<HTMLElement>('#save-slots-panel')
 const saveSlotsList = saveSlotsPanel.querySelector<HTMLElement>('.save-slots-list')!
@@ -6286,10 +6299,24 @@ function bindLoadedGame(loaded: GameState, message: string): void {
   fillScenarioForm(loaded.snapshot.scenario)
   showToast(message)
 }
+/** Loads the single quick-save slot (`SAVE_KEY` / `GameState.load`), not a named archive entry. */
+function tryQuickLoad(): boolean {
+  if (multiplayer.status.mode === 'client') {
+    showToast('Nur der Host kann einen Spielstand laden', true)
+    return false
+  }
+  const loaded = GameState.load()
+  if (!loaded) {
+    showToast('Kein gültiger Spielstand gefunden', true)
+    return false
+  }
+  bindLoadedGame(loaded, 'Spielstand geladen')
+  return true
+}
 function showSaveSlots(slots: ServerSaveSlot[], onServer: boolean): void {
   saveSlotsList.innerHTML = slots.length
     ? slots.map(slot => `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}</small></div><div><button data-load-slot="${slot.id}">Laden</button><button data-overwrite-slot="${slot.id}">Überschreiben</button><button data-delete-slot="${slot.id}" aria-label="${escapeHtml(slot.name)} löschen">×</button></div></article>`).join('')
-    : `<p class="save-slots-empty">Noch keine benannten Spielstände ${onServer ? 'auf dem lokalen Server' : 'im Browser'}. Der Button „Speichern“ bleibt der schnelle Einzelspielstand.</p>`
+    : `<p class="save-slots-empty">Noch keine benannten Spielstände ${onServer ? 'auf dem lokalen Server' : 'im Browser'}. „Schnell speichern“ und „Schnell laden“ bleiben der schnelle Einzelspielstand.</p>`
 }
 async function fetchSaveSlots(): Promise<{ slots: ServerSaveSlot[], onServer: boolean }> {
   try {

@@ -574,6 +574,7 @@ export class CampingSystem {
           elevation: visitor.cellElevation,
         },
         [entrance],
+        true,
       ) ?? []
     visitor.thought = 'Ich mache mich auf den Heimweg.'
   }

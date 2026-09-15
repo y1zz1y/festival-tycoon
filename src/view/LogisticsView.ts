@@ -29,6 +29,7 @@ import type {
   LogisticsSnapshot,
   ParkingCell,
   RoadCell,
+  RoadPosition,
   RoadVehicle,
 } from '../game/logistics'
 import { resolveRoadLayer, roadLayerElevation } from '../game/logistics'
@@ -660,7 +661,7 @@ export class LogisticsView {
       this.clearInspectRoute()
       return
     }
-    const cells: Array<{ x: number; z: number }> = [
+    const cells: RoadPosition[] = [
       vehicle.position,
       ...vehicle.route,
     ]
@@ -673,20 +674,20 @@ export class LogisticsView {
       cells.push(vehicle.parkingCell)
     }
     const stamp = `${vehicle.id}:${vehicle.state}:${cells
-      .map((cell) => `${cell.x},${cell.z}`)
+      .map((cell) => `${cell.x},${cell.z},${cell.elevation ?? ''}`)
       .join('>')}`
     if (stamp === this.inspectStamp) return
     this.inspectStamp = stamp
     this.clearInspectRoute()
     if (cells.length < 2) return
-    const points = cells.map(
-      (cell) =>
-        new Vector3(
+    const points = cells.map((cell) => {
+      const road = this.roadAt(cell.x, cell.z, cell.elevation)
+      return new Vector3(
           cell.x + 0.5,
-          this.groundY(cell.x, cell.z) + 0.28,
+          (road ? this.roadY(road) : this.groundY(cell.x, cell.z)) + 0.28,
           cell.z + 0.5,
-        ),
-    )
+        )
+    })
     const line = new Line(
       new BufferGeometry().setFromPoints(points),
       new LineBasicMaterial({

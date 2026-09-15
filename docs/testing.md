@@ -18,7 +18,7 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 
 | Datei | Inhalt |
 | --- | --- |
-| `tests/regression.ts` | Orchestrierung, Tick-Partition, Multiplayer-Sockets, Saves |
+| `tests/regression.ts` | Orchestrierung, Tick-Partition, Multiplayer-Sockets, Saves, Abreise durch Camping-Ausweisungen nach Festivalende |
 | `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, Lights, Achterbahnwagen, Logistik-Modelle |
 | `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf |
 | `tests/visitorSleep.ts` | Festival-Schlafzeiten, Legacy-Remap, zirkadiane Energie, Zelt- und Abreiseziele |
@@ -28,7 +28,7 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | `tests/stageTickets.ts` | Tickets, Bühnenfläche |
 | `tests/stageInteraction.ts` | Werkstatt / Interaktion |
 | `tests/supplyChain.ts` | Waren, Umwege, Ground, Mindestbestand in 20er-Schritten |
-| `tests/operations.ts` | Betrieb, Personal, Alltag, Saugroboter durch Personaleingang, Einsatzgebiete, Reinigung leert volle Eimer zuerst und idle auch halbvolle, Verletzte an den nächsten freien Sanitäter / Krankenwagen (ohne Insassen im Auto), Müllwagen-Erhalt / Wiedereinfahrt, Queue-Kette / Rückweg / leerer Stand / Stand-Spuren, Nachschub von allen Seiten und Verkauf nur vorne, Parkplatz-Aussteigen auf Nachbarweg (bleiben ausgestiegen, laufen ohne Bucht-Jitter zum Ziel), Abreise wartet im Auto auf die Gruppe (Einstieg vom Gehweg), Insassen erst nach dem Aussteigen verletzbar / belegend, Parkplatz- und Krankenfeld-Abriss inkl. Restbelegung, Debug Autos entfernen löscht Wagen und gibt Belegung frei, Gäste lassen Müll fallen wenn der nächste Eimer voll ist und benutzen leere Eimer weiter |
+| `tests/operations.ts` | Betrieb, Personal, Alltag, Saugroboter durch Personaleingang, Einsatzgebiete, Reinigung leert volle Eimer zuerst und idle auch halbvolle, Verletzte an den nächsten freien Sanitäter / Krankenwagen (ohne Insassen im Auto), Müllwagen-Erhalt / Wiedereinfahrt, Queue-Kette / Rückweg / leerer Stand / Stand-Spuren, Nachschub von allen Seiten und Verkauf nur vorne, Parkplatz-Aussteigen auf Nachbarweg (bleiben ausgestiegen, laufen ohne Bucht-Jitter zum Ziel), Abreise nur im eigenen Anreiseauto (3/3 setzt rückwärts aus der Bucht und verlässt die Karte; 5er/6er-Gruppe vollständig; tote/fremde IDs und Verletzte), Insassen erst nach dem Aussteigen verletzbar / belegend, Parkplatz- und Krankenfeld-Abriss inkl. Restbelegung, Debug Autos entfernen löscht Wagen und gibt Belegung frei, Gäste lassen Müll fallen wenn der nächste Eimer voll ist und benutzen leere Eimer weiter |
 | `tests/staffZones.ts` | 3×3-Einsatzgebiete: Ziehen weist zwei Blöcke zu, Start auf aktivem Block entfernt, `setStaffZone` flackert nicht, Saugroboter dieselbe Farbe |
 | `tests/queueLanes.ts` | Hälftige Stand-Queue-Geometrie, Spurwahl, keine Attraktionsänderung |
 | `tests/shopGoods.ts` | Allgemeine Waren, Maskottchen-Kauf/Hand-Chance, Shirt-Farbe/Schnitt, Save-Defaults |
@@ -54,6 +54,27 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | `tests/render-performance.html` | Browser-Framezeiten |
 
 ## Wichtige Regeln
+
+`operations.ts` prüft eine voll besetzte Abreise mit falsch gerichtetem
+Straßenpfeil: Insassen bleiben erhalten, die fehlende Ausfahrtroute wird
+auch nach Laden angezeigt, bei fehlendem Mitfahrer verschwindet der alte
+Hinweis und nach Pfeilkorrektur fährt das Auto automatisch bis aus der Karte.
+Reproduktion vom 15.09.2026: Im zugesandten Spielstand blockierte der Pfeil
+bei X −28 / Z 19 (Westen statt Süden/+Z) die gemeinsame Parkplatzausfahrt.
+Die private korrigierte Kopie ändert ausschließlich diese Richtungsmaske.
+Der vertiefte Überführungstest unterscheidet tatsächliche Kartenausfahrten
+von Stau-Timeout-Entfernungen: mit Ebenen- und Ausparkfix fahren bei
+1×/3×/8× alle 141 Autos durch die Ausfahrt nach 570/493/493 Aufrufen von
+`tick(0.1)`, ohne vorzeitige Entfernung. Persönliche Spielstände gehören
+nicht in die Test-Fixtures.
+
+`wayElevation.ts` fährt Fahrzeuge durch gestapelte Straßen und Halbstufenrampen:
+andere Ebenen blockieren nicht, gleiche Ebenen schon, fremde Richtungspfeile
+drehen Autos nicht, Fußgänger unter Brücken blockieren oben nicht. Laden,
+Ausweichschritte, Rückwärtsmanöver und die Inspektionslinie behalten die Höhe.
+Ein verlorener Abfahrtsweg wird angezeigt und löscht das Fahrzeug nicht.
+`operations.ts` prüft belegte Ausparkzufahrten und den Erhalt besetzter Autos
+bei längerem Stau.
 
 Zusätzliche Regressionen: `accessControl.ts` prüft Einbahn-Einfahrten an
 ungerichteten Kreuzungen und die gemeinsame Kantenlage von Personentor und
