@@ -683,6 +683,8 @@ export const SIMULATION_CONFIG = {
     tentPackLitterChance: 0.62,
     binRange: 7,
     binCapacity: 12,
+    // Nearest bin in binRange is full or unusable: drop litter here, do not hunt farther.
+    visitorDropIfBinFull: true,
     binFullBeauty: -12,
     cleanerCarrySpeedMultiplier: 0.62,
     cleanerMaxCarry: 12,

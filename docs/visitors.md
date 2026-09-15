@@ -8,7 +8,7 @@ sind abgeleitete Darstellung desselben Zustands.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Typen, Spawn, Bewegung, Ziele | `src/game/GameState.ts` | `Visitor`, `VisitorState`, `trySpawnVisitor`, `walkVisitors` |
+| Typen, Spawn, Bewegung, Ziele | `src/game/GameState.ts` | `Visitor`, `VisitorState`, `trySpawnVisitor`, `walkVisitors`, `tryDisposeWaste`, `dropPendingWaste` |
 | Stand-Queue-Spuren | `src/game/queueLanes.ts` | `queueStandOffset`, `stallQueueTileOffset` |
 | Need-/Alkohol-/Übelkeitswerte | `src/game/simulationConfig.ts` | `visitors`, `needs` (`interactionMinutes.stockout`), `alcohol`, `nausea` |
 | Festival-Schlafrhythmus | `src/game/visitorSleep.ts`, `src/game/simulationConfig.ts` | `camping.sleepSchedule`, `sampleFestivalSleepRhythm`, `isMinuteInSleepWindow` |
@@ -20,7 +20,7 @@ sind abgeleitete Darstellung desselben Zustands.
 | Stabile Optik (Geschlecht, Hash) | `src/game/rng.ts` | `visitorLooksFemale`, `hashStringSeed` |
 | Pixel-Personen | `src/view/pixelPeople.ts` | geteilte Geometrien, Accessory-Batches |
 | Souvenirs | `src/game/shopGoods.ts`, `src/view/souvenirMeshes.ts` | `ownedMascot`/`heldMascot`, `wornShirt`; Instanz-Batches |
-| Ankunft per Auto/Fuß | `src/game/logistics.ts`, `src/game/GameState.ts` | `ArrivalGroup`, `collectSeatedPassengerIds`, `chooseParkingDisembarkPath`, `finishVehicleParking` |
+| Ankunft per Auto/Fuß | `src/game/logistics.ts`, `src/game/GameState.ts` | `ArrivalGroup`, `collectSeatedPassengerIds`, `chooseParkingDisembarkPath`, `finishVehicleParking`, `placeVisitorOnDisembarkCell`, `keepDisembarkRouteOnFoot` |
 
 ## Wichtige Regeln
 
@@ -43,10 +43,19 @@ sind abgeleitete Darstellung desselben Zustands.
   Solange jemand in `RoadVehicle.passengerIds` steht (Anreiseauto, Bus,
   Krankenwagen) oder `vehicle-arrival` / `bus-riding` ist, ist er kein
   Fußgänger: keine Bewegung, keine Weg-Belegung, keine Verletzung, kein
-  Sanitäter, kein Ticker. Beim Einparken lädt `finishVehicleParking`
-  Anreise-Insassen trotzdem aus (erst Platz auf dem Nachbarweg, dann
-  Zielwahl). Zurück ins Auto nur von der Zufahrt/Bucht, nicht vom
-  Gehweg. Eine im Auto gesetzte Verletzung gilt erst auf dem Fußweg.
+  Sanitäter, kein Ticker.   Beim Einparken lädt `finishVehicleParking`
+  Anreise-Insassen trotzdem aus (erst Platz auf dem Nachbarweg mit
+  gültiger Fuß-Zelle/`tileOffset`, dann Zielwahl auf dem Wegnetz).
+  Die erste Route darf nicht durch die Parkbucht. Anreise-Insassen
+  steigen aus und bleiben draußen. Wer abreisen will, steigt vom
+  Nachbarweg (Gehweg neben der Bucht) wieder ein, bleibt `leaving` in
+  `passengerIds` und wartet dort, bis die restliche Gruppe sitzt; erst
+  dann fährt das Auto. Zufahrt und Bucht bleiben gültige Türen.
+  Eine im Auto gesetzte Verletzung gilt erst auf dem Fußweg.
+  Debug **Autos entfernen** löscht die Wagen zuerst, setzt Insassen auf
+  den Ausstiegsweg und schickt sie zu Fuß heim — sonst bleibt
+  `beginVisitorDeparture` ein No-Op, solange sie noch in `passengerIds`
+  stehen.
 - Wer eine Schlange verlässt (Abreise, geschlossenes Angebot, Ausverkauf)
   oder am Essen-/Getränkestand bedient wurde, geht die Queue-Kette
   rückwärts zum Eingang. An **Stand-Queues** (Imbiss, Getränke, WC, Souvenirs)
@@ -87,6 +96,15 @@ sind abgeleitete Darstellung desselben Zustands.
   Grundverbrauch, nach der persönlichen Bettzeit erhöht
   `afterBedtimeEnergyDecayMultiplier` ihn. Kein neues Quartier für
   Tagesgäste.
+- Getragener Müll (`pendingWaste`) geht in den **nächsten** Eimer in
+  `waste.binRange`, wenn dort Platz ist. Ist dieser Eimer voll, unbenutzbar
+  oder fehlt ein begehbarer Eimer mit Platz, lassen die Gäste den Müll
+  sofort als `litter` auf der aktuellen (sonst benachbarten begehbaren)
+  Kachel fallen und wählen das nächste Bedürfnis. Sie bleiben nicht in
+  `seeking`/`exploring` ohne Route stehen und laufen nicht über die Karte
+  zu einem weiter entfernten freien Eimer. Balancing:
+  `waste.visitorDropIfBinFull`. Eimer-Liste einmal pro Tick, keine
+  Gebäude-Vollscans in der Besucherschleife.
 
 ## Tests
 
@@ -101,7 +119,10 @@ Hand-Chance, Shirt vom Stand, Save). `tests/regression.ts`
 `tests/stageTickets.ts`. Queue-Reihenfolge, kontinuierliches Nachrücken,
 Queue-Rückweg, geteilte Stand-Spuren, leere Stände, Aussteigen auf den
 Nachbarweg, Insassen steigen nach dem Parken aus und bleiben zu Fuß
-(keine Verletzung/Belegung vor dem Aussteigen): `tests/operations.ts`,
+(keine Verletzung/Belegung vor dem Aussteigen), Abreise wartet im Auto
+auf die Gruppe (Einstieg vom Gehweg), voller Nachbar-Eimer
+ergibt Bodenmüll statt Stillstand, leerer Eimer wird weiter benutzt:
+`tests/operations.ts`,
 `tests/queueLanes.ts`.
 Festival-Schlafzeiten, Legacy-Remap, zirkadianer Energieverbrauch und
 Zelt-/Abreiseziele: `tests/visitorSleep.ts`.
@@ -109,5 +130,5 @@ Zelt-/Abreiseziele: `tests/visitorSleep.ts`.
 ## Bei Änderungen dieses Dokument
 
 Aktualisieren, wenn `Visitor` / `VisitorState` / Needs neue Felder bekommen,
-Spawn- oder Abreiselogik wechselt oder Gedanken/Bubbles neue Arten erhalten.
+Spawn- oder Abreiselogik wechselt, Müllfallen bei vollem Eimer ändert oder Gedanken/Bubbles neue Arten erhalten.
 Neue UI-Panels für Besucher in `docs/ui.md` mitvermerken.

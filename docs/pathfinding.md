@@ -26,6 +26,9 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
   sofort. Neue Weg- oder Straßenrampen gehören dazu (`placePath` / `placeRoad`).
   Ein Fußweg auf einer Autostraße bleibt ein gemeinsames Feld (`NAV_PATH` und
   `NAV_ROAD`, Kosten wie Pflaster); die Straße wird nicht entfernt.
+  Parkbuchten (`NAV_PARKING` ohne Weg) sind keine Fußgänger-Kanten:
+  Gäste laufen nach dem Aussteigen auf dem Nachbarweg, nicht durch die
+  Bucht oder als Abkürzung über den Stellplatz.
   Der Straßengraph speichert Lagen mit `roadLayerKey` (`x:z:Höhe`); zwei
   Straßen auf einer Kachel verbinden sich nur bei passender Kantenhöhe.
 - `packCell` kodiert Höhen in Halbstufen (`elevation * 2`), damit 0.5 und 1.0
@@ -96,7 +99,9 @@ Rücksetzbewegungen sowie bestehende Fahrzeugrouten.
 Crowd-Expiry, Bau-Invalidierung). `tests/supplyChain.ts` (Umwege nach
 Cache-Expiry). `tests/regression.ts` (Wegschlüssel inkl. Höhe `0`).
 `tests/wayElevation.ts` (Halbstufen, Fuß- und Straßenrampen, Legacy-Volleinheit,
-Fußweg-Kreuzung behält die Autostraße).
+Fußweg-Kreuzung behält die Autostraße). `tests/operations.ts` (nach dem
+Aussteigen laufen Gäste vom Nachbarweg zum Ziel, nicht in die Parkbucht;
+Abreise sucht die Gehweg-Türen in einer Multi-Goal-Suche).
 `tests/accessControl.ts` (rote Ampel, geschlossene Schranke, Umparken,
 Liefer- und Müllwagen-Umweg). `tests/operations.ts` (Queue-Kette ohne
 Shortcuts, Rückwärtsgehen, Stand-Spuren, Saugroboter durch `staffOnly`).

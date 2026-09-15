@@ -99,25 +99,45 @@ export type WasteBinInfo = {
   stored: number
 }
 
+export function wasteBinManhattan(
+  from: { x: number; z: number },
+  bin: { x: number; z: number },
+): number {
+  return Math.abs(bin.x - from.x) + Math.abs(bin.z - from.z)
+}
+
+export function wasteBinHasRoom(
+  bin: Pick<WasteBinInfo, 'stored'>,
+  capacity: number,
+): boolean {
+  return bin.stored < capacity
+}
+
+export function findNearestWasteBinInRange(
+  from: { x: number; z: number },
+  bins: readonly WasteBinInfo[],
+  range: number,
+): WasteBinInfo | null {
+  return (
+    bins
+      .filter((bin) => wasteBinManhattan(from, bin) <= range)
+      .sort(
+        (left, right) =>
+          wasteBinManhattan(from, left) - wasteBinManhattan(from, right),
+      )[0] ?? null
+  )
+}
+
 export function findNearestWasteBin(
   from: { x: number; z: number },
   bins: readonly WasteBinInfo[],
   range: number,
   capacity: number,
 ): WasteBinInfo | null {
-  return (
-    bins
-      .filter(
-        (bin) =>
-          bin.stored < capacity &&
-          Math.abs(bin.x - from.x) + Math.abs(bin.z - from.z) <= range,
-      )
-      .sort(
-        (left, right) =>
-          Math.abs(left.x - from.x) +
-          Math.abs(left.z - from.z) -
-          (Math.abs(right.x - from.x) + Math.abs(right.z - from.z)),
-      )[0] ?? null
+  return findNearestWasteBinInRange(
+    from,
+    bins.filter((bin) => wasteBinHasRoom(bin, capacity)),
+    range,
   )
 }
 
