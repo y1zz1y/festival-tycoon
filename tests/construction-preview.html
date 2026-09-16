@@ -1,0 +1,22 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>Bau-Eingaben testen</title>
+<style>body{margin:0;font:14px system-ui;background:#263c39;color:white}canvas{width:100vw;height:100vh;display:block}aside{position:absolute;top:12px;left:12px;background:#18322eee;padding:12px}button{margin:4px}output{display:block}</style>
+<canvas></canvas><aside><button id="wall">Wand</button><button id="roof">Dach</button><button id="bench">Bank</button><button id="bin">Eimer</button><button id="checks">Rendering prüfen</button><output id="status"></output><output id="check"></output></aside>
+<script type="module">
+import {GameState} from '../src/game/GameState.ts';
+import {WorldView} from '../src/view/WorldView.ts';
+import {scenerySlot} from '../src/game/scenery.ts';
+import {contextDemolitionTarget} from '../src/game/contextDemolition.ts';
+const snapshot=structuredClone(new GameState().snapshot);snapshot.buildings=[];snapshot.visitors=[];snapshot.terrain={heights:{}};snapshot.festival.planning=false;
+const game=new GameState(snapshot);game.addDebugMoney();game.setSpeed(0);
+for(let x=-2;x<3;x++)game.place('path',x,2);
+for(const side of [0,1,2,3])game.place('wallChaletFull',0,0,side);
+game.setBuildElevation(1);game.place('wallChaletWindow',0,0,0);game.place('roofChaletFlat',0,0,4);game.setTool('wallChaletFull');
+const noop=()=>{},status=document.querySelector('#status');let hovered=null;
+const view=new WorldView(document.querySelector('canvas'),cell=>{const r=game.place(game.snapshot.selectedTool,cell.x,cell.z,scenerySlot(game.snapshot.selectedTool,cell.localX,cell.localZ,game.snapshot.buildRotation));document.querySelector('#check').textContent=r.message},cell=>{hovered=cell},noop,noop,delta=>game.adjustBuildElevation(delta),noop,noop,noop);
+view.setPlacementValidator((...args)=>game.canPlace(...args).ok);
+view.setConstructionHandlers(h=>game.setBuildElevation(h),(cell,picked)=>{if(cell){const target=contextDemolitionTarget(game.snapshot,game.snapshot.selectedTool,cell,picked?.buildingId);if(target?.type==='building')game.bulldoze(target.building.x,target.building.z,target.building.id)}return true});
+for(const [id,tool] of [['wall','wallChaletFull'],['roof','roofChaletSlope'],['bench','bench'],['bin','binChalet']])document.querySelector('#'+id).onclick=()=>game.setTool(tool);
+document.querySelector('#checks').onclick=()=>{let failures=[];for(const kind of ['wallChaletFull','wallChaletWindow','roofChaletFlat','roofChaletSlope']){const model=view.createBuildingModel(kind,2);if(model.children.length!==1)failures.push(kind)}document.querySelector('#check').textContent=failures.length?'FEHLER: '+failures.join(', '):'PASS: erhöhte Wände und Dächer ohne Stützen'};
+view.focusWorldPosition(.5,.5);
+function frame(){view.update(game.snapshot,1,game.worldRevision);view.render();status.textContent=`Höhe: ${game.snapshot.buildElevation} · Objekte: ${game.snapshot.buildings.length} · Feld: ${hovered?hovered.x+', '+hovered.z:'–'}`;requestAnimationFrame(frame)}frame();
+</script></html>

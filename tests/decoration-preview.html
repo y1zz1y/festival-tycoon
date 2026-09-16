@@ -1,0 +1,30 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>Themen-Deko & Fassaden</title>
+<style>body{overflow:hidden;margin:0;background:#263c39;color:#fff4dc;font:15px system-ui}header{padding:16px 24px}h1{margin:0;font-size:22px}select{padding:8px;margin-left:20px}canvas{display:block}p{margin:8px 0}</style>
+<header><h1>Themen-Deko & Fassaden <select id="theme"></select></h1><p>Vorne: Themenobjekte in Baugröße · Hinten: Vollwand, Halbwand, Fenster und Tür, zweigeschossiges Beispiel · Ziehen: drehen · Mausrad: zoomen</p></header>
+<script type="module">
+import * as T from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {createRetroBuilding} from '../src/view/retroBuildings.ts';
+import {DECORATION_THEMES,decorationKindsForTheme} from '../src/game/decoration.ts';
+import {scenerySlot,sceneryTransform} from '../src/game/scenery.ts';
+import {wallSpec,roofSpec} from '../src/game/decorationWalls.ts';
+const select=document.querySelector('select');
+select.innerHTML=DECORATION_THEMES.filter(t=>t.id!=='klassik').map(t=>`<option value="${t.id}">${t.label}</option>`).join('');
+const scene=new T.Scene();scene.background=new T.Color('#263c39');
+const camera=new T.PerspectiveCamera(38,innerWidth/(innerHeight-100),.1,100);camera.position.set(5,5,8);
+const renderer=new T.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight-100);document.body.append(renderer.domElement);
+scene.add(new T.HemisphereLight(0xfff3de,0x64756a,2));const sun=new T.DirectionalLight(0xffffff,2.5);sun.position.set(-4,8,5);scene.add(sun);
+const root=new T.Group();scene.add(root);const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,.3,0);controls.update();
+function model(kind,x,z,y=0){const m=createRetroBuilding(kind);m.position.set(x,y,z);root.add(m);return m}
+function load(){root.clear();const kinds=decorationKindsForTheme(select.value);let i=0;const walls=[],roofs=[];
+for(const kind of kinds){if(wallSpec(kind)){walls.push(kind);continue}if(roofSpec(kind)){roofs.push(kind);continue}const x=(i%5-2)*1.25,z=Math.floor(i/5)*1.6;
+const ground=new T.Mesh(new T.BoxGeometry(.98,.04,.98),new T.MeshStandardMaterial({color:0x73816a}));ground.position.set(x,-.025,z);root.add(ground);
+const m=model(kind,x,z);const tr=sceneryTransform({kind,rotation:0,decorationSlot:scenerySlot(kind,.25,.25,0)});m.scale.set(tr.sx,tr.sy,tr.sz);i++}
+walls.slice(0,4).forEach((kind,i)=>model(kind,(i-2)*1.2,-2));
+walls.slice(4).forEach((kind,i)=>model(kind,(i-1)*1.2,-3.5));
+roofs.forEach((kind,i)=>model(kind,3+i*1.2,1));
+if(roofs.length){model(roofs[1],3,-2.5,2);const l=model(walls[4],2.5,-2.5,2);l.rotation.y=Math.PI/2;const r=model(walls[5],3.5,-2.5,2);r.rotation.y=-Math.PI/2;model(walls[6],3,-2,2);}
+if(walls.length){model(walls[3],3,-2);model(walls[2],3,-2,1);const m=model(walls[0],3.5,-2.5);m.rotation.y=Math.PI/2;const n=model(walls[1],3.5,-2.5,1);n.rotation.y=Math.PI/2}
+renderer.render(scene,camera)}
+select.onchange=load;controls.addEventListener('change',()=>renderer.render(scene,camera));load();
+</script></html>

@@ -1,0 +1,9 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>Wege und Brücken</title><style>body{margin:0;background:#263c39;color:white;font:14px system-ui}canvas{width:100vw;height:100vh;display:block}aside{position:absolute;top:12px;left:12px;background:#18322edc;padding:14px}h1{font-size:20px;margin:0 0 8px}</style><canvas></canvas><aside><h1>Wege & Straßen</h1>Hinten: Holzbrücke mit Abzweig · Vorne: Straßenbrücke<br>Geländer folgen Rampen und lassen Anschlüsse frei.<br>Unterführung ohne durchragende Stützen · Rechtsziehen: Kamera · Mausrad: Zoom</aside><script type="module">
+import {GameState} from '../src/game/GameState.ts';import {WorldView} from '../src/view/WorldView.ts';
+const s=structuredClone(new GameState().snapshot);s.buildings=[];s.visitors=[];s.terrain={heights:{}};s.logistics.roadCells=[];s.logistics.parkingCells=[];s.festival.planning=false;
+let id=0;const path=(x,z,elevation,slope=0,direction=1,wayType='footBoard')=>s.buildings.push({id:'preview'+id++,kind:'path',x,z,elevation,rotation:0,pathSlope:slope,pathSlopeDirection:direction,pathType:'normal',wayType,price:0});
+for(let x=-3;x<=3;x++){const h=x<-1?(x+4)*.5:x>1?(4-x)*.5:1.5;path(x,0,h,x<-1?.5:x>1?-.5:0)}
+path(0,1,1.5);path(0,2,1.5);path(1,2,1.5);path(0,0,0,0,0,'footPaved');path(0,-1,0,0,0,'footPaved');path(0,1,0,0,0,'footPaved');
+for(let x=-3;x<=3;x++){const h=Math.abs(x)>1?.5:1;const slope=x===-3||x===-1?.5:x===2?-.5:0;s.logistics.roadCells.push({x,z:4,elevation:h,roadSlope:slope,roadSlopeDirection:1,allowedDirections:null,blockedEdges:0,speedLimit:50,crosswalk:false});}
+const game=new GameState(s);game.setSpeed(0);const noop=()=>{};const view=new WorldView(document.querySelector('canvas'),noop,noop,noop,noop,noop,noop,noop,noop);view.focusWorldPosition(0,2);function frame(){view.update(game.snapshot,1,game.worldRevision);view.render();requestAnimationFrame(frame)}frame();
+</script></html>
