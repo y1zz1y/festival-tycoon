@@ -407,10 +407,22 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   )
 
   const gates=fixture(0), from={x:2,z:-20,elevation:0}, gate={x:3,z:-20,elevation:0}
+  const northOfGate={x:3,z:-19,elevation:0}
+  const alongGate={x:4,z:-20,elevation:0}
   assert.ok((gates as any).findPath(from,[gate]))
   assert.ok(gates.manageFestival({type:'staffGate',...gate}).ok)
-  assert.equal((gates as any).findPath(from,[gate]),null,'guests cannot enter staff gates, including cached routes')
+  assert.ok((gates as any).findPath(from,[gate]),'guests can walk onto a directed staff-gate tile from an open edge')
+  assert.ok((gates as any).findPath(from,[alongGate]),'guests can walk the rest of the tile and other edges')
   assert.ok((gates as any).findPath(from,[gate],false,false,false,false,false,undefined,true),'staff can enter the same gate')
+  const guestFromGate=((gates as any).getPedestrianNeighbors(gate,{}) as Array<{x:number;z:number}>)
+    .map(cell=>[cell.x,cell.z])
+  assert.ok(!guestFromGate.some(([x,z])=>x===3&&z===-19),'visitors cannot cross the painted staff-gate edge')
+  assert.ok(guestFromGate.some(([x,z])=>x===2&&z===-20),'the ungated sides of the staff-gate tile stay walkable')
+  const staffFromGate=((gates as any).getPedestrianNeighbors(gate,{allowStaff:true}) as Array<{x:number;z:number}>)
+    .map(cell=>[cell.x,cell.z])
+  assert.ok(staffFromGate.some(([x,z])=>x===3&&z===-19),'staff can pass the painted staff-gate edge')
+  assert.ok((gates as any).findPath(northOfGate,[gate]),'guests may leave through the staff gate the other way')
+  assert.equal((gates as any).isPedestrianSolidAt(gate.x,gate.z,0),false,'a staff gate does not lock the whole cell')
   const defaultStaffPath=gates.snapshot.buildings.find(b=>b.kind==='path'&&b.x===3&&b.z===-20)!
   assert.equal(defaultStaffPath.staffGateDirection,0,'new staff gates snap to the build-rotation edge')
   assert.deepEqual(
@@ -426,7 +438,13 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.deepEqual(staffGateWorldPosition(westStaffPath),gateEdgeWorldPosition(3,-20,0,2))
   assert.equal(staffGateYaw(westStaffPath),Math.PI)
   assert.equal(staffGateWorldPosition(westStaffPath).z,-19.5-GATE_EDGE_OFFSET)
-  assert.equal((edgeGates as any).findPath(from,[gate]),null,'edge-snapped staff gates still block the whole tile')
+  assert.ok((edgeGates as any).findPath(from,[gate]),'edge-snapped staff gates do not lock the whole tile')
+  const southOfWest={x:3,z:-21,elevation:0}
+  const guestFromWestGate=((edgeGates as any).getPedestrianNeighbors(gate,{}) as Array<{x:number;z:number}>)
+    .map(cell=>[cell.x,cell.z])
+  assert.ok(!guestFromWestGate.some(([x,z])=>x===3&&z===-21),'direction 2 blocks only the painted -Z edge')
+  assert.ok((edgeGates as any).findPath(southOfWest,[gate]),'guests may still step onto the tile from the open side')
+  assert.ok((edgeGates as any).findPath(gate,[southOfWest],false,false,false,false,false,undefined,true),'staff can cross a rotated staff gate')
   assert.ok(!edgeGates.manageFestival({type:'staffGate',x:10,z:-20,elevation:0,direction:1}).ok,'staff gates need a path')
   assert.ok(edgeGates.manageFestival({type:'staffGate',x:3,z:-20,elevation:0,direction:1}).ok)
   assert.equal(westStaffPath.staffOnly,false)
@@ -447,26 +465,30 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     assert.ok(botGates.manageFestival({type:'staffGate',x,z:-20,elevation:0}).ok)
   }
   const southOfGate={x:3,z:-21,elevation:0}
-  const northOfGate={x:3,z:-19,elevation:0}
+  const staffSide={x:3,z:-19,elevation:0}
   const staffGateCell={x:3,z:-20,elevation:0}
-  assert.equal(
+  assert.ok(
     (botGates as any).findPath(southOfGate,[staffGateCell]),
-    null,
-    'guests still cannot enter a staff-only Personaleingang',
+    'guests can enter a directed Personaleingang tile from an open edge',
   )
-  const guestAround=(botGates as any).findPath(southOfGate,[northOfGate]) as Array<{x:number;z:number}> | null
+  const guestAround=(botGates as any).findPath(southOfGate,[staffSide]) as Array<{x:number;z:number}> | null
   if (guestAround) {
-    assert.ok(
-      guestAround.every(cell=>{
-        const path=botGates.snapshot.buildings.find(building=>building.kind==='path'&&building.x===cell.x&&building.z===cell.z)
-        return !path?.staffOnly
-      }),
-      'guest detours must not step onto staff-only tiles',
-    )
+    const steps=[[southOfGate.x,southOfGate.z],...guestAround.map(cell=>[cell.x,cell.z])]
+    for (let index=1;index<steps.length;index+=1) {
+      const [fromX,fromZ]=steps[index-1]!
+      const [toX,toZ]=steps[index]!
+      assert.ok(
+        !(fromZ===-20 && toZ===-19 && toX===fromX && fromX>=2 && fromX<=4),
+        'guest detours must not cross a painted staff-gate edge',
+      )
+    }
   }
   const guestNeighbors=((botGates as any).getPedestrianNeighbors(southOfGate,{}) as Array<{x:number;z:number}>)
     .map(cell=>[cell.x,cell.z])
-  assert.ok(!guestNeighbors.some(([x,z])=>x===3&&z===-20),'guest neighbors exclude the staff gate')
+  assert.ok(guestNeighbors.some(([x,z])=>x===3&&z===-20),'guest neighbors include the staff-gate tile from the open side')
+  const blockedNeighbors=((botGates as any).getPedestrianNeighbors(staffGateCell,{}) as Array<{x:number;z:number}>)
+    .map(cell=>[cell.x,cell.z])
+  assert.ok(!blockedNeighbors.some(([x,z])=>x===3&&z===-19),'guests still cannot leave through the painted edge')
   const staffNeighbors=((botGates as any).getPedestrianNeighbors(southOfGate,{allowStaff:true}) as Array<{x:number;z:number}>)
     .map(cell=>[cell.x,cell.z])
   assert.ok(staffNeighbors.some(([x,z])=>x===3&&z===-20),'staff neighbors still include the staff gate')

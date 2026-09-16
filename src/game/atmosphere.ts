@@ -1,4 +1,5 @@
 import { isWasteBin } from './decorationWalls'
+import { isSealedWasteContainer } from './waste'
 import { stageStats, type StageDesign } from './stageDesign'
 import { WORLD_SIZE } from './catalog'
 import type { BuildingKind } from './catalog'
@@ -160,6 +161,9 @@ export class AtmosphereSystem {
               (building.wasteFill ?? 0) / SIMULATION_CONFIG.waste.binCapacity,
             )
           : 0
+      const sealedStored = isSealedWasteContainer(building.kind)
+        ? Math.max(0, building.wasteFill ?? 0)
+        : 0
       sources.push({
         x: building.x,
         z: building.z,
@@ -169,6 +173,10 @@ export class AtmosphereSystem {
             ? definition.beauty +
               fillRatio *
                 (SIMULATION_CONFIG.waste.binFullBeauty - definition.beauty)
+            : isSealedWasteContainer(building.kind)
+              ? definition.beauty +
+                sealedStored *
+                  SIMULATION_CONFIG.waste.sealedContainerStoredBeautyPerBag
             : definition.beauty + (building.stageDesign ? stageStats(building.stageDesign).beauty * .2 : 0),
         party: definition.party + (building.stageDesign ? stageStats(building.stageDesign).party * .25 : 0),
         range: definition.range,

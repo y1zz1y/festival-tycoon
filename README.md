@@ -78,9 +78,19 @@ mit geringer Nässebindung. Grasfläche bietet Wiesenboden und einzelne Kiesstel
 Stadtfläche ist bereits befestigt, entwässert und tragfähig für große Gebäude.
 Geländefarben und natürliche Vegetation passen zur Umgebung.
 
-**Geländeunebenheit** reicht von 0 % (vollständig flach) bis 100 % (stark hügelig).
-Wüste erzeugt Dünen ohne zufällige Wasserlöcher; Stadtfläche bleibt ebenfalls über
-Wasserniveau. Eingang und Straßenzufahrt bleiben bei jedem Wert eingeebnet.
+**Geländeunebenheit** reicht von 0 % (vollständig flach) bis 100 % (stark hügelig,
+RCT-artige Stufenplateaus). Wüste erzeugt Dünen ohne zufällige Wasserlöcher;
+Stadtfläche bleibt ebenfalls über Wasserniveau. Eingang und Straßenzufahrt
+bleiben bei jedem Wert eingeebnet.
+Im Reiter **Gelände** gibt es nur **Feld anheben**, **Feld senken** und
+**Glätten**. Ziehen markiert ein Rechteck; jeder Klick ändert um eine
+halbe Höhenstufe. Hänge bleiben höchstens 0,5 hoch, der Rest wird zur
+Steinklippe. **Glätten** zieht die Fläche auf die Höhe unter dem ersten
+Klick. Der Wasserspiegel liegt eine halbe Stufe unter Ebene 0 und liegt
+auch auf den abfallenden Uferhängen. Gäste mit wenig Spaß laufen zum
+erreichbaren Wasser und baden dort. Angehobene Gebäude und Deko bekommen
+Säulen nur, wo darunter Luft ist — nicht durch angehobenes Land oder ein
+anderes Objekt.
 Die Einstellungen gelten beim Start eines neuen Spiels. Spielstände und Multiplayer
 übernehmen die Auswahl; vorhandenes Gelände wird beim Laden nicht neu erzeugt.
 
@@ -162,6 +172,12 @@ Fußgänger zum Umlaufen.
    Ein Klick auf ein Müllfahrzeug zeigt die geladene Müllmenge (aktuell /
    Kapazität), nicht Insassen. Ein Klick auf eine Müllablage zeigt, wie voll
    die gesamte zusammenhängende Fläche ist und wie viel Platz noch frei ist.
+   Unter **Logistik → Müll** steht der **versiegelte Müllcontainer** (80 Beutel):
+   Reinigung bringt Müll dorthin, wenn er näher als die Ablage ist. Er senkt
+   die Attraktivität deutlich weniger als offene Ablagen. Müllwagen leeren ihn
+   nur, wenn er auf einer Straße steht und ein Wagen wirklich anfährt;
+   sonst tragen Reinigungskräfte den Inhalt zur Ablage, sobald sie keine
+   andere Arbeit haben.
 
 Bestellungen benötigen zunächst 90 Spielminuten bis zum Kartenrand. Danach fährt
 ein sichtbarer Lastwagen zum Depot, entlädt dort und verlässt das Gelände wieder.
@@ -301,7 +317,10 @@ und ersetzt keinen Dauertest auf einem großen ausgebauten Festival über ein ec
 Über **„Festival planen“** in der oberen Leiste lässt sich auf dem aktuellen Gelände
 ein Festivalwochenende starten. Verfügbares Budget und bestehende Gebäude bleiben erhalten.
 Der Rest des aktuellen Tages dient der Vorbereitung; darauf folgen zwei Festivaltage.
-Nach deren Ende pausiert das Spiel mit einer Auswertung. Ziele sind 150 Anreisen,
+Nach deren Ende erscheint automatisch das **HEADLINE Magazin**: ein Heft mit
+Note, Zitat und Pro-/Kontra-Spalten zum Wochenende. Schließen mit
+**Weiter / Schließen**; erneut unter **Festival planen → Abrechnung & Ruf**.
+Ziele sind 150 Anreisen,
 65 % durchschnittliche Zufriedenheit an den Festivaltagen und eine nichtnegative
 Gesamtbilanz einschließlich Vorbereitung. Anschließend kann eine weitere Ausgabe oder
 das freie Spiel folgen.
@@ -332,6 +351,9 @@ das freie Spiel folgen.
 - **Abrechnung & Ruf:** Tagesbilanz, Anreisen, Zufriedenheit, Konzertbesuch, Ausverkäufe
   und Wetterbelastung. Vier bleibende Rufwerte für Musik, Atmosphäre, Komfort und Organisation
   beeinflussen zukünftige Nachfrage; Musikruf erschließt größere Bands.
+- **HEADLINE Magazin:** Nach dem letzten Festivaltag ein Heft mit Note, Zitat und
+  Pro-/Kontra-Spalten aus denselben Zahlen. Einmal automatisch je Ausgabe;
+  erneut unter Abrechnung & Ruf.
 
 Der Modus ist standardmäßig ausgeschaltet, auch beim Laden älterer Spielstände.
 Alle neuen Zustände werden gespeichert und über den Host mit Multiplayer-Clients
@@ -376,7 +398,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - unbegrenzter Besucherzustrom mit lokaler Gedränge- und Festivallust-Simulation; ein laufendes Konzert füllt die Festivallust, eine dunkle Bühne nicht
 - zuschaltbares Gedränge-Overlay mit durchschnittlicher Parkauslastung
 - getrennte Karten-Overlays für lokale Attraktivität und Partystimmung mit abflachender Quellenaddition
-- Dekoration mit Themen oben im Deko-Reiter (Klassik, Wüste, Wald, Neon, Industrie, Tropen, Mystik, Zirkus, Alpin, Arktis, Steampunk) und darunter den Kategorien Pflanzen, Möbel, Licht, Fest, Kulisse, Zaun. Darin Bäume, Hecken, Banner, thematische Palmen, Neonbögen, Eisskulpturen, Zahnräder und die bisherigen Stücke (Totems, Lampions, Bierfässer, Diskokugeln, Willkommensbögen, Bänke, Mastleuchten, Tageslichtballons, …). Jede Art hat eine eigene Attraktivität: kleine billige Stücke wirken nur nah, teure Blickfänge stärker und weiter (Karten-Overlay Attraktivität)
+- Dekoration mit Themen oben im Deko-Reiter (Klassik, Wüste, Wald, Neon, Industrie, Tropen, Mystik, Zirkus, Alpin, Arktis, Steampunk) und darunter den Kategorien Pflanzen, Möbel, Licht, Fest, Kulisse, Zaun. Darin Bäume, Hecken, Banner, thematische Palmen, Neonbögen, Eisskulpturen, Zahnräder und die bisherigen Stücke (Totems, Lampions, Bierfässer, Diskokugeln, Willkommensbögen, Bänke, Mastleuchten, Tageslichtballons, …). Hecken, Zäune und Wände sind für Fußgänger undurchlässig; Türen in Wänden bleiben begehbar. Jede Art hat eine eigene Attraktivität: kleine billige Stücke wirken nur nah, teure Blickfänge stärker und weiter (Karten-Overlay Attraktivität)
 - Festivalbühnen, gerichtete sowie omnidirektionale Lautsprecher und ausweisbare Bühnenvorplätze
 - maximal neun feiernde Besucher je Vorplatzfeld, lokale Tanz-Hotspots und Stimmungsverstärkung durch Tänzer
 - individuelle Vorlieben für schöne Umgebung und Partystimmung sowie Meidung von Feuer, Kotze und Schlafenden
@@ -531,15 +553,15 @@ RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafi
 
 ## Festivalbetrieb und automatische Logistik
 
-Neue Szenarien beginnen geschlossen in der Planung. Unter **Festival planen** legt ihr Vorlauf, Festivaltage, Angebotszeiten sowie die Preise für Tages- und Campingticket fest; erst **Festival starten** setzt die Festivalzeit in Gang. Nach dem Ende bleiben Abreise und Reinigung aktiv, der Park bleibt bis zum nächsten Start geschlossen. Bestehende laufende Spielstände behalten ihren Ablauf.
+Neue Szenarien beginnen geschlossen in der Planung. Unter **Festival planen** legt ihr Vorlauf, Festivaltage, Angebotszeiten sowie die Preise für Tages- und Campingticket fest; erst **Festival starten** setzt die Festivalzeit in Gang. Nach dem Ende erscheint das **HEADLINE Magazin**, Abreise und Reinigung bleiben aktiv, der Park bleibt bis zum nächsten Start geschlossen. Bestehende laufende Spielstände behalten ihren Ablauf.
 
 Unter **Logistik** in der Iconleiste einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen. Das Paket-Icon in der Gruppe **Verwalten** öffnet die Logistikverwaltung für Bestellungen, Träger und **Bandversorgung**.
 
 **Bandversorgung:** Unter **Logistik → Bandversorgung** **Backstage ausweisen** (oder im Paket-Fenster den Reiter **Bandversorgung**) und die Fläche an eine Bühne malen (zusammenhängende Nachbarfelder). Getrennte Flächen bleiben markiert, zählen aber nicht. Mehrere verbundene Bühnen teilen sich Attraktivität, Verpflegung und Drauf. Bands spielen auch ohne Backstage, der Auftritt ist dann schwächer. Imbiss und Getränkestand in der Nähe (bis 12 Felder) verbessern die Verpflegung; Deko auf aktivem Backstage hebt die Attraktivität. Fans, die sich auf das Backstage mogeln, senken sie. **Parkplatz für den Tourbus** nur auf Backstage und an einer Straße: ein Platz je Bus-Band des Tages, sonst nicht die volle Attraktivität. Headliner kommen morgens (~08:00) mit einem eigenen Tourbus auf den Parkplatz und fahren abends (~23:00 oder nach dem letzten Set) wieder. Kleinere Bands (Draw unter 30) und Bands ohne freien Platz kommen zu Fuß über den **Personaleingang**. Die Musiker hängen zwischen den Sets auf dem verbundenen Backstage rum und tragen dieselben Outfits wie auf der Bühne. Ein Klick auf Backstage öffnet das Infofenster mit allen Werten inklusive Show-Qualität und Trinkgeld. Mindestbestände (in 20er-Schritten) und Trägerzahl stellt ihr dort im Reiter **Waren & Träger** oder im Infofenster des Lagers ein. Bestellungen kosten Warenpreis plus 45 € Fracht. Lastwagen liefern zum Anlieferungsplatz; Träger holen dort Waren physisch ab und bringen sie ins Depot. Depots versorgen Stände automatisch bis zum Zielbestand von 40 Einheiten. Als **Zwischenlager** freigegebene Depots geben zusätzlich Ware an andere Depots ab. Träger kosten einmalig 120 € und anschließend 0,04 €/Spielminute.
 
-Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als farbigen Balken und als Zahl im Infofenster. An Mülleimern liegt der Füllstand als grobe Zahl Kartons am Boden (leer keine, voll vier). Ist der nächste Eimer voll oder nicht benutzbar, lassen Gäste den Müll auf dem Weg fallen und gehen weiter; freie Eimer in der Nähe werden weiter benutzt. Ein Klick auf eine Müllablage öffnet das Infofenster mit Füllstand, Kapazität und freiem Platz der **gesamten zusammenhängenden Fläche**. Ablagen lassen sich nicht überfüllen. Müllfahrzeuge zeigen im Infofenster die geladene Müllmenge statt Insassen. Unten am Bildrand erscheint ein **Meldungs-Ticker** bei Feuer, Massenpanik und wenn alle Müllflächen über 90 % voll sind; **Hin** springt zur Stelle. Die letzten Meldungen öffnet der Button **Meldungen** links neben Mehrspieler. Reinigungskräfte bringen gesammelten Bodenmüll zuerst zum nächsten erreichbaren Mülleimer; volle Eimer leeren sie vorrangig und bringen den Inhalt zur Müllablage. Haben sie keinen Bodenmüll, keine Kotze und keinen vollen Eimer, leeren sie auch teilweise gefüllte Eimer (ab einem Viertel), statt herumzustehen. Müllwagen übernehmen die weitere Abfuhr. Saugreiniger vom Betriebshof fahren auf Wegen und Bühnenvorplätzen, dürfen den Personaleingang wie Personal nutzen, halten vor Besuchern und entladen an der Müllablage; Eimer lassen sie stehen. In der Personalverwaltung erscheinen sie unter **Reinigungskraft** als Saugroboter und bekommen dieselben Einsatzgebiete wie Reinigungskräfte. Alte Müllträger beenden vorhandene Ladungen und werden anschließend aus dem Logistiksystem entfernt.
+Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als farbigen Balken und als Zahl im Infofenster. An Mülleimern liegt der Füllstand als grobe Zahl Kartons am Boden (leer keine, voll vier). Ist der nächste Eimer voll oder nicht benutzbar, lassen Gäste den Müll auf dem Weg fallen und gehen weiter; freie Eimer in der Nähe werden weiter benutzt. Ein Klick auf eine Müllablage öffnet das Infofenster mit Füllstand, Kapazität und freiem Platz der **gesamten zusammenhängenden Fläche**. Ablagen lassen sich nicht überfüllen. **Versiegelte Müllcontainer** (Logistik → Müll, 80 Beutel) nehmen den Müll der Reinigung auf, wenn sie näher als die Ablage sind; volle Container werden übersprungen. Sie stinken und senken die Attraktivität weniger als offene Haufen. Müllwagen leeren sie nur auf einer Straße; ohne Wagen unterwegs schleppt idle Reinigung zur Ablage. Müllfahrzeuge zeigen im Infofenster die geladene Müllmenge statt Insassen. Unten am Bildrand erscheint ein **Meldungs-Ticker** bei Feuer, Massenpanik und wenn alle Müllflächen über 90 % voll sind; **Hin** springt zur Stelle. Die letzten Meldungen öffnet der Button **Meldungen** links neben Mehrspieler. Reinigungskräfte bringen gesammelten Bodenmüll zuerst zum nächsten erreichbaren Mülleimer; volle Eimer leeren sie vorrangig und bringen den Inhalt zur Müllablage. Haben sie keinen Bodenmüll, keine Kotze und keinen vollen Eimer, leeren sie auch teilweise gefüllte Eimer (ab einem Viertel), statt herumzustehen. Müllwagen übernehmen die weitere Abfuhr. Saugreiniger vom Betriebshof fahren auf Wegen und Bühnenvorplätzen, dürfen den Personaleingang wie Personal nutzen, halten vor Besuchern und entladen an der Müllablage; Eimer lassen sie stehen. In der Personalverwaltung erscheinen sie unter **Reinigungskraft** als Saugroboter und bekommen dieselben Einsatzgebiete wie Reinigungskräfte. Alte Müllträger beenden vorhandene Ladungen und werden anschließend aus dem Logistiksystem entfernt.
 
-**Personaltore** werden auf Fußwege gesetzt, sitzen wie Personentore auf der Kante der aktuellen Baurichtung (`R`) und sperren diese Kachel für Besucher; Personal, Saugroboter und Warenlogistik dürfen passieren. Lastwagen bleiben auf der Straße. Alte zentrierte Personaleingänge bleiben beim Laden gültig. Für einen vollständig getrennten Bereich muss das Tor mit Zäunen bzw. geschlossenen Grenzen kombiniert werden. Personalfiguren, Saugroboter oder Namen in der Personalverwaltung anklicken: Das Infofenster bietet Verfolgen und Einsatzgebiete (3×3-Felder, zusammenhängend). Unter **Bereiche verwalten** lassen sich die Blöcke per Klick oder Ziehen bemalen; der erste 3×3-Block legt fest, ob der Strich zuweist oder entfernt. Die 3×3-Kachel unter dem Zeiger wird hervorgehoben. Der zugewiesene Bereich wird markiert. Abhol-/Einsatzorte liegen im zugewiesenen Bereich; notwendige Entsorgungs-, Rettungs- und Rückwege dürfen hinausführen. Automatische Träger können ebenfalls angeklickt und einem rechteckigen Bereich zugewiesen werden.
+**Personaltore** werden auf Fußwege gesetzt, sitzen wie Personentore auf der Kante der aktuellen Baurichtung (`R`) und sperren nur diese Richtung für Besucher — die Kachel und die anderen Kanten bleiben begehbar. Personal, Bands über den Personaleingang, Saugroboter und Warenlogistik dürfen die Kante passieren. Lastwagen bleiben auf der Straße. Alte zentrierte Personaleingänge bleiben beim Laden gültig. Für einen vollständig getrennten Bereich muss das Tor mit Zäunen bzw. geschlossenen Grenzen kombiniert werden. Personalfiguren, Saugroboter oder Namen in der Personalverwaltung anklicken: Das Infofenster bietet Verfolgen und Einsatzgebiete (3×3-Felder, zusammenhängend). Unter **Bereiche verwalten** lassen sich die Blöcke per Klick oder Ziehen bemalen; der erste 3×3-Block legt fest, ob der Strich zuweist oder entfernt. Die 3×3-Kachel unter dem Zeiger wird hervorgehoben. Der zugewiesene Bereich wird markiert. Abhol-/Einsatzorte liegen im zugewiesenen Bereich; notwendige Entsorgungs-, Rettungs- und Rückwege dürfen hinausführen. Automatische Träger können ebenfalls angeklickt und einem rechteckigen Bereich zugewiesen werden.
 
 
 ### Ticketplanung und Bühnenwerkstatt

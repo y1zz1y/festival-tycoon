@@ -24,6 +24,11 @@ export function testWayStructures(): void {
   const connected = [cell, { ...cell, x: 1 }, { ...cell, z: 1 }]
   assert.deepEqual(wayStructurePlan(cell, indexWayStructures(connected), 0).edges, [2, 3], 'corner connections have no transverse railing')
   assert.equal(wayStructurePlan({ ...cell, elevation: 2 }, indexWayStructures([]), 2).raised, false, 'high terrain is not a bridge')
+  assert.equal(
+    wayStructurePlan({ ...cell, elevation: 2 }, indexWayStructures([cell]), 0, { solidTop: 2 }).supports.length,
+    0,
+    'a solid filling the bay removes way posts',
+  )
   const group = new Group(), plan = wayStructurePlan(cell, indexWayStructures([cell]), 0)
   for (let n = 0; n < 200; n++) { const mesh = createWayStructure(cell, plan)!; mesh.position.x = n; group.add(mesh) }
   const batches = batchRetroBuildings(group)

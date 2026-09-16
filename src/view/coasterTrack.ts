@@ -251,6 +251,8 @@ export function createStyledCoasterTrackPiece(options: {
   trackHeightsByCell: ReadonlyMap<string, number[]>
   railColor?: number
   structureColor?: number
+  landAt?: (x: number, z: number) => number
+  solidTopAt?: (x: number, z: number) => number
 }): Group {
   const style = COASTER_TRACK_STYLES[options.styleId]
   const railColor = options.chainLift || options.kind === 'station' ? 0xe8a735 : options.railColor ?? style.rail
@@ -322,21 +324,24 @@ export function createStyledCoasterTrackPiece(options: {
       const height = hung.y - hang
       if (height > 0.3) {
         const cellKey = `${Math.round(current.x)}:${Math.round(current.z)}`
+        const landY = options.landAt?.(hung.x, hung.z) ?? 0
+        const solidY = options.solidTopAt?.(hung.x, hung.z) ?? landY
+        const bottom = Math.max(landY, solidY)
         const lowerTrack = (options.trackHeightsByCell.get(cellKey) ?? []).some(
-          (value) => value < current.y - 0.45 && value > 0.15,
+          (value) => value < current.y - 0.45 && value > bottom + 0.15,
         )
-        if (!lowerTrack) {
-          const post = Math.max(0.12, height - 0.18)
+        const post = height - 0.18 - bottom
+        if (!lowerTrack && post > 0.15) {
           if (style.id === 'wooden' || style.id === 'woodenMouse') {
-            kit.box(hung.x, post / 2, hung.z, style.supportRadius * 2.2, post, style.supportRadius * 2.2, style.support)
+            kit.box(hung.x, bottom + post / 2, hung.z, style.supportRadius * 2.2, post, style.supportRadius * 2.2, style.support)
             if (post > 0.8) {
-              kit.box(hung.x + 0.12, post * 0.45, hung.z, 0.035, post * 0.7, 0.035, style.tie)
-              kit.box(hung.x - 0.12, post * 0.45, hung.z, 0.035, post * 0.7, 0.035, style.tie)
+              kit.box(hung.x + 0.12, bottom + post * 0.45, hung.z, 0.035, post * 0.7, 0.035, style.tie)
+              kit.box(hung.x - 0.12, bottom + post * 0.45, hung.z, 0.035, post * 0.7, 0.035, style.tie)
             }
           } else if (style.id === 'boxSpine' || style.id === 'gigaLattice') {
-            kit.box(hung.x, post / 2, hung.z, style.supportRadius * 2.4, post, style.supportRadius * 1.6, style.support)
+            kit.box(hung.x, bottom + post / 2, hung.z, style.supportRadius * 2.4, post, style.supportRadius * 1.6, style.support)
           } else {
-            kit.cylinder(hung.x, post / 2, hung.z, style.supportRadius, post, style.support, style.supportRadius * 1.25, 6)
+            kit.cylinder(hung.x, bottom + post / 2, hung.z, style.supportRadius, post, style.support, style.supportRadius * 1.25, 6)
           }
         }
       }

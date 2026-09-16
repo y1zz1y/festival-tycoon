@@ -1,4 +1,5 @@
 import { WALL_KINDS, wallSpec, ROOF_KINDS, roofSpec } from './decorationWalls'
+import { decorationKindsInCategory } from './decoration'
 import type { BuildingKind } from './catalog'
 
 export const SCENERY_KINDS = [
@@ -29,6 +30,36 @@ const EDGE_SCENERY_KINDS = [
   'glowTape', 'chainFence', 'occultBanner', 'carnivalBulbs', 'iceFence', 'pipeRail',
 ] as const
 export function isEdgeScenery(kind: string): boolean { return (EDGE_SCENERY_KINDS as readonly string[]).includes(kind) }
+
+const PEDESTRIAN_BARRIER_KINDS = new Set<string>([
+  'hedge',
+  ...decorationKindsInCategory('fence'),
+  ...WALL_KINDS.filter((kind) => wallSpec(kind)?.shape !== 'Door'),
+])
+
+/** Hedges, Zaun-category pieces and wall segments (not doors) block pedestrians. */
+export function isPedestrianBarrierKind(kind: string): boolean {
+  return PEDESTRIAN_BARRIER_KINDS.has(kind)
+}
+
+/**
+ * How a barrier occupies the pedestrian grid.
+ * `solid` = whole tile (legacy missing slot or explicit full-tile slot 4).
+ * 0–3 = that tile edge only (RCT-like). Classic `fence` uses rotation.
+ */
+export function pedestrianBarrierOccupancy(item: {
+  kind: string
+  rotation: number
+  decorationSlot?: number
+}): 'solid' | 0 | 1 | 2 | 3 | undefined {
+  if (!isPedestrianBarrierKind(item.kind)) return undefined
+  if (item.kind === 'fence') return (item.rotation & 3) as 0 | 1 | 2 | 3
+  if (item.decorationSlot === undefined || item.decorationSlot === 4) return 'solid'
+  if (isEdgeScenery(item.kind) && item.decorationSlot >= 0 && item.decorationSlot <= 3) {
+    return item.decorationSlot as 0 | 1 | 2 | 3
+  }
+  return 'solid'
+}
 export const LARGE_SCENERY_KINDS = [...ROOF_KINDS, 'desertPalm', 'palmTree', 'alpineFir', 'icePine', 'neonArch', 'miniBigTop', 'beerGardenTable', 'altarTable', 'mossLog', 'palletBench', 'iceBench', 'gearBench', 'iceSculpture', 'woodlandIdol', 'playaTotem', 'maypole', 'giantMushroom', 'crystalTotem', 'inflatableCactus', 'parasol', 'loungeChair', 'inflatable', 'popcornCart'] as const
 export function isLargeScenery(kind: string): boolean { return (LARGE_SCENERY_KINDS as readonly string[]).includes(kind) }
 export type SceneryObject = { kind: BuildingKind; rotation: number; decorationSlot?: number }

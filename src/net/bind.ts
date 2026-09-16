@@ -84,11 +84,19 @@ export function enableMultiplayerCommands(game: GameState): void {
     type: 'bulldozeArea',
     cells: [...cells],
   }))
-  game.editTerrain = wrap(game, game.editTerrain, (x, z, mode) => ({
+  game.editTerrain = wrap(game, game.editTerrain, (x, z, mode, corner, originHeight) => ({
     type: 'editTerrain',
     x,
     z,
     mode,
+    corner,
+    originHeight,
+  }))
+  game.editTerrainArea = wrap(game, game.editTerrainArea, (cells, mode, originHeight) => ({
+    type: 'editTerrainArea',
+    cells: [...cells],
+    mode,
+    originHeight,
   }))
   game.designateRoad = wrap(game, game.designateRoad, (cells) => ({
     type: 'designateRoad',

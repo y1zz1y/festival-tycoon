@@ -48,9 +48,16 @@ dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
   abgeleitet wie `queueDirection` und kommt mit dem Gebäude-Snapshot.
   Der Vorfall-Ticker wird auf jedem Client aus `incidents`, Panik-Gästen
   und `wasteDumpCells` abgeleitet; kein `GameCommand` und kein extra
-  Snapshot-Feld.
+  Snapshot-Feld. Das HEADLINE Magazin ebenso: jeder Client ruft
+  `buildHeadlineMagazine` auf dem Host-Snapshot auf (gleiche Zahlen,
+  gleicher Text). Kein Command, kein Recap-Feld.
   Festival-Action `staffGate` darf `direction` (Baurichtung, Kante) mitsenden;
   fehlend gilt 0. Alte Clients ohne Feld bleiben gültig.
+  `editTerrain` darf optionales `corner` (0–3) und `originHeight` mitsenden;
+  `mode` kann weiter `raiseCorner` / `lowerCorner` / `water` / `smooth` /
+  `flatten` sein (UI zeigt nur raise/lower/smooth). Flächen gehen über
+  `editTerrainArea` (`cells`, `mode`, optionales `originHeight` für Glätten).
+  Snapshot `waterLevel` und optionale `terrain.corners` kommen mit der Welt.
   `placePath.slope` ist eine Zahl (neu ±0.5, Legacy ±1). Neue Commands
   `placeRoad` und `undoRoad` setzen Straßenrampen host-autoritativ.
   `undoRoad` darf optionales `elevation` mitsenden, damit nur eine Lage
@@ -67,6 +74,9 @@ dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
   ein Gebäude-`kind`. Optionale Besucherfelder `backstageIntrusion` /
   `backstageLingerMinutes`. Alte Clients ohne diese Felder bleiben gültig
   (leere Arrays / Bare-Stage).
+  `RoadVehicle.target.kind` kann `sealedWasteContainer` sein (`buildingId`,
+  x, z). Gebäude-`kind` `sealedWasteContainer` nutzt bestehendes `place`
+  und `wasteFill`. Unbekanntes Ziel wird beim Normalisieren verworfen.
   `startCoaster.typeId` ist jeder Katalogtyp (`CoasterTypeId`). Unbekannte
   IDs löst der Host zu `classicSteel` auf. Snapshot-`coaster.typeId` kommt
   mit den Sim-Paketen; kein neues Command.

@@ -83,7 +83,7 @@ import {
   WebGLRenderer,
   WebGLRenderTarget,
 } from 'three'
-import { BUILDINGS, WORLD_SIZE, isRoadBuildTool } from '../game/catalog'
+import { BUILDINGS, WORLD_SIZE, isRoadBuildTool, isTerrainEditTool } from '../game/catalog'
 import type { BuildingKind } from '../game/catalog'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { isFestivalOfferActive } from '../game/dayPlan'
@@ -132,10 +132,12 @@ import { PowerView } from './PowerView'
 import { LaserView } from './LaserView'
 import {
   getTerrainHeight,
-  isWaterHeight,
+  getWaterLevel,
   terrainFingerprint,
-  WATER_HEIGHT,
+  tileShowsWater,
 } from '../game/terrain'
+import { supportGap, tileSupportSolids, isSupportlessKind } from '../game/supportOccupancy'
+import { attachSupportPosts, DEFAULT_SUPPORT_OFFSETS } from './supports'
 import { wayOverlapsRoadGrade } from '../game/wayElevation'
 import {
   placementGroundCell, draggedBuildElevation, buildElevationAbove,
@@ -187,6 +189,10 @@ const GROUND_ONLY_TOOLS = new Set([
   'terrainRaise',
   'terrainLower',
   'terrainFlatten',
+  'terrainRaiseCorner',
+  'terrainLowerCorner',
+  'terrainWater',
+  'terrainSmooth',
   'camping',
   'medicalArea',
   'stageForecourt',
@@ -379,7 +385,7 @@ export class WorldView {
     roughness: 1,
   })
   private landMaterial = new MeshStandardMaterial({
-    color: 0x887456,
+    color: 0x8b8680,
     map: createEarthTexture(),
     side: DoubleSide,
     roughness: 0.95,
@@ -1739,7 +1745,7 @@ export class WorldView {
     // Moisture changes a material uniform, never rebuilds thousands of terrain cells.
     this.terrainSurfaceMaterial.color.setScalar(1 - Math.max(0, Math.min(100, snapshot.festival.wetness)) * .0015)
     const pads = terrainPads(snapshot)
-    const fingerprint = `${this.worldSize}:${snapshot.scenario.environment}:${terrainFingerprint(snapshot.terrain)}:${this.groundSurfaceFingerprint}:${[...pads].sort().join('|')}`
+    const fingerprint = `${this.worldSize}:${snapshot.scenario.environment}:${getWaterLevel(snapshot)}:${terrainFingerprint(snapshot.terrain)}:${this.groundSurfaceFingerprint}:${[...pads].sort().join('|')}`
     if (fingerprint === this.terrainFingerprint && this.landMesh) {
       return
     }
@@ -1755,13 +1761,22 @@ export class WorldView {
     const waterCells: Array<{ x: number; z: number }> = []
     for (let z = -half; z < half; z += 1) {
       for (let x = -half; x < half; x += 1) {
-        const height = getTerrainHeight(snapshot.terrain, x, z)
-        if (isWaterHeight(height)) waterCells.push({ x, z })
+        if (
+          tileShowsWater(
+            snapshot.terrain,
+            x,
+            z,
+            getWaterLevel(snapshot),
+            (cellX, cellZ) => cellX >= -half && cellX < half && cellZ >= -half && cellZ < half,
+          )
+        ) {
+          waterCells.push({ x, z })
+        }
       }
     }
     const shape = this.terrainShape!
     if (this.landMesh) { this.terrainGroup.remove(this.landMesh); this.landMesh.geometry.dispose() }
-    this.landMaterial.color.setHex(snapshot.scenario.environment === 'desert' ? 0xb69b6e : snapshot.scenario.environment === 'urban' ? 0x818177 : 0x887456)
+    this.landMaterial.color.setHex(snapshot.scenario.environment === 'desert' ? 0x9a8b70 : snapshot.scenario.environment === 'urban' ? 0x7d7c78 : 0x8b8680)
     this.landMesh = createTerrainBase(shape, this.landMaterial)
     this.terrainGroup.add(this.landMesh)
     this.syncWaterMesh(waterCells)
@@ -1795,7 +1810,7 @@ export class WorldView {
       waterMatrix.makeRotationX(-Math.PI / 2)
       waterMatrix.setPosition(
         cell.x + 0.5,
-        WATER_HEIGHT + 0.08,
+        getWaterLevel(this.currentSnapshot) + 0.04,
         cell.z + 0.5,
       )
       water.setMatrixAt(waterIndex, waterMatrix)
@@ -1915,7 +1930,19 @@ export class WorldView {
       }
       if (item.kind === 'path' && !this.pathSharesRoadGrade(item)) {
         const cell = paths.get(item.id)!
-        const plan = wayStructurePlan(cell, wayIndex, getTerrainHeight(this.currentSnapshot!.terrain, item.x, item.z))
+        const ground = getTerrainHeight(this.currentSnapshot!.terrain, item.x, item.z)
+        const solids = tileSupportSolids(
+          this.currentSnapshot!.buildings,
+          item.x,
+          item.z,
+          item.id,
+          this.currentSnapshot!.logistics.roadCells,
+        )
+        const solidTop = solids.reduce((max, span) => Math.max(max, span.top), Number.NEGATIVE_INFINITY)
+        const plan = wayStructurePlan(cell, wayIndex, ground, {
+          landAt: (lx, lz) => this.terrainShape?.sample(item.x + 0.5 + lx, item.z + 0.5 + lz) ?? ground,
+          solidTop: Number.isFinite(solidTop) ? solidTop : undefined,
+        })
         // Queue lanes already have their own rails, but retain the shared slim supports.
         if (item.pathType === 'queue') plan.raised = false
         const structure = createWayStructure(cell, plan)
@@ -1924,6 +1951,7 @@ export class WorldView {
       if (item.kind === 'path' && item.pathType === 'queue') {
         this.addQueueBarriers(model, item, items)
       }
+      this.attachOccupancySupports(model, item)
       model.userData.isStage = item.kind === 'stage'
       model.userData.buildingId = item.id
       const soundWaves = model.userData.soundWaves as Group | undefined
@@ -1958,7 +1986,7 @@ export class WorldView {
 
   private createBuildingModel(
     kind: BuildingKind,
-    elevation: number,
+    _elevation: number,
     pathType: 'normal' | 'queue' = 'normal',
     pathSlope = 0,
     surfaceColor?: number,
@@ -1968,12 +1996,10 @@ export class WorldView {
   ): Group {
     if ((LOGISTICS_FACILITY_KINDS as readonly string[]).includes(kind)) {
       const facility = createLogisticsFacility(kind as LogisticsFacilityKind)
-      this.addSupport(facility, elevation, .24)
       return facility
     }
     const detailed = createRetroBuilding(kind, variant)
     if (detailed) {
-      if (!isFacade(kind)) this.addSupport(detailed, elevation, .24)
       return detailed
     }
     const group = new Group()
@@ -2273,8 +2299,6 @@ export class WorldView {
       arrow.rotation.x = Math.PI / 2
       group.add(arrow)
     }
-    this.addSupport(group, elevation, 0.24)
-
     group.traverse((object) => {
       if (object instanceof Mesh) {
         object.castShadow = true
@@ -2430,22 +2454,34 @@ export class WorldView {
     return snapshot.minute % cycle < performance
   }
 
-  private addSupport(group: Group, elevation: number, radius: number): void {
-    if (elevation <= 0) return
-    const geometry = new CylinderGeometry(radius * 0.45, radius * 0.55, elevation, 6)
-    const material = new MeshStandardMaterial({ color: 0x59665f, roughness: 0.9 })
-    const offset = 0.34
-    ;[
-      [-offset, -offset],
-      [offset, -offset],
-      [-offset, offset],
-      [offset, offset],
-    ].forEach(([x, z]) => {
-      const support = new Mesh(geometry, material)
-      support.position.set(x ?? 0, -elevation / 2, z ?? 0)
-      support.castShadow = true
-      group.add(support)
+  private attachOccupancySupports(group: Group, item: PlacedBuilding): void {
+    if (isSupportlessKind(item.kind) || !this.terrainShape || !this.currentSnapshot) return
+    const originX = group.position.x
+    const originZ = group.position.z
+    const footprint = stageSize(item.stageDesign, item.rotation)
+    const offsets =
+      footprint.width > 1.05 || footprint.depth > 1.05
+        ? ([
+            [-footprint.width / 2 + 0.22, -footprint.depth / 2 + 0.22],
+            [footprint.width / 2 - 0.22, -footprint.depth / 2 + 0.22],
+            [-footprint.width / 2 + 0.22, footprint.depth / 2 - 0.22],
+            [footprint.width / 2 - 0.22, footprint.depth / 2 - 0.22],
+          ] as const)
+        : DEFAULT_SUPPORT_OFFSETS
+    const gaps = offsets.map(([dx, dz]) => {
+      const worldX = originX + dx
+      const worldZ = originZ + dz
+      const landY = this.terrainShape!.sample(worldX, worldZ)
+      const solids = tileSupportSolids(
+        this.currentSnapshot!.buildings,
+        Math.floor(worldX),
+        Math.floor(worldZ),
+        item.id,
+        this.currentSnapshot!.logistics.roadCells,
+      )
+      return supportGap(item.elevation, landY, solids)
     })
+    attachSupportPosts(group, item.elevation, gaps, offsets)
   }
 
   private addQueueBarriers(
@@ -2615,6 +2651,17 @@ export class WorldView {
           trackHeightsByCell,
           railColor: type.railColor,
           structureColor: type.color,
+          landAt: (x, z) => this.terrainShape?.sample(x, z) ?? 0,
+          solidTopAt: (x, z) => {
+            const solids = tileSupportSolids(
+              this.currentSnapshot?.buildings ?? [],
+              Math.floor(x),
+              Math.floor(z),
+              undefined,
+              this.currentSnapshot?.logistics.roadCells ?? [],
+            )
+            return solids.reduce((max, span) => Math.max(max, span.top), 0)
+          },
         })
         trackPiece.userData.coasterId = coaster.id
         trackPiece.userData.pieceIndex = pieceIndex
@@ -2840,6 +2887,8 @@ export class WorldView {
         (visitor.state === 'socializing' &&
           visitor.campActivity === 'sitting') ||
         visitor.state === 'bench-resting'
+      const swimming =
+        visitor.state === 'swimming' && visitor.route.length === 0
       const moving =
         visitor.state !== 'sleeping' && visitor.route.length > 0
       const dx = visitor.x - this.cameraTarget.x
@@ -2948,10 +2997,10 @@ export class WorldView {
             : z - Math.sin(visitor.facing) * wobble
       const displayY =
         this.actorTerrainHeight(displayX, displayZ, y) +
-        (visitor.state === 'sleeping' ? 0.12 : sitting ? -0.02 : 0.04 + bob) +
+        (visitor.state === 'sleeping' ? 0.12 : swimming ? -0.28 : sitting ? -0.02 : 0.04 + bob) +
         jump
       const scaleY =
-        sitting ? 0.84 : visitor.emotion === 'sad' && visitor.state !== 'sleeping' ? 0.92 : 1
+        swimming ? 0.72 : sitting ? 0.84 : visitor.emotion === 'sad' && visitor.state !== 'sleeping' ? 0.92 : 1
       const stageFacing =
         atActivityTarget && visitor.state === 'partying' && visitor.activityTarget
           ? danceFloorFacing(
@@ -2986,7 +3035,7 @@ export class WorldView {
       const limbSwing =
         visitor.state === 'sleeping' || visitor.state === 'medical-transport'
           ? 0
-          : sitting
+          : sitting || swimming
             ? Math.PI * 0.42
             : stride * (visitor.isDancing ? 1.15 : strength)
       const headTilt = visitor.emotion === 'sad' ? 0.35 : 0
@@ -3487,9 +3536,7 @@ export class WorldView {
           this.currentSnapshot?.selectedTool === 'roadSpeed10' ||
           this.currentSnapshot?.selectedTool === 'roadSpeed30' ||
           this.currentSnapshot?.selectedTool === 'roadSpeed50' ||
-          this.currentSnapshot?.selectedTool === 'terrainRaise' ||
-          this.currentSnapshot?.selectedTool === 'terrainLower' ||
-          this.currentSnapshot?.selectedTool === 'terrainFlatten' ||
+          isTerrainEditTool(this.currentSnapshot?.selectedTool) ||
           this.currentSnapshot?.selectedTool === 'bulldoze' ||
           this.currentSnapshot?.selectedTool === 'powerCable')
       ) {
@@ -3928,9 +3975,7 @@ export class WorldView {
       tool === 'camping' ||
       tool === 'medicalArea' ||
       tool === 'stageForecourt' ||
-      tool === 'terrainRaise' ||
-      tool === 'terrainLower' ||
-      tool === 'terrainFlatten'
+      isTerrainEditTool(tool)
         ? existing?.elevation ?? ground
         : ground + this.currentSnapshot.buildElevation
     const stageDesign = tool==='stage' ? this.currentSnapshot.festival.stageTemplates?.find(t=>t.name===this.currentSnapshot!.festival.selectedStageTemplate) : undefined

@@ -12,8 +12,8 @@ export function testTerrainSurface(fixture: (count?: number) => GameState): void
   const material = createTerrainMaterial()
   const surface = createTerrainSurface(snapshot, material)
   assert.equal(surface.children.length, 0, 'ground detail uses one mesh, not one object per pebble/tile')
-  assert.equal(surface.geometry.getAttribute('position').count, 32 * 32 * 5, 'one bounded triangle fan per cell, including the lake bed')
-  assert.equal(surface.geometry.index!.count, 32 * 32 * 12)
+  assert.equal(surface.geometry.getAttribute('position').count, 32 * 32 * 4, 'two faceted triangles per cell, including the lake bed')
+  assert.equal(surface.geometry.index!.count, 32 * 32 * 6)
   const positions = surface.geometry.getAttribute('position')
   const normals = surface.geometry.getAttribute('normal')
   for (let i = 0; i < positions.count; i++) {
@@ -45,7 +45,7 @@ export function testTerrainSurface(fixture: (count?: number) => GameState): void
   const parkingLot = createTerrainSurface(snapshot, material)
   const parkingUv = parkingLot.geometry.getAttribute('uv')
   const half = snapshot.scenario.worldSize / 2
-  const parkingIndex = ((3 + half) * snapshot.scenario.worldSize + (3 + half)) * 5
+  const parkingIndex = ((3 + half) * snapshot.scenario.worldSize + (3 + half)) * 4
   const parkingRow = TERRAIN_MATERIALS.indexOf('parking')
   assert.ok(
     Math.abs(parkingUv.getY(parkingIndex) - (parkingRow * 64 + 0.5) / (64 * TERRAIN_MATERIALS.length)) < 1e-6,
@@ -63,11 +63,11 @@ export function testTerrainSurface(fixture: (count?: number) => GameState): void
   const edit = planTerrainEdit(landscape.terrain, 32, 0, 0, 'raise', () => false)
   assert.ok(edit.ok); applyTerrainChanges(landscape.terrain, edit.changes)
   const shape = new TerrainShape(landscape, new Set())
-  assert.equal(shape.sample(.5, .5), 1, 'hill centre retains the saved edit height')
-  assert.equal(shape.sample(1.5, .5), 0, 'neighbor centre remains at its saved height')
-  assert.ok(shape.sample(.9, .5) > 0 && shape.sample(.9, .5) < 1, 'raising a tile automatically produces a slope')
+  assert.equal(shape.sample(.5, .5), 0.5, 'raised tile stays a flat RCT plateau')
+  assert.ok(shape.sample(1.5, .5) > 0 && shape.sample(1.5, .5) < 0.5, 'neighbor becomes the 0.5 sloped skirt')
+  assert.equal(shape.sample(.9, .5), 0.5, 'the raised tile itself stays faceted-flat')
   for (const t of [.1, .3, .5, .8]) {
-    assert.ok(Math.abs(shape.sample(1 - 1e-7, t) - shape.sample(1 + 1e-7, t)) < 1e-5, 'neighboring slopes share their edge')
+    assert.ok(Math.abs(shape.sample(1 - 1e-7, t) - shape.sample(1 + 1e-7, t)) < 1e-5, '0.5 neighbors share their edge')
     assert.ok(Math.abs(shape.sample(t, 1 - 1e-7) - shape.sample(t, 1 + 1e-7)) < 1e-5)
   }
   const plainMaterial = new MeshStandardMaterial()
@@ -82,7 +82,7 @@ export function testTerrainSurface(fixture: (count?: number) => GameState): void
     assert.equal(shape.actorHeight(x, z, 5), 5, 'raised crossings keep their own elevation')
   }
   const padShape = new TerrainShape(landscape, new Set(['0,0']))
-  for (const x of [.02, .4, .98]) for (const z of [.02, .6, .98]) assert.equal(padShape.sample(x, z), 1, 'buildings and marked areas retain flat foundations')
+  for (const x of [.02, .4, .98]) for (const z of [.02, .6, .98]) assert.equal(padShape.sample(x, z), 0.5, 'buildings and marked areas retain flat foundations')
   const naturalBase = createTerrainBase(shape, plainMaterial)
   assert.equal(naturalBase.geometry.index!.count, 32 * 4 * 6, 'natural hills need no internal cube walls')
   const retaining = createTerrainBase(new TerrainShape(landscape, new Set(['0,0', '1,0'])), plainMaterial)

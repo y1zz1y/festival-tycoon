@@ -9,7 +9,7 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Übelkeit, Incident-Spawn | `src/game/incidents.ts` | `IncidentSystem`, `GroundIncident` |
-| Müllablagen, Eimer | `src/game/waste.ts` | `WasteDumpCell`, `findNearestWasteBin`, `findNearestWasteBinInRange`, `wasteBinHasRoom`, `connectedWasteDumpStats`, `acceptWasteAtDump`, `parkWasteDumpFill` |
+| Müllablagen, Eimer, versiegelte Container | `src/game/waste.ts` | `WasteDumpCell`, `SealedWasteContainerInfo`, `findNearestWasteBin`, `findNearestWasteBinInRange`, `wasteBinHasRoom`, `connectedWasteDumpStats`, `acceptWasteAtDump`, `acceptWasteAtSealedContainer`, `sealedContainerAllowsManualHaul`, `wasteDropGoals`, `parkWasteDumpFill` |
 | Meldungs-Ticker | `src/game/ticker.ts`, `src/tickerUI.ts` | `observeTickerEvents`, `mountTickerUI` |
 | Debug-Räumung | `src/game/GameState.ts` | `clearWasteForDebug` |
 | Feuerwerk (Sim) | `src/game/fireworks.ts` | `FireworksSystem` |
@@ -66,6 +66,20 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
   den freien Rest an; Reinigung, Saugroboter und Träger behalten den
   Überhang. Alte Saves mit höherem `stored` werden auf die Kappe geklemmt.
   Müllwagen fassen `garbageTruckCapacity` 90.
+- Versiegelte Müllcontainer (`sealedWasteContainer`) fassen
+  `waste.sealedContainerCapacity` 80 Beutel. Reinigung bringt geladene
+  Beutel dorthin, wenn der Container näher und nicht voll ist; sonst zur
+  Ablage. Attraktivität: `atmosphere.sources.sealedWasteContainer`
+  (beauty −8, party −2, range 3) plus
+  `waste.sealedContainerStoredBeautyPerBag` (−0,22 je Beutel) statt
+  offener Ablage (`wasteDump` −48 / −1,4 je Beutel). Müllwagen leeren
+  den Container nur, wenn er **auf einer Straße** liegt und die Straße
+  vom Müllnetz erreichbar ist. Idle Reinigung (niedrigste Priorität nach
+  vollen Eimern, Litter/Kotze/Camps und idle Eimer-Leeren) trägt zur
+  Ablage, sobald `stored > 0` und kein Müllwagen **unterwegs** ist.
+  `truckReachable` allein reicht nicht zum Überspringen: ohne Wagen
+  (oder wenn der Wagen die Kiste nicht erreichen kann) muss per Hand
+  geleert werden. Platzierung auf der Straße ist optional.
 - Neue Verletzte bekommen den nächsten freien Sanitäter oder Krankenwagen
   (Manhattan, dann eine Wegsuche). Details und Tests: `docs/staff.md`.
   Insassen in `passengerIds` (noch nicht ausgestiegen) sind keine
@@ -99,6 +113,12 @@ statt Insassen).
 `tests/ticker.ts` (Müllwagen 90, Ablage 180, kein Overflow, Ticker bei
 >90 % aller Ablagen, Feuer/Panik mit Sprungziel, keine Meldung für
 verletzte Insassen noch im Fahrzeug).
+`tests/sealedWasteContainer.ts` (Kapazität 80, nähere Container vor
+Ablage, volle Container übersprungen, versiegelte Attraktivitätsstrafe
+schwächer als offene Ablage, Müllwagen leert nur Straßen-Container,
+idle Reinigung trägt Container→Ablage auch wenn die Straße erreichbar
+ist aber kein Wagen kommt, voller Eimer bleibt vorrangig, Live-Tick
+leert off-road und liefert an die Ablage).
 
 ## Bei Änderungen dieses Dokument
 
@@ -112,3 +132,12 @@ Bühnen-Pyro zusätzlich in `docs/stages.md`. Sanitäter/Krankenwagen in `docs/s
 Normalisierung, Gästesuche/-entsorgung, Reinigung/Träger und Inspektion nutzen
 sämtliche Varianten mit derselben Kapazität und `wasteFill`. Menü: Deko/Möbel.
 Die sichtbaren Füllkartons folgen der automatischen Wegkanten-Drehung.
+
+## Versiegelte Müllcontainer
+
+Gebäude-`kind` `sealedWasteContainer` im Logistik-Tab **Müll**. Ein
+gemergtes Container-Mesh, kein Draw-Call je Beutel. `wasteFill` wie bei
+Eimern, geklemmt auf 80. Infofenster zeigt Füllstand und ob ein Müllwagen
+abfahren kann. Kein neues `GameCommand`; bestehendes `place` reicht.
+Fahrzeugziel `sealedWasteContainer` (`buildingId`, x, z) in
+`docs/multiplayer.md` / `docs/saves.md`.

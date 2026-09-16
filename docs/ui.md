@@ -9,14 +9,15 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 | --- | --- | --- |
 | Orchestrierung, Tasten, Tools | `src/main.ts` | RCT-Iconleiste `.rct-toolbar` |
 | Abriss-/Info-Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | `pickPlacedObject`, `resolvePickedBuilding` |
-| Infofenster Müllwagen / Ablage | `src/main.ts`, `src/game/logistics.ts`, `src/game/waste.ts` | `formatRoadVehicleInspectLoad`, `connectedWasteDumpStats` |
+| Infofenster Müllwagen / Ablage / Container | `src/main.ts`, `src/game/logistics.ts`, `src/game/waste.ts` | `formatRoadVehicleInspectLoad`, `connectedWasteDumpStats`, `formatSealedContainerInspect` |
 | Infofenster Backstage | `src/main.ts`, `src/game/bandSupply.ts` | `formatBackstageInspect`, Klick auf Backstage-Kachel |
 | Meldungs-Ticker | `src/tickerUI.ts`, `src/game/ticker.ts` | `mountTickerUI`, `observeTickerEvents` |
 | Bau-Kategorien und Raster | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` |
 | Deko-Themenfilter | `src/game/decoration.ts`, `src/main.ts` | `renderDecorationCatalog`, Themen-Chips in `#decoration-themes` |
 | Festival-Verwaltung | `src/festivalUI.ts`, `src/festival.css` | |
+| HEADLINE Magazin | `src/headlineMagazineUI.ts`, `src/headlineMagazine.css`, `src/game/headlineMagazine.ts` | Vollbild-Heft nach `festival.finished`; Weiter/Schließen; erneut unter Abrechnung & Ruf |
 | Bandplan | `src/musicPlanner.ts` | |
-| Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold |
+| Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css`, `src/game/buildMenu.ts` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold. Gelände-Reiter: Feld anheben/senken, Glätten (Fläche) |
 | Shift-Rampen-Ausgang | `src/main.ts`, `src/game/wayElevation.ts` | `lockShiftElevationOrigin`, `planLockedOriginRamp` |
 | Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/view/WorldView.ts` | Halbstufen `snapBuildElevation`; `groundTileMarker` auf der Hover-Kachel |
 | Bühnenwerkstatt | `src/stageEditor.ts`, `src/stageEditor.css` | |
@@ -111,8 +112,8 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   [decoration.md](decoration.md).   Attraktionen: Fahrgeschäfte, Achterbahn (Typen als Katalogkacheln),
   Stände (Imbiss, WC, Getränke, Maskottchen, T-Shirt), Camping, Festival
   (Turmhöhe nur unter Fahrgeschäfte). Am T-Shirt-Stand stellt das Infofenster
-  Farbe und Schnitt ein. Logistik:
-  Waren, Bus, Müll, Krankenhaus (`ambulanceGarage`, `medicalArea`),
+  Farbe und Schnitt ein.   Logistik:
+  Waren, Bus, Müll (`wasteDump`, `sealedWasteContainer`, Depots), Krankenhaus (`ambulanceGarage`, `medicalArea`),
   Tourbus-Parkplatz.
   Der Reiter **Achterbahn** im Attraktionen-Katalog listet jeden Typ
   direkt (Holz, Twister, Junior, Wilde Maus, LIM-Launch, …) wie andere
@@ -135,8 +136,12 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   haben denselben Knopf im Konstruktionsfenster.
   Untergruppen der übrigen Kategorien stehen in `buildMenu.ts`. Info bleibt
   das Standardwerkzeug.
-  Tagesplan und Ticketpreise liegen unter **Festival planen**. Deko-Hilfe
-  und Drehen sitzen in der Deko-Palette.
+  Tagesplan und Ticketpreise liegen unter **Festival planen**. Endet das
+  Wochenende, liegt automatisch das **HEADLINE Magazin** über der Welt
+  (Masthead, Cover, Pro/Kontra, Note) – HTML/CSS, kein 3D-Objekt. Einmal
+  pro Ausgabe, außer ihr schlagt es unter Abrechnung & Ruf erneut auf.
+  Texte kommen aus `buildHeadlineMagazine` und dem Snapshot, nicht aus der
+  UI. Deko-Hilfe und Drehen sitzen in der Deko-Palette.
 - Offene Infofenster dürfen die Mittelwertleiste verschieben oder ausblenden;
   aktivierte Karten-Overlays bleiben bestehen. Die Overlay-Schalter sitzen
   in der Iconleiste zwischen Verwalten und Sitzung.
@@ -189,7 +194,8 @@ Hellcyan-Vorschau (`staffZoneHoverOverlay`). Träger-Rechtecke bleiben bei
 **Arbeitsbereich ziehen** (`setGroundAreaTool`).
 
 `tests/staffZones.ts` (Zonen-Ziehen). `tests/mobileTouch.ts`. UI-lastige Festival-/Stage-Flows in
-`tests/stageInteraction.ts`, `tests/musicPlanning.ts`.
+`tests/stageInteraction.ts`, `tests/musicPlanning.ts`. Magazin-Modell nach Festivalende:
+`tests/headlineMagazine.ts`.
 Infotexte für Müllwagen-Ladung und zusammenhängende Ablagen:
 `tests/festivalAdditions.ts`. Ticker und Müllkappen: `tests/ticker.ts`.
 Debug **Autos entfernen** (Autos weg, Belegung frei, Insassen zu Fuß):
@@ -255,6 +261,17 @@ Außerhalb davon lassen lokal transparent gewordene Fassaden Klicks zu den
 Objekten dahinter durch, etwa zu Ständen. Entfernte, undurchsichtige Bauteile
 bleiben anklickbar. Der Hover-Test trifft weiterhin die Fassaden, damit der
 Einblick beim Durchklicken stabil bleibt.
+
+## RCT-Geländewerkzeuge (0.1.132)
+
+Wasser liegt eine halbe Stufe unter 0. Gäste baden auf gefluteten Feldern.
+
+## Land-Editor drei Flächenwerkzeuge (0.1.134)
+
+Im Reiter **Gelände** nur **Feld anheben**, **Feld senken**, **Glätten**.
+Klick oder Ziehen füllt ein Rechteck, keine Linienstriche. Stufe 0,5.
+**Glätten** setzt alle getroffenen Felder auf die Höhe unter dem
+Startpunkt. Ecke / Einebnen / Wasser-als-Werkzeug sind aus der UI.
 
 ## Wegmöbel ausrichten (0.1.131)
 
