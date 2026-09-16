@@ -1551,6 +1551,66 @@ body.title-open #app-install-hint {
   width: 440px;
 }
 
+.decoration-themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.decoration-themes button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 4px 6px;
+  color: #eaf4ee;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1.15;
+}
+
+.decoration-themes button small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: #cbdcd4;
+}
+
+.decoration-themes button[aria-pressed='true'] {
+  background: rgba(69, 151, 111, 0.28);
+  border-color: #5daf85;
+}
+
+.build-menu-decoration .build-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  grid-template-columns: none;
+}
+
+.decoration-category h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #efcf86;
+}
+
+.decoration-category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 96px);
+  justify-content: start;
+  gap: 6px;
+}
+
+.decoration-empty {
+  margin: 8px 0;
+  color: #cbdcd4;
+  font-size: 12px;
+}
+
 .build-menu.dock-right {
   left: auto;
   right: 12px;
@@ -1649,6 +1709,13 @@ body.title-open #app-install-hint {
   height: 88px;
   margin: 0;
   border: none;
+}
+
+.build-menu-catalog.build-menu-decoration .build-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  grid-template-columns: none;
 }
 
 .build-catalog-status {
@@ -2688,6 +2755,25 @@ body.title-open #app-install-hint {
   color: #ffe86d;
 }
 
+.rct-coaster-construction #coaster-type-name {
+  display: block;
+  width: 100%;
+  margin: 0 0 4px;
+  padding: 4px 6px;
+  color: #fff7d5;
+  background: #554d40;
+  border: 1px solid #776d5a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rct-coaster-construction #coaster-type-hint {
+  display: block;
+  color: #efe4c4;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .rct-coaster-construction .piece-palette {
   gap: 2px;
 }
@@ -2746,6 +2832,8 @@ body.title-open #app-install-hint {
 .rct-coaster-construction .piece-palette button:disabled {
   filter: grayscale(1);
   opacity: 0.38;
+  pointer-events: none;
+  cursor: not-allowed;
 }
 
 .rct-coaster-construction .track-special-toggle {
@@ -3308,6 +3396,7 @@ body.title-open #app-install-hint {
 .logistics-tabs,
 .logistics-management-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin: 8px 0;
 }
@@ -3347,6 +3436,34 @@ body.title-open #app-install-hint {
 
 .logistics-panel.visible {
   display: block;
+}
+
+.band-supply-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.band-supply-tools button {
+  flex: 1;
+  min-width: 8rem;
+  padding: 7px;
+  border: 1px solid rgba(213, 229, 220, 0.18);
+  border-radius: 7px;
+  background: rgba(16, 38, 30, 0.7);
+  color: #b9cec4;
+}
+
+.band-supply-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 7px;
+  background: rgba(16, 38, 30, 0.45);
 }
 
 .logistics-summary-grid,

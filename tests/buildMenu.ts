@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict'
 import { BUILDING_KINDS } from '../src/game/catalog'
 import type { Tool } from '../src/game/catalog'
+import { COASTER_TYPES } from '../src/game/coasters'
+import { COASTER_CATALOG_TYPE_IDS, coasterVehiclePreview } from '../src/game/coasterTypes'
 import { GameState } from '../src/game/GameState'
 import {
   BUILD_CATEGORIES,
   CATALOG_BUILD_CATEGORIES,
+  coasterCatalogIcon,
   isCatalogBuildCategory,
   listedBuildTools,
   placeableTools,
@@ -26,7 +29,11 @@ export function testBuildMenu(): void {
     for (const group of category.groups) {
       assert.ok(group.items.length > 0, `${category.id}/${group.id} ist leer`)
       for (const item of group.items) {
-        const key = item.bungee ? `${item.tool}:bungee` : item.tool
+        const key = item.bungee
+          ? `${item.tool}:bungee`
+          : item.coasterTypeId
+            ? `${item.tool}:${item.coasterTypeId}`
+            : item.tool
         assert.equal(seen.has(key), false, `Doppelter Menüeintrag ${key}`)
         seen.add(key)
       }
@@ -55,12 +62,36 @@ export function testBuildMenu(): void {
     subgroupForTool('medicalArea'),
     { category: 'logistics', group: 'medical' },
   )
+  assert.deepEqual(
+    subgroupForTool('backstageArea'),
+    { category: 'logistics', group: 'band' },
+  )
+  assert.deepEqual(
+    subgroupForTool('tourBusParking'),
+    { category: 'logistics', group: 'band' },
+  )
   assert.equal(
     BUILD_CATEGORIES.find((category) => category.id === 'roads')?.dock,
     'left',
   )
   for (const category of BUILD_CATEGORIES) {
     if (category.id !== 'roads') assert.equal(category.dock, 'left')
+  }
+
+  const coasterGroup = BUILD_CATEGORIES.find((category) => category.id === 'attractions')?.groups.find(
+    (group) => group.id === 'coasters',
+  )
+  assert.ok(coasterGroup, 'Attraktionen brauchen einen Achterbahn-Reiter')
+  assert.equal(coasterGroup!.items.some((item) => item.tool === 'coaster' && !item.coasterTypeId), false)
+  assert.ok(coasterGroup!.items.length >= 8, 'Achterbahn-Reiter listet Typen direkt')
+  assert.ok(coasterGroup!.items.every((item) => item.tool === 'coaster' && item.coasterTypeId))
+  assert.equal(coasterGroup!.items.length, COASTER_CATALOG_TYPE_IDS.length)
+  for (const item of coasterGroup!.items) {
+    const typeId = item.coasterTypeId!
+    const preview = coasterVehiclePreview(typeId)
+    assert.equal(item.icon, preview.trainStyle, `${typeId} catalog tile is keyed by train style`)
+    assert.equal(coasterCatalogIcon(typeId), COASTER_TYPES[typeId].trainStyle)
+    assert.equal(item.icon.includes('🎢'), false)
   }
 
   const game = new GameState()

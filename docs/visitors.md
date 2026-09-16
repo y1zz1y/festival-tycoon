@@ -11,6 +11,7 @@ sind abgeleitete Darstellung desselben Zustands.
 | Typen, Spawn, Bewegung, Ziele | `src/game/GameState.ts` | `Visitor`, `VisitorState`, `trySpawnVisitor`, `walkVisitors`, `tryDisposeWaste`, `dropPendingWaste` |
 | Stand-Queue-Spuren | `src/game/queueLanes.ts` | `queueStandOffset`, `stallQueueTileOffset` |
 | Need-/Alkohol-/Übelkeitswerte | `src/game/simulationConfig.ts` | `visitors`, `needs` (`interactionMinutes.stockout`), `alcohol`, `nausea` |
+| Festivallust (`motivation`) | `src/game/GameState.ts`, `src/game/simulationConfig.ts` | `Visitor.motivation`, `crowding.motivation*`, `atmosphere.concertMotivationPerMinute` |
 | Festival-Schlafrhythmus | `src/game/visitorSleep.ts`, `src/game/simulationConfig.ts` | `camping.sleepSchedule`, `sampleFestivalSleepRhythm`, `isMinuteInSleepWindow` |
 | Inventar (Zelt, Essen, Pyro, …) | `src/game/inventory.ts` | Inventarfelder und Verbrauch |
 | Gedanken gruppieren | `src/game/visitorThoughts.ts` | `groupVisitorsByThought` |
@@ -84,6 +85,16 @@ sind abgeleitete Darstellung desselben Zustands.
   laufenden Reservierungen dürfen aber keinen physischen Platz blockieren:
   Angekommene Gäste stehen stabil in Ankunftsreihenfolge davor und rücken bei
   jedem Tick kontinuierlich nach. Das gilt für Stände und Achterbahnen.
+- Festivallust ist `Visitor.motivation` (0–100), nicht ein extra Need neben
+  Hunger/Toilette/Spaß/Energie. Sie sinkt durch Gedränge, leere Bedürfnisse
+  und schlechte Atmosphäre (`crowding.motivationLossPerMinute`). Ein
+  gebuchter Live-Auftritt füllt sie über `atmosphere.concertMotivationPerMinute`
+  mal `showQuality` der Bühnen-Bandversorgung (`docs/band-supply.md`),
+  solange der Gast `partying` mit passender `concertId` am laufenden Slot
+  steht. Warten vor dem ersten Song, Vorbeigehen und dunkle/pausierende
+  Bühnen füllen sie nicht. Balancing und Show-Bedingungen: `docs/stages.md`.
+  Fans können budgetiert ins aktive Backstage eindringen
+  (`backstageIntrusion`); das ist kein zweites Need.
 - Neue Need- oder State-Werte müssen in Snapshot, UI, Gedanken und ggf.
   Multiplayer-Deltas landen.
 - Maskottchen und T-Shirts sind Andenken (`goods`), kein Hunger-/Durststillen.
@@ -123,7 +134,7 @@ Bereits begonnene Müllwege werden beim wiederholten Schließzeit-Check beibehal
 `tests/pixelPeople.ts` (Batches, stabile Optik). `tests/shopGoods.ts` (Kauf,
 Hand-Chance, Shirt vom Stand, Save). `tests/regression.ts`
 (Spawn, Needs, Speed-Partition, Festivalende-Abreise durch Campingflächen).
-Festival-Anreisen: `tests/festival.ts`,
+Festival-Anreisen und Live-Show-Festivallust: `tests/festival.ts`,
 `tests/stageTickets.ts`. Queue-Reihenfolge, kontinuierliches Nachrücken,
 Queue-Rückweg, geteilte Stand-Spuren, leere Stände, Aussteigen auf den
 Nachbarweg, Insassen steigen nach dem Parken aus und bleiben zu Fuß
@@ -138,5 +149,6 @@ Zelt-/Abreiseziele: `tests/visitorSleep.ts`.
 ## Bei Änderungen dieses Dokument
 
 Aktualisieren, wenn `Visitor` / `VisitorState` / Needs neue Felder bekommen,
-Spawn- oder Abreiselogik wechselt, Müllfallen bei vollem Eimer ändert oder Gedanken/Bubbles neue Arten erhalten.
+Festivallust-Quellen oder -Verluste wechseln, Spawn- oder Abreiselogik wechselt,
+Müllfallen bei vollem Eimer ändert oder Gedanken/Bubbles neue Arten erhalten.
 Neue UI-Panels für Besucher in `docs/ui.md` mitvermerken.

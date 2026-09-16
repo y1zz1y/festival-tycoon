@@ -53,7 +53,7 @@ export type ArrivalGroup = {
   entryFeesPaid: boolean
 }
 
-export type RoadVehicleKind = 'visitorCar' | 'ambulance' | 'bus' | 'garbageTruck' | 'sweeper' | 'deliveryTruck'
+export type RoadVehicleKind = 'visitorCar' | 'ambulance' | 'bus' | 'garbageTruck' | 'sweeper' | 'deliveryTruck' | 'tourBus'
 export type RoadVehicleState =
   | 'idle'
   | 'driving'
@@ -73,6 +73,7 @@ export type RoadVehicleTarget =
   | { kind: 'garage'; garageId: string }
   | { kind: 'depot'; depotId: string }
   | { kind: 'wasteDump'; x: number; z: number }
+  | { kind: 'tourBusParking'; buildingId: string }
 
 export type RoadVehicle = {
   stuckMinutes?: number
@@ -97,6 +98,7 @@ export type RoadVehicle = {
   deliveryId?: string | null
   parkingSearchCursor?: number
   workZones?: string[]
+  reservedParkingId?: string | null
 }
 
 export const ROAD_VEHICLE_KIND_LABELS: Record<
@@ -109,6 +111,7 @@ export const ROAD_VEHICLE_KIND_LABELS: Record<
   garbageTruck: { icon: '🚛', name: 'Müllfahrzeug' },
   sweeper: { icon: '🧹', name: 'Saugreiniger' },
   deliveryTruck: { icon: '🚚', name: 'Lieferfahrzeug' },
+  tourBus: { icon: '🚌', name: 'Tourbus' },
 }
 
 export function isPlayerOwnedFleetVehicle(vehicle: Pick<RoadVehicle, 'kind'>): boolean {
@@ -290,6 +293,7 @@ export function describeRoadVehicleDestination(vehicle: RoadVehicle): string | n
     return `Parkplatz ${vehicle.parkingCell.x}, ${vehicle.parkingCell.z}`
   }
   if (vehicle.target?.kind === 'busStop') return 'Nächste Bushaltestelle'
+  if (vehicle.target?.kind === 'tourBusParking') return 'Tourbus-Parkplatz'
   if (vehicle.kind === 'deliveryTruck' && vehicle.target?.kind === 'depot') {
     return 'Anlieferungsplatz'
   }
@@ -397,6 +401,7 @@ const VEHICLE_KINDS: readonly RoadVehicleKind[] = [
   'garbageTruck',
   'sweeper',
   'deliveryTruck',
+  'tourBus',
 ]
 const VEHICLE_STATES: readonly RoadVehicleState[] = [
   'idle',
@@ -792,6 +797,7 @@ function normalizeRoadVehicle(value: unknown): RoadVehicle | null {
     deliveryId: nullableString(source.deliveryId),
     parkingSearchCursor: Math.floor(nonNegativeNumber(source.parkingSearchCursor)),
     workZones: Array.isArray(source.workZones) ? stringArray(source.workZones) : undefined,
+    reservedParkingId: nullableString(source.reservedParkingId),
   }
 }
 
@@ -886,6 +892,9 @@ function normalizeVehicleTarget(value: unknown): RoadVehicleTarget | null {
   if (source.kind === 'wasteDump') {
     const position = normalizePosition(source)
     return position ? { kind: 'wasteDump', ...position } : null
+  }
+  if (source.kind === 'tourBusParking' && typeof source.buildingId === 'string') {
+    return { kind: 'tourBusParking', buildingId: source.buildingId }
   }
   return null
 }

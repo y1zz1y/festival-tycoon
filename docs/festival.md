@@ -42,6 +42,12 @@ hält die Simulationsuhr an, bis **Festival starten**.
 `tests/festival.ts` (Ablauf, Buchung, Lager, Ruf). `tests/musicPlanning.ts`.
 `tests/stageTickets.ts`. `tests/festivalAdditions.ts`.
 
+Bandversorgung / Backstage / Tourbus-Ankunft (Morgen ~08:00 / Abend ~23:00
+an der Festivaluhr, `BANDS.draw` ≥ 30 will einen Bus, sonst Personaleingang):
+[`band-supply.md`](band-supply.md). `BANDS` und `Booking` bleiben die
+Buchungsquelle. `bandActors` sind keine Gäste; sie tragen `costumeId` /
+`role` aus `bandLooks.ts` und sehen auf Bühne und Backstage gleich aus.
+
 ## Bei Änderungen dieses Dokument
 
 Aktualisieren, wenn Aktionen, Ticketregeln, Wetter, Rufachsen, Bands oder

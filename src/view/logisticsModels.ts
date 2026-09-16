@@ -30,6 +30,7 @@ export const LOGISTICS_FACILITY_KINDS = [
   'wasteDepot',
   'specialDepot',
   'ambulanceGarage',
+  'tourBusParking',
 ] as const satisfies readonly BuildingKind[]
 
 export type LogisticsFacilityKind = (typeof LOGISTICS_FACILITY_KINDS)[number]
@@ -54,7 +55,7 @@ const facilityGeometries = new Map<string, ReturnType<ModelKit['finish']>>()
 const vehicleGeometries = new Map<string, ReturnType<ModelKit['finish']>>()
 
 export function logisticsFacilityFootprint(kind: LogisticsFacilityKind): number {
-  if (kind === 'busStop') return 1
+  if (kind === 'busStop' || kind === 'tourBusParking') return 1
   if (kind === 'busDepot' || kind === 'specialDepot') return 3
   return 2
 }
@@ -359,6 +360,36 @@ function buildBus(): ReturnType<ModelKit['finish']> {
   return k.finish()
 }
 
+/** Longer dark coach — not the yellow shuttle `bus`. One merged mesh. */
+function buildTourBus(): ReturnType<ModelKit['finish']> {
+  const k = new ModelKit()
+  const hull = 0x2a3340
+  const stripe = 0xc9a45f
+  const bay = 0x1a1e24
+  k.box(0, 0.12, 0, 0.72, 0.08, 1.72, ink)
+  k.box(0, 0.42, 0, 0.68, 0.52, 1.68, hull)
+  k.box(0, 0.78, 0, 0.64, 0.14, 1.64, 0x1c242c)
+  k.box(0, 0.58, 0, 0.7, 0.05, 1.66, stripe)
+  k.box(0, 0.5, 0.84, 0.54, 0.24, 0.04, 0x4a6570)
+  for (const z of [-0.62, -0.22, 0.18, 0.52]) {
+    for (const x of [-0.35, 0.35]) {
+      k.box(x, 0.5, z, 0.02, 0.2, 0.24, 0x4a6570)
+    }
+  }
+  k.box(0.22, 0.36, 0.86, 0.14, 0.38, 0.04, ink)
+  for (const z of [-0.55, 0.05, 0.55]) {
+    k.box(0, 0.22, z, 0.62, 0.14, 0.28, bay)
+  }
+  for (const z of [-0.62, 0.62]) {
+    for (const x of [-0.34, 0.34]) {
+      k.box(x, 0.12, z, 0.08, 0.2, 0.2, 0x1a1c1e)
+    }
+  }
+  k.box(0, 0.86, 0.28, 0.28, 0.06, 0.16, stripe)
+  k.box(0, 0.86, -0.36, 0.22, 0.08, 0.28, 0x24303a)
+  return k.finish()
+}
+
 function buildGarbageTruck(): ReturnType<ModelKit['finish']> {
   const k = new ModelKit()
   const cab = 0x3f6b3a
@@ -439,6 +470,18 @@ function buildSweeper(): ReturnType<ModelKit['finish']> {
   return k.finish()
 }
 
+function buildTourBusParking(): ReturnType<ModelKit['finish']> {
+  const k = new ModelKit()
+  k.box(0, 0.03, 0, 0.94, 0.06, 0.94, 0x3c4247)
+  k.box(0, 0.045, 0, 0.82, 0.02, 0.82, 0x4a5258)
+  k.box(0, 0.05, 0, 0.08, 0.02, 0.7, 0xe0a832)
+  k.box(-0.28, 0.05, 0.28, 0.18, 0.02, 0.04, 0xe8e6e0)
+  k.box(0.28, 0.05, -0.28, 0.18, 0.02, 0.04, 0xe8e6e0)
+  k.box(-0.32, 0.22, -0.32, 0.08, 0.36, 0.08, 0x2a3036)
+  k.box(-0.32, 0.42, -0.32, 0.2, 0.08, 0.04, 0xd4a017)
+  return k.finish()
+}
+
 export function createLogisticsFacility(kind: LogisticsFacilityKind): Group {
   const builders: Record<LogisticsFacilityKind, () => ReturnType<ModelKit['finish']>> = {
     busStop: buildBusStop,
@@ -446,6 +489,7 @@ export function createLogisticsFacility(kind: LogisticsFacilityKind): Group {
     wasteDepot: buildWasteDepot,
     specialDepot: buildSpecialDepot,
     ambulanceGarage: buildAmbulanceGarage,
+    tourBusParking: buildTourBusParking,
   }
   return meshFrom(kind, facilityGeometries, builders[kind], facilityMaterial)
 }
@@ -478,6 +522,7 @@ export function createRoadVehicleModel(
     garbageTruck: buildGarbageTruck,
     deliveryTruck: buildDeliveryTruck,
     sweeper: buildSweeper,
+    tourBus: buildTourBus,
   }
   return meshFrom(kind, vehicleGeometries, builders[kind], vehicleMaterial)
 }

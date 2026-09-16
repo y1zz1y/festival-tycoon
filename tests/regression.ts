@@ -1,11 +1,16 @@
+import { testFacadeReveal } from './facadeReveal'
+import { testWayStructures } from './wayStructures'
 import { testMusicPlanning } from './musicPlanning'
 import { testPixelPeople } from './pixelPeople'
 import { testCarrierModels } from './carrierModels'
 import { testCampingModels } from './campingModels'
 import { testRideAccess } from './rideAccess'
 import { testFestivalAdditions } from './festivalAdditions'
+import { testCoasterTypes } from './coasterTypes'
+import { testBandSupply } from './bandSupply'
 import { testTerrainSurface } from './terrainSurface'
 import { testScenery } from './scenery'
+import { testDecorationThemes, testThemedDecorationPlacement } from './decoration'
 import { testPicking } from './picking'
 import { testMobileTouch } from './mobileTouch'
 import { testPerformanceGuards } from './performanceGuards'
@@ -51,6 +56,8 @@ function test(name: string, run: () => void) {
   console.log(`PASS ${name}`)
 }
 
+testFacadeReveal()
+testWayStructures()
 testMobileTouch()
 testQueueLanes()
 testPixelPeople()
@@ -94,9 +101,17 @@ function fixture(count = 20): GameState {
 testPerformanceGuards(fixture)
 testAccessControl(fixture)
 testScenery(fixture)
+test('decoration themes filter catalog kinds and keep placement on scenery.ts', () => {
+  testDecorationThemes()
+  testThemedDecorationPlacement(fixture)
+})
 testPicking(fixture)
 testTickerAndWasteCaps()
 testFestivalAdditions(fixture)
+testCoasterTypes(fixture)
+test('band supply: bare vs supplied, shared pool, parking, fans, clock, placement, inactive, staff gate', () => {
+  testBandSupply(fixture)
+})
 testRideAccess(fixture)
 testTerrainSurface(fixture)
 

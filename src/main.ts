@@ -1,5 +1,8 @@
+import { contextDemolitionTarget } from './game/contextDemolition'
+import { isDecorationCatalogKind } from './game/decoration'
+import { isWasteBin } from './game/decorationWalls'
 import { GENRES } from './game/musicTaste'
-import { isScenery, scenerySlot, isEdgeScenery } from './game/scenery'
+import { isScenery, isLargeScenery, scenerySlot, isEdgeScenery } from './game/scenery'
 import { makeDraggable, makeResizable } from './dragPanel'
 import { mountStageEditor } from './stageEditor'
 import { stageStats } from './game/stageDesign'
@@ -37,15 +40,45 @@ import {
   isCatalogBuildCategory,
   subgroupForTool,
   type BuildCategoryId,
+  type BuildMenuItem,
 } from './game/buildMenu'
 import {
-  COASTER_TYPES,
+  DEFAULT_DECORATION_THEME,
+  DECORATION_CATEGORY_IDS,
+  DECORATION_CATEGORY_LABELS,
+  DECORATION_THEMES,
+  decorationThemeOf,
+  filterDecorationKinds,
+  isDecorationThemeId,
+  type DecorationThemeId,
+} from './game/decoration'
+import {
   TRACK_BANK_ANGLE,
+  TRACK_PIECE_KINDS,
   TRACK_PIECES,
   TRACK_PITCHES,
-  canTransitionTrackPitch,
   createTrackPiece,
+  getCoasterType,
+  type CoasterTypeId,
 } from './game/coasters'
+import {
+  applyConstructionBank,
+  applyConstructionKind,
+  applyConstructionPitch,
+  constantPitchPieceKind,
+  isTrackBankChoiceCurrentlyEnabled,
+  isTrackChainLiftEligible,
+  isTrackChainLiftVisible,
+  isTrackPalettePieceEnabled,
+  isTrackPitchChoiceCurrentlyEnabled,
+  listTrackBankChoices,
+  listTrackPalettePieces,
+  listTrackPitchChoices,
+  resolveNextTrackPiece,
+  TRACK_DIRECTION_KINDS,
+  TRACK_SPECIAL_KINDS,
+  type CoasterWindowState,
+} from './game/coasterConnections'
 import type {
   Coaster,
   CoasterOperationMode,
@@ -81,6 +114,10 @@ import {
   parseWasteDumpId,
   wasteDumpId,
 } from './game/waste'
+import {
+  formatBackstageHover,
+  formatBackstageInspect,
+} from './game/bandSupply'
 import { groupVisitorsByThought } from './game/visitorThoughts'
 import { enableMultiplayerCommands } from './net/bind'
 import { MultiplayerSession } from './net/session'
@@ -318,7 +355,8 @@ app.innerHTML = `
         <div id="terrain-planner-slot"></div>
       </div>
       <div id="build-extra-decoration" class="build-extra" hidden>
-        <p class="scenery-help">Kleine Deko: bis zu 4 pro Feld. Hecken, Banner, Wimpel, Lichterketten und Gebetsfahnen stehen an der Feldkante. Tageslichtballons brauchen ein ganzes Feld. Die Maus bestimmt die Position.</p>
+        <div id="decoration-themes" class="decoration-themes" role="listbox" aria-label="Deko-Themen"></div>
+        <p class="scenery-help">Oben das Thema wählen, darunter die Kategorien. Kleine Deko: bis zu 4 pro Feld. Hecken, Banner, Wimpel, Lichterketten, Gebetsfahnen und thematische Kantenstücke stehen an der Feldkante. Tageslichtballons brauchen ein ganzes Feld. Die Maus bestimmt die Position.</p>
         <button id="rotate-scenery" type="button">↻ Drehen / nächste Seite <kbd>R</kbd></button>
       </div>
       <div id="build-extra-attractions" class="build-extra" hidden>
@@ -435,7 +473,11 @@ app.innerHTML = `
         <strong id="coaster-construction-title">Achterbahn 1 Konstruktion</strong>
         <button id="close-coaster-builder" aria-label="Editor schließen">×</button>
       </div>
-      <select id="coaster-type" class="editor-native-select" aria-hidden="true" tabindex="-1"><option value="classicSteel">Klassische Stahlachterbahn</option></select>
+      <section class="rct-editor-section track-section">
+        <label>Achterbahntyp</label>
+        <strong id="coaster-type-name">Klassische Stahlachterbahn</strong>
+        <small id="coaster-type-hint"></small>
+      </section>
       <section class="rct-editor-section track-section">
         <label>Richtung <b id="coaster-direction">↙</b></label>
         <div id="track-direction-palette" class="piece-palette track-piece-palette"></div>
@@ -796,6 +838,7 @@ app.innerHTML = `
         <button data-logistics-tab="overview" class="active">Übersicht</button>
         <button data-logistics-tab="supply">Waren & Träger</button>
         <button data-logistics-tab="routes">Buslinien</button>
+        <button data-logistics-tab="band-supply">Bandversorgung</button>
       </div>
       <section id="logistics-overview"></section>
       <section id="logistics-supply" hidden>
@@ -833,6 +876,16 @@ app.innerHTML = `
           <button id="create-bus-line" class="primary">Linie anlegen</button>
         </div>
         <div id="bus-lines-list"></div>
+      </section>
+      <section id="logistics-band-supply" hidden>
+        <p class="scenario-hint">Backstage muss an eine Bühne grenzen oder über weitere Backstage-Felder verbunden sein. Getrennte Felder bleiben ausgewiesen, zählen aber nicht. Mehrere verbundene Bühnen teilen sich einen Pool.</p>
+        <div class="band-supply-tools">
+          <button type="button" id="band-supply-paint">Backstage ausweisen</button>
+          <button type="button" id="band-supply-erase">Backstage entfernen</button>
+          <button type="button" id="band-supply-parking">Parkplatz für den Tourbus</button>
+        </div>
+        <p id="band-supply-preview" class="scenario-hint"></p>
+        <div id="band-supply-list"></div>
       </section>
     </aside>
     <div id="title-screen" class="title-screen" role="dialog" aria-modal="true" aria-labelledby="title-screen-name">
@@ -998,53 +1051,52 @@ const TRACK_PIECE_ICONS: Record<TrackPieceKind, string> = {
   photo: '📷',
   splash: '💦',
   brakes: '▥',
+  helixLeft: '↺',
+  helixRight: '↻',
 }
-COASTER_TYPES.classicSteel.supportedPieces.forEach((kind) => {
+TRACK_PIECE_KINDS.forEach((kind) => {
   const piece = TRACK_PIECES[kind]
   trackPieceSelect.insertAdjacentHTML(
     'beforeend',
     `<option value="${kind}">${piece.name} · ${formatMoney(piece.cost)}</option>`,
   )
 })
+const coasterTypeName = requireElement<HTMLElement>('#coaster-type-name')
+const coasterTypeHint = requireElement<HTMLElement>('#coaster-type-hint')
 
-const TRACK_DIRECTION_ORDER: TrackPieceKind[] = [
-  'curveLeft4',
-  'curveLeft3',
-  'curveLeft2',
-  'curveLeft1',
-  'straight',
-  'curveRight1',
-  'curveRight2',
-  'curveRight3',
-  'curveRight4',
+const TRACK_PITCH_BUTTONS: readonly { pitch: number; icon: string; title: string; label: string }[] = [
+  { pitch: TRACK_PITCHES.steepDown, icon: '⇘', title: 'Steil abwärts', label: 'Steil ab' },
+  { pitch: TRACK_PITCHES.gentleDown, icon: '↘', title: 'Sanft abwärts', label: 'Sanft ab' },
+  { pitch: 0, icon: '→', title: 'Flach', label: 'Flach' },
+  { pitch: TRACK_PITCHES.gentleUp, icon: '↗', title: 'Sanft aufwärts', label: 'Sanft auf' },
+  { pitch: TRACK_PITCHES.steepUp, icon: '⇗', title: 'Steil aufwärts', label: 'Steil auf' },
 ]
-function populateTrackPalette(palette: HTMLElement, kinds: TrackPieceKind[]): void {
-  kinds.forEach((kind) => {
-    const piece = TRACK_PIECES[kind]
-  palette.insertAdjacentHTML(
-    'beforeend',
-    `<button data-track-piece="${kind}" title="${piece.name} · ${formatMoney(piece.cost)}">
+const TRACK_BANK_BUTTONS: readonly { bank: number; icon: string; title: string; label: string }[] = [
+  { bank: -TRACK_BANK_ANGLE, icon: '◢', title: 'Neigung links einleiten', label: 'Links' },
+  { bank: 0, icon: '━', title: 'Seitliche Neigung ausleiten', label: 'Neutral' },
+  { bank: TRACK_BANK_ANGLE, icon: '◣', title: 'Neigung rechts einleiten', label: 'Rechts' },
+]
+
+function trackPieceButtonHtml(kind: TrackPieceKind, active: boolean, enabled = true): string {
+  const piece = TRACK_PIECES[kind]
+  const disabledAttrs = enabled ? '' : ' disabled aria-disabled="true"'
+  return `<button type="button" data-track-piece="${kind}" class="${active && enabled ? 'active' : ''}"${disabledAttrs} title="${piece.name} · ${formatMoney(piece.cost)}">
       <span>${TRACK_PIECE_ICONS[kind]}</span><small>${piece.station ? 'Station' : piece.radius ? `${piece.radius}×${piece.radius}` : piece.name}</small>
-    </button>`,
-  )
-  })
+    </button>`
 }
 
-populateTrackPalette(trackDirectionPalette, TRACK_DIRECTION_ORDER)
-populateTrackPalette(trackSpecialPalette, ['station', 'sBendLeft', 'sBendRight', 'verticalLoop', 'halfLoopUp', 'halfLoopDown', 'photo', 'splash', 'brakes'])
-trackSlopePalette.innerHTML = `
-  <button data-track-pitch="${TRACK_PITCHES.steepDown}" title="Steil abwärts"><span>⇘</span><small>Steil ab</small></button>
-  <button data-track-pitch="${TRACK_PITCHES.gentleDown}" title="Sanft abwärts"><span>↘</span><small>Sanft ab</small></button>
-  <button data-track-pitch="0" title="Flach"><span>→</span><small>Flach</small></button>
-  <button data-track-pitch="${TRACK_PITCHES.gentleUp}" title="Sanft aufwärts"><span>↗</span><small>Sanft auf</small></button>
-  <button data-track-pitch="${TRACK_PITCHES.steepUp}" title="Steil aufwärts"><span>⇗</span><small>Steil auf</small></button>
-  <button id="toggle-chain-lift" type="button" title="Kettenlift für das nächste geeignete Stück" aria-pressed="false"><span>⛓</span><small>Kette</small></button>
-`
-trackBankPalette.innerHTML = `
-  <button data-track-bank="${-TRACK_BANK_ANGLE}" title="Neigung links einleiten"><span>◢</span><small>Links</small></button>
-  <button data-track-bank="0" title="Seitliche Neigung ausleiten"><span>━</span><small>Neutral</small></button>
-  <button data-track-bank="${TRACK_BANK_ANGLE}" title="Neigung rechts einleiten"><span>◣</span><small>Rechts</small></button>
-`
+function renderTrackPalette(
+  palette: HTMLElement,
+  entries: readonly { kind: TrackPieceKind; enabled: boolean }[],
+  activeKind: TrackPieceKind,
+): void {
+  palette.replaceChildren()
+  if (entries.length === 0) return
+  palette.insertAdjacentHTML(
+    'beforeend',
+    entries.map((entry) => trackPieceButtonHtml(entry.kind, entry.kind === activeKind, entry.enabled)).join(''),
+  )
+}
 
 const canvas = requireElement<HTMLCanvasElement>('#game-canvas')
 const money = requireElement<HTMLElement>('#money')
@@ -1113,7 +1165,6 @@ const demolishCoasterConstructionButton = requireElement<HTMLButtonElement>(
   '#demolish-coaster-construction',
 )
 const chainLiftInput = requireElement<HTMLInputElement>('#chain-lift')
-const chainLiftButton = requireElement<HTMLButtonElement>('#toggle-chain-lift')
 const trackPreviousButton = requireElement<HTMLButtonElement>('#track-previous')
 const trackNextButton = requireElement<HTMLButtonElement>('#track-next')
 const trackSelection = requireElement<HTMLElement>('#track-selection')
@@ -1189,6 +1240,10 @@ for (const panel of [staffPanel, visitorOverviewPanel, complaintsPanel, logistic
 const logisticsOverview = requireElement<HTMLElement>('#logistics-overview')
 const logisticsSupply = requireElement<HTMLElement>('#logistics-supply')
 const logisticsRoutes = requireElement<HTMLElement>('#logistics-routes')
+const logisticsBandSupply = requireElement<HTMLElement>('#logistics-band-supply')
+const bandSupplyList = requireElement<HTMLElement>('#band-supply-list')
+const bandSupplyPreview = requireElement<HTMLElement>('#band-supply-preview')
+let backstageEraseMode = false
 const supplyDepotSelect = requireElement<HTMLSelectElement>('#supply-depot-select')
 const supplyDepotStock = requireElement<HTMLElement>('#supply-depot-stock')
 const supplyDepotDistribution = requireElement<HTMLSelectElement>('#supply-depot-distribution')
@@ -1333,7 +1388,9 @@ let coasterEditIndex = -1
 let coasterAccessMode: 'entrance' | 'exit' | null = null
 let coasterTargetPitch = 0
 let coasterTargetBank = 0
-let selectedEntity: { type: 'building' | 'coaster' | 'vehicle' | 'access' | 'depot' | 'wasteDump'; id: string } | null = null
+let pendingCoasterTypeId: CoasterTypeId = 'classicSteel'
+let coasterSelectedKind: TrackPieceKind = 'station'
+let selectedEntity: { type: 'building' | 'coaster' | 'vehicle' | 'access' | 'depot' | 'wasteDump' | 'backstage'; id: string } | null = null
 let logisticsOverlayVisible = false
 let accessAreaDrawing = false
 let entityTab: 'overview' | 'dynamics' = 'overview'
@@ -1377,7 +1434,8 @@ try {
       coasterEditIndex = Math.max(0, Math.min(coaster.pieces.length - 1, pieceIndex))
       coasterTargetPitch = coaster.pieces[coasterEditIndex]?.end.pitch ?? 0
       coasterTargetBank = coaster.pieces[coasterEditIndex]?.end.bank ?? 0
-      trackPieceSelect.value = getConstantPitchPiece(coasterTargetPitch)
+      coasterSelectedKind = 'straight'
+      trackPieceSelect.value = constantPitchPieceKind(coasterTargetPitch)
       updateCoasterBuilder()
       showToast(`Bauanker auf Element ${coasterEditIndex + 1} gesetzt`)
     },
@@ -1399,6 +1457,26 @@ try {
 
 const supplyPlanner = mountLogisticsUI(() => game, view, showToast)
 view.setPlacementValidator((kind, x, z, slot) => game.canPlace(kind, x, z, slot).ok)
+view.setConstructionHandlers((height, cell) => {
+  game.setBuildElevation(height)
+  if (pathEditorActive && cell) {
+    const anchorCell = shiftElevationOrigin ?? cell
+    pathAnchor = { x: anchorCell.x, z: anchorCell.z, elevation: game.getTerrainHeight(anchorCell.x, anchorCell.z) + height }
+    shiftElevationOrigin = { ...pathAnchor }
+    updatePathEditor()
+  }
+}, (cell, picked) => {
+  const tool = game.snapshot.selectedTool
+  if (!(isDecorationCatalogKind(tool) || tool === 'path' || tool === 'road')) return false
+  if (!cell) return true
+  const target = contextDemolitionTarget(game.snapshot, tool, cell, picked?.buildingId)
+  if (target?.type === 'road') {
+    showToast(game.undoRoadSegment(target.road.x, target.road.z, undefined, target.road.elevation).message)
+  } else if (target?.type === 'building') {
+    showToast(game.bulldoze(target.building.x, target.building.z, target.building.id).message)
+  }
+  return true
+})
 const staffDetails = mountStaffDetails(() => game, view, showToast, () => supplyPlanner.releaseTool())
 const tickerUI = mountTickerUI({
   focusWorld: (x, z) => view.focusWorldPosition(x, z),
@@ -1606,7 +1684,13 @@ function bindGameState(nextGame: GameState): void {
     if (pathWindowOpen && !(roadEditorOpen ? ROAD_WINDOW_TOOLS : PATH_WINDOW_TOOLS).includes(snapshot.selectedTool)) closePathEditor()
     else if (pathWindowOpen) updatePathEditor()
     document.querySelectorAll<HTMLElement>('[data-tool]').forEach((button) => {
-      button.classList.toggle('active', button.dataset.tool === snapshot.selectedTool && (snapshot.selectedTool !== 'ride' || (button.dataset.bungee === 'true') === (view.bungeePreviewHeight !== null)))
+      const typeMatch = !button.dataset.coasterType || button.dataset.coasterType === selectedCoasterTypeId()
+      button.classList.toggle(
+        'active',
+        button.dataset.tool === snapshot.selectedTool &&
+          typeMatch &&
+          (snapshot.selectedTool !== 'ride' || (button.dataset.bungee === 'true') === (view.bungeePreviewHeight !== null)),
+      )
     })
     if (!buildCatalogStatus.hidden && !catalogHoverActive) showSelectedCatalogStatus()
     const activeCategory = categoryForTool(
@@ -1928,6 +2012,8 @@ function updateLogisticsPanel(force = false): void {
     infrastructure.routes.filter((route) => route.automatic).map((route) => [route.id, route.depotId]),
     infrastructure.status,
     game.snapshot.festival.deliveries.map((delivery) => [delivery.id, delivery.remaining, delivery.kind, delivery.quantity]),
+    game.snapshot.backstageCells,
+    game.snapshot.bandSupply,
   ])
   if (!force && fingerprint === logisticsFingerprint) return
   logisticsFingerprint = fingerprint
@@ -2024,6 +2110,27 @@ function updateLogisticsPanel(force = false): void {
       }</p>`
     })
     .join('')
+  const components = game.snapshot.bandSupply?.components ?? []
+  const cost = SIMULATION_CONFIG.bandSupply.backstageDesignationCost
+  bandSupplyPreview.textContent = backstageEraseMode
+    ? 'Modus: Backstage entfernen. Ziehen im Gelände löscht die Auswahl.'
+    : `Modus: Backstage ausweisen · ${cost} € je Feld. Muss an eine Bühne anschließen.`
+  bandSupplyList.innerHTML =
+    components.length === 0
+      ? '<p class="scenario-hint">Noch kein Backstage ausgewiesen.</p>'
+      : components
+          .map((component) => {
+            const origin = component.stages[0]
+            const parking = !component.parkingNeeded
+              ? 'Parkplätze nicht nötig'
+              : `${component.usableSlots}/${component.busDemand} Tourbus-Plätze`
+            return `<div class="band-supply-row">
+              <span>${component.active ? (component.bareStage ? 'Nur Bühne' : 'Aktiv') : 'Getrennt'} · ${component.designatedTiles} Felder · Drauf ${Math.round(component.satisfaction)}</span>
+              <span>${parking} · Show ×${component.showQuality.toFixed(2)}</span>
+              ${origin ? `<button type="button" data-band-supply-focus="${origin.id}">Hin</button>` : ''}
+            </div>`
+          })
+          .join('')
 }
 
 type VisitorOverviewSort =
@@ -2298,6 +2405,7 @@ function handleCellClick(cell: CellPosition): void {
     else if (depot) openEntityInfoForDepot(depot.id)
     else if (game.getCampingCellAt(cell.x, cell.z)) showToast('Ausgewiesener Zeltbereich')
     else if (game.getWasteDumpAt(cell.x, cell.z)) openEntityInfoForWasteDump(cell.x, cell.z)
+    else if (game.getBackstageCellAt(cell.x, cell.z)) openEntityInfoForBackstage(cell.x, cell.z)
     else {
       const height = game.getTerrainHeight(cell.x, cell.z)
       const label =
@@ -2465,6 +2573,8 @@ function handleCellClick(cell: CellPosition): void {
             ? game.designateWasteDump([cell])
           : tool === 'stageForecourt'
             ? game.designateStageForecourt([cell])
+          : tool === 'backstageArea'
+            ? game.designateBackstageArea([cell], !backstageEraseMode)
         : tool === 'powerCable'
           ? game.designatePowerCable(
               cell.x,
@@ -2488,6 +2598,7 @@ function paintPath(cell: CellPosition): void {
     game.snapshot.selectedTool === 'medicalArea' ||
     game.snapshot.selectedTool === 'wasteDump' ||
     game.snapshot.selectedTool === 'stageForecourt' ||
+    game.snapshot.selectedTool === 'backstageArea' ||
     game.snapshot.selectedTool === 'parkingArea' ||
     game.snapshot.selectedTool === 'powerCable' ||
     game.snapshot.selectedTool === 'bulldoze'
@@ -2520,6 +2631,7 @@ function startPathDrag(cell: CellPosition): void {
     game.snapshot.selectedTool === 'medicalArea' ||
     game.snapshot.selectedTool === 'wasteDump' ||
     game.snapshot.selectedTool === 'stageForecourt' ||
+    game.snapshot.selectedTool === 'backstageArea' ||
     game.snapshot.selectedTool === 'parkingArea' ||
     game.snapshot.selectedTool === 'powerCable' ||
     game.snapshot.selectedTool === 'road' ||
@@ -2552,6 +2664,7 @@ function finishPathDrag(): void {
     game.snapshot.selectedTool === 'medicalArea' ||
     game.snapshot.selectedTool === 'wasteDump' ||
     game.snapshot.selectedTool === 'stageForecourt' ||
+    game.snapshot.selectedTool === 'backstageArea' ||
     game.snapshot.selectedTool === 'parkingArea' ||
     game.snapshot.selectedTool === 'powerCable' ||
     game.snapshot.selectedTool === 'bulldoze'
@@ -2602,6 +2715,14 @@ function finishPathDrag(): void {
   }
   if (game.snapshot.selectedTool === 'stageForecourt') {
     const result = game.designateStageForecourt(cells)
+    showToast(result.message, !result.ok)
+    dragPathStart = null
+    dragPathEnd = null
+    view.setPathDragPreview([], 0)
+    return
+  }
+  if (game.snapshot.selectedTool === 'backstageArea') {
+    const result = game.designateBackstageArea(cells, !backstageEraseMode)
     showToast(result.message, !result.ok)
     dragPathStart = null
     dragPathEnd = null
@@ -3179,16 +3300,20 @@ function buildRoadCell(cell: { x: number; z: number }) {
   return game.manageFestival({ type: 'wayArea', from: cell, to: cell, kind: supplyPlanner.getRoadType() })
 }
 
-function openCoasterBuilder(coasterId: string | null = null): void {
+function openCoasterBuilder(coasterId: string | null = null, typeId?: CoasterTypeId): void {
   closeRideBuilder(false)
   buildMenuPanel.hidden = true
   buildMenuToggle.setAttribute('aria-expanded', 'false')
   closeBuildSubmenus()
   supplyPlanner.releaseTool()
   if (pathWindowOpen) closePathEditor()
+  if (!coasterId && typeId) pendingCoasterTypeId = getCoasterType(typeId).id
   if (!coasterId) {
+    coasterSelectedKind = 'station'
     trackPieceSelect.value = 'station'
     chainLiftInput.checked = false
+  } else {
+    coasterSelectedKind = 'straight'
   }
   trackSpecialPalette.hidden = true
   trackSpecialToggle.setAttribute('aria-expanded', 'false')
@@ -3200,7 +3325,7 @@ function openCoasterBuilder(coasterId: string | null = null): void {
   const editAnchor = coasterId ? game.getCoaster(coasterId)?.pieces.at(-1)?.end : null
   coasterTargetPitch = editAnchor?.pitch ?? 0
   coasterTargetBank = editAnchor?.bank ?? 0
-  if (editAnchor) trackPieceSelect.value = getConstantPitchPiece(coasterTargetPitch)
+  if (editAnchor) trackPieceSelect.value = constantPitchPieceKind(coasterTargetPitch)
   coasterAccessMode = null
   game.setTool('coaster')
   updateCoasterBuilder()
@@ -3219,32 +3344,60 @@ function closeCoasterBuilder(): void {
   view.setCoasterTrackSelection([])
 }
 
-function getConstantPitchPiece(pitch: number): TrackPieceKind {
-  if (Math.abs(pitch - TRACK_PITCHES.steepUp) < 0.001) return 'slopeUp'
-  if (Math.abs(pitch - TRACK_PITCHES.gentleUp) < 0.001) return 'slopeGentleUp'
-  if (Math.abs(pitch - TRACK_PITCHES.steepDown) < 0.001) return 'slopeDown'
-  if (Math.abs(pitch - TRACK_PITCHES.gentleDown) < 0.001) return 'slopeGentleDown'
-  return 'straight'
+function selectedCoasterTypeId(): CoasterTypeId {
+  const existing = activeCoasterId ? game.getCoaster(activeCoasterId) : null
+  if (existing) return existing.typeId
+  return getCoasterType(pendingCoasterTypeId).id
+}
+
+function currentCoasterWindow(): CoasterWindowState {
+  return {
+    typeId: selectedCoasterTypeId(),
+    selectedKind: coasterSelectedKind,
+    targetPitch: coasterTargetPitch,
+    targetBank: coasterTargetBank,
+    chainLift: chainLiftInput.checked,
+  }
+}
+
+function openCoasterEnd(): { pitch: number; bank: number } | null {
+  if (!activeCoasterId) return null
+  return game.getCoaster(activeCoasterId)?.pieces[coasterEditIndex]?.end ?? null
+}
+
+function applyCoasterWindow(next: CoasterWindowState): void {
+  pendingCoasterTypeId = getCoasterType(next.typeId).id
+  coasterSelectedKind = next.selectedKind
+  coasterTargetPitch = next.targetPitch
+  coasterTargetBank = next.targetBank
+  chainLiftInput.checked = next.chainLift
+}
+
+function coasterTypeHintText(typeId: CoasterTypeId): string {
+  const type = getCoasterType(typeId)
+  if (type.liftStyle === 'none') return 'Kein Kettenlift — nur Launch.'
+  if (type.liftStyle === 'cable') return 'Seillift. Kettenlift-Flag ist nicht verfügbar.'
+  if (type.liftStyle === 'powered') return 'Powered Launch. Kettenlift ist kein Standard.'
+  if (type.liftStyle === 'curved') return 'Nur sanfte Steigung, gebogener Lift.'
+  if (type.trainStyle === 'mouse') return 'Einzelwagen, keine Seitenneigung, enge 1-Feld-Kurven.'
+  if (type.id === 'wooden') return 'Holzachterbahn: Looping und Wassersplash, keine 1-Feld-Kurven.'
+  if (type.trackStyle === 'bobsledTrough') return 'Nur sanfte Steigung. Rinnenbahn ohne große Kurven.'
+  return type.name
 }
 
 function selectCoasterPitch(targetPitch: number): void {
-  coasterTargetPitch = targetPitch
-  const coaster = activeCoasterId ? game.getCoaster(activeCoasterId) : null
-  const anchor = coaster?.pieces[coasterEditIndex]?.end
-  trackPieceSelect.value =
-    anchor && Math.abs(anchor.pitch - targetPitch) > 0.001
-      ? 'pitchTransition'
-      : getConstantPitchPiece(targetPitch)
+  const end = openCoasterEnd()
+  if (!end) return
+  if (!isTrackPitchChoiceCurrentlyEnabled(end.pitch, targetPitch, selectedCoasterTypeId(), end.bank)) return
+  applyCoasterWindow(applyConstructionPitch(currentCoasterWindow(), targetPitch))
   updateCoasterBuilder()
 }
 
 function selectCoasterBank(targetBank: number): void {
-  coasterTargetBank = targetBank
-  const coaster = activeCoasterId ? game.getCoaster(activeCoasterId) : null
-  const anchor = coaster?.pieces[coasterEditIndex]?.end
-  if (anchor && Math.abs(anchor.bank - targetBank) > 0.001) {
-    trackPieceSelect.value = 'bankTransition'
-  }
+  const end = openCoasterEnd()
+  if (!end) return
+  if (!isTrackBankChoiceCurrentlyEnabled(end.bank, targetBank, selectedCoasterTypeId(), end.pitch)) return
+  applyCoasterWindow(applyConstructionBank(currentCoasterWindow(), targetBank))
   updateCoasterBuilder()
 }
 
@@ -3252,7 +3405,7 @@ function buildCoasterPiece(): void {
   if (!activeCoasterId) {
     if (!coasterStartCandidate) return
     const result = game.startCoaster(
-      'classicSteel',
+      selectedCoasterTypeId(),
       coasterStartCandidate.x,
       coasterStartCandidate.z,
     )
@@ -3262,28 +3415,49 @@ function buildCoasterPiece(): void {
       coasterEditIndex = 0
       coasterTargetPitch = 0
       coasterTargetBank = 0
+      coasterSelectedKind = 'straight'
       trackPieceSelect.value = 'straight'
     }
     showToast(result.message, !result.ok)
     updateCoasterBuilder()
     return
   }
-  const kind = trackPieceSelect.value as TrackPieceKind
+  const resolved = resolveNextTrackPiece(
+    currentCoasterWindow(),
+    game.getCoaster(activeCoasterId)?.pieces[coasterEditIndex]?.end ?? null,
+    true,
+  )
   const insertionIndex = coasterEditIndex + 1
   const result = game.appendCoasterPiece(
     activeCoasterId,
-    kind,
-    chainLiftInput.checked,
+    resolved.kind,
+    resolved.chainLift,
     coasterEditIndex,
-    { targetPitch: coasterTargetPitch, targetBank: coasterTargetBank },
+    resolved.options,
   )
   if (result.ok) {
     coasterEditIndex = insertionIndex
-    if (kind === 'pitchTransition') {
-      trackPieceSelect.value = getConstantPitchPiece(coasterTargetPitch)
-    } else if (kind === 'bankTransition') {
-      trackPieceSelect.value = 'straight'
+    const end = game.getCoaster(activeCoasterId)?.pieces[coasterEditIndex]?.end
+    coasterTargetPitch = end?.pitch ?? resolved.options.targetPitch ?? coasterTargetPitch
+    coasterTargetBank = end?.bank ?? resolved.options.targetBank ?? coasterTargetBank
+    if (resolved.kind === 'pitchTransition' || resolved.kind === 'bankTransition') {
+      if (
+        coasterSelectedKind === 'pitchTransition' ||
+        coasterSelectedKind === 'bankTransition' ||
+        coasterSelectedKind === 'station'
+      ) {
+        coasterSelectedKind = 'straight'
+      }
+    } else if (
+      resolved.kind === 'straight' ||
+      resolved.kind === 'slopeGentleUp' ||
+      resolved.kind === 'slopeUp' ||
+      resolved.kind === 'slopeGentleDown' ||
+      resolved.kind === 'slopeDown'
+    ) {
+      coasterSelectedKind = 'straight'
     }
+    trackPieceSelect.value = resolved.kind
   }
   showToast(result.message, !result.ok)
   updateCoasterBuilder()
@@ -3297,7 +3471,8 @@ function undoCoasterPiece(): void {
     coasterEditIndex = (coaster?.pieces.length ?? 1) - 1
     coasterTargetPitch = coaster?.pieces[coasterEditIndex]?.end.pitch ?? 0
     coasterTargetBank = coaster?.pieces[coasterEditIndex]?.end.bank ?? 0
-    trackPieceSelect.value = getConstantPitchPiece(coasterTargetPitch)
+    coasterSelectedKind = 'straight'
+    trackPieceSelect.value = constantPitchPieceKind(coasterTargetPitch)
   }
   showToast(result.message, !result.ok)
   updateCoasterBuilder()
@@ -3313,7 +3488,8 @@ function moveCoasterTrackCursor(delta: number): void {
   const anchor = coaster.pieces[coasterEditIndex]?.end
   coasterTargetPitch = anchor?.pitch ?? 0
   coasterTargetBank = anchor?.bank ?? 0
-  trackPieceSelect.value = getConstantPitchPiece(coasterTargetPitch)
+  coasterSelectedKind = 'straight'
+  trackPieceSelect.value = constantPitchPieceKind(coasterTargetPitch)
   updateCoasterBuilder()
 }
 
@@ -3326,7 +3502,8 @@ function deleteCoasterFromSelection(): void {
     const anchor = game.getCoaster(activeCoasterId)?.pieces[coasterEditIndex]?.end
     coasterTargetPitch = anchor?.pitch ?? 0
     coasterTargetBank = anchor?.bank ?? 0
-    trackPieceSelect.value = getConstantPitchPiece(coasterTargetPitch)
+    coasterSelectedKind = 'straight'
+    trackPieceSelect.value = constantPitchPieceKind(coasterTargetPitch)
   }
   showToast(result.message, !result.ok)
   updateCoasterBuilder()
@@ -3337,7 +3514,12 @@ function updateCoasterBuilder(): void {
   if (!coasterBuilderActive) return
 
   const coaster = activeCoasterId ? game.getCoaster(activeCoasterId) : null
-  coasterConstructionTitle.textContent = `${coaster?.name ?? 'Achterbahn 1'} Konstruktion`
+  const typeId = selectedCoasterTypeId()
+  const type = getCoasterType(typeId)
+  pendingCoasterTypeId = typeId
+  coasterTypeName.textContent = type.name
+  coasterTypeHint.textContent = coasterTypeHintText(typeId)
+  coasterConstructionTitle.textContent = `${coaster?.name ?? type.name} Konstruktion`
   if (coaster) {
     coasterEditIndex = Math.max(0, Math.min(coaster.pieces.length - 1, coasterEditIndex))
   }
@@ -3356,61 +3538,103 @@ function updateCoasterBuilder(): void {
   coasterExitButton.disabled = !coaster
   demolishCoasterConstructionButton.hidden = !coaster
   trackPieceSelect.disabled = !coaster
-  const selectedPiece = TRACK_PIECES[trackPieceSelect.value as TrackPieceKind]
-  document.querySelectorAll<HTMLButtonElement>('[data-track-piece]').forEach((button) => {
-    button.classList.toggle('active', button.dataset.trackPiece === trackPieceSelect.value)
-    const definition = TRACK_PIECES[button.dataset.trackPiece as TrackPieceKind]
-    const curveAllowed =
-      !definition?.turn ||
-      Boolean(
-        anchorPiece &&
-          (Math.abs(anchorPiece.end.bank) < 0.001 || Math.sign(anchorPiece.end.bank) === definition.turn),
+  const resolved = resolveNextTrackPiece(
+    currentCoasterWindow(),
+    anchorPiece?.end ?? null,
+    Boolean(coaster),
+  )
+  trackPieceSelect.value = resolved.kind
+  const selectedPiece = TRACK_PIECES[resolved.kind]
+  const directionEntries = listTrackPalettePieces(
+    TRACK_DIRECTION_KINDS,
+    anchorPiece?.end ?? null,
+    Boolean(coaster),
+    typeId,
+  )
+  const specialEntries = listTrackPalettePieces(
+    TRACK_SPECIAL_KINDS,
+    anchorPiece?.end ?? null,
+    Boolean(coaster),
+    typeId,
+  )
+  renderTrackPalette(trackDirectionPalette, directionEntries, coasterSelectedKind)
+  trackDirectionPalette.style.gridTemplateColumns = `repeat(${Math.max(1, directionEntries.length)}, minmax(0, 1fr))`
+  renderTrackPalette(trackSpecialPalette, specialEntries, coasterSelectedKind)
+  trackSpecialToggle.hidden = specialEntries.length === 0
+  if (specialEntries.length === 0) {
+    trackSpecialPalette.hidden = true
+    trackSpecialToggle.setAttribute('aria-expanded', 'false')
+  }
+  const pitchEntries = listTrackPitchChoices(
+    anchorPiece?.end.pitch ?? 0,
+    typeId,
+    anchorPiece?.end.bank ?? 0,
+  ).map((entry) => ({ ...entry, enabled: Boolean(coaster) && entry.enabled }))
+  trackSlopePalette.replaceChildren()
+  if (pitchEntries.length > 0) {
+    trackSlopePalette.insertAdjacentHTML(
+      'beforeend',
+      TRACK_PITCH_BUTTONS.filter((entry) =>
+        pitchEntries.some((choice) => Math.abs(choice.pitch - entry.pitch) < 0.001),
       )
-    const stationAllowed =
-      !definition?.station ||
-      Boolean(
-        anchorPiece &&
-          Math.abs(anchorPiece.end.pitch) < 0.001 &&
-          Math.abs(anchorPiece.end.bank) < 0.001,
+        .map((entry) => {
+          const choice = pitchEntries.find((item) => Math.abs(item.pitch - entry.pitch) < 0.001)
+          const enabled = choice?.enabled ?? false
+          const active = enabled && Math.abs(entry.pitch - coasterTargetPitch) < 0.001
+          const disabledAttrs = enabled ? '' : ' disabled aria-disabled="true"'
+          return `<button type="button" data-track-pitch="${entry.pitch}" class="${active ? 'active' : ''}"${disabledAttrs} title="${entry.title}"><span>${entry.icon}</span><small>${entry.label}</small></button>`
+        })
+        .join(''),
+    )
+  }
+  const chainVisible = isTrackChainLiftVisible(typeId)
+  const chainEnabled = Boolean(
+    coaster &&
+      isTrackChainLiftEligible(
+        selectedPiece.kind,
+        anchorPiece?.end.pitch ?? 0,
+        resolved.options.targetPitch ?? coasterTargetPitch,
+        typeId,
+      ),
+  )
+  if (!chainVisible || !chainEnabled) chainLiftInput.checked = false
+  if (chainVisible) {
+    const chainDisabledAttrs = chainEnabled ? '' : ' disabled aria-disabled="true"'
+    trackSlopePalette.insertAdjacentHTML(
+      'beforeend',
+      `<button id="toggle-chain-lift" type="button" class="${chainEnabled && chainLiftInput.checked ? 'active' : ''}"${chainDisabledAttrs} title="Kettenlift für das nächste geeignete Stück" aria-pressed="${String(chainEnabled && chainLiftInput.checked)}"><span>⛓</span><small>Kette</small></button>`,
+    )
+  }
+  const slopeCount = pitchEntries.length + (chainVisible ? 1 : 0)
+  trackSlopePalette.style.gridTemplateColumns = `repeat(${Math.max(1, slopeCount)}, minmax(0, 1fr))`
+  const bankEntries = listTrackBankChoices(
+    anchorPiece?.end.bank ?? 0,
+    typeId,
+    anchorPiece?.end.pitch ?? 0,
+  ).map((entry) => ({ ...entry, enabled: Boolean(coaster) && entry.enabled }))
+  trackBankPalette.replaceChildren()
+  if (bankEntries.length > 0) {
+    trackBankPalette.insertAdjacentHTML(
+      'beforeend',
+      TRACK_BANK_BUTTONS.filter((entry) =>
+        bankEntries.some((choice) => Math.abs(choice.bank - entry.bank) < 0.001),
       )
-    button.disabled =
-      (!coaster && button.dataset.trackPiece !== 'station') ||
-      !curveAllowed ||
-      (Boolean(definition?.special) && (!anchorPiece || Math.abs(anchorPiece.end.pitch) > .001 || Math.abs(anchorPiece.end.bank - (definition.kind === 'halfLoopDown' ? Math.PI : 0)) > .001)) ||
-      !stationAllowed
-  })
-  document.querySelectorAll<HTMLButtonElement>('[data-track-pitch]').forEach((button) => {
-    const pitch = Number(button.dataset.trackPitch)
-    button.classList.toggle('active', Math.abs(pitch - coasterTargetPitch) < 0.001)
-    button.disabled =
-      !coaster ||
-      !canTransitionTrackPitch(anchorPiece?.end.pitch ?? 0, pitch)
-  })
-  document.querySelectorAll<HTMLButtonElement>('[data-track-bank]').forEach((button) => {
-    const bank = Number(button.dataset.trackBank)
-    button.classList.toggle('active', Math.abs(bank - coasterTargetBank) < 0.001)
-    button.disabled =
-      !coaster ||
-      Boolean(
-        anchorPiece &&
-          Math.abs(anchorPiece.end.bank) > 0.001 &&
-          Math.abs(bank) > 0.001 &&
-          Math.sign(anchorPiece.end.bank) !== Math.sign(bank),
-      )
-  })
+        .map((entry) => {
+          const choice = bankEntries.find((item) => Math.abs(item.bank - entry.bank) < 0.001)
+          const enabled = choice?.enabled ?? false
+          const active = enabled && Math.abs(entry.bank - coasterTargetBank) < 0.001
+          const disabledAttrs = enabled ? '' : ' disabled aria-disabled="true"'
+          return `<button type="button" data-track-bank="${entry.bank}" class="${active ? 'active' : ''}"${disabledAttrs} title="${entry.title}"><span>${entry.icon}</span><small>${entry.label}</small></button>`
+        })
+        .join(''),
+    )
+  }
+  trackBankPalette.style.gridTemplateColumns = `repeat(${Math.max(1, bankEntries.length)}, minmax(0, 1fr))`
   const displayedPiece = coaster ? selectedPiece : TRACK_PIECES.station
   coasterPiecePreview.textContent = `${TRACK_PIECE_ICONS[displayedPiece.kind]} ${getIsoDirectionIcon(
     anchorPiece?.end.heading ?? game.snapshot.buildRotation,
   )}`
-  chainLiftInput.disabled =
-    !coaster ||
-    !selectedPiece?.chainAllowed ||
-    (selectedPiece.kind === 'pitchTransition' &&
-      Math.max(coasterTargetPitch, anchorPiece?.end.pitch ?? 0) <= 0)
-  if (chainLiftInput.disabled) chainLiftInput.checked = false
-  chainLiftButton.disabled = chainLiftInput.disabled
-  chainLiftButton.classList.toggle('active', chainLiftInput.checked)
-  chainLiftButton.setAttribute('aria-pressed', String(chainLiftInput.checked))
+  chainLiftInput.disabled = !chainVisible || !chainEnabled
   const displayedCost =
     displayedPiece.cost +
     (chainLiftInput.checked ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
@@ -3437,7 +3661,13 @@ function updateCoasterBuilder(): void {
         },
         false,
       )
-      view.setCoasterConstructionPreview(stationPreview.points)
+      view.setCoasterConstructionPreview(stationPreview.points, {
+        kind: 'station',
+        chainLift: false,
+        styleId: type.trackStyle,
+        railColor: type.railColor,
+        structureColor: type.color,
+      })
       coasterStatus.textContent =
         `Startpunkt: ${coasterStartCandidate.x}, ${coasterStartCandidate.z} · ` +
         `Ebene ${game.snapshot.buildElevation} · Richtung ${getIsoDirectionIcon(game.snapshot.buildRotation)}. ` +
@@ -3459,12 +3689,18 @@ function updateCoasterBuilder(): void {
   view.setCoasterTrackSelection(selectedTrackPiece?.points ?? [])
   const previewPiece = createTrackPiece(
     'preview',
-    trackPieceSelect.value as TrackPieceKind,
+    resolved.kind,
     anchorPiece.end,
-    chainLiftInput.checked,
-    { targetPitch: coasterTargetPitch, targetBank: coasterTargetBank },
+    resolved.chainLift,
+    resolved.options,
   )
-  view.setCoasterConstructionPreview(previewPiece.points)
+  view.setCoasterConstructionPreview(previewPiece.points, {
+    kind: resolved.kind,
+    chainLift: resolved.chainLift,
+    styleId: type.trackStyle,
+    railColor: type.railColor,
+    structureColor: type.color,
+  })
   const accessState = `${coaster.entrance ? '✓ Eingang' : '○ Eingang'} · ${coaster.exit ? '✓ Ausgang' : '○ Ausgang'}`
   coasterStatus.textContent =
     `Bauanker: ${anchorPiece.end.x}, ${anchorPiece.end.z} · Höhe ${anchorPiece.end.elevation.toFixed(2)} · ` +
@@ -3532,6 +3768,10 @@ function updateContextHelp(): void {
     const dumpArea = dump
       ? connectedWasteDumpStats(game.snapshot.wasteDumpCells ?? [], dump)
       : null
+    const backstage = game.getBackstageCellAt(hoveredCell.x, hoveredCell.z)
+    const backstageStats = backstage
+      ? game.getBandSupplyAt(hoveredCell.x, hoveredCell.z)
+      : undefined
     const ground = groundInfo(game.snapshot, hoveredCell.x, hoveredCell.z)
     const soilName = { field: 'Ackerboden', clay: 'Lehmboden', gravel: 'Kiesboden', sand: 'Sandboden', grass: 'Wiesenboden', urban: 'Stadtboden' }[ground.type]
     const cellX = hoveredCell.x
@@ -3554,6 +3794,10 @@ function updateContextHelp(): void {
         ? formatWasteDumpAreaHover(dumpArea)
       : dump
         ? `Müllablage · ${dump.stored} Säcke gelagert`
+      : backstageStats
+        ? formatBackstageHover(backstageStats)
+      : backstage
+        ? 'Backstage auswählen'
       : height <= -2
         ? 'Wasser'
         : height === -1
@@ -3609,12 +3853,17 @@ function updateContextHelp(): void {
       game.getWasteDumpAt(hoveredCell.x, hoveredCell.z)
         ? 'Diese Müllablage senkt die Attraktivität stark. Reinigungskräfte bringen hierher Müll.'
         : 'Klicken oder ziehen, um eine Müllablage auszuweisen. Sie ist extrem unattraktiv; Müllfahrzeuge brauchen eine Straße daneben.'
-  } else if (tool === 'wasteBin') {
+  } else if (isWasteBin(tool)) {
     contextHelp.textContent =
       'Mülleimer setzen. Gäste im Umkreis von 7 Feldern werfen gebrauchte Dinge hier hinein.'
   } else if (tool === 'stageForecourt') {
     contextHelp.textContent =
       'Klicken oder rechteckig ziehen, um einen Bühnenvorplatz mit 9 Plätzen je Feld auszuweisen.'
+  } else if (tool === 'backstageArea') {
+    const cost = SIMULATION_CONFIG.bandSupply.backstageDesignationCost
+    contextHelp.textContent = backstageEraseMode
+      ? 'Klicken oder ziehen, um Backstage zu entfernen. Getrennte Reste bleiben ausgewiesen, zählen aber nicht.'
+      : `Klicken oder ziehen, um Backstage auszuweisen (${cost} € je Feld). Muss an eine Bühne anschließen.`
   } else if (tool === 'powerCable') {
     contextHelp.textContent = game.getPowerCableAt(hoveredCell.x, hoveredCell.z)
       ? 'Hier liegt ein Kabel. Klick entfernt es, Ziehen verlegt weitere.'
@@ -3661,7 +3910,7 @@ function updateContextHelp(): void {
         : 'Auf der Straße nur als Überweg: Bauhöhe auf Ebene 1 stellen.'
   } else {
     contextHelp.textContent = game.canPlace(tool, hoveredCell.x, hoveredCell.z, scenerySlot(tool, hoveredCell.localX, hoveredCell.localZ, game.snapshot.buildRotation)).message
-    if (isScenery(tool)) contextHelp.textContent += isEdgeScenery(tool) ? ' · Maus: Feldkante · R: nächste Seite' : ' · Maus: Viertelfeld · R: drehen'
+    if (isScenery(tool)) contextHelp.textContent += isEdgeScenery(tool) ? ' · Maus: Feldkante · R: nächste Seite · Shift: Bauhöhe (0,5)' : isLargeScenery(tool) ? ' · Ganzes Feld · R: drehen' : ' · Maus: Viertelfeld · R: drehen'
   }
 }
 
@@ -4043,6 +4292,17 @@ function openEntityInfoForWasteDump(x: number, z: number): void {
   updateEntityPanel()
 }
 
+function openEntityInfoForBackstage(x: number, z: number): void {
+  closeRideBuilder(false)
+  selectedEntity = { type: 'backstage', id: `backstage:${x}:${z}` }
+  entityTab = 'overview'
+  hideVisitorPanel()
+  staffDetails.close()
+  view.setInspectedVehicle(null)
+  entityPanel.hidden = false
+  updateEntityPanel()
+}
+
 function updateEntityPanel(): void {
   requireElement<HTMLElement>('#open-ride-construction').hidden=true
   editStageButton.hidden = true
@@ -4202,6 +4462,33 @@ function updateEntityPanel(): void {
     depotOptions.classList.remove('visible')
     return
   }
+  if (selectedEntity.type === 'backstage') {
+    const match = /^backstage:(-?\d+):(-?\d+)$/.exec(selectedEntity.id)
+    const stats =
+      match && game.getBandSupplyAt(Number(match[1]), Number(match[2]))
+    if (!stats) {
+      closeEntityPanel()
+      return
+    }
+    const inspect = formatBackstageInspect(stats)
+    entityIcon.textContent = '🎤'
+    entityType.textContent = 'Bandversorgung'
+    entityName.textContent = 'Backstage'
+    entityStatus.textContent = inspect.status
+    entityStats.innerHTML = inspect.lines
+      .map((line) => `<span>${line.label} <b>${line.value}</b></span>`)
+      .join('')
+    entityTabs.classList.remove('visible')
+    entityOverview.hidden = false
+    entityDynamics.classList.remove('visible')
+    priceOptions.classList.remove('visible')
+    shirtOptions.classList.remove('visible')
+    applyPriceToKindButton.hidden = true
+    securityOptions.classList.remove('visible')
+    coasterOptions.classList.remove('visible')
+    depotOptions.classList.remove('visible')
+    return
+  }
   if (selectedEntity.type === 'building') {
     const building = game.snapshot.buildings.find((item) => item.id === selectedEntity?.id)
     if (!building) {
@@ -4233,7 +4520,7 @@ function updateEntityPanel(): void {
           ? `Schallrichtung ${getIsoDirectionIcon(building.rotation)} · direkt davor zu laut`
           : building.kind === 'omniSpeaker'
             ? 'Beschallt die Umgebung in alle Richtungen'
-            : building.kind === 'wasteBin'
+            : isWasteBin(building.kind)
               ? `Füllstand ${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity} · Gäste im Umkreis von 7 Feldern nutzen ihn`
             : `Zugang ${getIsoDirectionIcon(building.rotation)} · Ebene ${building.elevation}`)
     const demand = SIMULATION_CONFIG.power.demand[building.kind] ?? 0
@@ -4245,7 +4532,7 @@ function updateEntityPanel(): void {
       <span>Kapazität <b>${building.rideType === 'bungee' ? '1 Springer' : definition.capacity}</b></span>
       ${shopSupplyKind(building.kind) ? `<span>Warenbestand <b>${Math.floor(game.snapshot.festival.infrastructure.shops[building.id]?.[shopSupplyKind(building.kind)!]??0)} / Ziel 40</b></span>` : ''}
       ${
-        building.kind === 'wasteBin'
+        isWasteBin(building.kind)
           ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity}</b></span>`
           : ''
       }
@@ -4328,7 +4615,7 @@ function updateEntityPanel(): void {
     closeEntityPanel()
     return
   }
-  const type = COASTER_TYPES[coaster.typeId]
+  const type = getCoasterType(coaster.typeId)
   const train = coaster.train
   const operationLabels = {
     closed: 'Geschlossen',
@@ -4404,7 +4691,7 @@ function updateCoasterDynamics(coaster: Coaster): void {
   const maximumLongitudinal = hasData
     ? Math.max(...telemetry.samples.map((sample) => sample.longitudinalG))
     : 0
-  const worldUnitMeters = COASTER_TYPES[coaster.typeId].physics.worldUnitMeters
+  const worldUnitMeters = getCoasterType(coaster.typeId).physics.worldUnitMeters
   const trackLengthMeters = coaster.pieces.reduce(
     (total, piece) =>
       total +
@@ -4789,6 +5076,7 @@ const buildCatalogDetail = requireElement<HTMLElement>('#build-catalog-detail')
 const buildCatalogCost = requireElement<HTMLElement>('#build-catalog-cost')
 let lastBuildCategory: BuildCategoryId = 'paths'
 let lastBuildGroup = new Map<BuildCategoryId, string>()
+let lastDecorationTheme: DecorationThemeId = DEFAULT_DECORATION_THEME
 let catalogHoverActive = false
 
 function fillBuildThumbnails(): void {
@@ -4809,6 +5097,15 @@ function fillBuildThumbnails(): void {
     image.setAttribute('aria-hidden', 'true')
     element.replaceChildren(image)
     delete element.dataset.previewSupply
+  })
+  buildGrid.querySelectorAll<HTMLElement>('[data-preview-coaster]').forEach((element) => {
+    const typeId = element.dataset.previewCoaster as CoasterTypeId
+    const image = document.createElement('img')
+    image.src = view.coasterTrainThumbnail(typeId)
+    image.alt = ''
+    image.setAttribute('aria-hidden', 'true')
+    element.replaceChildren(image)
+    delete element.dataset.previewCoaster
   })
 }
 
@@ -4835,6 +5132,84 @@ function showSelectedCatalogStatus(): void {
   showCatalogStatus(active ?? buildGrid.querySelector<HTMLButtonElement>('.tool'))
 }
 
+function catalogTileHtml(item: BuildMenuItem, catalog: boolean): string {
+  const stageTemplate =
+    item.tool === 'stage'
+      ? game.snapshot.festival.stageTemplates?.find(
+          (template) => template.name === game.snapshot.festival.selectedStageTemplate,
+        )
+      : undefined
+  const name = escapeHtml(stageTemplate ? stageTemplate.name : item.name)
+  const buildingCost =
+    item.tool === 'stage'
+      ? formatMoney(BUILDINGS.stage.cost + (stageTemplate ? stageStats(stageTemplate).cost : 0))
+      : item.previewKind && !item.bungee
+        ? formatMoney(BUILDINGS[item.previewKind].cost)
+        : ''
+  const cost = buildingCost || (/€/.test(item.detail) ? item.detail : '')
+  const extraDetail = item.detail !== cost && item.detail !== buildingCost ? item.detail : ''
+  const preview = item.previewKind
+    ? `<span class="building-preview" data-preview-kind="${item.previewKind}">${item.icon}</span>`
+    : item.previewSupply
+      ? `<span class="building-preview" data-preview-supply="${item.previewSupply}">${item.icon}</span>`
+      : item.coasterTypeId
+        ? `<span class="building-preview" data-preview-coaster="${item.coasterTypeId}">${item.icon}</span>`
+        : `<span>${item.icon}</span>`
+  const speedClass =
+    item.tool === 'roadSpeed10'
+      ? ' speed-10'
+      : item.tool === 'roadSpeed30'
+        ? ' speed-30'
+        : item.tool === 'roadSpeed50'
+          ? ' speed-50'
+          : ''
+  const label = [name, extraDetail, cost].filter(Boolean).join(', ')
+  const catalogAttrs = catalog
+    ? ` data-catalog-name="${name}" data-catalog-detail="${escapeHtml(extraDetail)}" data-catalog-cost="${escapeHtml(cost)}" aria-label="${escapeHtml(label)}"`
+    : ''
+  const caption = catalog ? '' : `<em>${name}<small>${item.tool === 'stage' ? cost : item.detail}</small></em>`
+  return `<button class="tool${speedClass}" data-tool="${item.tool}"${item.bungee ? ' data-bungee="true"' : ''}${item.coasterTypeId ? ` data-coaster-type="${item.coasterTypeId}"` : ''}${catalogAttrs} type="button">${preview}${caption}</button>`
+}
+
+function decorationItem(kind: BuildingKind): BuildMenuItem {
+  const building = BUILDINGS[kind]
+  return {
+    tool: kind,
+    name: building.name,
+    icon: building.icon,
+    detail: `${Math.floor(building.cost).toLocaleString('de-DE')} €`,
+    previewKind: kind,
+  }
+}
+
+function renderDecorationThemes(): void {
+  const host = document.querySelector<HTMLElement>('#decoration-themes')
+  if (!host) return
+  host.innerHTML = DECORATION_THEMES.map(
+    (theme) =>
+      `<button type="button" data-decoration-theme="${theme.id}" aria-pressed="${theme.id === lastDecorationTheme}" title="${escapeHtml(theme.rationale)}">${theme.icon}<small>${escapeHtml(theme.label)}</small></button>`,
+  ).join('')
+}
+
+function renderDecorationCatalog(): void {
+  renderDecorationThemes()
+  buildSubtabs.hidden = true
+  buildSubtabs.replaceChildren()
+  const sections = DECORATION_CATEGORY_IDS.flatMap((category) => {
+    const kinds = filterDecorationKinds(lastDecorationTheme, category)
+    if (kinds.length === 0) return []
+    const tiles = kinds.map((kind) => catalogTileHtml(decorationItem(kind), true)).join('')
+    return [
+      `<section class="decoration-category" data-decoration-category="${category}"><h3>${DECORATION_CATEGORY_LABELS[category]}</h3><div class="decoration-category-grid">${tiles}</div></section>`,
+    ]
+  })
+  buildGrid.innerHTML = sections.length
+    ? sections.join('')
+    : '<p class="decoration-empty">Keine Deko in diesem Thema.</p>'
+  fillBuildThumbnails()
+  showSelectedCatalogStatus()
+}
+
 function renderBuildGrid(categoryId: BuildCategoryId, groupId?: string): void {
   const category = buildCategoryById(categoryId)
   const group =
@@ -4844,7 +5219,15 @@ function renderBuildGrid(categoryId: BuildCategoryId, groupId?: string): void {
   catalogHoverActive = false
   buildMenuTitle.textContent = category.label
   buildMenuPanel.classList.toggle('build-menu-catalog', catalog)
+  buildMenuPanel.classList.toggle('build-menu-decoration', categoryId === 'decoration')
   buildCatalogStatus.hidden = !catalog
+  document.querySelectorAll<HTMLElement>('.build-extra').forEach((extra) => {
+    extra.hidden = extra.id !== `build-extra-${category.extra ?? ''}`
+  })
+  if (categoryId === 'decoration') {
+    renderDecorationCatalog()
+    return
+  }
   if (category.groups.length > 1) {
     buildSubtabs.hidden = false
     buildSubtabs.innerHTML = category.groups
@@ -4857,51 +5240,11 @@ function renderBuildGrid(categoryId: BuildCategoryId, groupId?: string): void {
     buildSubtabs.hidden = true
     buildSubtabs.replaceChildren()
   }
-  document.querySelectorAll<HTMLElement>('.build-extra').forEach((extra) => {
-    extra.hidden = extra.id !== `build-extra-${category.extra ?? ''}`
-  })
   const attractionsExtra = document.querySelector<HTMLElement>('#build-extra-attractions')
   if (attractionsExtra && categoryId === 'attractions') {
     attractionsExtra.hidden = group.id !== 'rides'
   }
-  buildGrid.innerHTML = group.items
-    .map((item) => {
-      const stageTemplate =
-        item.tool === 'stage'
-          ? game.snapshot.festival.stageTemplates?.find(
-              (template) => template.name === game.snapshot.festival.selectedStageTemplate,
-            )
-          : undefined
-      const name = escapeHtml(stageTemplate ? stageTemplate.name : item.name)
-      const buildingCost =
-        item.tool === 'stage'
-          ? formatMoney(BUILDINGS.stage.cost + (stageTemplate ? stageStats(stageTemplate).cost : 0))
-          : item.previewKind && !item.bungee
-            ? formatMoney(BUILDINGS[item.previewKind].cost)
-            : ''
-      const cost = buildingCost || (/€/.test(item.detail) ? item.detail : '')
-      const extraDetail = item.detail !== cost && item.detail !== buildingCost ? item.detail : ''
-      const preview = item.previewKind
-        ? `<span class="building-preview" data-preview-kind="${item.previewKind}">${item.icon}</span>`
-        : item.previewSupply
-          ? `<span class="building-preview" data-preview-supply="${item.previewSupply}">${item.icon}</span>`
-          : `<span>${item.icon}</span>`
-      const speedClass =
-        item.tool === 'roadSpeed10'
-          ? ' speed-10'
-          : item.tool === 'roadSpeed30'
-            ? ' speed-30'
-            : item.tool === 'roadSpeed50'
-              ? ' speed-50'
-              : ''
-      const label = [name, extraDetail, cost].filter(Boolean).join(', ')
-      const catalogAttrs = catalog
-        ? ` data-catalog-name="${name}" data-catalog-detail="${escapeHtml(extraDetail)}" data-catalog-cost="${escapeHtml(cost)}" aria-label="${escapeHtml(label)}"`
-        : ''
-      const caption = catalog ? '' : `<em>${name}<small>${item.tool === 'stage' ? cost : item.detail}</small></em>`
-      return `<button class="tool${speedClass}" data-tool="${item.tool}"${item.bungee ? ' data-bungee="true"' : ''}${catalogAttrs} type="button">${preview}${caption}</button>`
-    })
-    .join('')
+  buildGrid.innerHTML = group.items.map((item) => catalogTileHtml(item, catalog)).join('')
   fillBuildThumbnails()
   if (catalog) showSelectedCatalogStatus()
 }
@@ -4963,6 +5306,10 @@ function openBuildCategory(categoryId: BuildCategoryId, groupId?: string): void 
   }
   if (pathWindowOpen) closePathEditor()
   const category = buildCategoryById(categoryId)
+  if (categoryId === 'decoration') {
+    const toolTheme = decorationThemeOf(game.snapshot.selectedTool)
+    if (toolTheme) lastDecorationTheme = toolTheme
+  }
   renderBuildGrid(categoryId, groupId ?? lastBuildGroup.get(categoryId))
   buildMenuPanel.hidden = false
   buildMenuPanel.classList.toggle('dock-right', category.dock === 'right')
@@ -4982,12 +5329,14 @@ function activateBuildTool(button: HTMLButtonElement): void {
     ? Math.max(4, Math.min(200, Number(requireElement<HTMLInputElement>('#bungee-height').value) || 20))
     : null
   if (tool === 'coaster') {
-    openCoasterBuilder()
+    lastBuildGroup.set('attractions', 'coasters')
+    openCoasterBuilder(null, button.dataset.coasterType as CoasterTypeId | undefined)
     return
   }
   if (pathWindowOpen && tool !== 'path') closePathEditor()
   if (coasterBuilderActive) closeCoasterBuilder()
   cancelAccessAreaDraw()
+  if (tool === 'backstageArea') backstageEraseMode = false
   game.setBuildElevation(0)
   game.setTool(tool)
   if (tool === 'road' || (tool === 'path' && !pathEditorActive)) supplyPlanner.activateWay(tool)
@@ -5017,6 +5366,13 @@ buildSubtabs.addEventListener('click', (event) => {
   const button = (event.target as Element).closest<HTMLButtonElement>('[data-build-group]')
   if (!button || !lastBuildCategory) return
   openBuildCategory(lastBuildCategory, button.dataset.buildGroup)
+})
+document.querySelector('#decoration-themes')?.addEventListener('click', (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>('[data-decoration-theme]')
+  const theme = button?.dataset.decorationTheme
+  if (!button || !theme || !isDecorationThemeId(theme)) return
+  lastDecorationTheme = theme
+  if (lastBuildCategory === 'decoration') renderDecorationCatalog()
 })
 buildGrid.addEventListener('click', (event) => {
   const button = (event.target as Element).closest<HTMLButtonElement>('[data-tool]')
@@ -5842,8 +6198,33 @@ document.querySelectorAll<HTMLButtonElement>('[data-logistics-tab]').forEach((bu
     logisticsOverview.hidden = tab !== 'overview'
     logisticsSupply.hidden = tab !== 'supply'
     logisticsRoutes.hidden = tab !== 'routes'
-    if (tab === 'supply') updateLogisticsPanel(true)
+    logisticsBandSupply.hidden = tab !== 'band-supply'
+    if (tab === 'supply' || tab === 'band-supply') updateLogisticsPanel(true)
   })
+})
+logisticsBandSupply.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button')
+  if (!button) return
+  if (button.id === 'band-supply-paint') {
+    backstageEraseMode = false
+    game.setTool('backstageArea')
+    updateLogisticsPanel(true)
+    return
+  }
+  if (button.id === 'band-supply-erase') {
+    backstageEraseMode = true
+    game.setTool('backstageArea')
+    updateLogisticsPanel(true)
+    return
+  }
+  if (button.id === 'band-supply-parking') {
+    game.setTool('tourBusParking')
+    return
+  }
+  const stageId = button.dataset.bandSupplyFocus
+  if (!stageId) return
+  const stage = game.snapshot.buildings.find((building) => building.id === stageId)
+  if (stage) view.focusWorldPosition(stage.x + 0.5, stage.z + 0.5)
 })
 logisticsOverview.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button')
@@ -6154,7 +6535,7 @@ function setMapOverlay(
 }
 
 entityPriceInput.addEventListener('change', () => {
-  if (!selectedEntity || selectedEntity.type === 'depot' || selectedEntity.type === 'access' || selectedEntity.type === 'vehicle' || selectedEntity.type === 'wasteDump') return
+  if (!selectedEntity || selectedEntity.type === 'depot' || selectedEntity.type === 'access' || selectedEntity.type === 'vehicle' || selectedEntity.type === 'wasteDump' || selectedEntity.type === 'backstage') return
   if (selectedEntity.type === 'coaster') {
     game.updateCoasterPrice(selectedEntity.id, Number(entityPriceInput.value))
   } else {
@@ -6281,7 +6662,27 @@ coasterRotateButton.addEventListener('click', () => {
   updateCoasterBuilder()
 })
 
-trackPieceSelect.addEventListener('change', () => updateCoasterBuilder())
+function selectCoasterPaletteKind(kind: TrackPieceKind, fromSpecials: boolean): void {
+  const end = openCoasterEnd()
+  if (!isTrackPalettePieceEnabled(kind, end, Boolean(end), selectedCoasterTypeId())) return
+  applyCoasterWindow(applyConstructionKind(currentCoasterWindow(), kind, end))
+  trackPieceSelect.value = kind
+  if (fromSpecials) {
+    trackSpecialPalette.hidden = true
+    trackSpecialToggle.setAttribute('aria-expanded', 'false')
+    trackSpecialToggle.textContent = `Speziell: ${TRACK_PIECES[kind].name}`
+  } else {
+    trackSpecialToggle.textContent = 'Speziell …'
+  }
+  updateCoasterBuilder()
+}
+
+trackPieceSelect.addEventListener('change', () => {
+  applyCoasterWindow(
+    applyConstructionKind(currentCoasterWindow(), trackPieceSelect.value as TrackPieceKind, openCoasterEnd()),
+  )
+  updateCoasterBuilder()
+})
 trackSpecialToggle.addEventListener('click', () => {
   trackSpecialPalette.hidden = !trackSpecialPalette.hidden
   trackSpecialToggle.setAttribute(
@@ -6289,37 +6690,34 @@ trackSpecialToggle.addEventListener('click', () => {
     String(!trackSpecialPalette.hidden),
   )
 })
-document.querySelectorAll<HTMLButtonElement>('[data-track-piece]').forEach((button) => {
-  button.addEventListener('click', () => {
-    const kind = button.dataset.trackPiece as TrackPieceKind | undefined
-    if (!kind) return
-    trackPieceSelect.value = kind
-    if (button.closest('#track-special-palette')) {
-      trackSpecialPalette.hidden = true
-      trackSpecialToggle.setAttribute('aria-expanded', 'false')
-      trackSpecialToggle.textContent = `Speziell: ${TRACK_PIECES[kind].name}`
-    } else {
-      trackSpecialToggle.textContent = 'Speziell …'
-    }
+trackDirectionPalette.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-track-piece]')
+  if (!button?.dataset.trackPiece || button.disabled) return
+  selectCoasterPaletteKind(button.dataset.trackPiece as TrackPieceKind, false)
+})
+trackSpecialPalette.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-track-piece]')
+  if (!button?.dataset.trackPiece || button.disabled) return
+  selectCoasterPaletteKind(button.dataset.trackPiece as TrackPieceKind, true)
+})
+trackSlopePalette.addEventListener('click', (event) => {
+  const chain = (event.target as HTMLElement).closest<HTMLButtonElement>('#toggle-chain-lift')
+  if (chain) {
+    if (chain.disabled) return
+    chainLiftInput.checked = !chainLiftInput.checked
     updateCoasterBuilder()
-  })
+    return
+  }
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-track-pitch]')
+  if (!button || button.disabled) return
+  trackSpecialToggle.textContent = 'Speziell …'
+  selectCoasterPitch(Number(button.dataset.trackPitch))
 })
-document.querySelectorAll<HTMLButtonElement>('[data-track-pitch]').forEach((button) => {
-  button.addEventListener('click', () => {
-    trackSpecialToggle.textContent = 'Speziell …'
-    selectCoasterPitch(Number(button.dataset.trackPitch))
-  })
-})
-document.querySelectorAll<HTMLButtonElement>('[data-track-bank]').forEach((button) => {
-  button.addEventListener('click', () => {
-    trackSpecialToggle.textContent = 'Speziell …'
-    selectCoasterBank(Number(button.dataset.trackBank))
-  })
-})
-chainLiftButton.addEventListener('click', () => {
-  if (chainLiftButton.disabled) return
-  chainLiftInput.checked = !chainLiftInput.checked
-  updateCoasterBuilder()
+trackBankPalette.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-track-bank]')
+  if (!button || button.disabled) return
+  trackSpecialToggle.textContent = 'Speziell …'
+  selectCoasterBank(Number(button.dataset.trackBank))
 })
 chainLiftInput.addEventListener('change', () => updateCoasterBuilder())
 coasterBuildButton.addEventListener('click', () => buildCoasterPiece())

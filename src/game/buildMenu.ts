@@ -1,5 +1,13 @@
 import { BUILDING_KINDS, BUILDINGS } from './catalog'
 import type { BuildingKind, Tool } from './catalog'
+import { TRACK_PIECES, type CoasterTypeId } from './coasters'
+import { listPlayableCoasterCatalogTypes } from './coasterTypes'
+import {
+  DECORATION_CATEGORY_IDS,
+  DECORATION_CATEGORY_LABELS,
+  decorationKindsInCategory,
+} from './decoration'
+import { SIMULATION_CONFIG } from './simulationConfig'
 
 export const BUILD_CATEGORY_IDS = [
   'bulldoze',
@@ -29,6 +37,7 @@ export type BuildMenuItem = {
   previewKind?: BuildingKind
   previewSupply?: 'delivery' | 'supply'
   bungee?: boolean
+  coasterTypeId?: CoasterTypeId
 }
 
 export type BuildSubgroup = {
@@ -62,9 +71,47 @@ function toolItem(
   name: string,
   icon: string,
   detail: string,
-  extra?: Pick<BuildMenuItem, 'bungee' | 'previewKind' | 'previewSupply'>,
+  extra?: Pick<BuildMenuItem, 'bungee' | 'previewKind' | 'previewSupply' | 'coasterTypeId'>,
 ): BuildMenuItem {
   return { tool, name, icon, detail, ...extra }
+}
+
+/** Fallback label only — catalog tiles render `coasterVehiclePreview` thumbnails. */
+const COASTER_TYPE_ICONS: Record<CoasterTypeId, string> = {
+  classicSteel: 'sitDownSteel',
+  wooden: 'wooden',
+  looping: 'sitDownSteel',
+  corkscrew: 'sitDownSteel',
+  hyper: 'sitDownSteel',
+  twister: 'bmSitdown',
+  hyperTwister: 'bmSitdown',
+  verticalDrop: 'giga',
+  giga: 'giga',
+  lsmLaunched: 'launched',
+  limLaunched: 'launched',
+  inverted: 'invertV',
+  compactInverted: 'invertV',
+  flying: 'flying',
+  standUp: 'standUp',
+  junior: 'junior',
+  steelWildMouse: 'mouse',
+  woodenWildMouse: 'mouse',
+  mineTrain: 'mine',
+  bobsled: 'bobsled',
+  suspendedSwinging: 'swinging',
+}
+
+export function coasterCatalogIcon(typeId: CoasterTypeId): string {
+  return COASTER_TYPE_ICONS[typeId]
+}
+
+function coasterTypeItems(): BuildMenuItem[] {
+  const stationCost = `${Math.floor(TRACK_PIECES.station.cost).toLocaleString('de-DE')} €`
+  return listPlayableCoasterCatalogTypes().map((entry) =>
+    toolItem('coaster', entry.name, COASTER_TYPE_ICONS[entry.id], `ab ${stationCost}`, {
+      coasterTypeId: entry.id,
+    }),
+  )
 }
 
 export const BUILD_CATEGORIES: readonly BuildCategory[] = [
@@ -105,93 +152,11 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
     icon: '🌳',
     dock: 'left',
     extra: 'decoration',
-    groups: [
-      {
-        id: 'plants',
-        label: 'Pflanzen',
-        items: [
-          buildingItem('tree'),
-          buildingItem('hedge'),
-          buildingItem('shrub'),
-          buildingItem('flowerbed'),
-          buildingItem('planter'),
-          buildingItem('hangingBasket'),
-          buildingItem('cactusPot'),
-        ],
-      },
-      {
-        id: 'furniture',
-        label: 'Möbel',
-        items: [
-          buildingItem('bench'),
-          buildingItem('picnicTable'),
-          buildingItem('parasol'),
-          buildingItem('hayBale'),
-          buildingItem('loungeChair'),
-          buildingItem('beanBag'),
-        ],
-      },
-      {
-        id: 'lights',
-        label: 'Licht',
-        items: [
-          buildingItem('lighting'),
-          buildingItem('lightBalloon'),
-          buildingItem('stringLights'),
-          buildingItem('lanternPole'),
-          buildingItem('tikiTorch'),
-          buildingItem('discoBall'),
-        ],
-      },
-      {
-        id: 'festival',
-        label: 'Fest',
-        items: [
-          buildingItem('statue'),
-          buildingItem('banner'),
-          buildingItem('bunting'),
-          buildingItem('festivalSign'),
-          buildingItem('totem'),
-          buildingItem('flagPole'),
-          buildingItem('kegStack'),
-          buildingItem('inflatable'),
-          buildingItem('prayerFlags'),
-          buildingItem('fireBowl'),
-          buildingItem('rock'),
-          buildingItem('streamers'),
-          buildingItem('pinwheel'),
-          buildingItem('windSock'),
-          buildingItem('inflatableCactus'),
-          buildingItem('giantMushroom'),
-          buildingItem('crystalTotem'),
-          buildingItem('welcomeArch'),
-        ],
-      },
-      {
-        id: 'props',
-        label: 'Kulisse',
-        items: [
-          buildingItem('trafficCone'),
-          buildingItem('crateStack'),
-          buildingItem('oilDrum'),
-          buildingItem('chalkboard'),
-          buildingItem('gnome'),
-          buildingItem('windChimes'),
-          buildingItem('photoFrame'),
-          buildingItem('decoSpeaker'),
-          buildingItem('boombox'),
-        ],
-      },
-      {
-        id: 'fence',
-        label: 'Zaun',
-        items: [
-          buildingItem('fence'),
-          buildingItem('picketFence'),
-          buildingItem('ropeFence'),
-        ],
-      },
-    ],
+    groups: DECORATION_CATEGORY_IDS.map((id) => ({
+      id,
+      label: DECORATION_CATEGORY_LABELS[id],
+      items: decorationKindsInCategory(id).map((kind) => buildingItem(kind)),
+    })),
   },
   {
     id: 'paths',
@@ -219,12 +184,16 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         label: 'Fahrgeschäfte',
         items: [
           buildingItem('ride'),
-          toolItem('coaster', 'Achterbahn', '🎢', 'ab 450 €'),
           toolItem('ride', 'Bungee-Turm', '🪂', '1.200 € + 25 €/Meter', {
             bungee: true,
             previewKind: 'ride',
           }),
         ],
+      },
+      {
+        id: 'coasters',
+        label: 'Achterbahn',
+        items: coasterTypeItems(),
       },
       {
         id: 'stalls',
@@ -313,10 +282,25 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         items: [buildingItem('busStop'), buildingItem('busDepot')],
       },
       {
+        id: 'band',
+        label: 'Bandversorgung',
+        items: [
+          toolItem(
+            'backstageArea',
+            'Backstage ausweisen',
+            '🎤',
+            `${SIMULATION_CONFIG.bandSupply.backstageDesignationCost} € je Feld · begehbar und bebaubar`,
+          ),
+          buildingItem(
+            'tourBusParking',
+            `${Math.floor(BUILDINGS.tourBusParking.cost).toLocaleString('de-DE')} € · nur Backstage`,
+          ),
+        ],
+      },
+      {
         id: 'waste',
         label: 'Müll',
         items: [
-          buildingItem('wasteBin'),
           toolItem('wasteDump', 'Müllablage', '🗑️', 'sehr unattraktiv'),
           buildingItem('wasteDepot'),
           buildingItem('specialDepot'),
@@ -403,6 +387,7 @@ export function placeableTools(): Tool[] {
     'camping',
     'medicalArea',
     'wasteDump',
+    'backstageArea',
     'road',
     'parkingArea',
     'roadDirection',

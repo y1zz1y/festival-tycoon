@@ -8,12 +8,13 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Arten, Tools, Anzeige | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` (`trafficLight`, `pathBarrier`, `deliveryYard`, `supplyDepot`, `staffGate`) |
-| Bau-Menü / Kategorien | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` (keine stillen Fallbacks). Abriss bleibt als Kategorie für die Toolbar, öffnet aber kein Raster. Wege öffnen `#path-construction` mit Schnellzugriff auf `pathBarrier`, `staffGate`, `securityGate`. `isCatalogBuildCategory`: Deko, Attraktionen und Logistik als Bildraster mit Hover-Fußzeile. Camping unter Attraktionen; Krankenhaus (`ambulanceGarage`, `medicalArea`) unter Logistik. |
+| Arten, Tools, Anzeige | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` (`trafficLight`, `pathBarrier`, `deliveryYard`, `supplyDepot`, `staffGate`, `tourBusParking`, `backstageArea`) |
+| Bau-Menü / Kategorien | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` (keine stillen Fallbacks). Abriss bleibt als Kategorie für die Toolbar, öffnet aber kein Raster. Wege öffnen `#path-construction` mit Schnellzugriff auf `pathBarrier`, `staffGate`, `securityGate`. `isCatalogBuildCategory`: Deko, Attraktionen und Logistik als Bildraster mit Hover-Fußzeile. Camping unter Attraktionen; Krankenhaus (`ambulanceGarage`, `medicalArea`); Bandversorgung (`backstageArea`, `tourBusParking`) unter Logistik. |
 | Bauhöhe | `src/game/GameState.ts`, `src/game/placementPreview.ts` | `adjustBuildElevation`, `setBuildElevation` (0–6, **Halbstufen 0.5**, wie Wege). `snapBuildElevation` / `stepBuildElevation`. |
 | Kosten / Upkeep / Appeal | `src/game/simulationConfig.ts` | `economy.buildings` |
 | Platzieren, prüfen, abräumen | `src/game/GameState.ts`, `src/view/picking.ts` | `canPlace`, `place`, `bulldoze`, `getAt`, `resolvePickedBuilding`; Abriss räumt auch Parkplätze und Krankenfelder inkl. Restbelegung (`clearDesignatedOccupancyAt`) |
-| Deko-Slots, Overlap, Transforms | `src/game/scenery.ts` | `scenerySlot`, `sceneryOverlaps`, `SCENERY_KINDS` (Viertel plus Kante: Hecke, Banner, Wimpel, Lichterkette, Gebetsfahnen, Lattenzaun, Absperrseil, Luftschlangen) |
+| Deko-Slots, Overlap, Transforms | `src/game/scenery.ts` | `scenerySlot`, `sceneryOverlaps`, `SCENERY_KINDS` (Viertel plus Kante: Hecke, Banner, Wimpel, Lichterkette, Gebetsfahnen, Lattenzaun, Absperrseil, Luftschlangen, Leuchtband, Kette, Runenbanner, Jahrmarktlichter, Eiszapfenzaun, Rohrgitter) |
+| Themen, Katalogfilter | `src/game/decoration.ts`, [decoration.md](decoration.md) | `DECORATION_THEMES`, `filterDecorationKinds` |
 | Bühnen-Grundfläche | `src/game/stageDesign.ts` | `buildingFootprint`, `occupiesBuildingCell` |
 | Bühnenstandort | `src/game/stageSite.ts` | `stageSiteIssue` |
 | Ride-Eingang/Ausgang | `src/game/GameState.ts` | `setRideAccess`, `canPlaceRideAccess` |
@@ -39,6 +40,11 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 - Personaleingang (`staffGate`) sitzt wie das Personentor auf der
   Ausgangskante der Baurichtung (`staffGateDirection`, Vorschau mit
   Richtungspfeil). Fehlt das Feld, bleibt ein altes mittiges Tor gültig.
+- `tourBusParking` (**Parkplatz für den Tourbus**) nur auf ausgewiesenem
+  Backstage und neben einer Straße. Backstage (`backstageArea`, Katalog
+  **Backstage ausweisen**) ist ein Overlay, kein `WayType` und keine
+  Camping-Sperre: Figuren laufen darauf, Gebäude und Deko bleiben
+  platzierbar. Fehlendes `decorationSlot` bleibt Legacy-Vollfeld.
 - Imbiss, Getränkestand, Maskottchen- und T-Shirt-Stand sind Inselbuden:
   Gäste kaufen an der gedrehten Vorderseite, Nachschub gilt von allen vier
   Nachbarfeldern (Weg oder Bühnenvorplatz). Die Drehung bleibt für Modell
@@ -58,11 +64,14 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
   Feuerschale plus Kulisse (Leitkegel, Kisten, Ölfass, Windrad, Windsack,
   Blumenampel, Kaktus, Zwerg, Windspiel, Kreidetafel, Liegestuhl, Sitzsack,
   Fackel, Deko-Box, Boombox, Selfie-Rahmen, Diskokugel, Luftkaktus, Riesenpilz,
-  Kristallstele, Willkommensbogen). `prayerFlags`, `picketFence`, `ropeFence`
-  und `streamers` teilen die Kanten-Slots mit Banner/Wimpel/Hecke.
-  `lightBalloon` ist ein Vollfeld wie `lighting` (Wege bleiben begehbar),
-  braucht Strom und das Tagesplan-Angebot Lampen. Deko-Fackel und Diskokugel
-  sind nur Mesh plus Atmosphäre, keine extra PointLights.
+  Kristallstele, Willkommensbogen) und themische Sätze (Wüste, Wald, Neon,
+  Industrie, Tropen, Mystik, Zirkus, Alpin, Arktis, Steampunk). Kanten-Slots
+  teilen Banner/Wimpel/Hecke/`prayerFlags`/`picketFence`/`ropeFence`/`streamers`
+  plus `glowTape`, `chainFence`, `occultBanner`, `carnivalBulbs`, `iceFence`,
+  `pipeRail`. `lightBalloon` ist ein Vollfeld wie `lighting` (Wege bleiben
+  begehbar), braucht Strom und das Tagesplan-Angebot Lampen. Deko-Fackel,
+  Diskokugel und neue Themenlampen sind nur Mesh plus Atmosphäre, keine extra
+  PointLights. Themenfilter und Stückliste: [decoration.md](decoration.md).
 - Attraktivität je Art: `SIMULATION_CONFIG.atmosphere.sources` (`beauty`,
   `party`, `range`). Kleine billige Stücke (Leitkegel 2) bleiben lokal;
   Mittelstücke (Selfie-Rahmen 11) und Blickfänge (Willkommensbogen 18,
@@ -72,7 +81,8 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 ## Tests
 
 `tests/scenery.ts` (Slots, Overlaps, Legacy, neue Arten, Attraktivität je Kind,
-Stapel/Reichweite, unbekannte Katalog-Arten). `tests/picking.ts` (Mesh-Treffer vs. Nachbar/Kachel). `tests/rideAccess.ts` (Tore).
+Stapel/Reichweite, unbekannte Katalog-Arten). `tests/decoration.ts` (Themenliste,
+Kategoriefilter, Legacy-Vollfeld, `scenery.ts`-Platzierung). `tests/picking.ts` (Mesh-Treffer vs. Nachbar/Kachel). `tests/rideAccess.ts` (Tore).
 `tests/operations.ts` (Buden von der Seite und von hinten; Personaleingang-Kante; Stand-Queue-Spuren; Parkplatz- und Krankenfeld-Abriss inkl. Restbelegung).
 `tests/shopGoods.ts` (Allgemeine Waren, Maskottchen, Shirt-Farbe/Schnitt).
 `tests/stageTickets.ts` / `tests/stageInteraction.ts` (Bühnenfläche).
@@ -85,3 +95,39 @@ Bodenkachel der Vorschau). Draw-Call-Grenzen: `tests/performanceGuards.ts`.
 Aktualisieren, wenn ein `BuildingKind` / `Tool` / Scenery-Typ dazukommt oder
 sich Platzierungsregeln, Footprints oder Slot-Semantik ändern. UI-Menüpunkte
 zusätzlich in `docs/ui.md` und Spielertext in `README.md`.
+
+## Themen-Baugrößen und Verkleidungen (0.1.125)
+
+Neue große Themenobjekte verwenden `decorationSlot: 4` als Vollfeld.
+Alte Viertel 0–3 und fehlende Legacy-Slots behalten ihre Fläche.
+`decorationWalls.ts` ergänzt 40 Fassadenarten: 10 Materialien mit Vollwand,
+Halbwand, Fenster und Tür. Wände sind 1 Feld breit, 1/0,5 hoch und entlang
+exakter Feldkanten stapelbar. `findCollision` verhindert doppelte gemeinsame
+Kanten über Nachbarfelder; Gebäudeverkleidung ist erlaubt. Wände sind dekorativ,
+keine Zugangskontrolle. Katalog/Modelle/Tests: [decoration.md](decoration.md).
+
+## Dächer und Wegmöbel (0.1.126)
+
+20 Dacharten und zehn Themen-Mülleimer in `decorationWalls.ts`; Menü Deko.
+Dächer belegen Slot 4; Wände/Dächer ohne automatische Stützen. Neue
+`pathFurniture.ts` teilt die automatische Kantenwahl von Bank/Eimer zwischen
+GameState und Vorschau. Möbel vermeiden Wegfortsetzungen auf derselben Ebene
+und wählen untereinander verschiedene Kanten. Eimer dürfen wie bisher auch
+auf Flächen ohne freie Außenkante stehen. Alle Eimerarten teilen Müllbetrieb.
+
+`src/game/contextDemolition.ts` wählt Abrissziele nach Baumodus, Building-ID
+und Straßenlage. `tests/decoration.ts` prüft Deko-/Wegtrennung und den Erhalt
+der unteren Straßenlage beim Entfernen einer oberen.
+
+## Dachkeile (0.1.128)
+
+30 zusätzliche Wand-Kinds: `wall<Style>SlopeLeft/SlopeRight/RoofEnd`.
+Kantenstücke mit reservierter Höhe 0,5 und zur Dachunterseite passender Kontur.
+Unter Deko/Thema/Wände, frei drehbar und mit Schrägdächern kombinierbar.
+
+## Straßenbänke und Eimer-Richtung (0.1.131)
+
+`pathFurnitureRotation` prüft Fußwege und Autostraßen auf derselben Bauhöhe.
+Bänke sind auf beiden Wegen an einer freien Außenkante zulässig; sonst bleibt
+die Platzierung abgewiesen. Eimer berücksichtigen die aktuelle `buildRotation`
+als bevorzugte freie Kante, damit **R** ihre sichtbare Front steuert.

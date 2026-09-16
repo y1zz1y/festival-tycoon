@@ -1,3 +1,4 @@
+import { draggedBuildElevation, buildElevationAbove } from '../src/game/placementPreview'
 import assert from 'node:assert/strict'
 import { GameState } from '../src/game/GameState'
 import {
@@ -21,6 +22,14 @@ function blankGame(): GameState {
 }
 
 export function testPlacementPreview(): void {
+  assert.equal(draggedBuildElevation(1, 400, 399), 1)
+  assert.equal(draggedBuildElevation(1, 400, 353), 1)
+  assert.equal(draggedBuildElevation(1, 400, 352), 1.5)
+  assert.equal(draggedBuildElevation(1, 400, 448), .5)
+  assert.equal(draggedBuildElevation(1, 400, 400), 1)
+  assert.equal(buildElevationAbove(1.45, .5), 1)
+  assert.equal(buildElevationAbove(1.5, .5), 1)
+
   assert.equal(BUILD_ELEVATION_STEP, 0.5)
   assert.equal(snapBuildElevation(0), 0)
   assert.equal(snapBuildElevation(0.24), 0)

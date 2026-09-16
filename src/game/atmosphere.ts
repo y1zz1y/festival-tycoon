@@ -1,3 +1,4 @@
+import { isWasteBin } from './decorationWalls'
 import { stageStats, type StageDesign } from './stageDesign'
 import { WORLD_SIZE } from './catalog'
 import type { BuildingKind } from './catalog'
@@ -153,7 +154,7 @@ export class AtmosphereSystem {
         sourceConfig[building.kind as keyof typeof sourceConfig] ?? null
       if (!definition) return
       const fillRatio =
-        building.kind === 'wasteBin'
+        isWasteBin(building.kind)
           ? Math.min(
               1,
               (building.wasteFill ?? 0) / SIMULATION_CONFIG.waste.binCapacity,
@@ -164,7 +165,7 @@ export class AtmosphereSystem {
         z: building.z,
         elevation: building.elevation,
         beauty:
-          building.kind === 'wasteBin'
+          isWasteBin(building.kind)
             ? definition.beauty +
               fillRatio *
                 (SIMULATION_CONFIG.waste.binFullBeauty - definition.beauty)

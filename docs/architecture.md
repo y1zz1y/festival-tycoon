@@ -8,9 +8,11 @@ Netzwerk-Clients mutieren die Welt nicht lokal dauerhaft; der Host entscheidet.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Spielzustand, Tick, Platzierung, Besucher-Orchestrierung | `src/game/GameState.ts` | `GameState`, `GameSnapshot` (aktuell `version: 27`) |
+| Spielzustand, Tick, Platzierung, Besucher-Orchestrierung | `src/game/GameState.ts` | `GameState`, `GameSnapshot` (aktuell `version: 29`) |
+| Bandversorgung / Backstage | `src/game/bandSupply.ts`, `src/game/bandActors.ts`, `src/game/bandLooks.ts` | Graph, Stats, Tourbus / Personaleingang, Bühnen-/Backstage-Kostüm |
 | Balancing (Tempo, Kosten, Wahrscheinlichkeiten) | `src/game/simulationConfig.ts` | `SIMULATION_CONFIG` |
 | Gebäudetypen, Tools, Anzeigedaten | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` |
+| Themen-Deko | `src/game/decoration.ts` | Katalogfilter, keine Snapshot-Felder |
 | Spielerbefehl → Methode | `src/net/commands.ts` | `applyGameCommand` |
 | Befehls- und Delta-Typen | `src/net/protocol.ts` | `GameCommand`, Snapshots |
 | UI, Eingaben, Systemverkabelung | `src/main.ts` | Event-Binding, Tool-Leiste |

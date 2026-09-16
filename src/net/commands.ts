@@ -60,6 +60,8 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.designateWasteDump(command.cells)
     case 'designateStageForecourt':
       return game.designateStageForecourt(command.cells)
+    case 'designateBackstageArea':
+      return game.designateBackstageArea(command.cells, command.enabled ?? true)
     case 'designatePowerCable':
       return game.designatePowerCable(command.x, command.z, command.enabled)
     case 'designatePowerCableArea':

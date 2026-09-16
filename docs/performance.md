@@ -1,5 +1,85 @@
 # Simulation and rendering performance
 
+## Local parking lookup (0.1.124, 2026-09-16)
+
+The supplied Base64 save was decoded to the ignored, private fixture
+`saves/performance-cars-user-20260915.json`. Its original attachment is unchanged.
+It starts with 1026 visitors and 266 vehicles, including 130 driving and 128
+parked. Despite the exit-cache fix below, `claimAdjacentFreeParking` still scanned
+every parking bay for every approaching car, twice on moving ticks. At 1x it
+consumed 13,807 ms over 120 ticks (32,136 calls, inclusive).
+
+The existing parking occupancy index now stores live parking-cell references.
+`getAdjacentParkingCells` queries just four neighbors before the unchanged access,
+height, signal and X/Z-priority checks. Reservation changes are visible immediately;
+list replacement, length changes and construction invalidation rebuild the index.
+Exact coordinates reject aliases from the packed spatial key. No tick scheduling,
+admission, movement speed, parking rules or rendering detail changed.
+
+Same supplied fixture, `PROFILE_METHODS=1`, 120 ticks, median/p95/max CPU ms:
+- 1x: 153.48 / 180.99 / 276.16 before; 39.03 / 49.98 / 97.63 after; 1025 visitors.
+- 3x: 161.67 / 194.66 / 266.64 before; 44.71 / 59.49 / 71.78 after; 1021 visitors.
+- 8x: 173.57 / 206.34 / 250.14 before; 53.73 / 74.06 / 97.61 after; 1005 visitors.
+
+Final snapshot SHA256 matches before/after at every speed. Remaining blocked-turn
+route planning costs about 3100 ms across the 120 ticks. This fix removes the
+dominant parking scan, but does not establish stable browser FPS or eliminate all
+traffic-related CPU load. Browser FPS was not measured.
+
+Mandatory `rtest3` control, same instrumentation and 120 ticks:
+- 1x: 10.60 / 29.94 / 58.03 before; 9.45 / 22.78 / 51.52 after; 1107 visitors.
+- 3x: 22.61 / 41.64 / 48.30 before; 19.97 / 34.06 / 42.32 after; 1144 visitors.
+- 8x: 27.37 / 48.10 / 65.39 before; 25.53 / 41.58 / 53.09 after; 1201 visitors.
+All three final control hashes also match. Timing varies with local machine load.
+The 1200-tick `rtest3` follow-up (same instrumentation, median/p95/max) measured
+1x 22.65 / 53.65 / 70.72 ms (1077 visitors), 3x 22.20 / 44.03 / 66.75
+(746), and 8x 19.32 / 33.47 / 54.21 (65). The nearly empty 8x endpoint is
+not evidence of steady crowded performance.
+Regression tests cover the four-neighbor work bound, reservation visibility,
+construction/removal and coordinate aliases. `npm test` and `npm run build` pass;
+the existing Vite bundle-size warning remains.
+
+## Repeated car exit searches (0.1.123, 2026-09-15)
+
+The local `test-3` slot reproduces the traffic slowdown with 208 vehicles,
+197 initially parked, 647 road cells and 217 visitors after 120 ticks. At 1x,
+50,073 exit queries consumed 8,566 ms (inclusive) in 120 ticks; logistics took
+9,872 ms. Cars with no valid exit repeated the same complete searches each tick.
+`findReachableRoadExit` now memoizes static successes and failures by road graph,
+resolved road layer, initial heading and U-turn policy. There are at most eight
+entries per road layer. Graph replacement immediately invalidates results;
+occupancy-dependent searches bypass the cache. Callers receive independent route
+copies. Movement, reservations, traffic signals and time progression are unchanged.
+
+Same starting slot, `PROFILE_METHODS=1`, 120 ticks, median/p95/max CPU ms:
+- 1x: 82.64 / 99.45 / 167.89 before; 10.88 / 17.37 / 139.82 after.
+- 3x: 86.24 / 104.35 / 142.92 before; 12.10 / 19.67 / 94.23 after.
+- 8x: 84.01 / 101.68 / 115.76 before; 12.12 / 18.38 / 65.65 after.
+
+All three final snapshot hashes match before/after exactly, with 217 visitors.
+The 1200-tick traffic follow-up retains 217 visitors at every speed:
+1x 10.40 / 14.54 / 129.93 ms, 3x 11.81 / 16.08 / 111.27 ms,
+8x 12.52 / 17.31 / 91.85 ms (median/p95/max, same instrumentation).
+The first search still costs work; this removes repeated searches, not every spike.
+Personal saves were read only. Existing unrelated working-tree changes were retained.
+
+Mandatory `rtest3` control, same instrumentation, 120 ticks (median/p95/max ms):
+- 1x: 11.29 / 27.69 / 71.76 before; 10.49 / 26.73 / 64.18 after; 1107 visitors.
+- 3x: 23.86 / 39.68 / 50.63 before; 22.72 / 39.01 / 49.78 after; 1144 visitors.
+- 8x: 29.96 / 51.88 / 66.79 before; 27.82 / 57.56 / 95.92 after; 1201 visitors.
+
+All three control snapshot hashes also match exactly. This mostly populated,
+low-traffic control does not demonstrate a general tick-speed improvement.
+The 1200-tick `rtest3` follow-up measured 28.53 / 66.61 / 204.40 ms at 1x
+(1077 visitors), 26.46 / 47.36 / 206.93 at 3x (746), and
+23.84 / 42.81 / 67.87 at 8x (65). Local concurrent development/load limits
+comparisons, and late festival closure changes population. These are CPU timings,
+not browser FPS; browser rendering was not measured in this pass.
+
+`performanceGuards.ts` covers cached success/failure, route-copy ownership,
+dynamic blockers, heading/U-turn separation and immediate arrow-edit invalidation.
+Full `npm test` and `npm run build` pass (existing Vite bundle-size warning).
+
 Index of all system docs: `docs/README.md`. Tick rules: `docs/simulation.md`.
 Batching and lights: `docs/rendering.md`. How to run the suites: `docs/testing.md`.
 Update this file when changing scheduling or rendering architecture.

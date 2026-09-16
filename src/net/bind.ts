@@ -120,6 +120,15 @@ export function enableMultiplayerCommands(game: GameState): void {
     game.designateStageForecourt,
     (cells) => ({ type: 'designateStageForecourt', cells: [...cells] }),
   )
+  game.designateBackstageArea = wrap(
+    game,
+    game.designateBackstageArea,
+    (cells, enabled = true) => ({
+      type: 'designateBackstageArea',
+      cells: [...cells],
+      enabled,
+    }),
+  )
   game.designatePowerCable = wrap(
     game,
     game.designatePowerCable,

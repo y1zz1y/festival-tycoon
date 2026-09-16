@@ -105,3 +105,10 @@ verletzte Insassen noch im Fahrzeug).
 Aktualisieren, wenn Incident-Arten, Müllkapazitäten, Ticker-Regeln, Eimer-Darstellung,
 Reinigungs-Eimer-Priorität, Gäste-Müll-bei-vollem-Eimer, Verletzten-Zuweisung, Panikformeln oder Pyro-Trigger ändern.
 Bühnen-Pyro zusätzlich in `docs/stages.md`. Sanitäter/Krankenwagen in `docs/staff.md`.
+
+## Themen-Mülleimer (0.1.126)
+
+`decorationWalls.ts:isWasteBin` fasst Klassik und zehn Themen-Eimer zusammen.
+Normalisierung, Gästesuche/-entsorgung, Reinigung/Träger und Inspektion nutzen
+sämtliche Varianten mit derselben Kapazität und `wasteFill`. Menü: Deko/Möbel.
+Die sichtbaren Füllkartons folgen der automatischen Wegkanten-Drehung.

@@ -1,3 +1,9 @@
+import { FacadeReveal } from './facadeReveal'
+import { isDecorationCatalogKind } from '../game/decoration'
+import { createWayStructure, indexWayStructures, wayStructurePlan, type WayStructureCell } from './wayStructures'
+import { pathFurnitureRotation } from '../game/pathFurniture'
+import { isWasteBin } from '../game/decorationWalls'
+import { wallSpec, isFacade } from '../game/decorationWalls'
 import { updateStageBand } from './stageBand'
 import { isScenery, isEdgeScenery, scenerySlot, sceneryTransform } from '../game/scenery'
 import { createRetroBuilding, batchRetroBuildings } from './retroBuildings'
@@ -82,18 +88,22 @@ import type { BuildingKind } from '../game/catalog'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { isFestivalOfferActive } from '../game/dayPlan'
 import {
-  COASTER_TYPES,
   computeTrackFrame,
+  getCoasterType,
   getSmoothedCoasterPiecePoints,
   sampleCoasterTrack,
   smoothTrackDisplayPoints,
+  type CoasterTrackStyleId,
+  type CoasterTypeId,
+  type TrackPieceKind,
 } from '../game/coasters'
 import { createBungeeModel, animateBungee, setBungeeJumper } from './bungee'
 import { createNudeAnatomy, createPersonGeometry, PersonDetailsView, personSeed, personStyle } from './pixelPeople'
 import { SouvenirPropsView } from './souvenirMeshes'
 import { mascotVariant } from '../game/shopGoods'
 import { createCoasterSpecial } from './coasterSpecials'
-import { COASTER_CAR_SEATS, createCoasterCar } from './coasterCars'
+import { createStyledCoasterTrackPiece } from './coasterTrack'
+import { createCoasterCar, getCoasterCarSeats } from './coasterCars'
 import type { Coaster, TrackPoint } from '../game/coasters'
 import type { CashEffect, GameSnapshot, PlacedBuilding, Visitor } from '../game/GameState'
 import { usesGateEdgePlacement } from '../game/accessControl'
@@ -116,6 +126,8 @@ import {
 import { LogisticsView } from './LogisticsView'
 import { zoneCellRange, zoneKey } from '../game/staffZones'
 import { WasteView } from './WasteView'
+import { BackstageView } from './BackstageView'
+import { BandActorView } from './BandActorView'
 import { PowerView } from './PowerView'
 import { LaserView } from './LaserView'
 import {
@@ -126,7 +138,7 @@ import {
 } from '../game/terrain'
 import { wayOverlapsRoadGrade } from '../game/wayElevation'
 import {
-  placementGroundCell,
+  placementGroundCell, draggedBuildElevation, buildElevationAbove,
   showsPlacementGroundMarker,
 } from '../game/placementPreview'
 
@@ -169,7 +181,6 @@ type DragEndHandler = () => void
 type CoasterPieceHandler = (coasterId: string, pieceIndex: number) => void
 
 const CONSTRUCTION_GRID_CELLS = 7
-const CONSTRUCTION_HEIGHT_STEP_PX = 22
 const GROUND_ONLY_TOOLS = new Set([
   'inspect',
   'bulldoze',
@@ -279,7 +290,7 @@ const WALK_BLOCKED_KINDS = new Set<string>([
   'food', 'toilet', 'ride', 'alcohol', 'mascot', 'shirt', 'securityGate', 'tree', 'hedge', 'shrub', 'rock', 'statue',
   'picnicTable', 'parasol', 'fence', 'stage', 'directionalSpeaker', 'omniSpeaker', 'ambulanceGarage',
   'busStop', 'busDepot', 'wasteDepot', 'specialDepot', 'generator', 'backupGenerator', 'foh', 'delayTower',
-  'videoWall', 'laserShow', 'fireworkBattery',
+  'videoWall', 'laserShow', 'fireworkBattery', 'tourBusParking',
 ])
 export type PersonPreviewMode = 'map' | 'front'
 type PersonPreviewSlot = {
@@ -354,6 +365,7 @@ export class WorldView {
   private terrainShape: TerrainShape | null = null
   private actorTerrainHeight = (x: number, z: number, y: number): number => this.terrainShape?.actorHeight(x, z, y) ?? y
   private buildings = new Group()
+  private facadeReveal: FacadeReveal | null = null
   private staticBuildingBatches = new Group()
   private treeTrunkGeometry = new CylinderGeometry(0.1, 0.14, 0.8, 8)
   private treeCrownGeometry = new ConeGeometry(0.52, 1.25, 9)
@@ -407,6 +419,8 @@ export class WorldView {
   private attractivenessView = new AtmosphereView(0.3, true)
   private partyMoodView = new AtmosphereView(0.82, false)
   private forecourtView = new ForecourtView()
+  private backstageView = new BackstageView()
+  private bandActorView = new BandActorView()
   private logisticsView = new LogisticsView()
   private accessControlView = new AccessControlView()
   private supplyChainView = new SupplyChainView()
@@ -498,6 +512,29 @@ export class WorldView {
   private groundTileMarker = createGroundTileMarker()
   private shiftHeightActive = false
   private shiftHeightY = 0
+  private shiftStartElevation = 0
+  private shiftLastElevation = 0
+  private heightHandler: ((height: number, cell: CellPosition | null) => void) | null = null
+  private rightClickHandler: ((cell: CellPosition | null, picked: CellPosition | null) => boolean) | null = null
+  setConstructionHandlers(height: (height: number, cell: CellPosition | null) => void, rightClick: (cell: CellPosition | null, picked: CellPosition | null) => boolean): void {
+    this.heightHandler = height; this.rightClickHandler = rightClick
+  }
+  private beginHeightDrag(y: number): void {
+    this.shiftHeightActive = true
+    this.shiftHeightY = y
+    const snapshot = this.currentSnapshot, cell = this.hoveredCell
+    let height = snapshot?.buildElevation ?? 0
+    if (snapshot && cell) {
+      const objects = snapshot.buildings.filter(b => occupiesBuildingCell(b, cell.x, cell.z))
+      const roads = snapshot.logistics.roadCells.filter(r => r.x === cell.x && r.z === cell.z)
+      const tops = objects.map(b => b.elevation + BUILDINGS[b.kind].height)
+      for (const road of roads) tops.push((road.elevation ?? getTerrainHeight(snapshot.terrain, cell.x, cell.z)) + 1)
+      if (tops.length) height = buildElevationAbove(Math.max(...tops), getTerrainHeight(snapshot.terrain, cell.x, cell.z))
+    }
+    this.shiftStartElevation = this.shiftLastElevation = height
+    this.heightHandler?.(height, cell)
+    this.updateConstructionGrid()
+  }
   private sceneryPreview = new Group()
   private sceneryPreviewKind = ''
   private placementValidator: ((kind: BuildingKind, x: number, z: number, slot?: number) => boolean) | null = null
@@ -528,6 +565,25 @@ export class WorldView {
     light.position.set(-3, 5, 4); scene.add(light)
     const camera = new OrthographicCamera(-.9, .9, .9, -.9, .1, 20)
     camera.position.set(3, 2.8, 4); camera.lookAt(0, .55, 0)
+    return this.renderThumbnail(scene, model, camera)
+  }
+
+  coasterTrainThumbnail(typeId: CoasterTypeId): string {
+    const type = getCoasterType(typeId)
+    const scene = new Scene()
+    scene.background = new Color(0x314943)
+    const model = createCoasterCar(type.carColor, type.trainStyle, type.accentColor)
+    scene.add(model, new AmbientLight(0xffffff, 2.1))
+    const light = new DirectionalLight(0xfff0ce, 3.1)
+    light.position.set(-2.4, 4.2, 3.4)
+    scene.add(light)
+    const hanging =
+      type.trainStyle === 'invertV' || type.trainStyle === 'flying' || type.trainStyle === 'swinging'
+    const camera = hanging
+      ? new OrthographicCamera(-0.62, 0.62, 0.42, -0.82, 0.1, 20)
+      : new OrthographicCamera(-0.55, 0.55, 0.55, -0.55, 0.1, 20)
+    camera.position.set(0.86, hanging ? 0.22 : 0.52, 1.08)
+    camera.lookAt(0, hanging ? -0.18 : 0.08, 0)
     return this.renderThumbnail(scene, model, camera)
   }
 
@@ -736,6 +792,8 @@ export class WorldView {
       this.incidentView.group,
       this.staffView.group,
       this.forecourtView.group,
+      this.backstageView.group,
+      this.bandActorView.group,
       this.attractivenessView.group,
       this.partyMoodView.group,
       this.logisticsView.group,
@@ -765,6 +823,7 @@ export class WorldView {
   private lastVisualRevision = ''
 
   update(snapshot: Readonly<GameSnapshot>, renderAlpha = 1, worldRevision?: number): void {
+    if (isDecorationCatalogKind(snapshot.selectedTool)) this.facadeReveal?.reset()
     const revision = `${snapshot.simTick}:${worldRevision}:${snapshot.selectedTool}:${this.logisticsMode}:${this.crowdingView.group.visible}:${this.attractivenessView.group.visible}:${this.partyMoodView.group.visible}`
     const dataChanged = worldRevision === undefined || snapshot !== this.lastVisualSnapshot || revision !== this.lastVisualRevision
     this.lastVisualSnapshot = snapshot
@@ -774,7 +833,7 @@ export class WorldView {
       this.cachedFootwayFingerprint = JSON.stringify(Object.entries(snapshot.festival.infrastructure.ground).filter(([, g]) => g.footway).map(([k, g]) => [k, g.footway]))
       this.groundSurfaceFingerprint = JSON.stringify(Object.entries(snapshot.festival.infrastructure.ground).filter(([, g]) => g.compacted || g.surface).map(([k, g]) => [k, g.compacted, g.surface]))
     }
-    const fingerprint = dataChanged ? this.buildingFingerprintOf(snapshot.buildings) + this.cachedFootwayFingerprint : this.buildingFingerprint
+    const fingerprint = dataChanged ? this.buildingFingerprintOf(snapshot.buildings) + this.cachedFootwayFingerprint + JSON.stringify(snapshot.logistics.roadCells.map(r => [r.x,r.z,r.elevation,r.roadSlope,r.roadSlopeDirection])) : this.buildingFingerprint
 
     this.currentSnapshot = snapshot
     this.syncInterpolation(snapshot, renderAlpha)
@@ -798,7 +857,7 @@ export class WorldView {
       this.buildingFingerprint = fingerprint
       this.rebuildBuildings(snapshot.buildings)
       this.wasteBins = snapshot.buildings.filter(
-        (building) => building.kind === 'wasteBin',
+        (building) => isWasteBin(building.kind),
       )
       this.lastPowerKey = ''
       this.renderer.shadowMap.needsUpdate = true
@@ -826,8 +885,21 @@ export class WorldView {
     this.incidentView.update(snapshot.incidents)
     this.staffView.update(snapshot.staff, this.renderAlpha, snapshot.simTick, this.actorTerrainHeight)
     if (dataChanged) this.forecourtView.update(snapshot.stageForecourtCells)
+    if (dataChanged) {
+      this.backstageView.update(
+        snapshot.backstageCells ?? [],
+        new Set(snapshot.bandSupply?.activeKeys ?? []),
+      )
+    }
+    this.bandActorView.update(
+      snapshot.bandActors ?? [],
+      this.renderAlpha,
+      snapshot.simTick,
+      this.actorTerrainHeight,
+    )
     if (dataChanged) this.attractivenessView.update(snapshot.attractiveness)
     if (dataChanged) this.partyMoodView.update(snapshot.partyMood)
+    if (dataChanged) this.logisticsView.setStructurePaths(snapshot.buildings.filter(b => b.kind === 'path').map(b => ({ x:b.x, z:b.z, elevation:b.elevation, slope:b.pathSlope ?? 0, direction:b.pathSlopeDirection ?? 0, road:false })))
     this.logisticsView.update(snapshot.logistics, (x, z) =>
       getTerrainHeight(snapshot.terrain, x, z),
       (x, z) => { const g = groundInfo(snapshot, x, z); if (g.roadway) return wayInfo(snapshot, x, z, 'road').color; return !this.logisticsMode ? 0x50555a : g.surface === 'paved' ? 0x50555a : g.surface === 'gravel' ? 0x8f948b : 0x8b7551 },
@@ -910,6 +982,7 @@ export class WorldView {
   }
 
   render(): void {
+    this.facadeReveal?.update(performance.now())
     this.renderer.render(this.scene, this.walkMode ? this.walkCamera : this.camera)
   }
 
@@ -965,6 +1038,8 @@ export class WorldView {
     this.incidentView.invalidate()
     this.staffView.invalidate()
     this.forecourtView.invalidate()
+    this.backstageView.invalidate()
+    this.bandActorView.invalidate()
     this.logisticsView.invalidate()
     this.accessControlView.invalidate()
     this.powerView.invalidate()
@@ -1513,16 +1588,64 @@ export class WorldView {
     })
   }
 
-  setCoasterConstructionPreview(points: readonly TrackPoint[]): void {
+  setCoasterConstructionPreview(
+    points: readonly TrackPoint[],
+    options?: {
+      kind?: TrackPieceKind
+      chainLift?: boolean
+      styleId?: CoasterTrackStyleId
+      railColor?: number
+      structureColor?: number
+    },
+  ): void {
     disposeChildren(this.coasterPreview)
     if (points.length < 2) return
     const preview = smoothTrackDisplayPoints(points)
-    const material = new MeshStandardMaterial({
+    const ghostMaterial = new MeshStandardMaterial({
       color: 0x65e6ee,
       transparent: true,
-      opacity: 0.65,
+      opacity: 0.72,
       depthWrite: false,
+      roughness: 0.42,
+      metalness: 0.18,
+      emissive: 0x1a6a72,
+      emissiveIntensity: 0.22,
     })
+    if (options?.styleId && options.kind) {
+      const frames = preview.map((point, index) => {
+        const previous = preview[Math.max(0, index - 1)] ?? point
+        const next = preview[Math.min(preview.length - 1, index + 1)] ?? point
+        return computeTrackFrame(
+          {
+            x: next.x - previous.x,
+            y: next.y - previous.y,
+            z: next.z - previous.z,
+          },
+          point.bank ?? 0,
+          point.pitch ?? 0,
+          point.frameHeading,
+        )
+      })
+      const track = createStyledCoasterTrackPiece({
+        styleId: options.styleId,
+        kind: options.kind,
+        chainLift: Boolean(options.chainLift),
+        display: preview,
+        frames,
+        centerPoints: preview.map((point) => new Vector3(point.x + 0.5, point.y + 0.24, point.z + 0.5)),
+        trackHeightsByCell: new Map(),
+        railColor: options.railColor,
+        structureColor: options.structureColor,
+      })
+      track.traverse((object) => {
+        if (object instanceof Mesh) {
+          object.material = ghostMaterial
+          object.castShadow = false
+        }
+      })
+      this.coasterPreview.add(track)
+      return
+    }
     ;[-0.15, 0.15].forEach((offset) => {
       const railPoints = preview.map((point, index) => {
         const previous = preview[Math.max(0, index - 1)] ?? point
@@ -1552,7 +1675,7 @@ export class WorldView {
             6,
             false,
           ),
-          material,
+          ghostMaterial,
         ),
       )
     })
@@ -1708,6 +1831,7 @@ export class WorldView {
         if (gate) {hash=Math.imul(hash,33)+gate.x;hash=Math.imul(hash,33)+gate.z;hash=Math.imul(hash,33)+gate.y}
       }
       hash = Math.imul(hash, 33) + Math.round((item.pathSlope ?? 0) * 2) + 4
+      hash = Math.imul(hash, 33) + (item.pathSlopeDirection ?? 0)
       hash = Math.imul(hash, 33) + (item.queueDirection ?? 0)
       hash = Math.imul(hash, 33) + (item.queueEntryDirection ?? 0)
       hash = Math.imul(hash, 33) + (item.queueSplit ? 7 : 1)
@@ -1746,6 +1870,8 @@ export class WorldView {
     this.soundWaveGroups = []
     this.nightLightMaterials = []
     this.nightLightBuildingIds = []
+    const paths = new Map(items.filter(b => b.kind === 'path').map(b => [b.id, { x: b.x, z: b.z, elevation: b.elevation, slope: b.pathSlope ?? 0, direction: b.pathSlopeDirection ?? 0, road: false } satisfies WayStructureCell]))
+    const wayIndex = indexWayStructures([...paths.values(), ...(this.currentSnapshot?.logistics.roadCells ?? []).map(r => ({ x:r.x, z:r.z, elevation:r.elevation ?? getTerrainHeight(this.currentSnapshot!.terrain,r.x,r.z), slope:r.roadSlope ?? 0, direction:r.roadSlopeDirection ?? 0, road:true }))])
     const fohVariants = this.fohVariants(items)
     items.forEach((item) => {
       if (
@@ -1784,8 +1910,16 @@ export class WorldView {
         model.rotation.y = placement.rotation * Math.PI / 2
         model.scale.set(placement.sx, placement.sy, placement.sz)
       }
-      if (isScenery(item.kind) && this.terrainShape && this.currentSnapshot) {
+      if (!isFacade(item.kind) && isScenery(item.kind) && this.terrainShape && this.currentSnapshot) {
         model.position.y += this.terrainShape.sample(model.position.x, model.position.z) - getTerrainHeight(this.currentSnapshot.terrain, item.x, item.z)
+      }
+      if (item.kind === 'path' && !this.pathSharesRoadGrade(item)) {
+        const cell = paths.get(item.id)!
+        const plan = wayStructurePlan(cell, wayIndex, getTerrainHeight(this.currentSnapshot!.terrain, item.x, item.z))
+        // Queue lanes already have their own rails, but retain the shared slim supports.
+        if (item.pathType === 'queue') plan.raised = false
+        const structure = createWayStructure(cell, plan)
+        if (structure) model.add(structure)
       }
       if (item.kind === 'path' && item.pathType === 'queue') {
         this.addQueueBarriers(model, item, items)
@@ -1804,6 +1938,12 @@ export class WorldView {
     })
     this.staticBuildingBatches = batchRetroBuildings(this.buildings)
     this.buildings.add(this.staticBuildingBatches)
+    for (const batch of this.staticBuildingBatches.children) {
+      if (!(batch instanceof Mesh) || !batch.userData.facade) continue
+      this.facadeReveal ??= new FacadeReveal(batch.material as MeshStandardMaterial)
+      batch.material = this.facadeReveal.material
+    }
+    this.facadeReveal?.setTarget(null)
   }
 
   private pathSharesRoadGrade(item: PlacedBuilding): boolean {
@@ -1833,7 +1973,7 @@ export class WorldView {
     }
     const detailed = createRetroBuilding(kind, variant)
     if (detailed) {
-      this.addSupport(detailed, elevation, .24)
+      if (!isFacade(kind)) this.addSupport(detailed, elevation, .24)
       return detailed
     }
     const group = new Group()
@@ -1849,12 +1989,12 @@ export class WorldView {
         pathType === 'queue'
           ? new MeshStandardMaterial({ color: 0x4f8870, roughness: 0.8 })
           : material
-      pathMaterial.map = wayTexture(wayType)
+      pathMaterial.map = wayTexture(wayType ?? 'footPaved')
       const surface = new Group()
       const crossing = onRoad && pathType !== 'queue'
-      const pathLength = pathSlope === 0 ? 0.94 : Math.hypot(1, pathSlope)
+      const pathLength = Math.hypot(1, pathSlope)
       const path = new Mesh(
-        new BoxGeometry(crossing ? 0.42 : 0.94, crossing ? 0.04 : 0.08, pathLength),
+        new BoxGeometry(crossing ? 0.42 : 1, crossing ? 0.04 : 0.08, pathLength),
         pathMaterial,
       )
       path.position.y = crossing ? 0.03 : 0.04
@@ -1868,7 +2008,6 @@ export class WorldView {
         )
       }
       group.add(surface)
-      this.addSupport(group, elevation, 0.16)
       return group
     }
 
@@ -1908,7 +2047,7 @@ export class WorldView {
       fence.add(foot)
       fence.position.z = 0.42
       group.add(fence)
-    } else if (kind === 'wasteBin') {
+    } else if (isWasteBin(kind)) {
       const can = new Mesh(
         new CylinderGeometry(0.11, 0.13, 0.38, 10),
         new MeshStandardMaterial({ color: 0x3f4a3a, roughness: 0.7 }),
@@ -2430,7 +2569,7 @@ export class WorldView {
       })
     })
     coasters.forEach((coaster) => {
-      const type = COASTER_TYPES[coaster.typeId]
+      const type = getCoasterType(coaster.typeId)
       const coasterGroup = new Group()
       coasterGroup.userData.coasterId = coaster.id
       const smoothedPieces = getSmoothedCoasterPiecePoints(coaster)
@@ -2466,139 +2605,24 @@ export class WorldView {
         const centerPoints = display.map(
           (point) => new Vector3(point.x + 0.5, point.y + 0.24, point.z + 0.5),
         )
-        const railMaterial = new MeshStandardMaterial({
-          color: piece.chainLift || piece.kind === 'station' ? 0xe8a735 : type.railColor,
-          metalness: 0.45,
-          roughness: 0.45,
+        const trackPiece = createStyledCoasterTrackPiece({
+          styleId: type.trackStyle,
+          kind: piece.kind,
+          chainLift: piece.chainLift,
+          display,
+          frames,
+          centerPoints,
+          trackHeightsByCell,
+          railColor: type.railColor,
+          structureColor: type.color,
         })
-        ;[-0.15, 0.15].forEach((offset) => {
-          const railPoints = [
-            ...(prevGhost
-              ? [
-                  new Vector3(
-                    prevGhost.x + 0.5,
-                    prevGhost.y + 0.24,
-                    prevGhost.z + 0.5,
-                  ).add(
-                    new Vector3(
-                      (frames[0]?.right.x ?? 1) * offset,
-                      (frames[0]?.right.y ?? 0) * offset,
-                      (frames[0]?.right.z ?? 0) * offset,
-                    ),
-                  ),
-                ]
-              : []),
-            ...centerPoints.map((point, index) => {
-              const right = frames[index]?.right ?? { x: 1, y: 0, z: 0 }
-              return point
-                .clone()
-                .add(new Vector3(right.x, right.y, right.z).multiplyScalar(offset))
-            }),
-            ...(nextGhost
-              ? [
-                  new Vector3(
-                    nextGhost.x + 0.5,
-                    nextGhost.y + 0.24,
-                    nextGhost.z + 0.5,
-                  ).add(
-                    new Vector3(
-                      (frames.at(-1)?.right.x ?? 1) * offset,
-                      (frames.at(-1)?.right.y ?? 0) * offset,
-                      (frames.at(-1)?.right.z ?? 0) * offset,
-                    ),
-                  ),
-                ]
-              : []),
-          ]
-          if (railPoints.length < 2) return
-          const curve = new CatmullRomCurve3(railPoints)
-          const startT = prevGhost && railPoints.length > 2 ? 1 / (railPoints.length - 1) : 0
-          const endT = nextGhost && railPoints.length > 2 ? 1 - 1 / (railPoints.length - 1) : 1
-          const sampleCount = Math.max(8, display.length * 3)
-          const sampled = Array.from({ length: sampleCount + 1 }, (_, index) =>
-            curve.getPoint(startT + (endT - startT) * (index / sampleCount)),
-          ).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z))
-          if (sampled.length < 2) return
-          const rail = new Mesh(
-            new TubeGeometry(
-              new CatmullRomCurve3(sampled),
-              Math.max(4, sampled.length),
-              0.035,
-              6,
-              false,
-            ),
-            railMaterial,
-          )
-          rail.castShadow = true
-          rail.userData.coasterId = coaster.id
-          rail.userData.pieceIndex = pieceIndex
-          coasterGroup.add(rail)
+        trackPiece.userData.coasterId = coaster.id
+        trackPiece.userData.pieceIndex = pieceIndex
+        trackPiece.traverse((object) => {
+          object.userData.coasterId = coaster.id
+          object.userData.pieceIndex = pieceIndex
         })
-        centerPoints
-          .filter((_, index) => index % 2 === 0)
-          .forEach((point, sleeperIndex) => {
-            const frame = frames[sleeperIndex * 2]
-            if (!frame) return
-            const forwardPoint =
-              display[Math.min(display.length - 1, sleeperIndex * 2 + 1)] ??
-              display[sleeperIndex * 2]
-            const currentPoint = display[sleeperIndex * 2]
-            if (!forwardPoint || !currentPoint) return
-            const forward = new Vector3(
-              forwardPoint.x - currentPoint.x,
-              forwardPoint.y - currentPoint.y,
-              forwardPoint.z - currentPoint.z,
-            ).normalize()
-            const sleeper = new Mesh(
-              new BoxGeometry(0.4, 0.035, 0.055),
-              new MeshStandardMaterial({ color: type.color, roughness: 0.65 }),
-            )
-            sleeper.position.copy(point)
-            sleeper.quaternion.setFromRotationMatrix(
-              new Matrix4().makeBasis(
-                new Vector3(frame.right.x, frame.right.y, frame.right.z),
-                new Vector3(frame.up.x, frame.up.y, frame.up.z),
-                forward,
-              ),
-            )
-            sleeper.userData.coasterId = coaster.id
-            sleeper.userData.pieceIndex = pieceIndex
-            coasterGroup.add(sleeper)
-          })
-
-        if (piece.kind === 'station') {
-          const platform = new Mesh(
-            new BoxGeometry(0.94, 0.14, 0.94),
-            new MeshStandardMaterial({ color: 0x59666c, roughness: 0.8 }),
-          )
-          platform.position.set(
-            piece.start.x + 0.5,
-            piece.start.elevation + 0.07,
-            piece.start.z + 0.5,
-          )
-          platform.receiveShadow = true
-          platform.userData.coasterId = coaster.id
-          platform.userData.pieceIndex = pieceIndex
-          coasterGroup.add(platform)
-        }
-
-        centerPoints
-          .filter((_, index) => index % 4 === 0)
-          .forEach((point, supportIndex) => {
-            if (point.y <= 0.3) return
-            const source = display[supportIndex * 4]
-            const cellKey = `${Math.round(source?.x ?? point.x - 0.5)}:${Math.round(source?.z ?? point.z - 0.5)}`
-            const lowerTrack = (trackHeightsByCell.get(cellKey) ?? []).some(
-              (height) => height < point.y - 0.45 && height > 0.15,
-            )
-            if (lowerTrack) return
-            const support = new Mesh(
-              new CylinderGeometry(0.035, 0.055, point.y - 0.18, 6),
-              new MeshStandardMaterial({ color: type.color, roughness: 0.7 }),
-            )
-            support.position.set(point.x, (point.y - 0.18) / 2, point.z)
-            coasterGroup.add(support)
-          })
+        coasterGroup.add(trackPiece)
       })
 
       for (const kind of ['entrance', 'exit'] as const) {
@@ -2648,7 +2672,7 @@ export class WorldView {
       const activePiece = coaster.train.state === 'running' ? sampleCoasterTrack(coaster, coaster.train.distance)?.pieceId : null
       const trackGroup = this.coasterTracks.children.find(g => g.userData.coasterId === coaster.id)
       for (const piece of trackGroup?.children ?? []) if (piece.userData.effect) piece.userData.effect.visible = piece.userData.pieceId === activePiece && !this.logisticsMode
-      if (!model || model.userData.cars !== coaster.train.cars) {
+      if (!model || model.userData.cars !== coaster.train.cars || model.userData.trainStyle !== getCoasterType(coaster.typeId).trainStyle) {
         if (model) {
           this.coasterTrains.remove(model)
           disposeObject3D(model)
@@ -2657,7 +2681,9 @@ export class WorldView {
         this.trainModels.set(coaster.id, model)
         this.coasterTrains.add(model)
       }
-      const physics = COASTER_TYPES[coaster.typeId].physics
+      const type = getCoasterType(coaster.typeId)
+      const physics = type.physics
+      const hang = type.trainStyle === 'invertV' || type.trainStyle === 'flying' || type.trainStyle === 'swinging' ? -0.12 : 0
       const leadDistance =
         this.interpolatedTrainDistance(coaster) +
         Math.max(0, coaster.train.cars - 1) * physics.carSpacing
@@ -2667,7 +2693,7 @@ export class WorldView {
           leadDistance - index * physics.carSpacing,
         )
         if (!sample) return
-        car.position.set(sample.point.x + 0.5, sample.point.y + 0.3, sample.point.z + 0.5)
+        car.position.set(sample.point.x + 0.5, sample.point.y + 0.3 + hang, sample.point.z + 0.5)
         this.trainForward.set(
           sample.tangent.x,
           sample.tangent.y,
@@ -2709,20 +2735,25 @@ export class WorldView {
 
   private createTrainModel(coaster: Coaster): Group {
     const group = new Group()
-    const type = COASTER_TYPES[coaster.typeId]
+    const type = getCoasterType(coaster.typeId)
+    const seats = getCoasterCarSeats(type.trainStyle)
     for (let index = 0; index < coaster.train.cars; index += 1) {
-      const carGroup = createCoasterCar(type.carColor)
+      const carGroup = createCoasterCar(type.carColor, type.trainStyle, type.accentColor)
       for (let seat = 0; seat < type.carCapacity; seat += 1) {
-        const passenger = this.createCarPassenger(index * type.carCapacity + seat, seat)
+        const passenger = this.createCarPassenger(index * type.carCapacity + seat, seats[seat] ?? seats[0]!)
         carGroup.add(passenger)
       }
       group.add(carGroup)
     }
     group.userData.cars = coaster.train.cars
+    group.userData.trainStyle = type.trainStyle
     return group
   }
 
-  private createCarPassenger(passengerSeat: number, seat: number): Group {
+  private createCarPassenger(
+    passengerSeat: number,
+    place: { x: number; y: number; z: number },
+  ): Group {
     const passenger = new Group()
     const shirtColors = [0xf05a5a, 0x4e9be8, 0xf0c34e, 0x67b878]
     const body = new Mesh(
@@ -2736,7 +2767,6 @@ export class WorldView {
     )
     body.position.y = 0.16
     head.position.y = 0.27
-    const place = COASTER_CAR_SEATS[seat] ?? COASTER_CAR_SEATS[0]!
     passenger.position.set(place.x, place.y, place.z)
     passenger.userData.passengerSeat = passengerSeat
     passenger.add(body, head)
@@ -3288,6 +3318,7 @@ export class WorldView {
     })
     this.canvas.addEventListener('contextmenu', (event) => event.preventDefault())
     this.canvas.addEventListener('pointerleave', () => {
+      this.facadeReveal?.setTarget(null)
       if (!this.pointerDownCell) {
         this.hoveredCell = null
         if (!this.staffZonePainting) this.updateStaffZoneHover(null)
@@ -3303,7 +3334,7 @@ export class WorldView {
         return
       }
       this.groundAreaCancelled = false
-      this.pickCell(event)
+      if (!this.shiftHeightActive || this.currentSnapshot?.selectedTool === 'path' || this.currentSnapshot?.selectedTool === 'road') this.pickCell(event)
       this.dragging = event.button === 1 || event.button === 2
       this.leftPointerDown = event.button === 0
       this.painting = false
@@ -3374,7 +3405,9 @@ export class WorldView {
         }
       }
       if (event.button === 2 && moved < 5) {
-        const piece = this.pickCoasterPiece(event)
+        this.setRayFromPointer(event)
+        const handled = this.rightClickHandler?.(this.hoveredCell, this.pickPlacedObject())
+        const piece = handled ? null : this.pickCoasterPiece(event)
         if (piece) this.onCoasterPieceRightClick(piece.coasterId, piece.pieceIndex)
       }
       if (this.painting) this.onPathPaintEnd()
@@ -3392,6 +3425,15 @@ export class WorldView {
       this.painting = false; this.dragging = false; this.sceneryDragLock = null; this.setPathDragPreview([], 0)
     })
     this.canvas.addEventListener('pointermove', (event) => {
+      if (this.facadeReveal && !isDecorationCatalogKind(this.currentSnapshot?.selectedTool ?? '')) {
+        this.setRayFromPointer(event)
+        const hit = this.raycaster.intersectObjects(this.buildings.children, true).find(hit => {
+          let object: Object3D | null = hit.object
+          while (object) { if (!object.visible) return false; object = object.parent }
+          return true
+        })
+        this.facadeReveal.setTarget(!this.dragging && hit?.object.userData.facade ? hit.point : null)
+      }
       if (this.walkMode) {
         if (this.walkLookActive) {
           this.lookWalk(event.clientX - this.lastPointer.x, event.clientY - this.lastPointer.y)
@@ -3410,19 +3452,16 @@ export class WorldView {
         this.lastPointer.set(event.clientX, event.clientY)
         return
       }
+      this.lastPointer.set(event.clientX, event.clientY)
       if (event.shiftKey && usesConstructionHeight(this.currentSnapshot?.selectedTool)) {
-        if (!this.shiftHeightActive) {
-          this.shiftHeightActive = true
-          this.shiftHeightY = event.clientY
-          this.updateConstructionGrid()
-        } else {
-          const dy = event.clientY - this.shiftHeightY
-          if (Math.abs(dy) >= CONSTRUCTION_HEIGHT_STEP_PX) {
-            this.onElevationChange(dy < 0 ? 1 : -1)
-            this.shiftHeightY = event.clientY
-          }
+        if (!this.shiftHeightActive) this.beginHeightDrag(event.clientY)
+        const height = draggedBuildElevation(this.shiftStartElevation, this.shiftHeightY, event.clientY)
+        if (height !== this.shiftLastElevation) {
+          this.shiftLastElevation = height
+          this.heightHandler?.(height, this.hoveredCell)
         }
-        this.pickCell(event)
+        // Keep scenery over its anchor while changing height; ways still extend ramps to the cursor.
+        if (this.currentSnapshot?.selectedTool === 'path' || this.currentSnapshot?.selectedTool === 'road') this.pickCell(event)
         return
       }
       if (this.shiftHeightActive) {
@@ -3476,7 +3515,12 @@ export class WorldView {
         event.preventDefault()
         if (this.walkMode) return
         if (event.shiftKey) {
-          this.onElevationChange(event.deltaY < 0 ? 1 : -1)
+          if (this.heightHandler) {
+            const height = Math.max(0, Math.min(6, (this.currentSnapshot?.buildElevation ?? 0) + (event.deltaY < 0 ? .5 : -.5)))
+            this.heightHandler(height, this.hoveredCell)
+            this.shiftStartElevation = this.shiftLastElevation = height
+            this.shiftHeightY = this.lastPointer.y
+          } else this.onElevationChange(event.deltaY < 0 ? 1 : -1)
           return
         }
         this.zoom = MathUtils.clamp(this.zoom * (event.deltaY > 0 ? 0.9 : 1.1), 0.55, 2.4)
@@ -3492,11 +3536,7 @@ export class WorldView {
         event.preventDefault()
         return
       }
-      if (event.key === 'Shift' && usesConstructionHeight(this.currentSnapshot?.selectedTool)) {
-        this.shiftHeightActive = true
-        this.shiftHeightY = this.lastPointer.y
-        this.updateConstructionGrid()
-      }
+      if (event.key === 'Shift' && !event.repeat && !this.shiftHeightActive && this.hoveredCell && usesConstructionHeight(this.currentSnapshot?.selectedTool)) this.beginHeightDrag(this.lastPointer.y)
       if (event.key === 'Escape' && this.staffZonePainting) {
         this.endStaffZonePaint()
         this.leftPointerDown = false
@@ -3514,6 +3554,7 @@ export class WorldView {
         this.updateConstructionGrid()
       }
     })
+    window.addEventListener('blur', () => { this.facadeReveal?.setTarget(null); this.shiftHeightActive = false; this.dragging = false; this.leftPointerDown = false; this.updateConstructionGrid() })
     window.addEventListener('resize', () => this.resize())
   }
 
@@ -3608,6 +3649,7 @@ export class WorldView {
       true,
     )
     for (const hit of hits) {
+      if (hit.object.userData.facade && this.facadeReveal?.isClickThrough(hit.point)) continue
       if (accessIdFromObject(hit.object)) return cellFromWorldPoint(hit.point.x, hit.point.z)
       const buildingId = buildingIdFromObject(hit.object, hit.instanceId)
       if (buildingId) {
@@ -3755,6 +3797,32 @@ export class WorldView {
       this.preview.visible = this.previewArrow.visible = false
       return
     }
+    if (tool === 'bench' || isWasteBin(tool)) {
+      const cell = this.hoveredCell
+      if (tool !== this.sceneryPreviewKind) {
+        disposeChildren(this.sceneryPreview)
+        this.sceneryPreviewKind = tool
+        const model = createRetroBuilding(tool as BuildingKind)!
+        model.traverse(o => { if (o instanceof Mesh) { const m = (o.material as MeshStandardMaterial).clone(); m.userData = {}; m.transparent = true; m.opacity = .72; o.material = m } })
+        this.sceneryPreview.add(model)
+      }
+      const elevation = getTerrainHeight(this.currentSnapshot.terrain, cell.x, cell.z) + this.currentSnapshot.buildElevation
+      const rotation = pathFurnitureRotation(
+        this.currentSnapshot,
+        cell.x,
+        cell.z,
+        elevation,
+        isWasteBin(tool) ? this.currentSnapshot.buildRotation : undefined,
+      ) ?? this.currentSnapshot.buildRotation
+      const valid = this.placementValidator?.(tool as BuildingKind, cell.x, cell.z) ?? true
+      this.sceneryPreview.visible = true
+      this.sceneryPreview.position.set(cell.x + .5, elevation, cell.z + .5)
+      this.sceneryPreview.rotation.y = (rotation ?? 0) * Math.PI / 2
+      this.sceneryPreview.scale.setScalar(1)
+      this.sceneryPreview.traverse(o => { if (o instanceof Mesh) (o.material as MeshStandardMaterial).color.setHex(valid ? 0xffffff : 0xf05a65) })
+      this.preview.visible = this.previewArrow.visible = false
+      return
+    }
     if (isScenery(tool)) {
       const cell = this.hoveredCell
       const rotation = this.sceneryDragLock?.rotation ?? this.currentSnapshot.buildRotation
@@ -3775,14 +3843,14 @@ export class WorldView {
       const valid = this.placementValidator?.(tool as BuildingKind, cell.x, cell.z, slot) ?? true
       this.sceneryPreview.visible = true
       this.sceneryPreview.position.set(cell.x + placement.x, getTerrainHeight(this.currentSnapshot.terrain, cell.x, cell.z) + this.currentSnapshot.buildElevation, cell.z + placement.z)
-      if (this.terrainShape) this.sceneryPreview.position.y = this.terrainShape.sample(cell.x + placement.x, cell.z + placement.z) + this.currentSnapshot.buildElevation
+      if (!isFacade(tool) && this.terrainShape) this.sceneryPreview.position.y = this.terrainShape.sample(cell.x + placement.x, cell.z + placement.z) + this.currentSnapshot.buildElevation
       this.sceneryPreview.rotation.y = placement.rotation * Math.PI / 2
       this.sceneryPreview.scale.set(placement.sx, placement.sy, placement.sz)
       this.sceneryPreview.traverse(object => { if (object instanceof Mesh) (object.material as MeshStandardMaterial).color.setHex(valid ? 0xffffff : 0xf05a65) })
       this.preview.visible = true; this.previewArrow.visible = false
       this.preview.position.copy(this.sceneryPreview.position); this.preview.position.y += .07
       const edge = isEdgeScenery(tool)
-      this.preview.scale.set(edge ? .98 : .5, .12, edge ? .2 : .5)
+      this.preview.scale.set(edge ? .98 : slot === 4 ? .98 : .5, .12, edge ? .2 : slot === 4 ? .98 : .5)
       this.preview.rotation.y = placement.rotation * Math.PI / 2
       const marker = this.preview.material as MeshStandardMaterial
       marker.color.setHex(valid ? 0x8fdab0 : 0xf05a65)
@@ -3804,10 +3872,11 @@ export class WorldView {
           const groundY = this.terrainShape
             ? this.terrainShape.sample(picked.x + placement.x, picked.z + placement.z)
             : getTerrainHeight(this.currentSnapshot.terrain, picked.x, picked.z)
-          this.preview.position.set(picked.x + placement.x, groundY + 0.07, picked.z + placement.z)
+          this.preview.position.set(picked.x + placement.x, picked.elevation + (wallSpec(picked.kind) ? 0 : groundY - getTerrainHeight(this.currentSnapshot.terrain, picked.x, picked.z)) + 0.07, picked.z + placement.z)
           this.preview.rotation.y = placement.rotation * Math.PI / 2
           const edge = isEdgeScenery(picked.kind)
-          this.preview.scale.set(edge ? 0.98 : 0.5, 0.12, edge ? 0.2 : 0.5)
+          const full = picked.decorationSlot === undefined || picked.decorationSlot === 4
+          this.preview.scale.set(edge ? .98 : full ? .98 : .5, .12, edge ? .2 : full ? .98 : .5)
         } else if (occupiesBuildingCell(picked, this.hoveredCell.x, this.hoveredCell.z)) {
           const footprint = stageSize(picked.stageDesign, picked.rotation)
           this.preview.rotation.y = 0
@@ -3925,7 +3994,7 @@ export class WorldView {
       tool !== 'busStop' &&
       objectsAtCell.some((item) => {
         if (
-          (tool === 'securityGate' || tool === 'bench' || tool === 'fence') &&
+          (tool === 'securityGate' || tool === 'fence') &&
           item.kind === 'path'
         ) {
           return false
@@ -3950,6 +4019,8 @@ export class WorldView {
             ? !existing && !campingOccupied
             : tool === 'stageForecourt'
               ? !existing && !campingOccupied && !medicalOccupied
+            : tool === 'backstageArea'
+              ? !campingOccupied && !medicalOccupied && !wasteOccupied
               : tool === 'busStop'
                 ? validBusStopPosition
               : tool === 'trafficLight'
@@ -4061,7 +4132,7 @@ export class WorldView {
       if (coaster) {
         const passengerIndex = coaster.train.passengerIds.indexOf(visitor.id)
         const carIndex = Math.floor(
-          passengerIndex / COASTER_TYPES[coaster.typeId].carCapacity,
+          passengerIndex / getCoasterType(coaster.typeId).carCapacity,
         )
         const car = this.trainModels.get(coaster.id)?.children[carIndex]
         if (car) target.set(car.position.x, car.position.y, car.position.z)

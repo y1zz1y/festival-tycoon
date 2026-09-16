@@ -134,9 +134,9 @@ export class WasteView {
       return Array.from({ length: wasteBinCartonCount(stored) }, (_, index) => {
         const slot = CARTON_SLOTS[index]!
         return {
-          x: bin.x + 0.5 + slot.x,
+          x: bin.x + 0.5 + Math.sin(bin.rotation * Math.PI / 2) * .32 + slot.x,
           y: bin.elevation + (slot.lie ? 0.06 : 0.05),
-          z: bin.z + 0.5 + slot.z,
+          z: bin.z + 0.5 + Math.cos(bin.rotation * Math.PI / 2) * .32 + slot.z,
           height: 1,
           yaw: slot.yaw,
           lie: slot.lie,

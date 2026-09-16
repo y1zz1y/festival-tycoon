@@ -1,7 +1,9 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, SphereGeometry, Vector3 } from 'three'
+import { BoxGeometry, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, SphereGeometry, Shape, ExtrudeGeometry, Vector3 } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { BuildingKind } from '../game/catalog'
 import { SCENERY_KINDS } from '../game/scenery'
+import { isFacade, wallSpec, roofWallTop, roofSpec, isWasteBin, binSpec, THEMED_BIN_KINDS, WALL_STYLES } from '../game/decorationWalls'
+import { decorationThemeOf, decorationCategoryOf } from '../game/decoration'
 
 // Small, strongly silhouetted pieces, baked into vertex colors: detail adds
 // triangles, never a draw call per bolt, plank, bottle or awning stripe.
@@ -32,6 +34,14 @@ export class ModelKit {
     this.add(new BoxGeometry(width, direction.length(), width), color, center.x, center.y, center.z,
       new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize()))
   }
+  panel(points: [number, number][], depth: number, color: number): void {
+    const shape = new Shape()
+    points.forEach(([x,y],i) => i ? shape.lineTo(x,y) : shape.moveTo(x,y))
+    shape.closePath()
+    const geometry = new ExtrudeGeometry(shape, { depth, bevelEnabled: false, steps: 1 })
+    geometry.setIndex(Array.from({ length: geometry.getAttribute('position').count }, (_, index) => index))
+    this.add(geometry, color, 0, 0, -depth / 2)
+  }
   finish(): BufferGeometry {
     const result = mergeGeometries(this.parts)!
     for (const part of this.parts) part.dispose()
@@ -42,13 +52,477 @@ export class ModelKit {
 }
 
 const ink = 0x28363b, cream = 0xf2dfb5, timber = 0x936141, steel = 0x92a6a5
+const sand = 0xc4a46a, rust = 0xb86b3a
+const moss = 0x3d6b3a, bark = 0x5a4634
+const neonM = 0xff2d95, neonC = 0x2ee6ff
+const brass = 0xc4a15a, copper = 0xb87333, iron = 0x3a3530
+const ice = 0xc8e8f4, aurora = 0x5ee0b0, auroraP = 0x7b6cff
 const material = new MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: .05 })
 material.userData.shared = true
 const geometries = new Map<BuildingKind, BufferGeometry>()
-export const DETAILED_BUILDINGS: readonly BuildingKind[] = ['food', 'alcohol', 'mascot', 'shirt', 'toilet', 'bench', 'wasteBin', 'generator', 'backupGenerator', 'foh', 'delayTower', 'securityGate', 'ride', ...SCENERY_KINDS]
+export const DETAILED_BUILDINGS: readonly BuildingKind[] = ['food', 'alcohol', 'mascot', 'shirt', 'toilet', 'bench', 'wasteBin', ...THEMED_BIN_KINDS, 'generator', 'backupGenerator', 'foh', 'delayTower', 'securityGate', 'ride', ...SCENERY_KINDS]
+
+/** Shared families: same primitives, theme via vertex colors. One merged mesh per kind. */
+function pine(k: ModelKit, trunk: number, layers: number[], cap?: number): void {
+  k.cylinder(0, .42, 0, .06, .82, trunk, .04, 6)
+  layers.forEach((color, i) => {
+    const y = .58 + i * .28, r = .36 - i * .08
+    k.cylinder(0, y, 0, r, .3, color, .05, 7)
+  })
+  if (cap) k.cylinder(0, 1.42, 0, .08, .08, cap, .02, 6)
+}
+
+function planterPot(k: ModelKit, pot: number, leaf: number, bloom: number): void {
+  k.cylinder(0, .14, 0, .16, .26, pot, .14, 7)
+  k.box(0, .28, 0, .3, .04, .3, cream)
+  k.cylinder(0, .48, 0, .08, .32, leaf, .06, 6)
+  k.box(0, .66, 0, .05, .04, .05, bloom)
+}
+
+function stool(k: ModelKit, seat: number, leg: number, ring?: number): void {
+  k.cylinder(0, .28, 0, .16, .06, seat, .16, 8)
+  for (const a of [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3]) {
+    const x = Math.cos(a) * .1, z = Math.sin(a) * .1
+    k.box(x, .14, z, .035, .26, .035, leg)
+  }
+  if (ring) k.cylinder(0, .12, 0, .12, .02, ring, .12, 8)
+}
+
+function edgePosts(k: ModelKit, post: number, rail: number, drip?: number): void {
+  for (const x of [-.4, .4]) {
+    k.box(x, .36, 0, .045, .72, .045, post)
+    k.box(x, .03, 0, .1, .06, .1, ink)
+  }
+  for (const y of [.28, .5]) k.box(0, y, 0, .82, .04, .03, rail)
+  if (drip) for (const x of [-.22, 0, .22]) k.box(x, .16, 0, .03, .16, .03, drip)
+}
+
+function embellishTheme(kind: BuildingKind, k: ModelKit): void {
+  const theme = decorationThemeOf(kind)
+  if (!theme || theme === 'klassik') return
+  const palette = Object.values(WALL_STYLES).find(style => style.theme === theme)!
+  const category = decorationCategoryOf(kind)
+  if (category === 'plants' || category === 'festival') {
+    // Broken-up ground clusters anchor the sculptures and vegetation in their setting.
+    for (let i = 0; i < 7; i++) {
+      const a = i * 2.399, r = .2 + (i % 3) * .065
+      const x = Math.cos(a) * r, z = Math.sin(a) * r
+      if (theme === 'wald' || theme === 'tropen' || theme === 'alpin') {
+        for (let j = 0; j < 3; j++) k.beam([x, .02, z], [x + (j - 1) * .055, .1 + j * .025, z + .025], .018, j % 2 ? moss : 0x729456)
+      } else k.cylinder(x, .025, z, .055, .05, i % 2 ? palette.color : palette.trim, .035, 5)
+    }
+  }
+  if (category === 'furniture') {
+    for (const x of [-.12, .12]) k.box(x, .015, 0, .065, .03, .24, palette.trim)
+  }
+  if (category === 'lights') {
+    k.cylinder(0, .035, 0, .115, .07, palette.color, .095, 10)
+    k.cylinder(0, .078, 0, .085, .016, palette.trim, .085, 10)
+  }
+  if (category === 'props') {
+    for (const x of [-.12, .12]) k.box(x, .025, -.09, .045, .05, .08, palette.trim)
+  }
+  if (category === 'fence') {
+    for (const x of [-.4, .4]) k.cylinder(x, .745, 0, .045, .055, palette.trim, .008, 6)
+  }
+}
+
+function buildThemedScenery(kind: BuildingKind, k: ModelKit): boolean {
+  if (kind === 'desertPalm' || kind === 'palmTree') {
+    const trunk = kind === 'desertPalm' ? sand : 0x8a6a3a
+    const leaf = kind === 'desertPalm' ? 0x6a8f3a : 0x3f7b42
+    k.cylinder(0, .55, 0, .05, 1.05, trunk, .035, 6)
+    k.box(0, .03, 0, .18, .06, .18, kind === 'desertPalm' ? sand : 0x4d8b46)
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3
+      const tip: [number, number, number] = [Math.cos(a) * .42, 1.03, Math.sin(a) * .42]
+      const mid: [number, number, number] = [Math.cos(a) * .22, 1.19, Math.sin(a) * .22]
+      k.beam([0, 1.1, 0], mid, .075, leaf)
+      k.beam(mid, tip, .055, leaf)
+      for (let n = 1; n < 4; n++) {
+        const r = n * .09
+        for (const side of [-1, 1]) k.beam([Math.cos(a) * r, 1.15, Math.sin(a) * r],
+          [Math.cos(a) * (r + .06) - Math.sin(a) * .09 * side, 1.08, Math.sin(a) * (r + .06) + Math.cos(a) * .09 * side], .025, leaf)
+      }
+    }
+    k.sphere(0, 1.14, 0, .08, leaf, 6)
+    return true
+  }
+  if (kind === 'alpineFir') { pine(k, timber, [0x345c40, 0x407b49, 0x589451]); return true }
+  if (kind === 'icePine') { pine(k, ice, [0xa8d4e4, 0xc8e8f4, 0xe8f4fa], cream); return true }
+  if (kind === 'forestFern') {
+    k.box(0, .04, 0, .2, .06, .2, bark)
+    for (let i = 0; i < 5; i++) {
+      const a = i * Math.PI / 2.6 - .4
+      k.beam([0, .04, 0], [Math.cos(a) * .34, .25, Math.sin(a) * .34], .02, moss)
+      for (let n = 1; n < 5; n++) for (const side of [-1, 1]) {
+        const r = n * .065
+        k.beam([Math.cos(a) * r, .05 + r * .6, Math.sin(a) * r],
+          [Math.cos(a) * r - Math.sin(a) * .07 * side, .08 + r * .6, Math.sin(a) * r + Math.cos(a) * .07 * side], .03, n % 2 ? moss : 0x649852)
+      }
+    }
+    return true
+  }
+  if (kind === 'neonPlant') { planterPot(k, ink, neonM, neonC); k.box(.06, .52, .04, .04, .12, .04, neonC); return true }
+  if (kind === 'scrapPlanter') { planterPot(k, 0x6a6e72, 0x4d8b46, rust); k.box(.14, .2, 0, .04, .16, .08, steel); return true }
+  if (kind === 'copperPlanter') { planterPot(k, copper, moss, brass); k.cylinder(0, .28, 0, .17, .03, brass, .17, 8); return true }
+  if (kind === 'dustLantern') {
+    k.box(0, .03, 0, .16, .06, .16, ink)
+    k.cylinder(0, .42, 0, .02, .78, timber)
+    for (const x of [-.18 / 2, .18 / 2]) for (const z of [-.18 / 2, .18 / 2]) k.box(x, .88, z, .018, .2, .018, sand)
+    k.cylinder(0, .88 + .2 / 2 + .035, 0, .18 * .8, .07, sand, .025, 4)
+    k.box(0, .88 - .2 / 2, 0, .18 * 1.15, .035, .18 * 1.15, sand)
+    k.box(0, .88, 0, .12, .14, .12, 0xffd58a)
+    return true
+  }
+  if (kind === 'foxfireLamp') {
+    k.box(0, .03, 0, .16, .06, .16, bark)
+    k.cylinder(0, .4, 0, .018, .72, timber)
+    k.sphere(0, .86, 0, .1, 0x7ec8c4, 7)
+    k.sphere(0, .92, .06, .05, cream, 5)
+    return true
+  }
+  if (kind === 'workLamp') {
+    k.box(0, .06, 0, .22, .1, .18, ink)
+    k.box(0, .28, -.02, .06, .36, .06, steel)
+    k.box(0, .52, .08, .22, .14, .16, 0xe4b754)
+    k.box(0, .52, .14, .16, .1, .04, cream)
+    return true
+  }
+  if (kind === 'spiritLantern') {
+    k.box(0, .03, 0, .16, .06, .16, ink)
+    k.cylinder(0, .5, 0, .02, .92, 0x4a3558)
+    for (const x of [-.2 / 2, .2 / 2]) for (const z of [-.2 / 2, .2 / 2]) k.box(x, 1.02, z, .018, .24, .018, 0x6b3d8a)
+    k.cylinder(0, 1.02 + .24 / 2 + .035, 0, .2 * .8, .07, 0x6b3d8a, .025, 4)
+    k.box(0, 1.02 - .24 / 2, 0, .2 * 1.15, .035, .2 * 1.15, 0x6b3d8a)
+    k.box(0, 1.02, 0, .14, .16, .14, 0xc8a0e8)
+    k.cylinder(0, 1.18, 0, .06, .05, brass)
+    return true
+  }
+  if (kind === 'carnivalBulbs') {
+    for (const x of [-.44, .44]) { k.box(x, .68, 0, .04, 1.36, .06, timber); k.box(x, .03, 0, .12, .06, .22, ink) }
+    k.beam([-.44, 1.28, 0], [.44, 1.28, 0], .016, ink)
+    for (let n = 0; n < 6; n++) k.sphere(-.3 + n * .12, 1.18 - (n % 2) * .06, 0, .035, [0xc43d55, 0xe4b754, 0x3d7cc7][n % 3]!, 5)
+    return true
+  }
+  if (kind === 'beerLantern') {
+    k.box(0, .03, 0, .16, .06, .16, ink)
+    k.cylinder(0, .48, 0, .02, .88, timber)
+    for (const x of [-.2 / 2, .2 / 2]) for (const z of [-.2 / 2, .2 / 2]) k.box(x, .98, z, .018, .22, .018, 0xe4b754)
+    k.cylinder(0, .98 + .22 / 2 + .035, 0, .2 * .8, .07, 0xe4b754, .025, 4)
+    k.box(0, .98 - .22 / 2, 0, .2 * 1.15, .035, .2 * 1.15, 0xe4b754)
+    k.box(0, .98, 0, .14, .14, .14, 0xffd58a)
+    k.box(0, .86, 0, .16, .03, .16, rust)
+    return true
+  }
+  if (kind === 'auroraLamp') {
+    k.box(0, .04, 0, .2, .08, .2, ice)
+    k.cylinder(0, .55, 0, .025, 1, ice, .02, 6)
+    k.box(0, 1.12, 0, .08, .36, .08, aurora)
+    k.box(.1, 1.2, 0, .06, .28, .06, auroraP)
+    k.box(-.08, 1.16, .04, .05, .22, .05, cream)
+    return true
+  }
+  if (kind === 'gasLamp') {
+    k.box(0, .04, 0, .2, .08, .2, iron)
+    k.cylinder(0, .6, 0, .03, 1.12, brass, .025, 6)
+    for (const x of [-.18 / 2, .18 / 2]) for (const z of [-.18 / 2, .18 / 2]) k.box(x, 1.22, z, .018, .22, .018, brass)
+    k.cylinder(0, 1.22 + .22 / 2 + .035, 0, .18 * .8, .07, brass, .025, 4)
+    k.box(0, 1.22 - .22 / 2, 0, .18 * 1.15, .035, .18 * 1.15, brass)
+    k.box(0, 1.22, 0, .12, .16, .12, 0xffd58a)
+    k.cylinder(0, 1.38, 0, .08, .06, copper)
+    return true
+  }
+  if (kind === 'playaTotem') {
+    k.box(0, .06, 0, .4, .1, .4, sand)
+    k.box(0, .36, 0, .22, .5, .18, rust)
+    k.box(0, .72, 0, .28, .22, .22, sand)
+    k.box(-.06, .74, .12, .05, .04, .02, ink)
+    k.box(.06, .74, .12, .05, .04, .02, ink)
+    k.box(0, 1.02, 0, .16, .36, .14, 0xe4b754)
+    return true
+  }
+  if (kind === 'woodlandIdol') {
+    k.cylinder(0, .2, 0, .16, .36, bark, .14, 6)
+    k.box(0, .5, 0, .28, .28, .22, 0x6a5340)
+    k.box(-.06, .52, .12, .05, .04, .02, cream)
+    k.box(.06, .52, .12, .05, .04, .02, cream)
+    k.cylinder(0, .82, 0, .1, .28, moss, .08, 6)
+    k.box(0, 1.04, 0, .18, .12, .12, 0x4d8b46)
+    return true
+  }
+  if (kind === 'neonArch') {
+    for (const x of [-.34, .34]) k.box(x, .7, 0, .08, 1.36, .08, ink)
+    k.box(0, 1.4, 0, .76, .08, .08, neonC)
+    k.box(0, 1.28, .05, .6, .16, .03, neonM)
+    for (const x of [-.34, .34]) k.box(x, .03, 0, .14, .06, .14, ink)
+    return true
+  }
+  if (kind === 'tikiMask') {
+    k.box(0, .06, 0, .22, .1, .16, timber)
+    k.box(0, .55, 0, .32, .78, .12, 0xd97a3a)
+    k.box(-.08, .7, .07, .07, .06, .02, ink)
+    k.box(.08, .7, .07, .07, .06, .02, ink)
+    k.box(0, .48, .07, .1, .12, .02, 0x6a5340)
+    k.box(0, .98, 0, .2, .12, .1, rust)
+    return true
+  }
+  if (kind === 'runeStone') {
+    k.box(0, .4, 0, .28, .78, .16, 0x657774)
+    k.box(0, .42, .09, .08, .28, .02, 0x6b3d8a)
+    k.box(0, .7, .09, .12, .04, .02, brass)
+    k.box(0, .06, 0, .34, .1, .22, 0x4a5554)
+    return true
+  }
+  if (kind === 'miniBigTop') {
+    k.cylinder(0, .22, 0, .32, .4, cream, .32, 8)
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4
+      k.box(Math.cos(a) * .28, .22, Math.sin(a) * .28, .08, .4, .04, i % 2 ? 0xc43d55 : cream)
+    }
+    k.cylinder(0, .55, 0, .34, .18, 0xc43d55, .02, 8)
+    k.cylinder(0, .7, 0, .02, .16, timber)
+    k.box(0, .8, 0, .08, .04, .08, 0xe4b754)
+    return true
+  }
+  if (kind === 'maypole') {
+    k.cylinder(0, .85, 0, .03, 1.65, timber)
+    k.box(0, .03, 0, .2, .06, .2, ink)
+    k.cylinder(0, 1.62, 0, .16, .05, 0x4d8b46, .16, 8)
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2
+      k.beam([0, 1.58, 0], [Math.cos(a) * .28, .7, Math.sin(a) * .28], .015, [0xc43d55, 0xe4b754, 0x3d7cc7, 0x4d8b46][i]!)
+    }
+    return true
+  }
+  if (kind === 'iceSculpture') {
+    for (const [x,z,h] of [[-.2,0,.7],[.2,-.1,.9],[.12,.2,.5]]) k.cylinder(x!, h! / 2, z!, .095, h!, ice, .008, 5)
+    k.box(0, .08, 0, .36, .12, .36, ice)
+    k.box(0, .4, 0, .18, .5, .16, 0xa8d4e4)
+    k.box(-.1, .7, 0, .1, .28, .1, cream)
+    k.box(.08, .78, .04, .08, .22, .08, aurora)
+    k.box(0, 1.02, 0, .06, .18, .06, auroraP)
+    return true
+  }
+  if (kind === 'pipeTotem') {
+    for (const y of [.2, .5, .85]) { k.cylinder(0, y, 0, .115, .045, brass); for (let n=0;n<6;n++) { const a=n*Math.PI/3; k.sphere(Math.cos(a)*.11,y,Math.sin(a)*.11,.018,iron,5) } }
+    k.beam([-.18,.08,0],[-.18,.7,0],.05,copper)
+    k.beam([-.18,.7,0],[0,.7,0],.05,copper)
+    k.box(0, .06, 0, .36, .1, .36, iron)
+    k.cylinder(0, .4, 0, .1, .56, copper, .1, 8)
+    k.cylinder(0, .72, 0, .12, .04, brass, .12, 8)
+    k.box(.16, .55, 0, .18, .06, .06, brass)
+    k.cylinder(0, .98, 0, .08, .4, iron, .08, 8)
+    k.cylinder(0, 1.22, 0, .12, .08, brass, .04, 8)
+    return true
+  }
+  if (kind === 'tumbleweed') {
+    k.sphere(0, .2, 0, .18, sand, 6)
+    k.sphere(.08, .22, .06, .12, 0xd4b87a, 5)
+    k.box(0, .04, 0, .16, .04, .16, rust)
+    return true
+  }
+  if (kind === 'uvSpeaker') {
+    k.box(0, .32, 0, .3, .56, .22, ink)
+    k.cylinder(0, .36, .12, .09, .04, neonC, .09, 8)
+    k.box(0, .54, .12, .16, .04, .02, neonM)
+    k.box(0, .04, 0, .26, .08, .18, ink)
+    return true
+  }
+  if (kind === 'coconutPile') {
+    k.sphere(-.08, .14, .02, .12, 0x6e5530, 6)
+    k.sphere(.1, .12, -.04, .1, 0x8a6a3a, 6)
+    k.sphere(.02, .26, .04, .09, 0x5a4634, 6)
+    k.box(0, .04, 0, .28, .04, .24, 0x4d8b46)
+    return true
+  }
+  if (kind === 'popcornCart') {
+    k.box(0, .28, 0, .42, .36, .28, 0xe4b754)
+    k.box(0, .5, 0, .38, .12, .24, cream)
+    k.box(0, .62, 0, .2, .16, .16, 0xc43d55)
+    for (const x of [-.16, .16]) k.cylinder(x, .08, .1, .06, .04, ink, .06, 8)
+    k.box(.2, .4, 0, .04, .2, .04, timber)
+    return true
+  }
+  if (kind === 'snowman') {
+    k.cylinder(0, .72, 0, .12, .025, ink)
+    k.cylinder(0, .78, 0, .075, .12, ink)
+    k.cylinder(0, .738, 0, .078, .025, 0xb9474c)
+    k.box(0, .5, 0, .23, .045, .18, 0xb9474c)
+    k.box(.055, .42, .12, .055, .18, .025, 0xb9474c)
+    for (const side of [-1, 1]) k.beam([side * .1, .4, 0], [side * .27, .5, .02], .025, bark)
+    for (const y of [.17, .25, .37]) k.sphere(0, y, .155, .015, ink, 5)
+    k.sphere(0, .18, 0, .16, cream, 7)
+    k.sphere(0, .42, 0, .12, 0xf4f7ff, 7)
+    k.sphere(0, .6, 0, .09, cream, 6)
+    k.box(0, .6, .1, .08, .02, .06, rust)
+    k.box(-.03, .64, .08, .015, .015, .015, ink)
+    k.box(.03, .64, .08, .015, .015, .015, ink)
+    return true
+  }
+  if (kind === 'gearStack') {
+    for (const [x, y, z, radius] of [[0, .12, 0, .18], [.08, .28, -.04, .14], [-.04, .42, .06, .1]]) {
+      for (let n = 0; n < 12; n++) { const a = n * Math.PI / 6; k.box(x! + Math.cos(a) * radius!, y!, z! + Math.sin(a) * radius!, .048, .055, .048, brass) }
+      k.cylinder(x!, y! + .038, z!, .035, .025, iron)
+    }
+    k.cylinder(0, .12, 0, .18, .06, brass, .18, 8)
+    k.cylinder(.08, .28, -.04, .14, .06, copper, .14, 8)
+    k.cylinder(-.04, .42, .06, .1, .05, brass, .1, 8)
+    k.box(0, .04, 0, .28, .04, .28, iron)
+    return true
+  }
+  if (kind === 'mossLog') {
+    k.cylinder(0, .14, 0, .12, .22, bark, .12, 8)
+    k.box(0, .14, 0, .7, .18, .22, 0x6a5340)
+    k.box(-.1, .26, .04, .16, .04, .1, moss)
+    k.box(.16, .24, -.02, .12, .04, .08, 0x4d8b46)
+    return true
+  }
+  if (kind === 'palletBench') {
+    for (let n = 0; n < 5; n++) k.box(0, .22, -.12 + n * .06, .7, .08, .052, n % 2 ? timber : 0xb28053)
+    for (const x of [-.26, .26]) k.box(x, .1, 0, .08, .16, .26, timber)
+    k.box(0, .28, -.1, .7, .16, .06, 0x9a6c42)
+    return true
+  }
+  if (kind === 'tikiStool') { stool(k, timber, bark, rust); return true }
+  if (kind === 'circusStool') { stool(k, 0xc43d55, cream, 0xe4b754); return true }
+  if (kind === 'altarTable') {
+    k.box(0, .32, 0, .7, .06, .36, bark)
+    for (const x of [-.26, .26]) k.box(x, .16, 0, .08, .28, .3, timber)
+    k.box(0, .4, 0, .16, .08, .12, 0x6b3d8a)
+    k.cylinder(0, .5, 0, .03, .12, 0xd4652a, .01, 5)
+    return true
+  }
+  if (kind === 'beerGardenTable') {
+    for (let n = 0; n < 5; n++) k.box(0, .48, -.14 + n * .07, .86, .05, .06, n % 2 ? timber : 0xad7c50)
+    for (const x of [-.22, .15]) { k.cylinder(x, .55, .02, .032, .1, cream); k.cylinder(x, .602, .02, .028, .012, 0xf9eabc) }
+    for (const z of [-.32, .32]) k.box(0, .28, z, .86, .04, .14, 0xb28053)
+    for (const x of [-.3, .3]) k.box(x, .22, 0, .06, .4, .34, bark)
+    return true
+  }
+  if (kind === 'iceBench') {
+    k.box(0, .22, 0, .64, .08, .22, ice)
+    k.box(0, .34, -.08, .64, .18, .06, 0xa8d4e4)
+    for (const x of [-.24, .24]) k.box(x, .1, 0, .08, .16, .2, cream)
+    return true
+  }
+  if (kind === 'gearBench') {
+    for (let n = 0; n < 4; n++) k.box(0, .24, -.09 + n * .06, .64, .07, .048, n % 2 ? copper : brass)
+    for (const x of [-.27, .27]) { k.beam([x, .12, -.09], [x, .46, -.09], .035, iron); k.beam([x, .32, -.09], [x, .32, .1], .03, brass) }
+    k.box(0, .36, -.08, .64, .16, .06, copper)
+    for (const x of [-.22, .22]) k.cylinder(x, .1, 0, .08, .06, iron, .08, 8)
+    return true
+  }
+  if (kind === 'glowTape') { edgePosts(k, ink, neonC, neonM); return true }
+  if (kind === 'chainFence') {
+    for (const x of [-.4, .4]) { k.box(x, .36, 0, .04, .72, .04, steel); k.box(x, .03, 0, .1, .06, .1, ink) }
+    for (const y of [.3, .5]) {
+      for (let n = 0; n < 5; n++) k.box(-.32 + n * .16, y, 0, .08, .04, .03, steel)
+    }
+    return true
+  }
+  if (kind === 'occultBanner') {
+    for (const x of [-.4, .4]) { k.box(x, .64, 0, .04, 1.24, .06, 0x4a3558); k.box(x, .03, 0, .12, .06, .2, ink) }
+    k.box(0, 1.18, 0, .82, .04, .06, timber)
+    k.box(0, .88, 0, .7, .42, .04, 0x6b3d8a)
+    k.box(0, .9, .03, .16, .16, .02, brass)
+    return true
+  }
+  if (kind === 'iceFence') { edgePosts(k, ice, cream, aurora); return true }
+  if (kind === 'pipeRail') {
+    for (const x of [-.4, .4]) { k.cylinder(x, .36, 0, .035, .7, iron, .035, 6); k.box(x, .03, 0, .1, .06, .1, ink) }
+    for (const y of [.28, .52]) k.box(0, y, 0, .82, .05, .05, brass)
+    return true
+  }
+  return false
+}
 
 function build(kind: BuildingKind, variant?: string): BufferGeometry {
   const k = new ModelKit()
+  const roof = roofSpec(kind)
+  if (roof) {
+    // Thin strips follow the roof slope and meet adjacent tiles without posts.
+    for (let n = 0; n < 10; n++) {
+      const z = -.45 + n * .1
+      const y = roof.slope ? .05 + (n / 9) * .4 : .05
+      const tilt = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), roof.slope ? -Math.atan(.4) : 0)
+      k.box(0, y, z, 1, .06, .108, n % 2 ? roof.color : roof.trim, tilt)
+    }
+    return k.finish()
+  }
+  if (isWasteBin(kind)) {
+    const spec = binSpec(kind)
+    const tint = spec?.color ?? 0x3d6657, trim = spec?.trim ?? ink
+    k.box(0, .22, .32, .26, .4, .26, tint)
+    for (const x of [-.1, -.033, .033, .1]) for (const z of [.182, .458]) k.box(x, .21, z, .025, .33, .016, trim)
+    k.box(0, .43, .32, .3, .045, .3, trim)
+    k.box(0, .456, .32, .15, .012, .09, ink)
+    k.box(0, .29, .168, .085, .1, .016, cream)
+    return k.finish()
+  }
+  const wall = wallSpec(kind)
+  if (wall) {
+    const profile = roofWallTop(wall.shape, 0)
+    if (profile !== undefined) {
+      const left = roofWallTop(wall.shape, -.5)!, right = roofWallTop(wall.shape, .5)!
+      const polygon: [number,number][] = [[-.5,0],[.5,0]]
+      if (right > 0) polygon.push([.5,right])
+      if (left > 0) polygon.push([-.5,left])
+      k.panel(polygon, .065, wall.color)
+      // Inset posts and seams are clipped to the roof profile, never rectangular above it.
+      for (let n=0;n<10;n++) {
+        const x=-.45+n*.1, h=Math.min(roofWallTop(wall.shape,x-.015)!,roofWallTop(wall.shape,x+.015)!)
+        if(h>.015) for(const z of [-.038,.038]) k.box(x,h/2,z,.014,h,.01,wall.trim)
+      }
+      return k.finish()
+    }
+    const h = wall.height
+    const opening = wall.shape === 'Window' || wall.shape === 'Door'
+    // Segmented panels leave real openings, including a walk-through door silhouette.
+    for (let row = 0; row < h * 10; row++) {
+      const y = row * .1 + .05
+      for (let col = 0; col < 10; col++) {
+        const x = -.45 + col * .1
+        if (opening && Math.abs(x) < .3 && y < .8 && (wall.shape === 'Door' || y > .3)) continue
+        const ribbed = wall.style === 'industrial' || wall.style === 'bamboo'
+        const striped = wall.style === 'circus' && col % 2 === 0
+        const planks = wall.style === 'woodland' || wall.style === 'bamboo'
+        const masonry = wall.style === 'adobe' || wall.style === 'arcane' || wall.style === 'ice'
+        k.box(x, y, 0, planks ? .093 : .1, masonry ? .094 : .1, ribbed && col % 2 ? .08 : .065,
+          new Color(striped ? wall.trim : wall.color).multiplyScalar(1 - ((planks ? col : row * 3 + col) % 4) * .045).getHex())
+      }
+    }
+    for (const x of [-.475, .475]) k.box(x, h / 2, 0, .05, h, .095, wall.trim)
+    for (const y of [.025, h - .025]) k.box(0, y, 0, 1, .05, .095, wall.trim)
+    if (opening) {
+      const bottom = wall.shape === 'Door' ? 0 : .3
+      for (const x of [-.3, .3]) k.box(x, (bottom + .8) / 2, 0, .04, .8 - bottom, .105, wall.trim)
+      k.box(0, .8, 0, .64, .04, .105, wall.trim)
+      if (wall.shape === 'Window') {
+        k.box(0, .3, 0, .68, .05, .14, wall.trim)
+        k.box(0, .55, 0, .025, .5, .07, wall.trim)
+      }
+    }
+    if (wall.style === 'chalet' && !opening) {
+      k.beam([-.43, .07, .045], [.43, h - .07, .045], .045, wall.trim)
+      k.beam([.43, .07, .045], [-.43, h - .07, .045], .045, wall.trim)
+    }
+    if (wall.style === 'brass' || wall.style === 'industrial') for (const x of [-.45, .45]) {
+      for (const y of [.1, h - .1]) for (const z of [-.055, .055]) k.sphere(x, y, z, .018, wall.trim, 5)
+    }
+    if (wall.style === 'arcane' || wall.style === 'neon') {
+      for (const x of [-.39, .39]) for (const z of [-.055, .055]) {
+        k.box(x, h / 2, z, .018, h * .5, .018, wall.trim)
+        if (wall.style === 'arcane') {
+          k.beam([x, h * .5, z], [x + .045, h * .6, z], .016, wall.trim)
+          k.beam([x, h * .4, z], [x - .045, h * .5, z], .016, wall.trim)
+        }
+      }
+    }
+    return k.finish()
+  }
+  embellishTheme(kind, k)
+  if (buildThemedScenery(kind, k)) return k.finish()
   if (kind === 'bunting' || kind === 'stringLights') {
     for (const x of [-.44, .44]) { k.box(x, .68, 0, .045, 1.36, .07, timber); k.box(x, .03, 0, .13, .06, .27, ink) }
     for (let n = 0; n < 8; n++) {
@@ -622,6 +1096,7 @@ export function createRetroBuilding(kind: BuildingKind, variant?: string): Group
   const group = new Group(), mesh = new Mesh(geometry, material)
   mesh.castShadow = mesh.receiveShadow = true
   mesh.userData.retroStatic = true
+  mesh.userData.facade = isFacade(kind)
   group.add(mesh)
   return group
 }
@@ -640,6 +1115,7 @@ export function batchRetroBuildings(source: Group): Group {
   const group = new Group(), matrix = new Matrix4()
   for (const [geometry, meshes] of buckets) {
     const batch = new InstancedMesh(geometry, material, meshes.length)
+    batch.userData.facade = meshes[0]!.userData.facade === true
     batch.userData.buildingIds = meshes.map(mesh => mesh.parent?.userData.buildingId)
     meshes.forEach((mesh, i) => batch.setMatrixAt(i, matrix.multiplyMatrices(inverse, mesh.matrixWorld)))
     batch.castShadow = batch.receiveShadow = true

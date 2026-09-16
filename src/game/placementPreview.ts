@@ -3,6 +3,15 @@ import { MAX_PATH_ELEVATION, WAY_ELEVATION_STEP, snapWayElevation } from './wayE
 /** Buildings, scenery and coaster start height share the way half-step. */
 export const BUILD_ELEVATION_STEP = WAY_ELEVATION_STEP
 
+/** Absolute displacement avoids event-rate dependent accumulation and stale cursor jumps. */
+export function draggedBuildElevation(startHeight: number, startY: number, currentY: number): number {
+  return snapBuildElevation(startHeight + Math.trunc((startY - currentY) / 48) * BUILD_ELEVATION_STEP)
+}
+
+export function buildElevationAbove(top: number, terrain: number): number {
+  return snapBuildElevation(Math.ceil((top - terrain - 1e-6) / BUILD_ELEVATION_STEP) * BUILD_ELEVATION_STEP)
+}
+
 export type PlacementGroundCell = {
   x: number
   z: number

@@ -58,6 +58,18 @@ dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
   `removeCoaster` (`coasterId`) reißt Schiene, Station, Zug, Tore und die
   angeschlossene Eingangsqueue host-autoritativ ab; optimistic wie die
   übrigen Coaster-Baucommands.
+  Backstage: `designateBackstageArea` (`cells`, optionales `enabled` zum
+  Löschen) ist optimistic wie Vorplatz/Müllablage. Snapshot:
+  `backstageCells`, `bandActors` (`memberIndex`, `role`, `costumeId`),
+  `bandSupply` (`components`,
+  `showQualityByStageId`, `activeKeys`). `RoadVehicle.kind` kann `tourBus`
+  sein (Ziel `tourBusParking` / `reservedParkingId`). `tourBusParking` ist
+  ein Gebäude-`kind`. Optionale Besucherfelder `backstageIntrusion` /
+  `backstageLingerMinutes`. Alte Clients ohne diese Felder bleiben gültig
+  (leere Arrays / Bare-Stage).
+  `startCoaster.typeId` ist jeder Katalogtyp (`CoasterTypeId`). Unbekannte
+  IDs löst der Host zu `classicSteel` auf. Snapshot-`coaster.typeId` kommt
+  mit den Sim-Paketen; kein neues Command.
 - Clients dürfen Construction optimistic zeigen, aber der Host bleibt
   maßgeblich (`resolveOptimisticCommand`, Reconciliation).
 - Besucher feldweise updaten; unveränderte Bereiche nicht erneut senden.
@@ -73,3 +85,24 @@ Pause/Resume, Deltas). Ride-Reconciliation: `tests/rideAccess.ts`.
 
 Aktualisieren, wenn Commands, Snapshot-Teile, Delta-Strategie, Tick-Delay
 oder Server-Raumlogik ändern. Save-Felder parallel in `docs/saves.md`.
+
+## Deko-Fassaden (0.1.125)
+
+Bestehende `place`/`placeSceneryLine`-Commands transportieren Vollfeld-Slot 4
+für große Themenobjekte und Wandkanten 0–3. Host und optimistischer Client
+nutzen dieselben Validierungen; Höhen/Rotationen bleiben im bestehenden
+Command-Kontext. Neue Wand-Kinds brauchen dieselbe Spielversion auf allen
+Clients. Kein neues Command; Tests prüfen Wandhöhe und Vollfeld auf dem Host.
+
+## Dächer, Eimer und Kontextabriss (0.1.126)
+
+Neue Dach-/Eimer-Kinds nutzen bestehende `place`-Commands. Automatische
+Möbelrotation wird auf Host und Client nach derselben `pathFurniture.ts`-Regel
+ermittelt. Kontextabriss nutzt vorhandenes `bulldoze` mit konkreter Building-ID
+bzw. `undoRoad` mit konkreter Höhe. Keine rein lokale Weltmutation. Shift setzt
+Bauhöhe lokal; nächste Baucommands übertragen den bestehenden Höhenkontext.
+
+## Dachabschluss-Kinds (0.1.128)
+
+30 Dachwand-Kinds verwenden bestehende place-/Dekolinien-Commands und
+Host-Prüfungen für Kanten, Höhe und Dach-Koexistenz. Keine neuen Commands/Felder.

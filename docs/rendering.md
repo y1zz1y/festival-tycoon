@@ -11,7 +11,7 @@ Draw-Call oder Material pro Detailstück oder Besucher.
 | Szene, Kamera, Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | Haupt-View; `pickPlacedObject` für Info/Abriss (Batches, Tore, Ampeln, Logistik); ein `LineSegments`-Baugitter 7×7 auf `buildElevation` (Shift oder Höhe ≠ 0); Personalzonen: ein InstancedMesh für zugewiesene 3×3 plus Hover-Vorschau (`setStaffZonePaintTool`) |
 | Pixel-Personen | `src/view/pixelPeople.ts` | 6 Visitor-Batches + Accessoires |
 | Souvenir-Props | `src/view/souvenirMeshes.ts` | 1 Maskottchen- + 4 Shirt-Schnitt-Batches, Instanzfarbe |
-| Gebäude-Instancing | `src/view/retroBuildings.ts` | ein gemergtes Vertex-Color-Mesh je `DETAILED_BUILDINGS`-Art inkl. aller `SCENERY_KINDS`; Instanz-`buildingIds` für Picking |
+| Gebäude-Instancing | `src/view/retroBuildings.ts` | ein gemergtes Vertex-Color-Mesh je `DETAILED_BUILDINGS`-Art inkl. aller `SCENERY_KINDS`; Themen-Deko über `buildThemedScenery` (Familien + Vertexfarben); Instanz-`buildingIds` für Picking |
 | Camping-Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts` | 14 Camping-Batches |
 | Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call; Parkfelder als Atlas-`parking` |
 | Lichter | `src/view/FestivalLightsView.ts` | fester PointLight-Pool; warm gelb vs. weiße Tageslichtballons über Instanzfarben |
@@ -26,8 +26,10 @@ Draw-Call oder Material pro Detailstück oder Besucher.
 | Ampeln / Wegschranken | `src/view/AccessControlView.ts` | Geteilte Geometrie, Signalfarbe, Picking über `accessId`. Ampeln rechts an der Fahrbahn, Lampe zum Gegenverkehr. Personentor auf der Ausgangskante (`gateEdgeWorldPosition`), Flügel klappen in die erlaubte Richtung auf |
 | Personaleingang | `src/view/SupplyChainView.ts` | Goldene Pfosten auf derselben Kante via `staffGateWorldPosition`; fehlendes `staffGateDirection` bleibt Legacy-Mitte |
 | Müllablagen / Eimer-Füllstand | `src/view/WasteView.ts` | Instanced Tiles, Ablage-Säcke und Kartons um Eimer; Füllstand nur über Kartonzahl |
-| Achterbahnwagen | `src/view/coasterCars.ts` | ein gemergtes Mesh pro Wagen plus Sitzgruppen; Geometrie je Lackfarbe geteilt |
-| Achterbahnschienen | `src/view/WorldView.ts` `rebuildCoasters` | zwei Tube-Schienen pro Stück aus `getSmoothedCoasterPiecePoints`; CatmullRom mit Ghost-Tangenten der Nachbarstücke, damit Joins nicht knicken |
+| Backstage-Overlay | `src/view/BackstageView.ts` | ein `InstancedMesh` (aktiv teal / getrennt amber); außerhalb der Gebäude-Batches |
+| Band-Akteure | `src/view/BandActorView.ts`, `src/view/bandMemberMesh.ts` | dieselbe gemergte Musiker-Geometrie wie `stageBand.ts`; geteiltes Vertex-Color-Material; ausgeblendet bei `vehicleId` oder `performing` |
+| Achterbahnwagen | `src/view/coasterCars.ts` | ein gemergtes Mesh pro Wagen plus Sitzgruppen; Geometrie je **Zugstil + Lackfarbe** geteilt (`sitDownSteel`, `wooden`, `bmSitdown`, `invertV`, `flying`, `standUp`, `junior`, `mouse`, `bobsled`, `mine`, `swinging`, `launched`, `giga`). Derselbe Wagen wird als 96-px-Katalogkachel gerendert (`WorldView.coasterTrainThumbnail`) |
+| Achterbahnschienen | `src/view/coasterTrack.ts` via `WorldView.rebuildCoasters` | ein vertex-color Mesh je Stück. Schienen sind **Segmentboxen entlang der diskreten Sample-Polylinie** (Heading/Pitch/Bank, ein Basisvektor pro Segment, leichter Überlapp, kein jedes-zweite-Sample mit fester 0,14-Länge). Schwellen, Stützen, optional Spine/Trog im selben Mesh. Geteiltes Material. Animierte Züge, Specials (Foto/Splash) und Picking bleiben außerhalb des statischen Batches. Stil-Tabelle: `steelLattice`, `wooden`, `boxSpine`, `invertedBox`, `flyingSpine`, `juniorTubular`, `wildMouse`, `woodenMouse`, `bobsledTrough`, `suspendedSpine`, `gigaLattice`, `launchedSteel` |
 | Stand-Queue-Spuren | `src/view/WorldView.ts` `addQueueBarriers` | Mittelschiene und zwei Pfeile am Queue-Mesh; bleibt im Gebäude-Batch |
 
 Weitere Views (`*View.ts`) sind in den Fach-MDs genannt und dürfen den
@@ -80,3 +82,72 @@ Snapshot nicht autoritativ schreiben.
 Aktualisieren, wenn Batch-Grenzen, Light-Architektur, ein neuer permanenter
 View-Zweig oder Picking-Ziele ändern. Neue sichtbare Objekte brauchen einen
 Batch-Plan, bevor einzelne Meshes entstehen.
+
+## Themenmodelle und Fassaden (0.1.125)
+
+`retroBuildings.ts` ergänzt Nicht-Klassik-Modelle durch `embellishTheme` und
+überarbeitete Blätter, Laternen, Möbel, Zahnräder und Eisdetails.
+40 Fassadenmodelle stammen aus `decorationWalls.ts`; offene Fenster/Türen,
+Materialstruktur und Rahmen sind je Art ein gemeinsames Vertexfarben-Mesh.
+Instancing und Building-IDs bleiben erhalten. Wände verwenden die gespeicherte
+Höhe ohne Terrain-Nachkorrektur, damit Lagen nahtlos stapeln. Slot 4 rendert
+Vollgröße. Visuelle Fixture: `tests/decoration-preview.html`.
+
+## Stützenfreie Fassaden und Wegmöbel (0.1.126)
+
+`isFacade` verhindert automatische Bodenstützen an Wänden und Dächern.
+Flach-/Schrägdächer nutzen je Kind gemergte Streifen, wie Wände instanziert.
+Themen-Eimer ebenfalls ein Mesh je Art. Bank/Eimer-Geistermodelle verwenden
+`pathFurnitureRotation` statt einer generischen Kachel. Eimer-Füllkartons
+folgen dem gedrehten Randversatz. `tests/construction-preview.html` nutzt den
+echten WorldView-Renderer für erhöhte Fassaden und interaktive Bauhöhe.
+
+## Wege und Brücken (0.1.127)
+
+`wayStructures.ts` erzeugt gemeinsame gemergte Geometrie für Randsteine,
+Geländer, Brückendeck-Unterbau und schlanke Vierkantstützen. `indexWayStructures`
+indiziert die Lagen einmal je Neuaufbau; Anschlussprüfungen lesen nur Nachbarn.
+`wayStructurePlan` hält verbundene Kanten frei, einschließlich Kurven/Kreuzungen,
+und erkennt Erhöhung relativ zum Gelände. Jede Stütze endet unter der lokalen
+Rampenunterseite; bei einer unteren Weg-/Straßenlage entfallen Stützen in dieser
+Kachel (freier Brückenspann). Keine Simulationsmutation. Wege und Straßen teilen
+die Geometrien nach Form/Höhe/Kanten; `batchRetroBuildings` instanziert diese
+Details, einschließlich Picking-IDs bei Wegen. Kein Draw-Call pro Pfosten.
+Warteschlangen behalten ihre eigenen Geländer und bekommen nur den Stützenplan.
+
+Weg-/Straßendecks reichen ohne graue Anschlussflicken über die ganze Kachel.
+`wayTextures.ts` bäckt differenzierte 64px-Beläge (Bohlen mit Fugen/Nägeln,
+versetztes Pflaster, Kieskörnung, Fahrplatten, Dirt-Spuren und Asphaltkörnung).
+Auch Legacy-Beläge ohne WayType bekommen Textur. Asphaltgeraden erhalten
+Mittellinien; Geschwindigkeits-Farbtönung erscheint nur mit Straßenbauhilfen.
+Gebäude-Fingerprint berücksichtigt Straßenlagen und Rampenrichtung, damit
+Unterführungsstützen bei Änderungen neu aufgebaut werden.
+
+Tests: `tests/wayStructures.ts`, visuell `tests/ways-preview.html` im echten
+WorldView. Tests umfassen alle Richtungen/Steigungen, Anschlüsse, Terrain-Höhe,
+freie untere Lagen und 200 gleiche Konstruktionen in einem Instanz-Batch.
+
+## Dachwand-Konturen (0.1.128)
+
+`roofWallTop` und `ModelKit.panel` erzeugen echte dreieckige Keilwände,
+spiegelverkehrt, plus hohe Stirnwand. Extrusion wird indexiert und mit den
+Materialdetails in ein Vertexfarben-Mesh gemergt. Details bleiben unter der
+Dachkontur. Instancing/Picking und Stützenfreiheit bleiben erhalten.
+
+## Lokaler Fassadeneinblick (0.1.129)
+
+`src/view/facadeReveal.ts` verwaltet ein WorldView-lokales Material mit geteilten
+Shader-Uniforms für die Fassaden-Instanzbatches. Sichtbare Raycast-Treffer auf
+Wänden/Dächern aktivieren einen weichen Radius: innen 1 Tile, Übergang bis
+2,5 Tiles, minimal 10 % Deckkraft. Zentrum und Stärke werden zeitlich geglättet.
+Kein Geometrie-Neuaufbau und keine zusätzlichen Batches pro Objekt. Nach dem
+Ausblenden des Effekts wird wieder Tiefe geschrieben. Originale Picking-Geometrie
+bleibt aktiv; unsichtbare Einzelmodelle werden bei der Hover-Suche übersprungen.
+Pointerleave, Fenster-Blur und Neuaufbau setzen den Effekt zurück. Nur Ansicht,
+keine Simulation, Commands oder Save-Felder.
+
+Seit 0.1.130: Im Deko-Baumodus bleiben Wände und Dächer vollständig sichtbar.
+Außerhalb davon lassen lokal transparent gewordene Fassaden Klicks zu den
+Objekten dahinter durch, etwa zu Ständen. Entfernte, undurchsichtige Bauteile
+bleiben anklickbar. Der Hover-Test trifft weiterhin die Fassaden, damit der
+Einblick beim Durchklicken stabil bleibt.

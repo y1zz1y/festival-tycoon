@@ -37,13 +37,16 @@ Neue oder geänderte Funktionen sind erst fertig, wenn die Doku stimmt:
 | Besucher: Bedürfnisse, Entscheidungen | [visitors.md](visitors.md) | Spawn, Needs, Gedanken, Gruppen |
 | Camping, Zelte, Treffpunkte | [camping.md](camping.md) | Parzellen, Installationen, Gathering |
 | Gebäude, Katalog, Deko, Platzierung | [buildings.md](buildings.md) | `BUILDING_KINDS`, Scenery-Slots, Abriss |
+| Themen-Deko, Deko-Reiter | [decoration.md](decoration.md) | Festival-Themen, Kategorienfilter, neue Arten |
 | Gelände, Boden, Wege, Umgebung | [terrain.md](terrain.md) | Höhen, Ground-Prep, Way-Types |
 | Straßen, Fahrzeuge, Waren, Depots | [logistics.md](logistics.md) | Roads, Träger, Lastwagen, Ampeln, Schranken |
+| Bandversorgung, Backstage, Tourbus | [band-supply.md](band-supply.md) | Backstage-Flächen, Bandzufriedenheit, Tourbus-Parkplatz, Show-Qualität |
 | Personal, Zonen, Sanität, Security | [staff.md](staff.md) | Rollen, Arbeitsbereiche, Tore |
 | Müll, Vorfälle, Feuerwerk, Panik | [incidents.md](incidents.md) | Incidents, Waste-Dumps, Ticker, Bubbles |
 | Festivalwochenende, Bands, Tickets | [festival.md](festival.md) | Buchungen, Wetter, Ruf, Tagesplan |
 | Bühnenwerkstatt, Show, Publikum | [stages.md](stages.md) | Designs, Vorlagen, Zuschauerflächen |
-| Achterbahn, Karussell, Bungee | [attractions.md](attractions.md) | Schienen, Queues, Ride-Zugang |
+| Achterbahn, Karussell, Bungee | [attractions.md](attractions.md) | Queues, Ride-Zugang, Betrieb |
+| Achterbahn-Editor, Schienenstücke | [coaster.md](coaster.md) | Anschluss-State-Machine, Stückkatalog, Bau-UI, Typ-Matrix |
 | Atmosphäre, Strom, Tageslicht | [atmosphere.md](atmosphere.md) | Overlays, Power-Netz, Day/Night |
 | Darstellung, Batches, Licht | [rendering.md](rendering.md) | `WorldView`, Instancing, Lights |
 | UI, Eingaben, Mobile | [ui.md](ui.md) | `main.ts`, Fenster, Touch |

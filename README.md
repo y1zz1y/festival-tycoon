@@ -373,10 +373,10 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
   mitgebrachter Vorräte; bei der Abreise dürfen Gäste sie als Weg-Fallback queren
 - individuelle Besucher-Inventare mit Zelt, Stühlen, Pavillon, Musikbox, Alkohol, Essen und Feuerwerkskörpern
 - zufälliges Zünden mit Verbrauch und sichtbaren Feuerwerkseffekten
-- unbegrenzter Besucherzustrom mit lokaler Gedränge- und Festivallust-Simulation
+- unbegrenzter Besucherzustrom mit lokaler Gedränge- und Festivallust-Simulation; ein laufendes Konzert füllt die Festivallust, eine dunkle Bühne nicht
 - zuschaltbares Gedränge-Overlay mit durchschnittlicher Parkauslastung
 - getrennte Karten-Overlays für lokale Attraktivität und Partystimmung mit abflachender Quellenaddition
-- Dekoration mit Bäumen, Hecken, Bannern, Wimpeln, Totems, Fahnen, Lampions, Bierfässern, Luftfiguren, Gebetsfahnen, Feuerschalen, Lattenzaun, Absperrseil, Luftschlangen, Leitkegeln, Kisten, Ölfässern, Windrädern, Windsäcken, Blumenampeln, Kakteen, Zwergen, Windspielen, Kreidetafeln, Liegestühlen, Sitzsäcken, Fackeln, Deko-Boxen, Boomboxen, Selfie-Rahmen, Diskokugeln, Luftkakteen, Riesenpilzen, Kristallstelen, Willkommensbögen, automatisch am Wegrand ausgerichteten Bänken, Mastleuchten und großen weißen Tageslichtballons. Jede Art hat eine eigene Attraktivität: kleine billige Stücke wirken nur nah, teure Blickfänge stärker und weiter (Karten-Overlay Attraktivität)
+- Dekoration mit Themen oben im Deko-Reiter (Klassik, Wüste, Wald, Neon, Industrie, Tropen, Mystik, Zirkus, Alpin, Arktis, Steampunk) und darunter den Kategorien Pflanzen, Möbel, Licht, Fest, Kulisse, Zaun. Darin Bäume, Hecken, Banner, thematische Palmen, Neonbögen, Eisskulpturen, Zahnräder und die bisherigen Stücke (Totems, Lampions, Bierfässer, Diskokugeln, Willkommensbögen, Bänke, Mastleuchten, Tageslichtballons, …). Jede Art hat eine eigene Attraktivität: kleine billige Stücke wirken nur nah, teure Blickfänge stärker und weiter (Karten-Overlay Attraktivität)
 - Festivalbühnen, gerichtete sowie omnidirektionale Lautsprecher und ausweisbare Bühnenvorplätze
 - maximal neun feiernde Besucher je Vorplatzfeld, lokale Tanz-Hotspots und Stimmungsverstärkung durch Tänzer
 - individuelle Vorlieben für schöne Umgebung und Partystimmung sowie Meidung von Feuer, Kotze und Schlafenden
@@ -411,7 +411,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - lokales, nicht ausbreitendes Brandrisiko durch betrunken gezündetes Feuerwerk
 - patrouillierende Feuerwehrkräfte, die lokale Brände löschen
 - RCT-Iconleiste oben rechts: Bauen, Verwalten und Sitzung; Baupaletten und Straßeneditor links
-- Dekoration, Attraktionen und Logistik als Bildkatalog: Kacheln im Raster, Name und Preis unten beim Darüberfahren
+- Dekoration, Attraktionen und Logistik als Bildkatalog: Kacheln im Raster, Name und Preis unten beim Darüberfahren. Im Deko-Fenster zuerst das Thema antippen, darunter scrollen die Kategorien des Themas
 - Camping unter Attraktionen, Krankenhaus (Garage und Krankenbereich) unter Logistik
 - generisches Achterbahnsystem mit erweiterbarem Typ- und Schienenkatalog
 - fortgesetzter Schienenbau mit Station, Geraden, sanften/steilen Steigungen und Kurven 1×1 bis 4×4
@@ -480,13 +480,13 @@ Der Wegtyp „Warteschlange“ steht ausschließlich in diesem Editor zur Verfü
 
 ### Achterbahn-Editor
 
-1. In der Iconleiste **Attraktionen** öffnen, „Achterbahn“ wählen und auf dem Gelände einen Startpunkt setzen.
+1. In der Iconleiste **Attraktionen** den Reiter **Achterbahn** öffnen und den Typ direkt wählen (Holz, Twister, Inverted, Wilde Maus, LIM-Launch, …). Jede Kachel zeigt den Zug dieses Typs. Danach die Startplattform setzen. Der Typ ist danach fest.
 2. Startpunkt, Bauhöhe und Startrichtung in der Vorschau anpassen und mit dem blauen Hammer die Startplattform bauen.
-3. Wie in RCT2 oben Richtung/Kurvenradius wählen. Weitere Elemente liegen hinter **Speziell …**.
+3. Wie in RCT2 oben Richtung/Kurvenradius wählen. Weitere Elemente liegen hinter **Speziell …**. Was der Typ nie kann, fehlt (kein Helix auf Holz, kein Steil auf Junior). Was **gerade** nicht passt (falsche Neigung, Kette, Spezial), bleibt sichtbar, ist aber ausgegraut und nicht klickbar.
 4. Jeder Wechsel zwischen flach, sanft und steil setzt ein Übergangsstück. Flach ↔ steil nutzt das lange Rundungsstück, alle anderen Stufen ein Feld. Der Wechsel von einer Steigung auf flach endet dadurch wieder exakt waagerecht.
 5. Seitliche Neigung links oder rechts muss vor einer Kurve eingeleitet und vor Stationen wieder neutral ausgeleitet werden. Nachfolgende Kurven übernehmen die gesetzte Neigung.
 6. Weitere Stationsplattformen verlängern den Zug um jeweils einen Wagen.
-7. Bei geeigneten Steigungen schaltet das Kettensymbol den Kettenzug für das nächste Stück ein; die angezeigten Kosten enthalten den Aufpreis.
+7. Bei geeigneten Steigungen schaltet das Kettensymbol den Kettenzug für das nächste Stück ein; die angezeigten Kosten enthalten den Aufpreis. LIM-Launch und Seillift-Typen haben keinen Kettenlift.
 8. Die roten Rückbauknöpfe entfernen das letzte bzw. markierte Stück. Mit den Pfeilen wird ein vorhandenes Element markiert.
 9. Eingang und Ausgang über die beiden unteren Schaltflächen auf getrennten Feldern neben Stationsplattformen anbauen.
 10. Die Strecke zum Startpunkt mit gleicher Höhe, Richtung, Höhenneigung und Seitenneigung zurückführen.
@@ -495,7 +495,7 @@ Eine Bahn fährt erst, wenn Strecke, Eingang und Ausgang vollständig sind. Mit 
 
 Eine noch nicht vollständige Achterbahn kann mit dem Info-Werkzeug angeklickt werden. Sie wird dadurch erneut im Achterbahn-Editor geöffnet und am Endanker des letzten vorhandenen Schienenelements fortgesetzt.
 
-Im Attraktionsfenster kann eine geschlossene Strecke geöffnet oder ohne Besucher im kontinuierlichen Testbetrieb gefahren werden. „Wagen zurückholen“ setzt den Zug sicher an die Station; vorhandene Fahrgäste werden dabei über den Ausgang zurück in den Park geführt. **Achterbahn abreißen** entfernt die gesamte Bahn: Schiene, Stützen, Zug, Station, Ein- und Ausgang sowie die angeschlossene Warteschlange. Das Infofenster schließt danach. Denselben Knopf gibt es im Konstruktionsfenster, solange die Bahn noch unvollständig ist. Abriss auf der Stations- oder Zugangskachel entfernt ebenfalls die ganze Bahn.
+Im Attraktionsfenster kann eine geschlossene Strecke geöffnet oder ohne Besucher im kontinuierlichen Testbetrieb gefahren werden. Testbetrieb läuft auch schon in der Festivalplanung (neue Szenarien starten dort), sobald die Uhr nicht auf Pause steht. „Wagen zurückholen“ setzt den Zug sicher an die Station; vorhandene Fahrgäste werden dabei über den Ausgang zurück in den Park geführt. **Achterbahn abreißen** entfernt die gesamte Bahn: Schiene, Stützen, Zug, Station, Ein- und Ausgang sowie die angeschlossene Warteschlange. Das Infofenster schließt danach. Denselben Knopf gibt es im Konstruktionsfenster, solange die Bahn noch unvollständig ist. Abriss auf der Stations- oder Zugangskachel entfernt ebenfalls die ganze Bahn.
 
 Über „Strecke bearbeiten“ lässt sich jede Bahn erneut öffnen. Vor- und Zurück-Schaltflächen markieren die vorhandenen Elemente nacheinander. „Markiertes Element löschen“ entfernt ausschließlich dieses Element und setzt den Bauanker auf das davorliegende Segment. Die späteren Segmente bleiben erhalten; die Strecke gilt als unterbrochen, bis neue Elemente die Lücke geometrisch korrekt schließen.
 
@@ -533,7 +533,9 @@ RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafi
 
 Neue Szenarien beginnen geschlossen in der Planung. Unter **Festival planen** legt ihr Vorlauf, Festivaltage, Angebotszeiten sowie die Preise für Tages- und Campingticket fest; erst **Festival starten** setzt die Festivalzeit in Gang. Nach dem Ende bleiben Abreise und Reinigung aktiv, der Park bleibt bis zum nächsten Start geschlossen. Bestehende laufende Spielstände behalten ihren Ablauf.
 
-Unter **Logistik** in der Iconleiste einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen. Das Paket-Icon in der Gruppe **Verwalten** öffnet die Logistikverwaltung für Bestellungen und Träger. Mindestbestände (in 20er-Schritten) und Trägerzahl stellt ihr dort im Reiter **Waren & Träger** oder im Infofenster des Lagers ein. Bestellungen kosten Warenpreis plus 45 € Fracht. Lastwagen liefern zum Anlieferungsplatz; Träger holen dort Waren physisch ab und bringen sie ins Depot. Depots versorgen Stände automatisch bis zum Zielbestand von 40 Einheiten. Als **Zwischenlager** freigegebene Depots geben zusätzlich Ware an andere Depots ab. Träger kosten einmalig 120 € und anschließend 0,04 €/Spielminute.
+Unter **Logistik** in der Iconleiste einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen. Das Paket-Icon in der Gruppe **Verwalten** öffnet die Logistikverwaltung für Bestellungen, Träger und **Bandversorgung**.
+
+**Bandversorgung:** Unter **Logistik → Bandversorgung** **Backstage ausweisen** (oder im Paket-Fenster den Reiter **Bandversorgung**) und die Fläche an eine Bühne malen (zusammenhängende Nachbarfelder). Getrennte Flächen bleiben markiert, zählen aber nicht. Mehrere verbundene Bühnen teilen sich Attraktivität, Verpflegung und Drauf. Bands spielen auch ohne Backstage, der Auftritt ist dann schwächer. Imbiss und Getränkestand in der Nähe (bis 12 Felder) verbessern die Verpflegung; Deko auf aktivem Backstage hebt die Attraktivität. Fans, die sich auf das Backstage mogeln, senken sie. **Parkplatz für den Tourbus** nur auf Backstage und an einer Straße: ein Platz je Bus-Band des Tages, sonst nicht die volle Attraktivität. Headliner kommen morgens (~08:00) mit einem eigenen Tourbus auf den Parkplatz und fahren abends (~23:00 oder nach dem letzten Set) wieder. Kleinere Bands (Draw unter 30) und Bands ohne freien Platz kommen zu Fuß über den **Personaleingang**. Die Musiker hängen zwischen den Sets auf dem verbundenen Backstage rum und tragen dieselben Outfits wie auf der Bühne. Ein Klick auf Backstage öffnet das Infofenster mit allen Werten inklusive Show-Qualität und Trinkgeld. Mindestbestände (in 20er-Schritten) und Trägerzahl stellt ihr dort im Reiter **Waren & Träger** oder im Infofenster des Lagers ein. Bestellungen kosten Warenpreis plus 45 € Fracht. Lastwagen liefern zum Anlieferungsplatz; Träger holen dort Waren physisch ab und bringen sie ins Depot. Depots versorgen Stände automatisch bis zum Zielbestand von 40 Einheiten. Als **Zwischenlager** freigegebene Depots geben zusätzlich Ware an andere Depots ab. Träger kosten einmalig 120 € und anschließend 0,04 €/Spielminute.
 
 Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als farbigen Balken und als Zahl im Infofenster. An Mülleimern liegt der Füllstand als grobe Zahl Kartons am Boden (leer keine, voll vier). Ist der nächste Eimer voll oder nicht benutzbar, lassen Gäste den Müll auf dem Weg fallen und gehen weiter; freie Eimer in der Nähe werden weiter benutzt. Ein Klick auf eine Müllablage öffnet das Infofenster mit Füllstand, Kapazität und freiem Platz der **gesamten zusammenhängenden Fläche**. Ablagen lassen sich nicht überfüllen. Müllfahrzeuge zeigen im Infofenster die geladene Müllmenge statt Insassen. Unten am Bildrand erscheint ein **Meldungs-Ticker** bei Feuer, Massenpanik und wenn alle Müllflächen über 90 % voll sind; **Hin** springt zur Stelle. Die letzten Meldungen öffnet der Button **Meldungen** links neben Mehrspieler. Reinigungskräfte bringen gesammelten Bodenmüll zuerst zum nächsten erreichbaren Mülleimer; volle Eimer leeren sie vorrangig und bringen den Inhalt zur Müllablage. Haben sie keinen Bodenmüll, keine Kotze und keinen vollen Eimer, leeren sie auch teilweise gefüllte Eimer (ab einem Viertel), statt herumzustehen. Müllwagen übernehmen die weitere Abfuhr. Saugreiniger vom Betriebshof fahren auf Wegen und Bühnenvorplätzen, dürfen den Personaleingang wie Personal nutzen, halten vor Besuchern und entladen an der Müllablage; Eimer lassen sie stehen. In der Personalverwaltung erscheinen sie unter **Reinigungskraft** als Saugroboter und bekommen dieselben Einsatzgebiete wie Reinigungskräfte. Alte Müllträger beenden vorhandene Ladungen und werden anschließend aus dem Logistiksystem entfernt.
 
@@ -573,3 +575,58 @@ Nach dem Festival entwickelt sich die Basis einmalig aus 80 % bisheriger Basis, 
 ### Performance bei großen Festivals
 
 Abreise- und Müllwegentscheidungen teilen das begrenzte Besucherbudget pro Simulationstick. Größere Gruppen planen ihre Ziele dadurch nacheinander; Zustandswechsel, laufende Bewegungen, Bedürfnisse und Spielzeit laufen weiter. Campingobjekte und Bodenereignisse verwenden wiederverwendete Grafikpuffer. Sichtbare Details, Figuren, Farben, Beleuchtung und Effekte bleiben erhalten. Reproduzierbare Messungen stehen in `docs/performance.md`.
+
+## Themen-Deko und stapelbare Wände
+
+Im Deko-Menü haben alle Themen außer **Klassik** überarbeitete Details.
+Große Palmen, Tannen, Zelte, Skulpturen, Bänke und Tische belegen jetzt ein
+ganzes Feld; kleine Requisiten bleiben Viertelfelder. Bereits gebaute Deko
+behält ihre bisherige Fläche.
+
+Unter **Deko → Thema → Wände** findet ihr Vollwände, Halbwand, Fensterwand
+und Türbogen in zehn Materialien. Maus an die Feldkante, **R** zum Drehen.
+Mit **Shift und Maus hoch/runter** oder der vorhandenen Höhensteuerung baut
+ihr höher: Halbwand = 0,5, Vollwand/Fenster/Tür = 1. Für das nächste Geschoss
+um die entsprechende Höhe anheben. Wände passen an Gebäude und Fahrgeschäfte;
+sie sind dekorative Verkleidungen und sperren keine Besucherwege.
+
+## Komfort beim Bauen
+
+- **Deko → Thema → Dächer:** Flach- und Schrägdächer, mit R drehbar.
+  Erhöhte Wände und Dächer haben keine automatischen Säulen darunter.
+- **Shift drücken** über einem bebauten Feld: Bauhöhe springt über das Objekt.
+  Shift halten und Maus senkrecht bewegen: ruhig in 0,5-Schritten (48 Pixel
+  pro Schritt). Shift+Mausrad geht ebenfalls. Loslassen behält die Höhe.
+- **Rechtsklick** im Deko-, Fußweg- oder Straßenbaumodus entfernt nur das
+  jeweilige Dekoobjekt, Wegstück oder Straßenstück. Rechtsziehen bewegt die Kamera.
+- **Bänke und Mülleimer** richten sich automatisch an freien Wegkanten aus.
+  Alle Mülleimer findet ihr bei **Deko → Möbel**, auch passend zu jedem Thema;
+  sie werden wie die klassischen Eimer benutzt und geleert.
+
+## Schönere Wege und Straßen
+
+Wege und Straßen haben detailliertere Beläge und saubere Anschlüsse.
+Erhöhte Fußwege bekommen Geländer, Straßenbrücken Leitplanken. An Kurven,
+Abzweigen und verbundenen Feldern bleiben die Durchgänge offen.
+Die schlanken Stützen enden unter der Strecke; untere Wege und Straßen
+bleiben frei. Geschwindigkeitsfarben erscheinen nur in der Straßenbauansicht.
+
+## Wände passend zum Schrägdach
+
+Unter **Deko → Thema → Wände** gibt es zu jedem Material einen Dachkeil
+**links hoch**, **rechts hoch** und einen **hohen Dachabschluss**.
+Auf derselben Bauhöhe wie das Dach setzen und mit **R** an die passende Kante
+drehen. Zwei spiegelverkehrte Keile schließen einen Giebel über zwei Felder.
+
+Beim Überfahren von Wänden oder Dächern mit der Maus werden die Bauteile
+in der direkten Umgebung weich durchsichtig, damit du hineinsehen kannst.
+Sobald du die Maus wegbewegst, werden sie wieder eingeblendet.
+
+Seit 0.1.130: Im Deko-Baumodus bleiben Wände und Dächer vollständig sichtbar.
+Außerhalb davon lassen lokal transparent gewordene Fassaden Klicks zu den
+Objekten dahinter durch, etwa zu Ständen. Entfernte, undurchsichtige Bauteile
+bleiben anklickbar. Der Hover-Test trifft weiterhin die Fassaden, damit der
+Einblick beim Durchklicken stabil bleibt.
+
+Mülleimer drehst du mit **R** an die gewünschte freie Kante. Bänke richten
+sich automatisch aus und können auch an einer freien Kante von Straßen stehen.

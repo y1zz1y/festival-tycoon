@@ -17,7 +17,43 @@ import {
 import { createPorterModel } from '../src/view/carrierModels'
 import { disposeObject3D } from '../src/view/disposeObject3D'
 
+function testRoadExitCache(fixture: (count?: number) => GameState): void {
+  const traffic = fixture(0), roads = traffic as any
+  const edge = -roads.getWorldSize() / 2
+  traffic.snapshot.logistics.roadCells = Array.from({ length: 4 }, (_, i) => ({
+    x: 0, z: edge + i, elevation: 0, allowedDirections: null,
+    blockedEdges: 0, speedLimit: 30 as const, crosswalk: false,
+  }))
+  roads.invalidateRoadGraph()
+  let exitSearches = 0
+  const searchExit = roads.searchReachableRoadExit.bind(roads)
+  roads.searchReachableRoadExit = (...args: any[]) => { exitSearches++; return searchExit(...args) }
+  const start = { x: 0, z: edge + 3, elevation: 0 }
+  const exitRoute = roads.findReachableRoadExit(start, 2)
+  assert.ok(exitRoute?.route.length, 'the shared exit query finds the map edge')
+  exitRoute.route[0].x = 999
+  exitRoute.route.length = 0
+  for (let i = 0; i < 200; i++) {
+    assert.equal(roads.findReachableRoadExit(start, 2).route[0].x, 0, 'callers own their route copies')
+  }
+  assert.equal(exitSearches, 1, 'identical departure queries share one search')
+  assert.equal(roads.findReachableRoadExit(start, 2, new Set([`0:${edge + 1}`])), null,
+    'live occupancy bypasses the static exit cache')
+  assert.ok(roads.findReachableRoadExit(start, 2), 'a blocked detour does not poison static reachability')
+  assert.ok(traffic.setRoadDirection(0, edge + 1, 0).ok)
+  const beforeBlocked = exitSearches
+  for (let i = 0; i < 200; i++) assert.equal(roads.findReachableRoadExit(start, 2), null)
+  assert.equal(exitSearches - beforeBlocked, 1, 'unreachable exits are not searched again each tick')
+  assert.ok(traffic.setRoadDirection(0, edge + 1, 2).ok)
+  assert.ok(roads.findReachableRoadExit(start, 2), 'arrow edits immediately invalidate failed exit searches')
+  roads.findReachableRoadExit(start, 0)
+  roads.findReachableRoadExit(start, 0, undefined, true)
+  assert.equal(exitSearches, beforeBlocked + 4, 'heading and U-turn policy have distinct cache entries')
+}
+
 export function testPerformanceGuards(fixture: (count?: number) => GameState): void {
+  testRoadExitCache(fixture)
+  testLocalParkingClaims(fixture)
   const game = fixture(100), internal = game as any
   const visitor = game.snapshot.visitors[0]!
   const camp = internal.camping
@@ -206,7 +242,7 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
     VISITOR_CAR_COLORS.includes(visitorCarColor('car-a') as typeof VISITOR_CAR_COLORS[number]),
   )
   assert.equal(visitorCarColor('car-a'), visitorCarColor('car-a'), 'car paint is stable for an id')
-  for (const kind of ['garbageTruck', 'deliveryTruck', 'bus', 'ambulance', 'sweeper'] as const) {
+  for (const kind of ['garbageTruck', 'deliveryTruck', 'bus', 'ambulance', 'sweeper', 'tourBus'] as const) {
     const a = createRoadVehicleModel(kind)
     const b = createRoadVehicleModel(kind)
     const mesh = a.children[0] as Mesh
@@ -306,4 +342,35 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   assert.ok(balloonPool.filter(light => light.intensity === 0).length === FESTIVAL_LIGHT_BUDGET - 1, 'unused pool slots stay attached and dark')
   assert.ok(balloonPool.every(light => light.parent === balloonLights.group), 'balloon lighting never adds extra PointLights')
   console.log('PASS deterministic decision budget, camp route bound, cache refresh and detailed asset batching')
+}
+
+function testLocalParkingClaims(fixture: (count?: number) => GameState): void {
+  const game = fixture(0), internal = game as any
+  const logistics = game.snapshot.logistics
+  logistics.roadCells = [{ x: 0, z: -18, elevation: 0, allowedDirections: null,
+    blockedEdges: 0, speedLimit: 30, crosswalk: false }]
+  internal.invalidateRoadGraph()
+  logistics.parkingCells = Array.from({ length: 400 }, (_, i) => ({
+    x: 5 + i % 15, z: -15 + Math.floor(i / 15), occupiedBy: null,
+  }))
+  logistics.parkingCells.push({ x: 1, z: -18, occupiedBy: null }, { x: -1, z: -18, occupiedBy: null })
+  const car = (id: string) => ({ id, kind: 'visitorCar', state: 'driving',
+    cell: { x: 0, z: -18 }, position: { x: 0, z: -18 }, parkingCell: null, route: [] })
+  let approachChecks = 0
+  const approaches = internal.getOpenParkingApproachRoads.bind(internal)
+  internal.getOpenParkingApproachRoads = (...args: any[]) => { approachChecks++; return approaches(...args) }
+  const first = car('first'), second = car('second')
+  assert.ok(internal.claimAdjacentFreeParking(first))
+  assert.deepEqual(first.parkingCell, { x: -1, z: -18 }, 'nearby bays preserve coordinate priority')
+  assert.ok(approachChecks <= 4, 'hundreds of distant bays never trigger approach checks')
+  assert.ok(internal.claimAdjacentFreeParking(second))
+  assert.deepEqual(second.parkingCell, { x: 1, z: -18 }, 'reservations update the indexed objects immediately')
+  assert.equal(internal.claimAdjacentFreeParking(car('third')), false)
+  logistics.parkingCells.push({ x: 0, z: -17, occupiedBy: null })
+  assert.ok(internal.claimAdjacentFreeParking(car('new-bay')), 'new bays invalidate the index')
+  logistics.parkingCells = []
+  assert.equal(internal.claimAdjacentFreeParking(car('removed')), false, 'removed bays leave no stale candidates')
+  logistics.parkingCells = [{ x: 257, z: -18, occupiedBy: null }]
+  assert.equal(internal.getAdjacentParkingCells({ x: 0, z: -18 }).length, 0,
+    'packed-coordinate collisions must not produce distant candidates')
 }

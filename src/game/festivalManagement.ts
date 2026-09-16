@@ -337,7 +337,9 @@ export function updateFestival(s: GameSnapshot): void {
       const distance = stageDistance(show.stage,visitor)
       if (distance <= 8 && visitor.concertId===show.booking.id && visitor.state === 'partying' && visitor.route.length === 0) {
         const affinity=musicAppeal(visitor.musicTaste,show.band.id),match=affinity>=.7
-        visitor.needs.fun = clamp(visitor.needs.fun + minutes * (1.5*affinity) * (1 + show.boost))
+        const quality = s.bandSupply?.showQualityByStageId[show.stage.id] ?? SIMULATION_CONFIG.bandSupply.bareShowQuality
+        visitor.needs.fun = clamp(visitor.needs.fun + minutes * (1.5*affinity) * (1 + show.boost) * quality)
+        bookFinance(s, 'sales', minutes * SIMULATION_CONFIG.bandSupply.tipPerWatcherMinute * quality)
         f.metrics.concertMinutes += minutes
         if ((visitor.toplessMinutes ?? 0) > 0) visitor.thought = CONCERT_TOPLESS_THOUGHT
         else if (!(toplessOnSite && visitor.thought === CONCERT_TOPLESS_CROWD_THOUGHT)) {

@@ -1,6 +1,6 @@
 # Spielstände und Versionierung
 
-`GameSnapshot.version` ist die Schema-Version (aktuell **27**). Sichtbare
+`GameSnapshot.version` ist die Schema-Version (aktuell **29**). Sichtbare
 Spielversion kommt aus `package.json`. Feature-/Fix-Batches erhöhen den
 Patch (`npm version patch --no-git-tag-version`) und halten das Lockfile synchron.
 
@@ -88,9 +88,20 @@ benannte Archiv (`SAVE_SLOTS_KEY` / Server-`saves/`).
 - `removeCoaster` ist nur ein Command; es kommen keine Snapshot-Felder
   hinzu. Nach dem Abriss fehlen die Bahn, ihre Tore und die zugehörige
   Eingangsqueue im nächsten Save.
+- `Coaster.typeId` ist einer der Katalog-IDs (`classicSteel`, `wooden`,
+  `twister`, …). Fehlender oder unbekannter Wert wird beim Laden zu
+  `classicSteel`. Kein neues Snapshot-Feld; alte classicSteel-Saves bleiben gültig.
 - `setStaffZone` ist nur ein Command (`staffId`, 3×3-`key`, `active`);
   keine neuen Snapshot-Felder. `workZones` bleibt wie bisher am Personal
   bzw. Saugroboter. `toggleStaffZone` bleibt für ältere Clients gültig.
+- Bandversorgung (v29): `backstageCells` (`{ x, z, elevation }[]`),
+  `bandActors` (optional `memberIndex`, `role`, `costumeId`; fehlende
+  Werte werden aus `bandLooks` ergänzt), abgeleitetes `bandSupply`.
+  Fehlende Arrays werden `[]`, fehlendes `bandSupply` leer.
+  `tourBusParking` ist ein Gebäude-`kind`; `tourBus` ein
+  `RoadVehicle.kind` mit `reservedParkingId`. Optionale Besucherfelder
+  `backstageIntrusion` / `backstageLingerMinutes`. Alte Stände ohne
+  Backstage spielen als Bare-Stage weiter.
 
 ## Tests
 
@@ -110,3 +121,24 @@ persönliche Slot-Dateien werden nicht überschrieben.
 
 Aktualisieren, wenn `GameSnapshot.version` steigt, ein Feld dazukommt oder
 sich Slot-/Export-Wege ändern. Command-Protokoll in `docs/multiplayer.md`.
+
+## Deko-Vollfelder und Fassaden (0.1.125)
+
+Kein neues Snapshot-Feld: `decorationSlot: 4` kennzeichnet neue große Deko.
+0–3 bleiben Viertel/Kante; undefined bleibt Legacy-Vollfeld. Keine Migration
+oder Vergrößerung alter Viertel. Die 40 `wall<Style><Shape>`-Kinds verwenden
+`elevation`, `rotation`, `decorationSlot` wie bestehende Deko. Laden bewahrt
+Slots und Wandlagen. Regressionen in `tests/decoration.ts`.
+
+## Dächer und Themen-Eimer (0.1.126)
+
+Neue Kinds `roof<Style>Flat/Slope` und `bin<Style>`; keine neuen Felder.
+Dächer speichern Vollfeld-Slot 4, Drehung und Höhe. Eimer speichern vorhandenes
+`wasteFill`, `rotation`, `elevation`. `isWasteBin` normalisiert alle Varianten.
+Wegkanten-Ausrichtung neuer Möbel bleibt als Rotation erhalten; alte Eimer
+nutzen beim Rendern ebenfalls den Randversatz. Regressionen in decoration.ts.
+
+## Dachabschluss-Kinds (0.1.128)
+
+`wall<Style>SlopeLeft/SlopeRight/RoofEnd` verwenden vorhandene Rotation,
+Kanten-Slots und elevation; kein neues Feld und keine Migration bestehender Teile.

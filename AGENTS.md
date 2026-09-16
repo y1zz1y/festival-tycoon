@@ -12,13 +12,16 @@ Important per-system facts live in `docs/*.md`, not only in this file. Start at
 | Visitors, needs, thoughts | `docs/visitors.md` |
 | Camping / gatherings | `docs/camping.md` |
 | Buildings, catalog, scenery | `docs/buildings.md` |
+| Themed decoration / Deko tab | `docs/decoration.md` |
 | Terrain, ground, way types | `docs/terrain.md` |
 | Roads, depots, freight, lights | `docs/logistics.md` |
+| Band supply / backstage / tour bus | `docs/band-supply.md` |
 | Staff, medical, security | `docs/staff.md` |
 | Waste, incidents, panic | `docs/incidents.md` |
 | Festival weekend, bands, tickets | `docs/festival.md` |
 | Stage workshop / shows | `docs/stages.md` |
 | Coasters, rides, queues | `docs/attractions.md` |
+| Coasters / track editor | `docs/coaster.md` |
 | Atmosphere, power, lights | `docs/atmosphere.md` |
 | Rendering / batching | `docs/rendering.md` |
 | UI / input | `docs/ui.md` |

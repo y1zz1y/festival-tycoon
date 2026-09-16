@@ -1,7 +1,7 @@
 {
   "name": "festival-simulator",
   "private": true,
-  "version": "0.1.110",
+  "version": "0.1.131",
   "type": "module",
   "scripts": {
     "test": "node scripts/test.mjs",

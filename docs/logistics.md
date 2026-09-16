@@ -8,7 +8,7 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Straßengraph, Fahrzeuge, Ankunft | `src/game/logistics.ts` | `LogisticsSnapshot`, `findRoadRoute`, `RoadVehicle`; `RoadCell.elevation` / `roadSlope` |
+| Straßengraph, Fahrzeuge, Ankunft | `src/game/logistics.ts` | `LogisticsSnapshot`, `findRoadRoute`, `RoadVehicle` (`tourBus` + `tourBusParking` target); `RoadCell.elevation` / `roadSlope` |
 | Aussteigen am Parkplatz | `src/game/logistics.ts`, `src/game/GameState.ts` | `chooseParkingDisembarkPath`, `finishVehicleParking`, `collectSeatedPassengerIds`, `tryBoardDepartureCar`, `canParkedCarDepart` |
 | Debug: Autos entfernen | `src/game/GameState.ts`, `src/main.ts` | `removeVisitorCarsForDebug` — alle `visitorCar`, Belegung, Insassen zu Fuß; nicht Abriss |
 | Straßenrampen | `src/game/GameState.ts`, `src/game/wayElevation.ts` | `placeRoadSegment`, Autodach `MAX_ROAD_RAISE` 1, Shift-Ausgang `planLockedOriginRamp` |
@@ -33,6 +33,21 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Balancing | `src/game/simulationConfig.ts` | `logistics` (`visitorCarCapacity` 6 = max. Anreisegruppe, `groupSizeWeights` 1–6), `waste` |
 
 ## Wichtige Regeln
+
+- `claimAdjacentFreeParking` fragt über `getAdjacentParkingCells` nur die vier
+  Nachbarkacheln ab. `ensureParkingIndex` hält die echten Parkbuchten im räumlichen
+  Index; Reservierungen wirken dadurch sofort auf das nächste Fahrzeug.
+  Hinzufügen, Entfernen und Laden erneuern den Index. Bei gepackten Koordinaten
+  werden die echten X/Z-Werte zusätzlich geprüft. Zufahrten, Höhen, Sperrkanten,
+  Ampeln und die bestehende Sortierung nach X/Z werden unverändert geprüft.
+
+- Ausfahrtsuchen ohne dynamische Belegung werden in `GameState.findReachableRoadExit`
+  je Straßengraph, Straßenlage, Fahrtrichtung und U-Turn-Regel wiederverwendet.
+  Auch unerreichbare Ausfahrten werden gespeichert: wartende Autos dürfen nicht
+  jeden Tick dieselbe vollständige Suche ausführen. Straßen-/Pfeiländerungen
+  ersetzen den Graphen und verwerfen sofort alle Ergebnisse. Belegungsabhängige
+  Umwege suchen weiter mit den aktuellen Sperrzellen; Ausparkreservierungen und
+  Bewegungsprüfungen bleiben aktuell. Routen werden als unabhängige Kopien geliefert.
 
 - Trägerwege über `findPath` (Fußgänger), Fahrzeuge über `findRoadRoute`.
   Nicht mischen.   Straßen und Fußwege können Rampen in **halben** Höhenstufen
@@ -295,8 +310,39 @@ Fußweg auf Autostraße, gestapelte Autostraße / Brücke, ein Feld übermalen o
 `tests/festivalAdditions.ts` (Müllwagen-Ladung statt Insassen,
 zusammenhängende Müllablage-Füllstände).
 
+Bandversorgung (Backstage, Tourbus-Parkplatz, Baumenü Logistik →
+Bandversorgung plus Tab **Bandversorgung** in der Logistikverwaltung):
+[`band-supply.md`](band-supply.md). Guest-`parkingCells`
+und Shuttle-`bus` bleiben getrennt vom `tourBus` / `tourBusParking`.
+Tourbus-Plätze müssen straßenerreichbar sein (`findRoadRoute` / gleiche
+Straßensuche wie Depots). Der `tourBus` ist ein eigener dunkler Reisebus
+(nicht der gelbe Shuttle), fährt morgens auf die Parkplatz-Kachel und
+bleibt dort bis zur Abendabfahrt.
+
 ## Bei Änderungen dieses Dokument
 
 Aktualisieren, wenn Fahrzeugarten, Depot-Rollen, Bestellregeln, Tore oder
 der Trennschnitt Straße/Fußweg ändern. Neue Logistics-Gebäude auch in
 `docs/buildings.md` und `catalog.ts`.
+
+## Deko-Eimer und Straßen-Kontextabriss (0.1.126)
+
+Mülleimer sind jetzt unter Deko/Möbel, einschließlich zehn Themenvarianten.
+Müllträger und Reinigung nutzen `isWasteBin` und bleiben unverändert funktional.
+Im Straßenbaumodus entfernt ein kurzer Rechtsklick nur die betroffene
+Straßenlage über `undoRoadSegment`; Fußweg/Gebäude bleiben erhalten.
+
+## Straßenoberflächen und Brücken (0.1.127)
+
+`LogisticsView` nutzt texturierte volle Straßendecks ohne graue Anschlussflicken,
+Asphalt-Mittellinien auf Geraden und Geschwindigkeitsfarbe nur als Bauhilfe.
+`wayStructures.ts` liefert Leitplanken an unverbundenen Brückenkanten sowie
+schlanke Stützen, die unter der lokalen Rampenhöhe enden. Untere Straßen und
+Fußwege werden bei den Stützen ausgespart. Geländer bleiben an legalen
+Anschlüssen offen. Fahrregeln und Netztopologie ändern sich nicht.
+
+## Bänke an Straßen (0.1.131)
+
+Eine Bank darf als dekoratives Wegmöbel auf einer Autostraßenlage gleicher Höhe
+stehen. Ihre Kante muss nach außen zeigen; angrenzende Straßen bleiben frei.
+Die Straßenlogik, Fahrzeugwege und Deck-Geometrie ändern sich nicht.

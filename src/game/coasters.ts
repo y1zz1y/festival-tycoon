@@ -18,10 +18,34 @@ export const TRACK_PIECE_KINDS = [
   'curveLeft4',
   'curveRight4',
   'sBendLeft', 'sBendRight', 'verticalLoop', 'halfLoopUp', 'halfLoopDown', 'photo', 'splash', 'brakes',
+  'helixLeft', 'helixRight',
 ] as const
 
 export type TrackPieceKind = (typeof TRACK_PIECE_KINDS)[number]
-export type CoasterTypeId = 'classicSteel'
+export const COASTER_TYPE_IDS = [
+  'classicSteel',
+  'wooden',
+  'looping',
+  'corkscrew',
+  'hyper',
+  'twister',
+  'hyperTwister',
+  'verticalDrop',
+  'giga',
+  'lsmLaunched',
+  'limLaunched',
+  'inverted',
+  'compactInverted',
+  'flying',
+  'standUp',
+  'junior',
+  'steelWildMouse',
+  'woodenWildMouse',
+  'mineTrain',
+  'bobsled',
+  'suspendedSwinging',
+] as const
+export type CoasterTypeId = (typeof COASTER_TYPE_IDS)[number]
 export type DispatchMode = 'full-or-timed' | 'full-only' | 'timed'
 export type CoasterOperationMode = 'closed' | 'open' | 'test'
 
@@ -198,14 +222,49 @@ function snapTrackRise(value: number): number {
   return Math.round(value * 2) / 2
 }
 
+export type CoasterLiftStyle = 'chain' | 'cable' | 'powered' | 'curved' | 'none'
+
+export type CoasterTrackStyleId =
+  | 'steelLattice'
+  | 'wooden'
+  | 'boxSpine'
+  | 'invertedBox'
+  | 'flyingSpine'
+  | 'juniorTubular'
+  | 'wildMouse'
+  | 'woodenMouse'
+  | 'bobsledTrough'
+  | 'suspendedSpine'
+  | 'gigaLattice'
+  | 'launchedSteel'
+
+export type CoasterTrainStyleId =
+  | 'sitDownSteel'
+  | 'wooden'
+  | 'bmSitdown'
+  | 'invertV'
+  | 'flying'
+  | 'standUp'
+  | 'junior'
+  | 'mouse'
+  | 'bobsled'
+  | 'mine'
+  | 'swinging'
+  | 'launched'
+  | 'giga'
+
 export type CoasterTypeDefinition = {
   id: CoasterTypeId
   name: string
   color: number
   railColor: number
   carColor: number
+  accentColor: number
   carCapacity: number
   defaultTicketPrice: number
+  liftStyle: CoasterLiftStyle
+  trackStyle: CoasterTrackStyleId
+  trainStyle: CoasterTrainStyleId
   physics: {
     worldUnitMeters: number
     carMassKg: number
@@ -229,6 +288,8 @@ export const TRACK_PIECES: Record<TrackPieceKind, TrackPieceDefinition> = {
   photo: { kind: 'photo', name: 'Fotostation', cost: 280, special: true },
   splash: { kind: 'splash', name: 'Wassersplash', cost: 450, special: true },
   brakes: { kind: 'brakes', name: 'Bremsstrecke', cost: 150, special: true },
+  helixLeft: { kind: 'helixLeft', name: 'Helix links', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.helixLeft, special: true },
+  helixRight: { kind: 'helixRight', name: 'Helix rechts', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.helixRight, special: true },
   station: { kind: 'station', name: 'Stationsplattform', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.station, station: true },
   straight: { kind: 'straight', name: 'Gerade', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.straight },
   slopeGentleUp: {
@@ -302,16 +363,340 @@ export const TRACK_PIECES: Record<TrackPieceKind, TrackPieceDefinition> = {
   },
 }
 
-export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
-  classicSteel: {
-    id: 'classicSteel',
-    name: 'Klassische Stahlachterbahn',
-    color: 0xd53945,
-    railColor: 0xf2d35c,
-    carColor: 0x2876c7,
-    ...SIMULATION_CONFIG.coasters.classicSteel,
-    supportedPieces: [...TRACK_PIECE_KINDS],
+const DEFAULT_COASTER_STATS = SIMULATION_CONFIG.coasters.classicSteel
+
+function withoutPieces(
+  pieces: readonly TrackPieceKind[],
+  excluded: readonly TrackPieceKind[],
+): TrackPieceKind[] {
+  const skip = new Set(excluded)
+  return pieces.filter((kind) => !skip.has(kind))
+}
+
+const NO_INVERSIONS = ['verticalLoop', 'halfLoopUp', 'halfLoopDown'] as const
+const NO_BANKING = ['bankTransition'] as const
+const NO_STEEP = ['slopeUp', 'slopeDown'] as const
+const NO_HELIX = ['helixLeft', 'helixRight'] as const
+const NO_ONE_TILE_TURNS = ['curveLeft1', 'curveRight1'] as const
+const ONLY_ONE_TILE_TURNS = [
+  'curveLeft2',
+  'curveRight2',
+  'curveLeft3',
+  'curveRight3',
+  'curveLeft4',
+  'curveRight4',
+] as const
+const NO_LARGE_CURVES = ['curveLeft3', 'curveRight3', 'curveLeft4', 'curveRight4'] as const
+
+function defineCoasterType(
+  id: CoasterTypeId,
+  name: string,
+  colors: { color: number; railColor: number; carColor: number; accentColor: number },
+  extras: {
+    supportedPieces: TrackPieceKind[]
+    liftStyle: CoasterLiftStyle
+    trackStyle: CoasterTrackStyleId
+    trainStyle: CoasterTrainStyleId
+    carCapacity?: number
+    defaultTicketPrice?: number
+    physics?: Partial<CoasterTypeDefinition['physics']>
   },
+): CoasterTypeDefinition {
+  return {
+    id,
+    name,
+    color: colors.color,
+    railColor: colors.railColor,
+    carColor: colors.carColor,
+    accentColor: colors.accentColor,
+    carCapacity: extras.carCapacity ?? DEFAULT_COASTER_STATS.carCapacity,
+    defaultTicketPrice: extras.defaultTicketPrice ?? DEFAULT_COASTER_STATS.defaultTicketPrice,
+    liftStyle: extras.liftStyle,
+    trackStyle: extras.trackStyle,
+    trainStyle: extras.trainStyle,
+    physics: { ...DEFAULT_COASTER_STATS.physics, ...extras.physics },
+    supportedPieces: extras.supportedPieces,
+  }
+}
+
+export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
+  classicSteel: defineCoasterType(
+    'classicSteel',
+    'Klassische Stahlachterbahn',
+    { color: 0xd53945, railColor: 0xf2d35c, carColor: 0x2876c7, accentColor: 0xe8c45a },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, NO_HELIX),
+      liftStyle: 'chain',
+      trackStyle: 'steelLattice',
+      trainStyle: 'sitDownSteel',
+    },
+  ),
+  wooden: defineCoasterType(
+    'wooden',
+    'Holzachterbahn',
+    { color: 0x8b5a2b, railColor: 0xd4a574, carColor: 0xc45c26, accentColor: 0xf0d090 },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['halfLoopUp', 'halfLoopDown', ...NO_ONE_TILE_TURNS, ...NO_HELIX]),
+      liftStyle: 'chain',
+      trackStyle: 'wooden',
+      trainStyle: 'wooden',
+    },
+  ),
+  looping: defineCoasterType(
+    'looping',
+    'Looping-Stahlachterbahn',
+    { color: 0x2f6fed, railColor: 0xf4f0e6, carColor: 0x1d4ed8, accentColor: 0xfbbf24 },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash', ...NO_HELIX]),
+      liftStyle: 'chain',
+      trackStyle: 'steelLattice',
+      trainStyle: 'sitDownSteel',
+    },
+  ),
+  corkscrew: defineCoasterType(
+    'corkscrew',
+    'Corkscrew',
+    { color: 0x0f766e, railColor: 0x99f6e4, carColor: 0x115e59, accentColor: 0xf59e0b },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash', ...NO_HELIX]),
+      liftStyle: 'chain',
+      trackStyle: 'steelLattice',
+      trainStyle: 'sitDownSteel',
+    },
+  ),
+  hyper: defineCoasterType(
+    'hyper',
+    'Hyperachterbahn',
+    { color: 0x1e3a5f, railColor: 0xe2e8f0, carColor: 0x0ea5e9, accentColor: 0xf97316 },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, 'splash', ...NO_HELIX]),
+      liftStyle: 'chain',
+      trackStyle: 'gigaLattice',
+      trainStyle: 'sitDownSteel',
+      physics: { dragArea: 0.78, carMassKg: 520 },
+    },
+  ),
+  twister: defineCoasterType(
+    'twister',
+    'Twister (B&M)',
+    { color: 0x4c1d95, railColor: 0xc4b5fd, carColor: 0x6d28d9, accentColor: 0xfde68a },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash']),
+      liftStyle: 'chain',
+      trackStyle: 'boxSpine',
+      trainStyle: 'bmSitdown',
+    },
+  ),
+  hyperTwister: defineCoasterType(
+    'hyperTwister',
+    'Hyper-Twister',
+    { color: 0x1e1b4b, railColor: 0xa5b4fc, carColor: 0x4338ca, accentColor: 0xfda4af },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, 'splash']),
+      liftStyle: 'chain',
+      trackStyle: 'boxSpine',
+      trainStyle: 'bmSitdown',
+    },
+  ),
+  verticalDrop: defineCoasterType(
+    'verticalDrop',
+    'Vertical Drop',
+    { color: 0x3f3f46, railColor: 0xfafafa, carColor: 0x18181b, accentColor: 0xef4444 },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, 'splash', ...NO_HELIX]),
+      liftStyle: 'chain',
+      trackStyle: 'gigaLattice',
+      trainStyle: 'giga',
+    },
+  ),
+  giga: defineCoasterType(
+    'giga',
+    'Giga-Coaster',
+    { color: 0x0c4a6e, railColor: 0xe0f2fe, carColor: 0x0369a1, accentColor: 0xfbbf24 },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, 'splash', ...NO_HELIX]),
+      liftStyle: 'cable',
+      trackStyle: 'gigaLattice',
+      trainStyle: 'giga',
+      physics: { dragArea: 0.72, carMassKg: 560, chainSpeed: 7.2 },
+    },
+  ),
+  lsmLaunched: defineCoasterType(
+    'lsmLaunched',
+    'LSM-Abschussachterbahn',
+    { color: 0x7c2d12, railColor: 0xfed7aa, carColor: 0xea580c, accentColor: 0x1e293b },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash', ...NO_HELIX]),
+      liftStyle: 'powered',
+      trackStyle: 'launchedSteel',
+      trainStyle: 'launched',
+      physics: { stationLaunchSpeed: 18 },
+    },
+  ),
+  limLaunched: defineCoasterType(
+    'limLaunched',
+    'LIM-Abschussachterbahn',
+    { color: 0x14532d, railColor: 0xbbf7d0, carColor: 0x16a34a, accentColor: 0x0f172a },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash', ...NO_HELIX]),
+      liftStyle: 'none',
+      trackStyle: 'launchedSteel',
+      trainStyle: 'launched',
+      physics: { stationLaunchSpeed: 20 },
+    },
+  ),
+  inverted: defineCoasterType(
+    'inverted',
+    'Inverted',
+    { color: 0x1f2937, railColor: 0x94a3b8, carColor: 0x334155, accentColor: 0xf43f5e },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash']),
+      liftStyle: 'chain',
+      trackStyle: 'invertedBox',
+      trainStyle: 'invertV',
+    },
+  ),
+  compactInverted: defineCoasterType(
+    'compactInverted',
+    'Kompakte Inverted',
+    { color: 0x111827, railColor: 0xcbd5e1, carColor: 0x1e293b, accentColor: 0x22d3ee },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash']),
+      liftStyle: 'chain',
+      trackStyle: 'invertedBox',
+      trainStyle: 'invertV',
+    },
+  ),
+  flying: defineCoasterType(
+    'flying',
+    'Flying Coaster',
+    { color: 0x312e81, railColor: 0xc7d2fe, carColor: 0x4f46e5, accentColor: 0xf472b6 },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash']),
+      liftStyle: 'chain',
+      trackStyle: 'flyingSpine',
+      trainStyle: 'flying',
+    },
+  ),
+  standUp: defineCoasterType(
+    'standUp',
+    'Stehende Achterbahn',
+    { color: 0x7f1d1d, railColor: 0xfecaca, carColor: 0xb91c1c, accentColor: 0xfacc15 },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash', ...NO_HELIX]),
+      liftStyle: 'chain',
+      trackStyle: 'steelLattice',
+      trainStyle: 'standUp',
+    },
+  ),
+  junior: defineCoasterType(
+    'junior',
+    'Juniorachterbahn',
+    { color: 0x166534, railColor: 0x86efac, carColor: 0x22c55e, accentColor: 0xfde047 },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, ...NO_STEEP, 'splash', ...NO_HELIX]),
+      liftStyle: 'curved',
+      trackStyle: 'juniorTubular',
+      trainStyle: 'junior',
+      carCapacity: 2,
+      defaultTicketPrice: 12,
+    },
+  ),
+  steelWildMouse: defineCoasterType(
+    'steelWildMouse',
+    'Wilde Maus (Stahl)',
+    { color: 0xa16207, railColor: 0xfde68a, carColor: 0xf59e0b, accentColor: 0x1f2937 },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [
+        ...NO_INVERSIONS,
+        ...NO_BANKING,
+        ...ONLY_ONE_TILE_TURNS,
+        'splash',
+        'sBendLeft',
+        'sBendRight',
+        ...NO_HELIX,
+      ]),
+      liftStyle: 'chain',
+      trackStyle: 'wildMouse',
+      trainStyle: 'mouse',
+      carCapacity: 2,
+      physics: { carSpacing: 0.42, carMassKg: 220, dragArea: 0.45 },
+    },
+  ),
+  woodenWildMouse: defineCoasterType(
+    'woodenWildMouse',
+    'Wilde Maus (Holz)',
+    { color: 0x78350f, railColor: 0xfbbf24, carColor: 0xb45309, accentColor: 0x44403c },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [
+        ...NO_INVERSIONS,
+        ...NO_BANKING,
+        ...ONLY_ONE_TILE_TURNS,
+        'splash',
+        'brakes',
+        'sBendLeft',
+        'sBendRight',
+        ...NO_HELIX,
+      ]),
+      liftStyle: 'chain',
+      trackStyle: 'woodenMouse',
+      trainStyle: 'mouse',
+      carCapacity: 2,
+      physics: { carSpacing: 0.42, carMassKg: 200, dragArea: 0.48 },
+    },
+  ),
+  mineTrain: defineCoasterType(
+    'mineTrain',
+    'Minenachterbahn',
+    { color: 0x5b3a1a, railColor: 0xc4a574, carColor: 0x7c2d12, accentColor: 0xd6d3d1 },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, 'splash']),
+      liftStyle: 'chain',
+      trackStyle: 'wooden',
+      trainStyle: 'mine',
+    },
+  ),
+  bobsled: defineCoasterType(
+    'bobsled',
+    'Bobbahn',
+    { color: 0x1e3a8a, railColor: 0x93c5fd, carColor: 0x1d4ed8, accentColor: 0xf8fafc },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [
+        ...NO_INVERSIONS,
+        ...NO_STEEP,
+        ...NO_LARGE_CURVES,
+        'splash',
+        ...NO_HELIX,
+      ]),
+      liftStyle: 'chain',
+      trackStyle: 'bobsledTrough',
+      trainStyle: 'bobsled',
+      carCapacity: 2,
+    },
+  ),
+  suspendedSwinging: defineCoasterType(
+    'suspendedSwinging',
+    'Hängende Schaukelachterbahn',
+    { color: 0x365314, railColor: 0xa3e635, carColor: 0x3f6212, accentColor: 0xfef08a },
+    {
+      supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, ...NO_BANKING, 'splash']),
+      liftStyle: 'chain',
+      trackStyle: 'suspendedSpine',
+      trainStyle: 'swinging',
+    },
+  ),
+}
+
+export function isCoasterTypeId(value: string | undefined | null): value is CoasterTypeId {
+  return Boolean(value && value in COASTER_TYPES)
+}
+
+export function resolveCoasterTypeId(value: string | undefined | null): CoasterTypeId {
+  return isCoasterTypeId(value) ? value : 'classicSteel'
+}
+
+export function getCoasterType(typeId: string | undefined | null): CoasterTypeDefinition {
+  return COASTER_TYPES[resolveCoasterTypeId(typeId)]
 }
 
 const HEADINGS = [
@@ -482,7 +867,57 @@ export function createTrackPiece(
   }
 }
 
+function createHelixTrack(id: string, kind: 'helixLeft' | 'helixRight', start: TrackAnchor): TrackPiece {
+  const forward = HEADINGS[start.heading] ?? HEADINGS[0]!
+  const turn: -1 | 1 = kind === 'helixLeft' ? -1 : 1
+  const side = turn === 1 ? { x: -forward.z, z: forward.x } : { x: forward.z, z: -forward.x }
+  const radius = 1.5
+  const rise = 1
+  const samples = 48
+  const center = {
+    x: start.x + forward.x * radius + side.x * radius,
+    z: start.z + forward.z * radius + side.z * radius,
+  }
+  const fromX = start.x - center.x
+  const fromZ = start.z - center.z
+  const points: TrackPoint[] = []
+  for (let index = 0; index <= samples; index += 1) {
+    const t = index / samples
+    const angle = turn * t * Math.PI * 2
+    const cosine = Math.cos(angle)
+    const sine = Math.sin(angle)
+    points.push({
+      x: center.x + fromX * cosine - fromZ * sine,
+      y: start.elevation + t * rise,
+      z: center.z + fromX * sine + fromZ * cosine,
+      pitch: Math.atan(rise / (2 * Math.PI * radius)),
+      bank: 0,
+    })
+  }
+  const last = points.at(-1)!
+  last.x = start.x
+  last.y = start.elevation + rise
+  last.z = start.z
+  last.pitch = 0
+  return {
+    id,
+    kind,
+    start: { ...start },
+    end: {
+      x: start.x,
+      z: start.z,
+      elevation: start.elevation + rise,
+      heading: start.heading,
+      pitch: 0,
+      bank: 0,
+    },
+    points,
+    chainLift: false,
+  }
+}
+
 function createSpecialTrack(id: string, kind: TrackPieceKind, start: TrackAnchor): TrackPiece {
+  if (kind === 'helixLeft' || kind === 'helixRight') return createHelixTrack(id, kind, start)
   const forward = HEADINGS[start.heading]!, side = { x: forward.z, z: -forward.x }
   const points: TrackPoint[] = [], looping = kind === 'verticalLoop' || kind === 'halfLoopUp' || kind === 'halfLoopDown'
   const samples = looping ? 64 : 32
@@ -634,7 +1069,7 @@ export function trackCurveRadiusError(
 
 function isPlanCurveKind(kind: TrackPieceKind): boolean {
   const definition = TRACK_PIECES[kind]
-  return Boolean(definition.radius && definition.turn) || kind === 'sBendLeft' || kind === 'sBendRight'
+  return Boolean(definition.radius && definition.turn) || kind === 'sBendLeft' || kind === 'sBendRight' || kind === 'helixLeft' || kind === 'helixRight'
 }
 
 function isLoopKind(kind: TrackPieceKind): boolean {

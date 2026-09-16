@@ -1,3 +1,4 @@
+import { isWasteBin } from './decorationWalls'
 import { acceptWasteAtDump } from './waste'
 import { occupiesBuildingCell } from './stageDesign'
 import { updateDepotCarriers } from './depotCarriers'
@@ -171,7 +172,7 @@ export function infrastructureAction(s: GameSnapshot, a: InfrastructureAction): 
   if (
     !target ||
     !(
-      (a.kind === 'waste' && target.kind === 'wasteBin') ||
+      (a.kind === 'waste' && isWasteBin(target.kind)) ||
       shopSupplyKind(target.kind) === a.kind
     )
   ) return fail('Passenden Stand, WC (Trinkwasser) oder Mülleimer wählen')

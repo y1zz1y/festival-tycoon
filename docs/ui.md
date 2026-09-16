@@ -10,8 +10,10 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 | Orchestrierung, Tasten, Tools | `src/main.ts` | RCT-Iconleiste `.rct-toolbar` |
 | Abriss-/Info-Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | `pickPlacedObject`, `resolvePickedBuilding` |
 | Infofenster Müllwagen / Ablage | `src/main.ts`, `src/game/logistics.ts`, `src/game/waste.ts` | `formatRoadVehicleInspectLoad`, `connectedWasteDumpStats` |
+| Infofenster Backstage | `src/main.ts`, `src/game/bandSupply.ts` | `formatBackstageInspect`, Klick auf Backstage-Kachel |
 | Meldungs-Ticker | `src/tickerUI.ts`, `src/game/ticker.ts` | `mountTickerUI`, `observeTickerEvents` |
 | Bau-Kategorien und Raster | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` |
+| Deko-Themenfilter | `src/game/decoration.ts`, `src/main.ts` | `renderDecorationCatalog`, Themen-Chips in `#decoration-themes` |
 | Festival-Verwaltung | `src/festivalUI.ts`, `src/festival.css` | |
 | Bandplan | `src/musicPlanner.ts` | |
 | Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold |
@@ -101,16 +103,33 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   (`securityGate`).   **Dekoration**, **Attraktionen** und **Logistik** sind
   Bildkataloge: feste 96-px-Kacheln im Raster (`auto-fill`, nicht in die
   Breite gestreckt), Standardbreite 440 px. Name, Zusatztext und **Kosten**
-  stehen unten und wechseln beim Darüberfahren. Deko-Gruppen: Pflanzen, Möbel,
-  Licht, Fest, Kulisse, Zaun — je Objekt eigene Attraktivität (Overlay
-  Attraktivität). Attraktionen: Fahrgeschäfte,
+  stehen unten und wechseln beim Darüberfahren. Deko: oben Themen-Chips
+  (Klassik, Wüste, Wald, Neon, Industrie, Tropen, Mystik, Zirkus, Alpin,
+  Arktis, Steampunk), darunter die Kategorien Pflanzen, Möbel, Licht, Fest,
+  Kulisse, Zaun nur mit den Stücken des Themas; leere Kategorien entfallen.
+  Je Objekt eigene Attraktivität (Overlay Attraktivität). Details:
+  [decoration.md](decoration.md).   Attraktionen: Fahrgeschäfte, Achterbahn (Typen als Katalogkacheln),
   Stände (Imbiss, WC, Getränke, Maskottchen, T-Shirt), Camping, Festival
   (Turmhöhe nur unter Fahrgeschäfte). Am T-Shirt-Stand stellt das Infofenster
   Farbe und Schnitt ein. Logistik:
-  Waren, Bus, Müll, Krankenhaus (`ambulanceGarage`, `medicalArea`).
-  Der Achterbahn-Eintrag öffnet ein RCT2-artiges sequenzielles Fenster:
-  Richtung, „Speziell …“, Neigung, Rollen/seitliches Kippen, Bauvorschau
-  mit Kosten, Rückbau/Bauen sowie Eingang/Ausgang. Eine fertige Bahn
+  Waren, Bus, Müll, Krankenhaus (`ambulanceGarage`, `medicalArea`),
+  Tourbus-Parkplatz.
+  Der Reiter **Achterbahn** im Attraktionen-Katalog listet jeden Typ
+  direkt (Holz, Twister, Junior, Wilde Maus, LIM-Launch, …) wie andere
+  Gebäudekacheln. Jede Kachel zeigt eine **generierte Zugvorschau**
+  (`coasterTrainThumbnail`, gleicher Wagenstil wie in der Welt), keine
+  generischen Achterbahn-Emojis. Ein Klick öffnet das RCT2-artige
+  Konstruktionsfenster mit festem Typ (nach der Startplattform
+  unveränderlich): Richtung, „Speziell …“, Neigung, Rollen/seitliches
+  Kippen, Bauvorschau mit Kosten, Rückbau/Bauen sowie Eingang/Ausgang.
+  Stücke, die der Typ **nie** bauen kann (`supportedPieces` / Katalog),
+  bleiben ausgeblendet. Stücke, die **aktuell** am offenen Ende nicht
+  gehen (falsche Neigung/Bank, Kette, Spezial), bleiben in der Palette
+  und sind **ausgegraut** (`disabled`) — das Raster springt nicht.
+  Klicks auf graue Buttons ändern die Geisterschiene nicht. Freigegebene
+  Neigung/Banking/Richtung switchen fest auf eine legale Kombination;
+  die Geisterschiene nutzt denselben `resolveNextTrackPiece`-
+  Helfer wie das Bauen und folgt sofort der Fensterwahl. Eine fertige Bahn
   öffnet das Infofenster: Betrieb, Preis, **Achterbahn abreißen**
   (Command `removeCoaster`, schließt das Fenster). Unfertige Bahnen
   haben denselben Knopf im Konstruktionsfenster.
@@ -124,9 +143,14 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 - Logistik-/Untergrund-Overlay blendet Besucher aus und zeigt Bodenmarkierungen;
   der Schalter sitzt in der Gruppe Kartenansichten und öffnet kein Planerfenster.
   Anlieferung, Depot und Personaltor stehen im Baumenü unter Logistik.
-  Das Paket-Icon in **Verwalten** öffnet die Logistikverwaltung.
+  Das Paket-Icon in **Verwalten** öffnet die Logistikverwaltung
+  (Übersicht, **Waren & Träger**, Buslinien, **Bandversorgung**).
   Mindestbestände (20er-Raster) und Trägerzahl stellt ihr dort im Reiter
   **Waren & Träger** oder im Infofenster ein.
+  **Bandversorgung** malt/löscht Backstage, setzt den Tourbus-Parkplatz
+  und listet Komponenten; ein Info-Klick auf Backstage füllt das
+  Infofenster (`formatBackstageInspect`). Dieselbe Fläche malt ihr auch
+  im Baumenü unter Logistik → Bandversorgung (**Backstage ausweisen**).
   Zeit läuft weiter. Einbahnen liegen als StVO-Fahrstreifenpfeile auf der
   Straße und bleiben über den Fahrzeugen sichtbar. Das Werkzeug
   Fahrtrichtung zeigt dieselbe weiße Markierung in der Vorschau.
@@ -174,8 +198,66 @@ Abriss-Picking (Mesh vor Nachbar/Kachelmitte): `tests/picking.ts`.
 Achterbahn-Komplettabriss aus Infofenster/Command: `tests/festivalAdditions.ts`.
 Bauhöhe 0.5 und Bodenkachel der Vorschau: `tests/placementPreview.ts`.
 
+Reiter **Bandversorgung** in `#logistics-panel` plus Backstage-Infofenster:
+`tests/bandSupply.ts`, [`band-supply.md`](band-supply.md).
+
 ## Bei Änderungen dieses Dokument
 
 Aktualisieren, wenn ein neues Fenster, eine neue Leiste, ein Shortcut oder
 ein Mobile-Verhalten dazukommt. Verdrahtung zu Simulation in der jeweiligen
 Fach-MD verlinken.
+
+## Deko-Fassaden und Größen (0.1.125)
+
+Jedes Thema außer Klassik hat die Kategorie **Wände**: Vollwand, Halbwand,
+Fensterwand und Türbogen. R dreht die Kante, Shift/Bauhöhe ermöglicht Stapeln
+in 0,5-Schritten bis Ebene 6. Vollwände sind 1 hoch, Halbwand 0,5.
+Die Hover-Hilfe unterscheidet Vollfeld, Viertelfeld und Kante. 23 große
+Themenobjekte setzen neue Vollfelder; Vorschau und Abriss markieren ihre Fläche.
+
+## Stabilere Bauhöhe und kontextueller Abriss (0.1.126)
+
+Einmal Shift über einer bebauten Kachel setzt die Bauhöhe auf die höchste
+Objektoberkante (auf nächste 0,5-Stufe aufgerundet). Straßen berücksichtigen
+1 Höhenstufe Durchfahrt. Ein gehaltener/repetierter Tastendruck löst nicht
+neu aus. Mausstart ist die letzte echte Cursorposition; **48 Pixel = 0,5**,
+absolute Distanz ab Start statt eventabhängigem Aufsummieren. Kleine Bewegungen
+ändern nichts; Dekokachel bleibt beim Höhenziehen fest. Shift+Mausrad setzt
+0,5-Schritte und verankert den Mausstart neu. Fokusverlust beendet Ziehen.
+Bei Wegen/Straßen bleibt der Ausgang beim Einstellen der Höhe fest; die
+separate Neigung wird weiter mit den Neigungsknöpfen gewählt.
+
+Kurzer Rechtsklick: Deko entfernt nur ein getroffenes Dekoobjekt, Wegmodus
+nur den Weg, Straßenmodus nur die Straßenlage. Building-ID/Weghöhe schützen
+andere Objekte und Lagen. Rechtsziehen bleibt Kamera, andere Modi behalten
+ihre bisherigen Aktionen. Bank/Eimer-Vorschauen zeigen die echte automatische
+Wegkante. Eimer aus Logistik entfernt, Deko/Möbel enthält alle Varianten.
+
+`src/game/contextDemolition.ts` wählt Abrissziele nach Baumodus, Building-ID
+und Straßenlage. `tests/decoration.ts` prüft Deko-/Wegtrennung und den Erhalt
+der unteren Straßenlage beim Entfernen einer oberen.
+
+## Schrägdach-Seiten schließen (0.1.128)
+
+Deko → Thema → Wände: **Dachkeil links hoch**, **Dachkeil rechts hoch** und
+**Dachabschluss hoch**. Auf die gleiche Bauhöhe wie das Dach setzen; mit R
+zur Seiten-/Stirnkante drehen. Zwei gespiegelte Keile bilden einen Giebel
+über zwei Felder. Jedes Dachmaterial hat den passenden Wandsatz.
+
+## In Gebäude schauen (0.1.129)
+
+Maus über gebaute Wände oder Dächer halten: Fassaden in der Umgebung werden
+weich durchsichtig. Beim Verlassen blenden sie wieder ein. Der Effekt braucht
+keine Taste.
+
+Seit 0.1.130: Im Deko-Baumodus bleiben Wände und Dächer vollständig sichtbar.
+Außerhalb davon lassen lokal transparent gewordene Fassaden Klicks zu den
+Objekten dahinter durch, etwa zu Ständen. Entfernte, undurchsichtige Bauteile
+bleiben anklickbar. Der Hover-Test trifft weiterhin die Fassaden, damit der
+Einblick beim Durchklicken stabil bleibt.
+
+## Wegmöbel ausrichten (0.1.131)
+
+Bei Mülleimern dreht **R** die gewünschte freie Kante und die Vorschau folgt
+direkt. Bänke werden weiter automatisch am Rand ausgerichtet und können nun
+auf Fußwegen sowie auf gleich hohen Straßen platziert werden.

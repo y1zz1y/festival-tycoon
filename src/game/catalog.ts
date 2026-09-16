@@ -1,6 +1,8 @@
+import { WALL_KINDS, wallSpec, ROOF_KINDS, roofSpec, THEMED_BIN_KINDS, binSpec } from './decorationWalls'
 import { SIMULATION_CONFIG } from './simulationConfig'
 
 export const BUILDING_KINDS = [
+  ...WALL_KINDS, ...ROOF_KINDS, ...THEMED_BIN_KINDS,
   'path',
   'food',
   'toilet',
@@ -24,6 +26,16 @@ export const BUILDING_KINDS = [
   'hangingBasket', 'cactusPot', 'gnome', 'windChimes', 'chalkboard',
   'loungeChair', 'beanBag', 'tikiTorch', 'decoSpeaker', 'boombox', 'photoFrame',
   'discoBall', 'inflatableCactus', 'giantMushroom', 'crystalTotem', 'welcomeArch',
+  'desertPalm', 'dustLantern', 'playaTotem', 'tumbleweed',
+  'forestFern', 'mossLog', 'foxfireLamp', 'woodlandIdol',
+  'neonPlant', 'neonArch', 'uvSpeaker', 'glowTape',
+  'scrapPlanter', 'palletBench', 'workLamp', 'chainFence',
+  'palmTree', 'tikiStool', 'tikiMask', 'coconutPile',
+  'altarTable', 'spiritLantern', 'runeStone', 'occultBanner',
+  'circusStool', 'carnivalBulbs', 'miniBigTop', 'popcornCart',
+  'alpineFir', 'beerGardenTable', 'beerLantern', 'maypole',
+  'icePine', 'iceBench', 'auroraLamp', 'iceSculpture', 'snowman', 'iceFence',
+  'copperPlanter', 'gearBench', 'gasLamp', 'pipeTotem', 'gearStack', 'pipeRail',
   'fence',
   'bench',
   'lighting',
@@ -44,6 +56,7 @@ export const BUILDING_KINDS = [
   'videoWall',
   'laserShow',
   'fireworkBattery',
+  'tourBusParking',
 ] as const
 
 export type BuildingKind = (typeof BUILDING_KINDS)[number]
@@ -53,6 +66,7 @@ export type Tool =
   | 'medicalArea'
   | 'wasteDump'
   | 'stageForecourt'
+  | 'backstageArea'
   | 'road'
   | 'parkingArea'
   | 'roadDirection'
@@ -106,6 +120,19 @@ export type BuildingDefinition = {
 }
 
 export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
+  ...Object.fromEntries(ROOF_KINDS.map(kind => {
+    const spec = roofSpec(kind)!
+    return [kind, { kind, name: `${spec.label} · ${spec.slope ? 'Schrägdach' : 'Flachdach'}`, ...SIMULATION_CONFIG.economy.decorationWalls, height: spec.height, color: spec.color, icon: '⌂' }]
+  })) as Record<typeof ROOF_KINDS[number], BuildingDefinition>,
+  ...Object.fromEntries(THEMED_BIN_KINDS.map(kind => {
+    const spec = binSpec(kind)!
+    return [kind, { kind, name: `${spec.label} · Mülleimer`, ...SIMULATION_CONFIG.economy.buildings.wasteBin, height: .5, color: spec.color, icon: '♻' }]
+  })) as Record<typeof THEMED_BIN_KINDS[number], BuildingDefinition>,
+  ...Object.fromEntries(WALL_KINDS.map(kind => {
+    const spec = wallSpec(kind)!
+    const label = { Full: 'Wand', Half: 'Halbwand', Window: 'Fensterwand', Door: 'Türbogen', SlopeLeft: 'Dachkeil links hoch', SlopeRight: 'Dachkeil rechts hoch', RoofEnd: 'Dachabschluss hoch' }[spec.shape]
+    return [kind, { kind, name: `${spec.label} · ${label}`, ...SIMULATION_CONFIG.economy.decorationWalls, height: spec.height, color: spec.color, icon: '▥' }]
+  })) as Record<typeof WALL_KINDS[number], BuildingDefinition>,
   path: {
     kind: 'path',
     name: 'Weg',
@@ -338,6 +365,14 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
     color: 0x2ee6a6,
     icon: '✳️',
   },
+  tourBusParking: {
+    kind: 'tourBusParking',
+    name: 'Parkplatz für den Tourbus',
+    ...SIMULATION_CONFIG.economy.buildings.tourBusParking,
+    height: 0.28,
+    color: 0x3c4247,
+    icon: '🚌',
+  },
   fireworkBattery: {
     kind: 'fireworkBattery',
     name: 'Feuerwerkbatterie',
@@ -389,6 +424,50 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
   giantMushroom: { kind: 'giantMushroom', name: 'Riesenpilz', cost: 110, upkeep: 1, capacity: 0, appeal: 8, defaultPrice: 0, height: 1.15, color: 0xce5677, icon: '🍄' },
   crystalTotem: { kind: 'crystalTotem', name: 'Kristallstele', cost: 130, upkeep: 1, capacity: 0, appeal: 8, defaultPrice: 0, height: 1.5, color: 0x7ec8c4, icon: '💎' },
   welcomeArch: { kind: 'welcomeArch', name: 'Willkommensbogen', cost: 160, upkeep: 2, capacity: 0, appeal: 10, defaultPrice: 0, height: 1.7, color: 0xc95670, icon: '⛩' },
+  desertPalm: { kind: 'desertPalm', name: 'Wüstenpalme', cost: 48, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: 1.55, color: 0x4f9a62, icon: '🌴' },
+  dustLantern: { kind: 'dustLantern', name: 'Staublaterne', cost: 42, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: 1.2, color: 0xc4a46a, icon: '🪔' },
+  playaTotem: { kind: 'playaTotem', name: 'Playa-Stele', cost: 115, upkeep: 1, capacity: 0, appeal: 8, defaultPrice: 0, height: 1.5, color: 0xb86b3a, icon: '🗿' },
+  tumbleweed: { kind: 'tumbleweed', name: 'Steppenrolle', cost: 16, upkeep: 0, capacity: 0, appeal: 2, defaultPrice: 0, height: .45, color: 0xc4a46a, icon: '🌾' },
+  forestFern: { kind: 'forestFern', name: 'Farn', cost: 28, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: .7, color: 0x3d6b3a, icon: '🌿' },
+  mossLog: { kind: 'mossLog', name: 'Moosstamm', cost: 32, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .4, color: 0x5a4634, icon: '🪵' },
+  foxfireLamp: { kind: 'foxfireLamp', name: 'Irrlicht', cost: 58, upkeep: 1, capacity: 0, appeal: 6, defaultPrice: 0, height: 1.15, color: 0x7ec8c4, icon: '✨' },
+  woodlandIdol: { kind: 'woodlandIdol', name: 'Waldidol', cost: 105, upkeep: 1, capacity: 0, appeal: 8, defaultPrice: 0, height: 1.4, color: 0x6a5340, icon: '🪵' },
+  neonPlant: { kind: 'neonPlant', name: 'UV-Pflanze', cost: 38, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: .75, color: 0xff2d95, icon: '🪴' },
+  neonArch: { kind: 'neonArch', name: 'Neonbogen', cost: 150, upkeep: 2, capacity: 0, appeal: 9, defaultPrice: 0, height: 1.65, color: 0x2ee6ff, icon: '🌈' },
+  uvSpeaker: { kind: 'uvSpeaker', name: 'UV-Box', cost: 62, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: .7, color: 0xff2d95, icon: '🔊' },
+  glowTape: { kind: 'glowTape', name: 'Leuchtband', cost: 24, upkeep: 1, capacity: 0, appeal: 3, defaultPrice: 0, height: .7, color: 0x2ee6ff, icon: '➖' },
+  scrapPlanter: { kind: 'scrapPlanter', name: 'Schrottkübel', cost: 26, upkeep: 1, capacity: 0, appeal: 3, defaultPrice: 0, height: .7, color: 0x6a6e72, icon: '🪴' },
+  palletBench: { kind: 'palletBench', name: 'Palettenbank', cost: 36, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .45, color: 0xb28053, icon: '🪑' },
+  workLamp: { kind: 'workLamp', name: 'Baustrahler', cost: 44, upkeep: 1, capacity: 0, appeal: 3, defaultPrice: 0, height: 1.1, color: 0xe4b754, icon: '🔦' },
+  chainFence: { kind: 'chainFence', name: 'Absperrkette', cost: 20, upkeep: 0, capacity: 0, appeal: 1, defaultPrice: 0, height: .7, color: 0x92a6a5, icon: '⛓️' },
+  palmTree: { kind: 'palmTree', name: 'Palme', cost: 52, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: 1.7, color: 0x4d8b46, icon: '🌴' },
+  tikiStool: { kind: 'tikiStool', name: 'Tiki-Hocker', cost: 28, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .5, color: 0x936141, icon: '🪑' },
+  tikiMask: { kind: 'tikiMask', name: 'Tiki-Maske', cost: 88, upkeep: 1, capacity: 0, appeal: 7, defaultPrice: 0, height: 1.25, color: 0xd97a3a, icon: '🎭' },
+  coconutPile: { kind: 'coconutPile', name: 'Kokosstapel', cost: 18, upkeep: 0, capacity: 0, appeal: 2, defaultPrice: 0, height: .4, color: 0x6e5530, icon: '🥥' },
+  altarTable: { kind: 'altarTable', name: 'Altar', cost: 70, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: .55, color: 0x5a4634, icon: '🕯️' },
+  spiritLantern: { kind: 'spiritLantern', name: 'Geisterlaterne', cost: 55, upkeep: 1, capacity: 0, appeal: 6, defaultPrice: 0, height: 1.3, color: 0x6b3d8a, icon: '🏮' },
+  runeStone: { kind: 'runeStone', name: 'Runenstein', cost: 95, upkeep: 0, capacity: 0, appeal: 7, defaultPrice: 0, height: 1.15, color: 0x657774, icon: '🪨' },
+  occultBanner: { kind: 'occultBanner', name: 'Runenbanner', cost: 38, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: 1.3, color: 0x6b3d8a, icon: '🚩' },
+  circusStool: { kind: 'circusStool', name: 'Zirkushocker', cost: 30, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .5, color: 0xc43d55, icon: '🪑' },
+  carnivalBulbs: { kind: 'carnivalBulbs', name: 'Jahrmarktlichter', cost: 60, upkeep: 2, capacity: 0, appeal: 6, defaultPrice: 0, height: 1.35, color: 0xe4b754, icon: '💡' },
+  miniBigTop: { kind: 'miniBigTop', name: 'Mini-Zelt', cost: 120, upkeep: 2, capacity: 0, appeal: 8, defaultPrice: 0, height: 1.2, color: 0xc43d55, icon: '🎪' },
+  popcornCart: { kind: 'popcornCart', name: 'Popcornwagen', cost: 75, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: .85, color: 0xe4b754, icon: '🍿' },
+  alpineFir: { kind: 'alpineFir', name: 'Alpentanne', cost: 50, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: 1.65, color: 0x345c40, icon: '🌲' },
+  beerGardenTable: { kind: 'beerGardenTable', name: 'Biertisch', cost: 80, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: .6, color: 0xb28053, icon: '🍺' },
+  beerLantern: { kind: 'beerLantern', name: 'Biergartenlaterne', cost: 48, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: 1.25, color: 0xe4b754, icon: '🏮' },
+  maypole: { kind: 'maypole', name: 'Maibaum', cost: 140, upkeep: 1, capacity: 0, appeal: 9, defaultPrice: 0, height: 1.75, color: 0x4d8b46, icon: '🎀' },
+  icePine: { kind: 'icePine', name: 'Eistanne', cost: 55, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: 1.65, color: 0xc8e8f4, icon: '🌲' },
+  iceBench: { kind: 'iceBench', name: 'Eisbank', cost: 40, upkeep: 0, capacity: 0, appeal: 4, defaultPrice: 0, height: .45, color: 0xc8e8f4, icon: '🧊' },
+  auroraLamp: { kind: 'auroraLamp', name: 'Polarlicht', cost: 88, upkeep: 2, capacity: 0, appeal: 7, defaultPrice: 0, height: 1.4, color: 0x5ee0b0, icon: '🌌' },
+  iceSculpture: { kind: 'iceSculpture', name: 'Eisskulptur', cost: 125, upkeep: 1, capacity: 0, appeal: 9, defaultPrice: 0, height: 1.45, color: 0xc8e8f4, icon: '🧊' },
+  snowman: { kind: 'snowman', name: 'Schneemann', cost: 45, upkeep: 0, capacity: 0, appeal: 5, defaultPrice: 0, height: .95, color: 0xf4f7ff, icon: '⛄' },
+  iceFence: { kind: 'iceFence', name: 'Eiszapfenzaun', cost: 24, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .8, color: 0xc8e8f4, icon: '❄️' },
+  copperPlanter: { kind: 'copperPlanter', name: 'Kupferkübel', cost: 42, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: .7, color: 0xb87333, icon: '🪴' },
+  gearBench: { kind: 'gearBench', name: 'Zahnradbank', cost: 70, upkeep: 1, capacity: 0, appeal: 4, defaultPrice: 0, height: .5, color: 0xc4a15a, icon: '🪑' },
+  gasLamp: { kind: 'gasLamp', name: 'Gaslaterne', cost: 72, upkeep: 1, capacity: 0, appeal: 6, defaultPrice: 0, height: 1.45, color: 0xc4a15a, icon: '🕯️' },
+  pipeTotem: { kind: 'pipeTotem', name: 'Rohrturm', cost: 135, upkeep: 1, capacity: 0, appeal: 8, defaultPrice: 0, height: 1.55, color: 0xb87333, icon: '🗼' },
+  gearStack: { kind: 'gearStack', name: 'Zahnräder', cost: 38, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .55, color: 0xc4a15a, icon: '⚙️' },
+  pipeRail: { kind: 'pipeRail', name: 'Rohrgitter', cost: 26, upkeep: 0, capacity: 0, appeal: 2, defaultPrice: 0, height: .75, color: 0x3a3530, icon: '🛤️' },
 }
 
 export const STARTING_MONEY = SIMULATION_CONFIG.economy.startingMoney

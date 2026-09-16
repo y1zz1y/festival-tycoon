@@ -1,21 +1,14 @@
 import { Group, Mesh, BoxGeometry, CylinderGeometry, MeshStandardMaterial, Color, Float32BufferAttribute, type BufferGeometry } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { partOnAudience, type StageDesign } from '../game/stageDesign'
-import { BANDS } from '../game/festivalManagement'
+import { bandCostumeId, bandLook, bandRoles, isDjAct } from '../game/bandLooks'
+import { createBandMemberModel } from './bandMemberMesh'
 import { disposeObject3D } from './disposeObject3D'
-/** Electro acts play a DJ booth instead of fielding a band — read off the catalogue so a new act of that genre needs no second list here. */
-const isDjSet=(bandId:string)=>BANDS.find(b=>b.id===bandId)?.genre==='Electro'
 
-type Role='singer'|'guitar'|'drums'|'keys'|'brass'|'dj'
-/** Shirt/accent colours, picked per performer so a line-up is not all in one colour. */
-const PERFORMER_COLORS=['#d96688','#63bcca','#dfb85a','#9774cd']
-const performerColor=(index:number,bandId:string)=>PERFORMER_COLORS[(index+bandId.length)%4]!
-export function bandRoles(id:string):Role[]{
-  if(['neon','orbit'].includes(id))return ['keys','keys']
-  if(id==='brass')return ['singer','brass','brass','drums']
-  if(id==='campfire')return ['singer','guitar','guitar']
-  if(id==='velvet')return ['singer','keys','guitar','drums']
-  return ['singer','guitar','guitar','drums']
+export { bandRoles, bandCostumeId }
+
+function hexAccent(bandId: string): string {
+  return `#${bandLook(bandId).accent.toString(16).padStart(6, '0')}`
 }
 /** Stage-deck cells a performer may stand on, in grid coordinates: floored decks that are neither spectator ground nor already taken by equipment. Ordered from the front of the stage backwards. */
 function freeDeckCells(d:StageDesign){
@@ -58,25 +51,8 @@ export function djPlacement(d?:StageDesign){
   const desk={x:best.x-d.width/2+span/2,z:best.z-d.depth/2+.5}
   return {desk,dj:{x:desk.x,z:desk.z-behind(span)},width:span}
 }
-function musician(role:Role,index:number,bandId:string){
-  const root=new Group(),buckets=new Map<string,BoxGeometry[]>()
-  const shirt=performerColor(index,bandId)
-  const box=(x:number,y:number,z:number,w:number,h:number,d:number,color:string)=>{const g=new BoxGeometry(w,h,d);g.translate(x,y,z);const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)}
-  box(0,.55,0,.32,.4,.19,shirt);box(0,.91,0,.26,.27,.24,index%2?'#b67b58':'#e4b38a');box(0,1.055,-.015,.28,.08,.25,'#30252c')
-  for(const side of [-1,1]){box(side*.09,.18,0,.12,.36,.14,'#252e40');box(side*.09,.035,.045,.14,.07,.24,'#151b24');box(side*.06,.94,.124,.03,.03,.02,'#202733')}
-  if(role==='guitar'){box(.03,.43,.19,.35,.3,.12,bandId==='campfire'?'#b98048':'#df6b50');box(.2,.65,.2,.09,.5,.07,'#b49c72');for(const x of [.18,.2,.22])box(x,.65,.24,.007,.47,.006,'#e4e3dc')}
-  if(role==='singer'){box(.12,.43,.24,.025,.86,.025,'#89929e');box(.12,.87,.24,.1,.065,.065,'#17202c');box(.12,.02,.24,.24,.035,.18,'#252e40')}
-  if(role==='keys'){box(0,.53,.3,.72,.13,.28,'#263348');for(let n=0;n<12;n++)box((n-5.5)*.052,.6,.33,.046,.025,.2,n%3?'#eee9de':'#202735');for(const x of [-.28,.28])box(x,.25,.3,.04,.5,.04,'#737f89')}
-  if(role==='brass'){box(.15,.68,.24,.09,.08,.45,'#d6ad47');box(.15,.68,.49,.22,.22,.12,'#f2cf67');box(.15,.68,.56,.15,.15,.02,'#534623')}
-  if(role==='dj'){for(const side of [-1,1])box(side*.145,.925,0,.05,.13,.14,'#1b222c');box(0,1.035,0,.31,.05,.07,'#1b222c')} // headphones: a cup over each ear under the band
-  if(role==='drums'){box(0,.23,.44,.48,.44,.3,'#98595c');box(0,.23,.601,.4,.36,.025,'#e5dbcb');for(const x of [-.3,.3]){box(x,.5,.34,.24,.15,.24,'#b97165');box(x,.59,.34,.25,.03,.25,'#e6ddd0');box(x*1.45,.79,.22,.38,.025,.3,'#d7bc60');box(x*1.45,.4,.22,.025,.8,.025,'#839099')}}
-  const body:BoxGeometry[]=[]
-  for(const [color,geometries] of buckets){const tint=new Color(color);for(const geometry of geometries){const values:number[]=[];for(let n=0;n<geometry.getAttribute('position').count;n++)values.push(tint.r,tint.g,tint.b);geometry.setAttribute('color',new Float32BufferAttribute(values,3));body.push(geometry)}}
-  root.add(new Mesh(mergeGeometries(body)!,new MeshStandardMaterial({vertexColors:true,roughness:.9,flatShading:true})));body.forEach(g=>g.dispose())
-  const arms:Group[]=[]
-  for(const side of [-1,1]){const arm=new Group();arm.position.set(side*.22,.73,0);const limb=new Mesh(new BoxGeometry(.1,.32,.1),new MeshStandardMaterial({color:shirt}));limb.position.y=-.14;arm.add(limb);if(role==='drums'){const stick=new Mesh(new BoxGeometry(.025,.3,.025),new MeshStandardMaterial({color:'#dccb9b'}));stick.position.set(0,-.3,.05);arm.add(stick)}root.add(arm);arms.push(arm)}
-  root.userData.arms=arms;root.userData.role=role;root.userData.index=index
-  return root
+function musician(role: Parameters<typeof createBandMemberModel>[1], index: number, bandId: string) {
+  return createBandMemberModel(bandId, role, index)
 }
 /**
  * The console an electro act plays on, built two deck cells wide and one deep with the crowd at
@@ -142,13 +118,14 @@ export function updateStageBand(stage:Group,bandId:string|undefined,time:number,
     const floor=design?.54:.28,scale=design?.tileWidth? .78:design?.width? .95:.34
     const place=(member:Group,x:number,z:number)=>{member.position.set(x,floor,z);member.scale.setScalar(scale);member.userData.baseY=floor;band!.add(member)}
     // An electro act plays a booth rather than a line-up: one DJ behind a console, no band.
-    const booth=isDjSet(key)?djPlacement(design):undefined
+    band.userData.costumeId=bandCostumeId(key)
+    const booth=isDjAct(key)?djPlacement(design):undefined
     if(booth){
-      const desk=djDesk(performerColor(0,key))
+      const desk=djDesk(hexAccent(key))
       desk.position.set(booth.desk.x,floor,booth.desk.z);desk.scale.setScalar(booth.width/2*(design?1:scale/.34))
       band.add(desk)
       place(musician('dj',0,key),booth.dj.x,booth.dj.z)
-    }else if(!isDjSet(key)){
+    }else if(!isDjAct(key)){
       const positions=bandPositions(design)
       bandRoles(key).forEach((role,i)=>{const pos=positions[i];if(!pos)return;place(musician(role,i,key),pos.x,pos.z)})
     }

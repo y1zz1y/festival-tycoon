@@ -20,9 +20,11 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | --- | --- |
 | `tests/regression.ts` | Orchestrierung, Tick-Partition, Multiplayer-Sockets, Saves, Abreise durch Camping-Ausweisungen nach Festivalende |
 | `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, Lights, Achterbahnwagen, Logistik-Modelle |
-| `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf |
+| `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust |
 | `tests/visitorSleep.ts` | Festival-Schlafzeiten, Legacy-Remap, zirkadiane Energie, Zelt- und Abreiseziele |
 | `tests/festivalAdditions.ts` | spätere Festival-Systeme, Eimer-Karton-Batches, zusammenhängende Müllablage-Füllstände, Müllwagen-Ladungsanzeige, 1-Feld-Steigungen, Wagen-Mesh, gerundete Schienenjoins, Achterbahn-Komplettabriss |
+| `tests/coasterTypes.ts` | Achterbahn-Typkatalog (alle Typen spielbar), Zug-Thumbnail-Spec je Typ, live vs diskrete Anschlussregeln, Helix/LIM/Junior/Maus/Mine/Bobbahn-Filter, fehlender typeId → classicSteel, Palette: Typ-Ausschluss vs aktuell ausgegraut, Hard-Switch inkl. Richtung, Ghost unverändert bei gesperrtem Klick, Testbetrieb auf geschlossenem classicSteel-Rechteck während `festival.planning` |
+| `tests/bandSupply.ts` | Bare vs versorgt, geteilter Pool, Tourbus-Quote 2/3 vs 3/3, Fans senken Attraktivität, Ankunft 08:00 mit Bus auf dem Parkplatz / Abreise abends, Idle-Akteure auf aktivem Backstage, gleiche `costumeId` Bühne/Backstage, Ausweisen neben der Bühne, Tourbus nur auf Backstage an der Straße (nicht auf Gras), Gebäude/Deko auf dem Overlay, inaktive Fläche bleibt markierbar zählt aber nicht, Junior/ohne Slot → Personaleingang; siehe [`band-supply.md`](band-supply.md) |
 | `tests/ticker.ts` | Müllwagen 90, Ablage 180, kein Overflow, Ticker >90 % / Feuer / Panik, keine Verletztenmeldung für Insassen |
 | `tests/musicPlanning.ts` | Spielplan, Genres |
 | `tests/stageTickets.ts` | Tickets, Bühnenfläche |
@@ -35,8 +37,9 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | `tests/accessControl.ts` | Ampeln, Tore, Sensoren, Einweg, Notfallöffnung, Halt vor Rot, opportunistisches Parken, Trennlinie, Liefer-/Müllwagen-Umweg, Tageszeit / Festivalphase / Zeitplan |
 | `tests/rideAccess.ts` | Tore, Queues, Bungee/Karussell |
 | `tests/scenery.ts` | Deko-Slots, Kanten-Fahnen, Tageslichtballon als Vollfeld, neue Arten, Attraktivität je Kind, Stapel/Reichweite, unbekannte Katalog-Arten |
+| `tests/decoration.ts` | Themenliste 8–12 inkl. Klassik/Arktis/Steampunk, Filter ohne Themen-Leaks, Legacy-Vollfeld, Platzierung über `scenery.ts` |
 | `tests/picking.ts` | Abriss-Raycast: Instanz-IDs, getroffenes Mesh vs. Nachbar/Kachelmitte, Reittor-Zelle |
-| `tests/buildMenu.ts` | Jedes platzierbare Tool außer `inspect` genau einmal im Baumenü; Deko/Attraktionen/Logistik als Katalog; Camping- und Krankenhaus-Tabs; Bauhöhe bleibt beim gleichen Tool und fällt bei neuem `setTool` auf 0 |
+| `tests/buildMenu.ts` | Jedes platzierbare Tool außer `inspect` genau einmal im Baumenü; Deko/Attraktionen/Logistik als Katalog; Achterbahn-Kacheln mit Zugstil/`coasterVehiclePreview`; Camping-, Krankenhaus- und Bandversorgung-Tabs (`backstageArea`, `tourBusParking`); Bauhöhe bleibt beim gleichen Tool und fällt bei neuem `setTool` auf 0; Deko-Gruppen kommen aus `decoration.ts` |
 | `tests/placementPreview.ts` | Bauhöhe rastet auf 0.5; Vorschau meldet die Bodenkachel (`y` = Gelände, nicht Ghost-Höhe) |
 | `tests/terrainSurface.ts` | Gelände-Mesh, Pads, Parkplatz-Asphalt nur auf Parkfeldern |
 | `tests/environments.ts` | Umgebungen |
@@ -54,6 +57,16 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | `tests/render-performance.html` | Browser-Framezeiten |
 
 ## Wichtige Regeln
+
+`testLocalParkingClaims` in `performanceGuards.ts` begrenzt Zufahrtsprüfungen
+bei 400 entfernten Buchten auf die unmittelbaren Nachbarn. Der Test prüft
+X/Z-Priorität, sofortige Reservierungen, neue/entfernte Buchten und die Abweisung
+entfernter Kacheln bei Kollisionen der gepackten Koordinaten.
+
+`performanceGuards.ts` prüft wiederholte erfolgreiche/erfolglose Ausfahrtsuchen,
+unabhängige Routenkopien, dynamische Belegung, getrennte Fahrtrichtungs-/U-Turn-
+Einträge und sofortige Wiederherstellung nach einer Pfeilkorrektur. Die bestehenden
+Abreise-, Überführungs- und Frame-Partition-Tests bleiben dafür ebenfalls verbindlich.
 
 `operations.ts` prüft eine voll besetzte Abreise mit falsch gerichtetem
 Straßenpfeil: Insassen bleiben erhalten, die fehlende Ausfahrtroute wird
@@ -109,3 +122,52 @@ sechs Ausrichtungen sowie alte 2D-Designs ohne Höhen und deren Bounding-Spheres
 
 Aktualisieren, wenn ein Testfile, ein npm-Script oder eine Preview-HTML
 dazukommt oder der Einstieg `tests/regression.ts` andere Module lädt.
+
+## Deko-Baugrößen und Wände
+
+`tests/decoration.ts`: 23 Vollfeld-Arten inklusive Save-Roundtrip/Kollision,
+40 Wandarten mit exakten Geometriehöhen, nahtloser Stapelung, Eckverbindung,
+Doppelbelegung derselben Kante vom Nachbarfeld, Fassaden und Host-Platzierung.
+`tests/decoration-preview.html`: visuelle Themenauswahl, reale Baugrößen,
+vier Wandformen und zweigeschossige Ecke (über Vite öffnen).
+
+## Baukomfort (0.1.126)
+
+`placementPreview.ts`: absolute 48-Pixel-Höhenänderung, Totzone, Rückbewegung
+und aufgerundete Objektoberkante. `decoration.ts`: alle Dachtypen, Höhenbounds,
+Wandkontakt, Dachkollision/Save sowie Themen-Eimer, Wegkante, Trennung von Bank,
+Füllstand-Roundtrip und begehbarer Weg. Vollständige Müll-/Reinigungsregressionen
+bleiben aktiv. `construction-preview.html`: echte WorldView-Interaktion und
+Stützenfreiheit erhöhter Wände/Dächer; isolierte Welt ohne Save-Zugriff.
+
+`src/game/contextDemolition.ts` wählt Abrissziele nach Baumodus, Building-ID
+und Straßenlage. `tests/decoration.ts` prüft Deko-/Wegtrennung und den Erhalt
+der unteren Straßenlage beim Entfernen einer oberen.
+
+## Weg- und Brückendetails
+
+`tests/wayStructures.ts` (regression.ts): Rampen in vier Richtungen mit
+−1/−0,5/0/0,5/1 Steigung; Stützen unter lokaler Fahrbahn, untere Querungen
+frei, verbundene Kanten offen, hohes Gelände ohne unnötige Geländer,
+endliche Vertices und Geometrie-/Instanzteilung für 200 gleiche Abschnitte.
+`tests/ways-preview.html`: echte WorldView-Ansicht mit Fußweg-/Straßenbrücke,
+Rampen, Abzweig und unterer Weglage. Keine persönlichen Spielstände.
+
+## Dachwände
+
+`tests/decoration.ts` prüft die erweiterten WALL_KINDS mit Bounds,
+Konturgrenze aller Vertices, Kantenstapelung, Dach-Koexistenz und Save-Roundtrip.
+Die Modellübersicht zeigt ein Schrägdach mit beiden Keilen und Stirnabschluss.
+
+## Fassadeneinblick
+
+`tests/facadeReveal.ts` prüft zeitliches Ein-/Ausblenden, Rückkehr zu opaker
+Tiefenschreibung, geglättete Positionswechsel und unabhängige Ansichten.
+Visuell: in `tests/construction-preview.html` über Dach/Wände fahren und dann
+auf freie Fläche; lokale Transparenz und Wiederherstellung kontrollieren.
+
+`tests/facadeReveal.ts` prüft außerdem lokales Durchklicken, solide entfernte
+Fassaden und das sofortige Zurücksetzen beim Wechsel in den Deko-Baumodus.
+
+`tests/decoration.ts` prüft die mit **R** gewählte freie Eimerkante und eine
+Bank auf einer Straßenkante mit freier Fortsetzung.

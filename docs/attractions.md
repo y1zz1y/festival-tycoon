@@ -4,16 +4,22 @@ Achterbahnen sind eigene Snapshot-Objekte (`coasters`). Karussell (`ride`) und
 Bungee sind Gebäude mit optionalem `rideEntrance` / `rideExit`. Warteschlangen
 sind gerichtete Wege (`pathType: 'queue'`).
 
+**Schienen-Editor / RCT2-Anschlussregeln:** [`coaster.md`](coaster.md).
+Gameplay, Queues und Fahrgeschäfte bleiben hier; der Track-Editor, die
+Stückkataloge und die Anschluss-State-Machine stehen dort.
+
 ## Wo finden
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
+| Schienen-Editor, Typen, Anschlussregeln | [`coaster.md`](coaster.md), `src/game/coasterTypes.ts`, `src/game/coasterConnections.ts` | Katalog, `describeTrackAppendIssue` |
 | Schienen, Physik, Betrieb | `src/game/coasters.ts` | `TRACK_PIECE_KINDS`, Zug, Dispatch, `getSmoothedCoasterPiecePoints` |
 | Bauen, Recall, Preis, Abriss | `src/game/GameState.ts` | `startCoaster`, `recallCoasterTrain`, `setRideAccess`, `removeCoaster` |
 | Queue-Richtung | `src/game/pathFlow.ts` | `allowsPathFlow` |
 | Balancing / SI-Physik | `src/game/simulationConfig.ts` | `coasters`, `classicSteel.physics`, `physicsSimulation`, `trackJoinSmoothing` |
 | Spezialstücke visuell | `src/view/coasterSpecials.ts` | Loop, Photo, Splash |
-| Wagen | `src/view/coasterCars.ts` | ein gemergtes Mesh, geteilte Geometrie |
+| Wagen | `src/view/coasterCars.ts` | ein gemergtes Mesh je Zugstil + Lackfarbe; geteilte Geometrie |
+| Schienenstile | `src/view/coasterTrack.ts` | ein vertex-color Mesh je Stück; Familien für Holz / Box / Inverted / Maus / Bob / … |
 | Bungee-Darstellung | `src/view/bungee.ts` | ein Rider, ein Seil |
 | Zugangstore | `src/view/attractionAccess.ts` | sechs geteilte Meshes |
 | Preview | `tests/access-preview.html` | |
@@ -79,6 +85,10 @@ sind gerichtete Wege (`pathType: 'queue'`).
   wieder ein konstantes gerades bzw. geneigtes Stück.
 - Ketten- und Stationsgeschwindigkeiten stehen in
   `SIMULATION_CONFIG.coasters.classicSteel.physics` bzw. `physicsSimulation`.
+- **Testbetrieb** auf einer geschlossenen Strecke setzt den leeren Zug sofort
+  in Fahrt (`stationLaunchSpeed`). Das gilt auch in der Festivalplanung,
+  solange die Spielgeschwindigkeit nicht 0 ist; Gäste und die Festivaluhr
+  bleiben in der Planung stehen.
 - Wagen: ein gemergtes Vertex-Color-Mesh, Geometrie pro Wagenfarbe gecacht.
   Fahrgäste bleiben eigene Kinder für Sichtbarkeit und Shirtfarbe.
 
@@ -87,10 +97,12 @@ sind gerichtete Wege (`pathType: 'queue'`).
 `tests/rideAccess.ts` (beide Ride-Typen, Queues, Saves, Multiplayer).
 `tests/operations.ts` (Serpentinen-Kette, Rückweg, leerer Stand).
 `tests/festivalAdditions.ts` (1-Feld-Steigungen, flach↔steil-Übergang, Wagen-Mesh, Schienenjoin-Rundung / Pfadkontinuität, vollständiger Abriss inkl. Queue und Command).
+`tests/coasterTypes.ts` (Typ-Katalog, alle Typen spielbar, Anschlussregeln, Helix, Palette-Filter, Testfahrt während Planung — Pflicht bei Editor-/Typ-Änderungen, siehe `coaster.md`).
 `tests/performanceGuards.ts` (Specials, eine Photo-Abrechnung, Bungee-Exklusivität, Wagen-Batch).
 
 ## Bei Änderungen dieses Dokument
 
-Aktualisieren, wenn Track-Kinds, Dispatch-Modi, Gate-Regeln, Join-Glättung,
-Physik-Caches oder Abriss ändern. Neue Attraktionsgebäude auch in
+Aktualisieren, wenn Dispatch-Modi, Gate-Regeln, Join-Glättung,
+Physik-Caches, Testfahrt/Planung oder Abriss ändern. Track-Kinds, Anschlussregeln, Typ-Katalog
+und Bau-UI: [`coaster.md`](coaster.md). Neue Attraktionsgebäude auch in
 `docs/buildings.md`.

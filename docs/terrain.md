@@ -73,3 +73,18 @@ Straße, ein Straßenfeld übermalen löscht keine Nachbarn).
 Aktualisieren, wenn Umgebungen, Höhenregeln, Ground-Works, Way-Types oder
 die Terrain-Mesh-Architektur ändern. Neue Beläge in `wayTypes.ts`, Config,
 UI und `README.md` (Spieler) ergänzen.
+
+## Bauhöhen-Eingabe (0.1.126)
+
+Shift setzt über bebautem Feld einmalig auf die auf 0,5 aufgerundete Oberkante.
+Höhe folgt danach der absoluten vertikalen Mausdistanz (48 px pro Halbstufe).
+Weg-/Straßen-Ausgangspunkt bleibt beim Einstellen fest. Neigung wird separat
+gewählt. Kurzer Rechtsklick im jeweiligen Baumodus entfernt nur Weg bzw. Straße.
+
+## Überarbeitete Wegoberflächen (0.1.127)
+
+Alle acht Beläge erhalten differenzierte Texturen aus `wayTextures.ts`.
+Kacheln schließen lückenlos an. Erhöhte Wege bekommen offene Anschlusskanten,
+Geländer und schlanke Stützen aus `wayStructures.ts`; Erhöhung wird relativ
+zum Gelände gemessen. Rampenstützen enden an ihrer lokalen Unterseite,
+Unterführungen bleiben stützenfrei. Navigation, Kosten und Höhen bleiben gleich.

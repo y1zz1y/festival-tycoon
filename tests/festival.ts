@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { FEMALE_VISITOR_NAMES, GameState, MALE_VISITOR_NAMES } from '../src/game/GameState'
 import type { GameSnapshot } from '../src/game/GameState'
 import { activeBookings, assignAudience, audienceMix, festivalTime, forecast, weatherAt, showIssue, updateFestival, watchableBookings } from '../src/game/festivalManagement'
+import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { visitorLooksFemale } from '../src/game/rng'
 import { CONCERT_TOPLESS_CROWD_THOUGHT, CONCERT_TOPLESS_THOUGHT, groupVisitorsByThought } from '../src/game/visitorThoughts'
 import { visitorIsFemale } from '../src/view/pixelPeople'
@@ -312,6 +313,77 @@ export function testFestival(fixture: (count?: number) => GameState): void {
   assert.equal(thoughtGroups.length, 2)
   assert.equal(thoughtGroups.find(group => group.thought === CONCERT_TOPLESS_CROWD_THOUGHT)?.count, 2)
 
+  const lust = create(3), lustState = lust.snapshot as GameSnapshot
+  const lustStage = lustState.buildings.find(b => b.kind === 'stage')!
+  assert.ok(lust.manageFestival({ type: 'book', bandId: 'meadow', stageId: lustStage.id, day: lustState.festival.startDay + 1, start: 840, duration: 90 }).ok)
+  lustState.day = lustState.festival.startDay + 1
+  lustState.parkOpen = true
+  lustState.power.poweredBuildingIds.push(lustStage.id)
+  lustState.festival.weather = 'sun'
+  lustState.festival.upgrades.rigging = true
+  const stageFan = (visitor: typeof lustState.visitors[number], concertId: string | null, motivation: number) => {
+    visitor.audience = 'music'
+    visitor.musicTaste = 'indie'
+    visitor.state = 'partying'
+    visitor.route = []
+    visitor.concertId = concertId
+    visitor.cellX = 5
+    visitor.cellZ = -20
+    visitor.cellElevation = 0
+    visitor.x = 5.5
+    visitor.z = -19.5
+    visitor.motivation = motivation
+    visitor.needs = { ...visitor.needs, fun: 50, energy: 80, hunger: 90, toilet: 90 }
+    visitor.pendingWaste = 0
+    visitor.consumptionCooldown = 999
+    visitor.localPartyMood = 40
+    visitor.interactionRemaining = 90
+    visitor.inventory = []
+  }
+  const liveFan = lustState.visitors[0]!
+  const waitingFan = lustState.visitors[1]!
+  const idleDancer = lustState.visitors[2]!
+  stageFan(liveFan, lustState.festival.bookings[0]!.id, 35)
+  stageFan(waitingFan, lustState.festival.bookings[0]!.id, 35)
+  stageFan(idleDancer, null, 35)
+  idleDancer.localPartyMood = 80
+  idleDancer.partyPreference = 1
+  lustState.minute = 850
+  ;(lust as any).visitorsAwaitingDecision.clear()
+  ;(lust as any).updateVisitors(10)
+  assert.equal(
+    liveFan.motivation,
+    Math.min(
+      100,
+      35 +
+        10 *
+          SIMULATION_CONFIG.atmosphere.concertMotivationPerMinute *
+          lust.showQualityForStage(lustStage.id),
+    ),
+    'watching a live booked set restores Festivallust',
+  )
+  assert.equal(idleDancer.motivation, 35, 'partying on a dark or idle floor does not restore Festivallust')
+  lustState.minute = 810
+  waitingFan.motivation = 35
+  waitingFan.concertId = lustState.festival.bookings[0]!.id
+  waitingFan.state = 'partying'
+  waitingFan.route = []
+  waitingFan.pendingWaste = 0
+  ;(lust as any).visitorsAwaitingDecision.clear()
+  ;(lust as any).updateVisitors(10)
+  assert.equal(waitingFan.motivation, 35, 'waiting before the first song does not restore Festivallust')
+  const passer = lustState.visitors[0]!
+  passer.state = 'exploring'
+  passer.route = []
+  passer.concertId = null
+  passer.motivation = 35
+  passer.pendingWaste = 0
+  passer.consumptionCooldown = 999
+  passer.musicTaste = 'dance'
+  ;(lust as any).visitorsAwaitingDecision.clear()
+  ;(lust as any).updateVisitors(10)
+  assert.equal(passer.motivation, 35, 'a guest who is not at the concert does not gain Festivallust')
+
   const priced = fixture(0)
   priced.updateEntryPrice(18)
   priced.updateCampingTicketPrice(42)
@@ -346,5 +418,5 @@ export function testFestival(fixture: (count?: number) => GameState): void {
     }
   }
 
-  console.log('PASS festival booking rules, audience demand, concert capacity, weather, stock, deliveries, saves, reports, next edition and network deltas')
+  console.log('PASS festival booking rules, audience demand, concert capacity, live-show Festivallust, weather, stock, deliveries, saves, reports, next edition and network deltas')
 }

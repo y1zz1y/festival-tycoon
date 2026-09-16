@@ -16,7 +16,7 @@ Tageslicht und Öffnungszeiten kommen aus `dayPlan` / `dayNight`, nicht aus der 
 | Strom-View | `src/view/PowerView.ts` | |
 | Tagesplan / Angebote | `src/game/dayPlan.ts` | Öffnung, Lampen, Stände |
 | Feste Lichter | `src/view/FestivalLightsView.ts` | Pool aus acht PointLights |
-| Balancing | `src/game/simulationConfig.ts` | `atmosphere`, `power`, `dayNight` |
+| Balancing | `src/game/simulationConfig.ts` | `atmosphere`, `power`, `dayNight`; Live-Show-Festivallust: `atmosphere.concertMotivationPerMinute` (`docs/visitors.md`, `docs/stages.md`) |
 
 ## Wichtige Quellen (Atmosphäre)
 
@@ -36,6 +36,8 @@ mehrere Felder. Gäste lesen `localAttractiveness` aus diesem Feld.
 - Overlay-Berechnung im Tick / auf gedrosselten UI-Intervallen, nicht pro Frame
   für die ganze Karte neu erfinden. Logistik/Untergrund ist ein eigenes
   Karten-Overlay (`WorldView.setLogisticsMode`), kein Atmosphäre-Feld.
+  Backstage-**Attraktivität** ist ein getrennter 0–100-Pool
+  (`docs/band-supply.md`), nicht dieses Overlay.
 - Strom: Verbraucher priorisieren (`CONSUMER_PRIORITY` in `power.ts`).
   Bühnen ohne Strom spielen nicht.
 - **Keine** PointLight pro Lampe oder Zelt erzeugen. Acht Festival-Lights plus

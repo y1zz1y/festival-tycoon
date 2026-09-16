@@ -39,8 +39,11 @@ Abreisen werden nach Laden aus Besucherzustand, Camp und Müll rekonstruiert.
 - Dringende Zustandswechsel, Bewegung und Needs laufen **jeden** Tick weiter.
 - Deterministische Budgets zählen Arbeit / `simTick`, niemals Wanduhren.
 - Profiling-Uhren (`PROFILE_METHODS`) sind nur Diagnose.
-- `festival.planning` und `speed === 0` halten `stepFixed` an; eingeplante
-  Commands können in Pause trotzdem über `advanceOne(false)` laufen.
+- `speed === 0` hält `stepFixed` an. `festival.planning` hält Gäste, Wirtschaft
+  und die Festivaluhr an, ruft aber weiter `updateCoastersForCurrentTick` auf,
+  damit **Testfahrt** während der Planung (Startzustand neuer Szenarien) den
+  Zug bewegt. Eingeplante Commands können in Pause trotzdem über
+  `advanceOne(false)` laufen.
 
 ## Tests
 

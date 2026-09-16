@@ -22,6 +22,13 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
 
 ## Wichtige Regeln
 
+- Straßen-Ausfahrten ohne Belegungssperren haben einen graphgebundenen Cache in
+  `findReachableRoadExit` (Suchkern: `searchReachableRoadExit`). Maximal acht
+  Einträge je Straßenlage: vier Start-Fahrtrichtungen × zwei U-Turn-Regeln.
+  Vollständig erfolglose Suchen dürfen bis zur nächsten Graphänderung bleiben;
+  diese Suche hat kein Abbruchbudget. Dynamische Sperrzellen umgehen den Cache.
+  Der Cache ist abgeleitet, wird nicht gespeichert und beeinflusst keine Tick-Zeitplanung.
+
 - Topology- und Zugangsänderungen (`worldRevision`) invalidieren Navigation
   sofort. Neue Weg- oder Straßenrampen gehören dazu (`placePath` / `placeRoad`).
   Ein Fußweg auf einer Autostraße bleibt ein gemeinsames Feld (`NAV_PATH` und
@@ -58,6 +65,9 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
   `allowStaff`), dürfen aber nur `isSweeperDriveCell` betreten — inklusive
   Bühnenvorplatz ohne Weg und `staffOnly`-Personaleingang. Gäste ohne
   `allowStaff` betreten diese Kacheln nicht.
+  Aktives Backstage (`NAV_BACKSTAGE`) ist für Personal, Band-Akteure und
+  Fans mit Intrusionsflag begehbar; normale Gäste nutzen es nicht als
+  Abkürzung. Fan-Einstieg ist eine budgetierte Multi-Goal-Suche.
 - Warteschlangen sind eine eindeutige Kette (Bau-Reihenfolge ab dem
   Stand/Eingang). `canTraversePath` erlaubt Vorwärts- und Rückwärtsgehen
   nur entlang dieser Kette, nicht über räumlich benachbarte Serpentinen-

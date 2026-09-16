@@ -81,6 +81,7 @@ type GameCommandAction =
   | { type: 'designateMedicalArea'; cells: CellRef[] }
   | { type: 'designateWasteDump'; cells: CellRef[] }
   | { type: 'designateStageForecourt'; cells: CellRef[] }
+  | { type: 'designateBackstageArea'; cells: CellRef[]; enabled?: boolean }
   | { type: 'designatePowerCable'; x: number; z: number; enabled: boolean }
   | { type: 'designatePowerCableArea'; cells: CellRef[] }
   | { type: 'setRoadDirection'; x: number; z: number; direction: Direction }
