@@ -254,7 +254,7 @@ app.innerHTML = `
     <header class="topbar panel">
       <div class="brand">
         <span class="brand-mark">H</span>
-        <div><strong>Headliner Tycoon</strong><small>Prototype 0.2</small></div>
+        <div><strong>Headliner Tycoon</strong><small>Prototype ${__APP_VERSION__}</small></div>
   </div>
     </header>
     <!-- The running numbers sit in their own overlay in the bottom-left corner rather than in the
@@ -284,7 +284,6 @@ app.innerHTML = `
         <button id="open-visitors" type="button" title="Besucher" aria-label="Besucher" aria-expanded="false">👥</button>
         <button id="toggle-staff-menu" type="button" title="Personal" aria-label="Personal" aria-expanded="false">🧑‍💼</button>
         <button id="toggle-ticker" type="button" title="Meldungen" aria-label="Meldungen" aria-expanded="false">📢</button>
-        <button id="toggle-multiplayer" type="button" title="Mehrspieler" aria-label="Mehrspieler" aria-expanded="false">🌐</button>
       </div>
       <div class="rct-group" aria-label="Kartenansichten">
         <button id="toggle-logistics-overlay" type="button" title="Logistik / Untergrund" aria-label="Logistik / Untergrund" aria-pressed="false">🗺️</button>
@@ -293,10 +292,11 @@ app.innerHTML = `
         <button id="toggle-party-overlay" type="button" title="Partystimmung" aria-label="Partystimmung" aria-pressed="false">🎵</button>
       </div>
       <div id="action-group-session" class="rct-group" aria-label="Sitzung">
-        <button id="toggle-finance" type="button" title="Finanzen" aria-label="Finanzen" aria-expanded="false">💶</button>
+        <button id="toggle-finance" type="button" title="Finanzen" aria-label="Finanzen" aria-expanded="false">💲</button>
         <button id="toggle-walk-mode" type="button" title="Gelände betreten" aria-label="Gelände betreten" aria-pressed="false">🚶</button>
         <button id="toggle-save-menu" type="button" title="Spielstand" aria-label="Spielstand" aria-expanded="false" aria-haspopup="true">💾</button>
         <button id="toggle-park" type="button" title="Park schließen" aria-label="Park schließen">🔓</button>
+        <button id="toggle-multiplayer" type="button" title="Mehrspieler" aria-label="Mehrspieler" aria-expanded="false">🌐</button>
         <button id="toggle-debug-menu" type="button" title="Debug" aria-label="Debug" aria-expanded="false">🐞</button>
         <button id="toggle-scenario" class="scenario-toggle" type="button" title="Einstellungen" aria-label="Einstellungen" aria-expanded="false">⚙️</button>
       </div>
@@ -565,7 +565,7 @@ app.innerHTML = `
         <button id="place-coaster-entrance" disabled>🚪 Eingang</button>
         <button id="place-coaster-exit" disabled>🚶 Ausgang</button>
       </div>
-      <button id="demolish-coaster-construction" class="demolish-coaster" type="button" hidden>🚜 Achterbahn abreißen</button>
+      <button id="demolish-coaster-construction" class="demolish-coaster" type="button" hidden>💣 Achterbahn abreißen</button>
     </aside>
     <section class="time-controls panel" aria-label="Zeitsteuerung">
       <button data-speed="0" title="Pause">❚❚</button>
@@ -673,7 +673,7 @@ app.innerHTML = `
             <button id="recall-train">↩ Wagen zurückholen</button>
             <button id="edit-coaster-track">🛠 Strecke bearbeiten</button>
           </div>
-          <button id="demolish-coaster" class="demolish-coaster" type="button">🚜 Achterbahn abreißen</button>
+          <button id="demolish-coaster" class="demolish-coaster" type="button">💣 Achterbahn abreißen</button>
           <label for="dispatch-mode">Abfahrt</label>
           <select id="dispatch-mode">
             <option value="full-or-timed">Voll oder nach Wartezeit</option>
@@ -964,7 +964,7 @@ app.innerHTML = `
           <button type="button" data-account="logout" hidden>Abmelden</button>
         </div>
         <div class="title-footer">
-          <span>Prototype 0.2</span>
+          <span>Prototype ${__APP_VERSION__}</span>
         </div>
       </div>
       <div id="title-account-mask" class="title-submenu" hidden>
@@ -1375,7 +1375,7 @@ const campingCapacitySummary =
 const stageEditor = mountStageEditor(() => game, showToast)
 const stageEditorButton = document.createElement('button')
 stageEditorButton.id = 'open-stage-editor'
-stageEditorButton.textContent = '🎭'
+stageEditorButton.textContent = '🏗️'
 stageEditorButton.title = 'Bühnenwerkstatt'
 stageEditorButton.setAttribute('aria-label', 'Bühnenwerkstatt')
 stageEditorButton.setAttribute('aria-expanded', 'false')

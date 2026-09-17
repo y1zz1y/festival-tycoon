@@ -118,20 +118,20 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
   {
     id: 'bulldoze',
     label: 'Abriss',
-    icon: '🚜',
+    icon: '💣',
     dock: 'left',
     groups: [
       {
         id: 'main',
         label: 'Abriss',
-        items: [toolItem('bulldoze', 'Abriss', '🚜', 'Gebäude und Wege')],
+        items: [toolItem('bulldoze', 'Abriss', '💣', 'Gebäude und Wege')],
       },
     ],
   },
   {
     id: 'terrain',
     label: 'Gelände',
-    icon: '⛰',
+    icon: '🚜',
     dock: 'left',
     extra: 'terrain',
     groups: [
@@ -149,7 +149,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
   {
     id: 'decoration',
     label: 'Dekoration',
-    icon: '🌳',
+    icon: '🪑',
     dock: 'left',
     extra: 'decoration',
     groups: DECORATION_CATEGORY_IDS.map((id) => ({
@@ -161,7 +161,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
   {
     id: 'paths',
     label: 'Wege',
-    icon: '▦',
+    icon: '🛤️',
     dock: 'left',
     extra: 'paths',
     groups: [

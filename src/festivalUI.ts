@@ -18,7 +18,7 @@ export function mountFestivalUI(
   const shell = document.querySelector<HTMLElement>('.game-shell')!
   const open = document.createElement('button')
   open.id = 'open-festival'
-  open.textContent = '🎪'
+  open.textContent = '📅'
   open.title = 'Festival planen'
   open.setAttribute('aria-label', 'Festival planen')
   open.setAttribute('aria-expanded', 'false')
