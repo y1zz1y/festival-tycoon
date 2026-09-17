@@ -12,6 +12,7 @@ import { SIMULATION_CONFIG } from './simulationConfig'
 export const BUILD_CATEGORY_IDS = [
   'bulldoze',
   'terrain',
+  'copy',
   'decoration',
   'paths',
   'attractions',
@@ -23,6 +24,7 @@ export type BuildCategoryId = (typeof BUILD_CATEGORY_IDS)[number]
 export type BuildDock = 'left' | 'right'
 export type BuildExtra =
   | 'terrain'
+  | 'copy'
   | 'decoration'
   | 'paths'
   | 'attractions'
@@ -143,6 +145,20 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           toolItem('terrainLower', 'Feld senken', '▼', '0,5 Höhe · Fläche'),
           toolItem('terrainSmooth', 'Glätten', '∼', 'auf Startfeldhöhe'),
         ],
+      },
+    ],
+  },
+  {
+    id: 'copy',
+    label: 'Kopieren',
+    icon: '⧉',
+    dock: 'left',
+    extra: 'copy',
+    groups: [
+      {
+        id: 'main',
+        label: 'Kopieren',
+        items: [toolItem('copy', 'Bereich kopieren', '⧉', 'Rechteck aufziehen')],
       },
     ],
   },
@@ -411,6 +427,7 @@ export function placeableTools(): Tool[] {
     'terrainSmooth',
     'powerCable',
     'bulldoze',
+    'copy',
   ]
   return [...BUILDING_KINDS, ...extras]
 }

@@ -118,7 +118,7 @@ import { createStaffMember, STAFF_DEFINITIONS } from './staff'
 import type { StaffMember, StaffRole } from './staff'
 import { isInAnyZone, setAssignedWorkZones, zonePaintActive } from './staffZones'
 import { StaffSimulation } from './staffSimulation'
-import { MedicalSystem, normalizeMedicalCell } from './medical'
+import { MedicalSystem, allowsMedicalOverlay, normalizeMedicalCell } from './medical'
 import type { MedicalCell } from './medical'
 import { IncidentSystem } from './incidents'
 import type {
@@ -128,6 +128,13 @@ import type {
 import { DEFAULT_SECURITY_CONFIG, SecuritySystem } from './security'
 import type { SecurityGateConfig } from './security'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import {
+  blueprintCatalogCost,
+  blueprintStampCharge,
+  preserveLegacyScenerySlot,
+  transformBlueprintItems,
+  type BlueprintItem,
+} from './blueprints'
 import {
   circadianEnergyDecayMultiplier,
   isMinuteInSleepWindow,
@@ -217,6 +224,7 @@ import {
   cellKey as roadCellKey,
   chooseParkingDisembarkPath,
   collectSeatedPassengerIds,
+  compareBusBoardPriority,
   createDefaultLogisticsSnapshot,
   createRoadGraph,
   DIRECTION_OFFSETS,
@@ -225,6 +233,7 @@ import {
   directionFromDelta,
   findRoadRoute,
   isPlayerOwnedFleetVehicle,
+  isVisitorReadyToBoardBus,
   isRoadDirectionAllowed,
   isVehicleReversing,
   normalizeLogisticsSnapshot,
@@ -1326,6 +1335,7 @@ export class GameState {
       'toggleAccessControlArea', 'clearAccessControlArea',
       'setPathFlow', 'startCoaster', 'appendCoasterPiece', 'undoCoasterPiece',
       'deleteCoasterPiece', 'removeCoaster', 'setCoasterAccess', 'setRideAccess',
+      'stampBlueprint',
     ].includes(command.type)
   }
 
@@ -2100,7 +2110,7 @@ export class GameState {
       (x, z) =>
         this.isInWorld(x, z) &&
         !this.isWaterTerrain(x, z) &&
-        (!this.getAt(x, z) || this.getAt(x, z)?.kind === 'tree') &&
+        !this.tileBlocksMedicalDesignation(x, z) &&
         !this.getCampingCellAt(x, z) &&
         !this.getWasteDumpAt(x, z) &&
         !this.getCoasterAt(x, z),
@@ -2208,15 +2218,6 @@ export class GameState {
     return Boolean(parking && !this.parkingCellIsVacant(parking))
   }
 
-  private hasLiveMedicalOccupancy(x: number, z: number): boolean {
-    const medical = this.state.medicalCells.find(
-      (cell) => cell.x === x && cell.z === z,
-    )
-    return Boolean(
-      medical?.occupants.some((occupant) => occupant && this.getVisitor(occupant)),
-    )
-  }
-
   private evictParkingOccupants(parking: { x: number; z: number; occupiedBy: string | null }): void {
     const vehicle = this.state.logistics.roadVehicles.find(
       (candidate) =>
@@ -2268,10 +2269,17 @@ export class GameState {
     })
   }
 
+  private tileBlocksMedicalDesignation(x: number, z: number): boolean {
+    return this.getBuildingsAtCell(x, z).some(
+      (building) => building.kind !== 'tree' && !allowsMedicalOverlay(building.kind),
+    )
+  }
+
   private clearDesignatedOccupancyAt(
     x: number,
     z: number,
     evict: boolean,
+    options?: { preserveMedical?: boolean },
   ): ActionResult | null {
     const parking = this.state.logistics.parkingCells.find(
       (cell) => cell.x === x && cell.z === z,
@@ -2284,6 +2292,7 @@ export class GameState {
       this.invalidateDesignatedOccupancy()
       return { ok: true, message: 'Parkplatz aufgehoben' }
     }
+    if (options?.preserveMedical) return null
     const medical = this.state.medicalCells.find(
       (cell) => cell.x === x && cell.z === z,
     )
@@ -4271,11 +4280,13 @@ export class GameState {
     return null
   }
 
-  canPlace(kind: BuildingKind, x: number, z: number, decorationSlot?: number): ActionResult {
+  canPlace(kind: BuildingKind, x: number, z: number, decorationSlot?: number, preserveLegacySlot = false): ActionResult {
     if (this.getRideAccessAt(x,z,this.getPlaceElevation(x,z))) return {ok:false,message:'Hier befindet sich ein Fahrgeschäft-Zugang'}
     if (isScenery(kind)) {
-      decorationSlot ??= isLargeScenery(kind) ? 4 : isEdgeScenery(kind) ? this.state.buildRotation : 0
-      if (!Number.isInteger(decorationSlot) || decorationSlot < 0 || decorationSlot > (isLargeScenery(kind) ? 4 : 3)) return { ok: false, message: 'Ungültige Dekoposition' }
+      if (!(preserveLegacySlot && decorationSlot === undefined)) {
+        decorationSlot ??= isLargeScenery(kind) ? 4 : isEdgeScenery(kind) ? this.state.buildRotation : 0
+        if (!Number.isInteger(decorationSlot) || decorationSlot < 0 || decorationSlot > (isLargeScenery(kind) ? 4 : 3)) return { ok: false, message: 'Ungültige Dekoposition' }
+      }
     } else if (decorationSlot !== undefined) return { ok: false, message: 'Dieses Objekt benötigt ein ganzes Feld' }
     const selected = kind==='stage' ? this.state.festival.stageTemplates?.find(t=>t.name===this.state.festival.selectedStageTemplate) : undefined
     if(selected){const issue=this.checkStageSite(selected,x,z,this.state.buildRotation,this.getPlaceElevation(x,z));if(issue)return {ok:false,message:issue}}
@@ -4302,11 +4313,7 @@ export class GameState {
     if (this.getCampingCellAt(x, z) && this.state.buildElevation < 1.2 && kind !== 'fence') {
       return { ok: false, message: 'Diese Fläche ist als Zeltbereich ausgewiesen' }
     }
-    if (
-      this.hasLiveMedicalOccupancy(x, z) &&
-      this.state.buildElevation < 1.2 &&
-      kind !== 'fence'
-    ) {
+    if (this.getMedicalCellAt(x, z) && !allowsMedicalOverlay(kind)) {
       return { ok: false, message: 'Diese Fläche gehört zum Krankenbereich' }
     }
     // A delay tower belongs out in the crowd — it takes the audience ground it stands on with it
@@ -4415,8 +4422,10 @@ export class GameState {
     }
   }
 
-  place(kind: BuildingKind, x: number, z: number, decorationSlot?: number): ActionResult {
-    if (isScenery(kind)) decorationSlot ??= isLargeScenery(kind) ? 4 : isEdgeScenery(kind) ? this.state.buildRotation : 0
+  place(kind: BuildingKind, x: number, z: number, decorationSlot?: number, preserveLegacySlot = false): ActionResult {
+    if (isScenery(kind) && !(preserveLegacySlot && decorationSlot === undefined)) {
+      decorationSlot ??= isLargeScenery(kind) ? 4 : isEdgeScenery(kind) ? this.state.buildRotation : 0
+    }
     if (kind === 'ambulanceGarage') {
       return this.placeAmbulanceGarage(x, z)
     }
@@ -4424,9 +4433,9 @@ export class GameState {
     if (kind === 'wasteDepot') return this.placeWasteDepot(x, z)
     if (kind === 'specialDepot') return this.placeSpecialDepot(x, z)
     if (kind === 'busStop') return this.placeBusStop(x, z)
-    const result = this.canPlace(kind, x, z, decorationSlot)
+    const result = this.canPlace(kind, x, z, decorationSlot, preserveLegacySlot)
     if (!result.ok) return result
-    this.clearDesignatedOccupancyAt(x, z, false)
+    this.clearDesignatedOccupancyAt(x, z, false, { preserveMedical: true })
 
     const placeElevation = this.getPlaceElevation(x, z)
     if (!isScenery(kind)) this.clearTreesAt(x, z, placeElevation, BUILDINGS[kind].height)
@@ -4477,6 +4486,138 @@ export class GameState {
     return { ok: true, message: `${BUILDINGS[kind].name} gebaut` }
   }
 
+  previewBlueprint(
+    originX: number,
+    originZ: number,
+    rotation: number,
+    items: readonly BlueprintItem[],
+  ): { ok: boolean; message: string; charge: number; placements: Array<{ x: number; z: number; valid: boolean; item: BlueprintItem }> } {
+    const transformed = transformBlueprintItems(items, rotation)
+    const savedRotation = this.state.buildRotation
+    const savedElevation = this.state.buildElevation
+    const placements: Array<{ x: number; z: number; valid: boolean; item: BlueprintItem }> = []
+    try {
+      for (const item of transformed) {
+        const x = originX + item.dx
+        const z = originZ + item.dz
+        this.state.buildElevation = item.elevationOffset
+        if (item.type === 'road') {
+          placements.push({ x, z, valid: this.canStampRoadPreview(x, z, item), item })
+          continue
+        }
+        this.state.buildRotation = item.rotation
+        if (item.kind === 'path') {
+          const result = this.canPlace('path', x, z)
+          placements.push({ x, z, valid: result.ok, item })
+          continue
+        }
+        const result = this.canPlace(
+          item.kind,
+          x,
+          z,
+          item.decorationSlot,
+          preserveLegacyScenerySlot(item),
+        )
+        placements.push({ x, z, valid: result.ok, item })
+      }
+    } finally {
+      this.state.buildRotation = savedRotation
+      this.state.buildElevation = savedElevation
+    }
+    const charge = blueprintStampCharge(items)
+    const valid = placements.filter((entry) => entry.valid).length
+    const ok = placements.length > 0 && placements.every((entry) => entry.valid) && this.state.money >= charge
+    return {
+      ok,
+      charge,
+      placements,
+      message:
+        placements.length === 0
+          ? 'Die Auswahl ist leer'
+          : this.state.money < charge
+            ? `Nicht genug Geld (${charge} €)`
+            : ok
+              ? `${valid} Objekt${valid === 1 ? '' : 'e'} für ${charge} € kopieren`
+              : `${valid} von ${placements.length} passen hier`,
+    }
+  }
+
+  stampBlueprint(originX: number, originZ: number, rotation: number, items: readonly BlueprintItem[]): ActionResult {
+    const transformed = transformBlueprintItems(items, rotation)
+    if (transformed.length === 0) return { ok: false, message: 'Die Auswahl ist leer' }
+    const charge = blueprintStampCharge(transformed)
+    if (this.state.money < charge) {
+      return { ok: false, message: `Nicht genug Geld (${charge} €)` }
+    }
+    const preview = this.previewBlueprint(originX, originZ, rotation, items)
+    if (!preview.placements.every((entry) => entry.valid)) {
+      return { ok: false, message: preview.message }
+    }
+    const catalog = blueprintCatalogCost(transformed)
+    const credit = catalog - charge
+    if (credit > 0) bookFinance(this.state, 'construction', credit)
+    const savedRotation = this.state.buildRotation
+    const savedElevation = this.state.buildElevation
+    let placed = 0
+    try {
+      for (const item of transformed) {
+        const x = originX + item.dx
+        const z = originZ + item.dz
+        this.state.buildElevation = item.elevationOffset
+        if (item.type === 'road') {
+          const terrain = this.getTerrainHeight(x, z)
+          if (this.placeRoadSegment(x, z, terrain + item.elevationOffset, item.slope, item.slopeDirection, item.wayType).ok) {
+            placed += 1
+          }
+          continue
+        }
+        this.state.buildRotation = item.rotation
+        if (item.kind === 'path') {
+          const terrain = this.getTerrainHeight(x, z)
+          if (
+            this.placePathSegment(
+              x,
+              z,
+              terrain + item.elevationOffset,
+              item.pathType ?? 'normal',
+              item.queueDirection ?? item.rotation,
+              item.pathSlope ?? 0,
+              item.wayType,
+            ).ok
+          ) {
+            placed += 1
+          }
+          continue
+        }
+        if (this.place(item.kind, x, z, item.decorationSlot, preserveLegacyScenerySlot(item)).ok) placed += 1
+      }
+    } finally {
+      this.state.buildRotation = savedRotation
+      this.state.buildElevation = savedElevation
+    }
+    if (placed === 0) {
+      if (credit > 0) bookFinance(this.state, 'construction', -credit)
+      return { ok: false, message: 'Hier konnte nichts kopiert werden' }
+    }
+    this.emit()
+    return {
+      ok: true,
+      message: `${placed} Objekt${placed === 1 ? '' : 'e'} kopiert · ${charge} €`,
+    }
+  }
+
+  private canStampRoadPreview(
+    x: number,
+    z: number,
+    item: Extract<BlueprintItem, { type: 'road' }>,
+  ): boolean {
+    if (!this.isInWorld(x, z)) return false
+    const terrain = this.getTerrainHeight(x, z)
+    const elevation = terrain + item.elevationOffset
+    if (this.isWaterTerrain(x, z) && elevation <= this.getWaterLevel()) return false
+    return true
+  }
+
   private placeAmbulanceGarage(x: number, z: number): ActionResult {
     const footprint = this.createFootprint(x, z, 2)
     const result = this.canPlaceLogisticsFootprint(
@@ -4485,7 +4626,7 @@ export class GameState {
     )
     if (!result.ok) return result
     footprint.forEach((cell) => {
-      this.clearDesignatedOccupancyAt(cell.x, cell.z, false)
+      this.clearDesignatedOccupancyAt(cell.x, cell.z, false, { preserveMedical: true })
       this.clearTreesAt(cell.x, cell.z, 0, 1)
     })
     const id = this.nextId('ambulance-garage')
@@ -4517,7 +4658,7 @@ export class GameState {
     )
     if (!result.ok) return result
     footprint.forEach((cell) => {
-      this.clearDesignatedOccupancyAt(cell.x, cell.z, false)
+      this.clearDesignatedOccupancyAt(cell.x, cell.z, false, { preserveMedical: true })
       this.clearTreesAt(cell.x, cell.z, 0, 1)
     })
     const id = this.nextId('bus-depot')
@@ -4544,7 +4685,7 @@ export class GameState {
     )
     if (!result.ok) return result
     footprint.forEach((cell) => {
-      this.clearDesignatedOccupancyAt(cell.x, cell.z, false)
+      this.clearDesignatedOccupancyAt(cell.x, cell.z, false, { preserveMedical: true })
       this.clearTreesAt(cell.x, cell.z, 0, 1)
     })
     const id = this.nextId('waste-depot')
@@ -4573,7 +4714,7 @@ export class GameState {
     )
     if (!result.ok) return result
     footprint.forEach((cell) => {
-      this.clearDesignatedOccupancyAt(cell.x, cell.z, false)
+      this.clearDesignatedOccupancyAt(cell.x, cell.z, false, { preserveMedical: true })
       this.clearTreesAt(cell.x, cell.z, 0, 1)
     })
     const id = this.nextId('special-depot')
@@ -4706,7 +4847,7 @@ export class GameState {
               building.elevation < 1,
           ) ||
           Boolean(this.getCampingCellAt(cell.x, cell.z)) ||
-          this.hasLiveMedicalOccupancy(cell.x, cell.z) ||
+          Boolean(this.getMedicalCellAt(cell.x, cell.z)) ||
           Boolean(this.getStageForecourtCellAt(cell.x, cell.z)) ||
           Boolean(this.getWasteDumpAt(cell.x, cell.z)),
       )
@@ -5395,7 +5536,7 @@ export class GameState {
     if (this.getCampingCellAt(x, z) && elevation < 1.2) {
       return { ok: false, message: 'Durch einen Zeltplatz kann kein Weg führen' }
     }
-    if (this.hasLiveMedicalOccupancy(x, z) && elevation < 1.2) {
+    if (this.getMedicalCellAt(x, z) && elevation < 1.2) {
       return { ok: false, message: 'Durch den Krankenbereich kann kein Weg führen' }
     }
     if (this.getStageForecourtCellAt(x, z) && elevation < 1.2) {
@@ -5461,7 +5602,7 @@ export class GameState {
     }
 
     this.clearTreesAt(x, z, candidateBase, candidateTop - candidateBase)
-    this.clearDesignatedOccupancyAt(x, z, false)
+    this.clearDesignatedOccupancyAt(x, z, false, { preserveMedical: true })
     bookFinance(this.state, 'construction', -pathCost)
     const pathData: Omit<PlacedBuilding, 'id'> = {
       kind: 'path',
@@ -9375,14 +9516,10 @@ export class GameState {
       vehicle.state = 'idle'
       return
     }
-    if (vehicle.waitMinutes > 0) {
-      vehicle.waitMinutes += minutes
-      if (vehicle.waitMinutes < 2) return
-      const nextIndex =
-        (vehicle.nextStopIndex + 1) % line.stopIds.length
-      this.routeBusToStop(vehicle, line, nextIndex)
-      return
-    }
+    vehicle.passengerIds = vehicle.passengerIds.filter((visitorId) => {
+      const visitor = this.getVisitor(visitorId)
+      return Boolean(visitor && visitor.state === 'bus-riding')
+    })
     const disembarkingIds = new Set(
       vehicle.passengerIds.filter((visitorId) => {
         const visitor = this.getVisitor(visitorId)
@@ -9434,26 +9571,28 @@ export class GameState {
       if (!visitor || visitor.route.length > 0) return
       this.decideNextAction(visitor)
     })
-    const waiting = this.state.visitors.filter(
-      (visitor) =>
-        visitor.state === 'bus-waiting' &&
-        visitor.busLineId === line.id &&
-        visitor.cellX === stop.x &&
-        visitor.cellZ === stop.z,
+    const waiting = this.state.visitors
+      .filter((visitor) => isVisitorReadyToBoardBus(visitor, line.id, stop))
+      .sort(compareBusBoardPriority)
+    const freeSeats = Math.max(
+      0,
+      SIMULATION_CONFIG.logistics.busCapacity - vehicle.passengerIds.length,
     )
-    const freeSeats =
-      SIMULATION_CONFIG.logistics.busCapacity - vehicle.passengerIds.length
     waiting.slice(0, freeSeats).forEach((visitor) => {
       visitor.state = 'bus-riding'
       visitor.route = []
-      vehicle.passengerIds.push(visitor.id)
+      if (!vehicle.passengerIds.includes(visitor.id)) {
+        vehicle.passengerIds.push(visitor.id)
+      }
     })
     waiting.slice(freeSeats).forEach((visitor) => {
       this.recordComplaint(visitor, 'bus-full')
       visitor.emotion = 'angry'
     })
     vehicle.waitMinutes += minutes
-    if (vehicle.waitMinutes < 2) return
+    if (vehicle.waitMinutes < SIMULATION_CONFIG.logistics.busStopDwellMinutes) {
+      return
+    }
     const nextIndex = (vehicle.nextStopIndex + 1) % line.stopIds.length
     this.routeBusToStop(vehicle, line, nextIndex)
   }

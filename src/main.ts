@@ -34,7 +34,17 @@ import {
   shopSupplyKind,
 } from './game/shopGoods'
 import { snapStockMinimum } from './game/supplyChain'
-import { BUILDING_KINDS, BUILDINGS, isTerrainEditTool } from './game/catalog'
+import { BUILDING_KINDS, BUILDINGS, isCopyTool, isTerrainEditTool } from './game/catalog'
+import {
+  captureBlueprint,
+  describeBlueprint,
+  type Blueprint,
+} from './game/blueprints'
+import {
+  deleteBlueprintLibraryEntry,
+  listBlueprintLibrary,
+  saveBlueprintLibraryEntry,
+} from './game/blueprintLibrary'
 import { isSwimmableHeight, isWaterHeight, terrainCornerIndex, terrainToolMode } from './game/terrain'
 import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financePeriodTotal } from './game/finance'
 import { goalName, goalProgressText } from './game/scenarioGoals'
@@ -88,6 +98,16 @@ import {
   TRACK_SPECIAL_KINDS,
   type CoasterWindowState,
 } from './game/coasterConnections'
+import {
+  TRACK_CHAIN_PALETTE_ID,
+  describeCoasterConstructionChrome,
+  syncCoasterPaletteElement,
+  trackBankPaletteId,
+  trackPiecePaletteId,
+  trackPitchPaletteId,
+  updateCoasterConstruction,
+  type CoasterPaletteButtonSpec,
+} from './game/coasterConstructionUI'
 import type {
   Coaster,
   CoasterOperationMode,
@@ -414,6 +434,16 @@ app.innerHTML = `
       </div>
       <div id="build-extra-terrain" class="build-extra" hidden>
         <div id="terrain-planner-slot"></div>
+      </div>
+      <div id="build-extra-copy" class="build-extra" hidden>
+        <p class="copy-help">Rechteck aufziehen wie beim Gelände. Danach folgt die Vorschau dem Zeiger; Klick stempelt. <kbd>R</kbd> dreht. Gespeichert wird nur in diesem Browser, nicht im Spielstand.</p>
+        <p id="copy-selection-summary">Keine Auswahl</p>
+        <div class="copy-save-row">
+          <input id="copy-blueprint-name" type="text" maxlength="40" placeholder="Name für die Bibliothek" autocomplete="off" />
+          <button id="copy-save-library" type="button">In Bibliothek speichern</button>
+        </div>
+        <button id="copy-new-selection" type="button">Neue Auswahl</button>
+        <div id="copy-library-list" class="copy-library-list"></div>
       </div>
       <div id="build-extra-decoration" class="build-extra" hidden>
         <div id="decoration-themes" class="decoration-themes" role="listbox" aria-label="Deko-Themen"></div>
@@ -1161,12 +1191,22 @@ const TRACK_BANK_BUTTONS: readonly { bank: number; icon: string; title: string; 
   { bank: TRACK_BANK_ANGLE, icon: '◣', title: 'Neigung rechts einleiten', label: 'Rechts' },
 ]
 
-function trackPieceButtonHtml(kind: TrackPieceKind, active: boolean, enabled = true): string {
-  const piece = TRACK_PIECES[kind]
-  const disabledAttrs = enabled ? '' : ' disabled aria-disabled="true"'
-  return `<button type="button" data-track-piece="${kind}" class="${active && enabled ? 'active' : ''}"${disabledAttrs} title="${piece.name} · ${formatMoney(piece.cost)}">
-      <span>${TRACK_PIECE_ICONS[kind]}</span><small>${piece.station ? 'Station' : piece.radius ? `${piece.radius}×${piece.radius}` : piece.name}</small>
-    </button>`
+function trackPiecePaletteSpecs(
+  entries: readonly { kind: TrackPieceKind; enabled: boolean }[],
+  activeKind: TrackPieceKind,
+): CoasterPaletteButtonSpec[] {
+  return entries.map((entry) => {
+    const piece = TRACK_PIECES[entry.kind]
+    return {
+      id: trackPiecePaletteId(entry.kind),
+      enabled: entry.enabled,
+      active: entry.kind === activeKind,
+      title: `${piece.name} · ${formatMoney(piece.cost)}`,
+      icon: TRACK_PIECE_ICONS[entry.kind],
+      label: piece.station ? 'Station' : piece.radius ? `${piece.radius}×${piece.radius}` : piece.name,
+      attrs: { 'data-track-piece': entry.kind },
+    }
+  })
 }
 
 function renderTrackPalette(
@@ -1174,12 +1214,7 @@ function renderTrackPalette(
   entries: readonly { kind: TrackPieceKind; enabled: boolean }[],
   activeKind: TrackPieceKind,
 ): void {
-  palette.replaceChildren()
-  if (entries.length === 0) return
-  palette.insertAdjacentHTML(
-    'beforeend',
-    entries.map((entry) => trackPieceButtonHtml(entry.kind, entry.kind === activeKind, entry.enabled)).join(''),
-  )
+  syncCoasterPaletteElement(palette, trackPiecePaletteSpecs(entries, activeKind))
 }
 
 const canvas = requireElement<HTMLCanvasElement>('#game-canvas')
@@ -1473,6 +1508,7 @@ let dragPathElevation = 0
 let terrainDragOriginHeight = 0
 let sceneryDragSlot: number | null = null
 let sceneryDragRotation = 0
+let copyClipboard: Blueprint | null = null
 let cameraQuarter = 0
 let coasterBuilderActive = false
 let activeCoasterId: string | null = null
@@ -1483,6 +1519,7 @@ let coasterTargetPitch = 0
 let coasterTargetBank = 0
 let pendingCoasterTypeId: CoasterTypeId = 'classicSteel'
 let coasterSelectedKind: TrackPieceKind = 'station'
+let lastCoasterConstructionKey: string | null = null
 let selectedEntity: { type: 'building' | 'coaster' | 'vehicle' | 'access' | 'depot' | 'wasteDump' | 'backstage'; id: string } | null = null
 let logisticsOverlayVisible = false
 let accessAreaDrawing = false
@@ -1501,6 +1538,7 @@ try {
     (cell) => {
       hoveredCell = cell
       updateRideAccessPreview(cell)
+      updateCopyPreview(cell)
       if (shiftElevationApplies()) {
         beginShiftElevationLock(cell)
         previewShiftElevation(cell)
@@ -2567,6 +2605,16 @@ function handleCellClick(cell: CellPosition): void {
   }
 
   const tool = game.snapshot.selectedTool
+  if (isCopyTool(tool)) {
+    if (copyClipboard) {
+      const result = game.stampBlueprint(cell.x, cell.z, game.snapshot.buildRotation, copyClipboard.items)
+      showToast(result.message, !result.ok)
+      updateCopyPreview(cell)
+      return
+    }
+    applyCopySelection(createCampingArea(cell, cell))
+    return
+  }
   if (isBusPlannerOpen()) {
     const stop =
       game.getBusStopAt(cell.x, cell.z) ??
@@ -2799,6 +2847,7 @@ function paintPath(cell: CellPosition): void {
     game.snapshot.selectedTool === 'parkingArea' ||
     game.snapshot.selectedTool === 'powerCable' ||
     game.snapshot.selectedTool === 'bulldoze' ||
+    isCopyTool(game.snapshot.selectedTool) ||
     isTerrainEditTool(game.snapshot.selectedTool)
       ? createCampingArea(dragPathStart, dragPathEnd)
       : createConnectedPathLine(dragPathStart, dragPathEnd),
@@ -2842,7 +2891,8 @@ function startPathDrag(cell: CellPosition): void {
     game.snapshot.selectedTool === 'roadSpeed30' ||
     game.snapshot.selectedTool === 'roadSpeed50' ||
     isTerrainEditTool(game.snapshot.selectedTool) ||
-    game.snapshot.selectedTool === 'bulldoze'
+    game.snapshot.selectedTool === 'bulldoze' ||
+    isCopyTool(game.snapshot.selectedTool)
       ? 0
       : game.snapshot.buildElevation
   view.setPathDragPreview([cell], dragPathElevation)
@@ -2865,10 +2915,18 @@ function finishPathDrag(): void {
     game.snapshot.selectedTool === 'parkingArea' ||
     game.snapshot.selectedTool === 'powerCable' ||
     game.snapshot.selectedTool === 'bulldoze' ||
+    isCopyTool(game.snapshot.selectedTool) ||
     isTerrainEditTool(game.snapshot.selectedTool)
       ? createCampingArea(dragPathStart, dragPathEnd)
       : createConnectedPathLine(dragPathStart, dragPathEnd)
   let built = 0
+  if (isCopyTool(game.snapshot.selectedTool)) {
+    applyCopySelection(cells)
+    dragPathStart = null
+    dragPathEnd = null
+    view.setPathDragPreview([], 0)
+    return
+  }
   if (isScenery(game.snapshot.selectedTool)) {
     const tool = game.snapshot.selectedTool as BuildingKind
     const slot =
@@ -3062,6 +3120,76 @@ function finishPathDrag(): void {
   dragPathStart = null
   dragPathEnd = null
   view.setPathDragPreview([], 0)
+}
+
+function applyCopySelection(cells: ReadonlyArray<{ x: number; z: number }>): void {
+  copyClipboard = captureBlueprint(game.snapshot, cells, (x, z) => game.getTerrainHeight(x, z))
+  updateCopySelectionSummary()
+  if (copyClipboard.items.length === 0) {
+    showToast('In diesem Rechteck liegt nichts zum Kopieren', true)
+    view.setBlueprintPreview([])
+    return
+  }
+  showToast(`Auswahl: ${describeBlueprint(copyClipboard)}`)
+  updateCopyPreview(hoveredCell)
+}
+
+function updateCopySelectionSummary(): void {
+  const summary = document.querySelector('#copy-selection-summary')
+  if (!summary) return
+  summary.textContent = copyClipboard ? `Auswahl: ${describeBlueprint(copyClipboard)}` : 'Keine Auswahl'
+}
+
+function updateCopyPreview(cell: CellPosition | null): void {
+  if (!isCopyTool(game.snapshot.selectedTool) || !copyClipboard || !cell || dragPathStart) {
+    view.setBlueprintPreview([])
+    return
+  }
+  const preview = game.previewBlueprint(cell.x, cell.z, game.snapshot.buildRotation, copyClipboard.items)
+  view.setBlueprintPreview(
+    preview.placements.map((entry) => ({
+      x: entry.x,
+      z: entry.z,
+      kind: entry.item.type === 'road' ? 'road' : entry.item.kind,
+      rotation: entry.item.type === 'road' ? entry.item.slopeDirection : entry.item.rotation,
+      decorationSlot: entry.item.type === 'building' ? entry.item.decorationSlot : undefined,
+      elevationOffset: entry.item.elevationOffset,
+      valid: entry.valid,
+      isRoad: entry.item.type === 'road',
+      isPath: entry.item.type === 'building' && entry.item.kind === 'path',
+    })),
+  )
+}
+
+function clearCopyClipboard(): void {
+  copyClipboard = null
+  view.setBlueprintPreview([])
+  updateCopySelectionSummary()
+}
+
+async function renderCopyLibrary(): Promise<void> {
+  const list = document.querySelector('#copy-library-list')
+  if (!list) return
+  const entries = await listBlueprintLibrary()
+  if (entries.length === 0) {
+    list.innerHTML = '<p class="copy-library-empty">Noch keine Vorlagen in der Baubibliothek.</p>'
+    return
+  }
+  list.innerHTML = entries
+    .map(
+      (entry) =>
+        `<div class="copy-library-item" data-blueprint-id="${entry.id}">
+          <div>
+            <strong>${entry.name}</strong>
+            <small>${describeBlueprint(entry.blueprint)}</small>
+          </div>
+          <div class="copy-library-actions">
+            <button type="button" data-blueprint-load="${entry.id}">Laden</button>
+            <button type="button" data-blueprint-delete="${entry.id}">Löschen</button>
+          </div>
+        </div>`,
+    )
+    .join('')
 }
 
 function createCampingArea(start: CellPosition, end: CellPosition): CellPosition[] {
@@ -3518,6 +3646,7 @@ function closeCoasterBuilder(): void {
   coasterStartCandidate = null
   coasterEditIndex = -1
   coasterAccessMode = null
+  lastCoasterConstructionKey = null
   trackSpecialPalette.hidden = true
   trackSpecialToggle.setAttribute('aria-expanded', 'false')
   coasterBuilder.classList.remove('visible')
@@ -3692,18 +3821,36 @@ function deleteCoasterFromSelection(): void {
 
 function updateCoasterBuilder(): void {
   coasterBuilder.classList.toggle('visible', coasterBuilderActive)
-  if (!coasterBuilderActive) return
+  if (!coasterBuilderActive) {
+    lastCoasterConstructionKey = null
+    return
+  }
 
   const coaster = activeCoasterId ? game.getCoaster(activeCoasterId) : null
+  if (coaster) {
+    coasterEditIndex = Math.max(0, Math.min(coaster.pieces.length - 1, coasterEditIndex))
+  }
+  const construction = updateCoasterConstruction(
+    lastCoasterConstructionKey,
+    describeCoasterConstructionChrome({
+      window: currentCoasterWindow(),
+      ride: coaster ?? null,
+      editIndex: coasterEditIndex,
+      startCandidate: coasterStartCandidate,
+      buildRotation: game.snapshot.buildRotation,
+      buildElevation: game.snapshot.buildElevation,
+      cameraQuarter,
+    }),
+  )
+  if (!construction.changed) return
+  lastCoasterConstructionKey = construction.key
+
   const typeId = selectedCoasterTypeId()
   const type = getCoasterType(typeId)
   pendingCoasterTypeId = typeId
   coasterTypeName.textContent = type.name
   coasterTypeHint.textContent = coasterTypeHintText(typeId)
   coasterConstructionTitle.textContent = `${coaster?.name ?? type.name} Konstruktion`
-  if (coaster) {
-    coasterEditIndex = Math.max(0, Math.min(coaster.pieces.length - 1, coasterEditIndex))
-  }
   const anchorPiece = coaster?.pieces[coasterEditIndex]
   coasterDirection.textContent = getIsoDirectionIcon(
     anchorPiece?.end.heading ?? game.snapshot.buildRotation,
@@ -3751,23 +3898,6 @@ function updateCoasterBuilder(): void {
     typeId,
     anchorPiece?.end.bank ?? 0,
   ).map((entry) => ({ ...entry, enabled: Boolean(coaster) && entry.enabled }))
-  trackSlopePalette.replaceChildren()
-  if (pitchEntries.length > 0) {
-    trackSlopePalette.insertAdjacentHTML(
-      'beforeend',
-      TRACK_PITCH_BUTTONS.filter((entry) =>
-        pitchEntries.some((choice) => Math.abs(choice.pitch - entry.pitch) < 0.001),
-      )
-        .map((entry) => {
-          const choice = pitchEntries.find((item) => Math.abs(item.pitch - entry.pitch) < 0.001)
-          const enabled = choice?.enabled ?? false
-          const active = enabled && Math.abs(entry.pitch - coasterTargetPitch) < 0.001
-          const disabledAttrs = enabled ? '' : ' disabled aria-disabled="true"'
-          return `<button type="button" data-track-pitch="${entry.pitch}" class="${active ? 'active' : ''}"${disabledAttrs} title="${entry.title}"><span>${entry.icon}</span><small>${entry.label}</small></button>`
-        })
-        .join(''),
-    )
-  }
   const chainVisible = isTrackChainLiftVisible(typeId)
   const chainEnabled = Boolean(
     coaster &&
@@ -3779,13 +3909,32 @@ function updateCoasterBuilder(): void {
       ),
   )
   if (!chainVisible || !chainEnabled) chainLiftInput.checked = false
+  const slopeSpecs: CoasterPaletteButtonSpec[] = TRACK_PITCH_BUTTONS.filter((entry) =>
+    pitchEntries.some((choice) => Math.abs(choice.pitch - entry.pitch) < 0.001),
+  ).map((entry) => {
+    const choice = pitchEntries.find((item) => Math.abs(item.pitch - entry.pitch) < 0.001)
+    const enabled = choice?.enabled ?? false
+    return {
+      id: trackPitchPaletteId(entry.pitch),
+      enabled,
+      active: enabled && Math.abs(entry.pitch - coasterTargetPitch) < 0.001,
+      title: entry.title,
+      icon: entry.icon,
+      label: entry.label,
+      attrs: { 'data-track-pitch': String(entry.pitch) },
+    }
+  })
   if (chainVisible) {
-    const chainDisabledAttrs = chainEnabled ? '' : ' disabled aria-disabled="true"'
-    trackSlopePalette.insertAdjacentHTML(
-      'beforeend',
-      `<button id="toggle-chain-lift" type="button" class="${chainEnabled && chainLiftInput.checked ? 'active' : ''}"${chainDisabledAttrs} title="Kettenlift für das nächste geeignete Stück" aria-pressed="${String(chainEnabled && chainLiftInput.checked)}"><span>⛓</span><small>Kette</small></button>`,
-    )
+    slopeSpecs.push({
+      id: TRACK_CHAIN_PALETTE_ID,
+      enabled: chainEnabled,
+      active: chainEnabled && chainLiftInput.checked,
+      title: 'Kettenlift für das nächste geeignete Stück',
+      icon: '⛓',
+      label: 'Kette',
+    })
   }
+  syncCoasterPaletteElement(trackSlopePalette, slopeSpecs)
   const slopeCount = pitchEntries.length + (chainVisible ? 1 : 0)
   trackSlopePalette.style.gridTemplateColumns = `repeat(${Math.max(1, slopeCount)}, minmax(0, 1fr))`
   const bankEntries = listTrackBankChoices(
@@ -3793,23 +3942,22 @@ function updateCoasterBuilder(): void {
     typeId,
     anchorPiece?.end.pitch ?? 0,
   ).map((entry) => ({ ...entry, enabled: Boolean(coaster) && entry.enabled }))
-  trackBankPalette.replaceChildren()
-  if (bankEntries.length > 0) {
-    trackBankPalette.insertAdjacentHTML(
-      'beforeend',
-      TRACK_BANK_BUTTONS.filter((entry) =>
-        bankEntries.some((choice) => Math.abs(choice.bank - entry.bank) < 0.001),
-      )
-        .map((entry) => {
-          const choice = bankEntries.find((item) => Math.abs(item.bank - entry.bank) < 0.001)
-          const enabled = choice?.enabled ?? false
-          const active = enabled && Math.abs(entry.bank - coasterTargetBank) < 0.001
-          const disabledAttrs = enabled ? '' : ' disabled aria-disabled="true"'
-          return `<button type="button" data-track-bank="${entry.bank}" class="${active ? 'active' : ''}"${disabledAttrs} title="${entry.title}"><span>${entry.icon}</span><small>${entry.label}</small></button>`
-        })
-        .join(''),
-    )
-  }
+  const bankSpecs: CoasterPaletteButtonSpec[] = TRACK_BANK_BUTTONS.filter((entry) =>
+    bankEntries.some((choice) => Math.abs(choice.bank - entry.bank) < 0.001),
+  ).map((entry) => {
+    const choice = bankEntries.find((item) => Math.abs(item.bank - entry.bank) < 0.001)
+    const enabled = choice?.enabled ?? false
+    return {
+      id: trackBankPaletteId(entry.bank),
+      enabled,
+      active: enabled && Math.abs(entry.bank - coasterTargetBank) < 0.001,
+      title: entry.title,
+      icon: entry.icon,
+      label: entry.label,
+      attrs: { 'data-track-bank': String(entry.bank) },
+    }
+  })
+  syncCoasterPaletteElement(trackBankPalette, bankSpecs)
   trackBankPalette.style.gridTemplateColumns = `repeat(${Math.max(1, bankEntries.length)}, minmax(0, 1fr))`
   const displayedPiece = coaster ? selectedPiece : TRACK_PIECES.station
   coasterPiecePreview.textContent = `${TRACK_PIECE_ICONS[displayedPiece.kind]} ${getIsoDirectionIcon(
@@ -3993,6 +4141,10 @@ function updateContextHelp(): void {
   } else if (tool === 'terrainSmooth') {
     contextHelp.textContent =
       'Rechteck ziehen: alle Felder auf die Höhe unter dem Startpunkt setzen.'
+  } else if (isCopyTool(tool)) {
+    contextHelp.textContent = copyClipboard
+      ? game.previewBlueprint(hoveredCell.x, hoveredCell.z, game.snapshot.buildRotation, copyClipboard.items).message
+      : 'Rechteck aufziehen, um Gebäude, Deko und Wege zu kopieren.'
   } else if (tool === 'bulldoze') {
     const access = game.getAccessControlAt(hoveredCell.x, hoveredCell.z)
     const removableCoaster = game.getRemovableCoasterAt(hoveredCell.x, hoveredCell.z)
@@ -5269,7 +5421,10 @@ function showToast(message: string, isError = false): void {
   }, 2200)
 }
 
-document.querySelector('#rotate-scenery')?.addEventListener('click', () => game.rotateBuild())
+document.querySelector('#rotate-scenery')?.addEventListener('click', () => {
+  game.rotateBuild()
+  updateCopyPreview(hoveredCell)
+})
 
 const buildMenuToggle = requireElement<HTMLButtonElement>('#open-build-menu')
 const buildMenuPanel = requireElement<HTMLElement>('#build-menu')
@@ -5499,6 +5654,21 @@ function openBuildCategory(categoryId: BuildCategoryId, groupId?: string): void 
     toggleBulldozeTool()
     return
   }
+  if (categoryId === 'copy') {
+    if (activeRideId) closeRideBuilder()
+    if (pathWindowOpen) closePathEditor()
+    if (coasterBuilderActive) closeCoasterBuilder()
+    lastBuildCategory = categoryId
+    game.setBuildElevation(0)
+    game.setTool('copy')
+    renderBuildGrid(categoryId, groupId ?? lastBuildGroup.get(categoryId))
+    buildMenuPanel.hidden = false
+    buildMenuToggle.setAttribute('aria-expanded', 'true')
+    setToolbarCategoryOpen(categoryId)
+    void renderCopyLibrary()
+    updateCopySelectionSummary()
+    return
+  }
   if (activeRideId) closeRideBuilder()
   lastBuildCategory = categoryId
   if (categoryId === 'paths' || categoryId === 'roads') {
@@ -5620,6 +5790,46 @@ buildMenuToggle.addEventListener('click', () => {
   const category = match?.category === 'bulldoze' ? lastBuildCategory : match?.category ?? lastBuildCategory
   openBuildCategory(category, match?.category === 'bulldoze' ? undefined : match?.group)
 })
+document.querySelector('#copy-save-library')?.addEventListener('click', () => {
+  if (!copyClipboard) {
+    showToast('Zuerst einen Bereich markieren', true)
+    return
+  }
+  const name = document.querySelector<HTMLInputElement>('#copy-blueprint-name')?.value ?? ''
+  void saveBlueprintLibraryEntry(name, copyClipboard).then((entry) => {
+    showToast(`„${entry.name}“ in der Baubibliothek gespeichert`)
+    void renderCopyLibrary()
+  })
+})
+document.querySelector('#copy-new-selection')?.addEventListener('click', () => {
+  clearCopyClipboard()
+  showToast('Neue Auswahl: Rechteck aufziehen')
+})
+document.querySelector('#copy-library-list')?.addEventListener('click', (event) => {
+  const target = (event.target as Element).closest<HTMLButtonElement>('[data-blueprint-load], [data-blueprint-delete]')
+  if (!target) return
+  const loadId = target.dataset.blueprintLoad
+  const deleteId = target.dataset.blueprintDelete
+  if (loadId) {
+    void listBlueprintLibrary().then((entries) => {
+      const entry = entries.find((item) => item.id === loadId)
+      if (!entry) return
+      copyClipboard = entry.blueprint
+      game.setTool('copy')
+      updateCopySelectionSummary()
+      updateCopyPreview(hoveredCell)
+      showToast(`Vorlage „${entry.name}“ geladen`)
+    })
+    return
+  }
+  if (deleteId) {
+    void deleteBlueprintLibraryEntry(deleteId).then(() => {
+      showToast('Vorlage gelöscht')
+      void renderCopyLibrary()
+    })
+  }
+})
+
 requireElement<HTMLButtonElement>('[data-close-build-menu]').addEventListener('click', () => {
   closeBuildMenu()
   if (buildMenuPanel.hidden) game.setTool('inspect')
@@ -7744,7 +7954,10 @@ window.addEventListener('keydown', (event) => {
     updateCoasterBuilder()
   } else if (event.key.toLowerCase() === 'r') {
     if (pathEditorActive) rotatePathDirection(1)
-    else game.rotateBuild()
+    else {
+      game.rotateBuild()
+      updateCopyPreview(hoveredCell)
+    }
   } else if (event.key === 'ArrowLeft' && pathEditorActive) {
     rotatePathDirection(-1)
   } else if (event.key === 'ArrowRight' && pathEditorActive) {
@@ -7793,7 +8006,13 @@ mountMobileUI({
     updatePathEditor()
     updateCoasterBuilder()
   },
-  rotateBuilding: () => { if (pathEditorActive) rotatePathDirection(1); else game.rotateBuild() },
+  rotateBuilding: () => {
+    if (pathEditorActive) rotatePathDirection(1)
+    else {
+      game.rotateBuild()
+      updateCopyPreview(hoveredCell)
+    }
+  },
   zoom: factor => view.zoomBy(factor),
   elevation: delta => { if (pathEditorActive) setPathSlope(pathSlope + delta); else game.adjustBuildElevation(delta) },
 })

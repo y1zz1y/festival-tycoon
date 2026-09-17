@@ -25,10 +25,12 @@ import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import {
   chooseParkingDisembarkPath,
   collectSeatedPassengerIds,
+  compareBusBoardPriority,
   describeRoadVehicleActivity,
   describeRoadVehicleDestination,
   formatRoadVehicleInspectLoad,
   isVehicleReversing,
+  isVisitorReadyToBoardBus,
 } from '../src/game/logistics'
 import { CrowdingSystem } from '../src/game/crowding'
 
@@ -1304,6 +1306,79 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   const secondVisit=overlayKeys.indexOf(`${secondStop.roadCell.x}:${secondStop.roadCell.z}`)
   assert.ok(firstVisit>=0 && secondVisit>firstVisit,'the live route visits stops in the sorted order')
 
+  assert.equal(SIMULATION_CONFIG.logistics.busCapacity, 40)
+  assert.equal(SIMULATION_CONFIG.logistics.busStopDwellMinutes, 2)
+  const lateWaiter={
+    id:'late-board',
+    state:'bus-waiting',
+    busLineId:line.id,
+    busWaitMinutes:36,
+    cellX:secondStop.x,
+    cellZ:secondStop.z,
+    route:[] as const,
+    targetId:secondStop.id,
+  }
+  const neighborWaiter={
+    ...lateWaiter,
+    id:'neighbor-board',
+    busWaitMinutes:12,
+    cellX:secondStop.x+1,
+    cellZ:secondStop.z,
+  }
+  assert.ok(isVisitorReadyToBoardBus(lateWaiter, line.id, secondStop))
+  assert.ok(isVisitorReadyToBoardBus(neighborWaiter, line.id, secondStop), 'arrived neighbors may board')
+  assert.ok(compareBusBoardPriority(lateWaiter, neighborWaiter) < 0, 'longest wait boards first')
+  const longWaitGuest=(busPlanner as any).spawnVisitorMember('day', 'bus-long-wait', 'pedestrian', false)
+  const midDwellGuest=(busPlanner as any).spawnVisitorMember('day', 'bus-mid-dwell', 'pedestrian', false)
+  assert.ok(longWaitGuest && midDwellGuest)
+  Object.assign(longWaitGuest, {
+    state:'bus-waiting',
+    busLineId:line.id,
+    busWaitMinutes:40,
+    busDestinationStopId:firstStop.id,
+    cellX:secondStop.x,
+    cellZ:secondStop.z,
+    x:secondStop.x+0.4,
+    z:secondStop.z+0.4,
+    cellElevation:0,
+    route:[],
+    targetId:secondStop.id,
+  })
+  Object.assign(midDwellGuest, {
+    state:'bus-waiting',
+    busLineId:line.id,
+    busWaitMinutes:8,
+    busDestinationStopId:firstStop.id,
+    cellX:secondStop.x+1,
+    cellZ:secondStop.z,
+    x:secondStop.x+1.4,
+    z:secondStop.z+0.4,
+    cellElevation:0,
+    route:[],
+    targetId:secondStop.id,
+  })
+  const boardingBus=buses[0]!
+  boardingBus.state='at-stop'
+  boardingBus.waitMinutes=1
+  boardingBus.passengerIds=['ghost-stale', longWaitGuest.id]
+  boardingBus.lineId=line.id
+  boardingBus.target={kind:'busStop', stopId:secondStop.id}
+  boardingBus.nextStopIndex=line.stopIds.indexOf(secondStop.id)
+  boardingBus.cell={...secondStop.roadCell}
+  boardingBus.position={...secondStop.roadCell}
+  boardingBus.route=[]
+  ;(busPlanner as any).updateLogistics(0.1)
+  assert.equal(longWaitGuest.state,'bus-riding','a long-waiting guest boards an empty bus')
+  assert.equal(midDwellGuest.state,'bus-riding','boarding continues after the first dwell tick')
+  assert.ok(boardingBus.passengerIds.includes(longWaitGuest.id))
+  assert.ok(boardingBus.passengerIds.includes(midDwellGuest.id))
+  assert.ok(!boardingBus.passengerIds.includes('ghost-stale'), 'stale passenger ids do not fill the bus')
+  assert.ok(boardingBus.passengerIds.length <= SIMULATION_CONFIG.logistics.busCapacity)
+  assert.ok(
+    boardingBus.waitMinutes < SIMULATION_CONFIG.logistics.busStopDwellMinutes,
+    'the bus stays at the stop for busStopDwellMinutes',
+  )
+
   const against=fixture(0), againstState=against.snapshot as GameSnapshot
   against.addDebugMoney()
   const againstEdge=-againstState.scenario.worldSize/2
@@ -2572,8 +2647,47 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   const leftoverBed = occupancyTile('leftover-bed')
   assert.ok(leftoverBed.game.designateMedicalArea([{ x: leftoverBed.x, z: leftoverBed.z }]).ok)
   leftoverBed.game.snapshot.medicalCells[0]!.occupants[0] = 'missing-patient'
-  assert.ok(leftoverBed.game.place('food', leftoverBed.x, leftoverBed.z).ok, 'vacant leftover beds can be built over')
-  assert.equal(leftoverBed.game.getMedicalCellAt(leftoverBed.x, leftoverBed.z), undefined)
+  const leftoverBlocked = leftoverBed.game.place('food', leftoverBed.x, leftoverBed.z)
+  assert.equal(leftoverBlocked.ok, false, leftoverBlocked.message)
+  assert.ok(leftoverBed.game.getMedicalCellAt(leftoverBed.x, leftoverBed.z), 'solid buildings must not eat vacant leftover beds')
+
+  const roofOverBed = occupancyTile('roof-over-bed')
+  assert.ok(roofOverBed.game.designateMedicalArea([{ x: roofOverBed.x, z: roofOverBed.z }]).ok)
+  const roofAllowed = roofOverBed.game.canPlace('roofAdobeFlat', roofOverBed.x, roofOverBed.z)
+  assert.ok(roofAllowed.ok, roofAllowed.message)
+  assert.ok(roofOverBed.game.place('roofAdobeFlat', roofOverBed.x, roofOverBed.z).ok)
+  assert.ok(roofOverBed.game.getMedicalCellAt(roofOverBed.x, roofOverBed.z), 'a roof must leave the medical cell in place')
+  assert.ok(
+    roofOverBed.game.snapshot.buildings.some(
+      (building) =>
+        building.kind === 'roofAdobeFlat' &&
+        building.x === roofOverBed.x &&
+        building.z === roofOverBed.z,
+    ),
+  )
+  const adjacentFood = roofOverBed.game.place('food', roofOverBed.x + 2, roofOverBed.z)
+  assert.ok(adjacentFood.ok, adjacentFood.message)
+  assert.ok(roofOverBed.game.getMedicalCellAt(roofOverBed.x, roofOverBed.z))
+  const solidOnBed = roofOverBed.game.canPlace('food', roofOverBed.x, roofOverBed.z)
+  assert.equal(solidOnBed.ok, false, 'a solid building on the medical tile must refuse instead of replacing the spot')
+  assert.equal(roofOverBed.game.place('food', roofOverBed.x, roofOverBed.z).ok, false)
+  assert.ok(roofOverBed.game.getMedicalCellAt(roofOverBed.x, roofOverBed.z))
+  const medicalRoute = (roofOverBed.game as any).findPath(
+    { x: roofOverBed.x + 1, z: roofOverBed.z, elevation: 0 },
+    [{ x: roofOverBed.x, z: roofOverBed.z, elevation: 0 }],
+    false,
+    false,
+    true,
+  )
+  assert.ok(medicalRoute && medicalRoute.length > 0, 'guests still path onto a roofed medical cell')
+
+  const medicalUnderRoof = occupancyTile('medical-under-roof')
+  assert.ok(medicalUnderRoof.game.place('roofAdobeFlat', medicalUnderRoof.x, medicalUnderRoof.z).ok)
+  assert.ok(
+    medicalUnderRoof.game.designateMedicalArea([{ x: medicalUnderRoof.x, z: medicalUnderRoof.z }]).ok,
+    'a roof must not occupy the medical ground layer',
+  )
+  assert.ok(medicalUnderRoof.game.getMedicalCellAt(medicalUnderRoof.x, medicalUnderRoof.z))
 
   const ghostSave = structuredClone(new GameState().snapshot) as GameSnapshot
   ghostSave.logistics.parkingCells = [{ x: 9, z: -16, occupiedBy: 'gone-car' }]
@@ -2583,9 +2697,13 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.equal(repaired.snapshot.logistics.parkingCells[0]!.occupiedBy, null)
   assert.ok(repaired.snapshot.medicalCells[0]!.occupants.every((occupant) => occupant === null))
   assert.ok(repaired.bulldoze(9, -16).ok)
-  assert.ok(repaired.place('food', 10, -16).ok)
+  assert.equal(repaired.canPlace('food', 10, -16).ok, false)
+  assert.equal(repaired.place('food', 10, -16).ok, false)
   assert.equal(repaired.snapshot.logistics.parkingCells.length, 0)
+  assert.equal(repaired.snapshot.medicalCells.length, 1)
+  assert.ok(repaired.bulldoze(10, -16).ok)
   assert.equal(repaired.snapshot.medicalCells.length, 0)
+  assert.ok(repaired.place('food', 10, -16).ok)
 
   const wasteGuest = (game: GameState, z: number) => {
     const guest = game.snapshot.visitors[0]!

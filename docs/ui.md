@@ -13,6 +13,7 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 | Infofenster Backstage | `src/main.ts`, `src/game/bandSupply.ts` | `formatBackstageInspect`, Klick auf Backstage-Kachel |
 | Meldungs-Ticker | `src/tickerUI.ts`, `src/game/ticker.ts` | `mountTickerUI`, `observeTickerEvents` |
 | Bau-Kategorien und Raster | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` |
+| Kopieren / Baubibliothek | `src/main.ts`, `src/game/blueprints.ts`, [blueprints.md](blueprints.md) | Kategorie **Kopieren**, Rechteck wie Gelände, Geistervorschau, `stampBlueprint`, lokale Bibliothek |
 | Deko-Themenfilter | `src/game/decoration.ts`, `src/main.ts` | `renderDecorationCatalog`, Themen-Chips in `#decoration-themes` |
 | Festival-Verwaltung | `src/festivalUI.ts`, `src/festival.css` | |
 | HEADLINE Magazin | `src/headlineMagazineUI.ts`, `src/headlineMagazine.css`, `src/game/headlineMagazine.ts` | Vollbild-Heft nach `festival.finished`; Weiter/Schließen; erneut unter Abrechnung & Ruf |
@@ -49,7 +50,7 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   Sim-Mutation, kein neues Command. Auf Mobile sitzt die Leiste über
   den Touch-Steuerungen.
   Oben rechts sitzt eine RCT-Iconleiste in vier Gruppen: **Bauen** (Abriss,
-  Gelände, Deko, Wege, Attraktionen, Autostraßen, Logistik),   **Verwalten**
+  Gelände, Kopieren, Deko, Wege, Attraktionen, Autostraßen, Logistik),   **Verwalten**
   (Festival, Bühnenwerkstatt, Logistikverwaltung für Bestellungen/Träger,
   Beschwerden, Besucher, Personal, Meldungen, Mehrspieler),
   **Kartenansichten** (Logistik/Untergrund, Gedränge, Attraktivität,
@@ -132,9 +133,17 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   gehen (falsche Neigung/Bank, Kette, Spezial), bleiben in der Palette
   und sind **ausgegraut** (`disabled`) — das Raster springt nicht.
   Klicks auf graue Buttons ändern die Geisterschiene nicht. Freigegebene
-  Neigung/Banking/Richtung switchen fest auf eine legale Kombination;
-  die Geisterschiene nutzt denselben `resolveNextTrackPiece`-
-  Helfer wie das Bauen und folgt sofort der Fensterwahl. Eine fertige Bahn
+  Neigung/Banking/Richtung switchen fest auf eine legale Kombination
+  **beim ersten Klick**; die Geisterschiene nutzt denselben
+  `resolveNextTrackPiece`-Helfer wie das Bauen und folgt sofort der
+  Fensterwahl. `updateCoasterBuilder` läuft aus dem Snapshot-Listener,
+  wendet das Fenster aber nur an, wenn `updateCoasterConstruction`
+  eine echte Änderung sieht (offenes Ende, Typ, Wahl, Startpose) —
+  nicht bei jedem Besucher-/Fahrzeug-Tick. Zusätzlich hält
+  `syncCoasterPalette` stabile Button-IDs und ändert nur `disabled` /
+  `active`. Sonst flackert `:hover` und Klicks gehen verloren (wie
+  früher die Bus-Haltestellenliste). Die Geisterschiene wird nur neu
+  gebaut, wenn sich das Stück wirklich ändert. Eine fertige Bahn
   öffnet das Infofenster: Betrieb, Preis, **Achterbahn abreißen**
   (Command `removeCoaster`, schließt das Fenster). Unfertige Bahnen
   haben denselben Knopf im Konstruktionsfenster.

@@ -77,6 +77,11 @@ sind abgeleitete Darstellung desselben Zustands.
   Gedanken-Text; bei wieder verfügbarem Bestand wird sie zurückgesetzt.
   Die budgetierte Zielwahl lässt leere Läden aus und sucht mit einer
   Multi-Goal-Suche nach erreichbaren Alternativen mit Bestand.
+- Festivalbus: `bus-waiting` bleibt stehen (leere Route, Ziel bleibt die
+  Haltestelle). Einsteigen passiert in der Logistik, nicht über das
+  Entscheidungsbudget: längste `busWaitMinutes` zuerst, auch nach vielen
+  Ticks und auch wenn der Bus schon in der Standzeit (`busStopDwellMinutes`)
+  ist. `docs/logistics.md`.
 - Das Konzert-Oberteil-Ereignis betrifft höchstens eine Person auf dem Gelände.
   `atmosphere.concertToplessChancePerMinute` begrenzt die gesamte Ereignisrate
   (0,002 pro Spielminute), auf die Population verteilt. Die aktive Person wird
@@ -149,7 +154,8 @@ Nachbarweg, Insassen steigen nach dem Parken aus und bleiben zu Fuß
 (keine Verletzung/Belegung vor dem Aussteigen), Abreise wartet im Auto
 nur im eigenen Anreiseauto (5er/6er steigen vollständig wieder ein), voller Nachbar-Eimer
 ergibt Bodenmüll statt Stillstand, leerer Eimer wird weiter benutzt:
-`tests/operations.ts`,
+`tests/operations.ts` (inkl. leerer Bus holt lang wartende Gäste,
+`busCapacity` 40),
 `tests/queueLanes.ts`.
 Festival-Schlafzeiten, Legacy-Remap, zirkadianer Energieverbrauch und
 Zelt-/Abreiseziele: `tests/visitorSleep.ts`. Baden und Wassertiefe:

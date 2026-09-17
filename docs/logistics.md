@@ -32,7 +32,7 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Trennlinie / Kante sperren | `src/game/GameState.ts` | `toggleRoadSeparator`, `road.blockedEdges` |
 | Ampel-/Schranken-Darstellung | `src/view/AccessControlView.ts` | eine Richtung, Grün/Rot bzw. offen/zu |
 | Fahrzeug-Interpolation | `src/view/transportMotion.ts` | nur Darstellung |
-| Balancing | `src/game/simulationConfig.ts` | `logistics` (`visitorCarCapacity` 6 = max. Anreisegruppe, `groupSizeWeights` 1–6), `waste` |
+| Balancing | `src/game/simulationConfig.ts` | `logistics` (`visitorCarCapacity` 6 = max. Anreisegruppe, `groupSizeWeights` 1–6, `busCapacity` 40 = Festivalbus-Fahrgäste, `busStopDwellMinutes` 2), `waste` |
 
 ## Wichtige Regeln
 
@@ -227,7 +227,18 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   Stopp / Depotanschluss). `setBusLineStops` ändert die Reihenfolge
   einer bestehenden Linie; `addBusToLine` kauft oder weist einen
   weiteren Bus desselben Depots zu (max. 3, Kosten `busCost`, Start am
-  Depotanschluss, gleiche Stoppfolge). `sellBus` entfernt den Bus
+  Depotanschluss, gleiche Stoppfolge). Ein Bus nimmt bis zu
+  `busCapacity` 40 Fahrgäste auf; freier Platz kommt aus
+  `SIMULATION_CONFIG.logistics.busCapacity` minus aktuellen
+  `bus-riding`-`passengerIds` (tote oder hängende IDs fallen raus).
+  An der Haltestelle steigt er während der ganzen Standzeit
+  (`busStopDwellMinutes` 2) ein, nicht nur im ersten Tick: längste
+  `busWaitMinutes` zuerst, dann ID. Wer an der Stopp-Kachel oder
+  orthogonal daneben wartet (`route` leer oder `targetId` = Halt)
+  und zur Linie gehört, steigt ein — auch nach langem Warten.
+  Ein leerer Bus mit Wartenden holt sie in wenigen Ticks ab.
+  Einsteigen zählt nicht gegen das Entscheidungsbudget.
+  `sellBus` entfernt den Bus
   weiter von Depot und Linie. Overlay-Daten: `previewBusLineRoute`
   (Stopps in Reihenfolge, dann Schleife) und `previewBusLineMarkers`
   (1-basierte Nummern an den Haltpositionen).
@@ -331,6 +342,8 @@ nächster freier Krankenwagen zum Verletzten,
 idle Krankenwagen zurück zur Garage, Verkauf sofort oder nach Rückfahrt,
 Haltestellen bleiben in der gewählten Reihenfolge, späterer zweiter Bus
 folgt derselben Linie, Overlay-Zellen in Stoppfolge,
+leerer Bus holt lang wartende Gäste während `busStopDwellMinutes`,
+Kapazität `busCapacity` 40,
 Müllwagen bleiben im Stau
 und hinter der Karte erhalten, Wiedereinfahrt sobald Einstiege frei
 sind, Rückfahrt vom Ausgang, Buden-Nachschub von der Seite/hinten,

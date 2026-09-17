@@ -34,6 +34,13 @@ export function enableMultiplayerCommands(game: GameState): void {
     x,
     z,
   }))
+  game.stampBlueprint = wrap(game, game.stampBlueprint, (originX, originZ, rotation, items) => ({
+    type: 'stampBlueprint',
+    originX,
+    originZ,
+    rotation,
+    items: structuredClone([...items]),
+  }))
   game.placePathSegment = wrap(
     game,
     game.placePathSegment,

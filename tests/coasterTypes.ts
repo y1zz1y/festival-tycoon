@@ -36,6 +36,17 @@ import {
   type TrackConnectionState,
 } from '../src/game/coasterConnections'
 import {
+  TRACK_CHAIN_PALETTE_ID,
+  coasterConstructionPreviewKey,
+  describeCoasterConstructionChrome,
+  syncCoasterPalette,
+  trackPiecePaletteId,
+  trackPitchPaletteId,
+  updateCoasterConstruction,
+  type CoasterPaletteButtonNode,
+  type CoasterPaletteButtonSpec,
+} from '../src/game/coasterConstructionUI'
+import {
   COASTER_CATALOG,
   COASTER_CATALOG_TYPE_IDS,
   FLOORLESS_IS_TWISTER_VEHICLE,
@@ -61,6 +72,44 @@ import {
 } from '../src/game/coasters'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { GameState } from '../src/game/GameState'
+
+function mockCoasterPaletteButton(spec: CoasterPaletteButtonSpec): CoasterPaletteButtonNode {
+  const attrs: Record<string, string> = {}
+  const classes = new Set<string>()
+  const button: CoasterPaletteButtonNode = {
+    id: spec.id,
+    disabled: false,
+    title: '',
+    className: '',
+    dataset: { ...(spec.attrs ?? {}) },
+    setAttribute(name: string, value: string) {
+      attrs[name] = value
+    },
+    classList: {
+      toggle(token: string, force?: boolean) {
+        if (force === true) classes.add(token)
+        else if (force === false) classes.delete(token)
+        else if (classes.has(token)) classes.delete(token)
+        else classes.add(token)
+        button.className = [...classes].join(' ')
+      },
+    },
+  }
+  return button
+}
+
+function mockCoasterPaletteHost(): {
+  children: CoasterPaletteButtonNode[]
+  replaceChildren: (...nodes: CoasterPaletteButtonNode[]) => void
+} {
+  const children: CoasterPaletteButtonNode[] = []
+  return {
+    children,
+    replaceChildren(...nodes: CoasterPaletteButtonNode[]) {
+      children.splice(0, children.length, ...nodes)
+    },
+  }
+}
 
 type ExpectedTypeFacts = {
   id: CoasterCatalogTypeId
@@ -1206,8 +1255,102 @@ export function testCoasterTypes(fixture?: (n?: number) => GameState): void {
   assert.equal(slopedNext.options.targetPitch, TRACK_PITCHES.gentleUp)
   assert.equal(constantPitchPieceKind(TRACK_PITCHES.gentleUp), 'slopeGentleUp')
   const curveWindow = applyConstructionKind(slopedWindow, 'curveLeft2', flat)
-  assert.equal(curveWindow.selectedKind, 'curveLeft2')
+  assert.equal(curveWindow.selectedKind, 'curveLeft2', 'enabled curve applies on the first selection')
+  assert.notEqual(curveWindow.selectedKind, slopedWindow.selectedKind)
   assert.equal(curveWindow.targetPitch, 0, 'selecting a curve snaps pitch back to the open end')
+  const steepOnce = applyConstructionPitch(flatWindow, TRACK_PITCHES.steepUp)
+  assert.equal(steepOnce.targetPitch, TRACK_PITCHES.steepUp, 'enabled steep applies on the first selection')
+  assert.notEqual(steepOnce.targetPitch, flatWindow.targetPitch)
+
+  const directionEntries = listTrackPalettePieces(TRACK_DIRECTION_KINDS, flat, true, 'classicSteel')
+  const directionSpecs: CoasterPaletteButtonSpec[] = directionEntries.map((entry) => ({
+    id: trackPiecePaletteId(entry.kind),
+    enabled: entry.enabled,
+    active: entry.kind === 'straight',
+    title: entry.kind,
+    icon: entry.kind,
+    label: entry.kind,
+    attrs: { 'data-track-piece': entry.kind },
+  }))
+  const listedAgain = listTrackPalettePieces(TRACK_DIRECTION_KINDS, flat, true, 'classicSteel')
+  assert.deepEqual(
+    listedAgain.map((entry) => trackPiecePaletteId(entry.kind)),
+    directionSpecs.map((spec) => spec.id),
+    'listing the palette twice without a click keeps the same button ids',
+  )
+  const paletteHost = mockCoasterPaletteHost()
+  const firstSync = syncCoasterPalette(paletteHost, directionSpecs, mockCoasterPaletteButton)
+  const mounted = [...paletteHost.children]
+  const secondSync = syncCoasterPalette(paletteHost, directionSpecs, mockCoasterPaletteButton)
+  assert.equal(firstSync.remounted, true)
+  assert.equal(secondSync.remounted, false, 'second palette listing must not remount buttons')
+  assert.equal(paletteHost.children[0], mounted[0])
+  assert.deepEqual(secondSync.ids, firstSync.ids)
+  const greyedStraight = directionSpecs.map((spec) =>
+    spec.id === trackPiecePaletteId('straight') ? { ...spec, enabled: false, active: false } : spec,
+  )
+  const greySync = syncCoasterPalette(paletteHost, greyedStraight, mockCoasterPaletteButton)
+  assert.equal(greySync.remounted, false, 'greying a piece must not remount the palette')
+  assert.equal(paletteHost.children[0], mounted[0])
+  const straightButton = paletteHost.children.find((button) => button.id === trackPiecePaletteId('straight'))
+  assert.equal(straightButton?.disabled, true)
+  const slopeSpecs: CoasterPaletteButtonSpec[] = [
+    {
+      id: trackPitchPaletteId(TRACK_PITCHES.steepUp),
+      enabled: true,
+      active: false,
+      title: 'Steil aufwärts',
+      icon: '⇗',
+      label: 'Steil auf',
+    },
+    {
+      id: TRACK_CHAIN_PALETTE_ID,
+      enabled: true,
+      active: false,
+      title: 'Kette',
+      icon: '⛓',
+      label: 'Kette',
+    },
+  ]
+  const slopeHost = mockCoasterPaletteHost()
+  syncCoasterPalette(slopeHost, slopeSpecs, mockCoasterPaletteButton)
+  const slopeNodes = [...slopeHost.children]
+  syncCoasterPalette(slopeHost, slopeSpecs, mockCoasterPaletteButton)
+  assert.equal(slopeHost.children[0], slopeNodes[0])
+  const ghostPoints = [
+    { x: 0, y: 0, z: 0, pitch: 0, bank: 0 },
+    { x: 1, y: 0, z: 0, pitch: 0, bank: 0 },
+  ]
+  assert.equal(
+    coasterConstructionPreviewKey(ghostPoints, { kind: 'straight', chainLift: false, styleId: 'steelLattice' }),
+    coasterConstructionPreviewKey(ghostPoints, { kind: 'straight', chainLift: false, styleId: 'steelLattice' }),
+    'unchanged ghost inputs keep the same preview key',
+  )
+  assert.notEqual(
+    coasterConstructionPreviewKey(ghostPoints, { kind: 'straight' }),
+    coasterConstructionPreviewKey(ghostPoints, { kind: 'curveLeft2' }),
+  )
+  const chrome = describeCoasterConstructionChrome({
+    window: flatWindow,
+    ride: null,
+    editIndex: -1,
+    startCandidate: null,
+    buildRotation: 0,
+    buildElevation: 0,
+  })
+  const firstChrome = updateCoasterConstruction(null, chrome)
+  assert.equal(firstChrome.changed, true)
+  const secondChrome = updateCoasterConstruction(firstChrome.key, chrome)
+  assert.equal(secondChrome.changed, false, 'same construction chrome must not rebuild the window')
+  const afterKindChrome = describeCoasterConstructionChrome({
+    window: curveWindow,
+    ride: null,
+    editIndex: -1,
+    startCandidate: null,
+    buildRotation: 0,
+    buildElevation: 0,
+  })
+  assert.equal(updateCoasterConstruction(firstChrome.key, afterKindChrome).changed, true)
   assert.equal(
     resolveNextTrackPiece(curveWindow, flat, true).kind,
     'curveLeft2',
@@ -1296,6 +1439,51 @@ export function testCoasterTypes(fixture?: (n?: number) => GameState): void {
   assert.ok(ride.train.state === 'running', `test train should dispatch, got ${ride.train.state}`)
   assert.ok(ride.train.distance > distanceBefore, 'test train must leave the station during planning')
   assert.ok(ride.train.speed > speedBefore, 'test train must pick up station launch speed')
+
+  const live = fixture(0)
+  live.addDebugMoney()
+  live.setSpeed(1)
+  const liveStart = live.startCoaster('classicSteel', 10, -10)
+  assert.ok(liveStart.ok && liveStart.id, liveStart.message)
+  const liveWindow: CoasterWindowState = {
+    typeId: 'classicSteel',
+    selectedKind: 'straight',
+    targetPitch: 0,
+    targetBank: 0,
+    chainLift: false,
+  }
+  const liveChrome = () =>
+    describeCoasterConstructionChrome({
+      window: liveWindow,
+      ride: live.getCoaster(liveStart.id!),
+      editIndex: 0,
+      startCandidate: null,
+      buildRotation: live.snapshot.buildRotation,
+      buildElevation: live.snapshot.buildElevation,
+    })
+  let constructionKey: string | null = null
+  let constructionApplies = 0
+  const applyConstruction = (): void => {
+    const result = updateCoasterConstruction(constructionKey, liveChrome())
+    constructionKey = result.key
+    if (result.changed) constructionApplies += 1
+  }
+  applyConstruction()
+  assert.equal(constructionApplies, 1)
+  for (let step = 0; step < 16; step += 1) {
+    live.tick(0.1)
+    applyConstruction()
+  }
+  assert.equal(
+    constructionApplies,
+    1,
+    'updateCoasterConstruction must not apply on every playing tick',
+  )
+  const pitchedWindow = applyConstructionPitch(liveWindow, TRACK_PITCHES.steepUp)
+  liveWindow.targetPitch = pitchedWindow.targetPitch
+  liveWindow.selectedKind = pitchedWindow.selectedKind
+  applyConstruction()
+  assert.equal(constructionApplies, 2, 'an enabled pitch change must refresh the construction window')
 
   console.log('PASS coaster type catalog, connection rules and playable type wiring')
 }

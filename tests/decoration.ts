@@ -18,7 +18,14 @@ import { GameState } from '../src/game/GameState'
 import { isEdgeScenery, isScenery, scenerySlot, sceneryTransform } from '../src/game/scenery'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { listedBuildTools } from '../src/game/buildMenu'
+import {
+  DECORATION_LIGHTS,
+  decorationLampKinds,
+  decorationLightOf,
+} from '../src/game/decorationLights'
 import { WALL_KINDS, wallSpec, roofWallTop, ROOF_KINDS, roofSpec, THEMED_BIN_KINDS } from '../src/game/decorationWalls'
+import { FestivalLightsView } from '../src/view/FestivalLightsView'
+import { Vector3 } from 'three'
 import { LARGE_SCENERY_KINDS } from '../src/game/scenery'
 import { createRetroBuilding } from '../src/view/retroBuildings'
 import { Box3 } from 'three'
@@ -229,4 +236,76 @@ export function testThemedDecorationPlacement(fixture: (count?: number) => GameS
   assert.equal(slotGame.canPlace('gearBench', 10, 6, 1).ok, false, 'themed quarters still use scenery overlap')
   assert.ok(slotGame.place('pipeRail', 10, 6, 0).ok, 'edge rail can share a tile with unused quarters')
   assert.equal(slotGame.canPlace('iceFence', 10, 6, 0).ok, false, 'themed edge slots share scenery.ts')
+}
+
+function enableNightLights(game: GameState): void {
+  game.snapshot.minute = 23 * 60
+  game.snapshot.dayPlan.offers.lights[23] = true
+}
+
+export function testDecorationLampLights(fixture: (count?: number) => GameState): void {
+  const catalogLamps = decorationLampKinds()
+  assert.ok(catalogLamps.length >= 10, 'every theme should expose a Licht piece')
+  const colors = new Set<number>()
+  for (const kind of catalogLamps) {
+    const spec = decorationLightOf(kind)
+    assert.ok(spec, `${kind} in Deko → Licht needs a light descriptor`)
+    assert.ok(spec.color > 0, `${kind} needs a model-matching color`)
+    assert.ok(spec.height > 0, `${kind} needs an emitter height`)
+    colors.add(spec.color)
+  }
+  assert.equal(catalogLamps.length, Object.keys(DECORATION_LIGHTS).length, 'no leftover lamp specs outside the catalog')
+  assert.ok(colors.size >= 6, 'themes must not share one generic lamp color')
+  assert.equal(decorationLightOf('tree'), undefined, 'plants do not emit festival lights')
+  assert.equal(decorationLightOf('iceFence'), undefined, 'fences stay dark unless they are a Licht kind')
+
+  const game = fixture(0)
+  enableNightLights(game)
+  const first = game.place('auroraLamp', 8, 6)
+  const second = game.place('gasLamp', 10, 6)
+  const third = game.place('auroraLamp', 12, 6)
+  assert.ok(first.ok && second.ok && third.ok)
+  const tree = game.place('tree', 14, 6)
+  assert.ok(tree.ok)
+
+  const lights = new FestivalLightsView()
+  lights.update(game.snapshot)
+  assert.equal(lights.activeSourceCount, 3, 'N lamps create N pooled light sources')
+  assert.deepEqual(lights.activeSourceKinds().sort(), ['auroraLamp', 'auroraLamp', 'gasLamp'])
+  const aurora = decorationLightOf('auroraLamp')!.color
+  const gas = decorationLightOf('gasLamp')!.color
+  assert.notEqual(aurora, gas)
+  assert.deepEqual([...lights.activeSourceColors()].sort(), [aurora, aurora, gas].sort())
+
+  lights.setFocus(new Vector3(8.5, 0, 6.5))
+  const pool = (lights as any).pool as { color: { getHex(): number }; intensity: number }[]
+  const spots = (lights as any).spots as { intensity: number; parent: unknown }[]
+  assert.ok(pool.some(light => light.color.getHex() === aurora && light.intensity > 0), 'aurora uses its ice-green point light')
+  assert.ok(pool.some(light => light.color.getHex() === gas && light.intensity > 0), 'gas lamp uses brass light')
+  assert.equal(spots.length, 4)
+  assert.ok(spots.every(light => light.parent === lights.group), 'floods stay attached even when unused')
+
+  const auroraBuilding = game.snapshot.buildings.find(building => building.kind === 'auroraLamp')!
+  assert.ok(game.bulldoze(auroraBuilding.x, auroraBuilding.z, auroraBuilding.id).ok)
+  lights.update(game.snapshot)
+  assert.equal(lights.activeSourceCount, 2, 'removing a lamp removes its light')
+  assert.deepEqual([...lights.activeSourceColors()].sort(), [aurora, gas].sort())
+
+  const flood = fixture(0)
+  enableNightLights(flood)
+  flood.rotateBuild()
+  assert.ok(flood.place('workLamp', 6, 8).ok)
+  const floodLights = new FestivalLightsView()
+  floodLights.update(flood.snapshot)
+  floodLights.setFocus(new Vector3(6.5, 0, 8.5))
+  const floodSpots = (floodLights as any).spots as { color: { getHex(): number }; intensity: number; target: { position: { x: number; z: number } }; position: { x: number; z: number } }[]
+  const sodium = decorationLightOf('workLamp')!.color
+  assert.ok(floodSpots.some(light => light.color.getHex() === sodium && light.intensity > 0), 'Baustrahler uses a sodium flood')
+  const aimed = floodSpots.find(light => light.intensity > 0)!
+  assert.ok(aimed.target.position.x > aimed.position.x, 'rotating a flood aims the cone')
+
+  flood.snapshot.minute = 12 * 60
+  flood.snapshot.dayPlan.offers.lights[12] = false
+  floodLights.update(flood.snapshot)
+  assert.equal(floodLights.activeSourceCount, 0, 'daylight follows the existing lights schedule')
 }

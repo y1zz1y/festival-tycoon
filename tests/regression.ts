@@ -12,7 +12,7 @@ import { testTerrainSurface } from './terrainSurface'
 import { testTerrainLand } from './terrainLand'
 import { testScenery } from './scenery'
 import { testPedestrianBarriers } from './pedestrianBarriers'
-import { testDecorationThemes, testThemedDecorationPlacement } from './decoration'
+import { testDecorationThemes, testThemedDecorationPlacement, testDecorationLampLights } from './decoration'
 import { testPicking } from './picking'
 import { testMobileTouch } from './mobileTouch'
 import { testPerformanceGuards } from './performanceGuards'
@@ -56,6 +56,7 @@ import { testTickerAndWasteCaps } from './ticker'
 import { testAccounts } from './accounts'
 import { testSaves } from './saves'
 import { testBrowserSaves, testServerSaveClient } from './browserSaves'
+import { testBlueprints, testBlueprintLibraryRoundtrip } from './blueprints'
 
 function test(name: string, run: () => void) {
   run()
@@ -72,6 +73,9 @@ testCampingModels()
 test('build menu lists every placeable tool once', () => {
   testBuildMenu()
 })
+test('copy tool captures 2x2 scenery, preview is dry, stamp duplicates', () => {
+  testBlueprints()
+})
 test('placement height snaps to half-steps and reports the ground cell', () => {
   testPlacementPreview()
 })
@@ -84,6 +88,8 @@ await testSaves()
 console.log('PASS saves belong to their account, public ones are readable by all and writable by none')
 testBrowserSaves(fixture)
 console.log('PASS local slots and quicksave keep visitors and buildings; listing ignores corrupt worlds')
+await testBlueprintLibraryRoundtrip()
+console.log('PASS blueprint library roundtrip stays out of SAVE_KEY')
 await testServerSaveClient()
 console.log('PASS server save list reports German errors instead of crashing')
 
@@ -117,6 +123,7 @@ test('hedges, walls and fences block pedestrians; wall doors stay passable', () 
 test('decoration themes filter catalog kinds and keep placement on scenery.ts', () => {
   testDecorationThemes()
   testThemedDecorationPlacement(fixture)
+  testDecorationLampLights(fixture)
 })
 testPicking(fixture)
 testTickerAndWasteCaps()

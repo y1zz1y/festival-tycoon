@@ -1,0 +1,59 @@
+# Kopieren und Baubibliothek
+
+RCT-artiges Rechteck-Kopieren: Bereich markieren, Geistervorschau, stempeln
+oder in der persönlichen Bibliothek speichern. Die Bibliothek liegt nur im
+Browser, nie im Spielstand und nie in Git.
+
+## Wo finden
+
+| Aufgabe | Datei | Einstieg |
+| --- | --- | --- |
+| Auswahl, Drehung, Kosten | `src/game/blueprints.ts` | `captureBlueprint`, `transformBlueprintItems`, `blueprintStampCharge` |
+| Persönliche Bibliothek | `src/game/blueprintLibrary.ts` | IndexedDB `headliner-tycoon-blueprints` + `BLUEPRINT_LIBRARY_KEY` |
+| Stempeln | `src/game/GameState.ts` | `previewBlueprint`, `stampBlueprint` |
+| Command | `src/net/protocol.ts`, `src/net/commands.ts` | `stampBlueprint` |
+| Werkzeug / Menü | `src/game/catalog.ts`, `src/game/buildMenu.ts` | Tool `copy`, Kategorie Kopieren |
+| UI, Rechteck, Vorschau | `src/main.ts`, `src/view/WorldView.ts` | `applyCopySelection`, `setBlueprintPreview` |
+| Balancing | `src/game/simulationConfig.ts` | `economy.blueprintCopyCostFactor` |
+
+## Was wird kopiert
+
+- Gebäude und Deko, deren Ankerfeld im Rechteck liegt, inkl. `decorationSlot`
+- Fehlendes `decorationSlot` bleibt Legacy-Vollfeld; es wird kein Viertel/Kante erfunden
+- Zäune, Bänke, Lampen, Stände und andere Katalogobjekte, die `place` kann
+- Fußwege (`path`) mit Belag, Schlange, Neigung
+- Autostraßenfelder inkl. optionalem Straßenbelag
+- Geländehöhen werden **mitgespeichert**, beim Stempeln **nicht** angewendet
+
+Nicht kopiert: Besucher, Fahrzeuge, lebende Müllhaufen, Camping-Installationen,
+Achterbahnen, Bühnen, Fahrgeschäfte, Depots, Bus-Haltestellen, Ausweisungen
+(Camping, Sanität, Müllablage, Backstage), Ampeln/Schranken.
+
+## Stempeln und Kosten
+
+Nach der Auswahl folgt eine Geistervorschau dem Zeiger. `R` dreht um die
+Ursprungsecke (min-x/min-z der Auswahl). Klick sendet `stampBlueprint`
+(Host-autoritativ, optimistic wie andere Baucommands).
+
+Kollision nutzt `canPlace` / `scenery.ts` bzw. `placePathSegment` /
+`placeRoadSegment`. Die Vorschau mutiert die Welt nicht.
+
+Kosten: Katalog- bzw. Wegpreis × `blueprintCopyCostFactor` (aktuell **0,8**,
+also 20 % Rabatt gegenüber Neubau). Zu wenig Geld bricht den ganzen Stempel ab.
+
+## Bibliothek
+
+Namen, Liste, Laden (Vorschau), Stempeln, Löschen. Persistenz über Sessions
+in `localStorage` (`festival-simulator-blueprints-v1`) und IndexedDB
+`headliner-tycoon-blueprints`. Kein `SAVE_KEY`, keine Slot-Dateien, keine
+Snapshot-Felder.
+
+## Tests
+
+`tests/blueprints.ts`: 2×2 mit zwei Dekos stempeln, Preview ohne Mutation,
+Bibliothek-Roundtrip ohne `SAVE_KEY`.
+
+## Bei Änderungen dieses Dokument
+
+Aktualisieren, wenn sich Kopierinhalt, Kostenfaktor, Command oder Speicherort
+ändern. Spielersteuerung im Root-`README.md`.

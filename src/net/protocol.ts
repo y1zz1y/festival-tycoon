@@ -22,6 +22,7 @@ import type { GroundIncident } from '../game/incidents'
 import type { FireworkEffect } from '../game/fireworks'
 import type { FestivalAction } from '../game/festivalManagement'
 import type { ShirtStyle } from '../game/shopGoods'
+import type { BlueprintItem } from '../game/blueprints'
 
 export type CellRef = { x: number; z: number }
 
@@ -38,6 +39,7 @@ type GameCommandAction =
   | { type: 'festival'; action: FestivalAction }
   | { type: 'loan'; action: { type: 'borrow' | 'repay'; amount: number } }
   | { type: 'place'; kind: BuildingKind; x: number; z: number; decorationSlot?: number }
+  | { type: 'stampBlueprint'; originX: number; originZ: number; rotation: number; items: BlueprintItem[] }
   | {
       type: 'placePath'
       x: number

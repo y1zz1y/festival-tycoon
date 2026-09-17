@@ -86,6 +86,10 @@ dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
   `startCoaster.typeId` ist jeder Katalogtyp (`CoasterTypeId`). Unbekannte
   IDs löst der Host zu `classicSteel` auf. Snapshot-`coaster.typeId` kommt
   mit den Sim-Paketen; kein neues Command.
+  `stampBlueprint` (`originX`, `originZ`, `rotation`, `items`) stempelt eine
+  lokale Vorlage host-autoritativ (optimistic wie `place`). Die Bibliothek
+  liegt nur im Client-Browser, nicht im Snapshot. Unbekannte `kind`-Werte
+  in `items` werden verworfen. Alte Clients ohne das Command bleiben gültig.
 - Clients dürfen Construction optimistic zeigen, aber der Host bleibt
   maßgeblich (`resolveOptimisticCommand`, Reconciliation).
 - Besucher feldweise updaten; unveränderte Bereiche nicht erneut senden.

@@ -15,7 +15,8 @@ Tageslicht und Öffnungszeiten kommen aus `dayPlan` / `dayNight`, nicht aus der 
 | Kabel setzen | `src/game/GameState.ts` | `designatePowerCable`, `isBuildingPowered` |
 | Strom-View | `src/view/PowerView.ts` | |
 | Tagesplan / Angebote | `src/game/dayPlan.ts` | Öffnung, Lampen, Stände |
-| Feste Lichter | `src/view/FestivalLightsView.ts` | Pool aus acht PointLights |
+| Feste Lichter | `src/view/FestivalLightsView.ts` | fester Pool: acht PointLights, vier SpotLights |
+| Deko-Lampen | `src/game/decorationLights.ts` | Farbe/Höhe/Kegel je `Deko → Licht`-Art |
 | Balancing | `src/game/simulationConfig.ts` | `atmosphere`, `power`, `dayNight`; Live-Show-Festivallust: `atmosphere.concertMotivationPerMinute` (`docs/visitors.md`, `docs/stages.md`) |
 
 ## Wichtige Quellen (Atmosphäre)
@@ -44,9 +45,18 @@ Details der Gewichte stehen in `SIMULATION_CONFIG.atmosphere.sources`
   (`docs/band-supply.md`), nicht dieses Overlay.
 - Strom: Verbraucher priorisieren (`CONSUMER_PRIORITY` in `power.ts`).
   Bühnen ohne Strom spielen nicht.
-- **Keine** PointLight pro Lampe oder Zelt erzeugen. Acht Festival-Lights plus
-  Cursor-Licht bleiben permanent attached, auch bei Intensität 0.
+- Lichtanzahl nie zur Laufzeit ändern (Shader-Recompile). Acht PointLights,
+  vier SpotLights (Baustrahler) und das Cursor-Licht bleiben permanent
+  attached, auch bei Intensität 0. Viele Quellen teilen den Pool nach
+  Kameranähe; jede Quelle behält eine instanzierte Glow-/Birnenfarbe.
   Siehe `docs/rendering.md` und `docs/performance.md`.
+- Jede `Deko → Licht`-Art (Klassik-Mastleuchte, Lampion, Staublaterne,
+  Irrlicht, Lichterkette, Diskokugel, Baustrahler, Fackel, Geisterlaterne,
+  Jahrmarktlichter, Biergartenlaterne, Polarlicht, Gaslaterne,
+  Tageslichtballon) hat eine Modellfarbe in `decorationLights.ts`.
+  `lighting` / `lightBalloon` brauchen Strom; die übrigen folgen nur dem
+  Tagesplan **Beleuchtung**. Intensität folgt `nightStrength` — mittags
+  nicht aufblenden.
 - `lighting`, Lichterketten und Lampions: warmes gelbes Licht, Reichweite 3–4.
   `lightBalloon` (Demand 3, Priorität 42): weißes Licht, Atmosphäre `range` 8,
   PointLight-Distance 9 statt 3.5. Derselbe Pool, Instanzfarben für Glow/Birne.
@@ -55,6 +65,7 @@ Details der Gewichte stehen in `SIMULATION_CONFIG.atmosphere.sources`
 ## Tests
 
 `tests/performanceGuards.ts` (Licht-Pool, 0/1/514 Quellen).
+`tests/decoration.ts` (Deskriptor je Licht-Art, N Lampen → N Quellen, Abriss).
 `tests/festival.ts` (Strom für Shows). `tests/operations.ts`.
 `tests/scenery.ts` (Deko-`beauty` unterscheidet sich je Art, Stapel und Reichweite).
 `tests/sealedWasteContainer.ts` (versiegelte Strafe schwächer als offene Ablage).

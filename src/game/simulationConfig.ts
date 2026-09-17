@@ -31,6 +31,8 @@ export const SIMULATION_CONFIG = {
     startingReputation: 50,
     maximumPrice: 1_000_000,
     demolitionRefundRate: 0.25,
+    /** Stamp copies charge this share of catalog / way costs (1 = full price). */
+    blueprintCopyCostFactor: 0.8,
     treeClearCost: 45,
     emptyParkBaseReputation: 45,
     coasterAppeal: 20,
@@ -279,7 +281,8 @@ export const SIMULATION_CONFIG = {
     sweeperMoveIntervalMinutes: 1.35,
     busCost: 1800,
     busResaleFraction: 0.5,
-    busCapacity: 20,
+    busCapacity: 40,
+    busStopDwellMinutes: 2,
     busBoardingMinutesPerPerson: 0.25,
     busDefaultHeadwayMinutes: 15,
     busMaximumWaitMinutes: 45,
@@ -421,14 +424,16 @@ export const SIMULATION_CONFIG = {
   },
   staff: {
     roles: {
-      cleaner: { hireCost: 180, hourlyWage: 14, speed: 0.29 },
+      // Walk +15% vs 0.29; loaded trips still apply waste.cleanerCarrySpeedMultiplier.
+      cleaner: { hireCost: 180, hourlyWage: 14, speed: 0.334 },
       security: { hireCost: 260, hourlyWage: 22, speed: 0.295 },
       firefighter: { hireCost: 320, hourlyWage: 26, speed: 0.2 },
       medic: { hireCost: 300, hourlyWage: 25, speed: 0.2 },
     },
-    cleanerWorkMinutes: 10,
-    cleanerLitterWorkMinutes: 4,
-    cleanerBinWorkMinutes: 6,
+    // Slightly shorter jobs so bag pickup/empty keep pace with the faster walk.
+    cleanerWorkMinutes: 9,
+    cleanerLitterWorkMinutes: 3.5,
+    cleanerBinWorkMinutes: 5.5,
     firefighterWorkMinutes: 16,
     medicNauseaThreshold: 85,
   },

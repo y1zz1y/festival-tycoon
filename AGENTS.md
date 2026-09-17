@@ -12,6 +12,7 @@ Important per-system facts live in `docs/*.md`, not only in this file. Start at
 | Visitors, needs, thoughts | `docs/visitors.md` |
 | Camping / gatherings | `docs/camping.md` |
 | Buildings, catalog, scenery | `docs/buildings.md` |
+| Copy / build library | `docs/blueprints.md` |
 | Themed decoration / Deko tab | `docs/decoration.md` |
 | Terrain, ground, way types | `docs/terrain.md` |
 | Roads, depots, freight, lights | `docs/logistics.md` |

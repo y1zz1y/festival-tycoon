@@ -126,6 +126,9 @@ Variante ohne Personen oder Objekte.
   die Ausgabe aus `festival.finished`, Berichten, Ruf, Anreisen und dem
   übrigen bestehenden Snapshot ab. Kein neues Feld, alte Stände bleiben
   gültig; ein beendetes Wochenende zeigt dasselbe Heft.
+- Die persönliche Baubibliothek (`BLUEPRINT_LIBRARY_KEY` /
+  IndexedDB `headliner-tycoon-blueprints`) ist kein Snapshot-Feld und
+  überschreibt keine Spielstände. Details: [blueprints.md](blueprints.md).
 - `sealedWasteContainer` ist ein Gebäude-`kind` mit vorhandenem
   `wasteFill` (0–80, `waste.sealedContainerCapacity`). Alte Stände ohne
   das Kind bleiben unverändert. `RoadVehicle.target.kind` kann

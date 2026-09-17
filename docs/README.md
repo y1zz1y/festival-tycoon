@@ -37,6 +37,7 @@ Neue oder geänderte Funktionen sind erst fertig, wenn die Doku stimmt:
 | Besucher: Bedürfnisse, Entscheidungen | [visitors.md](visitors.md) | Spawn, Needs, Gedanken, Gruppen |
 | Camping, Zelte, Treffpunkte | [camping.md](camping.md) | Parzellen, Installationen, Gathering |
 | Gebäude, Katalog, Deko, Platzierung | [buildings.md](buildings.md) | `BUILDING_KINDS`, Scenery-Slots, Abriss |
+| Kopieren / Baubibliothek | [blueprints.md](blueprints.md) | Rechteck, Vorschau, Stempel, lokale Bibliothek |
 | Themen-Deko, Deko-Reiter | [decoration.md](decoration.md) | Festival-Themen, Kategorienfilter, neue Arten |
 | Gelände, Boden, Wege, Umgebung | [terrain.md](terrain.md) | Höhen, Ground-Prep, Way-Types |
 | Straßen, Fahrzeuge, Waren, Depots | [logistics.md](logistics.md) | Roads, Träger, Lastwagen, Ampeln, Schranken |

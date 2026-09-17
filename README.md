@@ -237,11 +237,13 @@ wartet ein besetztes Auto; beim Ausparken wartet es auf eine freie Zufahrt.
 Auf Überführungen bleiben Fahrzeuge, Verkehrsregeln und Belegung nach
 Straßenebene getrennt, auch nach dem Laden. Abriss (Leiste oder
 Autostraßen-Abreißen) hebt die
-Bucht auf; die Kachel wird wieder zu Wiese und ist bebaubar. Dasselbe
-gilt für Krankenbereiche. Ein Klick im Abrissmodus entfernt das
+Bucht auf; die Kachel wird wieder zu Wiese und ist bebaubar. Krankenbereiche
+hebt nur der Abriss auf — Gebäude und Wege dürfen die Liegen nicht
+überbauen oder löschen. Dächer, Wände und Bauzäune dürfen über einem
+Krankenfeld stehen. Ein Klick im Abrissmodus entfernt das
 **3D-Objekt unter dem Mauszeiger** (Gebäude, Deko-Viertel, Tor, Ampel),
-nicht die Nachbarkachel hinter dem Mesh; Rechteckziehen bleibt flächig. Alte Restkacheln nach einem fehlgeschlagenen
-Abriss lassen sich abreißen oder direkt überbauen. Fußwege und Autostraßen können im Stückmodus Rampen
+nicht die Nachbarkachel hinter dem Mesh; Rechteckziehen bleibt flächig. Alte Rest-Parkplätze nach einem fehlgeschlagenen
+Abriss lassen sich abreißen oder direkt überbauen; Rest-Krankenfelder nur abreißen. Fußwege und Autostraßen können im Stückmodus Rampen
 in **halben Höhenstufen** bauen (weniger steil als die frühere volle Stufe).
 Fußwege dürfen weiter höher liegen; Autos höchstens **eine** Höhenstufe
 über dem Gelände (zwei Halbstufen). Alte Parks mit vollen Stufen bleiben
@@ -398,7 +400,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - unbegrenzter Besucherzustrom mit lokaler Gedränge- und Festivallust-Simulation; ein laufendes Konzert füllt die Festivallust, eine dunkle Bühne nicht
 - zuschaltbares Gedränge-Overlay mit durchschnittlicher Parkauslastung
 - getrennte Karten-Overlays für lokale Attraktivität und Partystimmung mit abflachender Quellenaddition
-- Dekoration mit Themen oben im Deko-Reiter (Klassik, Wüste, Wald, Neon, Industrie, Tropen, Mystik, Zirkus, Alpin, Arktis, Steampunk) und darunter den Kategorien Pflanzen, Möbel, Licht, Fest, Kulisse, Zaun. Darin Bäume, Hecken, Banner, thematische Palmen, Neonbögen, Eisskulpturen, Zahnräder und die bisherigen Stücke (Totems, Lampions, Bierfässer, Diskokugeln, Willkommensbögen, Bänke, Mastleuchten, Tageslichtballons, …). Hecken, Zäune und Wände sind für Fußgänger undurchlässig; Türen in Wänden bleiben begehbar. Jede Art hat eine eigene Attraktivität: kleine billige Stücke wirken nur nah, teure Blickfänge stärker und weiter (Karten-Overlay Attraktivität)
+- Dekoration mit Themen oben im Deko-Reiter (Klassik, Wüste, Wald, Neon, Industrie, Tropen, Mystik, Zirkus, Alpin, Arktis, Steampunk) und darunter den Kategorien Pflanzen, Möbel, Licht, Fest, Kulisse, Zaun. Darin Bäume, Hecken, Banner, thematische Palmen, Neonbögen, Eisskulpturen, Zahnräder und die bisherigen Stücke (Totems, Lampions, Bierfässer, Diskokugeln, Willkommensbögen, Bänke, Mastleuchten, Tageslichtballons, …). Jede Lampe unter **Licht** leuchtet in der Farbe ihres Modells (warmes Laternenlicht, UV/Neon, Polarlicht, Gaslicht, Natrium-Baustrahler, …), sobald Beleuchtung im Tagesplan aktiv ist. Hecken, Zäune und Wände sind für Fußgänger undurchlässig; Türen in Wänden bleiben begehbar. Jede Art hat eine eigene Attraktivität: kleine billige Stücke wirken nur nah, teure Blickfänge stärker und weiter (Karten-Overlay Attraktivität)
 - Festivalbühnen, gerichtete sowie omnidirektionale Lautsprecher und ausweisbare Bühnenvorplätze
 - maximal neun feiernde Besucher je Vorplatzfeld, lokale Tanz-Hotspots und Stimmungsverstärkung durch Tänzer
 - individuelle Vorlieben für schöne Umgebung und Partystimmung sowie Meidung von Feuer, Kotze und Schlafenden
@@ -424,7 +426,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Träger (Transportkräfte) in derselben Figurenqualität wie Besucher, mit gelber Warnweste und Handkarren
 - gerichtete normale Wege mit dreh- und entfernbaren Bodenmarkierungen
 - automatisch besetzte Einbahn-Sicherheitsschleusen mit konfigurierbaren Verboten und Kontrollgründlichkeit
-- ausweisbare Krankenbereiche mit drei Liegen pro Feld und Sanitätertransport für Bewusstlose
+- ausweisbare Krankenbereiche mit drei Liegen pro Feld und Sanitätertransport für Bewusstlose; Dächer dürfen die Liegen überdecken, Gebäude nicht ersetzen
 - alkohol- und toilettenabhängige Übelkeit sowie zusätzliche Übelkeit nach alkoholisierten Fahrten
 - sichtbare Verschmutzungen, die von Reinigungskräften und Saugreinigern
   gesucht und beseitigt werden; Reinigungskräfte leeren volle Eimer zuerst
@@ -434,6 +436,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - lokales, nicht ausbreitendes Brandrisiko durch betrunken gezündetes Feuerwerk
 - patrouillierende Feuerwehrkräfte, die lokale Brände löschen
 - RCT-Iconleiste oben rechts: Bauen, Verwalten und Sitzung; Baupaletten und Straßeneditor links
+- **Kopieren** in der Bauleiste: Rechteck aufziehen, Geistervorschau folgt dem Zeiger, Klick stempelt (Katalogpreis × 0,8). **R** dreht. Optional mit Namen in der **Baubibliothek** dieses Browsers speichern (nicht im Spielstand)
 - Dekoration, Attraktionen und Logistik als Bildkatalog: Kacheln im Raster, Name und Preis unten beim Darüberfahren. Im Deko-Fenster zuerst das Thema antippen, darunter scrollen die Kategorien des Themas
 - Camping unter Attraktionen, Krankenhaus (Garage und Krankenbereich) unter Logistik
 - generisches Achterbahnsystem mit erweiterbarem Typ- und Schienenkatalog
@@ -476,7 +479,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - mittlere oder rechte Maustaste ziehen: Kamera verschieben
 - Mausrad: zoomen
 - Q / E: Kamera um 90 Grad drehen
-- R: Gebäudezugang um 90 Grad drehen
+- R: Gebäude, Deko oder Kopiervorlage um 90 Grad drehen
 - Shift halten und Maus hoch/runter (oder Mausrad / Bild hoch/runter): Bauhöhe in halben Stufen (0.5, 0–6) ändern. Um das Gebäude erscheint ein 7×7-Baugitter auf dieser Ebene. Die Bodenkachel unter dem Zeiger bleibt immer gelb umrandet, auch wenn das Objekt angehoben ist. Shift loslassen behält die Höhe; ein neues Bauwerkzeug setzt sie auf 0.
 - 1–9: Werkzeug wählen, 0: Achterbahn
 - Leertaste: pausieren / fortsetzen
@@ -505,7 +508,7 @@ Der Wegtyp „Warteschlange“ steht ausschließlich in diesem Editor zur Verfü
 
 1. In der Iconleiste **Attraktionen** den Reiter **Achterbahn** öffnen und den Typ direkt wählen (Holz, Twister, Inverted, Wilde Maus, LIM-Launch, …). Jede Kachel zeigt den Zug dieses Typs. Danach die Startplattform setzen. Der Typ ist danach fest.
 2. Startpunkt, Bauhöhe und Startrichtung in der Vorschau anpassen und mit dem blauen Hammer die Startplattform bauen.
-3. Wie in RCT2 oben Richtung/Kurvenradius wählen. Weitere Elemente liegen hinter **Speziell …**. Was der Typ nie kann, fehlt (kein Helix auf Holz, kein Steil auf Junior). Was **gerade** nicht passt (falsche Neigung, Kette, Spezial), bleibt sichtbar, ist aber ausgegraut und nicht klickbar.
+3. Wie in RCT2 oben Richtung/Kurvenradius wählen. Weitere Elemente liegen hinter **Speziell …**. Was der Typ nie kann, fehlt (kein Helix auf Holz, kein Steil auf Junior). Was **gerade** nicht passt (falsche Neigung, Kette, Spezial), bleibt sichtbar, ist aber ausgegraut und nicht klickbar. Die Palette bleibt auch bei laufender Zeit stabil: Hover flackert nicht, ein Klick auf Steil oder eine Richtung gilt beim ersten Mal.
 4. Jeder Wechsel zwischen flach, sanft und steil setzt ein Übergangsstück. Flach ↔ steil nutzt das lange Rundungsstück, alle anderen Stufen ein Feld. Der Wechsel von einer Steigung auf flach endet dadurch wieder exakt waagerecht.
 5. Seitliche Neigung links oder rechts muss vor einer Kurve eingeleitet und vor Stationen wieder neutral ausgeleitet werden. Nachfolgende Kurven übernehmen die gesetzte Neigung.
 6. Weitere Stationsplattformen verlängern den Zug um jeweils einen Wagen.
@@ -556,7 +559,7 @@ RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafi
 
 Neue Szenarien beginnen geschlossen in der Planung. Unter **Festival planen** legt ihr Vorlauf, Festivaltage, Angebotszeiten sowie die Preise für Tages- und Campingticket fest; erst **Festival starten** setzt die Festivalzeit in Gang. Nach dem Ende erscheint das **HEADLINE Magazin**, Abreise und Reinigung bleiben aktiv, der Park bleibt bis zum nächsten Start geschlossen. Bestehende laufende Spielstände behalten ihren Ablauf.
 
-Unter **Logistik** in der Iconleiste einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen. Das Paket-Icon in der Gruppe **Verwalten** öffnet die Logistikverwaltung für Bestellungen, Träger, **Buslinien** und **Bandversorgung**. Im Reiter **Buslinien** liegen ungenutzte Haltestellen links, die Fahrreihenfolge rechts — per Ziehen einreihen oder umsortieren (Pfeile bleiben als Extra). Die gelbe Linie auf der Karte trägt die Stoppnummern 1, 2, 3 …. **Automatisch sortieren** sucht die kürzeste Runde. Einer bestehenden Linie könnt ihr später **Bus hinzufügen** (Kosten wie ein neuer Bus, Start am Depot). Krankenwagen kauft und verkauft ihr in der Übersicht; ohne Einsatz fahren sie zur Garage zurück.
+Unter **Logistik** in der Iconleiste einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen. Das Paket-Icon in der Gruppe **Verwalten** öffnet die Logistikverwaltung für Bestellungen, Träger, **Buslinien** und **Bandversorgung**. Im Reiter **Buslinien** liegen ungenutzte Haltestellen links, die Fahrreihenfolge rechts — per Ziehen einreihen oder umsortieren (Pfeile bleiben als Extra). Die gelbe Linie auf der Karte trägt die Stoppnummern 1, 2, 3 …. **Automatisch sortieren** sucht die kürzeste Runde. Einer bestehenden Linie könnt ihr später **Bus hinzufügen** (Kosten wie ein neuer Bus, Start am Depot). Ein Bus nimmt bis zu 40 Gäste mit und holt Wartende an der Haltestelle ab, auch wenn sie schon länger stehen. Krankenwagen kauft und verkauft ihr in der Übersicht; ohne Einsatz fahren sie zur Garage zurück.
 
 **Bandversorgung:** Unter **Logistik → Bandversorgung** **Backstage ausweisen** (oder im Paket-Fenster den Reiter **Bandversorgung**) und die Fläche an eine Bühne malen (zusammenhängende Nachbarfelder). Getrennte Flächen bleiben markiert, zählen aber nicht. Mehrere verbundene Bühnen teilen sich Attraktivität, Verpflegung und Drauf. Bands spielen auch ohne Backstage, der Auftritt ist dann schwächer. Imbiss und Getränkestand in der Nähe (bis 12 Felder) verbessern die Verpflegung; Deko auf aktivem Backstage hebt die Attraktivität. Fans, die sich auf das Backstage mogeln, senken sie. **Parkplatz für den Tourbus** nur auf Backstage und an einer Straße: ein Platz je Bus-Band des Tages, sonst nicht die volle Attraktivität. Headliner kommen morgens (~08:00) mit einem eigenen Tourbus auf den Parkplatz und fahren abends (~23:00 oder nach dem letzten Set) wieder. Kleinere Bands (Draw unter 30) und Bands ohne freien Platz kommen zu Fuß über den **Personaleingang**. Die Musiker hängen zwischen den Sets auf dem verbundenen Backstage rum und tragen dieselben Outfits wie auf der Bühne. Ein Klick auf Backstage öffnet das Infofenster mit allen Werten inklusive Show-Qualität und Trinkgeld. Mindestbestände (in 20er-Schritten) und Trägerzahl stellt ihr dort im Reiter **Waren & Träger** oder im Infofenster des Lagers ein. Bestellungen kosten Warenpreis plus 45 € Fracht. Lastwagen liefern zum Anlieferungsplatz; Träger holen dort Waren physisch ab und bringen sie ins Depot. Depots versorgen Stände automatisch bis zum Zielbestand von 40 Einheiten. Als **Zwischenlager** freigegebene Depots geben zusätzlich Ware an andere Depots ab. Träger kosten einmalig 120 € und anschließend 0,04 €/Spielminute.
 
@@ -615,6 +618,13 @@ sie sind dekorative Verkleidungen und sperren keine Besucherwege.
 
 ## Komfort beim Bauen
 
+- **Kopieren / Baubibliothek:** In der Iconleiste **Kopieren** wählen und ein
+  Rechteck aufziehen (wie Gelände). Kopiert werden gesetzte Gebäude, Deko
+  (inkl. `decorationSlot`, Legacy-Vollfelder bleiben voll), Zäune, Wege und
+  Autostraßen — nicht Gäste, Fahrzeuge oder Müllhaufen. Danach folgt eine
+  Vorschau dem Zeiger; Klick zahlt 80 % des Katalogpreises und stempelt.
+  Mit Namen speichert ihr die Auswahl in der persönlichen Bibliothek dieses
+  Browsers (IndexedDB/`localStorage`, nicht im Spielstand).
 - **Deko → Thema → Dächer:** Flach- und Schrägdächer, mit R drehbar.
   Erhöhte Wände und Dächer haben keine automatischen Säulen darunter.
 - **Shift drücken** über einem bebauten Feld: Bauhöhe springt über das Objekt.

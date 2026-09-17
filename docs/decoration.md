@@ -53,6 +53,7 @@ dieselbe Kategorie-Reihenfolge.
 | Bau-Menü-Gruppen | `src/game/buildMenu.ts` | Deko-`groups` aus `decorationKindsInCategory` |
 | UI: Themenleiste + Abschnitte | `src/main.ts` | `renderDecorationCatalog` |
 | Meshes / Instancing | `src/view/retroBuildings.ts` | `buildThemedScenery` (Familien + Vertexfarben) |
+| Lampenlicht | `src/game/decorationLights.ts` | `DECORATION_LIGHTS` — Farbe, Höhe, Punkt/Kegel je Licht-Art |
 | Attraktivität | `src/game/simulationConfig.ts` | `atmosphere.sources` je Kind |
 
 Neue Stücke (44): Wüste 4, Wald 4, Neon 4, Industrie 4, Tropen 4, Mystik 4,
@@ -71,12 +72,14 @@ Kanten-Slots der neuen Arten: `glowTape`, `chainFence`, `occultBanner`,
   **Zaun** und Wandsegmente außer `*Door` sperren den Fußgängergraphen
   (`pedestrianBarrierOccupancy` in `scenery.ts`).
 - Statische Details: ein gemergtes Vertex-Color-Mesh je Art, Instancing
-  über `batchRetroBuildings`. Kein Material/Draw-Call pro Zahnrad, Eiszapfen
-  oder Farnblatt. Arktis/Steampunk unterscheiden sich über Farben und
-  Silhouette, nicht über extra PointLights.
-- Neue Lampen (Irrlicht, Polarlicht, Gaslaterne, …) sind Mesh plus
-  Atmosphäre wie Fackel/Diskokugel — kein `consumesPower`, kein extra
-  PointLight-Slot.
+  über `batchRetroBuildings`. Kein Material/Draw-Call pro Zahnrad, Eiszapfen,
+  Farnblatt oder Glühbirne. Arktis/Steampunk unterscheiden sich über Farben
+  und Silhouette; echtes Licht kommt aus dem geteilten Festival-Light-Pool.
+- Jede Art in Kategorie **Licht** hat einen Deskriptor in
+  `decorationLights.ts` (Farbe, Emitterhöhe, Reichweite, Punkt oder Kegel).
+  `lighting` / `lightBalloon` brauchen Strom; die übrigen Themenlampen
+  folgen nur dem Tagesplan-Angebot **Beleuchtung**. Bäume und Zäune bleiben
+  dunkel. Platzieren, Drehen und Abriss aktualisieren die Quellen.
 - Balancing der neuen Stücke: Kosten/Appeal im Katalog, Reichweite in
   `SIMULATION_CONFIG.atmosphere.sources`.
 
@@ -85,8 +88,10 @@ Kanten-Slots der neuen Arten: `glowTape`, `chainFence`, `occultBanner`,
 `tests/decoration.ts`: Themenliste (8–12, inkl. Klassik/Arktis/Steampunk),
 Filter (Klassik zeigt kein Arktis-Stück), leere Kategorie Wüste/Möbel,
 alle Katalogarten im Menü, neue Arten über `scenery.ts` mit Slot,
-Legacy-Baum ohne Slot bleibt Vollfeld. `tests/scenery.ts` prüft weiter
-Slots, Overlaps und Atmosphäre für **alle** `SCENERY_KINDS`.
+Legacy-Baum ohne Slot bleibt Vollfeld, jede Licht-Art hat eine Farbe,
+N platzierte Lampen erzeugen N Quellen, Abriss entfernt das Licht.
+`tests/scenery.ts` prüft weiter Slots, Overlaps und Atmosphäre für
+**alle** `SCENERY_KINDS`.
 `tests/buildMenu.ts` verlangt jedes Kind genau einmal (über alle Themen).
 `tests/performanceGuards.ts`: ein Draw-Call je `DETAILED_BUILDINGS`-Art.
 
@@ -182,3 +187,12 @@ Außenkante aus; falls sie belegt ist, nutzt der Eimer die nächste freie Kante.
 Die Vorschau zeigt dieselbe Richtung. Bänke wählen weiterhin automatisch eine
 freie Kante und dürfen jetzt auch auf einer gleich hohen Autostraße stehen.
 Straßen- und Wegfortsetzungen bleiben für die Kante frei.
+
+## Themenlampen mit echtem Licht (0.1.157)
+
+Jede Art unter **Deko → Licht** speist `FestivalLightsView`: Farbe, Höhe und
+Punkt- vs. Kegellicht stehen in `decorationLights.ts` und folgen dem Mesh
+(warmes Laternenlicht, UV/Silber der Diskokugel, Irrlicht-Türkis, Polarlicht,
+Gasflamme, Natrium-Baustrahler). Glow und Birne sind Instanzfarben, die
+echten Lights ein fester Pool (8 Punkte, 4 Spots). Strom nur für Mastleuchte
+und Tageslichtballon. Kein neues Command oder Save-Feld.

@@ -83,7 +83,8 @@ import {
   WebGLRenderer,
   WebGLRenderTarget,
 } from 'three'
-import { BUILDINGS, WORLD_SIZE, isRoadBuildTool, isTerrainEditTool } from '../game/catalog'
+import { BUILDINGS, WORLD_SIZE, isCopyTool, isRoadBuildTool, isTerrainEditTool } from '../game/catalog'
+import type { BlueprintGhost } from '../game/blueprints'
 import type { BuildingKind } from '../game/catalog'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { isFestivalOfferActive } from '../game/dayPlan'
@@ -103,6 +104,7 @@ import { SouvenirPropsView } from './souvenirMeshes'
 import { mascotVariant } from '../game/shopGoods'
 import { createCoasterSpecial } from './coasterSpecials'
 import { createStyledCoasterTrackPiece } from './coasterTrack'
+import { coasterConstructionPreviewKey } from '../game/coasterConstructionUI'
 import { createCoasterCar, getCoasterCarSeats } from './coasterCars'
 import type { Coaster, TrackPoint } from '../game/coasters'
 import type { CashEffect, GameSnapshot, PlacedBuilding, Visitor } from '../game/GameState'
@@ -198,6 +200,7 @@ const GROUND_ONLY_TOOLS = new Set([
   'stageForecourt',
   'wasteDump',
   'powerCable',
+  'copy',
 ])
 
 function usesConstructionHeight(tool?: string): boolean {
@@ -504,6 +507,8 @@ export class WorldView {
   private coasterTrains = new Group()
   private coasterPreview = new Group()
   private coasterSelection = new Group()
+  private coasterPreviewKey = ''
+  private coasterSelectionKey = ''
   private trainModels = new Map<string, Group>()
   private trainVisitorsById = new Map<string, Visitor>()
   private trainForward = new Vector3()
@@ -619,6 +624,7 @@ export class WorldView {
   private constructionNext: Mesh
   private constructionSlope: Mesh
   private pathDragPreview = new Group()
+  private blueprintPreview = new Group()
   private groundAreaHandler: ((from: CellPosition, to: CellPosition, preview: boolean) => void) | null = null
   private groundAreaStart: CellPosition | null = null
   private groundAreaEndKey = ''
@@ -788,6 +794,7 @@ export class WorldView {
       this.constructionNext,
       this.constructionSlope,
       this.pathDragPreview,
+      this.blueprintPreview,
       this.campingView.group,
       this.fireworksView.group,
       this.crowdingView.group,
@@ -1608,6 +1615,28 @@ export class WorldView {
     })
   }
 
+  setBlueprintPreview(ghosts: readonly BlueprintGhost[]): void {
+    disposeChildren(this.blueprintPreview)
+    ghosts.forEach((ghost) => {
+      const tile = new Mesh(
+        this.pathDragGeometry,
+        new MeshStandardMaterial({
+          color: ghost.valid ? 0x75e49e : 0xf05a65,
+          transparent: true,
+          opacity: 0.55,
+          depthWrite: false,
+        }),
+      )
+      const ground = getTerrainHeight(this.currentSnapshot?.terrain, ghost.x, ghost.z)
+      const slot = ghost.decorationSlot
+      const edge = typeof slot === 'number' && slot >= 0 && slot <= 3 && !ghost.isRoad && !ghost.isPath
+      tile.scale.set(edge ? 0.55 : 0.92, 1, edge ? 0.28 : 0.92)
+      tile.position.set(ghost.x + 0.5, ground + ghost.elevationOffset + 0.16, ghost.z + 0.5)
+      tile.rotation.y = ghost.rotation * Math.PI / 2
+      this.blueprintPreview.add(tile)
+    })
+  }
+
   setCoasterConstructionPreview(
     points: readonly TrackPoint[],
     options?: {
@@ -1618,6 +1647,9 @@ export class WorldView {
       structureColor?: number
     },
   ): void {
+    const previewKey = coasterConstructionPreviewKey(points, options)
+    if (previewKey === this.coasterPreviewKey) return
+    this.coasterPreviewKey = previewKey
     disposeChildren(this.coasterPreview)
     if (points.length < 2) return
     const preview = smoothTrackDisplayPoints(points)
@@ -1664,6 +1696,9 @@ export class WorldView {
         }
       })
       this.coasterPreview.add(track)
+      this.coasterPreview.traverse((object) => {
+        object.raycast = () => {}
+      })
       return
     }
     ;[-0.15, 0.15].forEach((offset) => {
@@ -1711,11 +1746,17 @@ export class WorldView {
     const start = points[0]!
     startMarker.position.set(start.x + 0.5, start.y + 0.08, start.z + 0.5)
     this.coasterPreview.add(startMarker)
+    this.coasterPreview.traverse((object) => {
+      object.raycast = () => {}
+    })
   }
 
   setCoasterTrackSelection(
     points: readonly { x: number; y: number; z: number }[],
   ): void {
+    const selectionKey = coasterConstructionPreviewKey(points)
+    if (selectionKey === this.coasterSelectionKey) return
+    this.coasterSelectionKey = selectionKey
     disposeChildren(this.coasterSelection)
     if (points.length < 2) return
     const preview = smoothTrackDisplayPoints(points)
@@ -3552,7 +3593,8 @@ export class WorldView {
           this.currentSnapshot?.selectedTool === 'roadSpeed50' ||
           isTerrainEditTool(this.currentSnapshot?.selectedTool) ||
           this.currentSnapshot?.selectedTool === 'bulldoze' ||
-          this.currentSnapshot?.selectedTool === 'powerCable')
+          this.currentSnapshot?.selectedTool === 'powerCable' ||
+          isCopyTool(this.currentSnapshot?.selectedTool))
       ) {
         if (!this.painting && this.pointerDownCell) {
           this.onPathPaintStart(this.pointerDownCell)
@@ -3834,6 +3876,12 @@ export class WorldView {
     if (this.constructionActive || this.rideGatePreview.visible) {
       this.preview.visible = false
       this.previewArrow.visible = false
+      return
+    }
+    if (isCopyTool(this.currentSnapshot?.selectedTool) && this.blueprintPreview.children.length > 0) {
+      this.preview.visible = false
+      this.previewArrow.visible = false
+      this.sceneryPreview.visible = false
       return
     }
     if (!this.hoveredCell || !this.currentSnapshot) {

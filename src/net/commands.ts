@@ -12,6 +12,8 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.manageLoan(command.action)
     case 'place':
       return game.place(command.kind, command.x, command.z, command.decorationSlot)
+    case 'stampBlueprint':
+      return game.stampBlueprint(command.originX, command.originZ, command.rotation, command.items)
     case 'placePath':
       return game.placePathSegment(
         command.x,

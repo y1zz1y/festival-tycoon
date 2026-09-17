@@ -15,7 +15,7 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 | Einstellen / entlassen / platzieren | `src/game/GameState.ts` | `hireStaff`, `fireStaff`, `placeStaffAt` |
 | Arbeitszonen | `src/game/staffZones.ts` | `isInAnyZone`, `zoneCellRange`, `setAssignedWorkZones`, `staffZonePaintStroke` |
 | Saugroboter in der Personal-UI | `src/game/staff.ts`, `src/staffDetailsUI.ts`, `src/main.ts` | `sweeperStaffName`, Reinigungs-Tab |
-| Krankenfelder, Betten | `src/game/medical.ts`, `src/game/GameState.ts` | `MedicalSystem`, `normalizeMedicalCell`, `MEDICAL_BEDS_PER_CELL`; Abriss über `clearDesignatedOccupancyAt` |
+| Krankenfelder, Betten | `src/game/medical.ts`, `src/game/GameState.ts` | `MedicalSystem`, `normalizeMedicalCell`, `allowsMedicalOverlay`, `MEDICAL_BEDS_PER_CELL`; Abriss über `clearDesignatedOccupancyAt` |
 | Verletzten-Zuweisung | `src/game/staffSimulation.ts`, `src/game/GameState.ts` | `assignNearestFreeMedics`; Krankenwagen `dispatchIdleAmbulances` |
 | Krankenwagen-Rückfahrt / Verkauf | `src/game/GameState.ts` | `returnIdleAmbulancesToGarage`, `sellAmbulance`, `sellAmbulanceVehicle`; `RoadVehicle.pendingSale` |
 | Personaleingang | `src/game/supplyChain.ts`, `src/game/accessControl.ts` | `staffGate`, `staffGateWorldPosition`, `gateEdgeWorldPosition`, `staffGateBlocksVisitor` |
@@ -24,7 +24,7 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 | Personal-UI | `src/staffDetailsUI.ts` | Infofenster, Bereich zuweisen |
 | Darstellung | `src/view/StaffView.ts`, `src/view/MedicalView.ts` | Uniformen, Liegen |
 | Depot-Träger (keine Rolle) | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts` | Gästefigur + Warnweste/Mütze + Handkarren |
-| Balancing | `src/game/simulationConfig.ts` | `staff`, `medical`, `security`, `waste.cleanerIdleEmptyFill` |
+| Balancing | `src/game/simulationConfig.ts` | `staff` (`roles.cleaner.speed`, `cleanerWorkMinutes`, `cleanerLitterWorkMinutes`, `cleanerBinWorkMinutes`), `medical`, `security`, `waste.cleanerIdleEmptyFill`, `waste.cleanerCarrySpeedMultiplier` |
 
 ## Wichtige Regeln
 
@@ -51,8 +51,19 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
   nicht das euklidisch nächste.
 - Abriss eines Krankenfelds entfernt die Liegen, gibt Bettreservierungen
   frei und macht die Kachel wieder bebaubar. Verwaiste Insassen-IDs aus
-  alten Saves werden beim Laden geleert; leere Restfelder dürfen
-  abgerissen oder überbaut werden. Navigation wird sofort ungültig.
+  alten Saves werden beim Laden geleert; leere Restfelder bleiben liegen
+  und dürfen nur per Abriss entfernt werden, nicht durch Überbauen.
+  Dächer, Wände und Bauzäune stapeln auf derselben Kachel
+  (`allowsMedicalOverlay`) und löschen das Krankenfeld nicht. Solide
+  Gebäude und Wege auf der Kachel lehnt `canPlace` ab. Navigation wird
+  beim Abriss sofort ungültig.
+- Reinigungskräfte gehen mit `staff.roles.cleaner.speed` 0.334
+  (15 % schneller als 0.29). Geladene Wege bleiben
+  `waste.cleanerCarrySpeedMultiplier` 0.62 auf dieser Basis, also
+  ebenfalls 15 % schneller. Arbeit etwas kürzer: `cleanerWorkMinutes` 9
+  (Kotze/verlassene Camps, vorher 10), `cleanerLitterWorkMinutes` 3.5
+  (Bodenmüll, vorher 4), `cleanerBinWorkMinutes` 5.5 (Eimer und
+  versiegelte Container, vorher 6).
 - Reinigungskräfte leeren Eimer in dieser Reihenfolge: volle Eimer
   (Füllstand ≥ `waste.binCapacity`) vor Bodenmüll, Kotze und verlassenen
   Camps; erst wenn nichts davon anliegt, leeren sie teilweise gefüllte
@@ -104,7 +115,8 @@ aktiven Block entfernt entlang des Strichs; `setStaffZone` ist idempotent;
 Saugroboter dieselbe Farbe), `tests/operations.ts` (Personaltor-Kante statt Vollfeld, bemalte Richtung für
 Gäste gesperrt, Staff und Saugroboter durch, Legacy-Mitte; Reinigung leert volle Eimer vor halbvollen und
 Bodenmüll, idle leert halbvolle Eimer in der Zone, Bodenmüll vor kaum
-genutzten Eimern; Krankenfeld-Abriss und Restbelegung; Verletzte an den
+genutzten Eimern; Krankenfeld-Abriss, Dach über Liegen, abgewiesenes
+Überbauen und Restbelegung; Verletzte an den
 nächsten freien Sanitäter bzw. Krankenwagen — näherer Idle vor fernem,
 kein Diebstahl eines tragenden Sanitäters, unerreichbarer Näherer wird
 übersprungen, Insassen im Auto werden nicht als Verletzte zugewiesen,
@@ -118,7 +130,8 @@ Scans). Personalwege hängen an denselben Nav-Invarianten wie
 
 Aktualisieren, wenn Rollen, Zonenregeln, Bettwahl, Verletzten-Zuweisung
 (nächster freier Sanitäter / Krankenwagen), Krankenwagen-Rückfahrt oder
-Verkauf, Gate-Verhalten,
-Träger-als-Personal-Zuweisung, Saugroboter-Einsatzgebiete oder
-Eimer-Leer-Priorität der Reinigung oder Container-Schlepp-Priorität ändern.
-Müll-/Brand-Ziele zusätzlich in `docs/incidents.md`.
+Verkauf, Gate-Verhalten, Krankenfeld-Platzierung (Dach-Overlay vs. Abriss),
+Träger-als-Personal-Zuweisung, Saugroboter-Einsatzgebiete,
+Reinigungs-Tempo (`roles.cleaner.speed`, Work-Minutes, Carry-Multiplier)
+oder Eimer-Leer-Priorität der Reinigung oder Container-Schlepp-Priorität
+ändern. Müll-/Brand-Ziele zusätzlich in `docs/incidents.md`.

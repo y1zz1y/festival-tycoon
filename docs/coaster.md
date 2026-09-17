@@ -42,7 +42,8 @@ RCT2 60° is not mixed into comments or the palette. Gentle is `atan(0.5)`.
 | Build, demolish, gates, operation | `src/game/GameState.ts` | `startCoaster`, `appendCoasterPiece`, `undoCoasterPiece`, `deleteCoasterPiece`, `removeCoaster`, `setCoasterAccess`, `setCoasterOperationMode` |
 | Commands | `src/net/protocol.ts`, `src/net/commands.ts`, `src/net/bind.ts` | `GameCommand` coaster variants |
 | Balancing / SI physics | `src/game/simulationConfig.ts` | `coasters`, `classicSteel.physics` (shared SI baseline + per-type overrides), `trackPieceCosts.helixLeft/Right`, `physicsSimulation`, `trackJoinSmoothing` |
-| Construction window | `src/main.ts` (`#coaster-builder`) | palettes rebuilt from shared lists, preview, undo, gates |
+| Construction window | `src/main.ts` (`#coaster-builder`) | `updateCoasterBuilder` skips unless `updateCoasterConstruction` says the window changed; palettes **diff-updated** in place |
+| Palette mount helper | `src/game/coasterConstructionUI.ts` | `updateCoasterConstruction` / `coasterConstructionViewKey`, `syncCoasterPalette`, stable ids, `coasterConstructionPreviewKey` |
 | Catalog train tiles | `src/view/WorldView.ts` | `coasterTrainThumbnail` — same `createCoasterCar` family as in-world trains |
 | Track styles | `src/view/coasterTrack.ts` | one merged vertex-color mesh per piece; family rails / ties / supports; posts stop at land or a solid and skip if the bay is filled |
 | Specials mesh | `src/view/coasterSpecials.ts` | photo, splash, brakes overlays |
@@ -211,11 +212,22 @@ Palette visibility **must** go through `src/game/coasterConnections.ts`
 (`listTrackPalettePieces`, `listTrackPitchChoices`, `listTrackBankChoices`,
 `isTrackChainLiftVisible` / `isTrackChainLiftEligible`,
 `resolveNextTrackPiece`, `applyConstructionPitch` / `applyConstructionBank` /
-`applyConstructionKind`), not only DOM conditionals. `main.ts` **rebuilds**
-the direction / special / slope / bank / chain buttons from those lists
-(no leftover `[hidden]` nodes). Type-supported buttons keep a **stable
-per-type layout**; current-state illegality uses `disabled` + grey CSS
-(`.rct-coaster-construction .piece-palette button:disabled`), not omission.
+`applyConstructionKind`), not only DOM conditionals. `updateCoasterBuilder`
+in `main.ts` is called from the snapshot listener, but **returns immediately**
+unless `updateCoasterConstruction` reports a change (open end, type,
+selected kind/pitch/bank, legal ride flags, start pose). Visitor/vehicle
+ticks do not remount or re-style the palette. When the window *does*
+change, `main.ts` **diff-updates** the direction / special / slope / bank /
+chain buttons via `syncCoasterPalette` (no leftover `[hidden]` nodes). Do
+**not** `innerHTML`-replace or `replaceChildren` the construction window on
+every tick, hover, or mousemove — that remounts buttons, wipes `:hover`,
+and drops clicks between pointerdown and click. Remount only when the
+stable id list changes (type-supported set). Type-supported buttons keep a
+**stable per-type layout**; current-state illegality uses `disabled` + grey
+CSS (`.rct-coaster-construction .piece-palette button:disabled`), not
+omission. Greyed pieces stay disabled without remounting the palette.
+The ghost mesh (`WorldView.setCoasterConstructionPreview`) is recreated
+only when `coasterConstructionPreviewKey` changes, not on every hover.
 
 A direction/special button is **listed** if `catalogAllowsTrackPiece` /
 `supportedPieces` includes it. It is **enabled** only if
@@ -463,7 +475,7 @@ Run: `npm test` (full suite via `scripts/test.mjs`) and `npm run build`.
 
 | File | What it locks |
 | --- | --- |
-| `tests/coasterTypes.ts` | Catalog matrix, all types playable, **vehicle thumbnail spec** per type, live append legality, palette **type-omit vs current-state grey** (wooden / junior / LIM / wild mouse / mine train / bobsled), hard-switch slope/bank/**kind**, disabled kind does not change ghost, helix, missing-type → classicSteel, discrete machine, `GameState` smoke, **classicSteel rectangle in Testbetrieb during planning advances distance/speed** |
+| `tests/coasterTypes.ts` | Catalog matrix, all types playable, **vehicle thumbnail spec** per type, live append legality, palette **type-omit vs current-state grey** (wooden / junior / LIM / wild mouse / mine train / bobsled), hard-switch slope/bank/**kind** (first enabled click changes window), disabled kind does not change ghost, **palette listed twice without click keeps ids / does not remount**, **`updateCoasterConstruction` does not apply across playing `tick`s**, helix, missing-type → classicSteel, discrete machine, `GameState` smoke, **classicSteel rectangle in Testbetrieb during planning advances distance/speed** |
 | `tests/festivalAdditions.ts` | 1-tile slopes, flat↔steep clothoid, inversions, join smoothing, full demolish |
 | `tests/performanceGuards.ts` | Specials batch, one photo charge, car mesh |
 | `tests/rideAccess.ts` | Carousel / bungee gates (not the track editor) |

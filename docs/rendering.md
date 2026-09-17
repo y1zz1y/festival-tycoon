@@ -15,7 +15,7 @@ Draw-Call oder Material pro Detailstück oder Besucher.
 | Camping-Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts` | 14 Camping-Batches |
 | Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call, zwei Dreiecke je Kachel; Parkfelder als Atlas-`parking` |
 | Objektstützen | `src/game/supportOccupancy.ts`, `src/view/supports.ts` | geteilter Zylinder; nur bei Luft unter dem Objekt |
-| Lichter | `src/view/FestivalLightsView.ts` | fester PointLight-Pool; warm gelb vs. weiße Tageslichtballons über Instanzfarben |
+| Lichter | `src/view/FestivalLightsView.ts` | fester Pool (8 PointLights, 4 SpotLights); Deko-Lampenfarben aus `decorationLights.ts` |
 | Auflösungscaps | `src/view/renderResolution.ts` | max. 1440×810 intern |
 | Touch-Kamera | `src/view/touchCamera.ts` | Zwei-Finger-Pan/Zoom |
 | Dispose | `src/view/disposeObject3D.ts` | GPU-Ressourcen |
@@ -69,8 +69,11 @@ Snapshot nicht autoritativ schreiben.
 - Custom-BufferGeometry-Buckets nach **Geometrie-Identität** keyen, nicht nur
   nach Constructor-Parametern.
 - Light-Anzahl nie zur Laufzeit ändern (Shader-Recompile / Freezes).
-  Neue Lichtarten (z. B. `lightBalloon`) nur Farbe, Distance und Intensität
-  der vorhandenen acht Slots umschalten, nie extra PointLights erzeugen.
+  Acht PointLights, vier SpotLights und das Cursor-Licht bleiben immer
+  in der Szene. Neue Deko-Lampen (`auroraLamp`, `gasLamp`, …) nur Farbe,
+  Höhe, Distance und Intensität der vorhandenen Slots setzen; Glow/Birne
+  sind InstancedMeshes außerhalb der statischen Scenery-Batches. Kein
+  Material oder Draw-Call pro Glühbirne.
 - Preview-Materials dürfen gebaute Instanzen nicht einfärben oder disposen.
 - Depot-Träger teilen die Gäste-Körperteile. Warnweste, Handkarren und
   Ladung sind je eine gemergte, vertex-gefärbte Geometrie — kein Mesh

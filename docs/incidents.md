@@ -18,7 +18,7 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
 | Personal-Reaktion | `src/game/staffSimulation.ts` | Cleaner, Firefighter; Verletzte: nächster freier Sanitäter (`assignNearestFreeMedics`) |
 | Krankenwagen bei Verletzung | `src/game/GameState.ts` | `dispatchIdleAmbulances` — nächster freier Wagen, nicht der erste in der Liste |
 | Views | `src/view/IncidentView.ts`, `src/view/WasteView.ts`, `src/view/FireworksView.ts`, `src/view/PanicView.ts` | nur Darstellung; Eimer-Füllstand als grobe Kartonzahl um den Eimer |
-| Balancing | `src/game/simulationConfig.ts` | `incidents`, `nausea`, `waste`, `fireworks` |
+| Balancing | `src/game/simulationConfig.ts` | `incidents`, `nausea`, `waste` (carry/idle thresholds), `fireworks`; Reinigungs-Tempo in `staff.roles.cleaner.speed`, `staff.cleanerWorkMinutes`, `staff.cleanerLitterWorkMinutes`, `staff.cleanerBinWorkMinutes` |
 
 ## Wichtige Regeln
 
@@ -30,7 +30,9 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
   erreichen. Zugewiesene Einsatzgebiete (`workZones`) begrenzen Suche und
   Aufnahme wie bei Reinigungskräften; Entladen an der Ablage bleibt
   außerhalb erlaubt.
-  Personal-Cleaner bleiben der Fußweg-Fallback. Volle Eimer
+  Personal-Cleaner bleiben der Fußweg-Fallback; Geh- und Arbeitszeiten
+  stehen unter `staff` (`roles.cleaner.speed` 0.334, +15 % zu 0.29;
+  Litter 3.5 / Eimer 5.5 / sonst 9 Minuten). Volle Eimer
   (`stored >= waste.binCapacity`) haben Vorrang vor Litter, Kotze und
   Camp-Resten; ohne solche Arbeit leeren sie Eimer ab
   `waste.cleanerIdleEmptyFill` (3, ein Viertel der 12er-Kapazität), statt
@@ -127,7 +129,8 @@ liefert an die Ablage).
 ## Bei Änderungen dieses Dokument
 
 Aktualisieren, wenn Incident-Arten, Müllkapazitäten, Ticker-Regeln, Eimer-Darstellung,
-Reinigungs-Eimer-Priorität, Gäste-Müll-bei-vollem-Eimer, Verletzten-Zuweisung, Panikformeln oder Pyro-Trigger ändern.
+Reinigungs-Eimer-Priorität, Reinigungs-Tempo (`staff.roles.cleaner.speed` und
+Work-Minutes), Gäste-Müll-bei-vollem-Eimer, Verletzten-Zuweisung, Panikformeln oder Pyro-Trigger ändern.
 Bühnen-Pyro zusätzlich in `docs/stages.md`. Sanitäter/Krankenwagen in `docs/staff.md`.
 
 ## Themen-Mülleimer (0.1.126)

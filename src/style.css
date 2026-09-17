@@ -1848,6 +1848,74 @@ body.title-open #app-install-hint {
   width: 70px;
 }
 
+.copy-help,
+#copy-selection-summary,
+.copy-library-empty {
+  margin: 0 0 8px;
+  color: #d5e8dc;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.copy-save-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.copy-save-row input,
+.copy-library-item button,
+#copy-new-selection,
+#copy-save-library {
+  min-height: 32px;
+  padding: 6px 8px;
+  color: #f2dfb5;
+  background: #476859;
+  border: 1px solid #819b80;
+}
+
+.copy-save-row input {
+  background: #1d322b;
+  color: #eaf4ee;
+}
+
+#copy-new-selection {
+  width: 100%;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.copy-library-list {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.copy-library-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(129, 155, 128, 0.35);
+}
+
+.copy-library-item small {
+  display: block;
+  color: #b7cfc3;
+}
+
+.copy-library-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.copy-library-item button {
+  cursor: pointer;
+}
+
 #build-extra-logistics button,
 #terrain-planner-slot button {
   width: 100%;

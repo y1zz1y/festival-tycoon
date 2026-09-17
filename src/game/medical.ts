@@ -1,3 +1,4 @@
+import { roofSpec, wallSpec } from './decorationWalls'
 import { SIMULATION_CONFIG } from './simulationConfig'
 
 export const MEDICAL_BEDS_PER_CELL = SIMULATION_CONFIG.medical.bedsPerCell
@@ -28,6 +29,11 @@ export function normalizeMedicalCell(
 
 export function medicalCellIsVacant(cell: MedicalCell): boolean {
   return cell.occupants.every((occupant) => occupant === null)
+}
+
+/** Overhead cover and edge facades share a tile with treatment spots. */
+export function allowsMedicalOverlay(kind: string): boolean {
+  return kind === 'fence' || Boolean(roofSpec(kind)) || Boolean(wallSpec(kind))
 }
 
 export class MedicalSystem {

@@ -12,7 +12,8 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 | Bau-Menü / Kategorien | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` (keine stillen Fallbacks). Abriss bleibt als Kategorie für die Toolbar, öffnet aber kein Raster. Wege öffnen `#path-construction` mit Schnellzugriff auf `pathBarrier`, `staffGate`, `securityGate`. `isCatalogBuildCategory`: Deko, Attraktionen und Logistik als Bildraster mit Hover-Fußzeile. Camping unter Attraktionen; Krankenhaus (`ambulanceGarage`, `medicalArea`); Bandversorgung (`backstageArea`, `tourBusParking`) unter Logistik. |
 | Bauhöhe | `src/game/GameState.ts`, `src/game/placementPreview.ts` | `adjustBuildElevation`, `setBuildElevation` (0–6, **Halbstufen 0.5**, wie Wege). `snapBuildElevation` / `stepBuildElevation`. |
 | Kosten / Upkeep / Appeal | `src/game/simulationConfig.ts` | `economy.buildings` |
-| Platzieren, prüfen, abräumen | `src/game/GameState.ts`, `src/view/picking.ts` | `canPlace`, `place`, `bulldoze`, `getAt`, `resolvePickedBuilding`; Abriss räumt auch Parkplätze und Krankenfelder inkl. Restbelegung (`clearDesignatedOccupancyAt`) |
+| Platzieren, prüfen, abräumen | `src/game/GameState.ts`, `src/view/picking.ts` | `canPlace`, `place`, `bulldoze`, `getAt`, `resolvePickedBuilding`; Abriss räumt Parkplätze und Krankenfelder (`clearDesignatedOccupancyAt`). `place` hebt Krankenfelder nicht auf; Dächer/Wände/Zäune stapeln (`allowsMedicalOverlay` in `medical.ts`) |
+| Bereich kopieren | `src/game/blueprints.ts`, [blueprints.md](blueprints.md) | Rechteck, `stampBlueprint`, lokale Bibliothek |
 | Deko-Slots, Overlap, Transforms | `src/game/scenery.ts` | `scenerySlot`, `sceneryOverlaps`, `SCENERY_KINDS` (Viertel plus Kante: Hecke, Banner, Wimpel, Lichterkette, Gebetsfahnen, Lattenzaun, Absperrseil, Luftschlangen, Leuchtband, Kette, Runenbanner, Jahrmarktlichter, Eiszapfenzaun, Rohrgitter); `isPedestrianBarrierKind` / `pedestrianBarrierOccupancy` für Hecke, Zaun und Wände |
 | Themen, Katalogfilter | `src/game/decoration.ts`, [decoration.md](decoration.md) | `DECORATION_THEMES`, `filterDecorationKinds` |
 | Bühnen-Grundfläche | `src/game/stageDesign.ts` | `buildingFootprint`, `occupiesBuildingCell` |
@@ -55,6 +56,11 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
   Eine angeschlossene Warteschlange bleibt **ein** Bauobjekt, wird aber
   senkrecht zur Laufrichtung hälftig geteilt (Anstehspur links, Rückweg
   rechts zur Theke). Attraktionsqueues sind ungeteilt.
+- Krankenfelder sind ein Boden-Overlay, kein Gebäude. `place` / Wege /
+  Logistik-Footprints dürfen sie nicht abreißen. Dächer, Wände und Bauzäune
+  dürfen dieselbe Kachel belegen; ein solides Gebäude auf der Liegen-Kachel
+  scheitert in `canPlace` statt die Liegen zu löschen. Ausweisen unter einem
+  bestehenden Dach bleibt erlaubt. Expliziter Abriss hebt das Feld weiter auf.
 - Gebäude und Wege dürfen übereinander liegen, wenn Höhenvolumen frei bleiben.
   Die Bauhöhe rastet in **halben Stufen (0.5)** von 0–6; Shift/Mausrad/Bild
   hoch-runter ändert eine Halbstufe. Nach dem Loslassen von Shift bleibt sie;
@@ -76,10 +82,12 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
   Industrie, Tropen, Mystik, Zirkus, Alpin, Arktis, Steampunk). Kanten-Slots
   teilen Banner/Wimpel/Hecke/`prayerFlags`/`picketFence`/`ropeFence`/`streamers`
   plus `glowTape`, `chainFence`, `occultBanner`, `carnivalBulbs`, `iceFence`,
-  `pipeRail`. `lightBalloon` ist ein Vollfeld wie `lighting` (Wege bleiben
-  begehbar), braucht Strom und das Tagesplan-Angebot Lampen. Deko-Fackel,
-  Diskokugel und neue Themenlampen sind nur Mesh plus Atmosphäre, keine extra
-  PointLights. Themenfilter und Stückliste: [decoration.md](decoration.md).
+  `pipeRail`.   `lightBalloon` ist ein Vollfeld wie `lighting` (Wege bleiben
+  begehbar), braucht Strom und das Tagesplan-Angebot Lampen. Jede
+  `Deko → Licht`-Art (Fackel, Diskokugel, Irrlicht, Polarlicht, …) speist
+  den geteilten Festival-Light-Pool mit der Modellfarbe
+  (`decorationLights.ts`), ohne extra Draw-Calls. Themenfilter und
+  Stückliste: [decoration.md](decoration.md).
 - `sealedWasteContainer` (**Versiegelter Müllcontainer**) steht unter
   Logistik → Müll. Optional auf einer Autostraße (dann Müllwagen-Abfuhr)
   oder daneben/im Gelände (dann nur Fuß-Reinigung). Kapazität 80,
@@ -96,7 +104,7 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 Stapel/Reichweite, unbekannte Katalog-Arten). `tests/pedestrianBarriers.ts`
 (Hecke/Wand/Zaun im Fußgraphen, Tür passierbar, Vollfeld vs. Kante). `tests/decoration.ts` (Themenliste,
 Kategoriefilter, Legacy-Vollfeld, `scenery.ts`-Platzierung). `tests/picking.ts` (Mesh-Treffer vs. Nachbar/Kachel). `tests/rideAccess.ts` (Tore).
-`tests/operations.ts` (Buden von der Seite und von hinten; Personaleingang-Kante; Stand-Queue-Spuren; Parkplatz- und Krankenfeld-Abriss inkl. Restbelegung).
+`tests/operations.ts` (Buden von der Seite und von hinten; Personaleingang-Kante; Stand-Queue-Spuren; Parkplatz-Abriss; Krankenfeld-Abriss, Dach über Liegen, abgewiesenes Überbauen).
 `tests/shopGoods.ts` (Allgemeine Waren, Maskottchen, Shirt-Farbe/Schnitt).
 `tests/stageTickets.ts` / `tests/stageInteraction.ts` (Bühnenfläche).
 `tests/operations.ts` (Imbiss von der Seite/hinten). `tests/buildMenu.ts`
@@ -104,6 +112,7 @@ Kategoriefilter, Legacy-Vollfeld, `scenery.ts`-Platzierung). `tests/picking.ts` 
 Bodenkachel der Vorschau). Draw-Call-Grenzen: `tests/performanceGuards.ts`.
 Stützen nur im Freiraum: `tests/terrainLand.ts`, `tests/wayStructures.ts`.
 `tests/sealedWasteContainer.ts` (Katalog-Kapazität 80, Platzierung).
+`tests/blueprints.ts` (2×2-Deko kopieren, Preview ohne Mutation, Bibliothek).
 
 ## Bei Änderungen dieses Dokument
 

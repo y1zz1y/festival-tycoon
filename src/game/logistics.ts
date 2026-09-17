@@ -215,6 +215,42 @@ export function collectSeatedPassengerIds(
   return seated
 }
 
+export type BusBoardWaiter = {
+  id: string
+  state: string
+  busLineId: string | null
+  busWaitMinutes: number
+  cellX: number
+  cellZ: number
+  route: readonly unknown[]
+  targetId: string | null
+}
+
+/** Waiting for this line on the stop tile, or one orthogonal neighbor if already arrived. */
+export function isVisitorReadyToBoardBus(
+  visitor: BusBoardWaiter,
+  lineId: string,
+  stop: { id: string; x: number; z: number },
+): boolean {
+  if (visitor.state !== 'bus-waiting' || visitor.busLineId !== lineId) return false
+  if (visitor.cellX === stop.x && visitor.cellZ === stop.z) return true
+  const adjacent =
+    Math.abs(visitor.cellX - stop.x) + Math.abs(visitor.cellZ - stop.z) === 1
+  if (!adjacent) return false
+  return visitor.route.length === 0 || visitor.targetId === stop.id
+}
+
+/** Longest wait first, then stable id so deferred boarding does not skip the same guests. */
+export function compareBusBoardPriority(
+  left: Pick<BusBoardWaiter, 'id' | 'busWaitMinutes'>,
+  right: Pick<BusBoardWaiter, 'id' | 'busWaitMinutes'>,
+): number {
+  return (
+    right.busWaitMinutes - left.busWaitMinutes ||
+    (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+  )
+}
+
 export type ParkingDisembarkCandidate = {
   x: number
   z: number
