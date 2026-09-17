@@ -21,6 +21,7 @@ import { testStageTickets } from './stageTickets'
 import { SupplyChainView } from '../src/view/SupplyChainView'
 import { transportMotionFactor } from '../src/view/transportMotion'
 import { testOperations } from './operations'
+import { testBusPlanner } from './busPlanner'
 import { testSealedWasteContainer } from './sealedWasteContainer'
 import { testStaffZonePaint } from './staffZones'
 import { testAccessControl } from './accessControl'
@@ -242,6 +243,7 @@ test('festival sleep rhythm, tents and circadian energy', () => {
 })
 testMusicPlanning(fixture)
 testOperations(fixture)
+testBusPlanner(fixture)
 testSealedWasteContainer(fixture)
 testStaffZonePaint(fixture)
 testShopGoods(fixture)

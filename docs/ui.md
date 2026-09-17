@@ -18,7 +18,7 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 | HEADLINE Magazin | `src/headlineMagazineUI.ts`, `src/headlineMagazine.css`, `src/game/headlineMagazine.ts` | Vollbild-Heft nach `festival.finished`; Weiter/Schließen; erneut unter Abrechnung & Ruf |
 | Bandplan | `src/musicPlanner.ts` | |
 | Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css`, `src/game/buildMenu.ts` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold. Gelände-Reiter: Feld anheben/senken, Glätten (Fläche) |
-| Buslinien-Planer | `src/main.ts`, `src/view/LogisticsView.ts` | Lokale Stoppliste, Sortieren, `setBusPlannerRoute`; Klick auf Haltestelle in der Karte |
+| Buslinien-Planer | `src/main.ts`, `src/game/busPlanner.ts`, `src/view/LogisticsView.ts` | Zwei Spalten ohne Duplikate, DnD, `sortBusLineStops`, nummerierte `setBusPlannerRoute`; Klick auf Haltestelle in der Karte |
 | Shift-Rampen-Ausgang | `src/main.ts`, `src/game/wayElevation.ts` | `lockShiftElevationOrigin`, `planLockedOriginRamp` |
 | Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/view/WorldView.ts` | Halbstufen `snapBuildElevation`; `groundTileMarker` auf der Hover-Kachel |
 | Bühnenwerkstatt | `src/stageEditor.ts`, `src/stageEditor.css` | |
@@ -155,9 +155,13 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   Das Paket-Icon in **Verwalten** öffnet die Logistikverwaltung
   (Übersicht, **Waren & Träger**, Buslinien, **Bandversorgung**).
   Im Reiter **Buslinien** bleiben gewählte Haltestellen erhalten
-  (auch nach Kartenklick und Panel-Refresh). Pfeile sortieren die
-  Stopps; solange der Reiter offen ist, liegt die aktuelle Route als
-  eine gelbe Linie auf der Karte und aktualisiert sich beim Umsortieren.
+  (auch nach Kartenklick und Panel-Refresh). Links liegen ungenutzte
+  Haltestellen, rechts die Fahrreihenfolge — dieselbe Station steht
+  nie in beiden Spalten. Ziehen zwischen den Spalten oder in der
+  rechten Liste sortiert; Pfeile bleiben Extra. **Automatisch
+  sortieren** (kürzeste Route) ordnet die rechte Liste neu. Solange
+  der Reiter offen ist, liegt die aktuelle Route als eine gelbe Linie
+  mit Stoppnummern 1, 2, 3 … auf der Karte.
   Einer bestehenden Linie fügt **Bus hinzufügen** einen weiteren Bus
   hinzu (freier Depotbus oder Neukauf). **RTW verkaufen** in der Übersicht
   oder im Infofenster des Krankenwagens: idle an der Garage sofort,

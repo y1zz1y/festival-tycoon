@@ -95,6 +95,7 @@ import type {
   TrackPieceKind,
 } from './game/coasters'
 import { GameState } from './game/GameState'
+import { applyBusPlannerDrag, type BusPlannerColumn } from './game/busPlanner'
 import {
   ACCESS_HOURS_PER_DAY,
   ACCESS_SCHEDULE_TIME_LABELS,
@@ -927,22 +928,23 @@ app.innerHTML = `
         <div id="supply-deliveries"></div>
       </section>
       <section id="logistics-routes" hidden>
-        <p class="scenario-hint">Haltestellen hier oder auf der Karte antippen. Die Auswahl bleibt erhalten. Pfeile sortieren die Linie; die gelbe Route auf der Karte folgt sofort. Einer bestehenden Linie könnt ihr später weitere Busse hinzufügen.</p>
+        <p class="scenario-hint">Links ungenutzte Haltestellen, rechts die Fahrreihenfolge. Ziehen zum Einreihen oder Umsortieren; die gelbe Linie zeigt 1, 2, 3 … auf der Karte. Einer bestehenden Linie könnt ihr später weitere Busse hinzufügen.</p>
         <div class="line-editor">
           <label>Name <input id="bus-line-name" value="Festival-Shuttle" /></label>
           <label>Depot <select id="bus-line-depot"></select></label>
           <label>Busse <input id="bus-line-count" type="number" min="1" max="3" value="1" /></label>
           <label>Takt <input id="bus-line-headway" type="number" min="2" max="120" value="15" /> Min.</label>
           <button id="create-bus-line" class="primary">Linie anlegen</button>
+          <button id="sort-bus-line" type="button">Automatisch sortieren</button>
           <button id="apply-bus-line-stops" type="button" hidden>Reihenfolge speichern</button>
         </div>
         <div class="bus-planner">
-          <div>
-            <h3>Haltestellen wählen</h3>
+          <div class="bus-planner-column" data-planner-column="available">
+            <h3>Verfügbare Haltestellen</h3>
             <div id="bus-stop-choices" class="bus-stop-choices"></div>
           </div>
-          <div>
-            <h3>Reihenfolge</h3>
+          <div class="bus-planner-column" data-planner-column="active">
+            <h3>Aktive Haltestellen (Fahrreihenfolge)</h3>
             <ol id="bus-line-planned" class="bus-line-planned"></ol>
           </div>
         </div>
@@ -1344,10 +1346,13 @@ const busLineDepot = requireElement<HTMLSelectElement>('#bus-line-depot')
 const busStopChoices = requireElement<HTMLElement>('#bus-stop-choices')
 const busLinePlanned = requireElement<HTMLOListElement>('#bus-line-planned')
 const applyBusLineStops = requireElement<HTMLButtonElement>('#apply-bus-line-stops')
+const sortBusLine = requireElement<HTMLButtonElement>('#sort-bus-line')
+const busPlannerRoot = requireElement<HTMLElement>('.bus-planner')
 const busLinesList = requireElement<HTMLElement>('#bus-lines-list')
 const plannedBusStopIds: string[] = []
 let editingBusLineId: string | null = null
 let busPlannerStopsFingerprint = ''
+let busPlannerDragging = false
 const visitorOverviewList =
   requireElement<HTMLElement>('#visitor-overview-list')
 const visitorOverviewSummary =
@@ -2115,40 +2120,49 @@ function loadBusLineIntoPlanner(lineId: string): void {
 }
 
 function syncBusPlannerOverlay(): void {
-  if (!isBusPlannerOpen() || plannedBusStopIds.length < 2) {
+  if (!isBusPlannerOpen()) {
     view.setBusPlannerRoute(null)
     return
   }
-  view.setBusPlannerRoute(game.previewBusLineRoute(plannedBusStopIds))
+  const cells =
+    plannedBusStopIds.length >= 2 ? game.previewBusLineRoute(plannedBusStopIds) : []
+  const markers = game.previewBusLineMarkers(plannedBusStopIds, editingBusLineId ?? undefined)
+  view.setBusPlannerRoute(cells, markers)
 }
 
 function renderBusPlanner(logistics = game.snapshot.logistics): void {
   syncPlannedBusStops(logistics)
-  const stopKey = logistics.busStops.map((stop) => `${stop.id}:${stop.name}`).join('|')
+  if (busPlannerDragging) {
+    syncBusPlannerOverlay()
+    return
+  }
+  const available = logistics.busStops.filter((stop) => !plannedBusStopIds.includes(stop.id))
+  const stopKey = [
+    logistics.busStops.map((stop) => `${stop.id}:${stop.name}`).join('|'),
+    plannedBusStopIds.join(','),
+  ].join('#')
   if (stopKey !== busPlannerStopsFingerprint) {
     busPlannerStopsFingerprint = stopKey
-    busStopChoices.innerHTML = logistics.busStops.length
-      ? logistics.busStops
-          .map((stop) => {
-            const selected = plannedBusStopIds.includes(stop.id)
-            return `<button type="button" class="bus-stop-choice${selected ? ' selected' : ''}" data-add-stop="${stop.id}">${escapeHtml(stop.name)}</button>`
+    busStopChoices.innerHTML = logistics.busStops.length === 0
+      ? '<p class="scenario-hint">Noch keine Haltestelle. Unter Logistik → Bus eine Haltestelle an den Gehweg neben die Straße setzen.</p>'
+      : available.length
+        ? available
+            .map(
+              (stop) =>
+                `<button type="button" class="bus-stop-choice" draggable="true" data-add-stop="${stop.id}" data-stop-id="${stop.id}" data-planner-source="available">${escapeHtml(stop.name)}</button>`,
+            )
+            .join('')
+        : '<p class="scenario-hint">Alle Haltestellen sind auf der Linie.</p>'
+    busLinePlanned.innerHTML = plannedBusStopIds.length
+      ? plannedBusStopIds
+          .map((stopId, index) => {
+            const stop = logistics.busStops.find((candidate) => candidate.id === stopId)
+            const name = stop?.name ?? stopId
+            return `<li class="bus-planned-stop" draggable="true" data-stop-id="${stopId}" data-planner-source="active" data-planned-index="${index}"><span>${index + 1}. ${escapeHtml(name)}</span><span class="bus-line-actions"><button type="button" data-move-stop="${index}" data-delta="-1" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" data-move-stop="${index}" data-delta="1" ${index === plannedBusStopIds.length - 1 ? 'disabled' : ''}>↓</button><button type="button" data-remove-stop="${index}">Entfernen</button></span></li>`
           })
           .join('')
-      : '<p class="scenario-hint">Noch keine Haltestelle. Unter Logistik → Bus eine Haltestelle an den Gehweg neben die Straße setzen.</p>'
-  } else {
-    busStopChoices.querySelectorAll<HTMLButtonElement>('[data-add-stop]').forEach((button) => {
-      button.classList.toggle('selected', plannedBusStopIds.includes(button.dataset.addStop ?? ''))
-    })
+      : '<li class="scenario-hint">Haltestellen hierher ziehen.</li>'
   }
-  busLinePlanned.innerHTML = plannedBusStopIds.length
-    ? plannedBusStopIds
-        .map((stopId, index) => {
-          const stop = logistics.busStops.find((candidate) => candidate.id === stopId)
-          const name = stop?.name ?? stopId
-          return `<li class="bus-planned-stop"><span>${index + 1}. ${escapeHtml(name)}</span><span class="bus-line-actions"><button type="button" data-move-stop="${index}" data-delta="-1" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" data-move-stop="${index}" data-delta="1" ${index === plannedBusStopIds.length - 1 ? 'disabled' : ''}>↓</button><button type="button" data-remove-stop="${index}">Entfernen</button></span></li>`
-        })
-        .join('')
-    : '<li class="scenario-hint">Mindestens zwei Haltestellen wählen.</li>'
   applyBusLineStops.hidden = !editingBusLineId
   applyBusLineStops.textContent = editingBusLineId
     ? 'Reihenfolge speichern'
@@ -6555,6 +6569,16 @@ applyBusLineStops.addEventListener('click', () => {
   showToast(result.message, !result.ok)
   updateLogisticsPanel(true)
 })
+sortBusLine.addEventListener('click', () => {
+  if (plannedBusStopIds.length < 2) {
+    showToast('Mindestens zwei Haltestellen für die kürzeste Route', true)
+    return
+  }
+  const sorted = game.sortBusLineStops([...plannedBusStopIds], busLineDepot.value || undefined)
+  plannedBusStopIds.splice(0, plannedBusStopIds.length, ...sorted)
+  renderBusPlanner()
+  showToast('Route automatisch sortiert (kürzeste Runde)')
+})
 busStopChoices.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-add-stop]')
   if (!button?.dataset.addStop) return
@@ -6570,6 +6594,85 @@ busLinePlanned.addEventListener('click', (event) => {
   if (button.dataset.moveStop != null) {
     movePlannedBusStop(Number(button.dataset.moveStop), Number(button.dataset.delta))
   }
+})
+
+function busPlannerDropIndex(event: DragEvent): number {
+  const item = (event.target as HTMLElement).closest<HTMLElement>('[data-planned-index]')
+  if (item && busLinePlanned.contains(item)) return Number(item.dataset.plannedIndex)
+  return plannedBusStopIds.length
+}
+
+function applyPlannerLists(active: string[]): void {
+  plannedBusStopIds.splice(0, plannedBusStopIds.length, ...active)
+  renderBusPlanner()
+}
+
+busPlannerRoot.addEventListener('dragstart', (event) => {
+  const target = event.target as HTMLElement
+  if (target.closest('button:not([data-add-stop])')) {
+    event.preventDefault()
+    return
+  }
+  const item = target.closest<HTMLElement>('[data-stop-id][data-planner-source]')
+  if (!item || !event.dataTransfer) return
+  const source = item.dataset.plannerSource as BusPlannerColumn
+  const stopId = item.dataset.stopId
+  if (!stopId) return
+  const payload = JSON.stringify({ source, stopId })
+  event.dataTransfer.setData('application/x-bus-stop', payload)
+  event.dataTransfer.setData('text/plain', payload)
+  event.dataTransfer.effectAllowed = source === 'available' ? 'copyMove' : 'move'
+  item.classList.add('dragging')
+  busPlannerDragging = true
+})
+busPlannerRoot.addEventListener('dragend', () => {
+  busPlannerDragging = false
+  busPlannerRoot.querySelectorAll('.dragging, .drop-target, .drop-before').forEach((node) => {
+    node.classList.remove('dragging', 'drop-target', 'drop-before')
+  })
+})
+busPlannerRoot.addEventListener('dragover', (event) => {
+  const column = (event.target as HTMLElement).closest<HTMLElement>('[data-planner-column]')
+  if (!column) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  busPlannerRoot.querySelectorAll('.drop-target, .drop-before').forEach((node) => {
+    node.classList.remove('drop-target', 'drop-before')
+  })
+  column.classList.add('drop-target')
+  const item = (event.target as HTMLElement).closest<HTMLElement>('[data-planned-index]')
+  item?.classList.add('drop-before')
+})
+busPlannerRoot.addEventListener('drop', (event) => {
+  const column = (event.target as HTMLElement).closest<HTMLElement>('[data-planner-column]')
+  if (!column || !event.dataTransfer) return
+  event.preventDefault()
+  busPlannerDragging = false
+  let payload: { source: BusPlannerColumn; stopId: string } | null = null
+  try {
+    payload = JSON.parse(
+      event.dataTransfer.getData('application/x-bus-stop') ||
+        event.dataTransfer.getData('text/plain'),
+    ) as {
+      source: BusPlannerColumn
+      stopId: string
+    }
+  } catch {
+    payload = null
+  }
+  busPlannerRoot.querySelectorAll('.dragging, .drop-target, .drop-before').forEach((node) => {
+    node.classList.remove('dragging', 'drop-target', 'drop-before')
+  })
+  if (!payload?.stopId) return
+  const target = column.dataset.plannerColumn as BusPlannerColumn
+  const allIds = game.snapshot.logistics.busStops.map((stop) => stop.id)
+  const lists = applyBusPlannerDrag(allIds, plannedBusStopIds, {
+    source: payload.source,
+    stopId: payload.stopId,
+    target,
+    at: target === 'active' ? busPlannerDropIndex(event) : undefined,
+  })
+  applyPlannerLists(lists.active)
 })
 busLinesList.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button')

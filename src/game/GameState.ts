@@ -266,6 +266,11 @@ import type {
   SpeedLimit,
 } from './logistics'
 import {
+  previewBusLineMarkers as buildBusLineMarkers,
+  sortBusLineStops as orderBusLineStops,
+  type BusPlannerStopMarker,
+} from './busPlanner'
+import {
   accessCellKey,
   accessEdgeKey,
   closedAccessEdges,
@@ -5101,6 +5106,25 @@ export class GameState {
       stops: this.state.logistics.busStops,
       stopIds,
       worldSize: this.getWorldSize(),
+    })
+  }
+
+  previewBusLineMarkers(stopIds: string[], lineId?: string): BusPlannerStopMarker[] {
+    return buildBusLineMarkers(this.state.logistics.busStops, stopIds, lineId)
+  }
+
+  sortBusLineStops(stopIds: string[], depotId?: string): string[] {
+    const depot = depotId
+      ? this.state.logistics.busDepots.find((candidate) => candidate.id === depotId)
+      : undefined
+    const depotAccess = depot ? this.getLogisticsBuildingAccess(depot, 3) : undefined
+    return orderBusLineStops({
+      roadCells: this.state.logistics.roadCells,
+      graph: this.getRoadGraph(),
+      stops: this.state.logistics.busStops,
+      stopIds,
+      worldSize: this.getWorldSize(),
+      depotAccess: depotAccess ?? undefined,
     })
   }
 

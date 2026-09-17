@@ -21,7 +21,7 @@ Draw-Call oder Material pro Detailstück oder Besucher.
 | Dispose | `src/view/disposeObject3D.ts` | GPU-Ressourcen |
 | Browser-Messharness | `tests/render-performance.html` | |
 | Logistik-Einbahn-Overlay | `src/view/LogisticsView.ts`, `src/view/roadDirectionArrow.ts` | Weiße StVO-Pfeile nach den Fahrzeugen; kompaktes InstancedMesh-Overlay nur bei Werkzeug Fahrtrichtung. Parkflächen: geteiltes Asphaltmaterial plus `parkingTexture` (Stelllinien in der Textur). Grün/Orange und das P nur in der Autostraßen-Bauansicht oder im Logistik-Overlay (`showParkingHelpers`) |
-| Buslinien-Planerroute | `src/view/LogisticsView.ts` `setPlannerRoute` | Eine `Line` / ein Material für die ganze Stoppfolge; weg beim Schließen des Reiters |
+| Buslinien-Planerroute | `src/view/LogisticsView.ts` `setPlannerRoute` | Eine `Line` / ein Material für die Stoppfolge plus ein Mesh mit geteiltem Zahlenatlas (1, 2, 3 …) an den Halten; weg beim Schließen des Reiters |
 | Logistik-Modelle | `src/view/logisticsModels.ts` | ModelKit-Gebäude und Fahrzeuge; Besucherautos teilen Geometrie je Lackfarbe |
 | Straßenrampen | `src/view/LogisticsView.ts` | Deck kippt um `roadSlope`; Stützen bei Erhöhung; Fahrzeuge folgen `waySurfaceY` |
 | Depot-Träger | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts` | dieselbe Personen-Geometrie wie Gäste; eine gemergte Warnwesten-/Mützen-Kit, ein Handkarren, ein Ladungsstapel |

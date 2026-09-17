@@ -15,7 +15,7 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Saugreiniger | `src/game/GameState.ts` | `isSweeperDriveCell`, `findSweeperRoute`, `updateSweeper`, `getSweeperDirtAccesses` |
 | Krankenwagen-Einsatz | `src/game/GameState.ts` | `dispatchIdleAmbulances` — nächster freier Wagen zum Verletzten; idle zurück zur Garage |
 | Krankenwagen verkaufen | `src/game/GameState.ts` | `sellAmbulance`, `sellAmbulanceVehicle`, `pendingSale` nach Rückfahrt |
-| Buslinie planen | `src/game/GameState.ts`, `src/game/logistics.ts`, `src/main.ts` | `createBusLine`, `setBusLineStops`, `addBusToLine`, `previewBusLineRoute` |
+| Buslinie planen | `src/game/GameState.ts`, `src/game/busPlanner.ts`, `src/game/logistics.ts`, `src/main.ts` | `createBusLine`, `setBusLineStops`, `addBusToLine`, `previewBusLineRoute`, `previewBusLineMarkers`, `sortBusLineStops` |
 | Müllwagen-Erhalt | `src/game/GameState.ts` | `restoreMissingGarbageTrucks`, `reenterGarbageTruck`, `holdGarbageTruckOffMap`, `sellGarbageTruck` |
 | Depots, Bestellungen, Lastwagen | `src/game/supplyChain.ts` | `Infrastructure`, `infrastructureAction`, `updateSupplyChain` |
 | Automatische Träger | `src/game/depotCarriers.ts` | `updateDepotCarriers` |
@@ -219,13 +219,18 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   bzw. Rückfahrt mit Patient und `pendingSale` bis zur Ankunft.
   Sanitäter: `docs/staff.md`.
 - Buslinien: Haltestellenreihenfolge liegt in `BusLine.stopIds`. Die
-  Planer-UI hält die Auswahl lokal (kein Multi-Select-Rebuild), zeigt
-  die Route als eine Overlay-Linie und erlaubt Sortieren. `setBusLineStops`
-  ändert die Reihenfolge einer bestehenden Linie; `addBusToLine` kauft
-  oder weist einen weiteren Bus desselben Depots zu (max. 3, Kosten
-  `busCost`, Start am Depotanschluss, gleiche Stoppfolge). `sellBus`
-  entfernt den Bus weiter von Depot und Linie. Overlay-Daten:
-  `previewBusLineRoute` (Stopps in Reihenfolge, dann Schleife).
+  Planer-UI hält die Auswahl lokal (kein Multi-Select-Rebuild): links
+  der Pool ungenutzter Haltestellen, rechts die aktive Fahrreihenfolge
+  ohne Duplikate, Drag-and-Drop plus Pfeile. `sortBusLineStops` in
+  `src/game/busPlanner.ts` macht Nearest-Neighbor plus 2-opt auf
+  `findRoadRoute`-Längen (deterministisch, Schleife zurück zum ersten
+  Stopp / Depotanschluss). `setBusLineStops` ändert die Reihenfolge
+  einer bestehenden Linie; `addBusToLine` kauft oder weist einen
+  weiteren Bus desselben Depots zu (max. 3, Kosten `busCost`, Start am
+  Depotanschluss, gleiche Stoppfolge). `sellBus` entfernt den Bus
+  weiter von Depot und Linie. Overlay-Daten: `previewBusLineRoute`
+  (Stopps in Reihenfolge, dann Schleife) und `previewBusLineMarkers`
+  (1-basierte Nummern an den Haltpositionen).
 - Gekaufte Flottenfahrzeuge (`garbageTruck`, Bus, Krankenwagen,
   Saugreiniger) dürfen beim Stau-Timeout nicht wie abfahrende
   Besucherautos gelöscht werden. `unstickVehicle` und das Leeren der

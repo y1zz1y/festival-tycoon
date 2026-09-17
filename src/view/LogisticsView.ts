@@ -6,6 +6,8 @@ import type { WayType } from '../game/wayTypes'
 import {
   BoxGeometry,
   BufferGeometry,
+  CanvasTexture,
+  Float32BufferAttribute,
   Group,
   InstancedMesh,
   Line,
@@ -17,8 +19,10 @@ import {
   DoubleSide,
   PlaneGeometry,
   Quaternion,
+  SRGBColorSpace,
   Vector3,
 } from 'three'
+import type { BusPlannerStopMarker } from '../game/busPlanner'
 import { waySurfaceY } from '../game/wayElevation'
 import type {
   AmbulanceGarage,
@@ -207,8 +211,12 @@ export class LogisticsView {
   private inspectStamp = ''
   private inspectRoute: Line | null = null
   private plannerRouteCells: RoadPosition[] = []
+  private plannerMarkers: BusPlannerStopMarker[] = []
   private plannerStamp = ''
   private plannerRoute: Line | null = null
+  private plannerNumbers: Mesh | null = null
+  private plannerNumberTexture: CanvasTexture | null = null
+  private plannerNumberMaterial: MeshBasicMaterial | null = null
   private readonly plannerMaterial = new LineBasicMaterial({
     color: 0xf4d35e,
     depthTest: false,
@@ -240,8 +248,12 @@ export class LogisticsView {
     this.inspectStamp = ''
   }
 
-  setPlannerRoute(cells: readonly RoadPosition[] | null): void {
+  setPlannerRoute(
+    cells: readonly RoadPosition[] | null,
+    markers?: readonly BusPlannerStopMarker[] | null,
+  ): void {
     this.plannerRouteCells = cells ? cells.map((cell) => ({ ...cell })) : []
+    this.plannerMarkers = markers ? markers.map((marker) => ({ ...marker })) : []
     this.plannerStamp = ''
     this.refreshPlannerRoute()
   }
@@ -628,9 +640,14 @@ export class LogisticsView {
   }
 
   private refreshPlannerRoute(): void {
-    const stamp = this.plannerRouteCells
-      .map((cell) => `${cell.x},${cell.z},${cell.elevation ?? ''}`)
-      .join('>')
+    const stamp = [
+      this.plannerRouteCells
+        .map((cell) => `${cell.x},${cell.z},${cell.elevation ?? ''}`)
+        .join('>'),
+      this.plannerMarkers
+        .map((marker) => `${marker.stopId}:${marker.index}:${marker.x},${marker.z},${marker.lineId ?? ''}`)
+        .join('|'),
+    ].join('#')
     if (stamp === this.plannerStamp) return
     this.plannerStamp = stamp
     if (this.plannerRoute) {
@@ -638,23 +655,125 @@ export class LogisticsView {
       this.plannerRoute.geometry.dispose()
       this.plannerRoute = null
     }
-    if (this.plannerRouteCells.length < 2) return
-    const points = this.plannerRouteCells.map((cell) => {
-      const road = this.roadAt(cell.x, cell.z, cell.elevation)
-      return new Vector3(
-        cell.x + 0.5,
-        (road ? this.roadY(road) : this.groundY(cell.x, cell.z)) + 0.32,
-        cell.z + 0.5,
+    this.clearPlannerNumbers()
+    if (this.plannerRouteCells.length >= 2) {
+      const points = this.plannerRouteCells.map((cell) => {
+        const road = this.roadAt(cell.x, cell.z, cell.elevation)
+        return new Vector3(
+          cell.x + 0.5,
+          (road ? this.roadY(road) : this.groundY(cell.x, cell.z)) + 0.32,
+          cell.z + 0.5,
+        )
+      })
+      const line = new Line(
+        new BufferGeometry().setFromPoints(points),
+        this.plannerMaterial,
       )
+      line.userData.plannerRoute = true
+      line.renderOrder = 7
+      this.plannerRoute = line
+      this.vehicleGroup.add(line)
+    }
+    this.refreshPlannerNumbers()
+  }
+
+  private plannerNumberAtlas(): CanvasTexture | null {
+    if (this.plannerNumberTexture) return this.plannerNumberTexture
+    if (typeof document === 'undefined') return null
+    const cols = 8
+    const rows = 8
+    const cell = 64
+    const canvas = document.createElement('canvas')
+    canvas.width = cols * cell
+    canvas.height = rows * cell
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    for (let number = 1; number <= cols * rows; number += 1) {
+      const index = number - 1
+      const col = index % cols
+      const row = Math.floor(index / cols)
+      const cx = col * cell + cell / 2
+      const cy = row * cell + cell / 2
+      ctx.beginPath()
+      ctx.arc(cx, cy, cell * 0.42, 0, Math.PI * 2)
+      ctx.fillStyle = '#14241c'
+      ctx.fill()
+      ctx.lineWidth = 4
+      ctx.strokeStyle = '#f4d35e'
+      ctx.stroke()
+      ctx.fillStyle = '#f4d35e'
+      ctx.font = `bold ${number >= 10 ? 26 : 32}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(number), cx, cy + 1)
+    }
+    const texture = new CanvasTexture(canvas)
+    texture.colorSpace = SRGBColorSpace
+    texture.needsUpdate = true
+    this.plannerNumberTexture = texture
+    return texture
+  }
+
+  private plannerNumberMat(): MeshBasicMaterial | null {
+    if (this.plannerNumberMaterial) return this.plannerNumberMaterial
+    const atlas = this.plannerNumberAtlas()
+    if (!atlas) return null
+    this.plannerNumberMaterial = new MeshBasicMaterial({
+      map: atlas,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
     })
-    const line = new Line(
-      new BufferGeometry().setFromPoints(points),
-      this.plannerMaterial,
-    )
-    line.userData.plannerRoute = true
-    line.renderOrder = 7
-    this.plannerRoute = line
-    this.vehicleGroup.add(line)
+    return this.plannerNumberMaterial
+  }
+
+  private refreshPlannerNumbers(): void {
+    if (this.plannerMarkers.length === 0) return
+    const material = this.plannerNumberMat()
+    if (!material) return
+    const size = 0.92
+    const positions: number[] = []
+    const uvs: number[] = []
+    const indices: number[] = []
+    this.plannerMarkers.forEach((marker, index) => {
+      const digit = Math.max(1, Math.min(64, marker.index)) - 1
+      const col = digit % 8
+      const row = Math.floor(digit / 8)
+      const u0 = col / 8
+      const u1 = (col + 1) / 8
+      const v0 = 1 - (row + 1) / 8
+      const v1 = 1 - row / 8
+      const cx = marker.x + 0.5
+      const cz = marker.z + 0.5
+      const road = this.roadAt(marker.x, marker.z, marker.elevation)
+      const cy = (road ? this.roadY(road) : this.groundY(marker.x, marker.z)) + 0.58
+      const base = index * 4
+      positions.push(
+        cx - size / 2, cy, cz - size / 2,
+        cx + size / 2, cy, cz - size / 2,
+        cx + size / 2, cy, cz + size / 2,
+        cx - size / 2, cy, cz + size / 2,
+      )
+      uvs.push(u0, v0, u1, v0, u1, v1, u0, v1)
+      indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
+    })
+    const geometry = new BufferGeometry()
+    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
+    geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
+    geometry.setIndex(indices)
+    const mesh = new Mesh(geometry, material)
+    mesh.userData.plannerNumbers = true
+    mesh.renderOrder = 8
+    mesh.frustumCulled = false
+    this.plannerNumbers = mesh
+    this.vehicleGroup.add(mesh)
+  }
+
+  private clearPlannerNumbers(): void {
+    if (!this.plannerNumbers) return
+    this.vehicleGroup.remove(this.plannerNumbers)
+    this.plannerNumbers.geometry.dispose()
+    this.plannerNumbers = null
   }
 
   private updateInspectRoute(vehicles: readonly VehicleLike[]): void {

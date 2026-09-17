@@ -3575,6 +3575,18 @@ body.title-open #app-install-hint {
   color: #c5d8ce;
 }
 
+.bus-planner-column {
+  min-height: 88px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px dashed transparent;
+}
+
+.bus-planner-column.drop-target {
+  border-color: #f4d35e;
+  background: rgba(244, 211, 94, 0.06);
+}
+
 .bus-stop-choices,
 .bus-line-planned {
   display: grid;
@@ -3582,6 +3594,7 @@ body.title-open #app-install-hint {
   margin: 0;
   padding: 0;
   list-style: none;
+  min-height: 48px;
 }
 
 .bus-stop-choice,
@@ -3595,6 +3608,16 @@ body.title-open #app-install-hint {
   border: 1px solid rgba(214, 229, 211, 0.15);
   background: #12271f;
   color: #e7f3ec;
+  cursor: grab;
+}
+
+.bus-stop-choice.dragging,
+.bus-planned-stop.dragging {
+  opacity: 0.45;
+}
+
+.bus-planned-stop.drop-before {
+  box-shadow: inset 0 2px 0 #f4d35e;
 }
 
 .bus-stop-choice.selected {

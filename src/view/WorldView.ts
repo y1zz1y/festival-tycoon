@@ -1276,8 +1276,16 @@ export class WorldView {
 
   setBusPlannerRoute(
     cells: readonly { x: number; z: number; elevation?: number }[] | null,
+    markers?: readonly {
+      stopId: string
+      index: number
+      x: number
+      z: number
+      elevation?: number
+      lineId?: string
+    }[] | null,
   ): void {
-    this.logisticsView.setPlannerRoute(cells)
+    this.logisticsView.setPlannerRoute(cells, markers)
   }
   followStaff(id: string | null): void {
     this.followedStaffId = id
