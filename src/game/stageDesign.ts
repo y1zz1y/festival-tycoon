@@ -1,7 +1,7 @@
 export const COMPONENTS = {
   deck: {name:'Bühnenpodest',cost:80,party:0,beauty:1,power:0},
   truss: {name:'Traversensystem',cost:110,party:0,beauty:1,power:0},
-  fireworks: {name:'Feuerwerk',cost:850,party:12,beauty:6,power:.4},
+  fireworks: {name:'Feuerwerk',cost:1000,party:12,beauty:6,power:.4},
   sparks: {name:'Funkensprüher',cost:390,party:6,beauty:3,power:.5},
   spot: {name:'Moving Head',cost:180,party:5,beauty:2,power:.4},
   lineArray: {name:'Line Array',cost:230,party:8,beauty:2,power:.7},
@@ -10,23 +10,56 @@ export const COMPONENTS = {
   fog: {name:'Nebelmaschine',cost:160,party:4,beauty:1,power:.8},
   laser: {name:'Laser',cost:340,party:7,beauty:3,power:.6},
   screen: {name:'Pixel-LED-Wand',cost:420,party:5,beauty:5,power:1.5},
-  discoBall: {name:'Diskokugel',cost:150,party:4,beauty:5,power:.1},
-  star: {name:'Deko-Stern',cost:70,party:1,beauty:4,power:0},
+  discoBall: {name:'Diskokugel',cost:250,party:4,beauty:5,power:.1},
+  star: {name:'Deko-Stern',cost:200,party:1,beauty:4,power:0},
   palm: {name:'Pixel-Palme',cost:120,party:1,beauty:7,power:0},
   foh: {name:'FOH-Pult',cost:900,party:2,beauty:1,power:.6},
   delay: {name:'Delayline',cost:520,party:7,beauty:0,power:1.4},
 } as const
-export const BRANDS = {
-  budget: {name:'Bummringer · Garagenserie',cost:1,quality:.75},
-  touring: {name:'Mahrten & Söhne · Touring',cost:1.7,quality:1.2},
-  premium: {name:'El-Akustisch · Prestige',cost:2.8,quality:1.7},
-} as const
+export type BrandTier = 'budget'|'touring'|'premium'
+export type Brand = {name:string;cost:number;quality:number}
+/**
+ * Who built the thing. Most parts come from three makes — the cheap one that just about
+ * works, the touring workhorse, the one the big stages order — and the make decides both
+ * the price and how much the part is worth on stage. Some parts are sold in a single
+ * version; those carry one entry, and the workshop then offers no choice at all.
+ */
+const tiers=(budget:string,touring:string,premium:string):Record<BrandTier,Brand>=>({
+  budget:{name:budget,cost:1,quality:.75},
+  touring:{name:touring,cost:1.7,quality:1.2},
+  premium:{name:premium,cost:2.8,quality:1.7},
+})
+const single=(quality:number):{budget:Brand}=>({budget:{name:'Standard',cost:1,quality}})
+/** One catalogue for everything with a cone in it: line arrays, tops and subs. */
+const AUDIO_BRANDS=tiers('A-Z Audio','JPK','EL-Akustisch')
 export const TRUSS_BRANDS = {
   budget: {name:'AluTraverse',cost:1,quality:.8},
   touring: {name:'Worldwide Truss',cost:1.6,quality:1.15},
   premium: {name:'Prolight',cost:2.3,quality:1.55},
 } as const
-export function brandsFor(kind:ComponentKind){return kind==='truss'?TRUSS_BRANDS:BRANDS}
+export const COMPONENT_BRANDS:Record<ComponentKind,Partial<Record<BrandTier,Brand>>> = {
+  deck:tiers('Manfred','DarkMinn','StageChill'),
+  truss:TRUSS_BRANDS,
+  fireworks:single(1.5),
+  sparks:tiers('DarkMinn','WizardFX','Sparkels'),
+  spot:tiers('DarkMinn','Martinio','Robbe'),
+  lineArray:AUDIO_BRANDS,
+  fullRange:AUDIO_BRANDS,
+  subwoofer:AUDIO_BRANDS,
+  fog:tiers('NebelVersand48','Nebelwerke H. Schmidt','SmokeFogFactory'),
+  laser:tiers('Grüner Laser','Bunter Laser','Super-Laser'),
+  screen:tiers('<no-name>','SuperLumen','LK'),
+  discoBall:single(1.2),
+  star:single(1.3),
+  palm:single(1.1),
+  foh:single(1),
+  delay:single(1),
+}
+export function brandsFor(kind:ComponentKind):Partial<Record<BrandTier,Brand>>{return COMPONENT_BRANDS[kind]}
+/** The make a part is sold in by default — the cheapest one, and for single-make parts the only one. */
+export function defaultBrand(kind:ComponentKind):BrandTier{return Object.keys(brandsFor(kind))[0] as BrandTier}
+/** What a part was built as, falling back to the only make left if a saved design names one that is gone. */
+export function brandOf(kind:ComponentKind,brand:BrandTier):Brand{return brandsFor(kind)[brand]??brandsFor(kind)[defaultBrand(kind)]!}
 export type ComponentKind = keyof typeof COMPONENTS
 /** Kinds that stand directly on the ground and never attach to a truss. */
 export const GROUND_ONLY_KINDS:ComponentKind[]=['deck','palm','fireworks','subwoofer','foh','delay']
@@ -62,7 +95,7 @@ export const NEIGHBOR_STEPS:{x:number;y:number;z:number}[]=[
   {x:0,y:1,z:0},{x:0,y:-1,z:0},
   {x:0,y:0,z:1},{x:0,y:0,z:-1},
 ]
-export type StagePart = {id:string;kind:ComponentKind;brand:keyof typeof BRANDS;x:number;y:number;z:number;axis?:Axis;rotation:number;attachedTo:string|null;color:string}
+export type StagePart = {id:string;kind:ComponentKind;brand:BrandTier;x:number;y:number;z:number;axis?:Axis;rotation:number;attachedTo:string|null;color:string}
 /** How the decoration lamps — a star's tubes, a palm's festoon — behave during a phase. Their tempo follows the phase's own speed fader. */
 export const DECO_PATTERNS = ['chase','sparkle','pulse','static'] as const
 export type DecoPattern = typeof DECO_PATTERNS[number]
@@ -93,7 +126,7 @@ export function defaultStageDesign():StageDesign {
  */
 export function stageStats(d:StageDesign) {
   let cost=0,party=0,beauty=0,power=0,speakers=0
-  for(const p of d.parts){const c=COMPONENTS[p.kind],b=brandsFor(p.kind)[p.brand];cost+=c.cost*b.cost;party+=c.party*b.quality;beauty+=c.beauty*b.quality;power+=c.power;if(['lineArray','fullRange','subwoofer'].includes(p.kind))speakers++}
+  for(const p of d.parts){const c=COMPONENTS[p.kind],b=brandOf(p.kind,p.brand);cost+=c.cost*b.cost;party+=c.party*b.quality;beauty+=c.beauty*b.quality;power+=c.power;if(['lineArray','fullRange','subwoofer'].includes(p.kind))speakers++}
   return {cost:Math.round(cost),upkeep:Math.round(cost*.008*10)/10,party:Math.round(party),beauty:Math.round(beauty),power:Math.round(power*10)/10,speakers}
 }
 export function stageDesignIssue(d:StageDesign):string|null {
@@ -303,8 +336,17 @@ export function migrateStageDesign(design:StageDesign):StageDesign {
     } : {}),
     parts: design.parts.map(part => Number.isFinite(part.y) ? part : { ...part, y: 0 }),
   } : design
-  const d=regridStageDesign(normalized)
-  let changed=false,turned=false
+  const regridded=regridStageDesign(normalized)
+  let changed=false,turned=false,regraded=false
+  // Parts that used to be sold in three makes and are sold in one now — fireworks, mirror
+  // balls and the like — keep the make they were built in inside old designs. It no longer
+  // exists, so they are rebuilt in the one that does.
+  const graded=regridded.parts.map(p=>{
+    if(!p||!Object.hasOwn(COMPONENTS,p.kind)||Object.hasOwn(brandsFor(p.kind),p.brand))return p
+    regraded=true
+    return {...p,brand:defaultBrand(p.kind)}
+  })
+  const d=regraded?{...regridded,parts:graded}:regridded
   /** The facing a module in a Pixel-LED-Wand must have: out along the truss face its wall is bolted to, resolved through however many modules the wall was grown by. */
   const wallFacing=(part:StagePart):number|undefined=>{
     const host=part.attachedTo?d.parts.find(q=>q?.id===part.attachedTo):undefined
@@ -332,8 +374,9 @@ export function migrateStageDesign(design:StageDesign):StageDesign {
   let next={...d,parts}
   const dropped=parts.filter(p=>(p.kind as string)==='banner')
   for(const p of dropped)next=removeStagePart(next,p.id)
-  if(!changed&&!turned&&!dropped.length)return d
+  if(!changed&&!turned&&!regraded&&!dropped.length)return d
   if(changed)console.warn(`Bühnendesign "${d.name}": veraltetes Bauteil "speaker" auf "fullRange" migriert.`)
   if(dropped.length)console.warn(`Bühnendesign "${d.name}": ${dropped.length} entferntes Bauteil "Themenbanner" aus der Bühne genommen.`)
+  if(regraded)console.warn(`Bühnendesign "${d.name}": Bauteile ohne die gespeicherte Qualitätsstufe auf die verbliebene umgestellt.`)
   return next
 }

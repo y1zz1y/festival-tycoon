@@ -1003,10 +1003,19 @@ app.innerHTML = `
             <span class="title-submenu-kicker">Szenario wählen</span>
           </div>
           <div class="title-submenu-rows">
-            <button type="button" data-title-scenario=""><span class="title-row-text"><span class="title-row-label">Freies Spiel</span><span class="title-row-meta">Gelände, Publikum und Startkapital selbst festlegen — ohne Vorgaben und ohne Ziele.</span></span><span class="title-row-value">frei</span></button>
+            <button type="button" data-title-scenario="" aria-haspopup="true"><span class="title-row-text"><span class="title-row-label">Freies Spiel</span><span class="title-row-meta">Gelände, Publikum und Startkapital selbst festlegen — ohne Vorgaben und ohne Ziele.</span></span><span class="title-row-value">frei</span></button>
             ${SCENARIO_PRESETS.map((entry) => `<button type="button" data-title-scenario="${entry.id}"${entry.price ? ` data-title-locked="${entry.price}" aria-disabled="true"` : ''}><span class="title-row-text"><span class="title-row-label">${entry.name}</span><span class="title-row-meta">${entry.detail}</span></span><span class="title-row-value">${entry.price ? `<span class="title-row-lock" aria-hidden="true">🔒</span>${entry.price}` : `${entry.settings.worldSize} × ${entry.settings.worldSize}`}</span></button>`).join('')}
           </div>
-        <div id="title-freeplay" class="title-freeplay" hidden>
+          <button type="button" data-title-back>Zurück</button>
+        </div>
+      </div>
+      <div id="title-freeplay-mask" class="title-submenu" hidden>
+        <div class="title-submenu-card">
+          <div class="title-submenu-head">
+            <span class="title-submenu-title">Freies Spiel</span>
+            <span class="title-submenu-kicker">Gelände &amp; Publikum</span>
+          </div>
+          <div id="title-freeplay" class="title-freeplay">
           <p class="scenario-hint">Diese Werte gelten für die ganze Partie und lassen sich später nicht mehr ändern.</p>
       <label class="scenario-field"><span>Umgebung</span><select id="scenario-environment">${Object.entries(ENVIRONMENTS).map(([id, e]) => `<option value="${id}">${e.name}</option>`).join('')}</select></label>
       <p id="scenario-ground-details" class="scenario-hint"></p>
@@ -1045,9 +1054,11 @@ app.innerHTML = `
           <option value="265">Riesig (265×265)</option>
         </select>
       </label>
-      <button id="start-scenario" type="button">▶ Freies Spiel starten</button>
-        </div>
-          <button type="button" data-title-back>Zurück</button>
+          </div>
+          <div class="title-freeplay-actions">
+            <button id="start-scenario" type="button">▶ Freies Spiel starten</button>
+            <button type="button" data-title-freeplay-close>Zurück</button>
+          </div>
         </div>
       </div>
     </div>
@@ -5921,7 +5932,7 @@ function setTitleScreenOpen(open: boolean): void {
   // The crowd on the heading only walks while anyone can see it.
   titleCrowd.setRunning(open)
   if (open) {
-    titleScreen.querySelector('[data-title-scenario=""]')?.setAttribute('aria-expanded', 'false')
+    openTitleFreeplay(false)
     openTitleSubmenu(false)
     closeTitleLoad()
     setAccountMaskOpen(false)
@@ -5943,7 +5954,7 @@ function openAboveTitle(panel: HTMLElement, open: () => void): void {
   if (titleScreenOpen()) panel.classList.add('above-title')
   open()
 }
-const titleFreeplay = requireElement<HTMLElement>('#title-freeplay')
+const titleFreeplayMask = requireElement<HTMLElement>('#title-freeplay-mask')
 const titleSubmenu = requireElement<HTMLElement>('#title-submenu')
 const titleLoadMask = requireElement<HTMLElement>('#title-load-mask')
 const titleLoadRows = requireElement<HTMLElement>('#title-load-rows')
@@ -6069,6 +6080,7 @@ const titleRowButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[da
  */
 let titleSelection = 0
 function titleEntries(): HTMLButtonElement[] {
+  if (!titleFreeplayMask.hidden) return [...titleFreeplayMask.querySelectorAll<HTMLButtonElement>('.title-freeplay-actions button')]
   if (!titleLoadMask.hidden) return [...titleLoadRows.querySelectorAll<HTMLButtonElement>('[data-title-load-slot]')]
   return (titleSubmenu.hidden ? titleMenuButtons : titleRowButtons).filter((entry) => !entry.disabled)
 }
@@ -6131,7 +6143,18 @@ function markTitleSelection(index: number): void {
 }
 function openTitleSubmenu(open: boolean): void {
   titleSubmenu.hidden = !open
-  if (!open) titleFreeplay.hidden = true
+  if (!open) titleFreeplayMask.hidden = true
+  markTitleSelection(0)
+}
+/**
+ * Free play asks its questions on a plate of its own, one step further in: the scenario
+ * list steps aside for it and comes back when this one is left, so the screen always
+ * shows one thing at a time rather than growing a form under the list.
+ */
+function openTitleFreeplay(open: boolean): void {
+  titleFreeplayMask.hidden = !open
+  titleSubmenu.hidden = open
+  if (open) fillScenarioForm(game.snapshot.scenario)
   markTitleSelection(0)
 }
 // Only a pointer that actually moves takes the selection over. `pointerover` alone
@@ -6159,6 +6182,7 @@ titleScreen.addEventListener('click', (event) => {
     } else setAccountMaskOpen(true, mode === 'register' ? 'register' : 'login')
     return
   }
+  if (target.closest('[data-title-freeplay-close]')) { openTitleFreeplay(false); return }
   if (target.closest('[data-title-back]')) { openTitleSubmenu(false); return }
   if (target.closest('[data-title-load-close]')) { closeTitleLoad(); return }
   const slot = target.closest<HTMLButtonElement>('[data-title-load-slot]')
@@ -6190,13 +6214,7 @@ titleScreen.addEventListener('click', (event) => {
   // A prepared scenario brings its own site and starts straight away; free play first
   // asks what the site should look like, because afterwards none of it can be changed.
   if (!preset) {
-    const show = titleFreeplay.hidden
-    titleFreeplay.hidden = !show
-    scenario.setAttribute('aria-expanded', String(show))
-    if (show) {
-      fillScenarioForm(game.snapshot.scenario)
-      titleFreeplay.scrollIntoView({ block: 'nearest' })
-    }
+    openTitleFreeplay(true)
     return
   }
   startFestival(normalizeScenarioSettings({ ...preset.settings, preset: preset.id }), `${preset.name} gestartet`)
@@ -6209,7 +6227,8 @@ window.addEventListener('keydown', (event) => {
   }
   if (isTextEntryTarget(event.target) || isTextEntryTarget(document.activeElement)) return
   if (event.key === 'Escape' || event.key === 'Backspace') {
-    if (!titleLoadMask.hidden) { event.preventDefault(); closeTitleLoad() }
+    if (!titleFreeplayMask.hidden) { event.preventDefault(); openTitleFreeplay(false) }
+    else if (!titleLoadMask.hidden) { event.preventDefault(); closeTitleLoad() }
     else if (!titleSubmenu.hidden) { event.preventDefault(); openTitleSubmenu(false) }
     return
   }

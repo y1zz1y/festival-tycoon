@@ -578,6 +578,7 @@ button {
 .title-submenu-card,
 .title-submenu-rows button,
 .title-submenu [data-title-back],
+.title-submenu [data-title-freeplay-close],
 .title-submenu [data-title-load-close] {
   border-style: solid;
   border-color: var(--ts-400) var(--ts-900) var(--ts-900) var(--ts-400);
@@ -868,6 +869,7 @@ button {
 }
 
 .title-submenu [data-title-back],
+.title-submenu [data-title-freeplay-close],
 .title-submenu [data-title-load-close] {
   align-self: flex-start;
   padding: 9px 22px;
@@ -881,6 +883,7 @@ button {
 }
 
 .title-submenu [data-title-back]:hover,
+.title-submenu [data-title-freeplay-close]:hover,
 .title-submenu [data-title-load-close]:hover {
   background: var(--ts-500);
 }
@@ -1021,10 +1024,14 @@ button {
 
 /* The free-play form, folded out under its row: the one place where a site is
    configured, since a running festival keeps what it was started with. */
+/* The free-play questions fill their own plate, so the list of fields scrolls inside
+   the card instead of pushing it past the bottom of the screen. */
 .title-freeplay {
   display: grid;
   gap: 8px;
+  max-height: min(58vh, 560px);
   padding: 12px 14px;
+  overflow-y: auto;
   text-align: left;
   background: var(--ts-800);
   border: 3px solid;
@@ -1035,9 +1042,20 @@ button {
   display: none;
 }
 
-.title-freeplay #start-scenario {
-  justify-self: start;
-  padding: 8px 18px;
+.title-freeplay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.title-freeplay-actions #start-scenario {
+  /* The button used to be the full width of a settings panel; beside its own "back"
+     button it is as wide as its label. */
+  width: auto;
+  flex: 0 0 auto;
+  padding: 11px 26px;
+  font-size: clamp(12px, 1.4vw, 16px);
   color: #ffffff;
   letter-spacing: 0.18em;
   text-transform: uppercase;

@@ -160,7 +160,7 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   mirrorDesign.parts.push({id:'mirrorBeam',kind:'truss',brand:'budget',axis:'x',x:2,y:2,z:2,rotation:0,attachedTo:null,color:'#ffffff'})
   for(let x=3;x<=5;x++)mirrorDesign.parts.push({id:`mirrorBeam${x}`,kind:'truss',brand:'budget',axis:'x',x,y:2,z:2,rotation:0,attachedTo:x===3?'mirrorBeam':`mirrorBeam${x-1}`,color:'#ffffff'})
   mirrorDesign.parts.push({id:'aimed',kind:'spot',brand:'touring',x:2,y:1,z:2,rotation:1,attachedTo:'mirrorBeam',color:'#ffd27f'}) // rotation 1 points it along +X, at the ball
-  mirrorDesign.parts.push({id:'mirror',kind:'discoBall',brand:'touring',x:5,y:1,z:2,rotation:0,attachedTo:'mirrorBeam5',color:'#dfe7ef'})
+  mirrorDesign.parts.push({id:'mirror',kind:'discoBall',brand:'budget',x:5,y:1,z:2,rotation:0,attachedTo:'mirrorBeam5',color:'#dfe7ef'})
   assert.equal(stageDesignIssue(mirrorDesign),null)
   const mirrorModel=createStageModel(mirrorDesign,{lightBudget:2})
   const mirror=mirrorModel.userData.effects.find((r:any)=>r.userData.rays)
@@ -270,10 +270,11 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   // The FOH desk and the delay position are components of the workshop like any other, standing on
   // the floor rather than coming with every stage the way the audience area does.
   for(const kind of ['foh','delay'] as const){
-    const onGround=stagePlacement(tower,{kind,brand:'touring',rotation:0,color:'#ffaa33'},{x:0,z:0})
+    // Both are sold in one version only, so 'budget' is the make they have.
+    const onGround=stagePlacement(tower,{kind,brand:'budget',rotation:0,color:'#ffaa33'},{x:0,z:0})
     assert.equal(onGround.attachedTo,null)
     assert.equal(stageDesignIssue({...defaultStageDesign(),parts:[onGround]}),null,`${kind} stands on the floor`)
-    const onTruss=stagePlacement(tower,{kind,brand:'touring',rotation:0,color:'#ffaa33'},{x:0,z:0},{id:'base',step:{x:0,y:0,z:1}})
+    const onTruss=stagePlacement(tower,{kind,brand:'budget',rotation:0,color:'#ffaa33'},{x:0,z:0},{id:'base',step:{x:0,y:0,z:1}})
     assert.ok(stageDesignIssue({...tower,parts:[...tower.parts,{...onTruss,id:`${kind}OnTruss`}]}),`${kind} cannot hang from a truss`)
     const built=createStageModel({...defaultStageDesign(),parts:[onGround]},{lightBudget:2})
     assert.ok(built.children.length,`${kind} builds geometry`)
@@ -433,8 +434,8 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.equal(stageStats(billing).cost,0,'however large its floor is')
   billing.parts.push({id:'beam',kind:'truss',brand:'budget',axis:'y',x:0,y:0,z:billing.depth-1,rotation:0,attachedTo:null,color:'#ffffff'})
   assert.equal(stageStats(billing).cost,COMPONENTS.truss.cost,'and one budget truss costs exactly its own price, with no floor surcharge on top')
-  for(let n=0;n<12;n++)billing.parts.push({id:`palm-${n}`,kind:'palm',brand:'premium',x:n%billing.width,y:0,z:Math.floor(n/billing.width),rotation:0,attachedTo:null,color:'#ffffff'})
-  for(let n=0;n<12;n++)billing.parts.push({id:`sub-${n}`,kind:'subwoofer',brand:'premium',x:n%billing.width,y:0,z:2+Math.floor(n/billing.width),rotation:0,attachedTo:null,color:'#ffffff'})
+  for(let n=0;n<24;n++)billing.parts.push({id:`palm-${n}`,kind:'palm',brand:'budget',x:n%billing.width,y:0,z:Math.floor(n/billing.width),rotation:0,attachedTo:null,color:'#ffffff'})
+  for(let n=0;n<6;n++)billing.parts.push({id:`sub-${n}`,kind:'subwoofer',brand:'premium',x:n%billing.width,y:0,z:4,rotation:0,attachedTo:null,color:'#ffffff'})
   assert.equal(stageDesignIssue(billing),null,'a floor packed with kit is still a valid design')
   const packed=stageStats(billing)
   assert.ok(packed.party>100&&packed.beauty>100,`party and beauty count past 100 instead of being clamped to it (${packed.party}/${packed.beauty})`)
