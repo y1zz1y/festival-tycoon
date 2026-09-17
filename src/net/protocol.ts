@@ -123,6 +123,8 @@ type GameCommandAction =
   | { type: 'toggleStaffZone'; staffId: string; key: string }
   | { type: 'setStaffZone'; staffId: string; key: string; active: boolean }
   | { type: 'buyAmbulance'; garageId: string }
+  | { type: 'sellAmbulance'; garageId: string }
+  | { type: 'sellAmbulanceVehicle'; vehicleId: string }
   | { type: 'buyBus'; depotId: string }
   | { type: 'sellBus'; depotId: string }
   | { type: 'buyGarbageTruck'; depotId: string }
@@ -137,6 +139,8 @@ type GameCommandAction =
       busCount: number
       headway: number
     }
+  | { type: 'addBusToLine'; lineId: string }
+  | { type: 'setBusLineStops'; lineId: string; stopIds: string[] }
   | { type: 'deleteBusLine'; lineId: string }
   | { type: 'startCoaster'; typeId: CoasterTypeId; x: number; z: number }
   | {

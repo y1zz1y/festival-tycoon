@@ -1194,6 +1194,116 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.equal(farAmbulance.state,'idle','a farther idle ambulance stays in the garage')
   assert.equal(busyAmbulance.passengerIds[0],'other-casualty','an occupied ambulance is not stolen')
 
+  const ambulanceHome=fixture(0), ambulanceHomeState=ambulanceHome.snapshot as GameSnapshot
+  ambulanceHome.addDebugMoney()
+  const ambulanceHomeEdge=-ambulanceHomeState.scenario.worldSize/2
+  for (let z=ambulanceHomeEdge; z<=-16; z+=1) {
+    if (!ambulanceHomeState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(ambulanceHome.designateRoad([{x:0,z}]).ok)
+    }
+  }
+  assert.ok(ambulanceHome.place('ambulanceGarage',-2,-18).ok)
+  const garage=ambulanceHomeState.logistics.ambulanceGarages[0]!
+  assert.ok(ambulanceHome.buyAmbulance(garage.id).ok)
+  const rtw=ambulanceHomeState.logistics.roadVehicles.find(vehicle=>vehicle.kind==='ambulance')
+  assert.ok(rtw)
+  const garageAccess={...rtw.cell!}
+  rtw.cell={x:0,z:-16}
+  rtw.position={x:0,z:-16}
+  rtw.state='idle'
+  rtw.route=[]
+  rtw.target=null
+  ;(ambulanceHome as any).updateLogistics(0.1)
+  assert.equal(rtw.state,'returning','an idle ambulance on the road drives back to its garage')
+  assert.equal(rtw.target?.kind,'garage')
+  assert.ok(rtw.route.length>0,'the return uses a road route')
+  assert.equal(rtw.route.at(-1)?.x,garageAccess.x)
+  assert.equal(rtw.route.at(-1)?.z,garageAccess.z)
+  rtw.cell={...garageAccess}
+  rtw.position={...garageAccess}
+  rtw.route=[]
+  rtw.state='idle'
+  rtw.target={kind:'garage',garageId:garage.id}
+  const soldHome=ambulanceHome.sellAmbulance(garage.id)
+  assert.ok(soldHome.ok,soldHome.message)
+  assert.equal(
+    ambulanceHomeState.logistics.roadVehicles.some(vehicle=>vehicle.kind==='ambulance'),
+    false,
+    'selling an idle ambulance at the garage deletes it immediately',
+  )
+  assert.ok(ambulanceHome.buyAmbulance(garage.id).ok)
+  const awayRtw=ambulanceHomeState.logistics.roadVehicles.find(vehicle=>vehicle.kind==='ambulance')!
+  awayRtw.cell={x:0,z:-16}
+  awayRtw.position={x:0,z:-16}
+  awayRtw.state='idle'
+  awayRtw.route=[]
+  const soldRtwAway=applyGameCommand(ambulanceHome,{type:'sellAmbulance',garageId:garage.id})
+  assert.ok(soldRtwAway.ok,soldRtwAway.message)
+  assert.equal(awayRtw.pendingSale,true,'a sale on the road waits until the garage')
+  assert.equal(awayRtw.state,'returning')
+  awayRtw.cell={...garageAccess}
+  awayRtw.position={...garageAccess}
+  awayRtw.route=[]
+  awayRtw.state='idle'
+  ;(ambulanceHome as any).updateLogistics(0.1)
+  assert.equal(
+    ambulanceHomeState.logistics.roadVehicles.some(vehicle=>vehicle.id===awayRtw.id),
+    false,
+    'the pending sale completes once the ambulance is back at the garage',
+  )
+
+  const busPlanner=fixture(0), busState=busPlanner.snapshot as GameSnapshot
+  busPlanner.addDebugMoney()
+  const busEdge=-busState.scenario.worldSize/2
+  for (let z=busEdge; z<=-14; z+=1) {
+    if (!busState.logistics.roadCells.some(cell=>cell.x===0 && cell.z===z)) {
+      assert.ok(busPlanner.designateRoad([{x:0,z}]).ok)
+    }
+    assert.ok(busPlanner.placePathSegment(1,z,0).ok)
+  }
+  assert.ok(busPlanner.place('busDepot',-3,-18).ok)
+  assert.ok(busPlanner.place('busStop',1,-16).ok)
+  assert.ok(busPlanner.place('busStop',1,-14).ok)
+  const busDepot=busState.logistics.busDepots[0]!
+  const firstStop=busState.logistics.busStops.find(stop=>stop.x===1 && stop.z===-16)
+  const secondStop=busState.logistics.busStops.find(stop=>stop.x===1 && stop.z===-14)
+  assert.ok(firstStop && secondStop)
+  assert.ok(busPlanner.buyBus(busDepot.id).ok)
+  const created=busPlanner.createBusLine('Shuttle',busDepot.id,[secondStop.id,firstStop.id],1,2)
+  assert.ok(created.ok,created.message)
+  const line=busState.logistics.busLines[0]!
+  assert.deepEqual(line.stopIds,[secondStop.id,firstStop.id],'added stops keep the chosen order')
+  const added=applyGameCommand(busPlanner,{type:'addBusToLine',lineId:line.id})
+  assert.ok(added.ok,added.message)
+  assert.equal(line.busIds.length,2,'a later bus joins the existing line')
+  const buses=busState.logistics.roadVehicles.filter(vehicle=>vehicle.kind==='bus')
+  assert.equal(buses.length,2)
+  assert.ok(buses.every(bus=>bus.lineId===line.id))
+  line.lastDepartureMinute=null
+  ;(busPlanner as any).updateLogistics(0.1)
+  const firstBus=buses.find(bus=>bus.state==='driving' || bus.state==='at-stop')
+  assert.ok(firstBus,'the first free bus starts the ordered route')
+  assert.equal(firstBus!.nextStopIndex,0)
+  assert.equal(firstBus!.target && 'stopId' in firstBus!.target ? firstBus!.target.stopId : null,secondStop.id)
+  line.lastDepartureMinute=null
+  ;(busPlanner as any).updateLogistics(0.1)
+  assert.ok(
+    buses.every(bus=>bus.nextStopIndex===0 && bus.target && 'stopId' in bus.target && bus.target.stopId===secondStop.id),
+    'both buses follow the same stop order',
+  )
+  const reordered=applyGameCommand(busPlanner,{
+    type:'setBusLineStops',
+    lineId:line.id,
+    stopIds:[firstStop.id,secondStop.id],
+  })
+  assert.ok(reordered.ok,reordered.message)
+  assert.deepEqual(line.stopIds,[firstStop.id,secondStop.id])
+  const overlay=busPlanner.previewBusLineRoute(line.stopIds)
+  const overlayKeys=overlay.map(cell=>`${cell.x}:${cell.z}`)
+  const firstVisit=overlayKeys.indexOf(`${firstStop.roadCell.x}:${firstStop.roadCell.z}`)
+  const secondVisit=overlayKeys.indexOf(`${secondStop.roadCell.x}:${secondStop.roadCell.z}`)
+  assert.ok(firstVisit>=0 && secondVisit>firstVisit,'the live route visits stops in the sorted order')
+
   const against=fixture(0), againstState=against.snapshot as GameSnapshot
   against.addDebugMoney()
   const againstEdge=-againstState.scenario.worldSize/2

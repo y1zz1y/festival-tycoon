@@ -13,7 +13,9 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Debug: Autos entfernen | `src/game/GameState.ts`, `src/main.ts` | `removeVisitorCarsForDebug` — alle `visitorCar`, Belegung, Insassen zu Fuß; nicht Abriss |
 | Straßenrampen | `src/game/GameState.ts`, `src/game/wayElevation.ts` | `placeRoadSegment`, Autodach `MAX_ROAD_RAISE` 1, Shift-Ausgang `planLockedOriginRamp` |
 | Saugreiniger | `src/game/GameState.ts` | `isSweeperDriveCell`, `findSweeperRoute`, `updateSweeper`, `getSweeperDirtAccesses` |
-| Krankenwagen-Einsatz | `src/game/GameState.ts` | `dispatchIdleAmbulances` — nächster freier Wagen zum Verletzten |
+| Krankenwagen-Einsatz | `src/game/GameState.ts` | `dispatchIdleAmbulances` — nächster freier Wagen zum Verletzten; idle zurück zur Garage |
+| Krankenwagen verkaufen | `src/game/GameState.ts` | `sellAmbulance`, `sellAmbulanceVehicle`, `pendingSale` nach Rückfahrt |
+| Buslinie planen | `src/game/GameState.ts`, `src/game/logistics.ts`, `src/main.ts` | `createBusLine`, `setBusLineStops`, `addBusToLine`, `previewBusLineRoute` |
 | Müllwagen-Erhalt | `src/game/GameState.ts` | `restoreMissingGarbageTrucks`, `reenterGarbageTruck`, `holdGarbageTruckOffMap`, `sellGarbageTruck` |
 | Depots, Bestellungen, Lastwagen | `src/game/supplyChain.ts` | `Infrastructure`, `infrastructureAction`, `updateSupplyChain` |
 | Automatische Träger | `src/game/depotCarriers.ts` | `updateDepotCarriers` |
@@ -189,13 +191,19 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   beides blockiert, gilt die normale Fahrtrichtung. Nach dem Entladen
   dreht der Lieferwagen in die Ausfahrt.
 - Versiegelte Müllcontainer (`sealedWasteContainer`, 80 Beutel) darf
-  der Müllwagen direkt anfahren, **nur wenn der Container auf einer
-  Straßenkachel steht** und die Straße vom Müllnetz erreichbar ist.
-  Zielart `RoadVehicleTarget.kind === 'sealedWasteContainer'`
-  (`buildingId`, x, z). Off-road oder ohne Zufahrt bleiben sie für
-  den Wagen unsichtbar; idle Reinigung schleppt dann zur Ablage. Steht
-  der Container an der Straße, der Wagen aber nicht unterwegs, leert
-  idle Reinigung ebenfalls.
+  der Müllwagen anfahren, **nur wenn der Container auf einer
+  Straßenkachel steht** und eine Nachbarstraße vom Müllnetz erreichbar
+  ist. Er hält auf der **angrenzenden** Straße, nicht auf derselben
+  Kachel wie der Container (Ablage-Zufahrten belegen oft genau diese
+  Kachel und würden sonst das Ziel stehlen). Zielart
+  `RoadVehicleTarget.kind === 'sealedWasteContainer'` (`buildingId`,
+  x, z). Ankunft leert den Container und danach offene Ablagen wie
+  bisher. Liegt eine gefüllte Straßenkiste an, fährt der Wagen **zuerst
+  dorthin** — eine Ablage-Zufahrt am Depot darf ihn nicht dauerhaft
+  beim Kippen halten. Off-road oder ohne Zufahrt bleiben sie für den
+  Wagen unsichtbar; idle Reinigung schleppt dann zur Ablage. Steht der
+  Container an der Straße, der Wagen aber nicht unterwegs, leert idle
+  Reinigung ebenfalls.
 - Das Infofenster eines Müllfahrzeugs zeigt die **Müllladung**
   (`cargo` / `garbageTruckCapacity` 90, inkl. Prozent), nicht Insassen.
   Insassen nur bei Fahrzeugen, die Personen tragen (`visitorCar`, Bus,
@@ -204,7 +212,20 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 - Idle-Krankenwagen fahren nicht den ersten Verletzten in der Gästeliste
   an: `dispatchIdleAmbulances` paart jeden Verletzten mit dem nächsten
   freien Wagen (Manhattan, dann **eine** Straßenroute). Ein Wagen auf
-  dem Weg oder mit Patient bleibt zugewiesen. Sanitäter: `docs/staff.md`.
+  dem Weg oder mit Patient bleibt zugewiesen. Ohne Patient (idle oder
+  nach der Übergabe) fährt der Wagen zur Garage und parkt am Anschluss;
+  er bleibt nicht auf der Straße. Verkauf in der Logistikübersicht oder
+  im Infofenster: idle an der Garage sofort, sonst Abbruch ohne Patient
+  bzw. Rückfahrt mit Patient und `pendingSale` bis zur Ankunft.
+  Sanitäter: `docs/staff.md`.
+- Buslinien: Haltestellenreihenfolge liegt in `BusLine.stopIds`. Die
+  Planer-UI hält die Auswahl lokal (kein Multi-Select-Rebuild), zeigt
+  die Route als eine Overlay-Linie und erlaubt Sortieren. `setBusLineStops`
+  ändert die Reihenfolge einer bestehenden Linie; `addBusToLine` kauft
+  oder weist einen weiteren Bus desselben Depots zu (max. 3, Kosten
+  `busCost`, Start am Depotanschluss, gleiche Stoppfolge). `sellBus`
+  entfernt den Bus weiter von Depot und Linie. Overlay-Daten:
+  `previewBusLineRoute` (Stopps in Reihenfolge, dann Schleife).
 - Gekaufte Flottenfahrzeuge (`garbageTruck`, Bus, Krankenwagen,
   Saugreiniger) dürfen beim Stau-Timeout nicht wie abfahrende
   Besucherautos gelöscht werden. `unstickVehicle` und das Leeren der
@@ -302,6 +323,9 @@ werden im Tick korrigiert. Ausparken richtet die Nase beim Einfahren aus.
 `tests/festival.ts` (Lager, Bestellungen). `tests/operations.ts` (Betrieb,
 Saugreiniger auf Wegen, Bühnenvorplatz und durch Personaleingang,
 nächster freier Krankenwagen zum Verletzten,
+idle Krankenwagen zurück zur Garage, Verkauf sofort oder nach Rückfahrt,
+Haltestellen bleiben in der gewählten Reihenfolge, späterer zweiter Bus
+folgt derselben Linie, Overlay-Zellen in Stoppfolge,
 Müllwagen bleiben im Stau
 und hinter der Karte erhalten, Wiedereinfahrt sobald Einstiege frei
 sind, Rückfahrt vom Ausgang, Buden-Nachschub von der Seite/hinten,
@@ -318,8 +342,10 @@ Liefer- und Müllwagen-Umweg bei Dauer-Rot, Gebiet).
 Fußweg auf Autostraße, gestapelte Autostraße / Brücke, ein Feld übermalen ohne Nachbarverlust).
 `tests/festivalAdditions.ts` (Müllwagen-Ladung statt Insassen,
 zusammenhängende Müllablage-Füllstände).
-`tests/sealedWasteContainer.ts` (Wagen leert Straßen-Container, nicht
-off-road).
+`tests/sealedWasteContainer.ts` (Wagen vom Depotanschluss zielt den
+Straßen-Container auch bei Ablage an der Depotzufahrt, hält auf der Nachbarstraße, Füllstand sinkt nach
+der Tour; Ablagefeld neben der Kachel stiehlt das Ziel nicht;
+off-road bleibt manuell).
 
 Bandversorgung (Backstage, Tourbus-Parkplatz, Baumenü Logistik →
 Bandversorgung plus Tab **Bandversorgung** in der Logistikverwaltung):

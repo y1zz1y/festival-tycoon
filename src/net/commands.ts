@@ -116,6 +116,10 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.setStaffZone(command.staffId, command.key, command.active)
     case 'buyAmbulance':
       return game.buyAmbulance(command.garageId)
+    case 'sellAmbulance':
+      return game.sellAmbulance(command.garageId)
+    case 'sellAmbulanceVehicle':
+      return game.sellAmbulanceVehicle(command.vehicleId)
     case 'buyBus':
       return game.buyBus(command.depotId)
     case 'sellBus':
@@ -136,6 +140,10 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
         command.busCount,
         command.headway,
       )
+    case 'addBusToLine':
+      return game.addBusToLine(command.lineId)
+    case 'setBusLineStops':
+      return game.setBusLineStops(command.lineId, command.stopIds)
     case 'deleteBusLine':
       return game.deleteBusLine(command.lineId)
     case 'startCoaster':

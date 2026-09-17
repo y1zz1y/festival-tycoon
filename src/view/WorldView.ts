@@ -1273,6 +1273,12 @@ export class WorldView {
   setInspectedVehicle(id: string | null): void {
     this.logisticsView.setInspectedVehicle(id)
   }
+
+  setBusPlannerRoute(
+    cells: readonly { x: number; z: number; elevation?: number }[] | null,
+  ): void {
+    this.logisticsView.setPlannerRoute(cells)
+  }
   followStaff(id: string | null): void {
     this.followedStaffId = id
     if (id) {

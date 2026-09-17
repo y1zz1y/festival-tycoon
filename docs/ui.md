@@ -18,6 +18,7 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 | HEADLINE Magazin | `src/headlineMagazineUI.ts`, `src/headlineMagazine.css`, `src/game/headlineMagazine.ts` | Vollbild-Heft nach `festival.finished`; Weiter/Schließen; erneut unter Abrechnung & Ruf |
 | Bandplan | `src/musicPlanner.ts` | |
 | Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css`, `src/game/buildMenu.ts` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold. Gelände-Reiter: Feld anheben/senken, Glätten (Fläche) |
+| Buslinien-Planer | `src/main.ts`, `src/view/LogisticsView.ts` | Lokale Stoppliste, Sortieren, `setBusPlannerRoute`; Klick auf Haltestelle in der Karte |
 | Shift-Rampen-Ausgang | `src/main.ts`, `src/game/wayElevation.ts` | `lockShiftElevationOrigin`, `planLockedOriginRamp` |
 | Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/view/WorldView.ts` | Halbstufen `snapBuildElevation`; `groundTileMarker` auf der Hover-Kachel |
 | Bühnenwerkstatt | `src/stageEditor.ts`, `src/stageEditor.css` | |
@@ -52,11 +53,14 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   (Festival, Bühnenwerkstatt, Logistikverwaltung für Bestellungen/Träger,
   Beschwerden, Besucher, Personal, Meldungen, Mehrspieler),
   **Kartenansichten** (Logistik/Untergrund, Gedränge, Attraktivität,
-  Partystimmung) und **Sitzung** (Finanzen, Gelände betreten, Speichern,
+  Partystimmung) und   **Sitzung** (Finanzen, Gelände betreten, Speichern,
   Park, Debug-Käfer, Einstellungen). Das Speicher-Dropdown hält
   **Schnell speichern** / **Schnell laden** für den einzelnen
-  `SAVE_KEY`-Slot (`GameState.save` / `GameState.load`) neben benannten
-  Ständen, Base64-Export und -Import. Auf dem Titelbildschirm lädt
+  `SAVE_KEY`-Slot (voller Snapshot inkl. Besucher und Gebäude; IndexedDB
+  wenn `localStorage` nicht reicht) neben benannten Ständen, Base64-Export
+  und -Import. Das Archiv listet Server-Stände (Konto) und lokale Browser-
+  Stände getrennt; fehlt der Server, steht eine deutsche Fehlermeldung
+  statt einer leeren Liste. Auf dem Titelbildschirm lädt
   **Schnell laden** denselben Einzelspielstand, ohne das Archiv.
   Debug-Käfer und FPS-/Versionszeile sind standardmäßig sichtbar;
   unter Einstellungen → Debug abschaltbar
@@ -150,6 +154,14 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   Anlieferung, Depot und Personaltor stehen im Baumenü unter Logistik.
   Das Paket-Icon in **Verwalten** öffnet die Logistikverwaltung
   (Übersicht, **Waren & Träger**, Buslinien, **Bandversorgung**).
+  Im Reiter **Buslinien** bleiben gewählte Haltestellen erhalten
+  (auch nach Kartenklick und Panel-Refresh). Pfeile sortieren die
+  Stopps; solange der Reiter offen ist, liegt die aktuelle Route als
+  eine gelbe Linie auf der Karte und aktualisiert sich beim Umsortieren.
+  Einer bestehenden Linie fügt **Bus hinzufügen** einen weiteren Bus
+  hinzu (freier Depotbus oder Neukauf). **RTW verkaufen** in der Übersicht
+  oder im Infofenster des Krankenwagens: idle an der Garage sofort,
+  sonst Rückfahrt und dann Verkauf.
   Mindestbestände (20er-Raster) und Trägerzahl stellt ihr dort im Reiter
   **Waren & Träger** oder im Infofenster ein.
   **Bandversorgung** malt/löscht Backstage, setzt den Tourbus-Parkplatz

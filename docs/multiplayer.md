@@ -77,6 +77,12 @@ dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
   `RoadVehicle.target.kind` kann `sealedWasteContainer` sein (`buildingId`,
   x, z). Gebäude-`kind` `sealedWasteContainer` nutzt bestehendes `place`
   und `wasteFill`. Unbekanntes Ziel wird beim Normalisieren verworfen.
+  Krankenwagen: `sellAmbulance` (`garageId`) und `sellAmbulanceVehicle`
+  (`vehicleId`). Optionales `RoadVehicle.pendingSale` kommt mit den
+  Sim-Paketen; fehlend gilt als nicht zum Verkauf. Buslinien:
+  `addBusToLine` (`lineId`) kauft/weist einen Bus zu; `setBusLineStops`
+  (`lineId`, `stopIds`) ändert nur die Reihenfolge. `busIds` / `stopIds`
+  bleiben bestehende Snapshot-Felder.
   `startCoaster.typeId` ist jeder Katalogtyp (`CoasterTypeId`). Unbekannte
   IDs löst der Host zu `classicSteel` auf. Snapshot-`coaster.typeId` kommt
   mit den Sim-Paketen; kein neues Command.

@@ -13,18 +13,46 @@ export type ServerSaveArchive = {
 }
 type StoredSaveSlot = ServerSaveSlot & { snapshot: string }
 
+function parseJson<T>(text: string): T {
+  try {
+    return (text ? JSON.parse(text) : {}) as T
+  } catch {
+    throw new Error('Der Spielserver hat keine Spielstandsliste geliefert (keine JSON-Antwort).')
+  }
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(options?.headers ?? {}) },
-  })
-  const payload = await response.json().catch(() => ({})) as T & { error?: string }
-  if (!response.ok) throw new Error(payload.error ?? 'Lokaler Server antwortet nicht')
+  let response: Response
+  try {
+    const headers = new Headers(options?.headers)
+    if (options?.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+    response = await fetch(url, {
+      ...options,
+      credentials: 'same-origin',
+      headers,
+    })
+  } catch {
+    throw new Error('Kein Kontakt zum Spielserver — läuft er? Lokale Spielstände bleiben in diesem Browser.')
+  }
+  const payload = parseJson<T & { error?: string }>(await response.text())
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Bitte im Titelbildschirm anmelden, um Server-Spielstände zu nutzen.')
+    }
+    if (response.status === 404) throw new Error('Dieser Server-Spielstand wurde nicht gefunden.')
+    throw new Error(payload.error ?? `Spielserver antwortet nicht (${response.status})`)
+  }
   return payload
 }
 
-export const listServerSaves = () => request<ServerSaveArchive>('/api/saves')
+export async function listServerSaves(): Promise<ServerSaveArchive> {
+  const payload = await request<Partial<ServerSaveArchive>>('/api/saves')
+  return {
+    account: typeof payload.account === 'string' ? payload.account : null,
+    own: Array.isArray(payload.own) ? payload.own : [],
+    shared: Array.isArray(payload.shared) ? payload.shared : [],
+  }
+}
 export const loadServerSave = (id: string) => request<StoredSaveSlot>(`/api/saves/${encodeURIComponent(id)}`)
 export const saveServerSave = (name: string, snapshot: string, id?: string) => request<ServerSaveSlot>(id ? `/api/saves/${encodeURIComponent(id)}` : '/api/saves', {
   method: id ? 'PUT' : 'POST', body: JSON.stringify({ name, snapshot }),

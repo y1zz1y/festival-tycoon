@@ -206,6 +206,13 @@ export class LogisticsView {
   private inspectedVehicleId: string | null = null
   private inspectStamp = ''
   private inspectRoute: Line | null = null
+  private plannerRouteCells: RoadPosition[] = []
+  private plannerStamp = ''
+  private plannerRoute: Line | null = null
+  private readonly plannerMaterial = new LineBasicMaterial({
+    color: 0xf4d35e,
+    depthTest: false,
+  })
   private getGroundY: (x: number, z: number) => number = () => 0
   private roadsByKey = new Map<string, RoadCell[]>()
   private readonly marksGroup = new Group()
@@ -231,6 +238,12 @@ export class LogisticsView {
   setInspectedVehicle(id: string | null): void {
     this.inspectedVehicleId = id
     this.inspectStamp = ''
+  }
+
+  setPlannerRoute(cells: readonly RoadPosition[] | null): void {
+    this.plannerRouteCells = cells ? cells.map((cell) => ({ ...cell })) : []
+    this.plannerStamp = ''
+    this.refreshPlannerRoute()
   }
 
   getVehiclePickRoot(): Group {
@@ -289,6 +302,7 @@ export class LogisticsView {
     this.updateParkingOccupancy(logistics.parkingCells)
     this.updateVehicles(logistics.roadVehicles)
     this.updateInspectRoute(logistics.roadVehicles)
+    this.refreshPlannerRoute()
     this.flowGroup.visible = showDirectionFlow
     if (showDirectionFlow) {
       this.flowPhase += seconds * 0.42
@@ -611,6 +625,36 @@ export class LogisticsView {
         }
       }
     })
+  }
+
+  private refreshPlannerRoute(): void {
+    const stamp = this.plannerRouteCells
+      .map((cell) => `${cell.x},${cell.z},${cell.elevation ?? ''}`)
+      .join('>')
+    if (stamp === this.plannerStamp) return
+    this.plannerStamp = stamp
+    if (this.plannerRoute) {
+      this.vehicleGroup.remove(this.plannerRoute)
+      this.plannerRoute.geometry.dispose()
+      this.plannerRoute = null
+    }
+    if (this.plannerRouteCells.length < 2) return
+    const points = this.plannerRouteCells.map((cell) => {
+      const road = this.roadAt(cell.x, cell.z, cell.elevation)
+      return new Vector3(
+        cell.x + 0.5,
+        (road ? this.roadY(road) : this.groundY(cell.x, cell.z)) + 0.32,
+        cell.z + 0.5,
+      )
+    })
+    const line = new Line(
+      new BufferGeometry().setFromPoints(points),
+      this.plannerMaterial,
+    )
+    line.userData.plannerRoute = true
+    line.renderOrder = 7
+    this.plannerRoute = line
+    this.vehicleGroup.add(line)
   }
 
   private updateInspectRoute(vehicles: readonly VehicleLike[]): void {

@@ -3562,8 +3562,58 @@ body.title-open #app-install-hint {
   color: #a9beb4;
 }
 
-.line-editor label:nth-last-of-type(1) {
-  grid-column: span 2;
+.bus-planner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+
+.bus-planner h3 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: #c5d8ce;
+}
+
+.bus-stop-choices,
+.bus-line-planned {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bus-stop-choice,
+.bus-planned-stop {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(214, 229, 211, 0.15);
+  background: #12271f;
+  color: #e7f3ec;
+}
+
+.bus-stop-choice.selected {
+  border-color: #f4d35e;
+  color: #f4d35e;
+}
+
+.bus-line-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bus-line-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.bus-line-row.selected {
+  border-color: #f4d35e;
 }
 
 .line-editor input,

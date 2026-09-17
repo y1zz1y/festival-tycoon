@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { DatabaseSync } from 'node:sqlite'
 import { db as sharedDatabase } from './database.ts'
-import { accountOfRequest } from './accounts.ts'
+import { accountOfRequest, ensureAccountsSchema } from './accounts.ts'
 
 /**
  * Saved games, one row each, in the same database the accounts live in.
@@ -108,6 +108,7 @@ export async function handleSaveRequest(request: IncomingMessage, response: Serv
   if (!pathname.startsWith('/api/saves')) return false
   const parts = pathname.split('/').filter(Boolean)
   const id = parts[2]
+  ensureAccountsSchema()
   const account = accountOfRequest(request)
   /** The caller's own id, or an end to the request: rows without an owner cannot exist. */
   const mine = (): string => {

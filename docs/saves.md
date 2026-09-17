@@ -9,23 +9,35 @@ Patch (`npm version patch --no-git-tag-version`) und halten das Lockfile synchro
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Snapshot-Form | `src/game/GameState.ts` | `GameSnapshot`, Konstruktor-Normalize |
-| Base64-Export | `src/game/saveText.ts` | `encodeSaveText`, `decodeSaveText` |
+| Base64-Export | `src/game/saveText.ts` | `encodeSaveText`, `decodeSaveText`, `serializeSnapshot` |
 | Browser-API zum Server | `src/game/serverSaves.ts` | `listServerSaves`, `saveServerSave` |
-| Katalog-Keys | `src/game/catalog.ts` | `SAVE_KEY`, `SAVE_SLOTS_KEY` |
-| Server-Slots | `server/saveSlots.ts` | JSON unter `saves/` |
+| Browser-Überlauf | `src/game/browserSaves.ts` | IndexedDB, wenn `localStorage` voll ist |
+| Katalog-Keys | `src/game/catalog.ts` | `SAVE_KEY`, `SAVE_SLOTS_KEY`, `saveSlotDataKey` |
+| Server-Slots | `server/saveSlots.ts` | SQLite `saves`-Tabelle in `data/accounts.db` |
 | Szenario-Defaults | `src/game/scenario.ts` | `normalizeScenarioSettings` |
 | Bühnen-Migration | `src/game/stageDesign.ts` | `migrateStageDesign` |
 | Logistics-Normalize | `src/game/logistics.ts` | `normalizeLogisticsSnapshot` |
 | Ampeln / Schranken | `src/game/accessControl.ts` | `normalizeAccessControls`, `accessControls` |
 
-Lokal im Dev-Server: bis zu 20 benannte Slots als JSON in `saves/`
-(gitignored). Ohne Server: gleichwertiger Browser-Speicher. Persönliche
-Saves niemals committen oder überschreiben.
+Lokale benannte Slots: Metadaten in `SAVE_SLOTS_KEY`, die Welt je Slot
+unter `saveSlotDataKey(id)`. Listing liest nur Namen/Zeiten, nie
+`GameState.fromJSON` — sonst leert ein schwerer oder neuer Snapshot das
+Archiv. Passt ein Stand nicht in `localStorage` (~5 MB), liegt er in
+IndexedDB (`src/game/browserSaves.ts`). Schnellspeichern schreibt denselben
+vollen Snapshot, niemals ohne Besucher/Gebäude.
+
+Server-Slots brauchen ein Konto (`/api/saves`, SQLite). `GET /api/saves`
+legt zuerst die Account-Tabellen an — sonst scheitert der `users`-Join
+für Gäste mit „no such table: users“. Gäste und Fehler (kein Server,
+keine JSON-Antwort, 401) zeigen eine deutsche Meldung; lokale Slots
+bleiben sichtbar. Persönliche Saves niemals committen oder überschreiben.
 
 **Schnell speichern** / **Schnell laden** (Iconleiste → Spielstand, plus
 **Schnell laden** auf dem Titelbildschirm) nutzen den einzelnen
-`SAVE_KEY`-Slot (`GameState.save` / `GameState.load`). Das ist nicht das
-benannte Archiv (`SAVE_SLOTS_KEY` / Server-`saves/`).
+`SAVE_KEY`-Slot (plus IndexedDB-Überlauf). Das ist nicht das
+benannte Archiv (`SAVE_SLOTS_KEY` / Server-Konto). Schnellstand und
+benannte Slots schreiben immer den vollen Snapshot — keine gekürzte
+Variante ohne Personen oder Objekte.
 
 ## Wichtige Regeln
 
@@ -121,6 +133,10 @@ benannte Archiv (`SAVE_SLOTS_KEY` / Server-`saves/`).
   unbekannt wird `null`. Optionales Personal-Feld
   `wasteFromSealedContainer` (nach Container-Leeren: Ladung nur zur
   Ablage). Fehlend gilt als falsch. Kein neues Snapshot-Top-Level-Feld.
+- Optionales `RoadVehicle.pendingSale` (Krankenwagen wartet auf Verkauf
+  an der Garage). Fehlend = nicht zum Verkauf. `BusLine.stopIds` /
+  `busIds` bleiben die gespeicherte Reihenfolge und Flotte; neue
+  Commands `setBusLineStops` und `addBusToLine` ändern nur diese Felder.
 
 ## Tests
 
@@ -133,8 +149,14 @@ Teile stehen auf `y=0`, fehlende Bühnenhöhe verwendet `STAGE_TILE_HEIGHT`. Vor
 Höhen und x/z-Platzierung bleiben erhalten. Die geladene Kopie wird migriert,
 persönliche Slot-Dateien werden nicht überschrieben.
 
-`tests/regression.ts` (Save-Text). Roundtrips in `tests/terrainSurface.ts`,
+`tests/regression.ts` (Save-Text). `tests/browserSaves.ts` (lokaler Slot-
+und Schnellspeichern-Roundtrip inkl. Besucher/Gebäude; Liste ohne
+`fromJSON`; gemockter Server-Client stürzt bei HTML/401 nicht ab).
+`tests/saves.ts` (Konto-API). Roundtrips in `tests/terrainSurface.ts`,
 `tests/rideAccess.ts`, `tests/festival.ts`, `tests/scenery.ts`.
+`tests/browserSaves.ts`: lokaler Slot und Schnellspeichern mit Besuchern
+und Gebäuden; Listing ohne `fromJSON`; Server-Client wirft bei HTML/Netz
+statt abzustürzen.
 
 ## Bei Änderungen dieses Dokument
 

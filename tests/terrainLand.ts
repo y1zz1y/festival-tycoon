@@ -106,6 +106,46 @@ export function testTerrainLand(fixture: (count?: number) => GameState): void {
   assert.ok(game.editTerrain(6, 2, 'raise').ok, 'land raise/lower still works')
   assert.ok(game.worldRevision > before, 'land edits invalidate navigation immediately')
   assert.equal(game.getTerrainHeight(6, 2), 0.5, 'game raise stores a half step')
+  const walk = game as unknown as {
+    findPath: (
+      start: { x: number; z: number; elevation: number },
+      goals: Array<{ x: number; z: number; elevation: number }>,
+    ) => Array<{ x: number; z: number; elevation: number }> | null
+  }
+  const upSlope = walk.findPath(
+    { x: 7, z: 2, elevation: 0 },
+    [{ x: 6, z: 2, elevation: 0.5 }],
+  )
+  assert.ok(upSlope && upSlope.length >= 1, 'pedestrians can walk a 0.5 land slope')
+  assert.ok(game.editTerrain(10, 2, 'raise').ok)
+  assert.ok(game.editTerrain(10, 2, 'raise').ok)
+  assert.equal(game.getTerrainHeight(10, 2), 1)
+  assert.equal(
+    walk.findPath({ x: 11, z: 2, elevation: 0 }, [{ x: 10, z: 2, elevation: 1 }]),
+    null,
+    'a 1.0 land cliff is not a pedestrian edge',
+  )
+  const pathOf = (state: GameState) =>
+    state as unknown as {
+      findPath: (
+        start: { x: number; z: number; elevation: number },
+        goals: Array<{ x: number; z: number; elevation: number }>,
+      ) => unknown
+    }
+  assert.ok(
+    pathOf(game).findPath({ x: 7, z: 2, elevation: 0 }, [{ x: 6, z: 2, elevation: 0.5 }]),
+    'land-0 to land-0.5 stays walkable after a raise',
+  )
+  const cliffNav = fixture(0)
+  cliffNav.snapshot.visitors = []
+  assert.ok(cliffNav.editTerrain(6, 4, 'raise').ok)
+  assert.ok(cliffNav.editTerrain(6, 4, 'raise').ok)
+  assert.equal(cliffNav.getTerrainHeight(6, 4), 1)
+  assert.equal(
+    pathOf(cliffNav).findPath({ x: 7, z: 4, elevation: 0 }, [{ x: 6, z: 4, elevation: 1 }]),
+    null,
+    'land-0 to land-1 is a cliff, not a walkable edge',
+  )
   const area = game.editTerrainArea([{ x: 6, z: 2 }, { x: 6, z: 3 }], 'smooth', 0.5)
   assert.ok(area.ok, area.message)
   assert.equal(game.getTerrainHeight(6, 3), 0.5, 'area smooth uses the start height')
@@ -168,5 +208,5 @@ export function testTerrainLand(fixture: (count?: number) => GameState): void {
   )
   assert.equal(supportGap(2, -1, filled), null, 'a solid under the object removes posts')
 
-  console.log('PASS land tools 3, step 0.5, area flatten-to-start, cliffs, shore water, swimming, supports')
+  console.log('PASS land tools 3, step 0.5, area flatten-to-start, cliffs, shore water, swimming, supports, cliff nav')
 }

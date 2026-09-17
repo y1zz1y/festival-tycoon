@@ -32,6 +32,10 @@ export async function testSaves(): Promise<void> {
   const world = (marker: string) => JSON.stringify({ money: 1000, marker })
 
   try {
+    // Listing must work before anyone has signed in. The public join onto users
+    // used to fail with "no such table: users" and empty the archive UI.
+    assert.deepEqual((await call('GET', '/api/saves')).body, { account: null, own: [], shared: [] })
+
     const ada = await signUp('Ada Lovelace')
     const grace = await signUp('Grace Hopper')
 

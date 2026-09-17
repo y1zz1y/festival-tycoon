@@ -17,6 +17,7 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 | Saugroboter in der Personal-UI | `src/game/staff.ts`, `src/staffDetailsUI.ts`, `src/main.ts` | `sweeperStaffName`, Reinigungs-Tab |
 | Krankenfelder, Betten | `src/game/medical.ts`, `src/game/GameState.ts` | `MedicalSystem`, `normalizeMedicalCell`, `MEDICAL_BEDS_PER_CELL`; Abriss über `clearDesignatedOccupancyAt` |
 | Verletzten-Zuweisung | `src/game/staffSimulation.ts`, `src/game/GameState.ts` | `assignNearestFreeMedics`; Krankenwagen `dispatchIdleAmbulances` |
+| Krankenwagen-Rückfahrt / Verkauf | `src/game/GameState.ts` | `returnIdleAmbulancesToGarage`, `sellAmbulance`, `sellAmbulanceVehicle`; `RoadVehicle.pendingSale` |
 | Personaleingang | `src/game/supplyChain.ts`, `src/game/accessControl.ts` | `staffGate`, `staffGateWorldPosition`, `gateEdgeWorldPosition`, `staffGateBlocksVisitor` |
 | Sicherheitsschleusen | `src/game/security.ts` | `SecuritySystem`, `SecurityGateConfig` |
 | Müllziele für Reinigung | `src/game/waste.ts` | nächster Eimer / versiegelter Container / Ablage; `wasteDropGoals` |
@@ -37,6 +38,13 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
   nicht erreichen kann (Zaun, fehlender Weg), wird übersprungen.
   Dasselbe gilt für den nächsten freien Krankenwagen
   (`dispatchIdleAmbulances` in `GameState.ts`).
+  Ein idle Krankenwagen ohne Patient fährt über `findRoadRoute` /
+  `routePreferringOpenLights` zur Garage (`returnIdleAmbulancesToGarage`)
+  und bleibt nicht auf der Straße stehen. Verkauf (`sellAmbulance` /
+  `sellAmbulanceVehicle`) löscht ihn sofort, wenn er idle an der Garage
+  steht; unterwegs oder im Einsatz wird der aktuelle Auftrag abgebrochen
+  (ohne Patient) bzw. zu Ende gefahren (mit Patient), dann gilt
+  `pendingSale` bis zur Ankunft. Kein unsterbliches Fahrzeug auf der Straße.
   Wer noch in einem Fahrzeug sitzt (`passengerIds`, `vehicle-arrival`,
   `bus-riding`), ist kein Patient auf der Straße.
 - Sanitäter wählen das über die **Wegstrecke** nächstgelegene freie Bett,
@@ -99,7 +107,9 @@ Bodenmüll, idle leert halbvolle Eimer in der Zone, Bodenmüll vor kaum
 genutzten Eimern; Krankenfeld-Abriss und Restbelegung; Verletzte an den
 nächsten freien Sanitäter bzw. Krankenwagen — näherer Idle vor fernem,
 kein Diebstahl eines tragenden Sanitäters, unerreichbarer Näherer wird
-übersprungen, Insassen im Auto werden nicht als Verletzte zugewiesen), `tests/sealedWasteContainer.ts` (nähere Container vor Ablage, volle übersprungen, idle Container→Ablage auch ohne Wagen, voller Eimer zuerst), `tests/accessControl.ts` (`gateEdgeWorldPosition`, `staffGateBlocksVisitor`),
+übersprungen, Insassen im Auto werden nicht als Verletzte zugewiesen,
+idle Krankenwagen fährt zur Garage, Verkauf löscht am Depot sofort und
+nach Rückfahrt), `tests/sealedWasteContainer.ts` (nähere Container vor Ablage, volle übersprungen, idle Container→Ablage auch ohne Wagen, voller Eimer zuerst, Müllwagen vom Depot leert Straßen-Container), `tests/accessControl.ts` (`gateEdgeWorldPosition`, `staffGateBlocksVisitor`),
 `tests/festivalAdditions.ts`, `tests/performanceGuards.ts` (keine nested
 Scans). Personalwege hängen an denselben Nav-Invarianten wie
 `docs/pathfinding.md`.
@@ -107,7 +117,8 @@ Scans). Personalwege hängen an denselben Nav-Invarianten wie
 ## Bei Änderungen dieses Dokument
 
 Aktualisieren, wenn Rollen, Zonenregeln, Bettwahl, Verletzten-Zuweisung
-(nächster freier Sanitäter / Krankenwagen), Gate-Verhalten,
+(nächster freier Sanitäter / Krankenwagen), Krankenwagen-Rückfahrt oder
+Verkauf, Gate-Verhalten,
 Träger-als-Personal-Zuweisung, Saugroboter-Einsatzgebiete oder
 Eimer-Leer-Priorität der Reinigung oder Container-Schlepp-Priorität ändern.
 Müll-/Brand-Ziele zusätzlich in `docs/incidents.md`.

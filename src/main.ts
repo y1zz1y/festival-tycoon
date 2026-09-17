@@ -8,7 +8,14 @@ import { makeDraggable, makeResizable } from './dragPanel'
 import { mountStageEditor } from './stageEditor'
 import { stageStats } from './game/stageDesign'
 import { mountStaffDetails } from './staffDetailsUI'
-import { encodeSaveText, decodeSaveText } from './game/saveText'
+import { encodeSaveText, decodeSaveText, serializeSnapshot, storageErrorMessage } from './game/saveText'
+import {
+  deleteNamedSlotJson,
+  readNamedSlotJson,
+  readQuicksaveJson,
+  writeNamedSlotJson,
+  writeQuicksaveJson,
+} from './game/browserSaves'
 import { deleteServerSave, listServerSaves, loadServerSave, saveServerSave, shareServerSave, type ServerSaveSlot } from './game/serverSaves'
 import { ENVIRONMENTS } from './game/environments'
 import { groundInfo } from './game/ground'
@@ -383,7 +390,7 @@ app.innerHTML = `
     <aside id="save-slots-panel" class="save-slots-panel panel" hidden>
       <div class="panel-header">
         <span class="panel-drag-line" aria-hidden="true"></span>
-        <h2 class="panel-header-title">Lokale Spielstände</h2>
+        <h2 class="panel-header-title">Spielstände</h2>
         <span class="panel-drag-line" aria-hidden="true"></span>
         <button data-close class="panel-close-button" aria-label="Spielstände schließen">×</button>
       </div>
@@ -920,13 +927,24 @@ app.innerHTML = `
         <div id="supply-deliveries"></div>
       </section>
       <section id="logistics-routes" hidden>
+        <p class="scenario-hint">Haltestellen hier oder auf der Karte antippen. Die Auswahl bleibt erhalten. Pfeile sortieren die Linie; die gelbe Route auf der Karte folgt sofort. Einer bestehenden Linie könnt ihr später weitere Busse hinzufügen.</p>
         <div class="line-editor">
           <label>Name <input id="bus-line-name" value="Festival-Shuttle" /></label>
           <label>Depot <select id="bus-line-depot"></select></label>
           <label>Busse <input id="bus-line-count" type="number" min="1" max="3" value="1" /></label>
           <label>Takt <input id="bus-line-headway" type="number" min="2" max="120" value="15" /> Min.</label>
-          <label>Haltestellen <select id="bus-line-stops" multiple size="5"></select></label>
           <button id="create-bus-line" class="primary">Linie anlegen</button>
+          <button id="apply-bus-line-stops" type="button" hidden>Reihenfolge speichern</button>
+        </div>
+        <div class="bus-planner">
+          <div>
+            <h3>Haltestellen wählen</h3>
+            <div id="bus-stop-choices" class="bus-stop-choices"></div>
+          </div>
+          <div>
+            <h3>Reihenfolge</h3>
+            <ol id="bus-line-planned" class="bus-line-planned"></ol>
+          </div>
         </div>
         <div id="bus-lines-list"></div>
       </section>
@@ -1323,8 +1341,13 @@ const depotWorkers = requireElement<HTMLInputElement>('#depot-workers')
 const depotWorkersValue = requireElement<HTMLElement>('#depot-workers-value')
 const depotRemove = requireElement<HTMLButtonElement>('#depot-remove')
 const busLineDepot = requireElement<HTMLSelectElement>('#bus-line-depot')
-const busLineStops = requireElement<HTMLSelectElement>('#bus-line-stops')
+const busStopChoices = requireElement<HTMLElement>('#bus-stop-choices')
+const busLinePlanned = requireElement<HTMLOListElement>('#bus-line-planned')
+const applyBusLineStops = requireElement<HTMLButtonElement>('#apply-bus-line-stops')
 const busLinesList = requireElement<HTMLElement>('#bus-lines-list')
+const plannedBusStopIds: string[] = []
+let editingBusLineId: string | null = null
+let busPlannerStopsFingerprint = ''
 const visitorOverviewList =
   requireElement<HTMLElement>('#visitor-overview-list')
 const visitorOverviewSummary =
@@ -2044,6 +2067,95 @@ function syncStockSliders(
   }
 }
 
+function isBusPlannerOpen(): boolean {
+  return logisticsPanel.classList.contains('visible') && !logisticsRoutes.hidden
+}
+
+function syncPlannedBusStops(logistics = game.snapshot.logistics): void {
+  const known = new Set(logistics.busStops.map((stop) => stop.id))
+  for (let index = plannedBusStopIds.length - 1; index >= 0; index -= 1) {
+    if (!known.has(plannedBusStopIds[index]!)) plannedBusStopIds.splice(index, 1)
+  }
+}
+
+function addPlannedBusStop(stopId: string, announce = true): boolean {
+  const stop = game.snapshot.logistics.busStops.find((candidate) => candidate.id === stopId)
+  if (!stop) return false
+  if (plannedBusStopIds.includes(stopId)) {
+    if (announce) showToast(`${stop.name} ist bereits in der Reihenfolge`)
+    return true
+  }
+  plannedBusStopIds.push(stopId)
+  renderBusPlanner()
+  if (announce) showToast(`${stop.name} zur Linie hinzugefügt`)
+  return true
+}
+
+function movePlannedBusStop(index: number, delta: number): void {
+  const next = index + delta
+  if (next < 0 || next >= plannedBusStopIds.length) return
+  const [stopId] = plannedBusStopIds.splice(index, 1)
+  plannedBusStopIds.splice(next, 0, stopId!)
+  renderBusPlanner()
+}
+
+function removePlannedBusStop(index: number): void {
+  plannedBusStopIds.splice(index, 1)
+  renderBusPlanner()
+}
+
+function loadBusLineIntoPlanner(lineId: string): void {
+  const line = game.snapshot.logistics.busLines.find((candidate) => candidate.id === lineId)
+  if (!line) return
+  editingBusLineId = lineId
+  plannedBusStopIds.splice(0, plannedBusStopIds.length, ...line.stopIds)
+  renderBusPlanner()
+  updateLogisticsPanel(true)
+  showToast(`${line.name}: Reihenfolge bearbeiten`)
+}
+
+function syncBusPlannerOverlay(): void {
+  if (!isBusPlannerOpen() || plannedBusStopIds.length < 2) {
+    view.setBusPlannerRoute(null)
+    return
+  }
+  view.setBusPlannerRoute(game.previewBusLineRoute(plannedBusStopIds))
+}
+
+function renderBusPlanner(logistics = game.snapshot.logistics): void {
+  syncPlannedBusStops(logistics)
+  const stopKey = logistics.busStops.map((stop) => `${stop.id}:${stop.name}`).join('|')
+  if (stopKey !== busPlannerStopsFingerprint) {
+    busPlannerStopsFingerprint = stopKey
+    busStopChoices.innerHTML = logistics.busStops.length
+      ? logistics.busStops
+          .map((stop) => {
+            const selected = plannedBusStopIds.includes(stop.id)
+            return `<button type="button" class="bus-stop-choice${selected ? ' selected' : ''}" data-add-stop="${stop.id}">${escapeHtml(stop.name)}</button>`
+          })
+          .join('')
+      : '<p class="scenario-hint">Noch keine Haltestelle. Unter Logistik → Bus eine Haltestelle an den Gehweg neben die Straße setzen.</p>'
+  } else {
+    busStopChoices.querySelectorAll<HTMLButtonElement>('[data-add-stop]').forEach((button) => {
+      button.classList.toggle('selected', plannedBusStopIds.includes(button.dataset.addStop ?? ''))
+    })
+  }
+  busLinePlanned.innerHTML = plannedBusStopIds.length
+    ? plannedBusStopIds
+        .map((stopId, index) => {
+          const stop = logistics.busStops.find((candidate) => candidate.id === stopId)
+          const name = stop?.name ?? stopId
+          return `<li class="bus-planned-stop"><span>${index + 1}. ${escapeHtml(name)}</span><span class="bus-line-actions"><button type="button" data-move-stop="${index}" data-delta="-1" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" data-move-stop="${index}" data-delta="1" ${index === plannedBusStopIds.length - 1 ? 'disabled' : ''}>↓</button><button type="button" data-remove-stop="${index}">Entfernen</button></span></li>`
+        })
+        .join('')
+    : '<li class="scenario-hint">Mindestens zwei Haltestellen wählen.</li>'
+  applyBusLineStops.hidden = !editingBusLineId
+  applyBusLineStops.textContent = editingBusLineId
+    ? 'Reihenfolge speichern'
+    : 'Reihenfolge speichern'
+  syncBusPlannerOverlay()
+}
+
 function updateLogisticsPanel(force = false): void {
   if (!logisticsPanel.classList.contains('visible')) return
   const logistics = game.snapshot.logistics
@@ -2064,7 +2176,8 @@ function updateLogisticsPanel(force = false): void {
     logistics.busLines.map((line) => [
       line.id,
       line.name,
-      line.busIds.length,
+      line.busIds,
+      line.stopIds,
       line.active,
     ]),
     infrastructure.depots.map((depot) => [
@@ -2104,7 +2217,7 @@ function updateLogisticsPanel(force = false): void {
       ${logistics.ambulanceGarages
         .map(
           (garage) =>
-            `<span>Garage ${garage.id.slice(-4)} · ${garage.bays.filter(Boolean).length}/2 RTW <button data-buy-ambulance="${garage.id}">RTW kaufen</button></span>`,
+            `<span>Garage ${garage.id.slice(-4)} · ${garage.bays.filter(Boolean).length}/2 RTW <button data-buy-ambulance="${garage.id}">RTW kaufen</button>${garage.bays.some(Boolean) ? ` <button data-sell-ambulance="${garage.id}">RTW verkaufen</button>` : ''}</span>`,
         )
         .join('')}
       ${logistics.busDepots
@@ -2126,21 +2239,23 @@ function updateLogisticsPanel(force = false): void {
         )
         .join('')}
     </div>`
+  const previousBusDepot = busLineDepot.value
   busLineDepot.innerHTML = logistics.busDepots
     .map(
       (depot) =>
         `<option value="${depot.id}">Depot ${depot.id.slice(-4)} (${depot.busIds.length}/3)</option>`,
     )
     .join('')
-  busLineStops.innerHTML = logistics.busStops
-    .map((stop) => `<option value="${stop.id}">${stop.name}</option>`)
-    .join('')
+  if ([...busLineDepot.options].some((option) => option.value === previousBusDepot)) {
+    busLineDepot.value = previousBusDepot
+  }
   busLinesList.innerHTML = logistics.busLines
     .map(
       (line) =>
-        `<div class="bus-line-row"><span>${line.name}</span><span>${line.stopIds.length} Stopps · ${line.busIds.length} Busse · ${line.headway} Min.</span><button data-delete-line="${line.id}">Löschen</button></div>`,
+        `<div class="bus-line-row${editingBusLineId === line.id ? ' selected' : ''}"><span>${escapeHtml(line.name)}</span><span>${line.stopIds.length} Stopps · ${line.busIds.length} Busse · ${line.headway} Min.</span><span class="bus-line-actions"><button type="button" data-edit-line="${line.id}">Reihenfolge</button><button type="button" data-add-bus-line="${line.id}">Bus hinzufügen</button><button type="button" data-delete-line="${line.id}">Löschen</button></span></div>`,
     )
     .join('')
+  renderBusPlanner(logistics)
   const previousDepot = supplyDepotSelect.value
   supplyDepotSelect.innerHTML = infrastructure.depots
     .map((depot, index) => {
@@ -2438,6 +2553,12 @@ function handleCellClick(cell: CellPosition): void {
   }
 
   const tool = game.snapshot.selectedTool
+  if (isBusPlannerOpen()) {
+    const stop =
+      game.getBusStopAt(cell.x, cell.z) ??
+      (cell.buildingId ? game.getBusStopAt(cell.x, cell.z, cell.buildingId) : undefined)
+    if (stop && addPlannedBusStop(stop.id)) return
+  }
   if (tool === 'inspect') {
     const vehicle = game.getVehicleAt(cell.x, cell.z)
     if (vehicle) {
@@ -4476,6 +4597,11 @@ function updateEntityPanel(): void {
           ? `<span>Wartet seit <b>${vehicle.waitMinutes.toFixed(1)} min</b></span>`
           : ''
       }
+      ${
+        vehicle.kind === 'ambulance'
+          ? `<button type="button" data-sell-ambulance-vehicle="${vehicle.id}">Krankenwagen verkaufen</button>`
+          : ''
+      }
     `
     entityTabs.classList.remove('visible')
     entityOverview.hidden = false
@@ -5600,15 +5726,18 @@ visitorOverviewToggle.addEventListener('click', () => {
   )
 })
 logisticsPanelToggle.addEventListener('click', () => {
+  const open = !logisticsPanel.classList.contains('visible')
   setPanelOpen(
     logisticsPanel,
     logisticsPanelToggle,
-    !logisticsPanel.classList.contains('visible'),
+    open,
     () => {
       logisticsFingerprint = ''
       updateLogisticsPanel(true)
     },
   )
+  if (open) syncBusPlannerOverlay()
+  else view.setBusPlannerRoute(null)
 })
 requireElement<HTMLButtonElement>('#debug-money').addEventListener('click', () => {
   const result = game.addDebugMoney()
@@ -6113,7 +6242,7 @@ async function openTitleLoad(): Promise<void> {
     ? `<h3 class="title-submenu-heading">Öffentliche Spielstände</h3>${archive.shared.map((slot) => titleSlotRow(slot, true)).join('')}`
     : ''
   titleLoadRows.innerHTML = own + shared ||
-    `<p class="title-load-empty">Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto' : 'in diesem Browser'}. Im laufenden Spiel legst du sie über „Spielstand“ an.</p>`
+    `<p class="title-load-empty">${archive.serverError ? `${escapeHtml(archive.serverError)} ` : ''}Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto oder' : ''} in diesem Browser. Im laufenden Spiel legst du sie über „Spielstand“ an.</p>`
   titleLoadNote.textContent = saveStorageNote(archive)
   markTitleSelection(0)
 }
@@ -6192,7 +6321,7 @@ titleScreen.addEventListener('click', (event) => {
     if (menu.dataset.titleMenu === 'resume') void resumeLastGame()
     else if (menu.dataset.titleMenu === 'new') openTitleSubmenu(true)
     else if (menu.dataset.titleMenu === 'quickload') {
-      if (tryQuickLoad()) setTitleScreenOpen(false)
+      void tryQuickLoad()
     }
     else if (menu.dataset.titleMenu === 'load') void openTitleLoad()
     else openAboveTitle(scenarioPanel, () => setScenarioPanelOpen(true))
@@ -6260,6 +6389,7 @@ requireElement<HTMLButtonElement>('#start-scenario').addEventListener('click', (
 fillScenarioForm(game.snapshot.scenario)
 requireElement<HTMLButtonElement>('#close-logistics').addEventListener('click', () => {
   setPanelOpen(logisticsPanel, logisticsPanelToggle, false)
+  view.setBusPlannerRoute(null)
 })
 document.querySelectorAll<HTMLButtonElement>('[data-logistics-tab]').forEach((button) => {
   button.addEventListener('click', () => {
@@ -6273,7 +6403,9 @@ document.querySelectorAll<HTMLButtonElement>('[data-logistics-tab]').forEach((bu
     logisticsSupply.hidden = tab !== 'supply'
     logisticsRoutes.hidden = tab !== 'routes'
     logisticsBandSupply.hidden = tab !== 'band-supply'
-    if (tab === 'supply' || tab === 'band-supply') updateLogisticsPanel(true)
+    if (tab === 'supply' || tab === 'band-supply' || tab === 'routes') updateLogisticsPanel(true)
+    if (tab === 'routes') syncBusPlannerOverlay()
+    else view.setBusPlannerRoute(null)
   })
 })
 logisticsBandSupply.addEventListener('click', (event) => {
@@ -6304,6 +6436,7 @@ logisticsOverview.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button')
   if (!button) return
   const garageId = button.dataset.buyAmbulance
+  const sellAmbulanceId = button.dataset.sellAmbulance
   const depotId = button.dataset.buyBus
   const sellDepotId = button.dataset.sellBus
   const garbageDepotId = button.dataset.buyGarbage
@@ -6312,6 +6445,8 @@ logisticsOverview.addEventListener('click', (event) => {
   const sellSweeperId = button.dataset.sellSweeper
   const result = garageId
     ? game.buyAmbulance(garageId)
+    : sellAmbulanceId
+      ? game.sellAmbulance(sellAmbulanceId)
     : depotId
       ? game.buyBus(depotId)
       : sellDepotId
@@ -6403,26 +6538,57 @@ depotRemove.addEventListener('click', () => {
   updateLogisticsPanel(true)
 })
 requireElement<HTMLButtonElement>('#create-bus-line').addEventListener('click', () => {
-  const selectedStops = [...busLineStops.selectedOptions].map(
-    (option) => option.value,
-  )
   const result = game.createBusLine(
     requireElement<HTMLInputElement>('#bus-line-name').value,
     busLineDepot.value,
-    selectedStops,
+    [...plannedBusStopIds],
     Number(requireElement<HTMLInputElement>('#bus-line-count').value),
     Number(requireElement<HTMLInputElement>('#bus-line-headway').value),
   )
   showToast(result.message, !result.ok)
+  if (result.ok) editingBusLineId = null
   updateLogisticsPanel(true)
 })
+applyBusLineStops.addEventListener('click', () => {
+  if (!editingBusLineId) return
+  const result = game.setBusLineStops(editingBusLineId, [...plannedBusStopIds])
+  showToast(result.message, !result.ok)
+  updateLogisticsPanel(true)
+})
+busStopChoices.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-add-stop]')
+  if (!button?.dataset.addStop) return
+  addPlannedBusStop(button.dataset.addStop)
+})
+busLinePlanned.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button')
+  if (!button) return
+  if (button.dataset.removeStop != null) {
+    removePlannedBusStop(Number(button.dataset.removeStop))
+    return
+  }
+  if (button.dataset.moveStop != null) {
+    movePlannedBusStop(Number(button.dataset.moveStop), Number(button.dataset.delta))
+  }
+})
 busLinesList.addEventListener('click', (event) => {
-  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
-    '[data-delete-line]',
-  )
-  if (!button?.dataset.deleteLine) return
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button')
+  if (!button) return
+  if (button.dataset.editLine) {
+    loadBusLineIntoPlanner(button.dataset.editLine)
+    return
+  }
+  if (button.dataset.addBusLine) {
+    const result = game.addBusToLine(button.dataset.addBusLine)
+    showToast(result.message, !result.ok)
+    updateLogisticsPanel(true)
+    return
+  }
+  if (!button.dataset.deleteLine) return
   const result = game.deleteBusLine(button.dataset.deleteLine)
   showToast(result.message, !result.ok)
+  if (editingBusLineId === button.dataset.deleteLine) editingBusLineId = null
+  updateLogisticsPanel(true)
 })
 complaintsToggle.addEventListener('click', () => {
   setPanelOpen(
@@ -6809,10 +6975,10 @@ coasterExitButton.addEventListener('click', () => {
 })
 
 document.querySelector<HTMLButtonElement>('#save')?.addEventListener('click', () => {
-  showToast(game.save().message)
+  void persistQuicksave()
 })
 document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', () => {
-  tryQuickLoad()
+  void tryQuickLoad()
 })
 
 const saveSlotsPanel = requireElement<HTMLElement>('#save-slots-panel')
@@ -6848,16 +7014,18 @@ type SaveArchiveView = {
   /** True when writing goes to the server: it answers and someone is signed in. */
   onServer: boolean
   reachable: boolean
+  serverError: string
 }
-let saveArchive: SaveArchiveView = { own: [], shared: [], account: null, onServer: false, reachable: false }
+let saveArchive: SaveArchiveView = { own: [], shared: [], account: null, onServer: false, reachable: false, serverError: '' }
 const browserSlots = (): SaveSlotView[] =>
   GameState.listSaveSlots().map((slot) => ({ ...slot, public: false, owner: '', source: 'browser' as const }))
 const findSaveSlot = (id: string): SaveSlotView | undefined =>
   saveArchive.own.find((slot) => slot.id === id) ?? saveArchive.shared.find((slot) => slot.id === id)
 function saveStorageNote(archive: SaveArchiveView): string {
-  if (archive.onServer) return `Deine Spielstände liegen beim Konto „${archive.account}“ auf dem Spielserver — bis zu 20 Stück.`
-  if (archive.reachable) return 'Ohne Konto bleiben Spielstände nur in diesem Browser. Melde dich im Titelbildschirm an, damit sie unter deinem Namen auf dem Spielserver liegen.'
-  return 'Der Spielserver ist nicht erreichbar. Bis zu 20 Spielstände werden stattdessen in diesem Browser gespeichert.'
+  const local = 'Lokale Spielstände liegen in diesem Browser (bis 20), unabhängig vom Server.'
+  if (archive.onServer) return `Server-Spielstände liegen beim Konto „${archive.account}“ (bis 20). ${local}`
+  if (archive.reachable) return `Ohne Konto bleiben neue Server-Stände leer. Melde dich im Titelbildschirm an. ${local}`
+  return `${archive.serverError || 'Der Spielserver ist nicht erreichbar.'} ${local}`
 }
 function bindLoadedGame(loaded: GameState, message: string): void {
   if (pathWindowOpen) closePathEditor()
@@ -6865,13 +7033,23 @@ function bindLoadedGame(loaded: GameState, message: string): void {
   fillScenarioForm(loaded.snapshot.scenario)
   showToast(message)
 }
-/** Loads the single quick-save slot (`SAVE_KEY` / `GameState.load`), not a named archive entry. */
-function tryQuickLoad(): boolean {
+async function persistQuicksave(): Promise<void> {
+  try {
+    const json = serializeSnapshot(game.snapshot)
+    await writeQuicksaveJson(json)
+    showToast('Spiel gespeichert')
+  } catch (error) {
+    showToast(storageErrorMessage(error, 'Schnellspeichern ist fehlgeschlagen'), true)
+  }
+}
+/** Loads the single quick-save slot (`SAVE_KEY` / overflow store), not a named archive entry. */
+async function tryQuickLoad(): Promise<boolean> {
   if (multiplayer.status.mode === 'client') {
     showToast('Nur der Host kann einen Spielstand laden', true)
     return false
   }
-  const loaded = GameState.load()
+  const raw = await readQuicksaveJson()
+  const loaded = raw ? GameState.fromJSON(raw) : GameState.load()
   if (!loaded) {
     showToast('Kein gültiger Spielstand gefunden', true)
     return false
@@ -6883,26 +7061,55 @@ function tryQuickLoad(): boolean {
 const sharedSlotRow = (slot: SaveSlotView): string =>
   `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>von ${escapeHtml(slot.owner)} · ${formatSaveTime(slot.savedAt)}</small></div><div><button data-load-slot="${slot.id}">Laden</button></div></article>`
 
+function ownSlotRow(slot: SaveSlotView, archive: SaveArchiveView): string {
+  const share = slot.source === 'server'
+    ? `<button data-share-slot="${slot.id}">${slot.public ? 'Nicht mehr teilen' : 'Teilen'}</button>`
+    : ''
+  return `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}${slot.source === 'browser' && archive.onServer ? ' · dieser Browser' : ''}</small></div><div><button data-load-slot="${slot.id}">Laden</button><button data-overwrite-slot="${slot.id}">Überschreiben</button>${share}<button data-delete-slot="${slot.id}" aria-label="${escapeHtml(slot.name)} löschen">×</button></div></article>`
+}
 function showSaveSlots(archive: SaveArchiveView): void {
-  const own = archive.own.length
-    ? archive.own.map((slot) => `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}</small></div><div><button data-load-slot="${slot.id}">Laden</button><button data-overwrite-slot="${slot.id}">Überschreiben</button>${archive.onServer ? `<button data-share-slot="${slot.id}">${slot.public ? 'Nicht mehr teilen' : 'Teilen'}</button>` : ''}<button data-delete-slot="${slot.id}" aria-label="${escapeHtml(slot.name)} löschen">×</button></div></article>`).join('')
-    : `<p class="save-slots-empty">Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto' : 'in diesem Browser'}. Der Button „Speichern“ bleibt der schnelle Einzelspielstand.</p>`
-  // The shared ones are a section of their own, and they offer nothing but loading:
-  // what you save afterwards lands in your archive, the original stays as it is.
+  const serverOwn = archive.own.filter((slot) => slot.source === 'server')
+  const localOwn = archive.own.filter((slot) => slot.source === 'browser')
+  const serverBlock = archive.onServer
+    ? (serverOwn.length
+      ? `<h3 class="save-slots-heading">Konto „${escapeHtml(archive.account ?? '')}“</h3>${serverOwn.map((slot) => ownSlotRow(slot, archive)).join('')}`
+      : `<h3 class="save-slots-heading">Konto „${escapeHtml(archive.account ?? '')}“</h3><p class="save-slots-empty">Noch keine Server-Spielstände unter diesem Konto.</p>`)
+    : archive.serverError
+      ? `<p class="save-slots-empty">${escapeHtml(archive.serverError)}</p>`
+      : ''
+  const localBlock = localOwn.length
+    ? `${archive.onServer || archive.serverError ? '<h3 class="save-slots-heading">Dieser Browser</h3>' : ''}${localOwn.map((slot) => ownSlotRow(slot, archive)).join('')}`
+    : `<p class="save-slots-empty">Noch keine benannten Spielstände in diesem Browser. „Schnell speichern“ bleibt der einzelne Schnellstand.</p>`
   const shared = archive.shared.length
     ? `<h3 class="save-slots-heading">Öffentliche Spielstände</h3><p class="save-slots-empty">Laden ja, überschreiben nein — gespeichert wird immer unter deinem eigenen Konto.</p>${archive.shared.map(sharedSlotRow).join('')}`
     : ''
-  saveSlotsList.innerHTML = own + shared
+  saveSlotsList.innerHTML = serverBlock + localBlock + shared
 }
 async function fetchSaveSlots(): Promise<SaveArchiveView> {
+  const local = browserSlots()
   try {
     const archive = await listServerSaves()
     const shared = archive.shared.map((slot) => ({ ...slot, source: 'server' as const }))
-    saveArchive = archive.account
-      ? { own: archive.own.map((slot) => ({ ...slot, source: 'server' as const })), shared, account: archive.account, onServer: true, reachable: true }
-      : { own: browserSlots(), shared, account: null, onServer: false, reachable: true }
-  } catch {
-    saveArchive = { own: browserSlots(), shared: [], account: null, onServer: false, reachable: false }
+    const serverOwn = archive.account
+      ? archive.own.map((slot) => ({ ...slot, source: 'server' as const }))
+      : []
+    saveArchive = {
+      own: [...serverOwn, ...local].sort((a, b) => b.savedAt - a.savedAt),
+      shared,
+      account: archive.account,
+      onServer: Boolean(archive.account),
+      reachable: true,
+      serverError: '',
+    }
+  } catch (error) {
+    saveArchive = {
+      own: local,
+      shared: [],
+      account: null,
+      onServer: false,
+      reachable: false,
+      serverError: error instanceof Error ? error.message : 'Server-Spielstände sind nicht erreichbar.',
+    }
   }
   return saveArchive
 }
@@ -6923,16 +7130,7 @@ saveSlotsPanel.querySelector('[data-close]')!.addEventListener('click', () => se
 saveSlotsPanel.querySelector<HTMLFormElement>('[data-save-slot]')!.addEventListener('submit', async event => {
   event.preventDefault()
   try {
-    if (saveArchive.onServer) {
-      const saved = await saveServerSave(saveSlotName.value, JSON.stringify(game.snapshot))
-      rememberLastSave({ ...saved, source: 'server' })
-      saveSlotsMessage.textContent = `Spielstand „${saved.name}“ unter deinem Konto gespeichert`
-    } else {
-      const result = game.saveSlot(saveSlotName.value)
-      saveSlotsMessage.textContent = result.message
-      if (!result.ok) return
-      rememberBrowserSave(saveSlotName.value)
-    }
+    saveSlotsMessage.textContent = await persistNamedSave(saveSlotName.value)
     saveSlotName.value = ''
     await renderSaveSlots()
   } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht gespeichert werden' }
@@ -6940,12 +7138,46 @@ saveSlotsPanel.querySelector<HTMLFormElement>('[data-save-slot]')!.addEventListe
 /** Reads one slot back, from wherever it came from, and makes it the one to resume. */
 async function readSaveSlot(slot: SaveSlotView): Promise<GameState | null> {
   try {
-    const loaded = slot.source === 'server' ? GameState.fromJSON((await loadServerSave(slot.id)).snapshot) : GameState.loadSlot(slot.id)
+    if (slot.source === 'server') {
+      const loaded = GameState.fromJSON((await loadServerSave(slot.id)).snapshot)
+      if (loaded) rememberLastSave(slot)
+      return loaded
+    }
+    const raw = await readNamedSlotJson(slot.id)
+    const loaded = raw ? GameState.fromJSON(raw) : GameState.loadSlot(slot.id)
     if (loaded) rememberLastSave(slot)
     return loaded
   } catch {
     return null
   }
+}
+
+async function persistLocalNamedSave(name: string, id?: string): Promise<string> {
+  const json = serializeSnapshot(game.snapshot)
+  const result = game.saveSlot(name, id)
+  if (result.ok) {
+    rememberBrowserSave(name)
+    return result.message
+  }
+  if (!result.slotId) throw new Error(result.message)
+  await writeNamedSlotJson(result.slotId, json)
+  rememberLastSave({ id: result.slotId, source: 'browser', name: name.trim().replace(/\s+/g, ' ') })
+  return `Spielstand „${name.trim().replace(/\s+/g, ' ')}“ im erweiterten Browser-Speicher gespeichert`
+}
+
+async function persistNamedSave(name: string, id?: string, source: 'server' | 'browser' = saveArchive.onServer ? 'server' : 'browser'): Promise<string> {
+  const json = serializeSnapshot(game.snapshot)
+  if (source === 'server') {
+    try {
+      const saved = await saveServerSave(name, json, id)
+      rememberLastSave({ ...saved, source: 'server' })
+      return `Spielstand „${saved.name}“ unter deinem Konto gespeichert`
+    } catch (error) {
+      const local = await persistLocalNamedSave(name, undefined)
+      return `${error instanceof Error ? error.message : 'Server-Speichern fehlgeschlagen'} Stattdessen lokal: ${local}`
+    }
+  }
+  return persistLocalNamedSave(name, id)
 }
 /** A browser slot has no id until it exists, so it is looked up after the write. */
 function rememberBrowserSave(name: string): void {
@@ -6968,14 +7200,7 @@ async function runAutosave(): Promise<void> {
   try {
     const archive = await fetchSaveSlots()
     const existing = archive.own.find((slot) => slot.name === AUTOSAVE_NAME)
-    if (archive.onServer) {
-      const saved = await saveServerSave(AUTOSAVE_NAME, JSON.stringify(game.snapshot), existing?.id)
-      rememberLastSave({ ...saved, source: 'server' })
-    } else {
-      const result = game.saveSlot(AUTOSAVE_NAME, existing?.id)
-      if (!result.ok) throw new Error(result.message)
-      rememberBrowserSave(AUTOSAVE_NAME)
-    }
+    await persistNamedSave(AUTOSAVE_NAME, existing?.id, existing?.source ?? (archive.onServer ? 'server' : 'browser'))
     showToast('Automatisch gespeichert')
   } catch (error) {
     showToast(error instanceof Error ? error.message : 'Automatisches Speichern fehlgeschlagen', true)
@@ -7021,10 +7246,7 @@ saveSlotsPanel.addEventListener('click', async event => {
   if (!slot) { renderSaveSlots(); return }
   if (button.dataset.overwriteSlot) {
     try {
-      if (slot.source === 'server') await saveServerSave(slot.name, JSON.stringify(game.snapshot), id)
-      else { const result = game.saveSlot(slot.name, id); if (!result.ok) throw new Error(result.message) }
-      rememberLastSave(slot)
-      saveSlotsMessage.textContent = `Spielstand „${slot.name}“ überschrieben`
+      saveSlotsMessage.textContent = await persistNamedSave(slot.name, id, slot.source)
       await renderSaveSlots()
     } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht überschrieben werden' }
     return
@@ -7042,7 +7264,11 @@ saveSlotsPanel.addEventListener('click', async event => {
   if (!window.confirm(`Spielstand „${slot.name}“ wirklich löschen?`)) return
   try {
     if (slot.source === 'server') await deleteServerSave(id)
-    else { const result = GameState.deleteSaveSlot(id); if (!result.ok) throw new Error(result.message) }
+    else {
+      const result = GameState.deleteSaveSlot(id)
+      if (!result.ok) throw new Error(result.message)
+      await deleteNamedSlotJson(id)
+    }
     saveSlotsMessage.textContent = 'Spielstand gelöscht'
     await renderSaveSlots()
   } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht gelöscht werden' }
@@ -7072,8 +7298,8 @@ async function renderSaveAsSlots(): Promise<void> {
   const archive = await fetchSaveSlots()
   saveAsStorageInfo.textContent = saveStorageNote(archive)
   saveAsList.innerHTML = archive.own.length
-    ? archive.own.map((slot) => `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}</small></div><div><button data-overwrite-slot="${slot.id}">Überschreiben</button></div></article>`).join('')
-    : `<p class="save-slots-empty">Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto' : 'in diesem Browser'}.</p>`
+    ? archive.own.map((slot) => `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}${slot.source === 'browser' && archive.onServer ? ' · dieser Browser' : ''}</small></div><div><button data-overwrite-slot="${slot.id}">Überschreiben</button></div></article>`).join('')
+    : `<p class="save-slots-empty">Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto oder' : ''} in diesem Browser.</p>`
 }
 async function openSaveAs(): Promise<void> {
   if (multiplayer.status.mode === 'client') { showToast('Nur der Host kann Spielstände verwalten', true); return }
@@ -7089,16 +7315,7 @@ makeResizable(saveAsPanel)
 saveAsPanel.querySelector<HTMLFormElement>('[data-save-as]')!.addEventListener('submit', async event => {
   event.preventDefault()
   try {
-    if (saveArchive.onServer) {
-      const saved = await saveServerSave(saveAsName.value, JSON.stringify(game.snapshot))
-      rememberLastSave({ ...saved, source: 'server' })
-      saveAsMessage.textContent = `Spielstand „${saved.name}“ unter deinem Konto gespeichert`
-    } else {
-      const result = game.saveSlot(saveAsName.value)
-      saveAsMessage.textContent = result.message
-      if (!result.ok) return
-      rememberBrowserSave(saveAsName.value)
-    }
+    saveAsMessage.textContent = await persistNamedSave(saveAsName.value)
     saveAsName.value = ''
     await renderSaveAsSlots()
   } catch (error) { saveAsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht gespeichert werden' }
@@ -7109,10 +7326,7 @@ saveAsPanel.addEventListener('click', async event => {
   const slot = saveArchive.own.find((item) => item.id === id)
   if (!slot) { renderSaveAsSlots(); return }
   try {
-    if (slot.source === 'server') await saveServerSave(slot.name, JSON.stringify(game.snapshot), id)
-    else { const result = game.saveSlot(slot.name, id); if (!result.ok) throw new Error(result.message) }
-    rememberLastSave(slot)
-    saveAsMessage.textContent = `Spielstand „${slot.name}“ überschrieben`
+    saveAsMessage.textContent = await persistNamedSave(slot.name, id, slot.source)
     await renderSaveAsSlots()
   } catch (error) { saveAsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht überschrieben werden' }
 })
@@ -7136,7 +7350,7 @@ function openSaveText(text: string, importing: boolean): void {
 }
 saveTextDialog.querySelector('[data-close]')!.addEventListener('click', () => saveTextDialog.close())
 document.querySelector('#copy-save')!.addEventListener('click', async () => {
-  const text = encodeSaveText(JSON.stringify(game.snapshot))
+  const text = encodeSaveText(serializeSnapshot(game.snapshot))
   try {
     await navigator.clipboard.writeText(text)
     showToast('Base64-Spielstand in die Zwischenablage kopiert')
@@ -7184,6 +7398,15 @@ followVisitorButton.addEventListener('click', () => {
 
 document.querySelector<HTMLButtonElement>('#close-entity')?.addEventListener('click', () => {
   closeEntityPanel()
+})
+entityStats.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+    '[data-sell-ambulance-vehicle]',
+  )
+  if (!button?.dataset.sellAmbulanceVehicle) return
+  const result = game.sellAmbulanceVehicle(button.dataset.sellAmbulanceVehicle)
+  showToast(result.message, !result.ok)
+  if (result.ok) updateEntityPanel()
 })
 
 function patchSelectedAccess(

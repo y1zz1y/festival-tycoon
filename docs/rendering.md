@@ -21,6 +21,7 @@ Draw-Call oder Material pro Detailstück oder Besucher.
 | Dispose | `src/view/disposeObject3D.ts` | GPU-Ressourcen |
 | Browser-Messharness | `tests/render-performance.html` | |
 | Logistik-Einbahn-Overlay | `src/view/LogisticsView.ts`, `src/view/roadDirectionArrow.ts` | Weiße StVO-Pfeile nach den Fahrzeugen; kompaktes InstancedMesh-Overlay nur bei Werkzeug Fahrtrichtung. Parkflächen: geteiltes Asphaltmaterial plus `parkingTexture` (Stelllinien in der Textur). Grün/Orange und das P nur in der Autostraßen-Bauansicht oder im Logistik-Overlay (`showParkingHelpers`) |
+| Buslinien-Planerroute | `src/view/LogisticsView.ts` `setPlannerRoute` | Eine `Line` / ein Material für die ganze Stoppfolge; weg beim Schließen des Reiters |
 | Logistik-Modelle | `src/view/logisticsModels.ts` | ModelKit-Gebäude und Fahrzeuge; Besucherautos teilen Geometrie je Lackfarbe |
 | Straßenrampen | `src/view/LogisticsView.ts` | Deck kippt um `roadSlope`; Stützen bei Erhöhung; Fahrzeuge folgen `waySurfaceY` |
 | Depot-Träger | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts` | dieselbe Personen-Geometrie wie Gäste; eine gemergte Warnwesten-/Mützen-Kit, ein Handkarren, ein Ladungsstapel |
@@ -41,7 +42,9 @@ Snapshot nicht autoritativ schreiben.
 - Statische Details: shared/merged Geometry, Vertex Colors, Instancing.
 - Die Inspektionsroute in `LogisticsView` berücksichtigt die Straßenlage
   und Rampenhöhe jedes Wegpunkts. Ihr Cache-Schlüssel enthält `elevation`;
-  die Linie liegt auch auf Überführungen auf der Fahrbahn.
+  die Linie liegt auch auf Überführungen auf der Fahrbahn. Die
+  Busplaner-Route nutzt dieselbe Höhenlogik, aber ein geteiltes
+  `LineBasicMaterial` für die gesamte Polylinie, kein Material je Segment.
 - Geteilte Stand-Queues bekommen eine Mittelschiene und einen zweiten
   Richtungspfeil am bestehenden Queue-Mesh, nicht extra Draw-Calls pro Gast.
 - `IncidentView` verwendet höchstens vier Instanz-Batches für alle Müllstücke,

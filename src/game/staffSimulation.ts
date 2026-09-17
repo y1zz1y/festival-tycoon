@@ -756,6 +756,7 @@ export class StaffSimulation {
       } else {
         member.x += (dx / remaining) * distance
         member.z += (dz / remaining) * distance
+        member.y += (next.elevation - member.y) * (distance / remaining)
         distance = 0
       }
     }

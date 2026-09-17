@@ -37,6 +37,82 @@ export function waySurfaceY(endElevation: number, slope = 0): number {
   return endElevation - slope / 2
 }
 
+/** Walk surface Y at local tile coords `u,v` in [0, 1] (tile origin is the NW corner). */
+export function waySurfaceYAt(
+  elevation: number,
+  slope = 0,
+  slopeDirection = 0,
+  localX = 0.5,
+  localZ = 0.5,
+): number {
+  const start = elevation - slope
+  const u = Math.min(1, Math.max(0, localX))
+  const v = Math.min(1, Math.max(0, localZ))
+  let t = 0.5
+  const direction = ((slopeDirection % 4) + 4) % 4
+  if (direction === 0) t = v
+  else if (direction === 1) t = u
+  else if (direction === 2) t = 1 - v
+  else t = 1 - u
+  return start + slope * t
+}
+
+const WAY_CORNER_UV = [
+  { u: 0, v: 0 },
+  { u: 0, v: 1 },
+  { u: 1, v: 1 },
+  { u: 1, v: 0 },
+] as const
+
+/**
+ * Heights of the two corners on the edge facing `direction` (0=+z, 1=+x, 2=-z, 3=-x).
+ * Order matches the opposite edge so pairwise compare is enough.
+ */
+export function wayEdgeHeights(
+  elevation: number,
+  slope = 0,
+  slopeDirection = 0,
+  direction: number,
+): [number, number] {
+  const heightAt = (index: number): number => {
+    const uv = WAY_CORNER_UV[index]!
+    return waySurfaceYAt(elevation, slope, slopeDirection, uv.u, uv.v)
+  }
+  switch (((direction % 4) + 4) % 4) {
+    case 0:
+      return [heightAt(1), heightAt(2)]
+    case 1:
+      return [heightAt(3), heightAt(2)]
+    case 2:
+      return [heightAt(0), heightAt(3)]
+    default:
+      return [heightAt(0), heightAt(1)]
+  }
+}
+
+export function pedestrianEdgesMeet(
+  fromEdge: readonly [number, number],
+  toEdge: readonly [number, number],
+  epsilon = WAY_ELEVATION_EPSILON,
+): boolean {
+  return (
+    Math.abs(fromEdge[0] - toEdge[0]) <= epsilon &&
+    Math.abs(fromEdge[1] - toEdge[1]) <= epsilon
+  )
+}
+
+/**
+ * Ground may step at most one half-step (a land slope). Δ 1.0 is a cliff unless
+ * a way ramp actually connects the shared edge (`canTraverseWayElevation`).
+ */
+export function canStepPedestrianHeight(
+  fromElevation: number,
+  toElevation: number,
+  epsilon = WAY_ELEVATION_EPSILON,
+): boolean {
+  return Math.abs(toElevation - fromElevation) <= WAY_ELEVATION_STEP + epsilon
+}
+
 export function canTraverseWayElevation(
   fromElevation: number,
   fromSlope: number,

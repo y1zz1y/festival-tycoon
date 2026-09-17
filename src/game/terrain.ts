@@ -254,6 +254,50 @@ export function tileVisualCorner(
   return snapTerrainHeight(corner)
 }
 
+/** Two visual corners of the edge facing `direction` (0=+z, 1=+x, 2=-z, 3=-x). */
+export function terrainWalkEdgeHeights(
+  terrain: TerrainSnapshot | undefined,
+  x: number,
+  z: number,
+  direction: number,
+  waterLevel: number = DEFAULT_WATER_LEVEL,
+  isCell: (cellX: number, cellZ: number) => boolean = () => true,
+): [number, number] {
+  const corner = (index: number): number =>
+    tileVisualCorner(terrain, x, z, index, waterLevel, isCell)
+  switch (((direction % 4) + 4) % 4) {
+    case 0:
+      return [corner(1), corner(2)]
+    case 1:
+      return [corner(3), corner(2)]
+    case 2:
+      return [corner(0), corner(3)]
+    default:
+      return [corner(0), corner(1)]
+  }
+}
+
+/** Authoritative walk height on land: the same two-triangle surface as the mesh. */
+export function sampleTerrainSurface(
+  terrain: TerrainSnapshot | undefined,
+  x: number,
+  z: number,
+  waterLevel: number = DEFAULT_WATER_LEVEL,
+  isCell: (cellX: number, cellZ: number) => boolean = () => true,
+): number {
+  const cx = Math.floor(x)
+  const cz = Math.floor(z)
+  if (!isCell(cx, cz)) return getTerrainHeight(terrain, cx, cz)
+  const u = x - cx
+  const v = z - cz
+  const nw = tileVisualCorner(terrain, cx, cz, 0, waterLevel, isCell)
+  const sw = tileVisualCorner(terrain, cx, cz, 1, waterLevel, isCell)
+  const se = tileVisualCorner(terrain, cx, cz, 2, waterLevel, isCell)
+  const ne = tileVisualCorner(terrain, cx, cz, 3, waterLevel, isCell)
+  if (u <= v) return (1 - v) * nw + (v - u) * sw + u * se
+  return (1 - u) * nw + (u - v) * ne + v * se
+}
+
 export function tileShowsWater(
   terrain: TerrainSnapshot | undefined,
   x: number,

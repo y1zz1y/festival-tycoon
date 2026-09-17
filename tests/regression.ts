@@ -54,6 +54,7 @@ import { testShopGoods } from './shopGoods'
 import { testTickerAndWasteCaps } from './ticker'
 import { testAccounts } from './accounts'
 import { testSaves } from './saves'
+import { testBrowserSaves, testServerSaveClient } from './browserSaves'
 
 function test(name: string, run: () => void) {
   run()
@@ -80,6 +81,10 @@ await testAccounts()
 console.log('PASS accounts: registration, sessions, hashed passwords and throttled guessing')
 await testSaves()
 console.log('PASS saves belong to their account, public ones are readable by all and writable by none')
+testBrowserSaves(fixture)
+console.log('PASS local slots and quicksave keep visitors and buildings; listing ignores corrupt worlds')
+await testServerSaveClient()
+console.log('PASS server save list reports German errors instead of crashing')
 
 function fixture(count = 20): GameState {
   const initial = structuredClone(new GameState().snapshot)

@@ -159,7 +159,11 @@ export function testFestival(fixture: (count?: number) => GameState): void {
 
   const saved = new Map<string, string>()
   const oldStorage = globalThis.localStorage
-  Object.assign(globalThis, { localStorage: { getItem: (key: string) => saved.get(key) ?? null, setItem: (key: string, value: string) => saved.set(key, value) } })
+  Object.assign(globalThis, { localStorage: {
+    getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => { saved.set(key, value) },
+    removeItem: (key: string) => { saved.delete(key) },
+  } })
   try {
     shop.save()
     assert.deepEqual(GameState.load()!.snapshot.festival, shopState.festival, 'public save/load retains the complete new mode')
@@ -167,7 +171,10 @@ export function testFestival(fixture: (count?: number) => GameState): void {
     assert.equal(shop.saveSlot('Nachtversion').ok, true)
     const slots = GameState.listSaveSlots()
     assert.equal(slots.length, 2)
-    assert.equal(GameState.loadSlot(slots[0]!.id)!.snapshot.money, shopState.money, 'named save slots load full snapshots')
+    const loadedSlot = GameState.loadSlot(slots[0]!.id)!.snapshot
+    assert.equal(loadedSlot.money, shopState.money, 'named save slots load full snapshots')
+    assert.equal(loadedSlot.visitors.length, shopState.visitors.length)
+    assert.equal(loadedSlot.buildings.length, shopState.buildings.length)
     assert.equal(shop.saveSlot('Aktualisierter Samstag', slots.find(slot => slot.name === 'Samstagabend')!.id).ok, true)
     assert.equal(GameState.listSaveSlots().length, 2, 'overwriting a slot does not create a duplicate')
     assert.equal(GameState.deleteSaveSlot(slots.find(slot => slot.name === 'Nachtversion')!.id).ok, true)

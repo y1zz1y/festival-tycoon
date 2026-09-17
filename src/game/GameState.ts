@@ -34,7 +34,8 @@ import {
   stallQueueTileOffset,
 } from './queueLanes'
 import { groundInfo, groundKey, buildingEfficiency, roadGroundLimit } from './ground'
-import { BUILDING_KINDS, BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY } from './catalog'
+import { BUILDING_KINDS, BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY, saveSlotDataKey } from './catalog'
+import { serializeSnapshot, storageErrorMessage } from './saveText'
 import { bookFinance, createFinanceState, financeEdition, financeForecast, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance'
 import { createScenarioProgress, updateScenarioProgress, type ScenarioProgress } from './scenarioGoals'
 import { createFestivalManagement, festivalAction, updateFestival, assignAudience, activeBookings, watchableBookings, showIssue, BANDS } from './festivalManagement'
@@ -227,6 +228,7 @@ import {
   isRoadDirectionAllowed,
   isVehicleReversing,
   normalizeLogisticsSnapshot,
+  previewBusLineRoute as buildBusLineRoutePreview,
   oppositeDirection,
   resolveRoadLayer,
   roadLayerElevation,
@@ -237,10 +239,15 @@ import {
   MAX_PATH_ELEVATION,
   WAY_ELEVATION_EPSILON,
   WAY_LEVEL_MATCH,
+  canStepPedestrianHeight,
   canTraverseWayElevation,
   elevationsMatch,
   maxRoadElevation,
+  pedestrianEdgesMeet,
+  wayEdgeHeights,
   wayOverlapsRoadGrade,
+  waySurfaceY,
+  waySurfaceYAt,
   packWayElevation,
   snapWayElevation,
 } from './wayElevation'
@@ -299,7 +306,9 @@ import {
   normalizeWaterLevel,
   planTerrainAreaEdit,
   planTerrainEdit,
+  sampleTerrainSurface,
   scatterWildTrees,
+  terrainWalkEdgeHeights,
 } from './terrain'
 import type { TerrainEditMode, TerrainSnapshot } from './terrain'
 
@@ -539,6 +548,7 @@ export type ActionResult = {
   ok: boolean
   message: string
   placedId?: string
+  slotId?: string
 }
 
 export type LocalSaveSlot = {
@@ -547,7 +557,7 @@ export type LocalSaveSlot = {
   savedAt: number
 }
 
-type StoredSaveSlot = LocalSaveSlot & { snapshot: string }
+type StoredSaveSlot = LocalSaveSlot & { snapshot?: string }
 
 type Listener = (snapshot: Readonly<GameSnapshot>) => void
 
@@ -1198,7 +1208,7 @@ export class GameState {
         visitor.name = `${visitorGivenName(visitor.id)} ${suffix}`.trim()
       }
       visitor.wanderNonce ??= 0
-      visitor.route = visitor.route.map((cell) => ({
+      visitor.route = (visitor.route ?? []).map((cell) => ({
         ...cell,
         elevation:
           cell.elevation ?? this.getPathAt(cell.x, cell.z)?.elevation ?? visitor.cellElevation,
@@ -2310,15 +2320,7 @@ export class GameState {
         const road = this.getRoadCellAt(building.x, building.z, building.elevation)
         const onRoad = Boolean(road)
         const truckReachable =
-          onRoad &&
-          reachable.has(
-            roadLayerKey(
-              building.x,
-              building.z,
-              road?.elevation ??
-                this.getTerrainHeight(building.x, building.z),
-            ),
-          )
+          onRoad && this.sealedContainerRoadIsReachable(building, reachable)
         return {
           id: building.id,
           x: building.x,
@@ -4757,6 +4759,20 @@ export class GameState {
     return { ok: true, message: `Krankenwagen ${bay + 1} gekauft` }
   }
 
+  sellAmbulance(garageId: string): ActionResult {
+    const garage = this.state.logistics.ambulanceGarages.find(
+      (candidate) => candidate.id === garageId,
+    )
+    if (!garage) return { ok: false, message: 'Garage nicht gefunden' }
+    const vehicleId = [...garage.bays].reverse().find((id): id is string => Boolean(id))
+    if (!vehicleId) return { ok: false, message: 'In dieser Garage gibt es keinen Krankenwagen' }
+    return this.requestAmbulanceSale(vehicleId)
+  }
+
+  sellAmbulanceVehicle(vehicleId: string): ActionResult {
+    return this.requestAmbulanceSale(vehicleId)
+  }
+
   buyBus(depotId: string): ActionResult {
     const depot = this.state.logistics.busDepots.find(
       (candidate) => candidate.id === depotId,
@@ -5012,6 +5028,88 @@ export class GameState {
     return { ok: true, message: 'Buslinie angelegt' }
   }
 
+  addBusToLine(lineId: string): ActionResult {
+    const line = this.state.logistics.busLines.find(
+      (candidate) => candidate.id === lineId,
+    )
+    if (!line) return { ok: false, message: 'Buslinie nicht gefunden' }
+    const depot = this.state.logistics.busDepots.find(
+      (candidate) => candidate.id === line.depotId,
+    )
+    if (!depot) return { ok: false, message: 'Busdepot nicht gefunden' }
+    const assigned = new Set(
+      this.state.logistics.busLines.flatMap((candidate) => candidate.busIds),
+    )
+    let busId = depot.busIds.find((id) => !assigned.has(id))
+    if (!busId) {
+      if (depot.busIds.length >= 3) {
+        return { ok: false, message: 'Dieses Depot besitzt bereits drei Busse' }
+      }
+      if (this.state.money < SIMULATION_CONFIG.logistics.busCost) {
+        return { ok: false, message: 'Nicht genug Geld' }
+      }
+      const access = this.getLogisticsBuildingAccess(depot, 3)
+      if (!access) return { ok: false, message: 'Das Depot hat keinen befahrbaren Anschluss' }
+      busId = this.nextId('bus')
+      bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.busCost)
+      depot.busIds.push(busId)
+      this.state.logistics.roadVehicles.push(
+        this.createRoadVehicle(busId, 'bus', access),
+      )
+    }
+    if (line.busIds.includes(busId)) {
+      return { ok: false, message: 'Dieser Bus fährt bereits auf der Linie' }
+    }
+    line.busIds.push(busId)
+    const bus = this.state.logistics.roadVehicles.find(
+      (vehicle) => vehicle.id === busId,
+    )
+    if (bus) bus.lineId = line.id
+    this.emit()
+    return { ok: true, message: 'Bus zur Linie hinzugefügt' }
+  }
+
+  setBusLineStops(lineId: string, stopIds: string[]): ActionResult {
+    const line = this.state.logistics.busLines.find(
+      (candidate) => candidate.id === lineId,
+    )
+    const validStops = stopIds.filter((id) =>
+      this.state.logistics.busStops.some((stop) => stop.id === id),
+    )
+    if (!line) return { ok: false, message: 'Buslinie nicht gefunden' }
+    if (validStops.length < 2) {
+      return {
+        ok: false,
+        message: 'Eine Linie benötigt mindestens zwei Haltestellen',
+      }
+    }
+    line.stopIds = validStops
+    line.busIds.forEach((busId) => {
+      const bus = this.state.logistics.roadVehicles.find(
+        (vehicle) => vehicle.id === busId,
+      )
+      if (bus && bus.nextStopIndex >= validStops.length) bus.nextStopIndex = 0
+    })
+    this.emit()
+    return { ok: true, message: 'Haltestellenreihenfolge gespeichert' }
+  }
+
+  previewBusLineRoute(stopIds: string[]): RoadPosition[] {
+    return buildBusLineRoutePreview({
+      roadCells: this.state.logistics.roadCells,
+      graph: this.getRoadGraph(),
+      stops: this.state.logistics.busStops,
+      stopIds,
+      worldSize: this.getWorldSize(),
+    })
+  }
+
+  getBusStopAt(x: number, z: number, stopId?: string) {
+    return this.state.logistics.busStops.find((stop) =>
+      stopId ? stop.id === stopId : stop.x === x && stop.z === z,
+    )
+  }
+
   deleteBusLine(lineId: string): ActionResult {
     const line = this.state.logistics.busLines.find(
       (candidate) => candidate.id === lineId,
@@ -5235,6 +5333,8 @@ export class GameState {
         from.x,
         from.z,
         false,
+        false,
+        from.elevation,
       )
     }
     return Boolean(this.getStageForecourtCellAt(to.x, to.z))
@@ -5976,6 +6076,7 @@ export class GameState {
     })
 
     this.dispatchIdleAmbulances()
+    this.returnIdleAmbulancesToGarage()
     this.dispatchTourBuses()
     logistics.roadVehicles.forEach((vehicle) => {
       if (removedVehicles.has(vehicle.id)) return
@@ -7055,7 +7156,7 @@ export class GameState {
       return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
     }
     if (target?.kind === 'sealedWasteContainer') {
-      return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
+      return this.sealedContainerPullUpRoads(target)
     }
     if (target?.kind === 'depot') {
       const depot = this.state.logistics.wasteDepots.find(
@@ -7089,8 +7190,11 @@ export class GameState {
       const last = vehicle.route.at(-1)
       return last ? this.collectRoadOrAccessTargets(last) : []
     }
-    if (target.kind === 'wasteDump' || target.kind === 'sealedWasteContainer') {
+    if (target.kind === 'wasteDump') {
       return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
+    }
+    if (target.kind === 'sealedWasteContainer') {
+      return this.sealedContainerPullUpRoads(target)
     }
     if (target.kind === 'cell') {
       if (this.isRoadExitCell(target) || this.isOffMapRoadExit(target)) {
@@ -7698,15 +7802,33 @@ export class GameState {
       dumps.reduce((sum, cell) => sum + cell.stored, 0) +
       containers.reduce((sum, building) => sum + (building.wasteFill ?? 0), 0)
     if (totalStored < SIMULATION_CONFIG.waste.truckDispatchThreshold) return
-    const accesses = [
-      ...this.getWasteDumpRoadAccesses(dumps),
-      ...this.getSealedContainerRoadAccesses(containers),
-    ]
+    const containerAccesses = this.getSealedContainerRoadAccesses(containers)
+    const dumpAccesses = this.getWasteDumpRoadAccesses(dumps)
+    // A dump pad beside the depot (or the truck's current cell) used to win
+    // `alreadyThere` and keep the wagon vacuuming dumps forever. Filled
+    // roadside boxes must be their own trip.
+    const accesses: Array<{
+      road: RoadPosition
+      dump?: { x: number; z: number; stored: number }
+      container?: { id: string; x: number; z: number; stored: number }
+    }> = containerAccesses.length > 0 ? containerAccesses : dumpAccesses
     if (accesses.length === 0) return
-    const alreadyThere = accesses.find(
-      (access) =>
-        access.road.x === vehicle.cell?.x && access.road.z === vehicle.cell.z,
-    )
+    const here = vehicle.cell
+    const sittingOn = here
+      ? containers.find(
+          (building) => building.x === here.x && building.z === here.z,
+        )
+      : undefined
+    if (sittingOn) {
+      this.assignGarbageTruckAccessTarget(vehicle, {
+        container: { id: sittingOn.id, x: sittingOn.x, z: sittingOn.z },
+      })
+      vehicle.route = []
+      vehicle.state = 'responding'
+      this.finishGarbageTruckLeg(vehicle)
+      return
+    }
+    const alreadyThere = this.pickGarbageTruckAccess(accesses, here)
     if (alreadyThere) {
       this.assignGarbageTruckAccessTarget(vehicle, alreadyThere)
       vehicle.route = []
@@ -7720,14 +7842,26 @@ export class GameState {
     )
     if (!route) return
     const last = route.at(-1) ?? vehicle.cell
-    const access =
-      accesses.find(
-        (candidate) => candidate.road.x === last.x && candidate.road.z === last.z,
-      ) ?? accesses[0]
+    const access = this.pickGarbageTruckAccess(accesses, last) ?? accesses[0]
     if (!access) return
     this.assignGarbageTruckAccessTarget(vehicle, access)
     vehicle.route = route.map(toRoadPosition)
     vehicle.state = 'responding'
+  }
+
+  private pickGarbageTruckAccess(
+    accesses: readonly {
+      road: RoadPosition
+      dump?: { x: number; z: number }
+      container?: { id: string; x: number; z: number }
+    }[],
+    at: RoadPosition | null | undefined,
+  ) {
+    if (!at) return undefined
+    const matching = accesses.filter(
+      (access) => access.road.x === at.x && access.road.z === at.z,
+    )
+    return matching.find((access) => access.container) ?? matching[0]
   }
 
   private assignGarbageTruckAccessTarget(
@@ -7787,30 +7921,70 @@ export class GameState {
       road: RoadPosition
     }> = []
     containers.forEach((container) => {
-      const road = this.getRoadCellAt(container.x, container.z, container.elevation)
-      if (!road) return
-      const key = roadLayerKey(
-        road.x,
-        road.z,
-        road.elevation ?? this.getTerrainHeight(road.x, road.z),
-      )
-      if (seen.has(key)) return
-      seen.add(key)
-      accesses.push({
-        container: {
-          id: container.id,
-          x: container.x,
-          z: container.z,
-          stored: container.wasteFill ?? 0,
-        },
-        road: {
-          x: road.x,
-          z: road.z,
-          elevation: road.elevation,
-        },
+      this.sealedContainerPullUpRoads(container).forEach((road) => {
+        const cell = this.getRoadCellAt(road.x, road.z, road.elevation)
+        if (!cell) return
+        const key = roadLayerKey(
+          cell.x,
+          cell.z,
+          cell.elevation ?? this.getTerrainHeight(cell.x, cell.z),
+        )
+        if (seen.has(key)) return
+        seen.add(key)
+        accesses.push({
+          container: {
+            id: container.id,
+            x: container.x,
+            z: container.z,
+            stored: container.wasteFill ?? 0,
+          },
+          road: toRoadPosition(cell),
+        })
       })
     })
     return accesses.sort((left, right) => right.container.stored - left.container.stored)
+  }
+
+  private sealedContainerPullUpRoads(container: {
+    x: number
+    z: number
+    elevation?: number
+  }): RoadPosition[] {
+    if (!this.getRoadCellAt(container.x, container.z, container.elevation)) {
+      return []
+    }
+    const adjacent = this.getAdjacentRoadPositions(container)
+    if (adjacent.length > 0) return adjacent
+    const here = this.getRoadCellAt(container.x, container.z, container.elevation)
+    return here ? [toRoadPosition(here)] : []
+  }
+
+  private sealedContainerRoadIsReachable(
+    container: { x: number; z: number; elevation?: number },
+    reachable: ReadonlySet<string>,
+  ): boolean {
+    return this.sealedContainerPullUpRoads(container).some((road) => {
+      const cell = this.getRoadCellAt(road.x, road.z, road.elevation)
+      if (!cell) return false
+      return reachable.has(
+        roadLayerKey(
+          cell.x,
+          cell.z,
+          cell.elevation ?? this.getTerrainHeight(cell.x, cell.z),
+        ),
+      )
+    })
+  }
+
+  private garbageTruckCanServiceSealedContainer(
+    here: RoadPosition,
+    building: { x: number; z: number; elevation: number; kind?: string },
+  ): boolean {
+    if (building.kind !== undefined && !isSealedWasteContainer(building.kind)) {
+      return false
+    }
+    if (!this.isSealedWasteContainerOnRoad(building)) return false
+    return Math.abs(building.x - here.x) + Math.abs(building.z - here.z) <= 1
   }
 
   private getDeliveryFreight(vehicle: RoadVehicle) {
@@ -8106,53 +8280,73 @@ export class GameState {
     return this.findServiceVehicleRoute(vehicle, targets, blockedCells)
   }
 
+  private emptySealedContainersForGarbageTruck(
+    vehicle: RoadVehicle,
+    room: number,
+  ): number {
+    if (room <= 0) return 0
+    let remaining = room
+    let takenTotal = 0
+    const emptied = new Set<string>()
+    const take = (building: PlacedBuilding | undefined) => {
+      if (!building || remaining <= 0 || emptied.has(building.id)) return
+      if (!isSealedWasteContainer(building.kind)) return
+      if (!this.isSealedWasteContainerOnRoad(building)) return
+      const taken = emptySealedContainerStored(building, remaining)
+      if (taken <= 0) return
+      vehicle.cargo += taken
+      remaining -= taken
+      takenTotal += taken
+      emptied.add(building.id)
+    }
+    if (vehicle.target?.kind === 'sealedWasteContainer') {
+      const target = vehicle.target
+      take(
+        this.state.buildings.find(
+          (candidate) =>
+            isSealedWasteContainer(candidate.kind) &&
+            candidate.id === target.buildingId,
+        ) ??
+          this.state.buildings.find(
+            (candidate) =>
+              isSealedWasteContainer(candidate.kind) &&
+              candidate.x === target.x &&
+              candidate.z === target.z,
+          ),
+      )
+    }
+    const here = vehicle.cell ?? vehicle.position
+    for (const building of this.state.buildings) {
+      if (!this.garbageTruckCanServiceSealedContainer(here, building)) continue
+      take(building)
+    }
+    return takenTotal
+  }
+
   private finishGarbageTruckLeg(vehicle: RoadVehicle): void {
     if (vehicle.state === 'responding') {
       let room = Math.max(
         0,
         SIMULATION_CONFIG.logistics.garbageTruckCapacity - vehicle.cargo,
       )
-      if (vehicle.target?.kind === 'sealedWasteContainer') {
-        const target = vehicle.target
-        const building =
-          this.state.buildings.find(
-            (candidate) =>
-              isSealedWasteContainer(candidate.kind) &&
-              candidate.id === target.buildingId,
-          ) ??
-          this.state.buildings.find(
-            (candidate) =>
-              isSealedWasteContainer(candidate.kind) &&
-              candidate.x === target.x &&
-              candidate.z === target.z,
+      room -= this.emptySealedContainersForGarbageTruck(vehicle, room)
+      const dumps = this.state.wasteDumpCells
+        .filter((cell) => cell.stored > 0)
+        .sort((left, right) => {
+          const truck = vehicle.cell ?? vehicle.position
+          return (
+            Math.abs(left.x - truck.x) +
+            Math.abs(left.z - truck.z) -
+            (Math.abs(right.x - truck.x) + Math.abs(right.z - truck.z))
           )
-        if (
-          building &&
-          this.isSealedWasteContainerOnRoad(building) &&
-          room > 0
-        ) {
-          const taken = emptySealedContainerStored(building, room)
-          vehicle.cargo += taken
-        }
-      } else {
-        const dumps = this.state.wasteDumpCells
-          .filter((cell) => cell.stored > 0)
-          .sort((left, right) => {
-            const truck = vehicle.cell ?? vehicle.position
-            return (
-              Math.abs(left.x - truck.x) +
-              Math.abs(left.z - truck.z) -
-              (Math.abs(right.x - truck.x) + Math.abs(right.z - truck.z))
-            )
-          })
-        dumps.forEach((dump) => {
-          if (room <= 0) return
-          const taken = Math.min(dump.stored, room)
-          dump.stored -= taken
-          vehicle.cargo += taken
-          room -= taken
         })
-      }
+      dumps.forEach((dump) => {
+        if (room <= 0) return
+        const taken = Math.min(dump.stored, room)
+        dump.stored -= taken
+        vehicle.cargo += taken
+        room -= taken
+      })
       vehicle.state = 'waiting'
       vehicle.waitMinutes = SIMULATION_CONFIG.waste.truckLoadMinutes
       vehicle.resumeState = 'returning'
@@ -8826,6 +9020,7 @@ export class GameState {
     for (const vehicle of this.state.logistics.roadVehicles) {
       if (vehicle.kind !== 'ambulance') continue
       for (const passengerId of vehicle.passengerIds) claimed.add(passengerId)
+      if (vehicle.pendingSale) continue
       if (vehicle.state === 'idle' && vehicle.cell) idle.push(vehicle)
     }
     if (idle.length === 0) return
@@ -8919,6 +9114,10 @@ export class GameState {
         : null
       if (!access || vehicle.passengerIds.length === 0) {
         vehicle.state = 'idle'
+        vehicle.target = null
+        if (vehicle.pendingSale || vehicle.passengerIds.length === 0) {
+          this.sendAmbulanceHome(vehicle)
+        }
         return
       }
       const route = this.routePreferringOpenLights({
@@ -8927,6 +9126,7 @@ export class GameState {
         start: vehicle.cell,
         target: access,
         initialDirection: this.getVehicleDirection(vehicle),
+        allowUTurn: true,
       })
       if (!route) {
         vehicle.state = 'idle'
@@ -8952,9 +9152,166 @@ export class GameState {
           'Der Krankenwagen hat mich an der Garage an die Sanitäter übergeben.'
       })
       vehicle.passengerIds = []
-      vehicle.state = 'idle'
       vehicle.target = null
+      if (vehicle.pendingSale) {
+        this.completeAmbulanceSale(vehicle)
+        return
+      }
+      vehicle.state = 'idle'
     }
+  }
+
+  private returnIdleAmbulancesToGarage(): void {
+    const idle = this.state.logistics.roadVehicles.filter(
+      (vehicle) =>
+        vehicle.kind === 'ambulance' &&
+        vehicle.state === 'idle' &&
+        vehicle.passengerIds.length === 0,
+    )
+    for (const vehicle of idle) {
+      if (this.isAmbulanceAtHome(vehicle)) {
+        if (vehicle.pendingSale) this.completeAmbulanceSale(vehicle)
+        continue
+      }
+      this.sendAmbulanceHome(vehicle)
+    }
+  }
+
+  private isAmbulanceAtHome(vehicle: RoadVehicle): boolean {
+    const here = vehicle.cell ?? vehicle.position
+    const garage = this.state.logistics.ambulanceGarages.find((candidate) =>
+      candidate.bays.includes(vehicle.id),
+    )
+    const access = garage ? this.getLogisticsBuildingAccess(garage, 2) : null
+    return Boolean(access && access.x === here.x && access.z === here.z)
+  }
+
+  private sendAmbulanceHome(vehicle: RoadVehicle): void {
+    const garage = this.state.logistics.ambulanceGarages.find((candidate) =>
+      candidate.bays.includes(vehicle.id),
+    )
+    const access = garage ? this.getLogisticsBuildingAccess(garage, 2) : null
+    const start = vehicle.cell ?? vehicle.position
+    if (!garage || !access) {
+      vehicle.state = 'idle'
+      vehicle.route = []
+      return
+    }
+    if (access.x === start.x && access.z === start.z) {
+      vehicle.state = 'idle'
+      vehicle.route = []
+      vehicle.target = { kind: 'garage', garageId: garage.id }
+      if (vehicle.pendingSale) this.completeAmbulanceSale(vehicle)
+      return
+    }
+    const route = this.routePreferringOpenLights({
+      roadCells: this.state.logistics.roadCells,
+      graph: this.getRoadGraph(),
+      start,
+      target: access,
+      initialDirection: this.getVehicleDirection(vehicle),
+      allowUTurn: true,
+    })
+    if (!route) {
+      vehicle.state = 'idle'
+      vehicle.route = []
+      vehicle.target = { kind: 'garage', garageId: garage.id }
+      return
+    }
+    vehicle.route = route.map(toRoadPosition)
+    vehicle.state = 'returning'
+    vehicle.target = { kind: 'garage', garageId: garage.id }
+    vehicle.resumeState = null
+    vehicle.waitMinutes = 0
+  }
+
+  private requestAmbulanceSale(vehicleId: string): ActionResult {
+    const vehicle = this.state.logistics.roadVehicles.find(
+      (candidate) => candidate.id === vehicleId && candidate.kind === 'ambulance',
+    )
+    if (!vehicle) {
+      for (const garage of this.state.logistics.ambulanceGarages) {
+        garage.bays = [
+          garage.bays[0] === vehicleId ? null : garage.bays[0],
+          garage.bays[1] === vehicleId ? null : garage.bays[1],
+        ]
+      }
+      this.emit()
+      return { ok: false, message: 'Der Krankenwagen war nicht mehr vorhanden und wurde bereinigt' }
+    }
+    vehicle.pendingSale = true
+    if (vehicle.passengerIds.length === 0 && vehicle.state === 'responding') {
+      this.cancelAmbulanceAssignment(vehicle)
+    }
+    if (
+      this.isAmbulanceAtHome(vehicle) &&
+      vehicle.passengerIds.length === 0 &&
+      (vehicle.state === 'idle' || vehicle.state === 'waiting' || vehicle.route.length === 0)
+    ) {
+      this.completeAmbulanceSale(vehicle)
+      this.emit()
+      return { ok: true, message: 'Krankenwagen verkauft' }
+    }
+    if (vehicle.passengerIds.length === 0 && vehicle.state !== 'returning') {
+      this.sendAmbulanceHome(vehicle)
+    } else if (vehicle.passengerIds.length > 0 && vehicle.state !== 'returning' && vehicle.cell) {
+      this.sendAmbulanceHome(vehicle)
+    }
+    this.emit()
+    return {
+      ok: true,
+      message: 'Krankenwagen fährt zur Garage und wird dann verkauft',
+    }
+  }
+
+  private cancelAmbulanceAssignment(vehicle: RoadVehicle): void {
+    for (const visitor of this.state.visitors) {
+      if (visitor.rescueVehicleId === vehicle.id) visitor.rescueVehicleId = null
+    }
+    vehicle.route = []
+    vehicle.target = null
+    vehicle.state = 'idle'
+    vehicle.waitMinutes = 0
+  }
+
+  private completeAmbulanceSale(vehicle: RoadVehicle): void {
+    const position = vehicle.cell ?? vehicle.position
+    vehicle.passengerIds.forEach((visitorId) => {
+      const visitor = this.getVisitor(visitorId)
+      if (!visitor) return
+      visitor.x = position.x + visitor.tileOffsetX
+      visitor.z = position.z + visitor.tileOffsetZ
+      visitor.cellX = position.x
+      visitor.cellZ = position.z
+      visitor.rescueVehicleId = null
+      visitor.injuryVehicleId = null
+      visitor.state = 'sleeping'
+      visitor.thought = 'Der Krankenwagen wurde an der Garage übergeben.'
+    })
+    for (const visitor of this.state.visitors) {
+      if (visitor.rescueVehicleId === vehicle.id) visitor.rescueVehicleId = null
+    }
+    for (const garage of this.state.logistics.ambulanceGarages) {
+      garage.bays = [
+        garage.bays[0] === vehicle.id ? null : garage.bays[0],
+        garage.bays[1] === vehicle.id ? null : garage.bays[1],
+      ]
+    }
+    this.state.logistics.roadVehicles =
+      this.state.logistics.roadVehicles.filter((candidate) => candidate.id !== vehicle.id)
+    const refund = Math.floor(
+      SIMULATION_CONFIG.logistics.ambulanceCost *
+        SIMULATION_CONFIG.logistics.busResaleFraction,
+    )
+    bookFinance(this.state, 'construction', refund)
+    this.state.cashEffects.push({
+      id: this.nextId('ambulance-sale'),
+      amount: refund,
+      x: position.x + 0.5,
+      y: 1.4,
+      z: position.z + 0.5,
+      age: 0,
+    })
   }
 
   private dispatchBus(vehicle: RoadVehicle): void {
@@ -9298,7 +9655,12 @@ export class GameState {
     const path =
       this.getPathAt(cell.x, cell.z, cell.elevation) ??
       this.getPathAt(cell.x, cell.z)
-    visitor.y = path ? this.getPathSurfaceElevation(path) : cell.elevation
+    visitor.y = this.samplePedestrianSurfaceY(
+      visitor.x,
+      visitor.z,
+      path,
+      cell.elevation,
+    )
     visitor.route = []
     visitor.targetId = null
   }
@@ -10172,75 +10534,117 @@ export class GameState {
   }
 
   save(): ActionResult {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(this.state))
-    return { ok: true, message: 'Spiel gespeichert' }
+    try {
+      localStorage.setItem(SAVE_KEY, serializeSnapshot(this.state))
+      return { ok: true, message: 'Spiel gespeichert' }
+    } catch (error) {
+      return { ok: false, message: storageErrorMessage(error, 'Schnellspeichern ist fehlgeschlagen') }
+    }
   }
 
   saveSlot(name: string, id?: string): ActionResult {
     const trimmed = name.trim().replace(/\s+/g, ' ').slice(0, 40)
     if (!trimmed) return { ok: false, message: 'Bitte einen Namen für den Spielstand eingeben' }
     try {
-      const slots = GameState.readSaveSlots()
+      const slots = GameState.readSlotIndex()
       const target = id ? slots.find(slot => slot.id === id) : undefined
       if (!target && slots.length >= 20) return { ok: false, message: 'Maximal 20 lokale Spielstände möglich' }
       const savedAt = Date.now()
-      const next: StoredSaveSlot = {
+      const next: LocalSaveSlot = {
         id: target?.id ?? `slot-${savedAt}-${Math.random().toString(36).slice(2, 8)}`,
         name: trimmed,
         savedAt,
-        snapshot: JSON.stringify(this.state),
       }
       const updated = target
         ? slots.map(slot => slot.id === target.id ? next : slot)
         : [...slots, next]
       localStorage.setItem(SAVE_SLOTS_KEY, JSON.stringify(updated))
-      return { ok: true, message: `Spielstand „${trimmed}“ gespeichert` }
-    } catch {
-      return { ok: false, message: 'Lokaler Spielstandsspeicher ist nicht verfügbar' }
+      try {
+        localStorage.setItem(saveSlotDataKey(next.id), serializeSnapshot(this.state))
+        return { ok: true, message: `Spielstand „${trimmed}“ gespeichert`, slotId: next.id }
+      } catch (error) {
+        return { ok: false, message: storageErrorMessage(error, 'Lokaler Spielstandsspeicher ist nicht verfügbar'), slotId: next.id }
+      }
+    } catch (error) {
+      return { ok: false, message: storageErrorMessage(error, 'Lokaler Spielstandsspeicher ist nicht verfügbar') }
     }
   }
 
   static listSaveSlots(): LocalSaveSlot[] {
-    return GameState.readSaveSlots()
-      .map(({ id, name, savedAt }) => ({ id, name, savedAt }))
-      .sort((a, b) => b.savedAt - a.savedAt)
+    return GameState.readSlotIndex().sort((a, b) => b.savedAt - a.savedAt)
   }
 
   static loadSlot(id: string): GameState | null {
-    const slot = GameState.readSaveSlots().find(candidate => candidate.id === id)
-    return slot ? GameState.fromJSON(slot.snapshot) : null
+    const raw = GameState.readSlotSnapshot(id)
+    return raw ? GameState.fromJSON(raw) : null
   }
 
   static deleteSaveSlot(id: string): ActionResult {
     try {
-      const slots = GameState.readSaveSlots()
+      const slots = GameState.readSlotIndex()
       if (!slots.some(slot => slot.id === id)) return { ok: false, message: 'Spielstand nicht gefunden' }
       localStorage.setItem(SAVE_SLOTS_KEY, JSON.stringify(slots.filter(slot => slot.id !== id)))
+      try { localStorage.removeItem(saveSlotDataKey(id)) } catch { /* index already dropped the row */ }
       return { ok: true, message: 'Spielstand gelöscht' }
-    } catch {
-      return { ok: false, message: 'Lokaler Spielstandsspeicher ist nicht verfügbar' }
+    } catch (error) {
+      return { ok: false, message: storageErrorMessage(error, 'Lokaler Spielstandsspeicher ist nicht verfügbar') }
     }
   }
 
-  private static readSaveSlots(): StoredSaveSlot[] {
+  /** Metadata only — never construct GameState while listing, or a heavy slot empties the archive. */
+  private static readSlotIndex(): LocalSaveSlot[] {
     try {
       const raw = localStorage.getItem(SAVE_SLOTS_KEY)
       if (!raw) return []
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed)) return []
-      return parsed.filter((slot): slot is StoredSaveSlot =>
-        slot && typeof slot.id === 'string' && typeof slot.name === 'string' &&
-        typeof slot.savedAt === 'number' && typeof slot.snapshot === 'string' &&
-        GameState.fromJSON(slot.snapshot) !== null,
-      )
+      const slots: LocalSaveSlot[] = []
+      let migrated = false
+      for (const slot of parsed) {
+        if (!slot || typeof slot.id !== 'string' || typeof slot.name !== 'string' || typeof slot.savedAt !== 'number') continue
+        slots.push({ id: slot.id, name: slot.name, savedAt: slot.savedAt })
+        if (typeof slot.snapshot === 'string') {
+          try {
+            if (localStorage.getItem(saveSlotDataKey(slot.id)) == null) {
+              localStorage.setItem(saveSlotDataKey(slot.id), slot.snapshot)
+            }
+            migrated = true
+          } catch { /* loadSlot can still read the embedded legacy snapshot */ }
+        }
+      }
+      if (migrated) {
+        try { localStorage.setItem(SAVE_SLOTS_KEY, JSON.stringify(slots)) } catch { /* keep the legacy blob */ }
+      }
+      return slots
     } catch {
       return []
     }
   }
 
+  private static readSlotSnapshot(id: string): string | null {
+    try {
+      const side = localStorage.getItem(saveSlotDataKey(id))
+      if (typeof side === 'string' && side) return side
+    } catch { /* try the legacy index blob */ }
+    try {
+      const raw = localStorage.getItem(SAVE_SLOTS_KEY)
+      if (!raw) return null
+      const parsed = JSON.parse(raw) as StoredSaveSlot[]
+      if (!Array.isArray(parsed)) return null
+      const slot = parsed.find(item => item && item.id === id)
+      return typeof slot?.snapshot === 'string' ? slot.snapshot : null
+    } catch {
+      return null
+    }
+  }
+
   static load(): GameState | null {
-    const raw = localStorage.getItem(SAVE_KEY)
-    return raw ? GameState.fromJSON(raw) : null
+    try {
+      const raw = localStorage.getItem(SAVE_KEY)
+      return raw ? GameState.fromJSON(raw) : null
+    } catch {
+      return null
+    }
   }
 
   static fromJSON(raw: string): GameState | null {
@@ -11391,16 +11795,25 @@ export class GameState {
       visitor.facing = Math.atan2(deltaX || direction.x, deltaZ || direction.z)
       if (distance <= movement || distance < 0.001) {
         visitor.x = targetX
-        visitor.y = this.getPathSurfaceElevation(path)
         visitor.z = targetZ
+        visitor.y = this.samplePedestrianSurfaceY(
+          visitor.x,
+          visitor.z,
+          path,
+          cell.elevation,
+        )
         visitor.cellX = cell.x
         visitor.cellZ = cell.z
         visitor.cellElevation = cell.elevation
       } else {
         visitor.x += (deltaX / distance) * movement
-        visitor.y +=
-          (this.getPathSurfaceElevation(path) - visitor.y) * (movement / distance)
         visitor.z += (deltaZ / distance) * movement
+        visitor.y = this.samplePedestrianSurfaceY(
+          visitor.x,
+          visitor.z,
+          path,
+          cell.elevation,
+        )
       }
     })
   }
@@ -11704,16 +12117,25 @@ export class GameState {
       visitor.facing = Math.atan2(deltaX || direction.x, deltaZ || direction.z)
       if (distance <= movement || distance < 0.001) {
         visitor.x = targetX
-        visitor.y = this.getPathSurfaceElevation(path)
         visitor.z = targetZ
+        visitor.y = this.samplePedestrianSurfaceY(
+          visitor.x,
+          visitor.z,
+          path,
+          cell.elevation,
+        )
         visitor.cellX = cell.x
         visitor.cellZ = cell.z
         visitor.cellElevation = cell.elevation
       } else {
         visitor.x += (deltaX / distance) * movement
-        visitor.y +=
-          (this.getPathSurfaceElevation(path) - visitor.y) * (movement / distance)
         visitor.z += (deltaZ / distance) * movement
+        visitor.y = this.samplePedestrianSurfaceY(
+          visitor.x,
+          visitor.z,
+          path,
+          cell.elevation,
+        )
       }
     })
   }
@@ -12308,13 +12730,12 @@ export class GameState {
       }
 
       const targetX = next.x + visitor.tileOffsetX
-      const targetY = nextPath
-        ? this.getPathSurfaceElevation(nextPath)
-        : nextCampingCell?.elevation ??
-          nextMedicalCell?.elevation ??
-          nextFestivalCell?.elevation ??
-          this.getTerrainHeight(next.x, next.z)
       const targetZ = next.z + visitor.tileOffsetZ
+      const fallbackY =
+        nextCampingCell?.elevation ??
+        nextMedicalCell?.elevation ??
+        nextFestivalCell?.elevation ??
+        next.elevation
       const deltaX = targetX - visitor.x
       const deltaZ = targetZ - visitor.z
       const remaining = Math.hypot(deltaX, deltaZ)
@@ -12322,8 +12743,13 @@ export class GameState {
 
       if (remaining <= distance * crowdSpeed) {
         visitor.x = targetX
-        visitor.y = targetY
         visitor.z = targetZ
+        visitor.y = this.samplePedestrianSurfaceY(
+          visitor.x,
+          visitor.z,
+          nextPath,
+          fallbackY,
+        )
         if (nextKey !== oldKey) {
           this.movementOccupancy.set(oldKey, Math.max(0, (this.movementOccupancy.get(oldKey) ?? 0) - 1))
           this.movementOccupancy.set(nextKey, (this.movementOccupancy.get(nextKey) ?? 0) + 1)
@@ -12376,8 +12802,16 @@ export class GameState {
       } else {
         distance *= crowdSpeed
         visitor.x += (deltaX / remaining) * distance
-        visitor.y += (targetY - visitor.y) * (distance / remaining)
         visitor.z += (deltaZ / remaining) * distance
+        const steppedX = Math.floor(visitor.x)
+        const steppedZ = Math.floor(visitor.z)
+        const onNext = steppedX === next.x && steppedZ === next.z
+        visitor.y = this.samplePedestrianSurfaceY(
+          visitor.x,
+          visitor.z,
+          onNext ? nextPath : currentPath ?? nextPath,
+          onNext ? fallbackY : visitor.cellElevation,
+        )
         this.applyCampWalkPenalty(visitor, distance)
         distance = 0
       }
@@ -15229,6 +15663,7 @@ export class GameState {
             node.cell.z,
             allowQueue,
             ignoreDirectional,
+            node.cell.elevation,
           )
         ) {
           continue
@@ -15404,9 +15839,9 @@ export class GameState {
       for (const [dx, dz] of PEDESTRIAN_OFFSETS) {
         const nx = node.cell.x + dx
         const nz = node.cell.z + dz
+        const direction = this.getDirectionIndex(dx, dz)
         for (const building of this.getBuildingsAtCell(nx, nz)) {
           if (building.kind !== 'path') continue
-          if (Math.abs(building.elevation - node.cell.elevation) > 1) continue
           const dest = this.pedestrianNav.get(
             this.packCell({
               x: building.x,
@@ -15415,18 +15850,55 @@ export class GameState {
             }),
           )
           if (!dest) continue
+          if (!this.pedestrianWalkEdgesConnect(node, dest, direction)) continue
           node.links.push({ node: dest, toPath: building })
         }
         if ((node.flags & NAV_GROUND) === 0) continue
         const neighborGround = this.getTerrainHeight(nx, nz)
-        if (Math.abs(neighborGround - node.cell.elevation) > 1) continue
         const dest = this.pedestrianNav.get(
           this.packCell({ x: nx, z: nz, elevation: neighborGround }),
         )
         if (!dest) continue
+        if (!this.pedestrianWalkEdgesConnect(node, dest, direction)) continue
         node.links.push({ node: dest })
       }
     })
+  }
+
+  private pedestrianWalkEdgesConnect(
+    from: PedestrianNavNode,
+    to: PedestrianNavNode,
+    direction: number,
+  ): boolean {
+    if (direction < 0) return false
+    const opposite = (direction + 2) % 4
+    return pedestrianEdgesMeet(
+      this.pedestrianWalkEdgeHeights(from, direction),
+      this.pedestrianWalkEdgeHeights(to, opposite),
+    )
+  }
+
+  private pedestrianWalkEdgeHeights(
+    node: PedestrianNavNode,
+    direction: number,
+  ): [number, number] {
+    const path = node.path
+    if (path) {
+      return wayEdgeHeights(
+        path.elevation,
+        path.pathSlope ?? 0,
+        path.pathSlopeDirection ?? 0,
+        direction,
+      )
+    }
+    return terrainWalkEdgeHeights(
+      this.state.terrain,
+      node.cell.x,
+      node.cell.z,
+      direction,
+      this.getWaterLevel(),
+      (x, z) => this.isInWorld(x, z),
+    )
   }
 
   private isPedestrianSolidAt(x: number, z: number, elevation: number): boolean {
@@ -15545,6 +16017,7 @@ export class GameState {
     fromZ: number,
     allowQueue: boolean,
     ignoreDirectionalRestrictions = false,
+    fromElevation = from?.elevation ?? to.elevation,
   ): boolean {
     const fromIsQueue = from?.pathType === 'queue'
     const toIsQueue = to.pathType === 'queue'
@@ -15568,20 +16041,19 @@ export class GameState {
     ) {
       return false
     }
-    if (
-      !canTraverseWayElevation(
-        from?.elevation ?? to.elevation,
-        from?.pathSlope ?? 0,
-        from?.pathSlopeDirection,
-        to.elevation,
-        to.pathSlope ?? 0,
-        to.pathSlopeDirection,
-        direction,
-      )
-    ) {
-      return false
-    }
-    return true
+    const ramped = canTraverseWayElevation(
+      from?.elevation ?? fromElevation,
+      from?.pathSlope ?? 0,
+      from?.pathSlopeDirection,
+      to.elevation,
+      to.pathSlope ?? 0,
+      to.pathSlopeDirection,
+      direction,
+    )
+    if (ramped) return true
+    // Ground may step onto a way across a land slope (≤ 0.5). Path-to-path
+    // still needs a real ramp so people cannot skip the way polyline.
+    return !from && canStepPedestrianHeight(fromElevation, to.elevation)
   }
 
   private isQueueChainStep(
@@ -16596,9 +17068,41 @@ export class GameState {
     }
   }
 
-  private getPathSurfaceElevation(path: PlacedBuilding | undefined): number {
+  private getPathSurfaceElevation(
+    path: PlacedBuilding | undefined,
+    x?: number,
+    z?: number,
+  ): number {
     if (!path) return 0
-    return path.elevation - (path.pathSlope ?? 0) / 2
+    if (x === undefined || z === undefined) {
+      return waySurfaceY(path.elevation, path.pathSlope ?? 0)
+    }
+    return waySurfaceYAt(
+      path.elevation,
+      path.pathSlope ?? 0,
+      path.pathSlopeDirection ?? 0,
+      x - path.x,
+      z - path.z,
+    )
+  }
+
+  private samplePedestrianSurfaceY(
+    x: number,
+    z: number,
+    path: PlacedBuilding | undefined,
+    fallback: number,
+  ): number {
+    if (path) return this.getPathSurfaceElevation(path, x, z)
+    const cellX = Math.floor(x)
+    const cellZ = Math.floor(z)
+    if (!this.isInWorld(cellX, cellZ)) return fallback
+    return sampleTerrainSurface(
+      this.state.terrain,
+      x,
+      z,
+      this.getWaterLevel(),
+      (cx, cz) => this.isInWorld(cx, cz),
+    )
   }
 
   private normalizePrice(price: number): number {

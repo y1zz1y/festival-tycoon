@@ -282,7 +282,7 @@ export function testSealedWasteContainer(fixture: (count?: number) => GameState)
   roadside.addDebugMoney()
   const roadState = roadside.snapshot as GameSnapshot
   const edge = -roadState.scenario.worldSize / 2
-  for (let z = edge; z <= -16; z += 1) {
+  for (let z = edge; z <= -14; z += 1) {
     if (!roadState.logistics.roadCells.some((cell) => cell.x === 0 && cell.z === z)) {
       assert.ok(roadside.designateRoad([{ x: 0, z }]).ok)
     }
@@ -290,25 +290,52 @@ export function testSealedWasteContainer(fixture: (count?: number) => GameState)
   assert.ok(roadside.place('wasteDepot', -2, -18).ok)
   assert.ok(roadside.buyGarbageTruck(roadState.logistics.wasteDepots[0]!.id).ok)
   const truck = roadState.logistics.roadVehicles.find((vehicle) => vehicle.kind === 'garbageTruck')!
-  assert.ok(roadside.place('sealedWasteContainer', 0, -17).ok)
+  assert.ok(roadside.place('sealedWasteContainer', 0, -15).ok)
   const onRoad = roadState.buildings.find((item) => item.kind === 'sealedWasteContainer')!
   onRoad.wasteFill = 12
   assert.ok(roadside.isSealedWasteContainerOnRoad(onRoad))
+  assert.ok(roadside.designateWasteDump([{ x: 1, z: -15 }]).ok)
+  const roadsideDump = roadState.wasteDumpCells.find((cell) => cell.x === 1 && cell.z === -15)!
+  roadsideDump.stored = 4
+  assert.ok(roadside.designateWasteDump([{ x: 1, z: -18 }]).ok)
+  const depotDump = roadState.wasteDumpCells.find((cell) => cell.x === 1 && cell.z === -18)!
+  depotDump.stored = 20
   truck.state = 'idle'
   truck.cargo = 0
-  truck.cell = { x: 0, z: -17 }
-  truck.position = { x: 0, z: -17 }
   truck.route = []
+  truck.target = null
+  assert.ok(truck.cell, 'the bought truck stays at the depot access')
+  assert.notEqual(
+    `${truck.cell?.x}:${truck.cell?.z}`,
+    `${onRoad.x}:${onRoad.z}`,
+    'dispatch must work without teleporting onto the container tile',
+  )
   ;(roadside as any).dispatchGarbageTruck(truck)
-  assert.equal(truck.target?.kind, 'sealedWasteContainer')
+  assert.equal(
+    truck.target?.kind,
+    'sealedWasteContainer',
+    'a dump pad on the depot access or container tile must not steal the truck target',
+  )
   if (truck.target?.kind === 'sealedWasteContainer') {
     assert.equal(truck.target.buildingId, onRoad.id)
   }
-  truck.state = 'responding'
-  truck.route = []
-  ;(roadside as any).finishGarbageTruckLeg(truck)
-  assert.equal(onRoad.wasteFill, 0, 'a roadside sealed container is emptied by the garbage truck')
-  assert.equal(truck.cargo, 12)
+  assert.ok(
+    truck.route.every((cell) => cell.x !== onRoad.x || cell.z !== onRoad.z),
+    'the truck pulls onto an adjacent road instead of occupying the container cell',
+  )
+  roadside.snapshot.parkOpen = false
+  roadside.snapshot.visitors = []
+  roadside.snapshot.speed = 3
+  const roadsideFill = onRoad.wasteFill ?? 0
+  for (let step = 0; step < 240; step += 1) {
+    roadside.tick(0.1)
+    if ((onRoad.wasteFill ?? 0) < roadsideFill) break
+  }
+  assert.ok(
+    (onRoad.wasteFill ?? 0) < roadsideFill,
+    'a roadside sealed container is emptied after the garbage-truck leg',
+  )
+  assert.ok(truck.cargo > 0)
 
   const grass = fixture(0)
   grass.addDebugMoney()

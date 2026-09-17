@@ -15,7 +15,7 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
 | Gerichtete Wege / Queues | `src/game/pathFlow.ts`, `src/game/queueLanes.ts`, `GameState.recalculateQueueDirections` | `allowsPathFlow`, Queue-Kette, Stand-Spuren |
 | Weg-Darstellung | `src/view/PathFlowView.ts` | Bodenmarkierungen |
 | Straßen-Graph (Fahrzeuge) | `src/game/logistics.ts` | `createRoadGraph`, `findRoadRoute`; Nachbarn nur bei passender Kantenhöhe / Rampe |
-| Rampen / Halbstufen | `src/game/wayElevation.ts` | `canTraverseWayElevation`, `packWayElevation` |
+| Rampen / Halbstufen / Klippen | `src/game/wayElevation.ts`, `src/game/terrain.ts` | `canTraverseWayElevation`, `wayEdgeHeights`, `waySurfaceYAt`, `canStepPedestrianHeight`, `terrainWalkEdgeHeights`, `sampleTerrainSurface` |
 | Ampeln / Wegschranken | `src/game/accessControl.ts` | `closedAccessEdges`, `accessEdgeKey` |
 | Personaleingang-Kante | `src/game/accessControl.ts` | `staffGateBlocksVisitor`, `staffGateDirection` |
 | Camping-Multi-Goal | `src/game/camping.ts` | `CampingSystem.findRouteToGathering` |
@@ -42,6 +42,14 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
   Straßen auf einer Kachel verbinden sich nur bei passender Kantenhöhe.
 - `packCell` kodiert Höhen in Halbstufen (`elevation * 2`), damit 0.5 und 1.0
   nicht kollidieren. Alte volle Stufen (`pathSlope` ±1) bleiben begehbar.
+- Fußkanten sind nur begehbar, wenn die **gemeinsame Kante** ohne Klippe
+  zusammenpasst (`wayEdgeHeights` / `terrainWalkEdgeHeights`). Rohgelände:
+  höchstens **0,5** (sichtbarer Hang); Δ **1,0** ist eine Steinklippe und
+  gesperrt. Wege brauchen eine echte Rampe (`canTraverseWayElevation`). Gras
+  neben einem 1,0-Weg ohne Rampe ist keine Abkürzung — die Route folgt der
+  Weg-Kette. Geländedits erhöhen `worldRevision` und bauen den Fußgraphen
+  sofort neu. Bewegung liest Y aus Wegsamples (`waySurfaceYAt`) bzw. dem
+  Gelände-Dreieck (`sampleTerrainSurface`), statt an Kachelgrenzen zu springen.
 - Crowd-Kosten ändern sich häufiger: gecachte Routen **gestaffelt** nach
   30–59 Ticks verfallen lassen. Nicht den ganzen Cache bei jedem Crowd-Update
   oder bei Cap leeren; bei Cap eine Eintrag entfernen.
@@ -135,7 +143,8 @@ Crowd-Expiry, Bau-Invalidierung). `tests/supplyChain.ts` (Umwege nach
 Cache-Expiry). `tests/regression.ts` (Wegschlüssel inkl. Höhe `0`; Abreise
 eines von Camping-Ausweisungen eingeschlossenen Besuchers nach Festivalende).
 `tests/wayElevation.ts` (Halbstufen, Fuß- und Straßenrampen, Legacy-Volleinheit,
-Fußweg-Kreuzung behält die Autostraße). `tests/operations.ts` (nach dem
+Fußweg-Kreuzung behält die Autostraße; Klippe 0→1 blockiert, 0,5-Hang und
+Weg-Rampe begehbar, Bewegung folgt den Wegkacheln ohne Y-Warp). `tests/operations.ts` (nach dem
 Aussteigen laufen Gäste vom Nachbarweg zum Ziel, nicht in die Parkbucht;
 Abreise sucht die Gehweg-Türen in einer Multi-Goal-Suche).
 `tests/accessControl.ts` (rote Ampel, geschlossene Schranke, Umparken,
@@ -143,7 +152,7 @@ Liefer- und Müllwagen-Umweg). `tests/operations.ts` (Queue-Kette ohne
 Shortcuts, Rückwärtsgehen, Stand-Spuren, Saugroboter durch `staffOnly`).
 `tests/queueLanes.ts` (Geometrie
 der hälftigen Stand-Spuren).
-Wasser für Gäste und Invalidierung nach Geländedit: `tests/terrainLand.ts`.
+Wasser für Gäste, Invalidierung nach Geländedit und Klippen-Nav: `tests/terrainLand.ts`.
 `tests/pedestrianBarriers.ts` (Hecke/Wand/Zaun sperren, Wandtür passierbar,
 Vollfeld vs. Kante, Nav-Invalidierung bei Setzen/Abriss).
 `tests/operations.ts` / `tests/accessControl.ts` (Personaleingang: bemalte

@@ -497,3 +497,4 @@ export const STARTING_MONEY = SIMULATION_CONFIG.economy.startingMoney
 export const WORLD_SIZE = 48
 export const SAVE_KEY = 'festival-simulator-save-v1'
 export const SAVE_SLOTS_KEY = 'festival-simulator-save-slots-v1'
+export const saveSlotDataKey = (id: string): string => `${SAVE_SLOTS_KEY}:${id}`

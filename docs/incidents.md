@@ -73,8 +73,11 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
   (beauty −8, party −2, range 3) plus
   `waste.sealedContainerStoredBeautyPerBag` (−0,22 je Beutel) statt
   offener Ablage (`wasteDump` −48 / −1,4 je Beutel). Müllwagen leeren
-  den Container nur, wenn er **auf einer Straße** liegt und die Straße
-  vom Müllnetz erreichbar ist. Idle Reinigung (niedrigste Priorität nach
+  den Container nur, wenn er **auf einer Straße** liegt und eine
+  Nachbarstraße vom Müllnetz erreichbar ist; der Wagen hält neben der
+  Kiste, nicht auf derselben Kachel. Gefüllte Straßenkisten haben Vorrang
+  vor offenen Ablagen, damit eine Depot-Kippzufahrt den Wagen nicht
+  dauerhaft von den Containern fernhält. Idle Reinigung (niedrigste Priorität nach
   vollen Eimern, Litter/Kotze/Camps und idle Eimer-Leeren) trägt zur
   Ablage, sobald `stored > 0` und kein Müllwagen **unterwegs** ist.
   `truckReachable` allein reicht nicht zum Überspringen: ohne Wagen
@@ -115,10 +118,11 @@ statt Insassen).
 verletzte Insassen noch im Fahrzeug).
 `tests/sealedWasteContainer.ts` (Kapazität 80, nähere Container vor
 Ablage, volle Container übersprungen, versiegelte Attraktivitätsstrafe
-schwächer als offene Ablage, Müllwagen leert nur Straßen-Container,
-idle Reinigung trägt Container→Ablage auch wenn die Straße erreichbar
-ist aber kein Wagen kommt, voller Eimer bleibt vorrangig, Live-Tick
-leert off-road und liefert an die Ablage).
+schwächer als offene Ablage, Müllwagen vom Depot zielt Straßen-Container
+auch bei Ablage an der Depotzufahrt und senkt `stored` nach der Tour, off-road nicht, idle Reinigung trägt
+Container→Ablage auch wenn die Straße erreichbar ist aber kein Wagen
+kommt, voller Eimer bleibt vorrangig, Live-Tick leert off-road und
+liefert an die Ablage).
 
 ## Bei Änderungen dieses Dokument
 
@@ -140,4 +144,6 @@ gemergtes Container-Mesh, kein Draw-Call je Beutel. `wasteFill` wie bei
 Eimern, geklemmt auf 80. Infofenster zeigt Füllstand und ob ein Müllwagen
 abfahren kann. Kein neues `GameCommand`; bestehendes `place` reicht.
 Fahrzeugziel `sealedWasteContainer` (`buildingId`, x, z) in
-`docs/multiplayer.md` / `docs/saves.md`.
+`docs/multiplayer.md` / `docs/saves.md`. Der Wagen hält auf einer
+Nachbarstraße; eine Ablage-Zufahrt auf der Containerkachel stiehlt
+das Ziel nicht.

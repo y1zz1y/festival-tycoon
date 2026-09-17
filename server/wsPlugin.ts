@@ -34,14 +34,36 @@ export function festivalMultiplayer(): Plugin {
     name: 'festival-multiplayer',
     configureServer(server) {
       bindWebSocket(server, server.config.server.port ?? 5173)
-      server.middlewares.use((request, response, next) => { void handleApi(request, response).then(handled => { if (!handled) next() }) })
+      server.middlewares.use((request, response, next) => {
+        void handleApi(request, response).then(
+          (handled) => { if (!handled) next() },
+          (error) => {
+            if (!response.headersSent) {
+              response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+              response.end(JSON.stringify({ error: 'Spielserver-Fehler beim Lesen der Spielstände' }))
+            }
+            console.error(error)
+          },
+        )
+      })
     },
     configurePreviewServer(server) {
       bindWebSocket(
         server as unknown as ViteDevServer,
         server.config.preview.port ?? 4173,
       )
-      server.middlewares.use((request, response, next) => { void handleApi(request, response).then(handled => { if (!handled) next() }) })
+      server.middlewares.use((request, response, next) => {
+        void handleApi(request, response).then(
+          (handled) => { if (!handled) next() },
+          (error) => {
+            if (!response.headersSent) {
+              response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+              response.end(JSON.stringify({ error: 'Spielserver-Fehler beim Lesen der Spielstände' }))
+            }
+            console.error(error)
+          },
+        )
+      })
     },
   }
 }

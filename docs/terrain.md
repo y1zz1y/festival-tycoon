@@ -9,14 +9,14 @@ ist von Wegbelägen getrennt.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Höhen, Ecken, Wasser, Edits | `src/game/terrain.ts` | `generateTerrain`, `planTerrainEdit`, `planTerrainAreaEdit`, `tileVisualCorner`, `tileShowsWater`, `getTerrainHeight`, `getWaterLevel` |
+| Höhen, Ecken, Wasser, Edits | `src/game/terrain.ts` | `generateTerrain`, `planTerrainEdit`, `planTerrainAreaEdit`, `tileVisualCorner`, `terrainWalkEdgeHeights`, `sampleTerrainSurface`, `tileShowsWater`, `getTerrainHeight`, `getWaterLevel` |
 | Gelände-Cache | `src/game/GameState.ts` | `rebuildTerrainCache` speichert Halbstufen als `height * 2` |
 | Stützen nur im Freiraum | `src/game/supportOccupancy.ts` | `supportGap`, `tileSupportSolids` |
 | Szenario, Weltgröße, Eingang | `src/game/scenario.ts` | `ScenarioSettings`, `SCENARIO_WORLD_SIZES` |
 | Umgebungen (Acker, Wüste, …) | `src/game/environments.ts` | `ENVIRONMENTS` |
 | Bodenzellen und Vorbereitung | `src/game/ground.ts` | `groundInfo`, `prepareGround`, `prepareGroundArea` |
 | Fußweg-/Straßenbeläge | `src/game/wayTypes.ts` | `WAY_TYPES`, `wayInfo`, `wayIssue` |
-| Weg- und Straßenrampen | `src/game/wayElevation.ts` | Halbstufen `0.5`, `MAX_PATH_ELEVATION` 6, Autodach `MAX_ROAD_RAISE` 1; `planLockedOriginRamp` / Shift-Ausgang |
+| Weg- und Straßenrampen | `src/game/wayElevation.ts` | Halbstufen `0.5`, `MAX_PATH_ELEVATION` 6, Autodach `MAX_ROAD_RAISE` 1; `planLockedOriginRamp` / Shift-Ausgang; Fußkanten `wayEdgeHeights` / `canStepPedestrianHeight` |
 | Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/view/WorldView.ts` | Gebäude/Deko/Achterbahn-Start rasten auf 0.5; gelbe Bodenkachel-Markierung unter dem Zeiger |
 | Terrain-Balancing | `src/game/simulationConfig.ts` | `terrain` (`waterHeight` −0.5, `minSwimDepth`, Schwimmkosten) |
 | Sichtbares Mesh / Atlas | `src/view/terrainSurface.ts` | ein Draw-Call für den Boden |
@@ -37,7 +37,11 @@ ist von Wegbelägen getrennt.
   dem Startpunkt. Neue Karten haben `waterLevel: -0.5`; Wasser liegt auf
   gefluteten Feldern und auf Uferhängen mit Ecke `<= waterLevel`. Alte
   Saves ohne Feld bekommen −0.5 (früherer Schlamm −1 wird badbar).
-  Geländedits erhöhen `worldRevision` sofort.
+  Geländedits erhöhen `worldRevision` sofort. Fußgänger verbinden Nachbarfelder
+  nur, wenn die gemeinsamen visuellen Kanten zusammenpassen: Δ **0,5** ist ein
+  Hang, Δ **1,0** eine Steinklippe — außer ein Weg mit Rampe trägt die Höhe
+  (`waySurfaceYAt`). Bewegung folgt dieser Oberfläche, nicht einem Y-Sprung
+  an der Feldgrenze.
 - Autoritative Terrain- und Navigationshöhen nicht durch Render-Meshes ersetzen.
   Die freie Bauhöhe (Gebäude, Deko, Achterbahn-Start) rastet ebenfalls auf
   **halbe** Stufen (`0.5`, 0–6); Autodach bleibt 1.0. Im Baumodus liegt auf
@@ -78,12 +82,12 @@ ist von Wegbelägen getrennt.
 Save-Stabilität, keine Sim-Mutation, Parkplatz-Asphalt nur auf Parkfeldern).
 `tests/terrainLand.ts` (drei Werkzeuge, Schritt 0,5, Fläche auf Starthöhe,
 Klippe nach 0,5 Hang, Wasser am Uferhang, Schwimmen, Nav-Invalidierung,
-Stützen nur im Freiraum). `tests/environments.ts`.
+Stützen nur im Freiraum, Fußweg 0→0,5 ja / 0→1 Klippe nein). `tests/environments.ts`.
 `tests/operations.ts` (Parkplatz-Abriss gibt die Kachel frei).
 `tests/supplyChain.ts` (Bodenarbeiten).
 `tests/wayElevation.ts` (Halbstufen-Rampen, beide Way-Typen, Autodach, Save-Migration,
 fester Shift-Ausgang beim Rampenstreichen, Fußweg auf Autostraße behält die
-Straße, ein Straßenfeld übermalen löscht keine Nachbarn).
+Straße, ein Straßenfeld übermalen löscht keine Nachbarn, Klippe 0→1 blockiert).
 `tests/placementPreview.ts` (Gebäude-Bauhöhe 0.5, Bodenkachel der Vorschau).
 
 ## Bei Änderungen dieses Dokument

@@ -100,6 +100,8 @@ export type RoadVehicle = {
   parkingSearchCursor?: number
   workZones?: string[]
   reservedParkingId?: string | null
+  /** Fleet sale after the vehicle reaches its depot/garage. */
+  pendingSale?: boolean
 }
 
 export const ROAD_VEHICLE_KIND_LABELS: Record<
@@ -182,6 +184,9 @@ export function describeRoadVehicleActivity(vehicle: RoadVehicle): string {
     case 'responding':
       return 'Fährt zum Einsatz'
     case 'returning':
+      if (vehicle.pendingSale && vehicle.kind === 'ambulance') {
+        return 'Fährt zur Garage und wird verkauft'
+      }
       return vehicle.kind === 'visitorCar' || vehicle.kind === 'deliveryTruck'
         ? 'Fährt vom Gelände ab'
         : 'Fährt zurück'
@@ -683,6 +688,51 @@ export function findRoadRoute(
   return path?.map((node) => node.cell) ?? null
 }
 
+/** Road cells a shuttle visits in stop order, then loops to the first stop. */
+export function previewBusLineRoute(options: {
+  roadCells: readonly RoadCell[]
+  stops: readonly BusStop[]
+  stopIds: readonly string[]
+  graph?: RoadGraph
+  worldSize?: number
+}): RoadPosition[] {
+  const ordered = options.stopIds.flatMap((stopId) => {
+    const stop = options.stops.find((candidate) => candidate.id === stopId)
+    return stop ? [stop] : []
+  })
+  if (ordered.length === 0) return []
+  if (ordered.length === 1) return [toRoadPosition(ordered[0]!.roadCell)]
+  const graph =
+    options.graph ??
+    createRoadGraph(options.roadCells, options.worldSize ?? WORLD_SIZE)
+  const cells: RoadPosition[] = []
+  const hops = [...ordered, ordered[0]!]
+  for (let index = 0; index < hops.length - 1; index += 1) {
+    const from = hops[index]!.roadCell
+    const to = hops[index + 1]!.roadCell
+    const route = findRoadRoute({
+      roadCells: options.roadCells,
+      graph,
+      start: from,
+      target: to,
+      worldSize: options.worldSize,
+    })
+    if (cells.length === 0) cells.push(toRoadPosition(from))
+    if (!route || route.length === 0) {
+      const target = toRoadPosition(to)
+      const last = cells.at(-1)
+      if (!last || last.x !== target.x || last.z !== target.z) cells.push(target)
+      continue
+    }
+    for (const cell of route) {
+      const next = toRoadPosition(cell)
+      const last = cells.at(-1)
+      if (!last || last.x !== next.x || last.z !== next.z) cells.push(next)
+    }
+  }
+  return cells
+}
+
 export function normalizeLogisticsSnapshot(value: unknown): LogisticsSnapshot {
   const source = asRecord(value)
   return {
@@ -802,6 +852,7 @@ function normalizeRoadVehicle(value: unknown): RoadVehicle | null {
     parkingSearchCursor: Math.floor(nonNegativeNumber(source.parkingSearchCursor)),
     workZones: Array.isArray(source.workZones) ? stringArray(source.workZones) : undefined,
     reservedParkingId: nullableString(source.reservedParkingId),
+    ...(source.pendingSale === true ? { pendingSale: true } : {}),
   }
 }
 

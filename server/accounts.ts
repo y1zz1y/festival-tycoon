@@ -104,6 +104,11 @@ function accountOfToken(token: string | null): PublicAccount | null {
   return { id: row.id, name: row.name, createdAt: row.createdAt }
 }
 
+/** Opens the accounts tables so other routes can join `users` even without a session cookie. */
+export function ensureAccountsSchema(): void {
+  db()
+}
+
 /** Who is knocking, as far as a local server can tell. */
 function originOf(request: IncomingMessage): string {
   const forwarded = request.headers['x-forwarded-for']

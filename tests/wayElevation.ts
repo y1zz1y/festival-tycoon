@@ -7,9 +7,14 @@ import {
   MAX_PATH_ELEVATION,
   MAX_ROAD_RAISE,
   WAY_ELEVATION_STEP,
+  canStepPedestrianHeight,
   lockShiftElevationOrigin,
+  pedestrianEdgesMeet,
   planLockedOriginRamp,
+  wayEdgeHeights,
+  waySurfaceYAt,
 } from '../src/game/wayElevation'
+import { terrainWalkEdgeHeights } from '../src/game/terrain'
 
 function blankGame(): GameState {
   const initial = structuredClone(new GameState().snapshot)
@@ -24,6 +29,7 @@ function blankGame(): GameState {
 
 export function testWayElevation(): void {
   testOverpassTraffic()
+  testPedestrianCliffAndRampWalk()
   assert.equal(WAY_ELEVATION_STEP, 0.5)
   assert.equal(MAX_ROAD_RAISE, 1)
   assert.equal(MAX_PATH_ELEVATION, 6)
@@ -374,4 +380,186 @@ function testOverpassTraffic(): void {
   climber.route = []
   ;(ramp as any).updateLogistics(0.1)
   assert.ok(!rampState.logistics.roadVehicles.includes(climber), 'a legal alternative exit outside the default lanes still completes departure')
+}
+
+function walkGame(game: GameState) {
+  return game as unknown as {
+    findPath: (
+      start: { x: number; z: number; elevation: number },
+      goals: Array<{ x: number; z: number; elevation: number }>,
+    ) => Array<{ x: number; z: number; elevation: number }> | null
+    moveVisitor: (visitor: { route: unknown[] } & Record<string, unknown>, distance: number, decideOnArrival?: boolean) => void
+  }
+}
+
+function assertNoCliffSteps(
+  route: Array<{ x: number; z: number; elevation: number }>,
+  message: string,
+): void {
+  for (let index = 1; index < route.length; index += 1) {
+    const previous = route[index - 1]!
+    const current = route[index]!
+    assert.ok(
+      canStepPedestrianHeight(previous.elevation, current.elevation),
+      `${message}: ${previous.x},${previous.z}@${previous.elevation} → ${current.x},${current.z}@${current.elevation}`,
+    )
+  }
+}
+
+function testPedestrianCliffAndRampWalk(): void {
+  assert.equal(canStepPedestrianHeight(0, 0.5), true)
+  assert.equal(canStepPedestrianHeight(0, 1), false)
+  const flatToRamp = wayEdgeHeights(0, 0, 0, 0)
+  const rampFromSouth = wayEdgeHeights(0.5, 0.5, 0, 2)
+  assert.ok(pedestrianEdgesMeet(flatToRamp, rampFromSouth), 'a 0.5 path ramp meets the low path')
+  assert.equal(
+    pedestrianEdgesMeet(wayEdgeHeights(0, 0, 0, 0), wayEdgeHeights(1, 0, 0, 2)),
+    false,
+    'flat 0 and flat 1 do not share an edge',
+  )
+  assert.ok(
+    Math.abs(waySurfaceYAt(0.5, 0.5, 0, 0.5, 0) - 0) < 1e-9,
+    'ramp Y at the low edge is the start height',
+  )
+  assert.ok(
+    Math.abs(waySurfaceYAt(0.5, 0.5, 0, 0.5, 1) - 0.5) < 1e-9,
+    'ramp Y at the high edge is the end height',
+  )
+
+  const cliffLand = { heights: { '8,-4': 1 } }
+  assert.equal(
+    pedestrianEdgesMeet(
+      terrainWalkEdgeHeights(cliffLand, 9, -4, 3),
+      terrainWalkEdgeHeights(cliffLand, 8, -4, 1),
+    ),
+    false,
+    'land-0 and land-1 leave a stone cliff on the shared edge',
+  )
+  const slopeLand = { heights: { '8,-4': 0.5 } }
+  assert.ok(
+    pedestrianEdgesMeet(
+      terrainWalkEdgeHeights(slopeLand, 9, -4, 3),
+      terrainWalkEdgeHeights(slopeLand, 8, -4, 1),
+    ),
+    'land-0 and land-0.5 meet on a walkable slope',
+  )
+
+  const cliff = blankGame()
+  const beforeCliff = cliff.worldRevision
+  assert.ok(cliff.editTerrain(8, -4, 'raise').ok)
+  assert.ok(cliff.editTerrain(8, -4, 'raise').ok)
+  assert.ok(cliff.worldRevision > beforeCliff, 'raising land invalidates navigation immediately')
+  assert.equal(cliff.getTerrainHeight(8, -4), 1)
+  const overCliff = walkGame(cliff).findPath(
+    { x: 9, z: -4, elevation: 0 },
+    [{ x: 8, z: -4, elevation: 1 }],
+  )
+  assert.equal(overCliff, null, 'cannot path from land-0 to land-1 across a cliff')
+
+  const slope = blankGame()
+  assert.ok(slope.editTerrain(8, -4, 'raise').ok)
+  const overSlope = walkGame(slope).findPath(
+    { x: 9, z: -4, elevation: 0 },
+    [{ x: 8, z: -4, elevation: 0.5 }],
+  )
+  assert.ok(overSlope && overSlope.length >= 1, 'can path via a 0.5 land slope')
+  assertNoCliffSteps(
+    [{ x: 9, z: -4, elevation: 0 }, ...overSlope],
+    '0.5 slope route',
+  )
+
+  const ramps = blankGame()
+  assert.ok(ramps.placePathSegment(6, -8, 0).ok)
+  assert.ok(ramps.placePathSegment(6, -7, 0.5, 'normal', 0, 0.5).ok)
+  assert.ok(ramps.placePathSegment(6, -6, 1, 'normal', 0, 0.5).ok)
+  const viaRamp = walkGame(ramps).findPath(
+    { x: 6, z: -8, elevation: 0 },
+    [{ x: 6, z: -6, elevation: 1 }],
+  )
+  assert.ok(viaRamp && viaRamp.length >= 2, 'can path via a way that ramps')
+  assert.ok(
+    viaRamp.some((cell) => cell.x === 6 && cell.z === -7 && cell.elevation === 0.5),
+    'the route includes the 0.5 ramp tile',
+  )
+  assertNoCliffSteps([{ x: 6, z: -8, elevation: 0 }, ...viaRamp], 'ramped path')
+
+  const beside = walkGame(ramps).findPath(
+    { x: 5, z: -6, elevation: 0 },
+    [{ x: 6, z: -6, elevation: 1 }],
+  )
+  if (beside) {
+    assert.ok(
+      beside.some((cell) => Math.abs(cell.elevation - 0.5) < 1e-6),
+      'reaching a high path from grass goes via the ramp, not the cliff face',
+    )
+    assertNoCliffSteps([{ x: 5, z: -6, elevation: 0 }, ...beside], 'grass to high path')
+  }
+
+  const noRamp = blankGame()
+  assert.ok(noRamp.placePathSegment(4, -6, 1).ok)
+  assert.equal(
+    walkGame(noRamp).findPath(
+      { x: 5, z: -6, elevation: 0 },
+      [{ x: 4, z: -6, elevation: 1 }],
+    ),
+    null,
+    'a 1.0 path without a ramp is not a walkable step from land-0',
+  )
+
+  const mover = blankGame()
+  assert.ok(mover.placePathSegment(4, -8, 0).ok)
+  assert.ok(mover.placePathSegment(4, -7, 0.5, 'normal', 0, 0.5).ok)
+  assert.ok(mover.placePathSegment(4, -6, 1, 'normal', 0, 0.5).ok)
+  const visitor = {
+    id: 'ramp-walker',
+    x: 4.4,
+    y: waySurfaceYAt(0, 0, 0, 0.4, 0.4),
+    z: -7.6,
+    cellX: 4,
+    cellZ: -8,
+    cellElevation: 0,
+    tileOffsetX: 0.4,
+    tileOffsetZ: 0.4,
+    route: [
+      { x: 4, z: -7, elevation: 0.5 },
+      { x: 4, z: -6, elevation: 1 },
+    ],
+    state: 'exploring',
+  }
+  const seen = new Set<string>(['4,-8,0'])
+  let previousY = visitor.y
+  for (let step = 0; step < 40; step += 1) {
+    walkGame(mover).moveVisitor(visitor, 0.2, false)
+    seen.add(`${visitor.cellX},${visitor.cellZ},${visitor.cellElevation}`)
+    assert.ok(
+      Math.abs(visitor.y - previousY) <= 0.35,
+      `movement Y follows the ramp instead of warping (${previousY} → ${visitor.y})`,
+    )
+    const surfaceAt = (x: number, z: number, elevation: number) => {
+      const path = mover.getPathAt(x, z, elevation)
+      if (!path) return null
+      return waySurfaceYAt(
+        path.elevation,
+        path.pathSlope ?? 0,
+        path.pathSlopeDirection ?? 0,
+        visitor.x - path.x,
+        visitor.z - path.z,
+      )
+    }
+    const currentY = surfaceAt(visitor.cellX, visitor.cellZ, visitor.cellElevation)
+    const tileY = surfaceAt(Math.floor(visitor.x), Math.floor(visitor.z), visitor.cellElevation)
+    const next = visitor.route[0] as { x: number; z: number; elevation: number } | undefined
+    const nextY = next ? surfaceAt(next.x, next.z, next.elevation) : null
+    const candidates = [currentY, tileY, nextY].filter((value): value is number => value != null)
+    assert.ok(candidates.length > 0, 'walker stays on the way tiles')
+    assert.ok(
+      candidates.some((expectedY) => Math.abs(visitor.y - expectedY) < 0.03),
+      `Y is sampled on the way surface (${visitor.y} vs ${candidates.join('/')} at ${visitor.x},${visitor.z})`,
+    )
+    previousY = visitor.y
+    if (visitor.route.length === 0 && visitor.cellZ === -6) break
+  }
+  assert.ok(seen.has('4,-7,0.5'), 'movement visits the 0.5 ramp tile')
+  assert.ok(seen.has('4,-6,1'), 'movement reaches the top of the ramp')
+  assert.equal(seen.has('4,-6,1') && !seen.has('4,-5,1'), true)
 }

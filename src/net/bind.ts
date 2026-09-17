@@ -233,6 +233,14 @@ export function enableMultiplayerCommands(game: GameState): void {
     type: 'buyAmbulance',
     garageId,
   }))
+  game.sellAmbulance = wrap(game, game.sellAmbulance, (garageId) => ({
+    type: 'sellAmbulance',
+    garageId,
+  }))
+  game.sellAmbulanceVehicle = wrap(game, game.sellAmbulanceVehicle, (vehicleId) => ({
+    type: 'sellAmbulanceVehicle',
+    vehicleId,
+  }))
   game.buyBus = wrap(game, game.buyBus, (depotId) => ({ type: 'buyBus', depotId }))
   game.sellBus = wrap(game, game.sellBus, (depotId) => ({ type: 'sellBus', depotId }))
   game.buyGarbageTruck = wrap(game, game.buyGarbageTruck, (depotId) => ({
@@ -263,6 +271,15 @@ export function enableMultiplayerCommands(game: GameState): void {
       headway,
     }),
   )
+  game.addBusToLine = wrap(game, game.addBusToLine, (lineId) => ({
+    type: 'addBusToLine',
+    lineId,
+  }))
+  game.setBusLineStops = wrap(game, game.setBusLineStops, (lineId, stopIds) => ({
+    type: 'setBusLineStops',
+    lineId,
+    stopIds,
+  }))
   game.deleteBusLine = wrap(game, game.deleteBusLine, (lineId) => ({
     type: 'deleteBusLine',
     lineId,
