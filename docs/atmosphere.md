@@ -38,6 +38,8 @@ Details der Gewichte stehen in `SIMULATION_CONFIG.atmosphere.sources`
 
 ## Wichtige Regeln
 
+- Hörbare Atmosphäre (Bühne, Gedränge, Camp, Wald) ist kein Overlay-Feld,
+  sondern kamera-orientiertes SFX mit Voice-Budget — siehe [audio.md](audio.md).
 - Overlay-Berechnung im Tick / auf gedrosselten UI-Intervallen, nicht pro Frame
   für die ganze Karte neu erfinden. Logistik/Untergrund ist ein eigenes
   Karten-Overlay (`WorldView.setLogisticsMode`), kein Atmosphäre-Feld.
@@ -74,4 +76,5 @@ Details der Gewichte stehen in `SIMULATION_CONFIG.atmosphere.sources`
 
 Aktualisieren, wenn Overlay-Quellen, Power-Verbraucher, Kabelregeln oder
 Day/Night-Parameter ändern. Neue Lichtarten zwingend gegen den festen
-Light-Pool prüfen.
+Light-Pool prüfen. Neue hörbare Zonen gehören nach [audio.md](audio.md),
+nicht in dieses Overlay.

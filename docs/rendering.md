@@ -2,7 +2,8 @@
 
 `WorldView` interpoliert den letzten Snapshot. Animated Stages, Licht,
 Picking und Overlays bleiben außerhalb der statischen Batches. Kein
-Draw-Call oder Material pro Detailstück oder Besucher.
+Draw-Call oder Material pro Detailstück oder Besucher. Festival-SFX hängen
+am Kamera-Listener und nicht an Unique-Materials ([audio.md](audio.md)).
 
 ## Wo finden
 

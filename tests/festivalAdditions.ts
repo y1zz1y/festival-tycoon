@@ -200,8 +200,11 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
   assert.ok(physicalSpeed('brakes') < normalSpeed)
   assert.ok(physicalSpeed('splash') < normalSpeed)
   physicalSpeed('photo')
-  assert.ok(SIMULATION_CONFIG.coasters.classicSteel.physics.chainSpeed >= 6)
-  assert.ok(SIMULATION_CONFIG.coasters.classicSteel.physics.stationLaunchSpeed >= 12)
+  assert.ok(SIMULATION_CONFIG.coasters.classicSteel.physics.chainSpeed >= 10)
+  assert.ok(SIMULATION_CONFIG.coasters.classicSteel.physics.stationLaunchSpeed >= 20)
+  assert.ok(SIMULATION_CONFIG.coasters.classicSteel.physics.stationDriveSpeed >= 6)
+  assert.ok(SIMULATION_CONFIG.coasters.classicSteel.physics.dragArea <= 0.55)
+  assert.ok(SIMULATION_CONFIG.coasters.physicsSimulation.maximumSpeed >= 85)
   const dropGame = fixture(1)
   const dropStart = dropGame.startCoaster('classicSteel', 10, -10)
   const dropCoaster = dropGame.getCoaster(dropStart.id!)!

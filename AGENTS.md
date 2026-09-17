@@ -24,6 +24,7 @@ Important per-system facts live in `docs/*.md`, not only in this file. Start at
 | Coasters, rides, queues | `docs/attractions.md` |
 | Coasters / track editor | `docs/coaster.md` |
 | Atmosphere, power, lights | `docs/atmosphere.md` |
+| Festival SFX / camera listener | `docs/audio.md` |
 | Rendering / batching | `docs/rendering.md` |
 | UI / input | `docs/ui.md` |
 | Multiplayer commands / deltas | `docs/multiplayer.md` |

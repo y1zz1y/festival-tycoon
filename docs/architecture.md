@@ -19,6 +19,7 @@ Netzwerk-Clients mutieren die Welt nicht lokal dauerhaft; der Host entscheidet.
 | UI, Eingaben, Systemverkabelung | `src/main.ts` | Event-Binding, Tool-Leiste |
 | HEADLINE Magazin (abgeleitet) | `src/game/headlineMagazine.ts` | `buildHeadlineMagazine` aus Snapshot, kein neues Feld |
 | 3D-Szene | `src/view/WorldView.ts` | Kamera, Picking, Instancing |
+| Festival-SFX | `src/game/audio.ts`, `src/view/FestivalAudio.ts` | Kamera-Listener, Pools; siehe [audio.md](audio.md) |
 | Host-HTTP/WebSocket | `server/serve.ts` | Dev- und Docker-Server |
 | Mehrspieler-Räume | `server/rooms.ts` | `attachMultiplayer` |
 
@@ -35,7 +36,7 @@ UI (main.ts, *UI.ts)  →  GameCommand  →  GameState.gate / Host
                                               ↓
                          game/* Systeme (Pfad, Camp, Staff, …)
                                               ↓
-                         GameSnapshot  →  WorldView / Overlays
+                         GameSnapshot  →  WorldView / Overlays / FestivalAudio
 ```
 
 Spieleraktionen gehen als `GameCommand` durch `GameState.gate`. Im Host-Modus

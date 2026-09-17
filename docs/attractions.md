@@ -85,6 +85,13 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
   wieder ein konstantes gerades bzw. geneigtes Stück.
 - Ketten- und Stationsgeschwindigkeiten stehen in
   `SIMULATION_CONFIG.coasters.classicSteel.physics` bzw. `physicsSimulation`.
+  Baseline (SI, Gravitation bleibt `9.81`): `stationLaunchSpeed` 22.4 m/s,
+  `stationDriveSpeed` 6.72 m/s, `chainSpeed` 10.4 m/s, `dragArea` 0.53 m²,
+  `maximumSpeed` 90 m/s. Typ-Overrides (Giga-Kette, LIM/LSM-Launch, kleinere
+  Maus-Stirnfläche) skalieren mit. Stationbremse
+  (`stationBrakingDeceleration` 4.2, `endBrakeDeceleration` 5.8,
+  `stationDriveAccelerationLimit` 9.6) folgt der höheren Abfahrtsgeschwindigkeit,
+  damit Züge nicht früher ausrollen. Gäste werden nicht eingefroren.
 - **Testbetrieb** auf einer geschlossenen Strecke setzt den leeren Zug sofort
   in Fahrt (`stationLaunchSpeed`). Das gilt auch in der Festivalplanung,
   solange die Spielgeschwindigkeit nicht 0 ist; Gäste und die Festivaluhr
@@ -96,8 +103,8 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
 
 `tests/rideAccess.ts` (beide Ride-Typen, Queues, Saves, Multiplayer).
 `tests/operations.ts` (Serpentinen-Kette, Rückweg, leerer Stand).
-`tests/festivalAdditions.ts` (1-Feld-Steigungen, flach↔steil-Übergang, Wagen-Mesh, Schienenjoin-Rundung / Pfadkontinuität, vollständiger Abriss inkl. Queue und Command).
-`tests/coasterTypes.ts` (Typ-Katalog, alle Typen spielbar, Anschlussregeln, Helix, Palette-Filter, Testfahrt während Planung — Pflicht bei Editor-/Typ-Änderungen, siehe `coaster.md`).
+`tests/festivalAdditions.ts` (1-Feld-Steigungen, flach↔steil-Übergang, Wagen-Mesh, Schienenjoin-Rundung / Pfadkontinuität, vollständiger Abriss inkl. Queue und Command, Physik-Untergrenzen `chainSpeed` / `stationLaunchSpeed` / `dragArea` / `maximumSpeed`).
+`tests/coasterTypes.ts` (Typ-Katalog, alle Typen spielbar, Anschlussregeln, Helix, Palette-Filter, Testfahrt während Planung, SI-Geschwindigkeitsuntergrenzen — Pflicht bei Editor-/Typ-Änderungen, siehe `coaster.md`).
 `tests/performanceGuards.ts` (Specials, eine Photo-Abrechnung, Bungee-Exklusivität, Wagen-Batch).
 
 ## Bei Änderungen dieses Dokument

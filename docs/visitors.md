@@ -81,7 +81,9 @@ sind abgeleitete Darstellung desselben Zustands.
   Haltestelle). Einsteigen passiert in der Logistik, nicht über das
   Entscheidungsbudget: längste `busWaitMinutes` zuerst, auch nach vielen
   Ticks und auch wenn der Bus schon in der Standzeit (`busStopDwellMinutes`)
-  ist. `docs/logistics.md`.
+  ist. Wartende im Radius um Halt und Fahrbahn (`busBoardingRadiusTiles`)
+  steigen mit ein, nicht nur die Kachel direkt am Schild.
+  `docs/logistics.md`.
 - Das Konzert-Oberteil-Ereignis betrifft höchstens eine Person auf dem Gelände.
   `atmosphere.concertToplessChancePerMinute` begrenzt die gesamte Ereignisrate
   (0,002 pro Spielminute), auf die Population verteilt. Die aktive Person wird

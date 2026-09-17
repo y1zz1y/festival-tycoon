@@ -958,7 +958,11 @@ export function testCoasterTypes(fixture?: (n?: number) => GameState): void {
   assert.equal(SIMULATION_CONFIG.coasters.classicSteel.carCapacity, 4)
   assert.equal(COASTER_TYPES.classicSteel.carCapacity, 4)
   assert.equal(COASTER_TYPES.classicSteel.physics.worldUnitMeters, 8)
-  assert.ok(COASTER_TYPES.classicSteel.physics.chainSpeed >= 6)
+  assert.ok(COASTER_TYPES.classicSteel.physics.chainSpeed >= 10)
+  assert.ok(COASTER_TYPES.classicSteel.physics.stationLaunchSpeed >= 20)
+  assert.ok(COASTER_TYPES.classicSteel.physics.dragArea <= 0.55)
+  assert.equal(SIMULATION_CONFIG.coasters.physicsSimulation.gravity, 9.81)
+  assert.ok(SIMULATION_CONFIG.coasters.physicsSimulation.maximumSpeed >= 85)
   assert.equal(SIMULATION_CONFIG.coasters.trackJoinSmoothing.sigma, 0.28)
   assert.deepEqual(
     [...HEADLINER_SPECIAL_KINDS],

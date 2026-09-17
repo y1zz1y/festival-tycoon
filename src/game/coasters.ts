@@ -473,7 +473,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
       liftStyle: 'chain',
       trackStyle: 'gigaLattice',
       trainStyle: 'sitDownSteel',
-      physics: { dragArea: 0.78, carMassKg: 520 },
+      physics: { dragArea: 0.49, carMassKg: 520 },
     },
   ),
   twister: defineCoasterType(
@@ -518,7 +518,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
       liftStyle: 'cable',
       trackStyle: 'gigaLattice',
       trainStyle: 'giga',
-      physics: { dragArea: 0.72, carMassKg: 560, chainSpeed: 7.2 },
+      physics: { dragArea: 0.45, carMassKg: 560, chainSpeed: 11.5 },
     },
   ),
   lsmLaunched: defineCoasterType(
@@ -530,7 +530,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
       liftStyle: 'powered',
       trackStyle: 'launchedSteel',
       trainStyle: 'launched',
-      physics: { stationLaunchSpeed: 18 },
+      physics: { stationLaunchSpeed: 28.8 },
     },
   ),
   limLaunched: defineCoasterType(
@@ -542,7 +542,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
       liftStyle: 'none',
       trackStyle: 'launchedSteel',
       trainStyle: 'launched',
-      physics: { stationLaunchSpeed: 20 },
+      physics: { stationLaunchSpeed: 32 },
     },
   ),
   inverted: defineCoasterType(
@@ -620,7 +620,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
       trackStyle: 'wildMouse',
       trainStyle: 'mouse',
       carCapacity: 2,
-      physics: { carSpacing: 0.42, carMassKg: 220, dragArea: 0.45 },
+      physics: { carSpacing: 0.42, carMassKg: 220, dragArea: 0.28 },
     },
   ),
   woodenWildMouse: defineCoasterType(
@@ -642,7 +642,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
       trackStyle: 'woodenMouse',
       trainStyle: 'mouse',
       carCapacity: 2,
-      physics: { carSpacing: 0.42, carMassKg: 200, dragArea: 0.48 },
+      physics: { carSpacing: 0.42, carMassKg: 200, dragArea: 0.30 },
     },
   ),
   mineTrain: defineCoasterType(

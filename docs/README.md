@@ -49,6 +49,7 @@ Neue oder geänderte Funktionen sind erst fertig, wenn die Doku stimmt:
 | Achterbahn, Karussell, Bungee | [attractions.md](attractions.md) | Queues, Ride-Zugang, Betrieb |
 | Achterbahn-Editor, Schienenstücke | [coaster.md](coaster.md) | Anschluss-State-Machine, Stückkatalog, Bau-UI, Typ-Matrix |
 | Atmosphäre, Strom, Tageslicht | [atmosphere.md](atmosphere.md) | Overlays, Power-Netz, Day/Night |
+| Festival-SFX, Kamera-Listener | [audio.md](audio.md) | Pools, Distanz, Cluster, Mute |
 | Darstellung, Batches, Licht | [rendering.md](rendering.md) | `WorldView`, Instancing, Lights |
 | UI, Eingaben, Mobile | [ui.md](ui.md) | `main.ts`, Fenster, Touch |
 | Mehrspieler, Host, Deltas | [multiplayer.md](multiplayer.md) | Commands, Codec, Server |
@@ -66,6 +67,7 @@ Neue oder geänderte Funktionen sind erst fertig, wenn die Doku stimmt:
 | Bau-Menü-Kategorien | `src/game/buildMenu.ts` |
 | UI-Orchestrierung | `src/main.ts` |
 | 3D-Szene | `src/view/WorldView.ts` |
+| Festival-SFX | `src/game/audio.ts`, `src/view/FestivalAudio.ts` |
 | Netzwerk-Protokoll | `src/net/protocol.ts` |
 | Command-Anwendung | `src/net/commands.ts` |
 | Host-Server | `server/serve.ts`, `server/rooms.ts` |

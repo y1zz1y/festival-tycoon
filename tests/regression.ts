@@ -57,6 +57,7 @@ import { testAccounts } from './accounts'
 import { testSaves } from './saves'
 import { testBrowserSaves, testServerSaveClient } from './browserSaves'
 import { testBlueprints, testBlueprintLibraryRoundtrip } from './blueprints'
+import { testFestivalAudio } from './audio'
 
 function test(name: string, run: () => void) {
   run()
@@ -64,6 +65,7 @@ function test(name: string, run: () => void) {
 }
 
 testFacadeReveal()
+testFestivalAudio()
 testWayStructures()
 testMobileTouch()
 testQueueLanes()

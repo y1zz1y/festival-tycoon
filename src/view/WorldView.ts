@@ -1,3 +1,4 @@
+import { listenerFromCamera, type AudioListenerPose } from '../game/audio'
 import { FacadeReveal } from './facadeReveal'
 import { isDecorationCatalogKind } from '../game/decoration'
 import { createWayStructure, indexWayStructures, wayStructurePlan, type WayStructureCell } from './wayStructures'
@@ -1300,6 +1301,22 @@ export class WorldView {
       this.followedVisitorId = null
       if (this.walkMode) this.setWalkMode(false)
     }
+  }
+
+  /** Ground look-at (orbit) or walk-camera ears. Used by festival SFX, not visitors. */
+  audioListenerPose(): AudioListenerPose {
+    if (this.walkMode) {
+      const lookX = this.walkX + Math.sin(this.walkYaw) * Math.cos(this.walkPitch)
+      const lookY = this.walkCamera.position.y + Math.sin(this.walkPitch)
+      const lookZ = this.walkZ + Math.cos(this.walkYaw) * Math.cos(this.walkPitch)
+      return listenerFromCamera(
+        this.walkCamera.position,
+        { x: lookX, y: lookY, z: lookZ },
+        this.walkCamera.up,
+        'camera',
+      )
+    }
+    return listenerFromCamera(this.camera.position, this.cameraTarget, this.camera.up, 'lookAt')
   }
 
   /** Jump the orbit camera to a world position (visitor/staff click, ticker). */

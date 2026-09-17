@@ -23,7 +23,9 @@ import {
 } from '../src/game/visitorBubbles'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import {
+  cellKey as roadCellKey,
   chooseParkingDisembarkPath,
+  collectEligibleBusWaiters,
   collectSeatedPassengerIds,
   compareBusBoardPriority,
   describeRoadVehicleActivity,
@@ -1308,6 +1310,8 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
 
   assert.equal(SIMULATION_CONFIG.logistics.busCapacity, 40)
   assert.equal(SIMULATION_CONFIG.logistics.busStopDwellMinutes, 2)
+  assert.equal(SIMULATION_CONFIG.logistics.busBoardingRadiusTiles, 4)
+  assert.equal(SIMULATION_CONFIG.logistics.busBoardsPerTick, 40)
   const lateWaiter={
     id:'late-board',
     state:'bus-waiting',
@@ -1325,9 +1329,60 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     cellX:secondStop.x+1,
     cellZ:secondStop.z,
   }
+  const queueWaiter={
+    ...lateWaiter,
+    id:'queue-board',
+    busWaitMinutes:20,
+    cellX:secondStop.x,
+    cellZ:secondStop.z+3,
+  }
+  const oppositeWaiter={
+    ...lateWaiter,
+    id:'opposite-board',
+    busWaitMinutes:18,
+    cellX:secondStop.roadCell.x-1,
+    cellZ:secondStop.roadCell.z,
+  }
+  const walkingWaiter={
+    ...lateWaiter,
+    id:'walking-board',
+    busWaitMinutes:9,
+    cellX:secondStop.x,
+    cellZ:secondStop.z+2,
+    route:[{x:secondStop.x,z:secondStop.z,elevation:0}],
+  }
+  const farWaiter={
+    ...lateWaiter,
+    id:'far-skip',
+    busWaitMinutes:50,
+    cellX:secondStop.x,
+    cellZ:secondStop.z+6,
+  }
+  const passerby={
+    ...neighborWaiter,
+    id:'passerby',
+    targetId:'other-stop',
+    route:[{x:secondStop.x+2,z:secondStop.z,elevation:0}],
+  }
   assert.ok(isVisitorReadyToBoardBus(lateWaiter, line.id, secondStop))
   assert.ok(isVisitorReadyToBoardBus(neighborWaiter, line.id, secondStop), 'arrived neighbors may board')
+  assert.ok(isVisitorReadyToBoardBus(queueWaiter, line.id, secondStop), 'queue cells in boarding radius may board')
+  assert.ok(isVisitorReadyToBoardBus(oppositeWaiter, line.id, secondStop), 'the opposite sidewalk may board')
+  assert.ok(isVisitorReadyToBoardBus(walkingWaiter, line.id, secondStop), 'approaching waiters in radius may board')
+  assert.ok(!isVisitorReadyToBoardBus(farWaiter, line.id, secondStop), 'waiters beyond the boarding radius stay off')
+  assert.ok(!isVisitorReadyToBoardBus(passerby, line.id, secondStop), 'neighbors walking elsewhere do not board')
   assert.ok(compareBusBoardPriority(lateWaiter, neighborWaiter) < 0, 'longest wait boards first')
+  const indexed=collectEligibleBusWaiters(
+    new Map([
+      [roadCellKey(queueWaiter.cellX, queueWaiter.cellZ), [queueWaiter]],
+      [roadCellKey(oppositeWaiter.cellX, oppositeWaiter.cellZ), [oppositeWaiter]],
+      [roadCellKey(farWaiter.cellX, farWaiter.cellZ), [farWaiter]],
+      [roadCellKey(passerby.cellX, passerby.cellZ), [passerby]],
+    ]),
+    line.id,
+    secondStop,
+  )
+  assert.deepEqual(indexed.map((waiter)=>waiter.id), ['queue-board', 'opposite-board'])
   const longWaitGuest=(busPlanner as any).spawnVisitorMember('day', 'bus-long-wait', 'pedestrian', false)
   const midDwellGuest=(busPlanner as any).spawnVisitorMember('day', 'bus-mid-dwell', 'pedestrian', false)
   assert.ok(longWaitGuest && midDwellGuest)
@@ -1378,6 +1433,56 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     boardingBus.waitMinutes < SIMULATION_CONFIG.logistics.busStopDwellMinutes,
     'the bus stays at the stop for busStopDwellMinutes',
   )
+
+  const queueGuests=Array.from({length:10}, (_, index)=>{
+    const guest=(busPlanner as any).spawnVisitorMember('day', `bus-queue-${index}`, 'pedestrian', false)
+    assert.ok(guest, `queue guest ${index} spawned`)
+    const spots=[
+      {x:secondStop.x,z:secondStop.z,route:[] as {x:number;z:number;elevation:number}[]},
+      {x:secondStop.x+1,z:secondStop.z,route:[]},
+      {x:secondStop.x,z:secondStop.z+1,route:[]},
+      {x:secondStop.x,z:secondStop.z+2,route:[]},
+      {x:secondStop.x,z:secondStop.z+3,route:[{x:secondStop.x,z:secondStop.z,elevation:0}]},
+      {x:secondStop.roadCell.x-1,z:secondStop.roadCell.z,route:[]},
+      {x:secondStop.roadCell.x,z:secondStop.roadCell.z+1,route:[]},
+      {x:secondStop.x-1,z:secondStop.z,route:[]},
+      {x:secondStop.x+1,z:secondStop.z+1,route:[]},
+      {x:secondStop.x,z:secondStop.z-1,route:[]},
+    ]
+    const spot=spots[index]!
+    Object.assign(guest, {
+      state:'bus-waiting',
+      busLineId:line.id,
+      busWaitMinutes:4+index,
+      busDestinationStopId:firstStop.id,
+      cellX:spot.x,
+      cellZ:spot.z,
+      x:spot.x+0.4,
+      z:spot.z+0.4,
+      cellElevation:0,
+      route:spot.route,
+      targetId:secondStop.id,
+    })
+    return guest
+  })
+  boardingBus.state='at-stop'
+  boardingBus.waitMinutes=0
+  boardingBus.passengerIds=[]
+  boardingBus.cell={...secondStop.roadCell}
+  boardingBus.position={...secondStop.roadCell}
+  boardingBus.route=[]
+  boardingBus.target={kind:'busStop', stopId:secondStop.id}
+  ;(busPlanner as any).updateLogistics(0.1)
+  const boarded=queueGuests.filter((guest)=>guest.state==='bus-riding')
+  assert.equal(boarded.length, 10, 'an empty 40-seat bus boards the nearby queue in one tick')
+  assert.ok(queueGuests.every((guest)=>boardingBus.passengerIds.includes(guest.id)))
+  assert.ok(
+    boardingBus.waitMinutes < SIMULATION_CONFIG.logistics.busStopDwellMinutes,
+    'min dwell still applies after a full nearby queue boards',
+  )
+  ;(busPlanner as any).updateLogistics(SIMULATION_CONFIG.logistics.busStopDwellMinutes)
+  assert.ok(queueGuests.every((guest)=>guest.state==='bus-riding'), 'boarded guests stay on until the next stop')
+  assert.equal(boardingBus.passengerIds.length, 10)
 
   const against=fixture(0), againstState=against.snapshot as GameSnapshot
   against.addDebugMoney()

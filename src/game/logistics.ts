@@ -226,18 +226,93 @@ export type BusBoardWaiter = {
   targetId: string | null
 }
 
-/** Waiting for this line on the stop tile, or one orthogonal neighbor if already arrived. */
+export type BusBoardStop = {
+  id: string
+  x: number
+  z: number
+  roadCell?: { x: number; z: number }
+}
+
+/** Closer of platform tile and the bus pull-up road (opposite sidewalk is then 1–2). */
+export function busBoardDistanceTiles(
+  visitor: Pick<BusBoardWaiter, 'cellX' | 'cellZ'>,
+  stop: Pick<BusBoardStop, 'x' | 'z' | 'roadCell'>,
+): number {
+  const toPlatform = Math.abs(visitor.cellX - stop.x) + Math.abs(visitor.cellZ - stop.z)
+  const road = stop.roadCell
+  if (!road) return toPlatform
+  return Math.min(
+    toPlatform,
+    Math.abs(visitor.cellX - road.x) + Math.abs(visitor.cellZ - road.z),
+  )
+}
+
+/** Queue / path cells around the platform and the roadside pull-up, Manhattan radius. */
+export function collectBusBoardingCells(
+  stop: Pick<BusBoardStop, 'x' | 'z' | 'roadCell'>,
+  radiusTiles: number,
+): { x: number; z: number }[] {
+  const cells: { x: number; z: number }[] = []
+  const seen = new Set<string>()
+  const addNeighborhood = (originX: number, originZ: number) => {
+    for (let dx = -radiusTiles; dx <= radiusTiles; dx += 1) {
+      for (let dz = -radiusTiles; dz <= radiusTiles; dz += 1) {
+        if (Math.abs(dx) + Math.abs(dz) > radiusTiles) continue
+        const x = originX + dx
+        const z = originZ + dz
+        const key = `${x}:${z}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        cells.push({ x, z })
+      }
+    }
+  }
+  addNeighborhood(stop.x, stop.z)
+  if (stop.roadCell && (stop.roadCell.x !== stop.x || stop.roadCell.z !== stop.z)) {
+    addNeighborhood(stop.roadCell.x, stop.roadCell.z)
+  }
+  return cells
+}
+
+/**
+ * Waiting for this line on the stop, or in boarding radius if arrived / targeting the stop.
+ * Walkers heading elsewhere stay off the bus even on a neighbor tile.
+ */
 export function isVisitorReadyToBoardBus(
   visitor: BusBoardWaiter,
   lineId: string,
-  stop: { id: string; x: number; z: number },
+  stop: BusBoardStop,
+  radiusTiles = SIMULATION_CONFIG.logistics.busBoardingRadiusTiles,
 ): boolean {
   if (visitor.state !== 'bus-waiting' || visitor.busLineId !== lineId) return false
-  if (visitor.cellX === stop.x && visitor.cellZ === stop.z) return true
-  const adjacent =
-    Math.abs(visitor.cellX - stop.x) + Math.abs(visitor.cellZ - stop.z) === 1
-  if (!adjacent) return false
+  const distance = busBoardDistanceTiles(visitor, stop)
+  if (distance > radiusTiles) return false
+  if (distance === 0) return true
   return visitor.route.length === 0 || visitor.targetId === stop.id
+}
+
+/** Stop-local gather from a cell index — do not scan the whole visitor list per bus. */
+export function collectEligibleBusWaiters<T extends BusBoardWaiter>(
+  visitorsByCell: { get(key: string): readonly T[] | undefined },
+  lineId: string,
+  stop: BusBoardStop,
+  radiusTiles = SIMULATION_CONFIG.logistics.busBoardingRadiusTiles,
+  keyOf: (x: number, z: number) => string = cellKey,
+): T[] {
+  const found: T[] = []
+  const seen = new Set<string>()
+  for (const cell of collectBusBoardingCells(stop, radiusTiles)) {
+    const list = visitorsByCell.get(keyOf(cell.x, cell.z))
+    if (!list) continue
+    for (const visitor of list) {
+      if (seen.has(visitor.id)) continue
+      if (!isVisitorReadyToBoardBus(visitor, lineId, stop, radiusTiles)) continue
+      seen.add(visitor.id)
+      found.push(visitor)
+    }
+  }
+  found.sort(compareBusBoardPriority)
+  return found
 }
 
 /** Longest wait first, then stable id so deferred boarding does not skip the same guests. */

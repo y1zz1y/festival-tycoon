@@ -223,8 +223,8 @@ import type {
 import {
   cellKey as roadCellKey,
   chooseParkingDisembarkPath,
+  collectEligibleBusWaiters,
   collectSeatedPassengerIds,
-  compareBusBoardPriority,
   createDefaultLogisticsSnapshot,
   createRoadGraph,
   DIRECTION_OFFSETS,
@@ -233,7 +233,6 @@ import {
   directionFromDelta,
   findRoadRoute,
   isPlayerOwnedFleetVehicle,
-  isVisitorReadyToBoardBus,
   isRoadDirectionAllowed,
   isVehicleReversing,
   normalizeLogisticsSnapshot,
@@ -6175,9 +6174,16 @@ export class GameState {
       logistics.roadVehicles.map((vehicle) => [vehicle.id, vehicle]),
     )
     const pedestriansByCell = new Map<string, Visitor[]>()
+    const busWaitersByCell = new Map<string, Visitor[]>()
     const seatedPassengers = collectSeatedPassengerIds(logistics.roadVehicles)
     let parkingSearches = 0
     this.state.visitors.forEach((visitor) => {
+      if (visitor.state === 'bus-waiting') {
+        const waitKey = roadCellKey(visitor.cellX, visitor.cellZ)
+        const waiters = busWaitersByCell.get(waitKey)
+        if (waiters) waiters.push(visitor)
+        else busWaitersByCell.set(waitKey, [visitor])
+      }
       if (
         this.isVisitorSeatedInVehicle(visitor, seatedPassengers) ||
         visitor.state === 'riding' ||
@@ -6246,7 +6252,7 @@ export class GameState {
     logistics.roadVehicles.forEach((vehicle) => {
       if (removedVehicles.has(vehicle.id)) return
       if (vehicle.kind === 'bus') {
-        this.updateBusAtStop(vehicle, minutes)
+        this.updateBusAtStop(vehicle, minutes, busWaitersByCell)
         if (vehicle.state === 'idle') this.dispatchBus(vehicle)
       }
       if (vehicle.kind === 'garbageTruck') {
@@ -9497,7 +9503,11 @@ export class GameState {
     }
   }
 
-  private updateBusAtStop(vehicle: RoadVehicle, minutes: number): void {
+  private updateBusAtStop(
+    vehicle: RoadVehicle,
+    minutes: number,
+    busWaitersByCell: Map<string, Visitor[]>,
+  ): void {
     if (vehicle.kind !== 'bus' || vehicle.state !== 'at-stop') return
     const line = this.state.logistics.busLines.find(
       (candidate) => candidate.id === vehicle.lineId,
@@ -9571,27 +9581,45 @@ export class GameState {
       if (!visitor || visitor.route.length > 0) return
       this.decideNextAction(visitor)
     })
-    const waiting = this.state.visitors
-      .filter((visitor) => isVisitorReadyToBoardBus(visitor, line.id, stop))
-      .sort(compareBusBoardPriority)
+    const radius = SIMULATION_CONFIG.logistics.busBoardingRadiusTiles
+    const waiting = collectEligibleBusWaiters(
+      busWaitersByCell,
+      line.id,
+      stop,
+      radius,
+      roadCellKey,
+    )
     const freeSeats = Math.max(
       0,
       SIMULATION_CONFIG.logistics.busCapacity - vehicle.passengerIds.length,
     )
-    waiting.slice(0, freeSeats).forEach((visitor) => {
+    const boardsThisTick = Math.min(
+      freeSeats,
+      SIMULATION_CONFIG.logistics.busBoardsPerTick,
+      waiting.length,
+    )
+    for (let index = 0; index < boardsThisTick; index += 1) {
+      const visitor = waiting[index]!
       visitor.state = 'bus-riding'
       visitor.route = []
       if (!vehicle.passengerIds.includes(visitor.id)) {
         vehicle.passengerIds.push(visitor.id)
       }
-    })
-    waiting.slice(freeSeats).forEach((visitor) => {
-      this.recordComplaint(visitor, 'bus-full')
-      visitor.emotion = 'angry'
-    })
+    }
+    const leftover = waiting.length - boardsThisTick
+    const remainingSeats = freeSeats - boardsThisTick
     vehicle.waitMinutes += minutes
     if (vehicle.waitMinutes < SIMULATION_CONFIG.logistics.busStopDwellMinutes) {
       return
+    }
+    if (remainingSeats > 0 && leftover > 0) {
+      return
+    }
+    if (remainingSeats === 0 && leftover > 0) {
+      waiting.slice(boardsThisTick).forEach((visitor) => {
+        this.recordComplaint(visitor, 'bus-full')
+        visitor.emotion = 'angry'
+      })
     }
     const nextIndex = (vehicle.nextStopIndex + 1) % line.stopIds.length
     this.routeBusToStop(vehicle, line, nextIndex)

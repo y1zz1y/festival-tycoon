@@ -181,6 +181,7 @@ import {
   planLockedOriginRamp,
 } from './game/wayElevation'
 import { WorldView } from './view/WorldView'
+import { FestivalAudio } from './view/FestivalAudio'
 import type { CellPosition, PathAnchor } from './view/WorldView'
 import { isTextEntryTarget } from './uiFocus'
 import { mountMobileUI } from './mobileUI'
@@ -271,6 +272,7 @@ const AUTOSAVE_INTERVALS = [
 ] as const
 const AUTOSAVE_DEFAULT_MINUTES = 15
 const AUTOSAVE_KEY = 'festival-autosave-minutes'
+const AUDIO_MUTE_KEY = 'festival-audio-muted'
 /** The one slot the automatic save writes to, over and over. */
 const AUTOSAVE_NAME = 'Autospeichern'
 
@@ -322,6 +324,7 @@ app.innerHTML = `
       <div id="action-group-session" class="rct-group" aria-label="Sitzung">
         <button id="toggle-finance" type="button" title="Finanzen" aria-label="Finanzen" aria-expanded="false">💲</button>
         <button id="toggle-walk-mode" type="button" title="Gelände betreten" aria-label="Gelände betreten" aria-pressed="false">🚶</button>
+        <button id="toggle-mute" type="button" title="Ton" aria-label="Ton" aria-pressed="false">🔊</button>
         <button id="toggle-save-menu" type="button" title="Spielstand" aria-label="Spielstand" aria-expanded="false" aria-haspopup="true">💾</button>
         <button id="toggle-park" type="button" title="Park schließen" aria-label="Park schließen">🔓</button>
         <button id="toggle-multiplayer" type="button" title="Mehrspieler" aria-label="Mehrspieler" aria-expanded="false">🌐</button>
@@ -354,6 +357,7 @@ app.innerHTML = `
       </div>
       <h3 class="scenario-heading">Einstellungen</h3>
       <label class="scenario-check"><input id="setting-debug-tools" type="checkbox" /><span>Debug</span></label>
+      <label class="scenario-check"><input id="setting-mute-audio" type="checkbox" /><span>Ton stumm</span></label>
       <label class="scenario-field"><span>Autospeichern</span><select id="setting-autosave">${AUTOSAVE_INTERVALS.map((option) => `<option value="${option.minutes}">${option.label}</option>`).join('')}</select></label>
       <button id="open-title-screen" type="button">🏠 Titelbildschirm</button>
       <h3 class="scenario-heading">Dieses Festival</h3>
@@ -1664,6 +1668,46 @@ view.setVehicleClickHandler((vehicleId) => {
 view.setAccessControlClickHandler((accessId) => openEntityInfoForAccess(accessId))
 view.setWalkModeListener(syncWalkModeUi)
 walkModeButton.addEventListener('click', () => setFestivalWalk(!view.isWalkMode()))
+const festivalAudio = new FestivalAudio()
+const muteAudioButton = requireElement<HTMLButtonElement>('#toggle-mute')
+const muteAudioToggle = requireElement<HTMLInputElement>('#setting-mute-audio')
+const readAudioMuted = (): boolean => {
+  try {
+    return window.localStorage.getItem(AUDIO_MUTE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const syncMuteUi = (muted: boolean): void => {
+  festivalAudio.setMuted(muted)
+  muteAudioToggle.checked = muted
+  muteAudioButton.setAttribute('aria-pressed', String(muted))
+  muteAudioButton.textContent = muted ? '🔇' : '🔊'
+  const label = muted ? 'Ton einschalten' : 'Ton stumm'
+  muteAudioButton.title = label
+  muteAudioButton.setAttribute('aria-label', label)
+}
+const setAudioMuted = (muted: boolean): void => {
+  syncMuteUi(muted)
+  try {
+    window.localStorage.setItem(AUDIO_MUTE_KEY, muted ? '1' : '0')
+  } catch {
+    /* session-only mute */
+  }
+}
+syncMuteUi(readAudioMuted())
+muteAudioButton.addEventListener('click', () => setAudioMuted(!festivalAudio.isMuted()))
+muteAudioToggle.addEventListener('change', () => setAudioMuted(muteAudioToggle.checked))
+const resumeFestivalAudio = (): void => {
+  festivalAudio.resume()
+}
+window.addEventListener('pointerdown', resumeFestivalAudio, { once: true })
+window.addEventListener('keydown', resumeFestivalAudio, { once: true })
+toolbarElement.addEventListener('click', (event) => {
+  if (!(event.target instanceof Element)) return
+  if (!event.target.closest('button')) return
+  festivalAudio.playUiClick(game.snapshot.simTick)
+})
 {
   let stickPointer: number | null = null
   const applyStick = (event: PointerEvent): void => {
@@ -8092,6 +8136,10 @@ function animate(time: number): void {
   measuredSimulationMs += viewStart - simulationStart
   view.update(game.snapshot, game.renderAlpha, game.worldRevision)
   view.advanceWalk(deltaSeconds)
+  festivalAudio.updateListener(view.audioListenerPose())
+  if (!document.body.classList.contains('title-open')) {
+    festivalAudio.syncSnapshot(game.snapshot)
+  }
   const renderStart = performance.now()
   measuredViewMs += renderStart - viewStart
   view.render()

@@ -8,6 +8,7 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Orchestrierung, Tasten, Tools | `src/main.ts` | RCT-Iconleiste `.rct-toolbar` |
+| Ton stumm | `src/main.ts`, `src/view/FestivalAudio.ts` | `#toggle-mute`, `#setting-mute-audio`; [audio.md](audio.md) |
 | Abriss-/Info-Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | `pickPlacedObject`, `resolvePickedBuilding` |
 | Infofenster Müllwagen / Ablage / Container | `src/main.ts`, `src/game/logistics.ts`, `src/game/waste.ts` | `formatRoadVehicleInspectLoad`, `connectedWasteDumpStats`, `formatSealedContainerInspect` |
 | Infofenster Backstage | `src/main.ts`, `src/game/bandSupply.ts` | `formatBackstageInspect`, Klick auf Backstage-Kachel |
@@ -54,8 +55,10 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   (Festival, Bühnenwerkstatt, Logistikverwaltung für Bestellungen/Träger,
   Beschwerden, Besucher, Personal, Meldungen, Mehrspieler),
   **Kartenansichten** (Logistik/Untergrund, Gedränge, Attraktivität,
-  Partystimmung) und   **Sitzung** (Finanzen, Gelände betreten, Speichern,
-  Park, Debug-Käfer, Einstellungen). Das Speicher-Dropdown hält
+  Partystimmung) und   **Sitzung** (Finanzen, Gelände betreten, Ton stumm, Speichern,
+  Park, Debug-Käfer, Einstellungen). **Ton stumm** (🔊/🔇) und
+  Einstellungen → **Ton stumm** teilen `localStorage` (`festival-audio-muted`),
+  nicht den Spielstand; siehe [audio.md](audio.md). Das Speicher-Dropdown hält
   **Schnell speichern** / **Schnell laden** für den einzelnen
   `SAVE_KEY`-Slot (voller Snapshot inkl. Besucher und Gebäude; IndexedDB
   wenn `localStorage` nicht reicht) neben benannten Ständen, Base64-Export

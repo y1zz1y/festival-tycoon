@@ -41,7 +41,7 @@ RCT2 60° is not mixed into comments or the palette. Gentle is `atan(0.5)`.
 | Connection / palette legality | `src/game/coasterConnections.ts` | `describeTrackAppendIssue`, `resolveNextTrackPiece`, `applyConstructionPitch` / `Bank` / `Kind`, `listTrackPalettePieces` (type-supported + `enabled`) |
 | Build, demolish, gates, operation | `src/game/GameState.ts` | `startCoaster`, `appendCoasterPiece`, `undoCoasterPiece`, `deleteCoasterPiece`, `removeCoaster`, `setCoasterAccess`, `setCoasterOperationMode` |
 | Commands | `src/net/protocol.ts`, `src/net/commands.ts`, `src/net/bind.ts` | `GameCommand` coaster variants |
-| Balancing / SI physics | `src/game/simulationConfig.ts` | `coasters`, `classicSteel.physics` (shared SI baseline + per-type overrides), `trackPieceCosts.helixLeft/Right`, `physicsSimulation`, `trackJoinSmoothing` |
+| Balancing / SI physics | `src/game/simulationConfig.ts` | `coasters`, `classicSteel.physics` (shared SI baseline + per-type overrides), `trackPieceCosts.helixLeft/Right`, `physicsSimulation`, `trackJoinSmoothing`. Speed keys: `stationLaunchSpeed` 22.4, `stationDriveSpeed` 6.72, `chainSpeed` 10.4, `dragArea` 0.53, `maximumSpeed` 90; gravity stays 9.81 |
 | Construction window | `src/main.ts` (`#coaster-builder`) | `updateCoasterBuilder` skips unless `updateCoasterConstruction` says the window changed; palettes **diff-updated** in place |
 | Palette mount helper | `src/game/coasterConstructionUI.ts` | `updateCoasterConstruction` / `coasterConstructionViewKey`, `syncCoasterPalette`, stable ids, `coasterConstructionPreviewKey` |
 | Catalog train tiles | `src/view/WorldView.ts` | `coasterTrainThumbnail` — same `createCoasterCar` family as in-world trains |
@@ -388,7 +388,11 @@ and heading `+2`. `halfLoopDown` requires that inverted end.
 **Physics:** `classicSteel.physics` + `physicsSimulation` (SI). Join smoothing
 `trackJoinSmoothing.sigma` (0.28 tiles), Gaussian on elevation / non-curve
 joins; plan curves stay circular. Snapshot `points` stay sharp. **Keep this.**
-Do not port RCT2 excitement / intensity / nausea.
+Do not port RCT2 excitement / intensity / nausea. Circuit pace (~60 % faster
+than 0.1.160) comes from launch / chain / station drive, a higher
+`maximumSpeed` clip (90 m/s), and lower `dragArea` — not from changing
+`gravity` or freezing guests. Per-type overrides keep the same ratios
+(Giga `chainSpeed` 11.5, LSM 28.8 / LIM 32 launch, hyper / mouse drag).
 
 **Join / cache:** `getSmoothedCoasterPiecePoints`, invalidate on piece-id /
 chain signature. Cars follow the same derived centerline as the mesh.
@@ -475,8 +479,8 @@ Run: `npm test` (full suite via `scripts/test.mjs`) and `npm run build`.
 
 | File | What it locks |
 | --- | --- |
-| `tests/coasterTypes.ts` | Catalog matrix, all types playable, **vehicle thumbnail spec** per type, live append legality, palette **type-omit vs current-state grey** (wooden / junior / LIM / wild mouse / mine train / bobsled), hard-switch slope/bank/**kind** (first enabled click changes window), disabled kind does not change ghost, **palette listed twice without click keeps ids / does not remount**, **`updateCoasterConstruction` does not apply across playing `tick`s**, helix, missing-type → classicSteel, discrete machine, `GameState` smoke, **classicSteel rectangle in Testbetrieb during planning advances distance/speed** |
-| `tests/festivalAdditions.ts` | 1-tile slopes, flat↔steep clothoid, inversions, join smoothing, full demolish |
+| `tests/coasterTypes.ts` | Catalog matrix, all types playable, **vehicle thumbnail spec** per type, live append legality, palette **type-omit vs current-state grey** (wooden / junior / LIM / wild mouse / mine train / bobsled), hard-switch slope/bank/**kind** (first enabled click changes window), disabled kind does not change ghost, **palette listed twice without click keeps ids / does not remount**, **`updateCoasterConstruction` does not apply across playing `tick`s**, helix, missing-type → classicSteel, discrete machine, `GameState` smoke, **classicSteel rectangle in Testbetrieb during planning advances distance/speed**, SI floors (`chainSpeed` ≥ 10, `stationLaunchSpeed` ≥ 20, `dragArea` ≤ 0.55, `gravity` 9.81, `maximumSpeed` ≥ 85) |
+| `tests/festivalAdditions.ts` | 1-tile slopes, flat↔steep clothoid, inversions, join smoothing, full demolish, physics speed floors |
 | `tests/performanceGuards.ts` | Specials batch, one photo charge, car mesh |
 | `tests/rideAccess.ts` | Carousel / bungee gates (not the track editor) |
 

@@ -283,7 +283,10 @@ export const SIMULATION_CONFIG = {
     busResaleFraction: 0.5,
     busCapacity: 40,
     busStopDwellMinutes: 2,
-    busBoardingMinutesPerPerson: 0.25,
+    /** Manhattan tiles from the platform or pull-up road; covers the queue and opposite sidewalk. */
+    busBoardingRadiusTiles: 4,
+    /** Empty 40-seat bus can fill in one dwell tick; leftover waiters keep the bus after min dwell. */
+    busBoardsPerTick: 40,
     busDefaultHeadwayMinutes: 15,
     busMaximumWaitMinutes: 45,
     busPreferenceEnergyThreshold: 42,
@@ -697,11 +700,11 @@ export const SIMULATION_CONFIG = {
         carMassKg: 480,
         passengerMassKg: 75,
         rollingResistance: 0.008,
-        dragArea: 0.85,
-        // m/s: lifts and station drives stay readable, drops can still race.
-        stationLaunchSpeed: 14,
-        stationDriveSpeed: 4.2,
-        chainSpeed: 6.5,
+        dragArea: 0.53,
+        // m/s: ~60% faster circuits vs 0.1.160; gravity stays 9.81.
+        stationLaunchSpeed: 22.4,
+        stationDriveSpeed: 6.72,
+        chainSpeed: 10.4,
         carSpacing: 0.68,
       },
     },
@@ -711,14 +714,14 @@ export const SIMULATION_CONFIG = {
       airDensity: 1.225,
       chainAccelerationFactor: 2.5,
       stationApproachBufferMeters: 4,
-      stationBrakingDeceleration: 2.6,
+      stationBrakingDeceleration: 4.2,
       stationBrakingBufferMeters: 1,
-      stationDriveAccelerationLimit: 6,
+      stationDriveAccelerationLimit: 9.6,
       stationDriveResponse: 3.5,
       endBrakeDistanceMeters: 8,
-      endBrakeDeceleration: 3.6,
+      endBrakeDeceleration: 5.8,
       minimumSpeed: -20,
-      maximumSpeed: 72,
+      maximumSpeed: 90,
       stationStopSpeed: 0.5,
       stationStopDistanceMeters: 0.08,
       stationOvershootDistance: 0.001,
@@ -804,6 +807,35 @@ export const SIMULATION_CONFIG = {
     inboundSlotColumns: 2,
     inboundSlotOffset: 0.12,
     alongJitter: 0.16,
+  },
+  /**
+   * Camera-listener festival SFX. Values are sim-tick / world units, not wall-clock.
+   * Playback may use real time; what can emit is decided here and in `src/game/audio.ts`.
+   */
+  audio: {
+    maxOneShotVoices: 12,
+    maxAmbientVoices: 6,
+    maxDistance: 28,
+    refDistance: 6,
+    rolloff: 1.2,
+    clusterSize: 4,
+    waterSampleStep: 3,
+    cheerMinCluster: 6,
+    crowdMinCluster: 4,
+    screamSpeed: 10,
+    masterGain: 0.28,
+    cooldownTicks: {
+      placeBuilding: 0,
+      demolish: 0,
+      coasterLaunch: 8,
+      cheer: 20,
+      scream: 16,
+      medical: 12,
+      busHiss: 15,
+      wasteTruck: 15,
+      incident: 10,
+      uiClick: 2,
+    },
   },
 } as const
 
