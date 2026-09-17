@@ -528,6 +528,8 @@ button {
   --ts-200: #cbdcd4;
   --ts-100: #edf7f1;
   --ts-gold: #efcf86;
+  /* The proof-reader's red, the one colour on this screen that is not of the palette. */
+  --ts-red: #e2483a;
   position: absolute;
   inset: 0;
   z-index: 60;
@@ -612,6 +614,29 @@ button {
   letter-spacing: 0.34em;
   text-transform: uppercase;
   color: var(--ts-gold);
+  /* The line stays on one line: the correction is painted over a fixed spot in it,
+     and a wrap would drop the next line straight through the brushed word. */
+  white-space: nowrap;
+  /* Room under the line for the word brushed in below the crossed-out one. */
+  padding-bottom: 2.3em;
+}
+
+/* The corrected word keeps its place in the line - the paint lies over and under
+   it, and is sized in em so it follows the text at every screen width. */
+.kicker-swap {
+  position: relative;
+  display: inline-block;
+}
+
+.kicker-brush {
+  position: absolute;
+  left: 50%;
+  top: -0.5em;
+  width: 7em;
+  height: 3.8em;
+  transform: translateX(-50%) rotate(-1.4deg);
+  overflow: visible;
+  pointer-events: none;
 }
 
 .title-name {
@@ -634,19 +659,26 @@ button {
 }
 
 .title-menu {
-  width: min(560px, 100%);
+  /* Wide enough that the longest name and its note stand side by side on one line
+     at full size - "Spielstand laden" against "Autospeichern · 15.09.26, 03:14". */
+  width: min(680px, 100%);
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
+/* Every plate is read left to right: the entry's name against the left edge, its
+   note against the right one, and a gap between them that never closes. Both keep
+   to one line - the name always, the note by cutting itself short if the plate
+   gets narrow. */
 .title-menu button {
   width: 100%;
-  padding: clamp(10px, 1.6vh, 18px) 24px;
+  padding: clamp(10px, 1.6vh, 18px) clamp(18px, 2.6vw, 32px);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: clamp(14px, 3vw, 36px);
+  text-align: left;
   color: #ffffff;
   background: var(--ts-600);
   border-width: 4px;
@@ -655,18 +687,26 @@ button {
 }
 
 .title-menu-label {
+  flex: 0 0 auto;
   font-size: clamp(18px, 2.6vw, 30px);
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  white-space: nowrap;
   text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
 }
 
 .title-menu-meta {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: clamp(9px, 1vw, 12px);
   letter-spacing: 0.18em;
   text-transform: uppercase;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ts-200);
   opacity: 0;
 }

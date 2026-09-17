@@ -178,6 +178,56 @@ function closeBuildSubmenus(): void {
     .forEach((element) => element.classList.remove('open'))
 }
 
+/**
+ * The publisher's line carries a correction, the way a poster gets one once it is
+ * already printed: „Watch“ struck out with a painted cross and „Code“ brushed in
+ * underneath. Both are drawn, not typed — stroked paths pushed around by a little
+ * noise, so the edges come out ragged the way a loaded brush leaves them.
+ */
+const PUBLISHER_MARK = `<svg class="kicker-brush" viewBox="0 0 136 74" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="kicker-bristles" x="-25%" y="-25%" width="150%" height="150%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="2" seed="7" result="noise" />
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.6" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+    <filter id="kicker-bristles-word" x="-25%" y="-25%" width="150%" height="150%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.11" numOctaves="2" seed="19" result="noise" />
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.1" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+  </defs>
+  <g fill="none" stroke="var(--ts-red)" stroke-linecap="round" stroke-linejoin="round">
+    <g filter="url(#kicker-bristles)">
+      <path d="M18 6 C 46 16, 82 27, 118 36" stroke-width="5" />
+      <path d="M118 5 C 91 15, 54 26, 19 35" stroke-width="4.4" />
+      <path d="M24 9 C 50 18, 84 28, 114 35" stroke-width="1.8" opacity=".7" />
+      <path d="M112 10 C 86 18, 52 28, 24 34" stroke-width="1.6" opacity=".65" />
+      <path d="M122 38 l 5 3" stroke-width="1.4" opacity=".55" />
+      <path d="M15 3 l -4 -3" stroke-width="1.2" opacity=".5" />
+    </g>
+    <g filter="url(#kicker-bristles-word)" transform="translate(68 58) scale(1.12) translate(-68 -58) rotate(-2.5 68 58)">
+      <g stroke-width="5.2">
+        <path d="M47 46 C 35 39, 24 46, 24 56 C 24 67, 35 73, 48 67" />
+        <path d="M63 44 C 52 45, 47 57, 52 66 C 59 74, 71 70, 71 58 C 71 47, 67 44, 60 45" />
+        <path d="M79 44 C 78 53, 77 62, 78 71" />
+        <path d="M79 45 C 91 43, 98 51, 97 58 C 96 67, 87 72, 78 70" />
+        <path d="M117 45 C 110 43, 104 43, 102 47 C 100 53, 100 63, 102 69 C 106 72, 113 71, 117 68" />
+        <path d="M103 57 C 106 56, 110 56, 113 57" />
+      </g>
+      <g stroke-width="2.4" opacity=".55">
+        <path d="M46 48 C 36 42, 26 48, 26 56" />
+        <path d="M70 52 C 71 60, 67 68, 60 68" />
+        <path d="M80 47 C 79 56, 79 64, 79 69" />
+        <path d="M81 46 C 91 45, 96 52, 95 58" />
+        <path d="M116 46 C 110 45, 105 45, 103 48" />
+      </g>
+      <g stroke-width="1.2" opacity=".45">
+        <path d="M118 70 l 5 2" />
+        <path d="M22 60 l -4 2" />
+      </g>
+    </g>
+  </g>
+</svg>`
+
 /** How often the game saves by itself. Fifteen minutes unless the player says otherwise. */
 const AUTOSAVE_INTERVALS = [
   { minutes: 5, label: 'Alle 5 Minuten' },
@@ -893,7 +943,7 @@ app.innerHTML = `
       <div class="title-stage">
         <div class="title-plaque">
           <canvas id="title-crowd" class="title-crowd" aria-hidden="true"></canvas>
-          <div class="title-kicker">AIGamesWatch Studios präsentiert</div>
+          <div class="title-kicker" aria-label="AIGamesCode Studios präsentiert">AIGames<span class="kicker-swap">Watch${PUBLISHER_MARK}</span> Studios präsentiert</div>
           <h1 id="title-screen-name" class="title-name">Headliner Tycoon</h1>
           <div class="title-subtitle">Ein Gelände, ein Wochenende, euer Publikum</div>
         </div>
