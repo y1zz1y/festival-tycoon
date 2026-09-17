@@ -73,6 +73,7 @@ export type RoadVehicleTarget =
   | { kind: 'garage'; garageId: string }
   | { kind: 'depot'; depotId: string }
   | { kind: 'wasteDump'; x: number; z: number }
+  | { kind: 'sealedWasteContainer'; buildingId: string; x: number; z: number }
   | { kind: 'tourBusParking'; buildingId: string }
 
 export type RoadVehicle = {
@@ -173,6 +174,7 @@ export function describeRoadVehicleActivity(vehicle: RoadVehicle): string {
       }
       if (vehicle.target?.kind === 'busStop') return 'Fährt zur nächsten Haltestelle'
       if (vehicle.target?.kind === 'wasteDump') return 'Fährt zur Müllkippe'
+      if (vehicle.target?.kind === 'sealedWasteContainer') return 'Fährt zum Müllcontainer'
       if (vehicle.target?.kind === 'depot') return 'Fährt zum Betriebshof'
       if (vehicle.target?.kind === 'garage') return 'Fährt zur Garage'
       if (vehicle.target?.kind === 'cell') return 'Fährt zum Ziel'
@@ -294,6 +296,8 @@ export function describeRoadVehicleDestination(vehicle: RoadVehicle): string | n
   }
   if (vehicle.target?.kind === 'busStop') return 'Nächste Bushaltestelle'
   if (vehicle.target?.kind === 'tourBusParking') return 'Tourbus-Parkplatz'
+  if (vehicle.target?.kind === 'sealedWasteContainer') return 'Versiegelter Müllcontainer'
+  if (vehicle.target?.kind === 'wasteDump') return 'Müllablage'
   if (vehicle.kind === 'deliveryTruck' && vehicle.target?.kind === 'depot') {
     return 'Anlieferungsplatz'
   }
@@ -892,6 +896,11 @@ function normalizeVehicleTarget(value: unknown): RoadVehicleTarget | null {
   if (source.kind === 'wasteDump') {
     const position = normalizePosition(source)
     return position ? { kind: 'wasteDump', ...position } : null
+  }
+  if (source.kind === 'sealedWasteContainer') {
+    const position = normalizePosition(source)
+    if (!position || typeof source.buildingId !== 'string') return null
+    return { kind: 'sealedWasteContainer', buildingId: source.buildingId, ...position }
   }
   if (source.kind === 'tourBusParking' && typeof source.buildingId === 'string') {
     return { kind: 'tourBusParking', buildingId: source.buildingId }

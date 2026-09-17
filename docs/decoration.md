@@ -49,7 +49,7 @@ dieselbe Kategorie-Reihenfolge.
 | --- | --- | --- |
 | Themen, Filter, neue Arten | `src/game/decoration.ts` | `DECORATION_THEMES`, `filterDecorationKinds`, `THEMED_DECORATION_KINDS` |
 | Katalog-Einträge | `src/game/catalog.ts` | `BUILDING_KINDS` / `BUILDINGS` |
-| Slots / Kanten | `src/game/scenery.ts` | `SCENERY_KINDS`, `EDGE_SCENERY_KINDS` |
+| Slots / Kanten | `src/game/scenery.ts` | `SCENERY_KINDS`, `EDGE_SCENERY_KINDS`, `pedestrianBarrierOccupancy` |
 | Bau-Menü-Gruppen | `src/game/buildMenu.ts` | Deko-`groups` aus `decorationKindsInCategory` |
 | UI: Themenleiste + Abschnitte | `src/main.ts` | `renderDecorationCatalog` |
 | Meshes / Instancing | `src/view/retroBuildings.ts` | `buildThemedScenery` (Familien + Vertexfarben) |
@@ -67,7 +67,9 @@ Kanten-Slots der neuen Arten: `glowTape`, `chainFence`, `occultBanner`,
 
 - Kein `GameCommand` und kein Snapshot-Themenfeld. Platzierung, Vorschau,
   Kollision und Multiplayer bleiben `scenery.ts`. Fehlendes `decorationSlot`
-  ist Legacy-Vollfeld; alte Saves nicht verkleinern.
+  ist Legacy-Vollfeld; alte Saves nicht verkleinern. Hecken, die Kategorie
+  **Zaun** und Wandsegmente außer `*Door` sperren den Fußgängergraphen
+  (`pedestrianBarrierOccupancy` in `scenery.ts`).
 - Statische Details: ein gemergtes Vertex-Color-Mesh je Art, Instancing
   über `batchRetroBuildings`. Kein Material/Draw-Call pro Zahnrad, Eiszapfen
   oder Farnblatt. Arktis/Steampunk unterscheiden sich über Farben und
@@ -115,12 +117,15 @@ Wände sitzen exakt an der Feldkante und auf der autoritativen Bauhöhe;
 keine zusätzliche Terrain-Interpolation. Sie können frei erhöht und nahtlos
 gestapelt werden. Doppelte gemeinsame Kanten werden auch vom Nachbarfeld
 abgewiesen; unterschiedliche Kanten dürfen Ecken bilden. Fassaden dürfen
-Gebäude/Fahrgeschäfte verkleiden und bleiben rein dekorativ, ohne Wegsperre.
+Gebäude/Fahrgeschäfte verkleiden. Volle/halbe Wände, Fenster und Dachkeile
+sperren die gekreuzte Kante für Fußgänger (fehlendes Slot = Legacy-Vollfeld).
+`*Door` bleibt begehbar. Hecken und die Kategorie **Zaun** ebenso.
 Kosten in `SIMULATION_CONFIG.economy.decorationWalls`, Atmosphäre je Wand
 in `atmosphere.sources`. Kein neues Command/Feld, siehe Saves/Multiplayer.
 
 `tests/decoration.ts` prüft alle 23 Vollfelder, 40 Wand-Bounds, Stapelung,
 Doppelbelegung vom Nachbarfeld, Fassaden und Multiplayer-Höhen/Slots.
+`tests/pedestrianBarriers.ts` prüft, dass Wände/Zäune/Hecken sperren und Türen offen bleiben.
 `tests/decoration-preview.html` zeigt alle Themen in Baugröße mit Wandreihe
 und zweigeschossiger Ecke. Bestehende Draw-Call-Guards erfassen auch Wände.
 

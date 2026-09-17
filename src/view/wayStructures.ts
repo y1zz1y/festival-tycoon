@@ -8,7 +8,12 @@ export function indexWayStructures(cells: readonly WayStructureCell[]): Map<stri
   for (const cell of cells) { const key = `${cell.x},${cell.z}`; const list = index.get(key) ?? []; list.push(cell); index.set(key, list) }
   return index
 }
-export function wayStructurePlan(cell: WayStructureCell, index: Map<string, WayStructureCell[]>, ground: number) {
+export function wayStructurePlan(
+  cell: WayStructureCell,
+  index: Map<string, WayStructureCell[]>,
+  ground: number,
+  extras?: { landAt?: (x: number, z: number) => number; solidTop?: number },
+) {
   const direction = cell.slope ? cell.direction : 0
   const connected = WAY_CARDINALS.map((d, side) => (index.get(`${cell.x + d.x},${cell.z + d.z}`) ?? []).some(other =>
     other.road === cell.road && canTraverseWayElevation(cell.elevation, cell.slope, cell.direction, other.elevation, other.slope, other.direction, side)))
@@ -18,11 +23,13 @@ export function wayStructurePlan(cell: WayStructureCell, index: Map<string, WayS
   const layers = index.get(`${cell.x},${cell.z}`) ?? []
   if (raised) for (const x of [-.41, .41]) for (const z of [-.32, .32]) {
     const top = -cell.slope / 2 + z * cell.slope - .065
-    const bottom = ground - cell.elevation
+    const land = extras?.landAt?.(x, z) ?? ground
+    const filled = Math.max(land, extras?.solidTop ?? land)
+    const bottom = filled - cell.elevation
     // Leave lower routes clear: the span is carried by the neighboring bridge cells.
     const obstructed = layers.some(other => other !== cell &&
       Math.min(other.elevation, other.elevation - other.slope) < cell.elevation + top &&
-      Math.max(other.elevation, other.elevation - other.slope) >= ground - .1)
+      Math.max(other.elevation, other.elevation - other.slope) >= filled - .1)
     if (top - bottom > .15 && !obstructed) supports.push({ x, z, bottom, top })
   }
   return { edges, raised, supports }

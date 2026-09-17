@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<title>HEADLINE Magazin</title>
+<style>body{margin:0;background:#1a1410}</style>
+<div class="game-shell"></div>
+<script type="module">
+import { GameState } from '../src/game/GameState.ts'
+import { festivalTime, updateFestival } from '../src/game/festivalManagement.ts'
+import { mountHeadlineMagazine } from '../src/headlineMagazineUI.ts'
+const game = new GameState()
+game.addDebugMoney()
+const s = game.snapshot
+s.dayPlan.leadDays = 1
+s.dayPlan.festivalDays = 2
+s.festival.planning = false
+game.place('stage', 0, 0)
+game.manageFestival({ type: 'start' })
+s.festival.admissions = 180
+s.festival.reports = [{
+  day: s.festival.startDay + 1,
+  balance: 420,
+  guests: 180,
+  satisfaction: 78,
+  concerts: 640,
+  stockouts: 2,
+  weatherImpact: 40,
+  reputation: { ...s.festival.reputation },
+}]
+s.day = s.festival.startDay + s.dayPlan.leadDays + s.dayPlan.festivalDays
+s.minute = 1
+s.festival.lastUpdate = festivalTime(s) - 2
+updateFestival(s)
+const magazine = mountHeadlineMagazine(document.querySelector('.game-shell'))
+magazine.update(s)
+</script>
+</html>

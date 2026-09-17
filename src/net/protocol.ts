@@ -73,7 +73,8 @@ type GameCommandAction =
     }
   | { type: 'bulldoze'; x: number; z: number; buildingId?: string }
   | { type: 'bulldozeArea'; cells: CellRef[] }
-  | { type: 'editTerrain'; x: number; z: number; mode: TerrainEditMode }
+  | { type: 'editTerrain'; x: number; z: number; mode: TerrainEditMode; corner?: number; originHeight?: number }
+  | { type: 'editTerrainArea'; cells: CellRef[]; mode: TerrainEditMode; originHeight?: number }
   | { type: 'designateRoad'; cells: RoadPosition[] }
   | { type: 'designateParking'; cells: RoadPosition[] }
   | { type: 'designateCampingCell'; x: number; z: number; enabled: boolean }

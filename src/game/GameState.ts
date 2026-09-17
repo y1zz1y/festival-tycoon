@@ -1,8 +1,8 @@
 import { pathFurnitureRotation } from './pathFurniture'
-import { isWasteBin, THEMED_BIN_KINDS } from './decorationWalls'
+import { isWasteBin, isWallDoor, THEMED_BIN_KINDS } from './decorationWalls'
 import { wallSpec } from './decorationWalls'
 import { musicTaste, musicAppeal, type MusicGenre } from './musicTaste'
-import { isScenery, isLargeScenery, isEdgeScenery, sceneryOverlaps, sceneryTransform } from './scenery'
+import { isScenery, isLargeScenery, isEdgeScenery, sceneryOverlaps, sceneryTransform, isPedestrianBarrierKind, pedestrianBarrierOccupancy } from './scenery'
 import { syncStageAudience } from './stageAudience'
 import { stageSiteIssue } from './stageSite'
 import { isStageAudienceCell, stageDistance, stageSize, buildingFootprint, occupiesBuildingCell, stageDesignIssue, stageStats, migrateStageDesign, type StageDesign } from './stageDesign'
@@ -142,16 +142,20 @@ import { FestivalAreaSystem } from './festivalAreas'
 import type { StageForecourtCell } from './festivalAreas'
 import {
   acceptWasteAtDump,
+  acceptWasteAtSealedContainer,
+  clampSealedContainerStored,
   clampWasteDumpStored,
   designateWasteDumps,
+  emptySealedContainerStored,
   findNearestWasteBin,
   findNearestWasteBinInRange,
+  isSealedWasteContainer,
   normalizeWasteDumpCell,
   wasteBinHasRoom,
   wasteBinManhattan,
   wasteDumpRemaining,
 } from './waste'
-import type { WasteBinInfo, WasteDumpCell } from './waste'
+import type { SealedWasteContainerInfo, WasteBinInfo, WasteDumpCell } from './waste'
 import {
   bandSupplyAt,
   bandSupplyForStage,
@@ -271,6 +275,7 @@ import {
   normalizeSchedulePhases,
   normalizeScheduleTime,
   normalizeStaffGateDirection,
+  staffGateBlocksVisitor,
   type AccessAreaCell,
   type AccessAreaIndexes,
   type AccessAreaStats,
@@ -283,14 +288,18 @@ import {
 import {
   applyTerrainChanges,
   createEmptyTerrain,
+  DEFAULT_WATER_LEVEL,
   generateTerrain,
   getTerrainHeight as readTerrainHeight,
+  getWaterLevel,
   isMudHeight,
+  isSwimmableHeight,
   isWaterHeight,
   normalizeTerrain,
+  normalizeWaterLevel,
+  planTerrainAreaEdit,
   planTerrainEdit,
   scatterWildTrees,
-  WATER_HEIGHT,
 } from './terrain'
 import type { TerrainEditMode, TerrainSnapshot } from './terrain'
 
@@ -353,6 +362,7 @@ export type VisitorState =
   | 'partying'
   | 'bench-resting'
   | 'relaxing'
+  | 'swimming'
   | 'camp-waiting'
   | 'vehicle-arrival'
   | 'bus-waiting'
@@ -480,7 +490,8 @@ export type SimTurn = {
 
 export type GameSnapshot = {
   festival: FestivalManagement
-  version: 29
+  version: 30
+  waterLevel: number
   simTick: number
   rngState: number
   money: number
@@ -664,7 +675,8 @@ function createBlankSnapshot(
   const entrance = createScenarioEntrance(settings.worldSize)
   return {
     festival: createFestivalManagement(),
-    version: 29,
+    version: 30,
+    waterLevel: DEFAULT_WATER_LEVEL,
     simTick: 0,
     rngState: hashStringSeed(
       `festival-${settings.worldSize}-${settings.startingMoney}`,
@@ -786,6 +798,7 @@ export class GameState {
   private visitorWasteBinTick = -1
   private visitorWasteBinBuildings: PlacedBuilding[] = []
   private indexedForecourtRef: readonly StageForecourtCell[] | null = null
+  /** Packed half-steps (`height * 2`) so 0.5 land edits stay exact. */
   private terrainHeights: Int8Array | null = null
   private cachedWorldSize = 0
   private cachedWorldHalf = 0
@@ -856,6 +869,8 @@ export class GameState {
   readonly rng: DeterministicRng = new DeterministicRng(1)
   private tickAccumulator = 0
   private lastNavRevision = -1
+  private swimGoalCells: Cell[] | null = null
+  private swimGoalRevision = -1
   private scheduledCommands = new Map<number, GameCommand[]>()
   private turnHashes = new Map<number, number>()
   private optimisticCommandSequence = 0
@@ -934,7 +949,8 @@ export class GameState {
       .map(normalizeBandActor)
       .filter((actor): actor is BandActor => actor !== null)
     this.state.bandSupply ??= emptyBandSupplySnapshot()
-    this.state.version = 29
+    this.state.version = 30
+    this.state.waterLevel = normalizeWaterLevel(this.state.waterLevel)
     syncStageAudience(this.state)
     this.state.attractiveness ??= {
       average: 0,
@@ -1041,6 +1057,9 @@ export class GameState {
       }
       if (isWasteBin(building.kind)) {
         building.wasteFill ??= 0
+      }
+      if (isSealedWasteContainer(building.kind)) {
+        building.wasteFill = clampSealedContainerStored(building.wasteFill ?? 0)
       }
       if (building.kind === 'shirt') {
         const fallback = defaultShirtSettings()
@@ -1283,7 +1302,7 @@ export class GameState {
       return ['ground', 'groundArea', 'depot', 'removeDepot', 'staffGate', 'wayArea', 'stageDesign'].includes(command.action.type)
     }
     return [
-      'place', 'placeBungee', 'setBungeeHeight', 'placeSceneryLine', 'placePath', 'undoPath', 'placeRoad', 'undoRoad', 'bulldoze', 'bulldozeArea', 'editTerrain',
+      'place', 'placeBungee', 'setBungeeHeight', 'placeSceneryLine', 'placePath', 'undoPath', 'placeRoad', 'undoRoad', 'bulldoze', 'bulldozeArea', 'editTerrain', 'editTerrainArea',
       'designateRoad', 'designateParking', 'designateCampingCell',
       'designateCampingArea', 'designateMedicalArea', 'designateWasteDump',
       'designateStageForecourt', 'designateBackstageArea', 'designatePowerCable', 'designatePowerCableArea',
@@ -1563,38 +1582,85 @@ export class GameState {
     const ix = x + this.cachedWorldHalf
     const iz = z + this.cachedWorldHalf
     if (ix < 0 || iz < 0 || ix >= size || iz >= size) return 0
-    return heights[(iz * size + ix) | 0]!
+    return heights[(iz * size + ix) | 0]! / 2
+  }
+
+  getWaterLevel(): number {
+    return getWaterLevel(this.state)
   }
 
   isWaterTerrain(x: number, z: number): boolean {
-    return isWaterHeight(this.getTerrainHeight(x, z))
+    return isWaterHeight(this.getTerrainHeight(x, z), this.getWaterLevel())
+  }
+
+  isSwimmableTerrain(x: number, z: number): boolean {
+    return isSwimmableHeight(this.getTerrainHeight(x, z), this.getWaterLevel())
   }
 
   isMudTerrain(x: number, z: number): boolean {
     return isMudHeight(this.getTerrainHeight(x, z))
   }
 
-  editTerrain(x: number, z: number, mode: TerrainEditMode): ActionResult {
-    const planned = planTerrainEdit(
-      this.state.terrain,
-      this.getWorldSize(),
-      x,
-      z,
+  editTerrain(
+    x: number,
+    z: number,
+    mode: TerrainEditMode,
+    corner = 0,
+    originHeight?: number,
+  ): ActionResult {
+    return this.commitTerrainEdit(
+      planTerrainEdit(
+        this.state.terrain,
+        this.getWorldSize(),
+        x,
+        z,
+        mode,
+        (cellX, cellZ) => this.isTerrainProtected(cellX, cellZ),
+        corner,
+        originHeight,
+      ),
       mode,
-      (cellX, cellZ) => this.isTerrainProtected(cellX, cellZ),
     )
+  }
+
+  editTerrainArea(
+    cells: ReadonlyArray<{ x: number; z: number }>,
+    mode: TerrainEditMode,
+    originHeight?: number,
+  ): ActionResult {
+    return this.commitTerrainEdit(
+      planTerrainAreaEdit(
+        this.state.terrain,
+        this.getWorldSize(),
+        cells,
+        mode,
+        (cellX, cellZ) => this.isTerrainProtected(cellX, cellZ),
+        originHeight,
+      ),
+      mode,
+    )
+  }
+
+  private commitTerrainEdit(
+    planned:
+      | { ok: false; message: string }
+      | { ok: true; changes: Array<{ x: number; z: number; from: number; to: number }>; cornerChanges?: Array<{ x: number; z: number; from: number; to: number }> },
+    mode: TerrainEditMode,
+  ): ActionResult {
     if (!planned.ok) return planned
-    const cost = planned.changes.length * SIMULATION_CONFIG.terrain.editCost
+    const changedCells = planned.changes.length
+    const cost = Math.max(1, changedCells) * SIMULATION_CONFIG.terrain.editCost
     if (this.state.money < cost) {
       return {
         ok: false,
-        message: `Nicht genug Geld (${cost} € für ${planned.changes.length} Felder)`,
+        message: `Nicht genug Geld (${cost} € für ${Math.max(1, changedCells)} Felder)`,
       }
     }
     bookFinance(this.state, 'landscaping', -cost)
-    applyTerrainChanges(this.state.terrain, planned.changes)
+    applyTerrainChanges(this.state.terrain, planned.changes, planned.cornerChanges)
     for (const c of planned.changes) delete this.state.festival.infrastructure.ground[groundKey(c.x, c.z)]
     this.terrainHeights = null
+    this.worldRevision += 1
     planned.changes.forEach((change) => {
       this.state.buildings.forEach((building) => {
         if (building.kind !== 'tree') return
@@ -1612,11 +1678,18 @@ export class GameState {
     })
     this.emit()
     const verb =
-      mode === 'raise' ? 'erhöht' : mode === 'lower' ? 'abgesenkt' : 'eingeebnet'
+      mode === 'raise' || mode === 'raiseCorner'
+        ? 'erhöht'
+        : mode === 'lower' || mode === 'lowerCorner' || mode === 'water'
+          ? 'abgesenkt'
+          : mode === 'smooth'
+            ? 'geglättet'
+            : 'eingeebnet'
+    const fields = Math.max(1, changedCells)
     return {
       ok: true,
-      message: `Gelände ${verb} (${planned.changes.length} Feld${
-        planned.changes.length === 1 ? '' : 'er'
+      message: `Gelände ${verb} (${fields} Feld${
+        fields === 1 ? '' : 'er'
       }, ${cost} €)`,
     }
   }
@@ -2219,6 +2292,87 @@ export class GameState {
   getWasteDumpAt(x: number, z: number): WasteDumpCell | undefined {
     this.ensureSpatialIndexes()
     return this.wasteDumpIndex.get(this.packXZ(x, z))
+  }
+
+  private listSealedWasteContainers(): SealedWasteContainerInfo[] {
+    const reachable = this.collectGarbageTruckReachableRoadKeys()
+    const truckEnRouteIds = new Set<string>()
+    for (const vehicle of this.state.logistics.roadVehicles) {
+      if (vehicle.kind !== 'garbageTruck' || vehicle.state === 'idle') continue
+      const target = vehicle.target
+      if (target?.kind === 'sealedWasteContainer') {
+        truckEnRouteIds.add(target.buildingId)
+      }
+    }
+    return this.state.buildings
+      .filter((building) => isSealedWasteContainer(building.kind))
+      .map((building) => {
+        const road = this.getRoadCellAt(building.x, building.z, building.elevation)
+        const onRoad = Boolean(road)
+        const truckReachable =
+          onRoad &&
+          reachable.has(
+            roadLayerKey(
+              building.x,
+              building.z,
+              road?.elevation ??
+                this.getTerrainHeight(building.x, building.z),
+            ),
+          )
+        return {
+          id: building.id,
+          x: building.x,
+          z: building.z,
+          elevation: building.elevation,
+          stored: building.wasteFill ?? 0,
+          onRoad,
+          truckReachable,
+          truckEnRoute: truckEnRouteIds.has(building.id),
+        }
+      })
+  }
+
+  private collectGarbageTruckReachableRoadKeys(): Set<string> {
+    const graph = this.getRoadGraph()
+    const seeds: RoadPosition[] = []
+    for (const depot of this.state.logistics.wasteDepots) {
+      const access = this.getLogisticsBuildingAccess(depot, 2)
+      if (access) seeds.push(access)
+    }
+    for (const vehicle of this.state.logistics.roadVehicles) {
+      if (vehicle.kind !== 'garbageTruck') continue
+      const here = vehicle.cell ?? vehicle.position
+      if (here) seeds.push(here)
+    }
+    const seen = new Set<string>()
+    const queue: string[] = []
+    const enqueue = (position: RoadPosition) => {
+      const road = this.getRoadCellAt(position.x, position.z, position.elevation)
+      if (!road) return
+      const key = roadLayerKey(
+        road.x,
+        road.z,
+        road.elevation ?? this.getTerrainHeight(road.x, road.z),
+      )
+      if (seen.has(key)) return
+      seen.add(key)
+      queue.push(key)
+    }
+    seeds.forEach((seed) => enqueue(seed))
+    while (queue.length > 0) {
+      const key = queue.shift()!
+      const neighbors = graph.neighbors.get(key) ?? []
+      neighbors.forEach((neighbor) => enqueue(neighbor))
+    }
+    return seen
+  }
+
+  isSealedWasteContainerOnRoad(building: {
+    x: number
+    z: number
+    elevation: number
+  }): boolean {
+    return Boolean(this.getRoadCellAt(building.x, building.z, building.elevation))
   }
 
   getDepotAt(x: number, z: number) {
@@ -3421,7 +3575,9 @@ export class GameState {
     const dirty = this.state.incidents.filter(i => i.kind === 'litter' || i.kind === 'vomit')
     this.state.incidents = this.state.incidents.filter(i => i.kind !== 'litter' && i.kind !== 'vomit')
     this.state.campInstallations = this.state.campInstallations.filter(c => !removed.has(c.id))
-    for (const b of this.state.buildings) if (isWasteBin(b.kind)) b.wasteFill = 0
+    for (const b of this.state.buildings) {
+      if (isWasteBin(b.kind) || isSealedWasteContainer(b.kind)) b.wasteFill = 0
+    }
     for (const dump of this.state.wasteDumpCells) dump.stored = 0
     for (const v of this.state.visitors) v.pendingWaste = 0
     for (const member of this.state.staff) if (member.role === 'cleaner') {
@@ -3502,6 +3658,7 @@ export class GameState {
           (building) =>
             occupiesBuildingCell(building,cell.x,cell.z) &&
             building.kind !== 'tree' &&
+            !isSealedWasteContainer(building.kind) &&
             building.elevation < 1,
         ) ||
         this.isLogisticsBuildingCell(cell.x, cell.z) ||
@@ -3565,7 +3722,7 @@ export class GameState {
     ) {
       return { ok: false, message: 'Autos dürfen höchstens eine Höhenstufe über dem Gelände fahren' }
     }
-    if (this.isWaterTerrain(x, z) && elevation <= WATER_HEIGHT) {
+    if (this.isWaterTerrain(x, z) && elevation <= this.getWaterLevel()) {
       return { ok: false, message: 'Im Wasser kann keine Straße gebaut werden' }
     }
     if (this.getRideAccessAt(x, z) || this.isLogisticsBuildingCell(x, z) || this.getCampingCellAt(x, z) || this.getMedicalCellAt(x, z) || this.getStageForecourtCellAt(x, z)) {
@@ -3575,7 +3732,13 @@ export class GameState {
     const candidateTop = Math.max(elevation, rampStart) + 0.28
     if (
       this.state.buildings.some((building) => {
-        if (!occupiesBuildingCell(building, x, z) || building.kind === 'tree') return false
+        if (
+          !occupiesBuildingCell(building, x, z) ||
+          building.kind === 'tree' ||
+          isSealedWasteContainer(building.kind)
+        ) {
+          return false
+        }
         const bounds = this.getBuildingVerticalBounds(building)
         return bounds.base < candidateTop && candidateBase < bounds.top
       }) ||
@@ -4115,7 +4278,10 @@ export class GameState {
     if (kind === 'stage' && groundInfo(this.state, x, z).bearing < 2) return { ok: false, message: 'Bühnen brauchen tragfähigen Untergrund: zuerst verdichten' }
     if (kind === 'ride' && groundInfo(this.state, x, z).bearing < 3) return { ok: false, message: 'Große Fahrgeschäfte brauchen ein entwässertes, gepflastertes Fundament' }
     if (
-      (this.getRoadCellAt(x, z) && kind !== 'path' && kind !== 'bench') ||
+      (this.getRoadCellAt(x, z) &&
+        kind !== 'path' &&
+        kind !== 'bench' &&
+        !isSealedWasteContainer(kind)) ||
       this.isLogisticsBuildingCell(x, z)
     ) {
       return { ok: false, message: 'Diese Fläche wird für die Logistik genutzt' }
@@ -4154,7 +4320,7 @@ export class GameState {
       return { ok: false, message: 'Der Tourbus-Parkplatz braucht eine angrenzende Straße' }
     }
     const placeElevation = this.getPlaceElevation(x, z)
-    if (this.isWaterTerrain(x, z) && placeElevation <= WATER_HEIGHT) {
+    if (this.isWaterTerrain(x, z) && placeElevation <= this.getWaterLevel()) {
       return { ok: false, message: 'Im Wasser kann nicht gebaut werden' }
     }
     const collision = this.findCollision(kind, x, z, placeElevation, decorationSlot)
@@ -4187,7 +4353,9 @@ export class GameState {
     ) {
       return { ok: false, message: 'Auf dieser Seite steht bereits ein Bauzaun' }
     }
-    const furnitureRoad = kind === 'bench' && Boolean(this.getRoadCellAt(x, z, placeElevation))
+    const furnitureRoad =
+      (kind === 'bench' || isSealedWasteContainer(kind)) &&
+      Boolean(this.getRoadCellAt(x, z, placeElevation))
     if ((kind === 'securityGate' || kind === 'bench') && collision?.kind !== 'path' && !furnitureRoad) {
       return {
         ok: false,
@@ -4207,7 +4375,8 @@ export class GameState {
       ((kind === 'securityGate' ||
         kind === 'bench' ||
         kind === 'fence' ||
-        isWasteBin(kind)) &&
+        isWasteBin(kind) ||
+        isSealedWasteContainer(kind)) &&
         collision?.kind === 'path') ||
       (kind === 'fence' && collision?.kind === 'fence') ||
       (collision?.kind === 'tree' && !isScenery(kind))
@@ -4280,7 +4449,7 @@ export class GameState {
         kind === 'stage'
           ? BAND_NAMES[this.idCounter % BAND_NAMES.length]
           : undefined,
-      wasteFill: isWasteBin(kind) ? 0 : undefined,
+      wasteFill: isWasteBin(kind) || isSealedWasteContainer(kind) ? 0 : undefined,
       ...(kind === 'shirt'
         ? {
             shirtColor: defaultShirtSettings().color,
@@ -5138,10 +5307,10 @@ export class GameState {
     ) {
       return { ok: false, message: 'Auf dieser Höhe ist nicht genug Platz' }
     }
-    if (this.isWaterTerrain(x, z) && elevation <= WATER_HEIGHT) {
+    if (this.isWaterTerrain(x, z) && elevation <= this.getWaterLevel()) {
       return { ok: false, message: 'Im Wasser kann kein Weg gebaut werden' }
     }
-    if (elevation < WATER_HEIGHT || elevation > MAX_PATH_ELEVATION) {
+    if (elevation < this.getWaterLevel() || elevation > MAX_PATH_ELEVATION) {
       return { ok: false, message: 'Diese Bauhöhe ist nicht möglich' }
     }
     const directions = [
@@ -6885,6 +7054,9 @@ export class GameState {
     if (target?.kind === 'wasteDump') {
       return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
     }
+    if (target?.kind === 'sealedWasteContainer') {
+      return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
+    }
     if (target?.kind === 'depot') {
       const depot = this.state.logistics.wasteDepots.find(
         (candidate) => candidate.id === target.depotId,
@@ -6917,7 +7089,7 @@ export class GameState {
       const last = vehicle.route.at(-1)
       return last ? this.collectRoadOrAccessTargets(last) : []
     }
-    if (target.kind === 'wasteDump') {
+    if (target.kind === 'wasteDump' || target.kind === 'sealedWasteContainer') {
       return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
     }
     if (target.kind === 'cell') {
@@ -7501,33 +7673,42 @@ export class GameState {
             candidate.id !== vehicle.id &&
             candidate.state !== 'idle',
         )
-        .map((candidate) =>
-          candidate.target?.kind === 'wasteDump'
-            ? `${candidate.target.x}:${candidate.target.z}`
-            : '',
-        ),
+        .map((candidate) => {
+          if (candidate.target?.kind === 'wasteDump') {
+            return `${candidate.target.x}:${candidate.target.z}`
+          }
+          if (candidate.target?.kind === 'sealedWasteContainer') {
+            return `sealed:${candidate.target.buildingId}`
+          }
+          return ''
+        }),
     )
     const dumps = this.state.wasteDumpCells.filter(
       (cell) =>
         cell.stored > 0 && !claimed.has(`${cell.x}:${cell.z}`),
     )
-    const totalStored = dumps.reduce((sum, cell) => sum + cell.stored, 0)
+    const containers = this.state.buildings.filter(
+      (building) =>
+        isSealedWasteContainer(building.kind) &&
+        (building.wasteFill ?? 0) > 0 &&
+        this.isSealedWasteContainerOnRoad(building) &&
+        !claimed.has(`sealed:${building.id}`),
+    )
+    const totalStored =
+      dumps.reduce((sum, cell) => sum + cell.stored, 0) +
+      containers.reduce((sum, building) => sum + (building.wasteFill ?? 0), 0)
     if (totalStored < SIMULATION_CONFIG.waste.truckDispatchThreshold) return
-    const accesses = this.getWasteDumpRoadAccesses(dumps)
+    const accesses = [
+      ...this.getWasteDumpRoadAccesses(dumps),
+      ...this.getSealedContainerRoadAccesses(containers),
+    ]
     if (accesses.length === 0) return
-    const alreadyThere = accesses.some(
+    const alreadyThere = accesses.find(
       (access) =>
         access.road.x === vehicle.cell?.x && access.road.z === vehicle.cell.z,
     )
     if (alreadyThere) {
-      const dump =
-        accesses.find(
-          (access) =>
-            access.road.x === vehicle.cell?.x &&
-            access.road.z === vehicle.cell.z,
-        )?.dump ?? dumps[0]
-      if (!dump) return
-      vehicle.target = { kind: 'wasteDump', x: dump.x, z: dump.z }
+      this.assignGarbageTruckAccessTarget(vehicle, alreadyThere)
       vehicle.route = []
       vehicle.state = 'responding'
       this.finishGarbageTruckLeg(vehicle)
@@ -7539,14 +7720,35 @@ export class GameState {
     )
     if (!route) return
     const last = route.at(-1) ?? vehicle.cell
-    const dump =
+    const access =
       accesses.find(
-        (access) => access.road.x === last.x && access.road.z === last.z,
-      )?.dump ?? dumps[0]
-    if (!dump) return
-    vehicle.target = { kind: 'wasteDump', x: dump.x, z: dump.z }
+        (candidate) => candidate.road.x === last.x && candidate.road.z === last.z,
+      ) ?? accesses[0]
+    if (!access) return
+    this.assignGarbageTruckAccessTarget(vehicle, access)
     vehicle.route = route.map(toRoadPosition)
     vehicle.state = 'responding'
+  }
+
+  private assignGarbageTruckAccessTarget(
+    vehicle: RoadVehicle,
+    access: {
+      dump?: { x: number; z: number }
+      container?: { id: string; x: number; z: number }
+    },
+  ): void {
+    if (access.container) {
+      vehicle.target = {
+        kind: 'sealedWasteContainer',
+        buildingId: access.container.id,
+        x: access.container.x,
+        z: access.container.z,
+      }
+      return
+    }
+    if (access.dump) {
+      vehicle.target = { kind: 'wasteDump', x: access.dump.x, z: access.dump.z }
+    }
   }
 
   private getWasteDumpRoadAccesses(
@@ -7571,6 +7773,44 @@ export class GameState {
       })
     })
     return accesses.sort((left, right) => right.dump.stored - left.dump.stored)
+  }
+
+  private getSealedContainerRoadAccesses(
+    containers: readonly PlacedBuilding[],
+  ): Array<{
+    container: { id: string; x: number; z: number; stored: number }
+    road: RoadPosition
+  }> {
+    const seen = new Set<string>()
+    const accesses: Array<{
+      container: { id: string; x: number; z: number; stored: number }
+      road: RoadPosition
+    }> = []
+    containers.forEach((container) => {
+      const road = this.getRoadCellAt(container.x, container.z, container.elevation)
+      if (!road) return
+      const key = roadLayerKey(
+        road.x,
+        road.z,
+        road.elevation ?? this.getTerrainHeight(road.x, road.z),
+      )
+      if (seen.has(key)) return
+      seen.add(key)
+      accesses.push({
+        container: {
+          id: container.id,
+          x: container.x,
+          z: container.z,
+          stored: container.wasteFill ?? 0,
+        },
+        road: {
+          x: road.x,
+          z: road.z,
+          elevation: road.elevation,
+        },
+      })
+    })
+    return accesses.sort((left, right) => right.container.stored - left.container.stored)
   }
 
   private getDeliveryFreight(vehicle: RoadVehicle) {
@@ -7872,23 +8112,47 @@ export class GameState {
         0,
         SIMULATION_CONFIG.logistics.garbageTruckCapacity - vehicle.cargo,
       )
-      const dumps = this.state.wasteDumpCells
-        .filter((cell) => cell.stored > 0)
-        .sort((left, right) => {
-          const truck = vehicle.cell ?? vehicle.position
-          return (
-            Math.abs(left.x - truck.x) +
-            Math.abs(left.z - truck.z) -
-            (Math.abs(right.x - truck.x) + Math.abs(right.z - truck.z))
+      if (vehicle.target?.kind === 'sealedWasteContainer') {
+        const target = vehicle.target
+        const building =
+          this.state.buildings.find(
+            (candidate) =>
+              isSealedWasteContainer(candidate.kind) &&
+              candidate.id === target.buildingId,
+          ) ??
+          this.state.buildings.find(
+            (candidate) =>
+              isSealedWasteContainer(candidate.kind) &&
+              candidate.x === target.x &&
+              candidate.z === target.z,
           )
+        if (
+          building &&
+          this.isSealedWasteContainerOnRoad(building) &&
+          room > 0
+        ) {
+          const taken = emptySealedContainerStored(building, room)
+          vehicle.cargo += taken
+        }
+      } else {
+        const dumps = this.state.wasteDumpCells
+          .filter((cell) => cell.stored > 0)
+          .sort((left, right) => {
+            const truck = vehicle.cell ?? vehicle.position
+            return (
+              Math.abs(left.x - truck.x) +
+              Math.abs(left.z - truck.z) -
+              (Math.abs(right.x - truck.x) + Math.abs(right.z - truck.z))
+            )
+          })
+        dumps.forEach((dump) => {
+          if (room <= 0) return
+          const taken = Math.min(dump.stored, room)
+          dump.stored -= taken
+          vehicle.cargo += taken
+          room -= taken
         })
-      dumps.forEach((dump) => {
-        if (room <= 0) return
-        const taken = Math.min(dump.stored, room)
-        dump.stored -= taken
-        vehicle.cargo += taken
-        room -= taken
-      })
+      }
       vehicle.state = 'waiting'
       vehicle.waitMinutes = SIMULATION_CONFIG.waste.truckLoadMinutes
       vehicle.resumeState = 'returning'
@@ -9381,6 +9645,7 @@ export class GameState {
             elevation: building.elevation,
             stored: building.wasteFill ?? 0,
           })),
+        sealedContainers: this.listSealedWasteContainers(),
         securityGates: this.state.buildings
           .filter((building) => building.kind === 'securityGate')
           .map((building) => ({
@@ -9431,6 +9696,20 @@ export class GameState {
           const added = Math.min(amount, Math.max(0, SIMULATION_CONFIG.waste.binCapacity - (bin.wasteFill ?? 0)))
           bin.wasteFill = (bin.wasteFill ?? 0) + added
           return added
+        },
+        fillSealedContainer: (id, amount) => {
+          const container = this.state.buildings.find(
+            (building) => building.id === id && isSealedWasteContainer(building.kind),
+          )
+          if (!container) return 0
+          return acceptWasteAtSealedContainer(container, amount)
+        },
+        emptySealedContainer: (id, amount) => {
+          const container = this.state.buildings.find(
+            (building) => building.id === id && isSealedWasteContainer(building.kind),
+          )
+          if (!container) return 0
+          return emptySealedContainerStored(container, amount)
         },
         emptyBin: (id, amount) => {
           const bin = this.state.buildings.find(
@@ -9867,7 +10146,7 @@ export class GameState {
           this.cellKey(cell.x, cell.z, cell.elevation),
         ) ?? 0,
       }))
-      .filter((cell) => !cell.path?.staffOnly && cell.crowding < current - 2)
+      .filter((cell) => cell.crowding < current - 2)
       .sort(
         (left, right) =>
           left.crowding - right.crowding ||
@@ -9971,7 +10250,8 @@ export class GameState {
       const migrated: GameSnapshot = {
         ...createBlankSnapshot(),
         ...data,
-        version: 29,
+        version: 30,
+        waterLevel: normalizeWaterLevel(data.waterLevel),
         terrain: normalizeTerrain(data.terrain),
         buildings: data.buildings.map(b => b.stageDesign ? { ...b, stageDesign: migrateStageDesign(b.stageDesign) } : b),
         campingCells: Array.isArray(data.campingCells) ? data.campingCells : [],
@@ -10800,6 +11080,32 @@ export class GameState {
           visitor.interactionRemaining <= 0 ||
           visitor.needs.energy <
             SIMULATION_CONFIG.visitors.decisions.lowEnergy
+        ) {
+          this.clearVisitorActivity(visitor)
+          visitor.state = 'exploring'
+          this.decideNextAction(visitor)
+        }
+        return
+      }
+
+      if (visitor.state === 'swimming' && visitor.route.length === 0) {
+        visitor.interactionRemaining -= minutes
+        const consumed = this.consumeWhileStationary(visitor, minutes)
+        if (visitor.pendingWaste > 0 && visitor.route.length > 0) return
+        visitor.needs.fun = Math.min(
+          100,
+          visitor.needs.fun + minutes * SIMULATION_CONFIG.terrain.swimFunPerMinute,
+        )
+        visitor.emotion = 'happy'
+        visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 10)
+        if (!consumed) {
+          visitor.thought = 'Das Wasser ist herrlich. Ich bleibe noch ein bisschen.'
+        }
+        if (
+          visitor.interactionRemaining <= 0 ||
+          visitor.needs.energy <
+            SIMULATION_CONFIG.visitors.decisions.lowEnergy ||
+          !this.isSwimmableTerrain(visitor.cellX, visitor.cellZ)
         ) {
           this.clearVisitorActivity(visitor)
           visitor.state = 'exploring'
@@ -11828,9 +12134,12 @@ export class GameState {
             : visitor.alcoholLevel >= movement.moderatelyDrunkThreshold
               ? movement.moderatelyDrunkMultiplier
               : 1)) *
-      (this.isMudTerrain(visitor.cellX, visitor.cellZ)
-        ? SIMULATION_CONFIG.terrain.mudMoveMultiplier
-        : 1)
+      (this.isWaterTerrain(visitor.cellX, visitor.cellZ) &&
+      !this.getPathAt(visitor.cellX, visitor.cellZ, visitor.cellElevation)
+        ? SIMULATION_CONFIG.terrain.swimMoveMultiplier
+        : this.isMudTerrain(visitor.cellX, visitor.cellZ)
+          ? SIMULATION_CONFIG.terrain.mudMoveMultiplier
+          : 1)
     const ground = wayInfo(this.state, visitor.cellX, visitor.cellZ, 'foot', this.getPathAt(visitor.cellX, visitor.cellZ, visitor.cellElevation)?.wayType)
     const surface = visitor.cellElevation > this.getTerrainHeight(visitor.cellX, visitor.cellZ) ? 1 : ground.speed
     const returningOnStallQueue = this.stallQueueReturnIds.has(visitor.id)
@@ -11981,8 +12290,11 @@ export class GameState {
         z: visitor.cellZ,
         elevation: visitor.cellElevation,
       }
+      const travel = this.getDirectionIndex(next.x - currentCell.x, next.z - currentCell.z)
+      const currentPath = this.getPathAt(currentCell.x, currentCell.z, currentCell.elevation)
       if (
-        nextPath?.staffOnly ||
+        (travel >= 0 &&
+          staffGateBlocksVisitor(currentPath, nextPath, travel as Direction)) ||
         !this.isInWorld(next.x, next.z) ||
         this.isPedestrianSolidAt(next.x, next.z, next.elevation) ||
         this.isPedestrianEdgeBlocked(currentCell, next)
@@ -12114,7 +12426,8 @@ export class GameState {
     if (
       visitor.state === 'partying' ||
       visitor.state === 'bench-resting' ||
-      visitor.state === 'relaxing'
+      visitor.state === 'relaxing' ||
+      visitor.state === 'swimming'
     ) {
       return
     }
@@ -12550,6 +12863,31 @@ export class GameState {
             : gathering.kind === 'musicBox'
               ? 'Ich gehe zur Musikbox am Zeltplatz.'
               : 'Ich setze mich zu den anderen Campern.'
+        return
+      }
+    }
+
+    if (
+      !urgentNeed &&
+      visitor.needs.fun < decisions.seekFunBelow
+    ) {
+      const swim = this.findSwimDestination(visitor)
+      if (swim) {
+        visitor.state = 'swimming'
+        visitor.targetId = null
+        visitor.route = swim.route
+        visitor.activityTarget = swim.cell
+        visitor.activitySlot = swim.slot
+        visitor.activityCapacity = swim.capacity
+        this.adjustVisitorOccupancy(visitor, 1)
+        visitor.interactionRemaining =
+          SIMULATION_CONFIG.terrain.swimDurationMinimum +
+          this.rng.next() * SIMULATION_CONFIG.terrain.swimDurationRandomRange
+        visitor.isDancing = false
+        visitor.thought =
+          swim.route.length > 1
+            ? 'Ich gehe baden – das wird Spaß machen.'
+            : 'Ich springe ins Wasser.'
         return
       }
     }
@@ -13435,7 +13773,9 @@ export class GameState {
   private adjustVisitorOccupancy(visitor: Visitor, delta: -1 | 1): void {
     if (this.occupancyTick !== this.state.simTick) return
     if (
-      (visitor.state === 'relaxing' || visitor.state === 'partying') &&
+      (visitor.state === 'relaxing' ||
+        visitor.state === 'partying' ||
+        visitor.state === 'swimming') &&
       visitor.activityTarget
     ) {
       const key = this.cellKey(
@@ -13486,7 +13826,9 @@ export class GameState {
     this.benchSlotBits.clear()
     for (const visitor of this.state.visitors) {
       if (
-        (visitor.state === 'relaxing' || visitor.state === 'partying') &&
+        (visitor.state === 'relaxing' ||
+          visitor.state === 'partying' ||
+          visitor.state === 'swimming') &&
         visitor.activityTarget
       ) {
         const key = this.cellKey(
@@ -13517,7 +13859,9 @@ export class GameState {
     let count =
       this.activityHeadcount.get(this.cellKey(cell.x, cell.z, cell.elevation)) ?? 0
     if (
-      (excluded.state === 'relaxing' || excluded.state === 'partying') &&
+      (excluded.state === 'relaxing' ||
+        excluded.state === 'partying' ||
+        excluded.state === 'swimming') &&
       excluded.activityTarget?.x === cell.x &&
       excluded.activityTarget.z === cell.z &&
       excluded.activityTarget.elevation === cell.elevation
@@ -13538,7 +13882,9 @@ export class GameState {
     const excluded = this.getVisitor(excludedVisitorId)
     if (
       excluded &&
-      (excluded.state === 'relaxing' || excluded.state === 'partying') &&
+      (excluded.state === 'relaxing' ||
+        excluded.state === 'partying' ||
+        excluded.state === 'swimming') &&
       excluded.activityTarget?.x === cell.x &&
       excluded.activityTarget.z === cell.z &&
       excluded.activityTarget.elevation === cell.elevation
@@ -13630,6 +13976,89 @@ export class GameState {
       }
     }
     return null
+  }
+
+  private ensureSwimGoals(): Cell[] {
+    if (this.swimGoalRevision === this.worldRevision && this.swimGoalCells) {
+      return this.swimGoalCells
+    }
+    this.swimGoalRevision = this.worldRevision
+    const cells: Cell[] = []
+    const size = this.getWorldSize()
+    const half = size / 2
+    const waterLevel = this.getWaterLevel()
+    for (let z = -half; z < half; z += 1) {
+      for (let x = -half; x < half; x += 1) {
+        const height = this.getTerrainHeight(x, z)
+        if (!isSwimmableHeight(height, waterLevel)) continue
+        if (this.getPathAt(x, z, height)) continue
+        if (this.isPedestrianSolidAt(x, z, height)) continue
+        if (this.getCampingCellAt(x, z)) continue
+        if (this.getRoadCellAt(x, z)) continue
+        if (this.getMedicalCellAt(x, z)) continue
+        if (this.getWasteDumpAt(x, z)) continue
+        if (this.getStageForecourtCellAt(x, z)) continue
+        cells.push({ x, z, elevation: height })
+      }
+    }
+    this.swimGoalCells = cells
+    return cells
+  }
+
+  private findSwimDestination(visitor: Visitor): {
+    cell: Cell
+    route: Cell[]
+    slot: number
+    capacity: number
+  } | null {
+    const goals = this.ensureSwimGoals()
+    if (goals.length === 0) return null
+    const capacity = SIMULATION_CONFIG.terrain.swimCapacityPerCell
+    const start = {
+      x: visitor.cellX,
+      z: visitor.cellZ,
+      elevation: visitor.cellElevation,
+    }
+    const open = goals
+      .map((cell) => {
+        const occupants = this.activityOccupantsAt(cell, visitor)
+        if (occupants >= capacity) return null
+        const distance =
+          Math.abs(cell.x - visitor.cellX) + Math.abs(cell.z - visitor.cellZ)
+        return { cell, occupants, distance }
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> =>
+        Boolean(candidate),
+      )
+      .sort(
+        (left, right) =>
+          left.distance - right.distance ||
+          left.occupants - right.occupants ||
+          left.cell.x - right.cell.x ||
+          left.cell.z - right.cell.z,
+      )
+      .slice(0, SIMULATION_CONFIG.pathfinding.maxScoredPathChecks)
+    if (open.length === 0) return null
+    const route = this.findPath(
+      start,
+      open.map((candidate) => candidate.cell),
+    )
+    if (!route) return null
+    const end = route.at(-1) ?? start
+    const match =
+      open.find(
+        (candidate) =>
+          candidate.cell.x === end.x &&
+          candidate.cell.z === end.z &&
+          Math.abs(candidate.cell.elevation - end.elevation) < 0.01,
+      ) ?? open[0]
+    if (!match) return null
+    return {
+      cell: match.cell,
+      route,
+      slot: this.getFreeActivitySlot(match.cell, capacity, visitor.id),
+      capacity,
+    }
   }
 
   private enforceDayPlan(): void {
@@ -14086,8 +14515,14 @@ export class GameState {
       goalKeys.has(this.packCell(start)) || goals.some(goal => {
       const node = this.pedestrianNav.get(this.packCell(goal))
       if (!node || (node.flags & NAV_SOLID) !== 0) return false
-      if (node.path?.staffOnly && !allowStaff) return false
-      if ((node.flags & NAV_WATER) !== 0 && (node.flags & NAV_PATH) === 0) return false
+      if (
+        node.path?.staffOnly &&
+        !allowStaff &&
+        normalizeStaffGateDirection(node.path.staffGateDirection) === undefined
+      ) {
+        return false
+      }
+      if ((node.flags & NAV_WATER) !== 0 && (node.flags & NAV_PATH) === 0 && allowStaff) return false
       if (!campingAccess && (node.flags & NAV_CAMPING) !== 0) return false
       if (!medicalAllowed && (node.flags & NAV_MEDICAL) !== 0) return false
       if (!festivalAllowed && (node.flags & NAV_FORECOURT) !== 0 && (node.flags & NAV_PATH) === 0) return false
@@ -14744,7 +15179,18 @@ export class GameState {
     for (let index = 0; index < node.links.length; index += 1) {
       const link = node.links[index]!
       const dest = link.node
-      if (dest.path?.staffOnly && !options.allowStaff) continue
+      if (!options.allowStaff) {
+        const travel = this.getDirectionIndex(
+          dest.cell.x - node.cell.x,
+          dest.cell.z - node.cell.z,
+        )
+        if (
+          travel >= 0 &&
+          staffGateBlocksVisitor(node.path, dest.path, travel as Direction)
+        ) {
+          continue
+        }
+      }
       if ((dest.flags & NAV_SOLID) !== 0) continue
       if (
         (dest.flags & NAV_PARKING) !== 0 &&
@@ -14752,7 +15198,7 @@ export class GameState {
       ) {
         continue
       }
-      if ((dest.flags & NAV_WATER) !== 0 && (dest.flags & NAV_PATH) === 0) continue
+      if ((dest.flags & NAV_WATER) !== 0 && (dest.flags & NAV_PATH) === 0 && options.allowStaff) continue
       if (!allowCamping && (dest.flags & NAV_CAMPING) !== 0) continue
       if (!allowMedical && (dest.flags & NAV_MEDICAL) !== 0) continue
       if (
@@ -14844,7 +15290,8 @@ export class GameState {
     for (const building of this.state.buildings) {
       if (
         building.kind !== 'path' &&
-        building.kind !== 'fence' &&
+        !isPedestrianBarrierKind(building.kind) &&
+        !isWallDoor(building.kind) &&
         !PEDESTRIAN_SOLID_KINDS.has(building.kind)
       ) {
         continue
@@ -14853,6 +15300,7 @@ export class GameState {
         (structure +
           this.packXZ(building.x, building.z) +
           building.rotation +
+          (building.decorationSlot ?? 8) +
           Math.round(building.elevation * 8) +
           (building.pathType === 'queue' ? 5 : 1) +
           (building.pathSlope ?? 0) * 11) |
@@ -14913,7 +15361,7 @@ export class GameState {
       const forecourt = this.getStageForecourtCellAt(x, z)
       const parking = this.hasParkingAt(x, z)
       const backstage = this.activeBackstagePacked.has(this.packXZ(x, z))
-      const water = isWaterHeight(height) && !path
+      const water = isWaterHeight(height, this.getWaterLevel()) && !path
       let flags = 0
       if (path) flags |= NAV_PATH
       if (road) flags |= NAV_ROAD
@@ -14928,12 +15376,10 @@ export class GameState {
       if (path || road || camping || medical || forecourt || parking || backstage) flags |= NAV_PAVED
       let fenceMask = 0
       for (const building of this.getBuildingsAtCell(x, z)) {
-        if (
-          building.kind === 'fence' &&
-          Math.abs(building.elevation - elevation) < WAY_LEVEL_MATCH
-        ) {
-          fenceMask |= directionBit(building.rotation as Direction)
-        }
+        if (Math.abs(building.elevation - elevation) >= WAY_LEVEL_MATCH) continue
+        const occupancy = pedestrianBarrierOccupancy(building)
+        if (occupancy === undefined || occupancy === 'solid') continue
+        fenceMask |= directionBit(occupancy)
       }
       this.pedestrianNav.set(packed, {
         cell: { x, z, elevation },
@@ -14987,9 +15433,11 @@ export class GameState {
     if (this.getRideAccessAt(x,z,elevation)) return true
     if (this.state.festival.infrastructure.depots.some(d => d.x === x && d.z === z) && elevation < this.getTerrainHeight(x, z) + 1) return true
     for (const building of this.getBuildingsAtCell(x, z)) {
-      if (
+      const catalogSolid =
         PEDESTRIAN_SOLID_KINDS.has(building.kind) &&
-        (building.decorationSlot === undefined || building.decorationSlot === 4) &&
+        (building.decorationSlot === undefined || building.decorationSlot === 4)
+      if (
+        (catalogSolid || pedestrianBarrierOccupancy(building) === 'solid') &&
         !isStageAudienceCell(building,x,z) &&
         this.volumesOverlap(building, elevation, 0.28)
       ) {
@@ -15038,8 +15486,7 @@ export class GameState {
   ): boolean {
     for (const building of this.getBuildingsAtCell(x, z)) {
       if (
-        building.kind === 'fence' &&
-        building.rotation === direction &&
+        pedestrianBarrierOccupancy(building) === direction &&
         Math.abs(building.elevation - elevation) < WAY_LEVEL_MATCH
       ) {
         return true
@@ -15056,7 +15503,9 @@ export class GameState {
   private getBasePedestrianSurfaceCost(cell: Cell): number {
     const path = this.getPathAt(cell.x, cell.z, cell.elevation)
     const height = this.getTerrainHeight(cell.x, cell.z)
-    if (isWaterHeight(height) && !path) return Number.POSITIVE_INFINITY
+    if (isWaterHeight(height, this.getWaterLevel()) && !path) {
+      return SIMULATION_CONFIG.terrain.swimPathCostMultiplier
+    }
     const mud = isMudHeight(height)
     const road = this.getRoadCellAt(cell.x, cell.z)
     if (path && road) {
@@ -15712,10 +16161,8 @@ export class GameState {
     const half = size / 2
     for (let z = -half; z < half; z += 1) {
       for (let x = -half; x < half; x += 1) {
-        heights[(z + half) * size + (x + half)] = readTerrainHeight(
-          this.state.terrain,
-          x,
-          z,
+        heights[(z + half) * size + (x + half)] = Math.round(
+          readTerrainHeight(this.state.terrain, x, z) * 2,
         )
       }
     }

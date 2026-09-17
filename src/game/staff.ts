@@ -27,6 +27,8 @@ export type StaffMember = {
   hiredDay?: number
   hiredMinute?: number
   wasteFromBin?: boolean
+  /** Set after emptying a sealed container; haul goes to the dump, not another container. */
+  wasteFromSealedContainer?: boolean
   carryingWaste: number
 }
 

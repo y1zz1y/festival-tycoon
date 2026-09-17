@@ -139,9 +139,9 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         id: 'shape',
         label: 'Form',
         items: [
-          toolItem('terrainRaise', 'Erhöhen', '▲', '8 € je Feld'),
-          toolItem('terrainLower', 'Senken', '▼', '8 € je Feld'),
-          toolItem('terrainFlatten', 'Einebnen', '▬', 'auf Ebene 0'),
+          toolItem('terrainRaise', 'Feld anheben', '▲', '0,5 Höhe · Fläche'),
+          toolItem('terrainLower', 'Feld senken', '▼', '0,5 Höhe · Fläche'),
+          toolItem('terrainSmooth', 'Glätten', '∼', 'auf Startfeldhöhe'),
         ],
       },
     ],
@@ -302,6 +302,10 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         label: 'Müll',
         items: [
           toolItem('wasteDump', 'Müllablage', '🗑️', 'sehr unattraktiv'),
+          buildingItem(
+            'sealedWasteContainer',
+            `${Math.floor(BUILDINGS.sealedWasteContainer.cost).toLocaleString('de-DE')} € · 80 Beutel, versiegelt`,
+          ),
           buildingItem('wasteDepot'),
           buildingItem('specialDepot'),
         ],
@@ -404,7 +408,7 @@ export function placeableTools(): Tool[] {
     'coaster',
     'terrainRaise',
     'terrainLower',
-    'terrainFlatten',
+    'terrainSmooth',
     'powerCable',
     'bulldoze',
   ]

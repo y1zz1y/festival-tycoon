@@ -49,6 +49,7 @@ export const BUILDING_KINDS = [
   'wasteDepot',
   'specialDepot',
   'wasteBin',
+  'sealedWasteContainer',
   'generator',
   'backupGenerator',
   'foh',
@@ -84,6 +85,10 @@ export type Tool =
   | 'terrainRaise'
   | 'terrainLower'
   | 'terrainFlatten'
+  | 'terrainRaiseCorner'
+  | 'terrainLowerCorner'
+  | 'terrainWater'
+  | 'terrainSmooth'
   | 'powerCable'
   | 'bulldoze'
   | 'inspect'
@@ -104,6 +109,16 @@ export const ROAD_BUILD_TOOLS = [
 
 export function isRoadBuildTool(tool: string | undefined): boolean {
   return (ROAD_BUILD_TOOLS as readonly string[]).includes(tool ?? '')
+}
+
+export const TERRAIN_EDIT_TOOLS = [
+  'terrainRaise',
+  'terrainLower',
+  'terrainSmooth',
+] as const satisfies readonly Tool[]
+
+export function isTerrainEditTool(tool: string | undefined): boolean {
+  return (TERRAIN_EDIT_TOOLS as readonly string[]).includes(tool ?? '')
 }
 
 export type BuildingDefinition = {
@@ -316,6 +331,14 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
     height: 0.75,
     color: 0x3f4a3a,
     icon: '🗑️',
+  },
+  sealedWasteContainer: {
+    kind: 'sealedWasteContainer',
+    name: 'Versiegelter Müllcontainer',
+    ...SIMULATION_CONFIG.economy.buildings.sealedWasteContainer,
+    height: 1.15,
+    color: 0x3a4a38,
+    icon: '🛢️',
   },
   generator: {
     kind: 'generator',

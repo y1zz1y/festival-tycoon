@@ -24,12 +24,16 @@ Feste Gebäude (Bäume, Bühnen, Lautsprecher, Lampen, **Deko je Art**) und mobi
 Quellen (Tänzer, Musikboxen, Gespräche). Addition flacht ab
 (`diminishingSaturation`); Feuer, Kotze und Schlafende wirken lokal negativ.
 Details der Gewichte stehen in `SIMULATION_CONFIG.atmosphere.sources`
-(`beauty`, `party`, `range`). Beitrag fällt linear mit der Distanz
-(`1 - distance / range`). Mehrere Quellen auf derselben Zelle addieren roh
-und werden erst danach saturiert — zwei Statuen sind stärker als eine, aber
-nicht doppelt so stark. Kleine Deko (Leitkegel `beauty` 2, `range` 1) bleibt
-lokal; Blickfänge (Willkommensbogen 18 / 4, Kristallstele 16 / 4) färben
-mehrere Felder. Gäste lesen `localAttractiveness` aus diesem Feld.
+(  `beauty`, `party`, `range`). Beitrag fällt linear mit der Distanz
+  (`1 - distance / range`). Mehrere Quellen auf derselben Zelle addieren roh
+  und werden erst danach saturiert — zwei Statuen sind stärker als eine, aber
+  nicht doppelt so stark. Kleine Deko (Leitkegel `beauty` 2, `range` 1) bleibt
+  lokal; Blickfänge (Willkommensbogen 18 / 4, Kristallstele 16 / 4) färben
+  mehrere Felder. Offene Müllablagen: `wasteDump` beauty −48 plus
+  `waste.dumpStoredBeautyPerBag` (−1,4). Versiegelte Container:
+  `sealedWasteContainer` beauty −8 plus
+  `waste.sealedContainerStoredBeautyPerBag` (−0,22). Gäste lesen
+  `localAttractiveness` aus diesem Feld.
 
 ## Wichtige Regeln
 
@@ -53,6 +57,7 @@ mehrere Felder. Gäste lesen `localAttractiveness` aus diesem Feld.
 `tests/performanceGuards.ts` (Licht-Pool, 0/1/514 Quellen).
 `tests/festival.ts` (Strom für Shows). `tests/operations.ts`.
 `tests/scenery.ts` (Deko-`beauty` unterscheidet sich je Art, Stapel und Reichweite).
+`tests/sealedWasteContainer.ts` (versiegelte Strafe schwächer als offene Ablage).
 
 ## Bei Änderungen dieses Dokument
 

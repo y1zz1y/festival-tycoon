@@ -13,7 +13,8 @@ Draw-Call oder Material pro Detailstück oder Besucher.
 | Souvenir-Props | `src/view/souvenirMeshes.ts` | 1 Maskottchen- + 4 Shirt-Schnitt-Batches, Instanzfarbe |
 | Gebäude-Instancing | `src/view/retroBuildings.ts` | ein gemergtes Vertex-Color-Mesh je `DETAILED_BUILDINGS`-Art inkl. aller `SCENERY_KINDS`; Themen-Deko über `buildThemedScenery` (Familien + Vertexfarben); Instanz-`buildingIds` für Picking |
 | Camping-Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts` | 14 Camping-Batches |
-| Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call; Parkfelder als Atlas-`parking` |
+| Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call, zwei Dreiecke je Kachel; Parkfelder als Atlas-`parking` |
+| Objektstützen | `src/game/supportOccupancy.ts`, `src/view/supports.ts` | geteilter Zylinder; nur bei Luft unter dem Objekt |
 | Lichter | `src/view/FestivalLightsView.ts` | fester PointLight-Pool; warm gelb vs. weiße Tageslichtballons über Instanzfarben |
 | Auflösungscaps | `src/view/renderResolution.ts` | max. 1440×810 intern |
 | Touch-Kamera | `src/view/touchCamera.ts` | Zwei-Finger-Pan/Zoom |
@@ -126,6 +127,17 @@ Unterführungsstützen bei Änderungen neu aufgebaut werden.
 Tests: `tests/wayStructures.ts`, visuell `tests/ways-preview.html` im echten
 WorldView. Tests umfassen alle Richtungen/Steigungen, Anschlüsse, Terrain-Höhe,
 freie untere Lagen und 200 gleiche Konstruktionen in einem Instanz-Batch.
+
+## Facettiertes Gelände und Stützen (0.1.132)
+
+Das Bodenmesh nutzt vier Ecken und zwei Dreiecke je Feld, nicht den
+früheren Fächer mit Mittelpunkt. Sichtbare Ecken kommen aus
+`tileVisualCorner` (Hang höchstens 0,5, sonst Steinklippe in
+`createTerrainBase`). Wasser ist ein InstancedMesh auf `waterLevel` für
+geflutete Felder und Uferhänge (`tileShowsWater`). Gebäude-/Deko-Stützen
+teilen eine Zylindergeometrie; sie entfallen, wenn Land oder ein Solid die
+Lücke füllt. Wege (`wayStructurePlan`) und Achterbahnstützen kürzen auf
+dieselbe Landhöhe.
 
 ## Dachwand-Konturen (0.1.128)
 

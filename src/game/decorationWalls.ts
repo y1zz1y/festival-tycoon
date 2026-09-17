@@ -33,6 +33,7 @@ const ROOF_SPECS = new Map(ROOF_KINDS.map(kind => {
 }))
 export function roofSpec(kind: string) { return ROOF_SPECS.get(kind) }
 export function isFacade(kind: string): boolean { return Boolean(wallSpec(kind) || roofSpec(kind)) }
+export function isWallDoor(kind: string): boolean { return wallSpec(kind)?.shape === 'Door' }
 export type ThemedBinKind = `bin${Capitalize<WallStyle>}`
 export const THEMED_BIN_KINDS = Object.keys(WALL_STYLES).map(style => `bin${style[0]!.toUpperCase()}${style.slice(1)}` as ThemedBinKind)
 const BIN_SPECS = new Map(THEMED_BIN_KINDS.map((kind, index) => [kind as string, Object.values(WALL_STYLES)[index]!]))

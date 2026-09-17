@@ -2,8 +2,16 @@ import { STAFF_DEFINITIONS } from './staff'
 import type { StaffMember } from './staff'
 import type { GroundIncident } from './incidents'
 import type { MedicalCell } from './medical'
-import type { WasteBinInfo, WasteDumpCell } from './waste'
-import { findNearestWasteDump, wasteDumpId, parseWasteDumpId } from './waste'
+import type { SealedWasteContainerInfo, WasteBinInfo, WasteDumpCell } from './waste'
+import {
+  parseDepositSealedContainerId,
+  parseSealedContainerId,
+  parseWasteDumpId,
+  sealedContainerAllowsManualHaul,
+  sealedContainerHasRoom,
+  sealedContainerId,
+  wasteDropGoals,
+} from './waste'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import type { RngSource } from './rng'
 import { isInAnyZone, zoneCellRange } from './staffZones'
@@ -35,6 +43,7 @@ type StaffContext = {
   medicalCells: MedicalCell[]
   wasteDumps: WasteDumpCell[]
   wasteBins: WasteBinInfo[]
+  sealedContainers?: SealedWasteContainerInfo[]
   securityGates: Array<{ id: string; x: number; z: number; elevation: number }>
   findPath: (start: Cell, goals: Cell[], allowGround?: boolean) => Cell[] | null
   pathNeighbors: (cell: Cell) => Cell[]
@@ -47,6 +56,8 @@ type StaffContext = {
   depositWaste: (x: number, z: number, amount: number) => number
   emptyBin: (id: string, amount: number) => number
   fillBin?: (id: string, amount: number) => number
+  fillSealedContainer?: (id: string, amount: number) => number
+  emptySealedContainer?: (id: string, amount: number) => number
   abandonedCamps?: Array<{ id: string; x: number; z: number; elevation: number }>
   removeAbandonedCamp?: (id: string) => boolean
 }
@@ -104,18 +115,14 @@ export class StaffSimulation {
       }
       const zones = member.workZones
       const inside = (x: number, z: number) => isInAnyZone(zones, x, z)
-      const workContext = zones?.length ? { ...context, visitors: context.visitors.filter(v => inside(v.cellX, v.cellZ)), incidents: context.incidents.filter(p => inside(p.x, p.z)), wasteBins: context.wasteBins.filter(p => inside(p.x, p.z)), abandonedCamps: context.abandonedCamps?.filter(p => inside(p.x, p.z)) } : context
+      const workContext = zones?.length ? { ...context, visitors: context.visitors.filter(v => inside(v.cellX, v.cellZ)), incidents: context.incidents.filter(p => inside(p.x, p.z)), wasteBins: context.wasteBins.filter(p => inside(p.x, p.z)), sealedContainers: context.sealedContainers?.filter(p => inside(p.x, p.z)), abandonedCamps: context.abandonedCamps?.filter(p => inside(p.x, p.z)) } : context
       // An inaccessible job must not pin a worker in place. Bound path searches
       // per decision, then patrol so the next search starts from a new position.
       const excluded = new Set(claimed)
       for (let attempt = 0; attempt < 8; attempt++) {
         const target = this.findTarget(member, workContext, excluded)
         if (!target) break
-        const route = context.findPath(
-          this.staffCell(member),
-          [target.cell],
-          target.allowMedical,
-        )
+        const route = this.routeToStaffTarget(member, target, context)
         if (!route) {
           excluded.add(target.id)
           continue
@@ -348,12 +355,23 @@ export class StaffSimulation {
           kind: 'bin',
         }
       }
-      return job
+      if (job) {
+        return {
+          id: job.id,
+          cell: job.cell,
+          allowMedical: true,
+          kind: job.kind,
+        }
+      }
+      // Lowest priority after bags, litter/vomit/camps and idle bin emptying:
+      // haul sealed containers that are not currently being emptied by a truck.
+      const haul = this.findIdleSealedHaul(member, context, claimed)
+      return haul
         ? {
-            id: job.id,
-            cell: job.cell,
+            id: sealedContainerId(haul.id),
+            cell: { x: haul.x, z: haul.z, elevation: haul.elevation },
             allowMedical: true,
-            kind: job.kind,
+            kind: 'sealed-haul',
           }
         : null
     }
@@ -432,6 +450,20 @@ export class StaffSimulation {
         member.state = member.carryingWaste > 0 ? 'carrying' : 'patrolling'
         return
       }
+      const depositSealed = parseDepositSealedContainerId(member.targetId)
+      if (depositSealed) {
+        const deposited =
+          context.fillSealedContainer?.(depositSealed, member.carryingWaste) ?? 0
+        member.carryingWaste -= deposited
+        member.wasteFromSealedContainer = false
+        if (member.carryingWaste <= 0) {
+          this.reset(member)
+          return
+        }
+        member.targetId = null
+        member.state = 'carrying'
+        return
+      }
       const dump = parseWasteDumpId(member.targetId)
       if (dump) {
         const deposited = context.depositWaste(
@@ -446,6 +478,12 @@ export class StaffSimulation {
         }
         member.targetId = null
         member.state = 'carrying'
+        return
+      }
+      const haulSealed = parseSealedContainerId(member.targetId)
+      if (haulSealed) {
+        member.state = 'working'
+        member.workMinutes = SIMULATION_CONFIG.staff.cleanerBinWorkMinutes
         return
       }
       const bin = context.wasteBins.find((candidate) => candidate.id === member.targetId)
@@ -478,6 +516,28 @@ export class StaffSimulation {
     const incident = context.incidents.find(
       (candidate) => candidate.id === member.targetId,
     )
+    const haulSealed = member.targetId
+      ? parseSealedContainerId(member.targetId)
+      : null
+    if (member.role === 'cleaner' && haulSealed) {
+      const room = Math.max(
+        0,
+        SIMULATION_CONFIG.waste.cleanerMaxCarry - member.carryingWaste,
+      )
+      const emptied = context.emptySealedContainer?.(haulSealed, room) ?? 0
+      member.carryingWaste += emptied
+      member.wasteFromBin = true
+      member.wasteFromSealedContainer = true
+      member.targetId = null
+      if (member.carryingWaste > 0) {
+        if (!this.sendCleanerToDump(member, context)) {
+          member.state = 'carrying'
+        }
+        return
+      }
+      this.reset(member)
+      return
+    }
     if (
       member.role === 'cleaner' &&
       member.targetId &&
@@ -571,7 +631,7 @@ export class StaffSimulation {
   }
 
   private sendCleanerToDump(member: StaffMember, context: StaffContext): boolean {
-    if (!member.wasteFromBin && context.fillBin) {
+    if (!member.wasteFromBin && !member.wasteFromSealedContainer && context.fillBin) {
       const bins = context.wasteBins.filter(bin => bin.stored < SIMULATION_CONFIG.waste.binCapacity)
         .sort((a, b) => Math.abs(a.x-member.cellX)+Math.abs(a.z-member.cellZ)-Math.abs(b.x-member.cellX)-Math.abs(b.z-member.cellZ))
       for (const bin of bins) {
@@ -581,18 +641,65 @@ export class StaffSimulation {
         return true
       }
     }
-    const dump = findNearestWasteDump(this.staffCell(member), context.wasteDumps)
-    if (!dump) return false
+    const containers = member.wasteFromSealedContainer
+      ? []
+      : (context.sealedContainers ?? []).filter((container) =>
+          sealedContainerHasRoom(container),
+        )
+    const goals = wasteDropGoals(context.wasteDumps, containers)
+    if (goals.length === 0) return false
     const route = context.findPath(
       this.staffCell(member),
-      [{ x: dump.x, z: dump.z, elevation: dump.elevation }],
+      goals.map((goal) => ({ x: goal.x, z: goal.z, elevation: goal.elevation })),
       true,
     )
-    if (!route) return false
-    member.targetId = wasteDumpId(dump)
+    if (!route?.length) return false
+    const last = route.at(-1)!
+    const dest =
+      goals.find((goal) => goal.x === last.x && goal.z === last.z) ??
+      this.nearestDropGoal(this.staffCell(member), goals)
+    if (!dest) return false
+    member.targetId = dest.id
     member.state = 'carrying'
     member.route = route
     return true
+  }
+
+  private nearestDropGoal(
+    from: { x: number; z: number },
+    goals: ReturnType<typeof wasteDropGoals>,
+  ) {
+    return (
+      goals
+        .slice()
+        .sort(
+          (left, right) =>
+            Math.abs(left.x - from.x) +
+            Math.abs(left.z - from.z) -
+            (Math.abs(right.x - from.x) + Math.abs(right.z - from.z)),
+        )[0] ?? null
+    )
+  }
+
+  private findIdleSealedHaul(
+    member: StaffMember,
+    context: StaffContext,
+    claimed: Set<string>,
+  ): SealedWasteContainerInfo | null {
+    if (member.carryingWaste >= SIMULATION_CONFIG.waste.cleanerMaxCarry) return null
+    const haulDistance = (container: SealedWasteContainerInfo) =>
+      Math.abs(container.x - member.cellX) + Math.abs(container.z - member.cellZ)
+    return (
+      (context.sealedContainers ?? [])
+        .filter(
+          (container) =>
+            sealedContainerAllowsManualHaul(container) &&
+            !claimed.has(sealedContainerId(container.id)) &&
+            !claimed.has(container.id),
+        )
+        .sort((left, right) => haulDistance(left) - haulDistance(right) || right.stored - left.stored)[0] ??
+      null
+    )
   }
 
   private patrol(member: StaffMember, context: StaffContext): void {
@@ -658,6 +765,26 @@ export class StaffSimulation {
     return { x: member.cellX, z: member.cellZ, elevation: member.cellElevation }
   }
 
+  private routeToStaffTarget(
+    member: StaffMember,
+    target: { cell: Cell; allowMedical?: boolean; kind?: string },
+    context: StaffContext,
+  ): Cell[] | null {
+    const start = this.staffCell(member)
+    const direct = context.findPath(start, [target.cell], target.allowMedical)
+    if (direct) return direct
+    // Sealed containers can sit off-path; if the box tile itself is closed,
+    // stand on a neighbour instead of dropping the haul (do not change occupancy).
+    if (target.kind !== 'sealed-haul') return null
+    const adjacent = [
+      { x: target.cell.x + 1, z: target.cell.z, elevation: target.cell.elevation },
+      { x: target.cell.x - 1, z: target.cell.z, elevation: target.cell.elevation },
+      { x: target.cell.x, z: target.cell.z + 1, elevation: target.cell.elevation },
+      { x: target.cell.x, z: target.cell.z - 1, elevation: target.cell.elevation },
+    ]
+    return context.findPath(start, adjacent, target.allowMedical)
+  }
+
   private incidentFieldKey(incident: GroundIncident): string {
     return `${incident.kind}:${incident.x}:${incident.z}:${incident.elevation}`
   }
@@ -671,6 +798,7 @@ export class StaffSimulation {
     if (member.role !== 'cleaner') member.carryingWaste = 0
     if (member.role === 'cleaner' && member.carryingWaste <= 0) {
       member.carryingWaste = 0
+      member.wasteFromSealedContainer = false
     }
   }
 }

@@ -16,6 +16,7 @@ hält die Simulationsuhr an, bis **Festival starten**.
 | Waren im Festivalkontext | `src/game/supplyChain.ts`, `src/game/festivalManagement.ts` | `Supply` inkl. `goods` (Allgemeine Waren) |
 | Spielplan-UI | `src/musicPlanner.ts` | Band ziehen, Raster |
 | Festival-Fenster | `src/festivalUI.ts` | Tickets, Preise, Tagesplan, Auswertung, Ausbauten |
+| HEADLINE Magazin | `src/game/headlineMagazine.ts`, `src/headlineMagazineUI.ts` | `buildHeadlineMagazine`, Overlay nach Festivalende |
 | Balancing | `src/game/simulationConfig.ts` | `visitors.festivalArrivals`, `economy.defaultEntryPrice`, `economy.defaultCampingTicketPrice` |
 
 ## Wichtige Regeln
@@ -36,11 +37,23 @@ hält die Simulationsuhr an, bis **Festival starten**.
   zählen nicht.
 - Neue Bands: `BANDS` plus Geschmack in `musicTaste.ts`. Keine geschützten
   RCT-/Echtband-Inhalte.
+- Nach dem letzten Festivaltag (`festival.finished`) öffnet einmal pro Ausgabe
+  das **HEADLINE Magazin** (`buildHeadlineMagazine`). Es rechnet nur aus
+  vorhandenen Snapshot-Feldern (Tagesberichte, Ruf, Anreisen, Bilanz,
+  Buchungen, Festivallust, Müll/Vorfälle, Strom, Backstage/`showQuality`,
+  Sanität/Security, Beschwerden, Atmosphäre). Kein zweites Wirtschaftssystem,
+  kein neues Snapshot-Feld, kein `Math.random()`/`Date.now()`. 3–6 Pro- und
+  3–6 Kontra-Zeilen aus Schwellen; fehlende Kontras werden mit einer dünnen
+  „könnte schärfer“-Seite gefüllt. Host und Clients zeigen denselben Text zum
+  gleichen Snapshot. Erneut öffnen: Abrechnung & Ruf → **HEADLINE Magazin
+  aufschlagen**. Mitternacht vor dem Endtag zählt nicht als Ausgabeende.
 
 ## Tests
 
 `tests/festival.ts` (Ablauf, Buchung, Lager, Ruf). `tests/musicPlanning.ts`.
 `tests/stageTickets.ts`. `tests/festivalAdditions.ts`.
+`tests/headlineMagazine.ts` (Magazin nur nach `finished`, mindestens ein
+Pro/Kontra, deterministisch, nicht mitten im Wochenende).
 
 Bandversorgung / Backstage / Tourbus-Ankunft (Morgen ~08:00 / Abend ~23:00
 an der Festivaluhr, `BANDS.draw` ≥ 30 will einen Bus, sonst Personaleingang):
@@ -50,6 +63,6 @@ Buchungsquelle. `bandActors` sind keine Gäste; sie tragen `costumeId` /
 
 ## Bei Änderungen dieses Dokument
 
-Aktualisieren, wenn Aktionen, Ticketregeln, Wetter, Rufachsen, Bands oder
-der Planungs-/Start-Zyklus ändern. Bühnenwerkstatt bleibt in `docs/stages.md`.
-Spielerregeln auch im Root-`README.md`.
+Aktualisieren, wenn Aktionen, Ticketregeln, Wetter, Rufachsen, Bands, der
+Planungs-/Start-Zyklus oder die Endauswertung (HEADLINE Magazin) ändern.
+Bühnenwerkstatt bleibt in `docs/stages.md`. Spielerregeln auch im Root-`README.md`.

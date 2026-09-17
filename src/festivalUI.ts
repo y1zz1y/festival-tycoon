@@ -4,6 +4,7 @@ import { makeDraggable, makeResizable } from './dragPanel'
 import './festival.css'
 import { AUDIENCES, AUDIENCE_NAMES, SUPPLIES, UPGRADES, WEATHER_NAMES, audienceMix, forecast, festivalTime } from './game/festivalManagement'
 import type { FestivalAction, Supply, Upgrade } from './game/festivalManagement'
+import { mountHeadlineMagazine } from './headlineMagazineUI'
 
 const money = (n: number) => `${Math.round(n).toLocaleString('de-DE')} €`
 const clock = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(Math.floor(n % 60)).padStart(2, '0')}`
@@ -60,6 +61,7 @@ export function mountFestivalUI(
   shell.append(panel)
   makeDraggable(panel.querySelector<HTMLElement>('.panel-header')!, panel)
   makeResizable(panel)
+  const magazine = mountHeadlineMagazine(shell)
   let lastRender = -1, reportCount = 0
   const execute = (action: FestivalAction) => { const result = getGame().manageFestival(action); if (result.message !== 'Befehl eingeplant') toast(result.message, !result.ok); render(getGame().snapshot, true) }
   const musicPlanner=mountMusicPlanner(panel.querySelector('[data-music-planner]')!,()=>getGame().snapshot,execute,toast)
@@ -69,6 +71,7 @@ export function mountFestivalUI(
     const button = (event.target as Element).closest<HTMLButtonElement>('button')
     if (!button) return
     if (button.hasAttribute('data-close')) { close(); return }
+    if (button.hasAttribute('data-magazine-open')) { magazine.open(); return }
     if (button.dataset.tab) {
       panel.querySelectorAll<HTMLElement>('[data-pane]').forEach(pane => pane.hidden = pane.dataset.pane !== button.dataset.tab)
       panel.querySelectorAll('[data-tab]').forEach(tab => tab.setAttribute('aria-pressed', String(tab === button)))
@@ -99,6 +102,7 @@ export function mountFestivalUI(
   const put = (selector: string, html: string) => { const el = panel.querySelector<HTMLElement>(selector)!; if (el.innerHTML !== html) el.innerHTML = html }
   function render(s: Readonly<GameSnapshot>, force = false) {
     const f = s.festival
+    magazine.update(s)
     weather.dataset.weather = f.enabled && !f.finished ? f.weather : 'sun'
     if (f.reports.length > reportCount) { reportCount = f.reports.length; toast('Neue Festival-Tagesabrechnung verfügbar') }
     else reportCount = f.reports.length
@@ -141,7 +145,7 @@ export function mountFestivalUI(
     const average = festivalReports.length ? festivalReports.reduce((sum, r) => sum + r.satisfaction, 0) / festivalReports.length : 0
     const balance = f.reports.reduce((sum, r) => sum + r.balance, 0)
     const success = f.admissions >= f.goals.guests && average >= f.goals.satisfaction && balance >= f.goals.profit
-    put('[data-reports]', `${f.finished ? `<article class="festival-result"><h3>${success ? 'Wochenendziele erreicht!' : 'Wochenende abgeschlossen – hier liegt euer nächstes Verbesserungspotenzial'}</h3><p>${f.admissions}/${f.goals.guests} Anreisen · Zufriedenheit ${Math.round(average)}/${f.goals.satisfaction}% · Bilanz ${money(balance)}</p><p>Mit dem behaltenen Gelände, den Ausbauten und eurem Ruf könnt ihr die nächste Ausgabe planen.</p></article>` : ''}${f.reports.map(r => `<article class="festival-booking"><div><h3>Tag ${r.day}${r.day === f.startDay ? ' · Vorbereitung' : ''}</h3><p>${r.guests} Anreisen · Zufriedenheit ${Math.round(r.satisfaction)}% · Tagesbilanz ${money(r.balance)}</p><p>${Math.round(r.concerts)} Besucher-Konzertminuten · ${r.stockouts} gescheiterte Käufe · Wetterbelastung ${Math.round(r.weatherImpact)}</p><small>${r.stockouts ? 'Mehr Vorräte und frühere Lieferungen helfen gegen Ausverkäufe. ' : ''}${r.weatherImpact > 100 ? 'Überdachung und Trinkwasser verbessern den Wetterschutz. ' : ''}${r.satisfaction < 65 ? 'Bedürfnisse, Ruhe und Erreichbarkeit prüfen.' : 'Die Gäste waren überwiegend zufrieden.'}</small></div></article>`).join('') || '<p class="festival-empty">Die erste Abrechnung erscheint nach Mitternacht. Das Festival endet nach den geplanten Festivaltagen.</p>'}`)
+    put('[data-reports]', `${f.finished ? `<article class="festival-result"><h3>${success ? 'Wochenendziele erreicht!' : 'Wochenende abgeschlossen – hier liegt euer nächstes Verbesserungspotenzial'}</h3><p>${f.admissions}/${f.goals.guests} Anreisen · Zufriedenheit ${Math.round(average)}/${f.goals.satisfaction}% · Bilanz ${money(balance)}</p><p>Mit dem behaltenen Gelände, den Ausbauten und eurem Ruf könnt ihr die nächste Ausgabe planen.</p><p><button type="button" data-magazine-open>HEADLINE Magazin aufschlagen</button></p></article>` : ''}${f.reports.map(r => `<article class="festival-booking"><div><h3>Tag ${r.day}${r.day === f.startDay ? ' · Vorbereitung' : ''}</h3><p>${r.guests} Anreisen · Zufriedenheit ${Math.round(r.satisfaction)}% · Tagesbilanz ${money(r.balance)}</p><p>${Math.round(r.concerts)} Besucher-Konzertminuten · ${r.stockouts} gescheiterte Käufe · Wetterbelastung ${Math.round(r.weatherImpact)}</p><small>${r.stockouts ? 'Mehr Vorräte und frühere Lieferungen helfen gegen Ausverkäufe. ' : ''}${r.weatherImpact > 100 ? 'Überdachung und Trinkwasser verbessern den Wetterschutz. ' : ''}${r.satisfaction < 65 ? 'Bedürfnisse, Ruhe und Erreichbarkeit prüfen.' : 'Die Gäste waren überwiegend zufrieden.'}</small></div></article>`).join('') || '<p class="festival-empty">Die erste Abrechnung erscheint nach Mitternacht. Das Festival endet nach den geplanten Festivaltagen.</p>'}`)
   }
   return { update: render }
 }

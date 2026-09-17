@@ -174,6 +174,34 @@ export function normalizeStaffGateDirection(value: unknown): Direction | undefin
   return value === 0 || value === 1 || value === 2 || value === 3 ? value : undefined
 }
 
+export type StaffGatePath = {
+  staffOnly?: boolean
+  staffGateDirection?: number
+}
+
+/**
+ * Visitor crossing of a Personaleingang.
+ * Directed gates (`staffGateDirection` 0–3) occupy that outgoing edge and
+ * block only travel in the painted direction. The reverse stay is open so
+ * guests can leave. Legacy tiles without a direction still forbid entering
+ * the whole cell. Callers with `allowStaff` must skip this check.
+ */
+export function staffGateBlocksVisitor(
+  fromPath: StaffGatePath | undefined,
+  toPath: StaffGatePath | undefined,
+  travelDirection: Direction,
+): boolean {
+  if (toPath?.staffOnly) {
+    const facing = normalizeStaffGateDirection(toPath.staffGateDirection)
+    if (facing === undefined) return true
+  }
+  if (fromPath?.staffOnly) {
+    const facing = normalizeStaffGateDirection(fromPath.staffGateDirection)
+    if (facing === travelDirection) return true
+  }
+  return false
+}
+
 export function currentAccessSlot(minute: number): number {
   const minuteOfHour = ((Math.floor(minute) % 60) + 60) % 60
   return Math.min(

@@ -8,7 +8,7 @@ Netzwerk-Clients mutieren die Welt nicht lokal dauerhaft; der Host entscheidet.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Spielzustand, Tick, Platzierung, Besucher-Orchestrierung | `src/game/GameState.ts` | `GameState`, `GameSnapshot` (aktuell `version: 29`) |
+| Spielzustand, Tick, Platzierung, Besucher-Orchestrierung | `src/game/GameState.ts` | `GameState`, `GameSnapshot` (aktuell `version: 30`) |
 | Bandversorgung / Backstage | `src/game/bandSupply.ts`, `src/game/bandActors.ts`, `src/game/bandLooks.ts` | Graph, Stats, Tourbus / Personaleingang, Bühnen-/Backstage-Kostüm |
 | Balancing (Tempo, Kosten, Wahrscheinlichkeiten) | `src/game/simulationConfig.ts` | `SIMULATION_CONFIG` |
 | Gebäudetypen, Tools, Anzeigedaten | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` |
@@ -16,6 +16,7 @@ Netzwerk-Clients mutieren die Welt nicht lokal dauerhaft; der Host entscheidet.
 | Spielerbefehl → Methode | `src/net/commands.ts` | `applyGameCommand` |
 | Befehls- und Delta-Typen | `src/net/protocol.ts` | `GameCommand`, Snapshots |
 | UI, Eingaben, Systemverkabelung | `src/main.ts` | Event-Binding, Tool-Leiste |
+| HEADLINE Magazin (abgeleitet) | `src/game/headlineMagazine.ts` | `buildHeadlineMagazine` aus Snapshot, kein neues Feld |
 | 3D-Szene | `src/view/WorldView.ts` | Kamera, Picking, Instancing |
 | Host-HTTP/WebSocket | `server/serve.ts` | Dev- und Docker-Server |
 | Mehrspieler-Räume | `server/rooms.ts` | `attachMultiplayer` |

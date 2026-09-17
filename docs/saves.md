@@ -1,6 +1,6 @@
 # Spielstände und Versionierung
 
-`GameSnapshot.version` ist die Schema-Version (aktuell **29**). Sichtbare
+`GameSnapshot.version` ist die Schema-Version (aktuell **30**). Sichtbare
 Spielversion kommt aus `package.json`. Feature-/Fix-Batches erhöhen den
 Patch (`npm version patch --no-git-tag-version`) und halten das Lockfile synchron.
 
@@ -60,8 +60,9 @@ benannte Archiv (`SAVE_SLOTS_KEY` / Server-`saves/`).
   `wasteDumpCells[].stored` wird beim Laden auf `waste.dumpCapacity` (180)
   geklemmt; kein neues Snapshot-Feld. Ticker-Verlauf ist nur UI.
   Optionales `staffGateDirection` (0–3) liegt am Fußweg mit `staffOnly`;
-  fehlend bleibt ein mittig dargestelltes Legacy-Personaltor, der
-  Kachelzugang ändert sich nicht.
+  fehlend bleibt ein mittig dargestelltes Legacy-Personaltor, das Gäste
+  weiter von der ganzen Kachel fernhält. Mit Richtung sperrt nur die
+  bemalte Ausgangskante Gäste, nicht das Feld.
   `Supply`/`Stock` kann `goods` (Allgemeine Waren) enthalten; fehlend = 0.
   Besucher: optionale `ownedMascot`, `heldMascot`, `wornShirt`.
   T-Shirt-Stand: optionale `shirtColor`/`shirtStyle` (Default klassisch/rot).
@@ -76,6 +77,13 @@ benannte Archiv (`SAVE_SLOTS_KEY` / Server-`saves/`).
   Scenery-Slots, fehlende Ride-Gates, braune Abandoned-Tents).
   Fehlendes `campingTicketPrice` übernimmt den gespeicherten `entryPrice`.
 - Terrain wird beim Laden nicht neu generiert.
+  Snapshot `waterLevel` (Default **−0.5**). Fehlt das Feld in alten Ständen,
+  wird −0.5 gesetzt: Land auf 0 bleibt trocken, früherer Schlamm (−1) und
+  alte Seebecken (−2) werden Wasser. Kachelhöhen rasten auf **0,5**;
+  ganzzahlige Altsaves bleiben gültig. Optionale `terrain.corners` sind
+  Eckhöhen; fehlend werden sie sichtbar aus den Kachelhöhen abgeleitet
+  (`tileVisualCorner`). `editTerrainArea` ist nur ein Command, kein neues
+  Snapshot-Feld. Keine stillen Slot-Änderungen an Deko.
 - Verwaiste Parkplatz-`occupiedBy` und Krankenfeld-`occupants` ohne
   Fahrzeug bzw. Besucher werden beim Laden geleert. Kein neues
   Snapshot-Feld. Restkacheln bleiben abriss- und überbaubar.
@@ -102,6 +110,17 @@ benannte Archiv (`SAVE_SLOTS_KEY` / Server-`saves/`).
   `RoadVehicle.kind` mit `reservedParkingId`. Optionale Besucherfelder
   `backstageIntrusion` / `backstageLingerMinutes`. Alte Stände ohne
   Backstage spielen als Bare-Stage weiter.
+- HEADLINE Magazin wird nicht gespeichert: `buildHeadlineMagazine` leitet
+  die Ausgabe aus `festival.finished`, Berichten, Ruf, Anreisen und dem
+  übrigen bestehenden Snapshot ab. Kein neues Feld, alte Stände bleiben
+  gültig; ein beendetes Wochenende zeigt dasselbe Heft.
+- `sealedWasteContainer` ist ein Gebäude-`kind` mit vorhandenem
+  `wasteFill` (0–80, `waste.sealedContainerCapacity`). Alte Stände ohne
+  das Kind bleiben unverändert. `RoadVehicle.target.kind` kann
+  `sealedWasteContainer` (`buildingId`, x, z) sein; fehlend oder
+  unbekannt wird `null`. Optionales Personal-Feld
+  `wasteFromSealedContainer` (nach Container-Leeren: Ladung nur zur
+  Ablage). Fehlend gilt als falsch. Kein neues Snapshot-Top-Level-Feld.
 
 ## Tests
 

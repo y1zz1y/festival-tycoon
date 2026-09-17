@@ -18,7 +18,7 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Depots, Bestellungen, Lastwagen | `src/game/supplyChain.ts` | `Infrastructure`, `infrastructureAction`, `updateSupplyChain` |
 | Automatische Träger | `src/game/depotCarriers.ts` | `updateDepotCarriers` |
 | Bude: alle Seiten | `src/game/shopAccess.ts` | `isShopServiceKind`, `CARDINAL_OFFSETS` |
-| Müllablagen / Eimer-Suche | `src/game/waste.ts` | `designateWasteDumps`, `findNearestWasteDump`, `connectedWasteDumpStats` |
+| Müllablagen / Eimer / versiegelte Container | `src/game/waste.ts` | `designateWasteDumps`, `findNearestWasteDump`, `connectedWasteDumpStats`, `wasteDropGoals`, `isSealedWasteContainer` |
 | Fahrzeug-Infofenster | `src/game/logistics.ts` | `formatRoadVehicleInspectLoad`, `roadVehicleCarriesPeople` |
 | Boden für Straßen/Depots | `src/game/ground.ts` | Tragfähigkeit, Nässe, Tempo-Limits |
 | Festival-Bestellungen | `src/game/festivalManagement.ts` | `orderGoods`, Supplies |
@@ -75,7 +75,8 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   den Fußgängergraphen, fahren aber nur auf normalen Wegen **und**
   Bühnenvorplätzen (`isSweeperDriveCell`). `findSweeperRoute` setzt
   `allowStaff`, damit Personaleingänge (`staffOnly`) passierbar sind;
-  Gäste bleiben blockiert, Lastwagen bleiben auf der Straße. Der
+  Gäste sperrt nur die bemalte Kante (Legacy die ganze Kachel). Lastwagen
+  bleiben auf der Straße. Der
   Fahrschritt prüft dieselbe Fläche, nicht `getPathAt` allein — Vorplätze
   haben keinen Weg und würden sonst die Route am Rand verwerfen.
 - Imbiss und Getränkestand nehmen Nachschub von **jeder** angrenzenden
@@ -187,6 +188,14 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   Zelle frei ist. Ein gesperrter Rückwärts-Schritt wird verworfen; ist
   beides blockiert, gilt die normale Fahrtrichtung. Nach dem Entladen
   dreht der Lieferwagen in die Ausfahrt.
+- Versiegelte Müllcontainer (`sealedWasteContainer`, 80 Beutel) darf
+  der Müllwagen direkt anfahren, **nur wenn der Container auf einer
+  Straßenkachel steht** und die Straße vom Müllnetz erreichbar ist.
+  Zielart `RoadVehicleTarget.kind === 'sealedWasteContainer'`
+  (`buildingId`, x, z). Off-road oder ohne Zufahrt bleiben sie für
+  den Wagen unsichtbar; idle Reinigung schleppt dann zur Ablage. Steht
+  der Container an der Straße, der Wagen aber nicht unterwegs, leert
+  idle Reinigung ebenfalls.
 - Das Infofenster eines Müllfahrzeugs zeigt die **Müllladung**
   (`cargo` / `garbageTruckCapacity` 90, inkl. Prozent), nicht Insassen.
   Insassen nur bei Fahrzeugen, die Personen tragen (`visitorCar`, Bus,
@@ -309,6 +318,8 @@ Liefer- und Müllwagen-Umweg bei Dauer-Rot, Gebiet).
 Fußweg auf Autostraße, gestapelte Autostraße / Brücke, ein Feld übermalen ohne Nachbarverlust).
 `tests/festivalAdditions.ts` (Müllwagen-Ladung statt Insassen,
 zusammenhängende Müllablage-Füllstände).
+`tests/sealedWasteContainer.ts` (Wagen leert Straßen-Container, nicht
+off-road).
 
 Bandversorgung (Backstage, Tourbus-Parkplatz, Baumenü Logistik →
 Bandversorgung plus Tab **Bandversorgung** in der Logistikverwaltung):

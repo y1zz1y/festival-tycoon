@@ -17,9 +17,9 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 | Saugroboter in der Personal-UI | `src/game/staff.ts`, `src/staffDetailsUI.ts`, `src/main.ts` | `sweeperStaffName`, Reinigungs-Tab |
 | Krankenfelder, Betten | `src/game/medical.ts`, `src/game/GameState.ts` | `MedicalSystem`, `normalizeMedicalCell`, `MEDICAL_BEDS_PER_CELL`; Abriss über `clearDesignatedOccupancyAt` |
 | Verletzten-Zuweisung | `src/game/staffSimulation.ts`, `src/game/GameState.ts` | `assignNearestFreeMedics`; Krankenwagen `dispatchIdleAmbulances` |
-| Personaleingang | `src/game/supplyChain.ts`, `src/game/accessControl.ts` | `staffGate`, `staffGateWorldPosition`, `gateEdgeWorldPosition` |
+| Personaleingang | `src/game/supplyChain.ts`, `src/game/accessControl.ts` | `staffGate`, `staffGateWorldPosition`, `gateEdgeWorldPosition`, `staffGateBlocksVisitor` |
 | Sicherheitsschleusen | `src/game/security.ts` | `SecuritySystem`, `SecurityGateConfig` |
-| Müllziele für Reinigung | `src/game/waste.ts` | nächster Eimer / Ablage |
+| Müllziele für Reinigung | `src/game/waste.ts` | nächster Eimer / versiegelter Container / Ablage; `wasteDropGoals` |
 | Personal-UI | `src/staffDetailsUI.ts` | Infofenster, Bereich zuweisen |
 | Darstellung | `src/view/StaffView.ts`, `src/view/MedicalView.ts` | Uniformen, Liegen |
 | Depot-Träger (keine Rolle) | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts` | Gästefigur + Warnweste/Mütze + Handkarren |
@@ -48,17 +48,31 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 - Reinigungskräfte leeren Eimer in dieser Reihenfolge: volle Eimer
   (Füllstand ≥ `waste.binCapacity`) vor Bodenmüll, Kotze und verlassenen
   Camps; erst wenn nichts davon anliegt, leeren sie teilweise gefüllte
-  Eimer ab `waste.cleanerIdleEmptyFill` (3 von 12, 25 %). Saugroboter
-  leeren keine Eimer. Zugewiesene Einsatzgebiete gelten weiter.
+  Eimer ab `waste.cleanerIdleEmptyFill` (3 von 12, 25 %). Danach, nur
+  wenn sonst keine Arbeit da ist, tragen sie versiegelte Container zur
+  Ablage, sofern `stored > 0` und kein erreichbarer Müllwagen bereits
+  unterwegs ist (`truckEnRoute` plus Straße). `truckReachable` allein
+  darf die manuelle Leerung nicht aussetzen. Das stiehlt keine eilige
+  Arbeit. Nach dem Entleeren eines Containers geht die Ladung nur zur
+  Ablage, nicht in einen anderen Container.
+  Geladene Beutel (nach Eimer-Leeren) gehen per einer Multi-Goal-Suche
+  zum näheren Ziel unter Containern mit Platz und Ablagen mit Platz.
+  Saugroboter leeren keine Eimer und keine Container. Zugewiesene
+  Einsatzgebiete gelten weiter.
 - Indizes für Incidents, Betten und Müll einmal pro Pass, nicht per Staff
   die ganze Welt scannen.
 - Personaltore: `staffGate` in `supplyChain.ts` / Festival-Actions; Werkzeug
-  im Baumenü unter Logistik. Neue Tore nutzen `staffGateDirection` und
-  dieselbe Kantenlage wie Personentore (`gateEdgeWorldPosition` in
-  `accessControl.ts`); fehlende Richtung in alten Saves bleibt mittig.
+  im Baumenü unter Logistik. Neue Tore nutzen `staffGateDirection` (0–3,
+  Ausgangskante der Baurichtung) und dieselbe Kantenlage wie Personentore
+  (`gateEdgeWorldPosition` in `accessControl.ts`). Die Kachel bleibt
+  begehbar: Gäste dürfen sie und die anderen Kanten nutzen, nicht aber die
+  bemalte Richtung (`staffGateBlocksVisitor`). Personal, Bands über
+  Personaleingang und Saugroboter (`allowStaff`) gehen in beide Richtungen
+  durch. `place` / Entfernen erhöht `worldRevision`. Fehlende Richtung in
+  alten Saves bleibt mittig und sperrt Gäste weiter von der ganzen Kachel.
   Krankenwagengarage und Krankenbereich liegen dort im Tab **Krankenhaus**.
   Saugroboter nutzen dieselben `staffOnly`-Kacheln wie Personal
-  (`findSweeperRoute` mit `allowStaff`); Gäste bleiben ausgesperrt.
+  (`findSweeperRoute` mit `allowStaff`).
 - Staff teilt Pixel-Personen-Teile; keine eigenen Meshes pro Figur.
 - Automatische Träger nutzen dieselben Körperteile wie Gäste, plus eine
   geteilte Warnwesten-/Mützen-Geometrie und einen gemergten Handkarren.
@@ -79,13 +93,13 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 
 `tests/staffZones.ts` (Ziehen über zwei 3×3 weist beide zu; Start auf einem
 aktiven Block entfernt entlang des Strichs; `setStaffZone` ist idempotent;
-Saugroboter dieselbe Farbe), `tests/operations.ts` (Personaltor-Zugang und Kantenlage, Saugroboter durch
-Personaleingang, Gäste nicht; Reinigung leert volle Eimer vor halbvollen und
+Saugroboter dieselbe Farbe), `tests/operations.ts` (Personaltor-Kante statt Vollfeld, bemalte Richtung für
+Gäste gesperrt, Staff und Saugroboter durch, Legacy-Mitte; Reinigung leert volle Eimer vor halbvollen und
 Bodenmüll, idle leert halbvolle Eimer in der Zone, Bodenmüll vor kaum
 genutzten Eimern; Krankenfeld-Abriss und Restbelegung; Verletzte an den
 nächsten freien Sanitäter bzw. Krankenwagen — näherer Idle vor fernem,
 kein Diebstahl eines tragenden Sanitäters, unerreichbarer Näherer wird
-übersprungen, Insassen im Auto werden nicht als Verletzte zugewiesen), `tests/accessControl.ts` (`gateEdgeWorldPosition`),
+übersprungen, Insassen im Auto werden nicht als Verletzte zugewiesen), `tests/sealedWasteContainer.ts` (nähere Container vor Ablage, volle übersprungen, idle Container→Ablage auch ohne Wagen, voller Eimer zuerst), `tests/accessControl.ts` (`gateEdgeWorldPosition`, `staffGateBlocksVisitor`),
 `tests/festivalAdditions.ts`, `tests/performanceGuards.ts` (keine nested
 Scans). Personalwege hängen an denselben Nav-Invarianten wie
 `docs/pathfinding.md`.
@@ -95,5 +109,5 @@ Scans). Personalwege hängen an denselben Nav-Invarianten wie
 Aktualisieren, wenn Rollen, Zonenregeln, Bettwahl, Verletzten-Zuweisung
 (nächster freier Sanitäter / Krankenwagen), Gate-Verhalten,
 Träger-als-Personal-Zuweisung, Saugroboter-Einsatzgebiete oder
-Eimer-Leer-Priorität der Reinigung ändern.
+Eimer-Leer-Priorität der Reinigung oder Container-Schlepp-Priorität ändern.
 Müll-/Brand-Ziele zusätzlich in `docs/incidents.md`.

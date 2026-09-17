@@ -8,7 +8,7 @@ sind abgeleitete Darstellung desselben Zustands.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Typen, Spawn, Bewegung, Ziele | `src/game/GameState.ts` | `Visitor`, `VisitorState`, `trySpawnVisitor`, `walkVisitors`, `tryDisposeWaste`, `dropPendingWaste` |
+| Typen, Spawn, Bewegung, Ziele | `src/game/GameState.ts` | `Visitor`, `VisitorState` (inkl. `swimming`), `trySpawnVisitor`, `walkVisitors`, `findSwimDestination` |
 | Stand-Queue-Spuren | `src/game/queueLanes.ts` | `queueStandOffset`, `stallQueueTileOffset` |
 | Need-/Alkohol-/Übelkeitswerte | `src/game/simulationConfig.ts` | `visitors`, `needs` (`interactionMinutes.stockout`), `alcohol`, `nausea` |
 | Festivallust (`motivation`) | `src/game/GameState.ts`, `src/game/simulationConfig.ts` | `Visitor.motivation`, `crowding.motivation*`, `atmosphere.concertMotivationPerMinute` |
@@ -95,6 +95,14 @@ sind abgeleitete Darstellung desselben Zustands.
   Bühnen füllen sie nicht. Balancing und Show-Bedingungen: `docs/stages.md`.
   Fans können budgetiert ins aktive Backstage eindringen
   (`backstageIntrusion`); das ist kein zweites Need.
+- Baden (`swimming`) ist Freizeit wie `relaxing`: bei niedrigem Spaß und
+  erreichbarem Wasser (Tiefe ≥ `terrain.minSwimDepth`, Standard 0.5) eine
+  Multi-Goal-Suche gegen `decisionsPerTick`. Wasser ist für Gäste begehbar
+  und langsamer (`swimPathCostMultiplier` / `swimMoveMultiplier`), nicht für
+  Personal, Träger oder Fahrzeuge. Seichte Felder und Land auf 0 zählen
+  nicht. Gedanken: „Ich gehe baden…“ / „Das Wasser ist herrlich…“.
+  Darstellung: Figur sitzt tiefer im Wasser (`WorldView`), nicht auf der
+  Wasserfläche. See-Index einmal je `worldRevision`, kein Besuchervollscan.
 - Neue Need- oder State-Werte müssen in Snapshot, UI, Gedanken und ggf.
   Multiplayer-Deltas landen.
 - Maskottchen und T-Shirts sind Andenken (`goods`), kein Hunger-/Durststillen.
@@ -144,7 +152,8 @@ ergibt Bodenmüll statt Stillstand, leerer Eimer wird weiter benutzt:
 `tests/operations.ts`,
 `tests/queueLanes.ts`.
 Festival-Schlafzeiten, Legacy-Remap, zirkadianer Energieverbrauch und
-Zelt-/Abreiseziele: `tests/visitorSleep.ts`.
+Zelt-/Abreiseziele: `tests/visitorSleep.ts`. Baden und Wassertiefe:
+`tests/terrainLand.ts`.
 
 ## Bei Änderungen dieses Dokument
 

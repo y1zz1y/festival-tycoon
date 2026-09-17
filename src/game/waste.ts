@@ -242,6 +242,178 @@ export function parkWasteDumpFill(
   return { cells, stored, capacity, remaining, percent }
 }
 
+export const SEALED_WASTE_CONTAINER_KIND = 'sealedWasteContainer' as const
+
+export type SealedWasteContainerInfo = {
+  id: string
+  x: number
+  z: number
+  elevation: number
+  stored: number
+  onRoad: boolean
+  truckReachable: boolean
+  /** True while a garbage truck is actually assigned / en route to this box. */
+  truckEnRoute?: boolean
+}
+
+/** Idle cleaners haul when stored > 0 unless a reachable truck is already coming. */
+export function sealedContainerAllowsManualHaul(
+  container: Pick<
+    SealedWasteContainerInfo,
+    'stored' | 'onRoad' | 'truckReachable' | 'truckEnRoute'
+  >,
+): boolean {
+  if (container.stored <= 0) return false
+  // Topological truckReachable alone must not starve the haul: a roadside box
+  // with no wagon coming still has to be emptied by hand. Skip only when a
+  // truck that can actually empty this container is already on the way.
+  if (container.truckEnRoute && container.onRoad && container.truckReachable) {
+    return false
+  }
+  return true
+}
+
+export function isSealedWasteContainer(kind: string | undefined): boolean {
+  return kind === SEALED_WASTE_CONTAINER_KIND
+}
+
+export function sealedContainerId(id: string): string {
+  return `sealed:${id}`
+}
+
+export function parseSealedContainerId(id: string): string | null {
+  if (!id.startsWith('sealed:')) return null
+  const value = id.slice('sealed:'.length)
+  return value || null
+}
+
+export function depositSealedContainerId(id: string): string {
+  return `deposit-sealed:${id}`
+}
+
+export function parseDepositSealedContainerId(id: string): string | null {
+  if (!id.startsWith('deposit-sealed:')) return null
+  const value = id.slice('deposit-sealed:'.length)
+  return value || null
+}
+
+export function sealedContainerCapacity(
+  capacity = SIMULATION_CONFIG.waste.sealedContainerCapacity,
+): number {
+  return capacity
+}
+
+export function sealedContainerRemaining(
+  container: Pick<SealedWasteContainerInfo, 'stored'>,
+  capacity = SIMULATION_CONFIG.waste.sealedContainerCapacity,
+): number {
+  return Math.max(0, capacity - Math.max(0, container.stored))
+}
+
+export function sealedContainerHasRoom(
+  container: Pick<SealedWasteContainerInfo, 'stored'>,
+  capacity = SIMULATION_CONFIG.waste.sealedContainerCapacity,
+): boolean {
+  return sealedContainerRemaining(container, capacity) > 0
+}
+
+export function acceptWasteAtSealedContainer(
+  container: { wasteFill?: number },
+  amount: number,
+  capacity = SIMULATION_CONFIG.waste.sealedContainerCapacity,
+): number {
+  if (amount <= 0) return 0
+  const stored = container.wasteFill ?? 0
+  const added = Math.min(amount, Math.max(0, capacity - stored))
+  container.wasteFill = stored + added
+  return added
+}
+
+export function emptySealedContainerStored(
+  container: { wasteFill?: number },
+  amount: number,
+): number {
+  if (amount <= 0) return 0
+  const stored = container.wasteFill ?? 0
+  const taken = Math.min(stored, amount)
+  container.wasteFill = stored - taken
+  return taken
+}
+
+export function clampSealedContainerStored(
+  stored: number,
+  capacity = SIMULATION_CONFIG.waste.sealedContainerCapacity,
+): number {
+  return Math.min(capacity, Math.max(0, Number(stored) || 0))
+}
+
+export function formatSealedContainerInspect(container: {
+  stored: number
+  capacity?: number
+  onRoad: boolean
+  truckReachable: boolean
+}): {
+  status: string
+  lines: Array<{ label: string; value: string }>
+} {
+  const capacity = container.capacity ?? SIMULATION_CONFIG.waste.sealedContainerCapacity
+  const remaining = Math.max(0, capacity - container.stored)
+  const percent =
+    capacity <= 0 ? 0 : Math.min(100, Math.round((container.stored / capacity) * 100))
+  const truck =
+    container.onRoad && container.truckReachable
+      ? 'Müllwagen kann entleeren · sonst trägt die Reinigung'
+      : container.onRoad
+        ? 'Straße ohne Zufahrt · Reinigung trägt zur Ablage'
+        : 'Nicht an der Straße · Reinigung trägt zur Ablage'
+  return {
+    status: `Versiegelt · ${truck}`,
+    lines: [
+      { label: 'Gelagert', value: `${container.stored} / ${capacity}` },
+      { label: 'Frei', value: String(remaining) },
+      { label: 'Auslastung', value: `${percent} %` },
+      { label: 'Abfuhr', value: truck },
+    ],
+  }
+}
+
+/** Destination cells for one multi-goal haul: dumps and sealed containers with room. */
+export function wasteDropGoals(
+  dumps: readonly WasteDumpCell[],
+  containers: readonly SealedWasteContainerInfo[],
+  dumpCapacity = SIMULATION_CONFIG.waste.dumpCapacity,
+  containerCapacity = SIMULATION_CONFIG.waste.sealedContainerCapacity,
+): Array<{ kind: 'dump' | 'sealed'; x: number; z: number; elevation: number; id: string }> {
+  const goals: Array<{
+    kind: 'dump' | 'sealed'
+    x: number
+    z: number
+    elevation: number
+    id: string
+  }> = []
+  dumps.forEach((dump) => {
+    if (wasteDumpRemaining(dump, dumpCapacity) <= 0) return
+    goals.push({
+      kind: 'dump',
+      x: dump.x,
+      z: dump.z,
+      elevation: dump.elevation,
+      id: wasteDumpId(dump),
+    })
+  })
+  containers.forEach((container) => {
+    if (!sealedContainerHasRoom(container, containerCapacity)) return
+    goals.push({
+      kind: 'sealed',
+      x: container.x,
+      z: container.z,
+      elevation: container.elevation,
+      id: depositSealedContainerId(container.id),
+    })
+  })
+  return goals
+}
+
 export function isParkWasteDumpOverFull(
   dumps: readonly WasteDumpCell[],
   ratio = SIMULATION_CONFIG.waste.dumpFullRatio,

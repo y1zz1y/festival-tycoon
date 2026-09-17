@@ -8,17 +8,18 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Arten, Tools, Anzeige | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` (`trafficLight`, `pathBarrier`, `deliveryYard`, `supplyDepot`, `staffGate`, `tourBusParking`, `backstageArea`) |
+| Arten, Tools, Anzeige | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` (`trafficLight`, `pathBarrier`, `deliveryYard`, `supplyDepot`, `staffGate`, `tourBusParking`, `backstageArea`, `sealedWasteContainer`) |
 | Bau-Menü / Kategorien | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` (keine stillen Fallbacks). Abriss bleibt als Kategorie für die Toolbar, öffnet aber kein Raster. Wege öffnen `#path-construction` mit Schnellzugriff auf `pathBarrier`, `staffGate`, `securityGate`. `isCatalogBuildCategory`: Deko, Attraktionen und Logistik als Bildraster mit Hover-Fußzeile. Camping unter Attraktionen; Krankenhaus (`ambulanceGarage`, `medicalArea`); Bandversorgung (`backstageArea`, `tourBusParking`) unter Logistik. |
 | Bauhöhe | `src/game/GameState.ts`, `src/game/placementPreview.ts` | `adjustBuildElevation`, `setBuildElevation` (0–6, **Halbstufen 0.5**, wie Wege). `snapBuildElevation` / `stepBuildElevation`. |
 | Kosten / Upkeep / Appeal | `src/game/simulationConfig.ts` | `economy.buildings` |
 | Platzieren, prüfen, abräumen | `src/game/GameState.ts`, `src/view/picking.ts` | `canPlace`, `place`, `bulldoze`, `getAt`, `resolvePickedBuilding`; Abriss räumt auch Parkplätze und Krankenfelder inkl. Restbelegung (`clearDesignatedOccupancyAt`) |
-| Deko-Slots, Overlap, Transforms | `src/game/scenery.ts` | `scenerySlot`, `sceneryOverlaps`, `SCENERY_KINDS` (Viertel plus Kante: Hecke, Banner, Wimpel, Lichterkette, Gebetsfahnen, Lattenzaun, Absperrseil, Luftschlangen, Leuchtband, Kette, Runenbanner, Jahrmarktlichter, Eiszapfenzaun, Rohrgitter) |
+| Deko-Slots, Overlap, Transforms | `src/game/scenery.ts` | `scenerySlot`, `sceneryOverlaps`, `SCENERY_KINDS` (Viertel plus Kante: Hecke, Banner, Wimpel, Lichterkette, Gebetsfahnen, Lattenzaun, Absperrseil, Luftschlangen, Leuchtband, Kette, Runenbanner, Jahrmarktlichter, Eiszapfenzaun, Rohrgitter); `isPedestrianBarrierKind` / `pedestrianBarrierOccupancy` für Hecke, Zaun und Wände |
 | Themen, Katalogfilter | `src/game/decoration.ts`, [decoration.md](decoration.md) | `DECORATION_THEMES`, `filterDecorationKinds` |
 | Bühnen-Grundfläche | `src/game/stageDesign.ts` | `buildingFootprint`, `occupiesBuildingCell` |
 | Bühnenstandort | `src/game/stageSite.ts` | `stageSiteIssue` |
 | Ride-Eingang/Ausgang | `src/game/GameState.ts` | `setRideAccess`, `canPlaceRideAccess` |
 | Retro-Gebäude-Batches | `src/view/retroBuildings.ts` | `batchRetroBuildings` |
+| Stützen / Säulen | `src/game/supportOccupancy.ts`, `src/view/supports.ts` | nur im unbesetzten Freiraum unter angehobenen Objekten |
 | Logistik-Gebäude / Fahrzeuge | `src/view/logisticsModels.ts` | `createLogisticsFacility`, `createSupplyStructure`, `createRoadVehicleModel` (Besucherautos: `VISITOR_CAR_COLORS` über Fahrzeug-ID) |
 | Bude: alle Seiten | `src/game/shopAccess.ts` | `isShopServiceKind` (Imbiss, Getränke, Maskottchen, Shirt) |
 | Warenart je Stand | `src/game/shopGoods.ts` | `shopSupplyKind`, `mascot`/`shirt` → `goods` |
@@ -39,7 +40,9 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
   Kachelmitte. Legacy-Vollfelder bleiben voll.
 - Personaleingang (`staffGate`) sitzt wie das Personentor auf der
   Ausgangskante der Baurichtung (`staffGateDirection`, Vorschau mit
-  Richtungspfeil). Fehlt das Feld, bleibt ein altes mittiges Tor gültig.
+  Richtungspfeil). Diese Kante sperrt nur Gäste in der bemalten Richtung,
+  nicht das ganze Feld. Fehlt das Feld, bleibt ein altes mittiges Tor
+  gültig und sperrt Gäste weiter von der Kachel.
 - `tourBusParking` (**Parkplatz für den Tourbus**) nur auf ausgewiesenem
   Backstage und neben einer Straße. Backstage (`backstageArea`, Katalog
   **Backstage ausweisen**) ist ein Overlay, kein `WayType` und keine
@@ -58,6 +61,11 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
   ein neues Werkzeug startet wieder auf Ebene 0.
 - Große Bühnen nutzen `buildingFootprint` / `occupiesBuildingCell`, nicht nur
   das Ankerfeld.
+- Angehobene Gebäude und Deko (keine Fassaden, keine Wege) bekommen Säulen
+  nur wo zwischen Unterkante und Land/Solid Luft ist. Land einschließlich
+  Seegrund zählt; Wasser selbst nicht. Ein Weg oder Gebäude in der Lücke
+  entfernt die Pfosten. Geteilte Stützengeometrie, Picking-IDs bleiben am
+  Elternobjekt. Legacy-`decorationSlot` wird nicht verkleinert.
 - Statische Modelldetails: geteilte/merged Geometrie und Instancing. Kein
   Material oder Draw-Call pro Brett, Flasche oder Schraube.
 - Festival-Deko (Viertel): Totem, Fahnenmast, Lampion, Bierfässer, Luftfigur,
@@ -72,6 +80,10 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
   begehbar), braucht Strom und das Tagesplan-Angebot Lampen. Deko-Fackel,
   Diskokugel und neue Themenlampen sind nur Mesh plus Atmosphäre, keine extra
   PointLights. Themenfilter und Stückliste: [decoration.md](decoration.md).
+- `sealedWasteContainer` (**Versiegelter Müllcontainer**) steht unter
+  Logistik → Müll. Optional auf einer Autostraße (dann Müllwagen-Abfuhr)
+  oder daneben/im Gelände (dann nur Fuß-Reinigung). Kapazität 80,
+  `wasteFill` wie Eimer. Ein gemergtes Mesh, keine Beutel-Instanzen.
 - Attraktivität je Art: `SIMULATION_CONFIG.atmosphere.sources` (`beauty`,
   `party`, `range`). Kleine billige Stücke (Leitkegel 2) bleiben lokal;
   Mittelstücke (Selfie-Rahmen 11) und Blickfänge (Willkommensbogen 18,
@@ -81,7 +93,8 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 ## Tests
 
 `tests/scenery.ts` (Slots, Overlaps, Legacy, neue Arten, Attraktivität je Kind,
-Stapel/Reichweite, unbekannte Katalog-Arten). `tests/decoration.ts` (Themenliste,
+Stapel/Reichweite, unbekannte Katalog-Arten). `tests/pedestrianBarriers.ts`
+(Hecke/Wand/Zaun im Fußgraphen, Tür passierbar, Vollfeld vs. Kante). `tests/decoration.ts` (Themenliste,
 Kategoriefilter, Legacy-Vollfeld, `scenery.ts`-Platzierung). `tests/picking.ts` (Mesh-Treffer vs. Nachbar/Kachel). `tests/rideAccess.ts` (Tore).
 `tests/operations.ts` (Buden von der Seite und von hinten; Personaleingang-Kante; Stand-Queue-Spuren; Parkplatz- und Krankenfeld-Abriss inkl. Restbelegung).
 `tests/shopGoods.ts` (Allgemeine Waren, Maskottchen, Shirt-Farbe/Schnitt).
@@ -89,6 +102,8 @@ Kategoriefilter, Legacy-Vollfeld, `scenery.ts`-Platzierung). `tests/picking.ts` 
 `tests/operations.ts` (Imbiss von der Seite/hinten). `tests/buildMenu.ts`
 (Katalog und Bauhöhe-Reset). `tests/placementPreview.ts` (Halbstufen-Snap 0.5,
 Bodenkachel der Vorschau). Draw-Call-Grenzen: `tests/performanceGuards.ts`.
+Stützen nur im Freiraum: `tests/terrainLand.ts`, `tests/wayStructures.ts`.
+`tests/sealedWasteContainer.ts` (Katalog-Kapazität 80, Platzierung).
 
 ## Bei Änderungen dieses Dokument
 
@@ -103,8 +118,11 @@ Alte Viertel 0–3 und fehlende Legacy-Slots behalten ihre Fläche.
 `decorationWalls.ts` ergänzt 40 Fassadenarten: 10 Materialien mit Vollwand,
 Halbwand, Fenster und Tür. Wände sind 1 Feld breit, 1/0,5 hoch und entlang
 exakter Feldkanten stapelbar. `findCollision` verhindert doppelte gemeinsame
-Kanten über Nachbarfelder; Gebäudeverkleidung ist erlaubt. Wände sind dekorativ,
-keine Zugangskontrolle. Katalog/Modelle/Tests: [decoration.md](decoration.md).
+Kanten über Nachbarfelder; Gebäudeverkleidung ist erlaubt. Wände sperren den
+Fußgängergraphen an der belegten Kante (Legacy ohne Slot: ganzes Feld).
+`*Door` bleibt passierbar und verbindet beide Seiten. Personaleingang und
+Sicherheitsschleusen bleiben eigene Zugangssysteme. Katalog/Modelle/Tests:
+[decoration.md](decoration.md).
 
 ## Dächer und Wegmöbel (0.1.126)
 

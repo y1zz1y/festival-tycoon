@@ -1,6 +1,7 @@
 import { contextDemolitionTarget } from './game/contextDemolition'
 import { isDecorationCatalogKind } from './game/decoration'
 import { isWasteBin } from './game/decorationWalls'
+import { isSealedWasteContainer } from './game/waste'
 import { GENRES } from './game/musicTaste'
 import { isScenery, isLargeScenery, scenerySlot, isEdgeScenery } from './game/scenery'
 import { makeDraggable, makeResizable } from './dragPanel'
@@ -26,7 +27,8 @@ import {
   shopSupplyKind,
 } from './game/shopGoods'
 import { snapStockMinimum } from './game/supplyChain'
-import { BUILDINGS } from './game/catalog'
+import { BUILDING_KINDS, BUILDINGS, isTerrainEditTool } from './game/catalog'
+import { isSwimmableHeight, isWaterHeight, terrainCornerIndex, terrainToolMode } from './game/terrain'
 import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financePeriodTotal } from './game/finance'
 import { goalName, goalProgressText } from './game/scenarioGoals'
 import { SCENARIO_PRESETS, scenarioPreset } from './game/scenarioPresets'
@@ -109,6 +111,7 @@ import {
 } from './game/logistics'
 import {
   connectedWasteDumpStats,
+  formatSealedContainerInspect,
   formatWasteDumpAreaHover,
   formatWasteDumpAreaInspect,
   parseWasteDumpId,
@@ -1428,6 +1431,7 @@ let pathHistory: Array<{
 let dragPathStart: CellPosition | null = null
 let dragPathEnd: CellPosition | null = null
 let dragPathElevation = 0
+let terrainDragOriginHeight = 0
 let sceneryDragSlot: number | null = null
 let sceneryDragRotation = 0
 let cameraQuarter = 0
@@ -2459,31 +2463,28 @@ function handleCellClick(cell: CellPosition): void {
     else {
       const height = game.getTerrainHeight(cell.x, cell.z)
       const label =
-        height <= -2
-          ? 'Wasser'
-          : height === -1
-            ? 'Schlamm'
-            : height > 0
-              ? `Hügel Ebene ${height}`
-              : 'Unbebautes Grundstück'
+        isWaterHeight(height, game.getWaterLevel())
+          ? isSwimmableHeight(height, game.getWaterLevel())
+            ? 'Wasser zum Baden'
+            : 'Wasser'
+          : height > 0
+            ? `Hügel Ebene ${height}`
+            : 'Unbebautes Grundstück'
       showToast(label)
     }
     return
   }
 
   if (
-    tool === 'terrainRaise' ||
-    tool === 'terrainLower' ||
-    tool === 'terrainFlatten'
+    isTerrainEditTool(tool)
   ) {
+    const mode = terrainToolMode(tool)
+    if (!mode) return
     const result = game.editTerrain(
       cell.x,
       cell.z,
-      tool === 'terrainRaise'
-        ? 'raise'
-        : tool === 'terrainLower'
-          ? 'lower'
-          : 'flatten',
+      mode,
+      terrainCornerIndex(cell.localX, cell.localZ),
     )
     showToast(result.message, !result.ok)
     return
@@ -2651,7 +2652,8 @@ function paintPath(cell: CellPosition): void {
     game.snapshot.selectedTool === 'backstageArea' ||
     game.snapshot.selectedTool === 'parkingArea' ||
     game.snapshot.selectedTool === 'powerCable' ||
-    game.snapshot.selectedTool === 'bulldoze'
+    game.snapshot.selectedTool === 'bulldoze' ||
+    isTerrainEditTool(game.snapshot.selectedTool)
       ? createCampingArea(dragPathStart, dragPathEnd)
       : createConnectedPathLine(dragPathStart, dragPathEnd),
     dragPathElevation,
@@ -2665,6 +2667,7 @@ function startPathDrag(cell: CellPosition): void {
   }
   dragPathStart = { ...cell }
   dragPathEnd = { ...cell }
+  terrainDragOriginHeight = game.getTerrainHeight(cell.x, cell.z)
   if (isScenery(game.snapshot.selectedTool)) {
     sceneryDragRotation = game.snapshot.buildRotation
     sceneryDragSlot = scenerySlot(
@@ -2692,9 +2695,7 @@ function startPathDrag(cell: CellPosition): void {
     game.snapshot.selectedTool === 'roadSpeed10' ||
     game.snapshot.selectedTool === 'roadSpeed30' ||
     game.snapshot.selectedTool === 'roadSpeed50' ||
-    game.snapshot.selectedTool === 'terrainRaise' ||
-    game.snapshot.selectedTool === 'terrainLower' ||
-    game.snapshot.selectedTool === 'terrainFlatten' ||
+    isTerrainEditTool(game.snapshot.selectedTool) ||
     game.snapshot.selectedTool === 'bulldoze'
       ? 0
       : game.snapshot.buildElevation
@@ -2717,7 +2718,8 @@ function finishPathDrag(): void {
     game.snapshot.selectedTool === 'backstageArea' ||
     game.snapshot.selectedTool === 'parkingArea' ||
     game.snapshot.selectedTool === 'powerCable' ||
-    game.snapshot.selectedTool === 'bulldoze'
+    game.snapshot.selectedTool === 'bulldoze' ||
+    isTerrainEditTool(game.snapshot.selectedTool)
       ? createCampingArea(dragPathStart, dragPathEnd)
       : createConnectedPathLine(dragPathStart, dragPathEnd)
   let built = 0
@@ -2852,28 +2854,11 @@ function finishPathDrag(): void {
     view.setPathDragPreview([], 0)
     return
   }
-  if (
-    game.snapshot.selectedTool === 'terrainRaise' ||
-    game.snapshot.selectedTool === 'terrainLower' ||
-    game.snapshot.selectedTool === 'terrainFlatten'
-  ) {
-    const mode =
-      game.snapshot.selectedTool === 'terrainRaise'
-        ? 'raise'
-        : game.snapshot.selectedTool === 'terrainLower'
-          ? 'lower'
-          : 'flatten'
-    let changed = 0
-    cells.forEach((cell) => {
-      const result = game.editTerrain(cell.x, cell.z, mode)
-      if (result.ok) changed += 1
-    })
-    showToast(
-      changed > 0
-        ? `${changed} Geländefeld${changed === 1 ? '' : 'er'} geändert`
-        : 'Das Gelände konnte hier nicht verändert werden',
-      changed === 0,
-    )
+  if (isTerrainEditTool(game.snapshot.selectedTool)) {
+    const mode = terrainToolMode(game.snapshot.selectedTool)
+    if (!mode) return
+    const result = game.editTerrainArea(cells, mode, terrainDragOriginHeight)
+    showToast(result.message, !result.ok)
     dragPathStart = null
     dragPathEnd = null
     view.setPathDragPreview([], 0)
@@ -3848,20 +3833,20 @@ function updateContextHelp(): void {
         ? formatBackstageHover(backstageStats)
       : backstage
         ? 'Backstage auswählen'
-      : height <= -2
-        ? 'Wasser'
-        : height === -1
-          ? 'Schlamm – Bewegung sehr langsam'
-          : `${game.getCampingCellAt(hoveredCell.x, hoveredCell.z) ? 'Zeltbereich · ' : ''}${parking ? 'Parkplatz · ' : ''}${soilName} · ${surfaceName}${ground.drained ? ' · Entwässert' : ''} · Tragfähigkeit ${ground.bearing}/3${height > 0 ? ` · Ebene ${height}` : ''}`
+      : isWaterHeight(height, game.getWaterLevel())
+        ? isSwimmableHeight(height, game.getWaterLevel())
+          ? 'Wasser – Gäste können baden'
+          : 'Wasser'
+        : `${game.getCampingCellAt(hoveredCell.x, hoveredCell.z) ? 'Zeltbereich · ' : ''}${parking ? 'Parkplatz · ' : ''}${soilName} · ${surfaceName}${ground.drained ? ' · Entwässert' : ''} · Tragfähigkeit ${ground.bearing}/3${height > 0 ? ` · Ebene ${height}` : ''}`
   } else if (tool === 'terrainRaise') {
     contextHelp.textContent =
-      'Klicken oder ziehen, um Hügel zu formen. Nachbarn bleiben begehbar.'
+      'Rechteck ziehen: Fläche um 0,5 anheben. Hänge höchstens 0,5, Rest als Steilklippe.'
   } else if (tool === 'terrainLower') {
     contextHelp.textContent =
-      'Klicken oder ziehen, um Senken zu graben. Ab Ebene −2 steht Wasser.'
-  } else if (tool === 'terrainFlatten') {
+      'Rechteck ziehen: Fläche um 0,5 senken. Unter −0,5 liegt Wasser.'
+  } else if (tool === 'terrainSmooth') {
     contextHelp.textContent =
-      'Klicken oder ziehen, um das Gelände auf Ebene 0 einzuebnen.'
+      'Rechteck ziehen: alle Felder auf die Höhe unter dem Startpunkt setzen.'
   } else if (tool === 'bulldoze') {
     const access = game.getAccessControlAt(hoveredCell.x, hoveredCell.z)
     const removableCoaster = game.getRemovableCoasterAt(hoveredCell.x, hoveredCell.z)
@@ -3906,6 +3891,9 @@ function updateContextHelp(): void {
   } else if (isWasteBin(tool)) {
     contextHelp.textContent =
       'Mülleimer setzen. Gäste im Umkreis von 7 Feldern werfen gebrauchte Dinge hier hinein.'
+  } else if (isSealedWasteContainer(tool)) {
+    contextHelp.textContent =
+      'Versiegelter Müllcontainer (80 Beutel). Reinigung bringt Müll hierher, wenn er näher als die Ablage ist. Müllwagen leeren ihn nur, wenn er auf einer Straße steht.'
   } else if (tool === 'stageForecourt') {
     contextHelp.textContent =
       'Klicken oder rechteckig ziehen, um einen Bühnenvorplatz mit 9 Plätzen je Feld auszuweisen.'
@@ -3958,9 +3946,13 @@ function updateContextHelp(): void {
       game.snapshot.buildElevation >= 1
         ? 'Gehweg als Überweg über die Straße. Besucher laufen oben, Autos darunter.'
         : 'Auf der Straße nur als Überweg: Bauhöhe auf Ebene 1 stellen.'
-  } else {
-    contextHelp.textContent = game.canPlace(tool, hoveredCell.x, hoveredCell.z, scenerySlot(tool, hoveredCell.localX, hoveredCell.localZ, game.snapshot.buildRotation)).message
-    if (isScenery(tool)) contextHelp.textContent += isEdgeScenery(tool) ? ' · Maus: Feldkante · R: nächste Seite · Shift: Bauhöhe (0,5)' : isLargeScenery(tool) ? ' · Ganzes Feld · R: drehen' : ' · Maus: Viertelfeld · R: drehen'
+  } else if (terrainToolMode(tool)) {
+    contextHelp.textContent =
+      'Rechteck ziehen: Fläche anheben, senken oder auf die Starthöhe glätten.'
+  } else if ((BUILDING_KINDS as readonly string[]).includes(tool)) {
+    const kind = tool as BuildingKind
+    contextHelp.textContent = game.canPlace(kind, hoveredCell.x, hoveredCell.z, scenerySlot(kind, hoveredCell.localX, hoveredCell.localZ, game.snapshot.buildRotation)).message
+    if (isScenery(kind)) contextHelp.textContent += isEdgeScenery(kind) ? ' · Maus: Feldkante · R: nächste Seite · Shift: Bauhöhe (0,5)' : isLargeScenery(kind) ? ' · Ganzes Feld · R: drehen' : ' · Maus: Viertelfeld · R: drehen'
   }
 }
 
@@ -4025,6 +4017,7 @@ function updateVisitorPanel(): void {
     partying: 'Feiert zur Musik',
     'bench-resting': 'Ruht sich auf einer Bank aus',
     relaxing: 'Hält sich an einem Lieblingsort auf',
+    swimming: 'Baden im Wasser',
     'camp-waiting': 'Wartet auf einen Campingplatz',
     'vehicle-arrival': 'Sitzt im anreisenden Auto',
     'bus-waiting': 'Wartet auf einen Bus',
@@ -4572,6 +4565,16 @@ function updateEntityPanel(): void {
             ? 'Beschallt die Umgebung in alle Richtungen'
             : isWasteBin(building.kind)
               ? `Füllstand ${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity} · Gäste im Umkreis von 7 Feldern nutzen ihn`
+            : isSealedWasteContainer(building.kind)
+              ? formatSealedContainerInspect({
+                  stored: building.wasteFill ?? 0,
+                  onRoad: Boolean(
+                    game.getRoadCellAt(building.x, building.z, building.elevation),
+                  ),
+                  truckReachable: Boolean(
+                    game.getRoadCellAt(building.x, building.z, building.elevation),
+                  ),
+                }).status
             : `Zugang ${getIsoDirectionIcon(building.rotation)} · Ebene ${building.elevation}`)
     const demand = SIMULATION_CONFIG.power.demand[building.kind] ?? 0
     const output = SIMULATION_CONFIG.power.output[building.kind] ?? 0
@@ -4584,6 +4587,8 @@ function updateEntityPanel(): void {
       ${
         isWasteBin(building.kind)
           ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity}</b></span>`
+          : isSealedWasteContainer(building.kind)
+            ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.sealedContainerCapacity}</b></span>`
           : ''
       }
       ${

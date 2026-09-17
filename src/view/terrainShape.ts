@@ -1,5 +1,5 @@
 import type { GameSnapshot } from '../game/GameState'
-import { getTerrainHeight } from '../game/terrain'
+import { getTerrainHeight, getWaterLevel, tileVisualCorner } from '../game/terrain'
 import { buildingFootprint } from '../game/stageDesign'
 import { isScenery } from '../game/scenery'
 
@@ -15,7 +15,7 @@ export function terrainPads(s: Readonly<GameSnapshot>): Set<string> {
   return pads
 }
 
-/** Cached triangle fan per cell: stable centre height, shared natural corners and flat building pads. */
+/** Shared tile corners: stored overrides, otherwise RCT-style max-of-hills / min-of-water. */
 export class TerrainShape {
   readonly size: number
   readonly half: number
@@ -32,21 +32,22 @@ export class TerrainShape {
       this.heights[i] = getTerrainHeight(s.terrain, x, z)
       this.flat[i] = pads.has(`${x},${z}`) ? 1 : 0
     }
-    const vertices = new Float64Array((this.size + 1) ** 2)
-    for (let z = -this.half; z <= this.half; z++) for (let x = -this.half; x <= this.half; x++) {
-      let sum = 0, count = 0, padSum = 0, padCount = 0
-      for (let dz = -1; dz <= 0; dz++) for (let dx = -1; dx <= 0; dx++) {
-        if (!this.contains(x + dx, z + dz)) continue
-        const i = this.index(x + dx, z + dz), h = this.heights[i]!
-        sum += h; count++
-        if (this.flat[i]) { padSum += h; padCount++ }
-      }
-      vertices[(z + this.half) * (this.size + 1) + x + this.half] = padCount ? padSum / padCount : sum / count
-    }
+    const isCell = (x: number, z: number) => this.contains(x, z)
+    const waterLevel = getWaterLevel(s)
     for (let z = -this.half; z < this.half; z++) for (let x = -this.half; x < this.half; x++) {
-      const i = this.index(x, z), v = (z + this.half) * (this.size + 1) + x + this.half
-      for (const [corner, offset] of [0, this.size + 1, this.size + 2, 1].entries())
-        this.corners[i * 4 + corner] = this.flat[i] ? this.heights[i]! : vertices[v + offset]!
+      const i = this.index(x, z)
+      const h = this.heights[i]!
+      if (this.flat[i]) {
+        this.corners[i * 4] = h
+        this.corners[i * 4 + 1] = h
+        this.corners[i * 4 + 2] = h
+        this.corners[i * 4 + 3] = h
+        continue
+      }
+      this.corners[i * 4] = tileVisualCorner(s.terrain, x, z, 0, waterLevel, isCell)
+      this.corners[i * 4 + 1] = tileVisualCorner(s.terrain, x, z, 1, waterLevel, isCell)
+      this.corners[i * 4 + 2] = tileVisualCorner(s.terrain, x, z, 2, waterLevel, isCell)
+      this.corners[i * 4 + 3] = tileVisualCorner(s.terrain, x, z, 3, waterLevel, isCell)
     }
   }
   contains(x: number, z: number): boolean { return x >= -this.half && z >= -this.half && x < this.half && z < this.half }
@@ -57,10 +58,9 @@ export class TerrainShape {
     const i = this.index(cx, cz), h = this.heights[i]!
     if (this.flat[i]) return h
     const u = x - cx, v = z - cz, c = i * 4, a = this.corners
-    if (u <= v && u + v <= 1) return 2 * u * h + (1 - u - v) * a[c]! + (v - u) * a[c + 1]!
-    if (u <= v) return 2 * (1 - v) * h + (v - u) * a[c + 1]! + (u + v - 1) * a[c + 2]!
-    if (u + v >= 1) return 2 * (1 - u) * h + (u + v - 1) * a[c + 2]! + (u - v) * a[c + 3]!
-    return 2 * v * h + (u - v) * a[c + 3]! + (1 - u - v) * a[c]!
+    const nw = a[c]!, sw = a[c + 1]!, se = a[c + 2]!, ne = a[c + 3]!
+    if (u <= v) return (1 - v) * nw + (v - u) * sw + u * se
+    return (1 - u) * nw + (u - v) * ne + v * se
   }
   actorHeight(x: number, z: number, elevation: number): number {
     const cx = Math.floor(x), cz = Math.floor(z)

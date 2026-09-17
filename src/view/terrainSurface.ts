@@ -1,7 +1,7 @@
 import { BufferGeometry, Color, DataTexture, Float32BufferAttribute, Mesh, MeshStandardMaterial, NearestFilter, LinearMipmapLinearFilter, SRGBColorSpace } from 'three'
 import type { GameSnapshot } from '../game/GameState'
 import { groundInfo } from '../game/ground'
-import { getTerrainHeight, isMudHeight, isWaterHeight } from '../game/terrain'
+import { getTerrainHeight, getWaterLevel, isMudHeight, isWaterHeight } from '../game/terrain'
 import { TerrainShape } from './terrainShape'
 
 export const TERRAIN_MATERIALS = ['field', 'clay', 'gravel', 'sand', 'grass', 'paved', 'compact', 'mud', 'parking'] as const
@@ -46,7 +46,7 @@ export function terrainMaterialAt(
   z: number,
   parking = parkingCellKeys(s),
 ): TerrainMaterial {
-  if (isMudHeight(getTerrainHeight(s.terrain, x, z))) return 'mud'
+  if (isMudHeight(getTerrainHeight(s.terrain, x, z)) || isWaterHeight(getTerrainHeight(s.terrain, x, z), getWaterLevel(s))) return 'mud'
   if (parking.has(`${x},${z}`)) return 'parking'
   const g = groundInfo(s, x, z)
   return g.surface === 'paved' ? 'paved' : g.surface === 'gravel' ? 'gravel' : g.compacted ? 'compact' : g.type === 'urban' ? 'paved' : g.type
@@ -115,17 +115,17 @@ export function createTerrainSurface(s: Readonly<GameSnapshot>, material: MeshSt
   const tint = new Color()
   for (let z = -half; z < half; z++) for (let x = -half; x < half; x++) {
     const height = getTerrainHeight(s.terrain, x, z)
-    const cell = cells.get(`${x},${z}`)!, kind = isWaterHeight(height) ? 'mud' : cell.kind, row = TERRAIN_MATERIALS.indexOf(kind)
+    const cell = cells.get(`${x},${z}`)!, kind = isWaterHeight(height, getWaterLevel(s)) ? 'mud' : cell.kind, row = TERRAIN_MATERIALS.indexOf(kind)
     const variant = Math.floor(hash(x, z) * VARIANTS)
     const base = positions.length / 3
-    for (const [corner, [dx, dz]] of [[0, 0], [0, 1], [1, 1], [1, 0], [.5, .5]].entries()) {
-      const surfaceHeight = corner === 4 ? height : shape.corners[shape.index(x, z) * 4 + corner]!
+    for (const [corner, [dx, dz]] of [[0, 0], [0, 1], [1, 1], [1, 0]].entries()) {
+      const surfaceHeight = shape.corners[shape.index(x, z) * 4 + corner]!
       positions.push(x + dx!, surfaceHeight + .003, z + dz!)
       const shade = patchShade(x + dx!, z + dz!)
-      // Natural soils meet softly at shared corners. Prepared surfaces retain exact construction edges.
+      // Shared corners keep one height. Prepared surfaces retain exact construction edges.
       tint.copy(BASE_COLORS[kind])
       let samples = 1
-      if (!cell.prepared && corner < 4) {
+      if (!cell.prepared) {
         for (let nz = z + dz! - 1; nz <= z + dz!; nz++) for (let nx = x + dx! - 1; nx <= x + dx!; nx++) {
           if (nx === x && nz === z) continue
           const neighbor = cells.get(`${nx},${nz}`)
@@ -138,7 +138,7 @@ export function createTerrainSurface(s: Readonly<GameSnapshot>, material: MeshSt
       // Half-texel inset prevents neighboring atlas materials bleeding into the surface.
       uv.push((variant * TILE + .5 + dx! * (TILE - 1)) / WIDTH, (row * TILE + .5 + dz! * (TILE - 1)) / HEIGHT)
     }
-    for (let corner = 0; corner < 4; corner++) indices.push(base + corner, base + (corner + 1) % 4, base + 4)
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
   }
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3))
@@ -192,10 +192,13 @@ export function createTerrainMaterial(): MeshStandardMaterial {
 export function createEarthTexture(): DataTexture {
   const pixels = new Uint8Array(32 * 32 * 4)
   for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
-    // Fine horizontal strata on exposed earth faces; no extra geometry along cliffs.
-    const value = Math.round(233 + hash(x, y) * 17 - (y % 8 === 0 ? 16 : 0))
+    // Horizontal stone strata on cliff faces; remaining drop after a 0.5 slope.
+    const value = Math.round(148 + hash(x, y) * 28 - (y % 6 === 0 ? 22 : 0))
     const i = (y * 32 + x) * 4
-    pixels[i] = pixels[i + 1] = pixels[i + 2] = value; pixels[i + 3] = 255
+    pixels[i] = value
+    pixels[i + 1] = value - 4
+    pixels[i + 2] = value - 10
+    pixels[i + 3] = 255
   }
   const texture = new DataTexture(pixels, 32, 32)
   texture.colorSpace = SRGBColorSpace; texture.magFilter = NearestFilter

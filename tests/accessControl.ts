@@ -12,6 +12,7 @@ import {
   normalizeAccessControls,
   normalizeStaffGateDirection,
   previewLabel,
+  staffGateBlocksVisitor,
   toggleAreaCells,
   usesGateEdgePlacement,
 } from '../src/game/accessControl'
@@ -97,6 +98,16 @@ export function testAccessControl(fixture: (count?: number) => GameState): void 
   assert.equal(normalizeStaffGateDirection(2), 2)
   assert.equal(normalizeStaffGateDirection(undefined), undefined)
   assert.equal(normalizeStaffGateDirection(4), undefined)
+  const directedGate = { staffOnly: true, staffGateDirection: 0 as const }
+  assert.equal(staffGateBlocksVisitor(directedGate, undefined, 0), true, 'visitors cannot leave in the painted direction')
+  assert.equal(staffGateBlocksVisitor(undefined, directedGate, 2), false, 'visitors may enter from the opposite side')
+  assert.equal(staffGateBlocksVisitor(directedGate, undefined, 1), false, 'other edges of the gate tile stay open')
+  assert.equal(
+    staffGateBlocksVisitor(undefined, { staffOnly: true }, 0),
+    true,
+    'legacy centered staff gates still block entering the tile',
+  )
+  assert.equal(staffGateBlocksVisitor({ staffOnly: true }, undefined, 0), false, 'legacy tiles still allow leaving')
 
   const junction: RoadCell[] = [
     { x: 0, z: 0, allowedDirections: null, blockedEdges: 0, speedLimit: 30, crosswalk: false },
@@ -667,7 +678,7 @@ export function testAccessControl(fixture: (count?: number) => GameState): void 
   assert.equal(grown.length, 5)
 
   const loaded = new GameState(structuredClone(lightState))
-  assert.equal(loaded.snapshot.version, 29)
+  assert.equal(loaded.snapshot.version, 30)
   assert.equal(loaded.snapshot.accessControls.trafficLights.length, 1)
   assert.equal(loaded.snapshot.accessControls.trafficLights[0]!.x, 5)
   assert.equal(currentAccessSlot(12 * 60), 0)

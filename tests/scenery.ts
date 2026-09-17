@@ -55,6 +55,7 @@ export function testScenery(fixture: (count?: number) => GameState): void {
   assert.equal(game.canPlace('banner', 3, -20, 2).ok, false, 'same edge cannot be reused')
   assert.ok(game.getPathAt(3, -20))
   assert.equal((game as any).isPedestrianSolidAt(3, -20, 0), false, 'edge decorations keep the path walkable')
+  assert.ok((game as any).isPedestrianEdgeBlocked({ x: 3, z: -20, elevation: 0 }, { x: 3, z: -19, elevation: 0 }), 'edge hedges block leaving across that side')
   assert.equal(game.getAt(3, -20, undefined, .5, .5)!.kind, 'path', 'center selects path, not surrounding hedge')
   assert.ok(game.place('banner', 12, 0, 1).ok)
   assert.ok(game.placePathSegment(12, 0, 0).ok, 'paths can also be built after edge scenery')

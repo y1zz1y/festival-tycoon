@@ -9,7 +9,9 @@ import { testFestivalAdditions } from './festivalAdditions'
 import { testCoasterTypes } from './coasterTypes'
 import { testBandSupply } from './bandSupply'
 import { testTerrainSurface } from './terrainSurface'
+import { testTerrainLand } from './terrainLand'
 import { testScenery } from './scenery'
+import { testPedestrianBarriers } from './pedestrianBarriers'
 import { testDecorationThemes, testThemedDecorationPlacement } from './decoration'
 import { testPicking } from './picking'
 import { testMobileTouch } from './mobileTouch'
@@ -19,6 +21,7 @@ import { testStageTickets } from './stageTickets'
 import { SupplyChainView } from '../src/view/SupplyChainView'
 import { transportMotionFactor } from '../src/view/transportMotion'
 import { testOperations } from './operations'
+import { testSealedWasteContainer } from './sealedWasteContainer'
 import { testStaffZonePaint } from './staffZones'
 import { testAccessControl } from './accessControl'
 import { CampingView } from '../src/view/CampingView'
@@ -41,6 +44,7 @@ import { attachMultiplayer } from '../server/rooms'
 import type { GameCommand } from '../src/net/protocol'
 import { scenePixelRatio } from '../src/view/renderResolution'
 import { testFestival } from './festival'
+import { testHeadlineMagazine } from './headlineMagazine'
 import { testBuildMenu } from './buildMenu'
 import { testPlacementPreview } from './placementPreview'
 import { testFinance } from './finance'
@@ -101,6 +105,9 @@ function fixture(count = 20): GameState {
 testPerformanceGuards(fixture)
 testAccessControl(fixture)
 testScenery(fixture)
+test('hedges, walls and fences block pedestrians; wall doors stay passable', () => {
+  testPedestrianBarriers(fixture)
+})
 test('decoration themes filter catalog kinds and keep placement on scenery.ts', () => {
   testDecorationThemes()
   testThemedDecorationPlacement(fixture)
@@ -114,6 +121,7 @@ test('band supply: bare vs supplied, shared pool, parking, fans, clock, placemen
 })
 testRideAccess(fixture)
 testTerrainSurface(fixture)
+testTerrainLand(fixture)
 
 test('Base64 saves preserve Unicode and full worlds without overwriting local saves', () => {
   const original = fixture(2)
@@ -221,11 +229,15 @@ testEnvironments()
 testWayElevation()
 testSupplyChain(fixture)
 testFestival(fixture)
+test('HEADLINE magazine recap after festival end', () => {
+  testHeadlineMagazine(fixture)
+})
 test('festival sleep rhythm, tents and circadian energy', () => {
   testVisitorSleep(fixture)
 })
 testMusicPlanning(fixture)
 testOperations(fixture)
+testSealedWasteContainer(fixture)
 testStaffZonePaint(fixture)
 testShopGoods(fixture)
 testStageTickets(fixture)

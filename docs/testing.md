@@ -21,6 +21,8 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | `tests/regression.ts` | Orchestrierung, Tick-Partition, Multiplayer-Sockets, Saves, Abreise durch Camping-Ausweisungen nach Festivalende |
 | `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, Lights, Achterbahnwagen, Logistik-Modelle |
 | `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust |
+| `tests/headlineMagazine.ts` | HEADLINE Magazin nur nach Festivalende, ≥1 Pro/Kontra, deterministisch, nicht mitten im Wochenende |
+| `tests/headline-magazine-preview.html` | visuelles HEADLINE-Heft nach einem beendeten Wochenende |
 | `tests/visitorSleep.ts` | Festival-Schlafzeiten, Legacy-Remap, zirkadiane Energie, Zelt- und Abreiseziele |
 | `tests/festivalAdditions.ts` | spätere Festival-Systeme, Eimer-Karton-Batches, zusammenhängende Müllablage-Füllstände, Müllwagen-Ladungsanzeige, 1-Feld-Steigungen, Wagen-Mesh, gerundete Schienenjoins, Achterbahn-Komplettabriss |
 | `tests/coasterTypes.ts` | Achterbahn-Typkatalog (alle Typen spielbar), Zug-Thumbnail-Spec je Typ, live vs diskrete Anschlussregeln, Helix/LIM/Junior/Maus/Mine/Bobbahn-Filter, fehlender typeId → classicSteel, Palette: Typ-Ausschluss vs aktuell ausgegraut, Hard-Switch inkl. Richtung, Ghost unverändert bei gesperrtem Klick, Testbetrieb auf geschlossenem classicSteel-Rechteck während `festival.planning` |
@@ -31,17 +33,20 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | `tests/stageInteraction.ts` | Werkstatt / Interaktion |
 | `tests/supplyChain.ts` | Waren, Umwege, Ground, Mindestbestand in 20er-Schritten |
 | `tests/operations.ts` | Betrieb, Personal, Alltag, Saugroboter durch Personaleingang, Einsatzgebiete, Reinigung leert volle Eimer zuerst und idle auch halbvolle, Verletzte an den nächsten freien Sanitäter / Krankenwagen (ohne Insassen im Auto), Müllwagen-Erhalt / Wiedereinfahrt, Queue-Kette / Rückweg / leerer Stand / Stand-Spuren, Nachschub von allen Seiten und Verkauf nur vorne, Parkplatz-Aussteigen auf Nachbarweg (bleiben ausgestiegen, laufen ohne Bucht-Jitter zum Ziel), Abreise nur im eigenen Anreiseauto (3/3 setzt rückwärts aus der Bucht und verlässt die Karte; 5er/6er-Gruppe vollständig; tote/fremde IDs und Verletzte), Insassen erst nach dem Aussteigen verletzbar / belegend, Parkplatz- und Krankenfeld-Abriss inkl. Restbelegung, Debug Autos entfernen löscht Wagen und gibt Belegung frei, Gäste lassen Müll fallen wenn der nächste Eimer voll ist und benutzen leere Eimer weiter |
+| `tests/sealedWasteContainer.ts` | Versiegelte Müllcontainer: Kapazität 80, Reinigung bevorzugt näheren Container vor Ablage, volle Container übersprungen, versiegelte Attraktivitätsstrafe schwächer als offene Ablage, Müllwagen leert nur Straßen-Container, idle Reinigung schleppt zur Ablage sobald kein Wagen unterwegs ist (`truckReachable` allein reicht nicht), voller Eimer zuerst, Live-Tick off-road → Ablage |
 | `tests/staffZones.ts` | 3×3-Einsatzgebiete: Ziehen weist zwei Blöcke zu, Start auf aktivem Block entfernt, `setStaffZone` flackert nicht, Saugroboter dieselbe Farbe |
 | `tests/queueLanes.ts` | Hälftige Stand-Queue-Geometrie, Spurwahl, keine Attraktionsänderung |
 | `tests/shopGoods.ts` | Allgemeine Waren, Maskottchen-Kauf/Hand-Chance, Shirt-Farbe/Schnitt, Save-Defaults |
 | `tests/accessControl.ts` | Ampeln, Tore, Sensoren, Einweg, Notfallöffnung, Halt vor Rot, opportunistisches Parken, Trennlinie, Liefer-/Müllwagen-Umweg, Tageszeit / Festivalphase / Zeitplan |
 | `tests/rideAccess.ts` | Tore, Queues, Bungee/Karussell |
 | `tests/scenery.ts` | Deko-Slots, Kanten-Fahnen, Tageslichtballon als Vollfeld, neue Arten, Attraktivität je Kind, Stapel/Reichweite, unbekannte Katalog-Arten |
+| `tests/pedestrianBarriers.ts` | Hecke/Wand/Zaun blockieren Fußgänger; Wandtür passierbar; Vollfeld vs. Kante; Nav-Invalidierung bei Setzen/Abriss |
 | `tests/decoration.ts` | Themenliste 8–12 inkl. Klassik/Arktis/Steampunk, Filter ohne Themen-Leaks, Legacy-Vollfeld, Platzierung über `scenery.ts` |
 | `tests/picking.ts` | Abriss-Raycast: Instanz-IDs, getroffenes Mesh vs. Nachbar/Kachelmitte, Reittor-Zelle |
 | `tests/buildMenu.ts` | Jedes platzierbare Tool außer `inspect` genau einmal im Baumenü; Deko/Attraktionen/Logistik als Katalog; Achterbahn-Kacheln mit Zugstil/`coasterVehiclePreview`; Camping-, Krankenhaus- und Bandversorgung-Tabs (`backstageArea`, `tourBusParking`); Bauhöhe bleibt beim gleichen Tool und fällt bei neuem `setTool` auf 0; Deko-Gruppen kommen aus `decoration.ts` |
 | `tests/placementPreview.ts` | Bauhöhe rastet auf 0.5; Vorschau meldet die Bodenkachel (`y` = Gelände, nicht Ghost-Höhe) |
-| `tests/terrainSurface.ts` | Gelände-Mesh, Pads, Parkplatz-Asphalt nur auf Parkfeldern |
+| `tests/terrainSurface.ts` | Gelände-Mesh (zwei Dreiecke je Kachel), Pads, Parkplatz-Asphalt nur auf Parkfeldern |
+| `tests/terrainLand.ts` | Drei Geländewerkzeuge, Stufe 0,5, Fläche auf Starthöhe, Klippe nach 0,5, Wasser am Uferhang, Baden, Nav nach Edit, Stützen nur im Freiraum |
 | `tests/environments.ts` | Umgebungen |
 | `tests/wayElevation.ts` | Halbstufen-Rampen für Fußweg und Straße, Autodach 1.0, Legacy-Höhe 1 bleibt 1.0, Shift-Ausgang bleibt beim Rampenstreichen, Fußweg auf Autostraße behält die Straße, gestapelte Autostraße / Brücke, ein Straßenfeld übermalen löscht keine Nachbarn |
 | `tests/pixelPeople.ts` | Personen-Batches |
@@ -94,7 +99,8 @@ ungerichteten Kreuzungen und die gemeinsame Kantenlage von Personentor und
 Personaleingang; `operations.ts` trennt frontalen Verkauf von
 seitlichem/hinterem Nachschub, prüft gedankenunabhängige Ausverkauf-Wartezeit
 und die Kantenlage neuer Personaleingänge samt Legacy-Mitte sowie
-Saugroboter durch `staffOnly` bei weiter blockierten Gästen.
+Saugroboter durch `staffOnly`, während Gäste nur die bemalte Kante
+nicht queren.
 `festival.ts` begrenzt das Oberteil-Ereignis auf eine Person;
 `pixelPeople.ts` prüft Brustgeometrie ohne farbige Brustwarzen.
 `festivalAdditions.ts` prüft 400 Vorfälle in einem Müll-Batch, unveränderte

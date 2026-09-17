@@ -60,7 +60,7 @@ const ice = 0xc8e8f4, aurora = 0x5ee0b0, auroraP = 0x7b6cff
 const material = new MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: .05 })
 material.userData.shared = true
 const geometries = new Map<BuildingKind, BufferGeometry>()
-export const DETAILED_BUILDINGS: readonly BuildingKind[] = ['food', 'alcohol', 'mascot', 'shirt', 'toilet', 'bench', 'wasteBin', ...THEMED_BIN_KINDS, 'generator', 'backupGenerator', 'foh', 'delayTower', 'securityGate', 'ride', ...SCENERY_KINDS]
+export const DETAILED_BUILDINGS: readonly BuildingKind[] = ['food', 'alcohol', 'mascot', 'shirt', 'toilet', 'bench', 'wasteBin', 'sealedWasteContainer', ...THEMED_BIN_KINDS, 'generator', 'backupGenerator', 'foh', 'delayTower', 'securityGate', 'ride', ...SCENERY_KINDS]
 
 /** Shared families: same primitives, theme via vertex colors. One merged mesh per kind. */
 function pine(k: ModelKit, trunk: number, layers: number[], cap?: number): void {
@@ -955,6 +955,18 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
       k.box(x, .37, .335, .04, .035, .27, ink)
       for (const y of [.37, .5]) k.box(x, y, .238, .018, .018, .01, steel)
     }
+  } else if (kind === 'sealedWasteContainer') {
+    // One merged dumpster: lid, body, rails. No mesh per bag.
+    k.box(0, .08, 0, .86, .12, .62, ink)
+    k.box(0, .48, 0, .8, .68, .56, 0x3f4c3a)
+    k.box(0, .84, 0, .84, .08, .6, 0x2b3428)
+    k.box(0, .9, .02, .72, .05, .46, 0x1c241c)
+    for (const x of [-.28, .28]) {
+      k.box(x, .5, .3, .08, .42, .04, steel)
+      k.box(x, .18, 0, .1, .14, .58, ink)
+    }
+    k.box(0, .56, .29, .22, .1, .03, cream)
+    k.box(.32, .86, 0, .08, .04, .18, 0x142018)
   } else if (kind === 'wasteBin') {
     k.box(0, .22, 0, .3, .4, .3, 0x3d6657)
     for (const x of [-.12, -.04, .04, .12]) k.box(x, .21, .156, .035, .34, .02, 0x2b4b43)
