@@ -16,6 +16,7 @@ gelten Footprint, Strom, Vorplatz und Buchungen.
 | Live-Show / Festivallust | `src/game/GameState.ts` | `updateConcertAttendance`, `tryVisitConcert` |
 | Templates / Buchungen | `src/game/festivalManagement.ts` | `stageDesign`, `stageTemplates` |
 | Werkstatt-UI | `src/stageEditor.ts` | Platzieren, Undo, Vorschau |
+| Orientierungsanzeige | `src/view/orientationGizmo.ts` | `createOrientationGizmo`, `OrientationGizmo` |
 | Modelle, Show, Lichtpool | `src/view/stageModel.ts` | `createStageModel`, `animateStageModel` |
 | Picking der Teile | `src/view/stagePicking.ts` | |
 | Pixel-Musiker | `src/view/stageBand.ts`, `src/view/bandMemberMesh.ts`, `src/game/bandLooks.ts` | nur visuell, kein Audio; dieselbe Costume-ID und dasselbe Mesh wie Backstage-`bandActors` |

@@ -1,4 +1,68 @@
 import { MAX_PATH_ELEVATION, WAY_ELEVATION_STEP, snapWayElevation } from './wayElevation'
+import type { BlueprintItem } from './blueprints'
+import type { BuildingKind, Tool } from './catalog'
+
+export type GhostRenderMode =
+  | 'none'
+  | 'footprint'
+  | 'model'
+  | 'scenery'
+  | 'path'
+  | 'blueprint'
+  | 'access'
+
+export type PlacementPreviewRequest =
+  | {
+      type: 'building'
+      kind: BuildingKind
+      x: number
+      z: number
+      decorationSlot?: number
+      preserveLegacySlot?: boolean
+      bungeeHeight?: number
+    }
+  | {
+      type: 'tool'
+      tool: Exclude<Tool, BuildingKind | 'copy'>
+      x: number
+      z: number
+      enabled?: boolean
+    }
+  | {
+      type: 'rideAccess'
+      buildingId: string
+      accessType: 'entrance' | 'exit'
+      x: number
+      z: number
+    }
+  | {
+      type: 'blueprint'
+      originX: number
+      originZ: number
+      rotation: number
+      items: readonly BlueprintItem[]
+    }
+
+export type PlacementPreviewPlacement = {
+  x: number
+  z: number
+  valid: boolean
+  item: BlueprintItem
+}
+
+export type PlacementPreviewResult = {
+  ok: boolean
+  message: string
+  renderMode: GhostRenderMode
+  kind?: BuildingKind
+  x?: number
+  z?: number
+  rotation?: number
+  decorationSlot?: number
+  footprint?: { width: number; depth: number }
+  charge?: number
+  placements?: PlacementPreviewPlacement[]
+}
 
 /** Buildings, scenery and coaster start height share the way half-step. */
 export const BUILD_ELEVATION_STEP = WAY_ELEVATION_STEP

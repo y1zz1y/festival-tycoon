@@ -9,6 +9,8 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Straßengraph, Fahrzeuge, Ankunft | `src/game/logistics.ts` | `LogisticsSnapshot`, `findRoadRoute`, `RoadVehicle` (`tourBus` + `tourBusParking` target); `RoadCell.elevation` / `roadSlope` |
+| Logistik-Tick und Fahrzeug-Indizes | `src/game/logisticsSimulation.ts`, `src/game/roadVehicleSimulation.ts`, `src/game/GameState.ts` | `updateLogisticsSimulation`, `buildLogisticsTickState`; `RoadVehicleSimulation.processLogisticsVehicles`; `GameState` verdrahtet die schmalen Fach-Callbacks |
+| Straßenfahrzeug-State-Machines | `src/game/roadVehicleSimulation.ts` | Gemeinsame Bewegung, Blockade/Umplanung sowie Dispatch, Rückkehr und Leg-Abschluss für Besucherautos, Krankenwagen, Busse, Müll- und Lieferwagen |
 | Aussteigen am Parkplatz | `src/game/logistics.ts`, `src/game/GameState.ts` | `chooseParkingDisembarkPath`, `finishVehicleParking`, `collectSeatedPassengerIds`, `tryBoardDepartureCar`, `canParkedCarDepart` |
 | Debug: Autos entfernen | `src/game/GameState.ts`, `src/main.ts` | `removeVisitorCarsForDebug` — alle `visitorCar`, Belegung, Insassen zu Fuß; nicht Abriss |
 | Straßenrampen | `src/game/GameState.ts`, `src/game/wayElevation.ts` | `placeRoadSegment`, Autodach `MAX_ROAD_RAISE` 1, Shift-Ausgang `planLockedOriginRamp` |
@@ -81,6 +83,16 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   bleiben auf der Straße. Der
   Fahrschritt prüft dieselbe Fläche, nicht `getPathAt` allein — Vorplätze
   haben keinen Weg und würden sonst die Route am Rand verwerfen.
+- `updateLogisticsSimulation` hält die historische Phasenfolge fest:
+  Zugangssignale, Freight→Fahrzeuge, Flottenreparatur, Tick-Indizes,
+  Dispatch/Fahrt/Stopps über den `GameState`-Callback, Entfernungen und danach
+  Fahrzeuge→Freight. Belegungs-, Fußgänger-, Buswarte- und Insassen-Indizes
+  werden einmal pro Logistik-Tick im Fachmodul gebaut.
+- `RoadVehicleSimulation` besitzt den Straßenfahrzeug-Tick und seine
+  typspezifischen Callbacks, importiert aber keinen konkreten `GameState`.
+  Tourbus-Ankunft/-Abfahrt bleibt an die Bandversorgung angebunden.
+  Saugreiniger teilen nur die Logistikphase, fahren weiter auf dem
+  Fußgängergraphen; Depot-Träger bleiben eine getrennte State-Machine.
 - Imbiss und Getränkestand nehmen Nachschub von **jeder** angrenzenden
   Weg- oder Vorplatzkachel, nicht nur von der gedrehten Vorderseite.
   `shopAccess.ts` (`CARDINAL_OFFSETS`, `isShopServiceKind`) und
@@ -344,6 +356,9 @@ werden im Tick korrigiert. Ausparken richtet die Nase beim Einfahren aus.
 ## Tests
 
 `tests/carrierModels.ts` (geteilte Gästeteile, Warnweste, Karren).
+`tests/simulationModules.ts` (Logistik-Phasenfolge, Tick-Indizes,
+Entfernungsabschluss, zustandslose Fahrzeughelfer und Besitz der
+Straßenfahrzeugfamilien durch `RoadVehicleSimulation`).
 `tests/supplyChain.ts` (Lieferung, Umwege, Cache-Recovery).
 `tests/festival.ts` (Lager, Bestellungen). `tests/operations.ts` (Betrieb,
 Saugreiniger auf Wegen, Bühnenvorplatz und durch Personaleingang,

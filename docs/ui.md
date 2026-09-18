@@ -7,7 +7,20 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Orchestrierung, Tasten, Tools | `src/main.ts` | RCT-Iconleiste `.rct-toolbar` |
+| Bootstrap / Verdrahtung | `src/main.ts` | RCT-Iconleiste `.rct-toolbar`, erzeugt Controller und verbindet Callbacks |
+| Stabile App-Shell / DOM-Vertrag | `src/app/shell.ts` | `mountAppShell`; vollständiges statisches Markup und Autosave-Konstanten |
+| Titel, Szenario und Saves | `src/ui/titleScreen.ts`, `src/ui/scenarioScreen.ts`, `src/ui/saveController.ts` | Controller mit injiziertem `GameState`-/Multiplayer-/Lade-Kontext |
+| Objekt- und Besucheranzeige | `src/ui/entityPanel.ts`, `src/ui/visitorPanel.ts` | Vollständige Objektpanel-Orchestrierung, Achterbahn-Telemetrie sowie zustandsbehaftete Besucher-Inspektion |
+| UI-Formatierung | `src/ui/format.ts` | HTML-Escaping, Geld-, Uhrzeit- und Speicherzeitformat |
+| Render- und Hidden-Tab-Schleife | `src/app/gameLoop.ts` | `startGameLoop`; schmale Game/View/Audio-Schnittstellen |
+| Kartenklick-Werkzeugrouting | `src/input/toolRouter.ts`, `src/input/cellToolHandlers.ts` | Direkte Commands sowie typisierte Achterbahn-, Wegeditor- und Inspect-Routen |
+| Weg-/Straßen-Ziehcontroller | `src/input/pathToolController.ts` | `createPathToolController`; besitzt Ziehzustand, Linien-/Rechteckbildung und Ausführung |
+| Achterbahn-Baufenster | `src/ui/coasterBuilderPanel.ts` | `updateCoasterBuilderPanel`; stabile Palette und Ghost-/Auswahlvorschau |
+| Kontexthilfe | `src/ui/contextHelp.ts` | `contextHelpText`; verwendet das autoritative `PlacementPreviewResult` |
+| Baukatalog / stabile Statusanzeige | `src/ui/buildCatalog.ts` | `createBuildCatalog`, `catalogTileHtml` |
+| Spielstand-Archivdarstellung | `src/ui/saveArchive.ts` | Zusammenführen Server/Browser, sichere Zeilen, Speicherhinweis |
+| Differentielle UI-Updates | `src/ui/differentialUpdates.ts` | `DifferentialUpdates`, `listFingerprint` |
+| Rechteck-Flächenvertrag | `src/ui/areaDesignation.ts` | `AreaDesignationSpec`, `normalizeRectangle`, Preview/Execute-Adapter |
 | Ton stumm | `src/main.ts`, `src/view/FestivalAudio.ts` | `#toggle-mute`, `#setting-mute-audio`; [audio.md](audio.md) |
 | Abriss-/Info-Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | `pickPlacedObject`, `resolvePickedBuilding` |
 | Infofenster Müllwagen / Ablage / Container | `src/main.ts`, `src/game/logistics.ts`, `src/game/waste.ts` | `formatRoadVehicleInspectLoad`, `connectedWasteDumpStats`, `formatSealedContainerInspect` |
@@ -22,8 +35,10 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 | Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css`, `src/game/buildMenu.ts` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold. Gelände-Reiter: Feld anheben/senken, Glätten (Fläche) |
 | Buslinien-Planer | `src/main.ts`, `src/game/busPlanner.ts`, `src/view/LogisticsView.ts` | Zwei Spalten ohne Duplikate, DnD, `sortBusLineStops`, nummerierte `setBusPlannerRoute`; Klick auf Haltestelle in der Karte |
 | Shift-Rampen-Ausgang | `src/main.ts`, `src/game/wayElevation.ts` | `lockShiftElevationOrigin`, `planLockedOriginRamp` |
-| Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/view/WorldView.ts` | Halbstufen `snapBuildElevation`; `groundTileMarker` auf der Hover-Kachel |
+| Bauvorschau / Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/game/GameState.ts`, `src/view/WorldView.ts` | `PlacementPreviewRequest/Result` und `previewPlacement` liefern gemeinsame Gültigkeit/Meldung; Halbstufen `snapBuildElevation`; `groundTileMarker` |
 | Bühnenwerkstatt | `src/stageEditor.ts`, `src/stageEditor.css` | |
+| Werkstatt-Orientierung | `src/view/orientationGizmo.ts` | `createOrientationGizmo`, `OrientationGizmo` |
+| Titelbild-Publikum | `src/titleCrowd.ts` | `mountTitleCrowd`, `TitleCrowd.setRunning`, `TitleCrowd.dispose` |
 | Personaldetails | `src/staffDetailsUI.ts` | Infofenster, Bereiche; Saugroboter wie Reinigung; 3×3-Zonen per Klick/Ziehen |
 | Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | |
 | Ziehbare Fenster | `src/dragPanel.ts` | |
@@ -36,6 +51,22 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 ## Wichtige Regeln
 
 - UI sendet `GameCommand`s bzw. `GameState`-Methoden, berechnet die Welt nicht.
+  `main.ts` ist Bootstrap und Modus-Koordinator; Shell, Titelbild, Szenarioformular,
+  Save-Archiv, Besucherpanel und Telemetrie-Präsentation besitzen eigene Controller
+  mit expliziten Kontextobjekten. Frame-/Hidden-Tab-Takt,
+  direkte Werkzeugaktionen, priorisierte Zellrouten, Weg-Ziehzustand,
+  Objektpanel, Achterbahn-Baufenster, Katalogaufbau und Archivdarstellung liegen
+  in kohäsiven Modulen. Extrahierte Kartenaktionen rufen weiterhin ausschließlich
+  die öffentliche `GameState`-Fassade auf und umgehen den Multiplayer-Gate nicht.
+  Snapshot-Listener ändern Werkzeug-/Speed-DOM nur bei geändertem Fingerprint.
+  Die vorhandenen Panel-Fingerprints bleiben für Personal, Besucher, Tagesplan,
+  Beschwerden, Finanzen und Logistik maßgeblich. Coaster-Palette und
+  Busplanerlisten behalten ihre DOM-Knoten bei unverändertem Fach-Fingerprint,
+  damit Hover, Fokus und Drag-and-drop nicht abbrechen.
+  Kontexthilfe und Ghost-Farbe lesen dasselbe `PlacementPreviewResult`;
+  `main.ts` stellt die typisierte Anfrage zusammen und `contextHelp.ts`
+  formuliert daraus den Text; `WorldView` berechnet
+  keine Platzierungsregeln.
   `describeRoadVehicleActivity` zeigt bei einem geparkten Besucherauto mit
   fehlgeschlagenem Abfahrtsversuch sowie einem abfahrenden Auto ohne Route
   (`waitMinutes > 0`) die fehlende
@@ -201,6 +232,11 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
   werden bei Ticks aktualisiert, damit Klicks nicht verloren gehen.
 - Touch: ein Finger baut/wählt; zwei Finger Kamera. Flächenwerkzeuge: zweiter
   Finger bricht die Auswahl ab.
+- Rechteckwerkzeuge teilen den UI-/World-Vertrag aus `areaDesignation.ts`.
+  Er normalisiert Grenzen für Vorschau und Ausführung, bewahrt aber den
+  ursprünglichen Startpunkt für fachliche Regeln wie Glätten. Gelände,
+  Wege und alle übrigen `WorldView.setGroundAreaTool`-Nutzer behalten ihre
+  jeweilige Validierung und Commands.
 - Spieler-sichtbare Steuerung und neue Fenster im Root-`README.md` beschreiben.
 
 Autostraßen: Belag per Art-Hold, freies Linienziehen oder Stückbau mit
@@ -231,6 +267,10 @@ Debug **Autos entfernen** (Autos weg, Belegung frei, Insassen zu Fuß):
 Abriss-Picking (Mesh vor Nachbar/Kachelmitte): `tests/picking.ts`.
 Achterbahn-Komplettabriss aus Infofenster/Command: `tests/festivalAdditions.ts`.
 Bauhöhe 0.5 und Bodenkachel der Vorschau: `tests/placementPreview.ts`.
+Extrahierte Update-Gates, Archivzusammenführung/-Escaping, gemeinsame
+Formatierungshelfer, Katalogkacheln und
+Werkzeugrouting durch den Multiplayer-Gate, Linien-/Rechteckbildung und
+autoritative Kontexthilfe: `tests/uiModules.ts`.
 
 Reiter **Bandversorgung** in `#logistics-panel` plus Backstage-Infofenster:
 `tests/bandSupply.ts`, [`band-supply.md`](band-supply.md).

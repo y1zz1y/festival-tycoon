@@ -5,53 +5,30 @@
  * cannot empty the archive.
  */
 import { SAVE_KEY, saveSlotDataKey } from './catalog'
-import { isQuotaError } from './saveText'
+import { createBrowserObjectStore, isQuotaError } from './browserPersistence'
 
 const DB_NAME = 'headliner-tycoon-saves'
 const DB_VERSION = 1
 const STORE = 'snapshots'
 const QUICK_IDB_KEY = 'quicksave'
 const QUICK_VIA_KEY = `${SAVE_KEY}:via`
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      reject(new Error('Erweiterter Browser-Speicher ist hier nicht verfügbar'))
-      return
-    }
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB nicht verfügbar'))
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE)
-    }
-    request.onsuccess = () => resolve(request.result)
-  })
-}
-
-function idbRequest<T>(run: (store: IDBObjectStore) => IDBRequest<T>, mode: IDBTransactionMode): Promise<T> {
-  return openDb().then((db) => new Promise<T>((resolve, reject) => {
-    const tx = db.transaction(STORE, mode)
-    const request = run(tx.objectStore(STORE))
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB-Zugriff fehlgeschlagen'))
-    request.onsuccess = () => resolve(request.result)
-    tx.oncomplete = () => db.close()
-    tx.onabort = () => {
-      db.close()
-      reject(tx.error ?? new Error('IndexedDB-Transaktion abgebrochen'))
-    }
-  }))
-}
+const overflowStore = createBrowserObjectStore(
+  DB_NAME,
+  DB_VERSION,
+  STORE,
+  'Erweiterter Browser-Speicher ist hier nicht verfügbar',
+)
 
 export const readOverflowSnapshot = (key: string): Promise<string | null> =>
-  idbRequest<string | undefined>((store) => store.get(key), 'readonly')
+  overflowStore.get<string>(key)
     .then((value) => (typeof value === 'string' && value ? value : null))
     .catch(() => null)
 
 export const writeOverflowSnapshot = (key: string, json: string): Promise<void> =>
-  idbRequest((store) => store.put(json, key), 'readwrite').then(() => undefined)
+  overflowStore.put(key, json)
 
 export const deleteOverflowSnapshot = (key: string): Promise<void> =>
-  idbRequest((store) => store.delete(key), 'readwrite').then(() => undefined).catch(() => undefined)
+  overflowStore.delete(key).catch(() => undefined)
 
 export async function writeQuicksaveJson(json: string): Promise<void> {
   try {

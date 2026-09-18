@@ -9,6 +9,7 @@ dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Befehls- und Nachrichtentypen | `src/net/protocol.ts` | `GameCommand`, World/Sim-Snapshots |
+| Vollständige Command-Metadaten | `src/net/commandRegistry.ts` | `COMMAND_METADATA`, `isOptimisticCommand` |
 | Command → `GameState` | `src/net/commands.ts` | `applyGameCommand` |
 | Kompakte Pakete | `src/net/codec.ts` | `packWorld` |
 | Deltas, Ankunft/Abreise | `src/net/worldUpdates.ts` | `WorldUpdates`, `applyWorld` |
@@ -17,6 +18,18 @@ dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
 | Host-Turns, Optimistic | `src/game/GameState.ts` | `gate`, `receiveTurn`, `applyNetworkWorld` |
 | Server-Räume | `server/rooms.ts` | `attachMultiplayer` |
 | WebSocket-Plugin | `server/wsPlugin.ts` | Kompression, Puffergrenze |
+
+`commandRegistry.ts` klassifiziert jeden `GameCommand` genau einmal als
+optimistic oder host-bestätigt; `satisfies Record<GameCommand['type'], ...>`
+erzwingt TypeScript-Vollständigkeit. Festival-Unteraktionen behalten ihre
+separate optimistic Allowlist. `commands.ts` hat zusätzlich einen
+exhaustiven `never`-Zweig, sodass ein neuer Union-Fall ohne Anwendung nicht
+baut. Wire-Namen, Payloads und die `GameCommand`-Union bleiben unverändert.
+
+Platzierung, Abriss und Schienenbau delegieren intern aus den bestehenden
+`GameState`-Methoden an `src/game/commands/*`. `applyGameCommand`,
+`enableMultiplayerCommands`, Command-Namen, Payloads und Optimistic-Einstufung
+bleiben unverändert; die Services kennen keinen konkreten `GameState`.
 
 ## Wichtige Regeln
 

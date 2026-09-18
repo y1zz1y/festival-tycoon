@@ -10,9 +10,9 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 | --- | --- | --- |
 | Arten, Tools, Anzeige | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` (`trafficLight`, `pathBarrier`, `deliveryYard`, `supplyDepot`, `staffGate`, `tourBusParking`, `backstageArea`, `sealedWasteContainer`) |
 | Bau-Menü / Kategorien | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` (keine stillen Fallbacks). Abriss bleibt als Kategorie für die Toolbar, öffnet aber kein Raster. Wege öffnen `#path-construction` mit Schnellzugriff auf `pathBarrier`, `staffGate`, `securityGate`. `isCatalogBuildCategory`: Deko, Attraktionen und Logistik als Bildraster mit Hover-Fußzeile. Camping unter Attraktionen; Krankenhaus (`ambulanceGarage`, `medicalArea`); Bandversorgung (`backstageArea`, `tourBusParking`) unter Logistik. |
-| Bauhöhe | `src/game/GameState.ts`, `src/game/placementPreview.ts` | `adjustBuildElevation`, `setBuildElevation` (0–6, **Halbstufen 0.5**, wie Wege). `snapBuildElevation` / `stepBuildElevation`. |
+| Bauhöhe / autoritative Vorschau | `src/game/GameState.ts`, `src/game/placementPreview.ts`, `src/game/commands/placementCommands.ts` | Fassadenmethode `previewPlacement`; Dispatch `previewPlacementCommand`; `PlacementPreviewRequest` / `PlacementPreviewResult`, `GhostRenderMode`; `adjustBuildElevation`, `setBuildElevation` (0–6, **Halbstufen 0.5**, wie Wege). |
 | Kosten / Upkeep / Appeal | `src/game/simulationConfig.ts` | `economy.buildings` |
-| Platzieren, prüfen, abräumen | `src/game/GameState.ts`, `src/view/picking.ts` | `canPlace`, `place`, `bulldoze`, `getAt`, `resolvePickedBuilding`; Abriss räumt Parkplätze und Krankenfelder (`clearDesignatedOccupancyAt`). `place` hebt Krankenfelder nicht auf; Dächer/Wände/Zäune stapeln (`allowsMedicalOverlay` in `medical.ts`) |
+| Platzieren, prüfen, abräumen | `src/game/placementService.ts`, `src/game/commands/placementCommands.ts`, `src/game/commands/bulldozeCommands.ts`, `src/game/GameState.ts`, `src/view/picking.ts` | `PlacementService` für Weg/Straße/Undo/konkreten Abriss; Commands und stabile Fassaden bleiben erhalten |
 | Bereich kopieren | `src/game/blueprints.ts`, [blueprints.md](blueprints.md) | Rechteck, `stampBlueprint`, lokale Bibliothek |
 | Deko-Slots, Overlap, Transforms | `src/game/scenery.ts` | `scenerySlot`, `sceneryOverlaps`, `SCENERY_KINDS` (Viertel plus Kante: Hecke, Banner, Wimpel, Lichterkette, Gebetsfahnen, Lattenzaun, Absperrseil, Luftschlangen, Leuchtband, Kette, Runenbanner, Jahrmarktlichter, Eiszapfenzaun, Rohrgitter); `isPedestrianBarrierKind` / `pedestrianBarrierOccupancy` für Hecke, Zaun und Wände |
 | Themen, Katalogfilter | `src/game/decoration.ts`, [decoration.md](decoration.md) | `DECORATION_THEMES`, `filterDecorationKinds` |
@@ -33,6 +33,20 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 - Neuer Gebäude- oder Werkzeugtyp braucht Einträge in `catalog.ts`,
   `SIMULATION_CONFIG.economy.buildings` (falls kostenpflichtig), `canPlace` /
   `place`, `buildMenu.ts`, Rendering und oft einen `GameCommand`.
+- `GameState.previewPlacement` ist der einzige Vertrag für Gültigkeit und
+  Meldung unter dem Mauszeiger. Er delegiert Gebäude an `canPlace` (inklusive
+  Bus-Haltestelle und 2×2/3×3-Depotflächen), Zugänge an
+  `canPlaceRideAccess`, Ausweisungen an deren zellweise Dry-Runs und
+  Blaupausen an `previewBlueprint`. Die Abfrage darf den Snapshot nicht ändern.
+- Platzierungs- und Abrissservices kennen keinen konkreten `GameState`. Die
+  Fassade liefert schmale Validierungs-/Mutationscallbacks; insbesondere bleibt
+  `GameState.canPlace` die gemeinsame autoritative Prüfung für Vorschau und Bau.
+  Weg-/Straßenhöhen, Kreuzungen, Rücknahme und die konkreten
+  Gebäude-/Overlay-/Straßen-Abrissmutationen liegen in `PlacementService`;
+  `bulldozeCommand` behält Zielauswahl und Flächenorchestrierung.
+- `BUILDING_GHOST_MODES` im Katalog bestimmt Modell- gegen Footprint-Vorschau.
+  Deko verfeinert dies auf Slotmodelle; bestehende Modelle werden als
+  transparente 3D-Geister wiederverwendet.
 - Scenery: fehlendes `decorationSlot` ist ein **Legacy-Vollfeld**. Alte Saves
   nicht still verkleinern. Placement, Preview, Kollision und Multiplayer
   müssen `scenery.ts` teilen. Instanzierte Deko trägt Building-IDs für Picking.
@@ -109,7 +123,9 @@ Kategoriefilter, Legacy-Vollfeld, `scenery.ts`-Platzierung). `tests/picking.ts` 
 `tests/stageTickets.ts` / `tests/stageInteraction.ts` (Bühnenfläche).
 `tests/operations.ts` (Imbiss von der Seite/hinten). `tests/buildMenu.ts`
 (Katalog und Bauhöhe-Reset). `tests/placementPreview.ts` (Halbstufen-Snap 0.5,
-Bodenkachel der Vorschau). Draw-Call-Grenzen: `tests/performanceGuards.ts`.
+Bodenkachel, Matrix aller Gebäudearten, Deko-Slots, Haltestelle,
+Bandversorgung, Medizin/Dächer, Depot-Footprints, Ride-Zugang, Blaupause und
+Mutationsfreiheit). Draw-Call-Grenzen: `tests/performanceGuards.ts`.
 Stützen nur im Freiraum: `tests/terrainLand.ts`, `tests/wayStructures.ts`.
 `tests/sealedWasteContainer.ts` (Katalog-Kapazität 80, Platzierung).
 `tests/blueprints.ts` (2×2-Deko kopieren, Preview ohne Mutation, Bibliothek).

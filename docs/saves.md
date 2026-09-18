@@ -1,6 +1,8 @@
 # Spielstände und Versionierung
 
-`GameSnapshot.version` ist die Schema-Version (aktuell **30**). Sichtbare
+`GameSnapshot.version` in `src/game/types/snapshot.ts` ist die kanonische
+Schema-Version. Aktuelle Snapshot-Version: **30**. `npm run test:docs` gleicht
+diesen dokumentierten Wert mit Typ, Bootstrap und Migration ab. Die sichtbare
 Spielversion kommt aus `package.json`. Feature-/Fix-Batches erhöhen den
 Patch (`npm version patch --no-git-tag-version`) und halten das Lockfile synchron.
 
@@ -8,10 +10,15 @@ Patch (`npm version patch --no-git-tag-version`) und halten das Lockfile synchro
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Snapshot-Form | `src/game/GameState.ts` | `GameSnapshot`, Konstruktor-Normalize |
+| Snapshot-Form | `src/game/types/snapshot.ts`, `src/game/types/entities.ts` | `GameSnapshot`, Entity-Strukturen |
+| Blank-/Neuspiel-Erzeugung | `src/game/snapshotBootstrap.ts` | `createBlankSnapshot`, `createInitialSnapshot` |
+| JSON-Migration | `src/game/snapshotMigration.ts` | `migrateSnapshot` |
+| Konstruktor-Reparaturen | `src/game/GameState.ts` | `GameState.constructor`, private Welt-/Index-Normalisierung |
 | Base64-Export | `src/game/saveText.ts` | `encodeSaveText`, `decodeSaveText`, `serializeSnapshot` |
 | Browser-API zum Server | `src/game/serverSaves.ts` | `listServerSaves`, `saveServerSave` |
 | Browser-Überlauf | `src/game/browserSaves.ts` | IndexedDB, wenn `localStorage` voll ist |
+| Gemeinsamer Browser-Speicher | `src/game/browserPersistence.ts` | IndexedDB-Adapter, `isQuotaError` |
+| Archiv-Viewmodell / HTML | `src/ui/saveArchive.ts` | Server- und Browser-Slots zusammenführen, Quelle erhalten, Texte escapen |
 | Katalog-Keys | `src/game/catalog.ts` | `SAVE_KEY`, `SAVE_SLOTS_KEY`, `saveSlotDataKey` |
 | Server-Slots | `server/saveSlots.ts` | SQLite `saves`-Tabelle in `data/accounts.db` |
 | Szenario-Defaults | `src/game/scenario.ts` | `normalizeScenarioSettings` |
@@ -26,11 +33,19 @@ Archiv. Passt ein Stand nicht in `localStorage` (~5 MB), liegt er in
 IndexedDB (`src/game/browserSaves.ts`). Schnellspeichern schreibt denselben
 vollen Snapshot, niemals ohne Besucher/Gebäude.
 
+Spielstände und Baubibliothek verwenden denselben kleinen IndexedDB-Adapter
+und dieselbe Quota-Erkennung aus `browserPersistence.ts`. Datenbanken,
+Object-Stores, localStorage-Schlüssel und die bisherige Überlauf-/Fallback-
+Reihenfolge bleiben getrennt und unverändert; es gibt keine Datenmigration.
+
 Server-Slots brauchen ein Konto (`/api/saves`, SQLite). `GET /api/saves`
 legt zuerst die Account-Tabellen an — sonst scheitert der `users`-Join
 für Gäste mit „no such table: users“. Gäste und Fehler (kein Server,
 keine JSON-Antwort, 401) zeigen eine deutsche Meldung; lokale Slots
 bleiben sichtbar. Persönliche Saves niemals committen oder überschreiben.
+Die UI-Zusammenführung in `ui/saveArchive.ts` verändert keine Snapshots:
+Server- und Browser-Slots behalten ihre Quelle, werden nur für Listen sortiert,
+und fremde Namen werden vor dem Einsetzen in HTML escaped.
 
 **Schnell speichern** / **Schnell laden** (Iconleiste → Spielstand, plus
 **Schnell laden** auf dem Titelbildschirm) nutzen den einzelnen
@@ -40,6 +55,11 @@ benannte Slots schreiben immer den vollen Snapshot — keine gekürzte
 Variante ohne Personen oder Objekte.
 
 ## Wichtige Regeln
+
+Die Extraktion von Besucher-Orchestrierung und Bau-/Abriss-/Coaster-Services
+ändert keine Snapshot-Felder oder Schema-Version. Die faire Routingqueue bleibt
+reiner Laufzeitzustand und wird nach dem Laden weiterhin aus Besucherzustand,
+Camp und Müll rekonstruiert.
 
 - Neue Snapshot-Felder: Default im Blank-Snapshot, Normalize beim Laden,
   Save-Kompatibilität für alte Stände, Multiplayer-Sync.
@@ -152,14 +172,13 @@ Teile stehen auf `y=0`, fehlende Bühnenhöhe verwendet `STAGE_TILE_HEIGHT`. Vor
 Höhen und x/z-Platzierung bleiben erhalten. Die geladene Kopie wird migriert,
 persönliche Slot-Dateien werden nicht überschrieben.
 
-`tests/regression.ts` (Save-Text). `tests/browserSaves.ts` (lokaler Slot-
-und Schnellspeichern-Roundtrip inkl. Besucher/Gebäude; Liste ohne
-`fromJSON`; gemockter Server-Client stürzt bei HTML/401 nicht ab).
+`tests/regression.ts` (Save-Text). `tests/snapshotModules.ts` (Blank-/Neuspiel,
+Migration und delegierender `GameState.fromJSON`-Einstieg).
+`tests/browserSaves.ts` (lokaler Slot- und Schnellspeichern-Roundtrip inkl.
+Besucher/Gebäude; Liste ohne `fromJSON`; gemockter Server-Client stürzt bei
+HTML/401 nicht ab).
 `tests/saves.ts` (Konto-API). Roundtrips in `tests/terrainSurface.ts`,
 `tests/rideAccess.ts`, `tests/festival.ts`, `tests/scenery.ts`.
-`tests/browserSaves.ts`: lokaler Slot und Schnellspeichern mit Besuchern
-und Gebäuden; Listing ohne `fromJSON`; Server-Client wirft bei HTML/Netz
-statt abzustürzen.
 
 ## Bei Änderungen dieses Dokument
 

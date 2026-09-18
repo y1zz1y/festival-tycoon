@@ -1,40 +1,21 @@
 import { contextDemolitionTarget } from './game/contextDemolition'
 import { isDecorationCatalogKind } from './game/decoration'
-import { isWasteBin } from './game/decorationWalls'
-import { isSealedWasteContainer } from './game/waste'
-import { GENRES } from './game/musicTaste'
-import { isScenery, isLargeScenery, scenerySlot, isEdgeScenery } from './game/scenery'
+import { scenerySlot } from './game/scenery'
 import { makeDraggable, makeResizable } from './dragPanel'
 import { mountStageEditor } from './stageEditor'
 import { stageStats } from './game/stageDesign'
 import { mountStaffDetails } from './staffDetailsUI'
-import { encodeSaveText, decodeSaveText, serializeSnapshot, storageErrorMessage } from './game/saveText'
-import {
-  deleteNamedSlotJson,
-  readNamedSlotJson,
-  readQuicksaveJson,
-  writeNamedSlotJson,
-  writeQuicksaveJson,
-} from './game/browserSaves'
-import { deleteServerSave, listServerSaves, loadServerSave, saveServerSave, shareServerSave, type ServerSaveSlot } from './game/serverSaves'
-import { ENVIRONMENTS } from './game/environments'
-import { groundInfo } from './game/ground'
-import type { Environment } from './game/environments'
 import { mountLogisticsUI } from './logisticsUI'
 import './style.css'
 import { mountFestivalUI } from './festivalUI'
 import { mountTickerUI } from './tickerUI'
-import { AUDIENCE_NAMES, SUPPLIES, WEATHER_ICONS, WEATHER_NAMES, formatTemperature, temperatureAt } from './game/festivalManagement'
+import { SUPPLIES, WEATHER_ICONS, WEATHER_NAMES, formatTemperature, temperatureAt } from './game/festivalManagement'
 import type { Supply } from './game/festivalManagement'
 import {
-  SHIRT_COLORS,
-  SHIRT_STYLE_LABELS,
   SHIRT_STYLES,
-  isPricedShopKind,
-  shopSupplyKind,
 } from './game/shopGoods'
 import { snapStockMinimum } from './game/supplyChain'
-import { BUILDING_KINDS, BUILDINGS, isCopyTool, isTerrainEditTool } from './game/catalog'
+import { BUILDING_KINDS, BUILDINGS, isCopyTool } from './game/catalog'
 import {
   captureBlueprint,
   describeBlueprint,
@@ -45,38 +26,26 @@ import {
   listBlueprintLibrary,
   saveBlueprintLibraryEntry,
 } from './game/blueprintLibrary'
-import { isSwimmableHeight, isWaterHeight, terrainCornerIndex, terrainToolMode } from './game/terrain'
 import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financePeriodTotal } from './game/finance'
 import { goalName, goalProgressText } from './game/scenarioGoals'
-import { SCENARIO_PRESETS, scenarioPreset } from './game/scenarioPresets'
-import { currentAccount, refreshAccount, registerAccount, signIn, signOut } from './accounts'
-import { mountTitleCrowd } from './titleCrowd'
+import { refreshAccount } from './accounts'
 import type { BuildingKind, Tool } from './game/catalog'
+import type { PlacementPreviewResult } from './game/placementPreview'
 import {
-  BUILD_CATEGORIES,
   buildCategoryById,
   categoryForTool,
-  isCatalogBuildCategory,
   subgroupForTool,
   type BuildCategoryId,
-  type BuildMenuItem,
 } from './game/buildMenu'
 import {
   DEFAULT_DECORATION_THEME,
-  DECORATION_CATEGORY_IDS,
-  DECORATION_CATEGORY_LABELS,
-  DECORATION_THEMES,
   decorationThemeOf,
-  filterDecorationKinds,
   isDecorationThemeId,
   type DecorationThemeId,
 } from './game/decoration'
 import {
-  TRACK_BANK_ANGLE,
   TRACK_PIECE_KINDS,
   TRACK_PIECES,
-  TRACK_PITCHES,
-  createTrackPiece,
   getCoasterType,
   type CoasterTypeId,
 } from './game/coasters'
@@ -86,34 +55,12 @@ import {
   applyConstructionPitch,
   constantPitchPieceKind,
   isTrackBankChoiceCurrentlyEnabled,
-  isTrackChainLiftEligible,
-  isTrackChainLiftVisible,
   isTrackPalettePieceEnabled,
   isTrackPitchChoiceCurrentlyEnabled,
-  listTrackBankChoices,
-  listTrackPalettePieces,
-  listTrackPitchChoices,
   resolveNextTrackPiece,
-  TRACK_DIRECTION_KINDS,
-  TRACK_SPECIAL_KINDS,
   type CoasterWindowState,
 } from './game/coasterConnections'
-import {
-  TRACK_CHAIN_PALETTE_ID,
-  describeCoasterConstructionChrome,
-  syncCoasterPaletteElement,
-  trackBankPaletteId,
-  trackPiecePaletteId,
-  trackPitchPaletteId,
-  updateCoasterConstruction,
-  type CoasterPaletteButtonSpec,
-} from './game/coasterConstructionUI'
-import type {
-  Coaster,
-  CoasterOperationMode,
-  DispatchMode,
-  TrackPieceKind,
-} from './game/coasters'
+import type { CoasterOperationMode, DispatchMode, TrackPieceKind } from './game/coasters'
 import { GameState } from './game/GameState'
 import { applyBusPlannerDrag, type BusPlannerColumn } from './game/busPlanner'
 import {
@@ -133,32 +80,15 @@ import type { PlacedBuilding } from './game/GameState'
 import type { RoadCell } from './game/logistics'
 import {
   describeRoadVehicleActivity,
-  describeRoadVehicleDestination,
-  formatRoadVehicleInspectLoad,
-  ROAD_VEHICLE_KIND_LABELS,
 } from './game/logistics'
 import {
-  connectedWasteDumpStats,
-  formatSealedContainerInspect,
-  formatWasteDumpAreaHover,
-  formatWasteDumpAreaInspect,
-  parseWasteDumpId,
   wasteDumpId,
 } from './game/waste'
-import {
-  formatBackstageHover,
-  formatBackstageInspect,
-} from './game/bandSupply'
 import { groupVisitorsByThought } from './game/visitorThoughts'
 import { enableMultiplayerCommands } from './net/bind'
 import { MultiplayerSession } from './net/session'
 import type { MultiplayerStatus } from './net/session'
 import { SIMULATION_CONFIG } from './game/simulationConfig'
-import {
-  SCENARIO_WORLD_SIZES,
-  normalizeScenarioSettings,
-} from './game/scenario'
-import type { ScenarioSettings } from './game/scenario'
 import { INVENTORY_ITEMS } from './game/inventory'
 import { STAFF_DEFINITIONS, STAFF_ROLES, SWEEPER_STAFF_ICON, sweeperStaffName } from './game/staff'
 import type { StaffRole, StaffState } from './game/staff'
@@ -184,8 +114,34 @@ import { WorldView } from './view/WorldView'
 import { FestivalAudio } from './view/FestivalAudio'
 import type { CellPosition, PathAnchor } from './view/WorldView'
 import { isTextEntryTarget } from './uiFocus'
+import { mountTitleScreen, type TitleScreenController } from './ui/titleScreen'
+import { mountSaveController } from './ui/saveController'
+import { createScenarioFormController } from './ui/scenarioScreen'
 import { mountMobileUI } from './mobileUI'
 import { mountUpdateNotice } from './updateNotice'
+import { startGameLoop } from './app/gameLoop'
+import { mountAppShell } from './app/shell'
+import { applyDirectCellTool } from './input/toolRouter'
+import {
+  handleCoasterCell,
+  handleInspectCell,
+  handlePathEditorCell,
+} from './input/cellToolHandlers'
+import {
+  createPathToolController,
+  rectangleCells,
+  type PathToolController,
+} from './input/pathToolController'
+import { createBuildCatalog } from './ui/buildCatalog'
+import { DifferentialUpdates, listFingerprint } from './ui/differentialUpdates'
+import { escapeHtml, formatMoney, formatTime } from './ui/format'
+import {
+  updateEntityPanel as renderEntityPanel,
+  type EntitySelection,
+} from './ui/entityPanel'
+import { contextHelpText } from './ui/contextHelp'
+import { updateCoasterBuilderPanel } from './ui/coasterBuilderPanel'
+import { mountVisitorPanel } from './ui/visitorPanel'
 
 function requireElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector)
@@ -210,68 +166,6 @@ function closeBuildSubmenus(): void {
     .forEach((element) => element.classList.remove('open'))
 }
 
-/**
- * The publisher's line carries a correction, the way a poster gets one once it is
- * already printed: „Watch“ struck out with a painted cross and „Code“ brushed in
- * underneath. Both are drawn, not typed — stroked paths pushed around by a little
- * noise, so the edges come out ragged the way a loaded brush leaves them.
- */
-const PUBLISHER_MARK = `<svg class="kicker-brush" viewBox="0 0 136 74" aria-hidden="true" focusable="false">
-  <defs>
-    <filter id="kicker-bristles" x="-25%" y="-25%" width="150%" height="150%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="2" seed="7" result="noise" />
-      <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.6" xChannelSelector="R" yChannelSelector="G" />
-    </filter>
-    <filter id="kicker-bristles-word" x="-25%" y="-25%" width="150%" height="150%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.11" numOctaves="2" seed="19" result="noise" />
-      <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.1" xChannelSelector="R" yChannelSelector="G" />
-    </filter>
-  </defs>
-  <g fill="none" stroke="var(--ts-red)" stroke-linecap="round" stroke-linejoin="round">
-    <g filter="url(#kicker-bristles)">
-      <path d="M18 6 C 46 16, 82 27, 118 36" stroke-width="5" />
-      <path d="M118 5 C 91 15, 54 26, 19 35" stroke-width="4.4" />
-      <path d="M24 9 C 50 18, 84 28, 114 35" stroke-width="1.8" opacity=".7" />
-      <path d="M112 10 C 86 18, 52 28, 24 34" stroke-width="1.6" opacity=".65" />
-      <path d="M122 38 l 5 3" stroke-width="1.4" opacity=".55" />
-      <path d="M15 3 l -4 -3" stroke-width="1.2" opacity=".5" />
-    </g>
-    <g filter="url(#kicker-bristles-word)" transform="translate(68 58) scale(1.12) translate(-68 -58) rotate(-2.5 68 58)">
-      <g stroke-width="5.2">
-        <path d="M47 46 C 35 39, 24 46, 24 56 C 24 67, 35 73, 48 67" />
-        <path d="M63 44 C 52 45, 47 57, 52 66 C 59 74, 71 70, 71 58 C 71 47, 67 44, 60 45" />
-        <path d="M79 44 C 78 53, 77 62, 78 71" />
-        <path d="M79 45 C 91 43, 98 51, 97 58 C 96 67, 87 72, 78 70" />
-        <path d="M117 45 C 110 43, 104 43, 102 47 C 100 53, 100 63, 102 69 C 106 72, 113 71, 117 68" />
-        <path d="M103 57 C 106 56, 110 56, 113 57" />
-      </g>
-      <g stroke-width="2.4" opacity=".55">
-        <path d="M46 48 C 36 42, 26 48, 26 56" />
-        <path d="M70 52 C 71 60, 67 68, 60 68" />
-        <path d="M80 47 C 79 56, 79 64, 79 69" />
-        <path d="M81 46 C 91 45, 96 52, 95 58" />
-        <path d="M116 46 C 110 45, 105 45, 103 48" />
-      </g>
-      <g stroke-width="1.2" opacity=".45">
-        <path d="M118 70 l 5 2" />
-        <path d="M22 60 l -4 2" />
-      </g>
-    </g>
-  </g>
-</svg>`
-
-/** How often the game saves by itself. Fifteen minutes unless the player says otherwise. */
-const AUTOSAVE_INTERVALS = [
-  { minutes: 5, label: 'Alle 5 Minuten' },
-  { minutes: 10, label: 'Alle 10 Minuten' },
-  { minutes: 15, label: 'Alle 15 Minuten' },
-  { minutes: 30, label: 'Alle 30 Minuten' },
-  { minutes: 60, label: 'Jede Stunde' },
-  { minutes: 120, label: 'Alle 2 Stunden' },
-  { minutes: 0, label: 'Aus' },
-] as const
-const AUTOSAVE_DEFAULT_MINUTES = 15
-const AUTOSAVE_KEY = 'festival-autosave-minutes'
 const AUDIO_MUTE_KEY = 'festival-audio-muted'
 /** The one slot the automatic save writes to, over and over. */
 const AUTOSAVE_NAME = 'Autospeichern'
@@ -1121,6 +1015,8 @@ app.innerHTML = `
   </main>
 `
 
+mountAppShell(requireElement<HTMLDivElement>('#app'))
+
 // Left stats bar and the icon toolbar can have different bottoms. Panels
 // spawn below whichever is lower.
 const topbarElement = requireElement<HTMLElement>('.topbar')
@@ -1145,34 +1041,6 @@ const trackSlopePalette = requireElement<HTMLElement>('#track-slope-palette')
 const trackBankPalette = requireElement<HTMLElement>('#track-bank-palette')
 const trackSpecialPalette = requireElement<HTMLElement>('#track-special-palette')
 const trackSpecialToggle = requireElement<HTMLButtonElement>('#toggle-track-specials')
-const TRACK_PIECE_ICONS: Record<TrackPieceKind, string> = {
-  station: '▰',
-  straight: '↑',
-  slopeGentleUp: '⤴',
-  slopeUp: '↗',
-  slopeGentleDown: '⤵',
-  slopeDown: '↘',
-  pitchTransition: '⌁',
-  bankTransition: '⤨',
-  curveLeft1: '↰¹',
-  curveRight1: '↱¹',
-  curveLeft2: '↰²',
-  curveRight2: '↱²',
-  curveLeft3: '↰³',
-  curveRight3: '↱³',
-  curveLeft4: '↰⁴',
-  curveRight4: '↱⁴',
-  sBendLeft: '⤴',
-  sBendRight: '⤵',
-  verticalLoop: '◯',
-  halfLoopUp: '∩',
-  halfLoopDown: '∪',
-  photo: '📷',
-  splash: '💦',
-  brakes: '▥',
-  helixLeft: '↺',
-  helixRight: '↻',
-}
 TRACK_PIECE_KINDS.forEach((kind) => {
   const piece = TRACK_PIECES[kind]
   trackPieceSelect.insertAdjacentHTML(
@@ -1182,45 +1050,6 @@ TRACK_PIECE_KINDS.forEach((kind) => {
 })
 const coasterTypeName = requireElement<HTMLElement>('#coaster-type-name')
 const coasterTypeHint = requireElement<HTMLElement>('#coaster-type-hint')
-
-const TRACK_PITCH_BUTTONS: readonly { pitch: number; icon: string; title: string; label: string }[] = [
-  { pitch: TRACK_PITCHES.steepDown, icon: '⇘', title: 'Steil abwärts', label: 'Steil ab' },
-  { pitch: TRACK_PITCHES.gentleDown, icon: '↘', title: 'Sanft abwärts', label: 'Sanft ab' },
-  { pitch: 0, icon: '→', title: 'Flach', label: 'Flach' },
-  { pitch: TRACK_PITCHES.gentleUp, icon: '↗', title: 'Sanft aufwärts', label: 'Sanft auf' },
-  { pitch: TRACK_PITCHES.steepUp, icon: '⇗', title: 'Steil aufwärts', label: 'Steil auf' },
-]
-const TRACK_BANK_BUTTONS: readonly { bank: number; icon: string; title: string; label: string }[] = [
-  { bank: -TRACK_BANK_ANGLE, icon: '◢', title: 'Neigung links einleiten', label: 'Links' },
-  { bank: 0, icon: '━', title: 'Seitliche Neigung ausleiten', label: 'Neutral' },
-  { bank: TRACK_BANK_ANGLE, icon: '◣', title: 'Neigung rechts einleiten', label: 'Rechts' },
-]
-
-function trackPiecePaletteSpecs(
-  entries: readonly { kind: TrackPieceKind; enabled: boolean }[],
-  activeKind: TrackPieceKind,
-): CoasterPaletteButtonSpec[] {
-  return entries.map((entry) => {
-    const piece = TRACK_PIECES[entry.kind]
-    return {
-      id: trackPiecePaletteId(entry.kind),
-      enabled: entry.enabled,
-      active: entry.kind === activeKind,
-      title: `${piece.name} · ${formatMoney(piece.cost)}`,
-      icon: TRACK_PIECE_ICONS[entry.kind],
-      label: piece.station ? 'Station' : piece.radius ? `${piece.radius}×${piece.radius}` : piece.name,
-      attrs: { 'data-track-piece': entry.kind },
-    }
-  })
-}
-
-function renderTrackPalette(
-  palette: HTMLElement,
-  entries: readonly { kind: TrackPieceKind; enabled: boolean }[],
-  activeKind: TrackPieceKind,
-): void {
-  syncCoasterPaletteElement(palette, trackPiecePaletteSpecs(entries, activeKind))
-}
 
 const canvas = requireElement<HTMLCanvasElement>('#game-canvas')
 const money = requireElement<HTMLElement>('#money')
@@ -1252,22 +1081,6 @@ const averageParty = requireElement<HTMLElement>('#average-party')
 const averagePartyBar = requireElement<HTMLElement>('#average-party-bar')
 const contextHelp = requireElement<HTMLElement>('#context-help')
 const toast = requireElement<HTMLElement>('#toast')
-const visitorPanel = requireElement<HTMLElement>('#visitor-panel')
-const visitorName = requireElement<HTMLElement>('#visitor-name')
-const visitorThought = requireElement<HTMLElement>('#visitor-thought')
-const visitorState = requireElement<HTMLElement>('#visitor-state')
-const visitorBudget = requireElement<HTMLElement>('#visitor-budget')
-const visitorAlcoholDisposition = requireElement<HTMLElement>('#visitor-alcohol-disposition')
-const visitorCamping = requireElement<HTMLElement>('#visitor-camping')
-const visitorTicket = requireElement<HTMLElement>('#visitor-ticket')
-const visitorSleepRhythm =
-  requireElement<HTMLElement>('#visitor-sleep-rhythm')
-const visitorInventory = requireElement<HTMLElement>('#visitor-inventory')
-const visitorCrowding = requireElement<HTMLElement>('#visitor-crowding')
-const visitorAttractiveness =
-  requireElement<HTMLElement>('#visitor-attractiveness')
-const visitorParty = requireElement<HTMLElement>('#visitor-party')
-const visitorPreferences = requireElement<HTMLElement>('#visitor-preferences')
 const pathConstruction = requireElement<HTMLElement>('#path-construction')
 makeDraggable(requireElement<HTMLElement>('.path-construction-header'), pathConstruction)
 const constructionStatus = requireElement<HTMLElement>('#construction-status')
@@ -1298,32 +1111,18 @@ const trackNextButton = requireElement<HTMLButtonElement>('#track-next')
 const trackSelection = requireElement<HTMLElement>('#track-selection')
 const deleteTrackButton = requireElement<HTMLButtonElement>('#delete-track-from-here')
 const entityPanel = requireElement<HTMLElement>('#entity-panel')
-const entityIcon = requireElement<HTMLElement>('#entity-icon')
-const entityType = requireElement<HTMLElement>('#entity-type')
-const entityName = requireElement<HTMLElement>('#entity-name')
-const entityStatus = requireElement<HTMLElement>('#entity-status')
 const entityStats = requireElement<HTMLElement>('#entity-stats')
-const entityTabs = requireElement<HTMLElement>('#entity-tabs')
 const entityOverview = requireElement<HTMLElement>('#entity-overview')
-const entityDynamics = requireElement<HTMLElement>('#entity-dynamics')
-const dynamicsSafety = requireElement<HTMLElement>('#dynamics-safety')
-const dynamicsStats = requireElement<HTMLElement>('#dynamics-stats')
-const dynamicsInfo = requireElement<HTMLElement>('#dynamics-info')
-const telemetryChart = requireElement<HTMLCanvasElement>('#telemetry-chart')
-const priceOptions = requireElement<HTMLElement>('#price-options')
 const entityPriceInput = requireElement<HTMLInputElement>('#entity-price')
 const applyPriceToKindButton =
   requireElement<HTMLButtonElement>('#apply-price-to-kind')
-const shirtOptions = requireElement<HTMLElement>('#shirt-options')
 const shirtColorPalette = requireElement<HTMLElement>('#shirt-color-palette')
 const shirtStyleSelect = requireElement<HTMLSelectElement>('#shirt-style')
-const coasterOptions = requireElement<HTMLElement>('#coaster-options')
 const dispatchModeSelect = requireElement<HTMLSelectElement>('#dispatch-mode')
 const dispatchIntervalInput = requireElement<HTMLInputElement>('#dispatch-interval')
 const dispatchValue = requireElement<HTMLElement>('#dispatch-value')
 const operationModeSelect = requireElement<HTMLSelectElement>('#operation-mode')
 const accessControlOptions = requireElement<HTMLElement>('#access-control-options')
-const accessSignal = requireElement<HTMLElement>('#access-signal')
 const accessSchedule = requireElement<HTMLElement>('#access-schedule')
 const accessSensor = requireElement<HTMLElement>('#access-sensor')
 const accessSlotsWrap = requireElement<HTMLElement>('#access-slots-wrap')
@@ -1342,7 +1141,6 @@ const accessPassage = requireElement<HTMLElement>('#access-passage')
 const accessEmergency = requireElement<HTMLElement>('#access-emergency')
 const accessOpenInEmergency = requireElement<HTMLInputElement>('#access-open-in-emergency')
 const accessClearArea = requireElement<HTMLButtonElement>('#access-clear-area')
-const securityOptions = requireElement<HTMLElement>('#security-options')
 const securityThoroughness =
   requireElement<HTMLInputElement>('#security-thoroughness')
 const securityThoroughnessValue =
@@ -1352,7 +1150,6 @@ const securityFlowShareValue =
   requireElement<HTMLElement>('#security-flow-share-value')
 const securityProhibitedItems =
   requireElement<HTMLElement>('#security-prohibited-items')
-const securityStaffing = requireElement<HTMLElement>('#security-staffing')
 const staffPanel = requireElement<HTMLElement>('#staff-panel')
 const staffList = requireElement<HTMLElement>('#staff-list')
 const visitorOverviewPanel =
@@ -1381,7 +1178,6 @@ const supplyStatus = requireElement<HTMLElement>('#supply-status')
 const supplyDeliveries = requireElement<HTMLElement>('#supply-deliveries')
 const supplyRemoveDepot = requireElement<HTMLButtonElement>('#supply-remove-depot')
 const depotOptions = requireElement<HTMLElement>('#depot-options')
-const depotRoleHint = requireElement<HTMLElement>('#depot-role-hint')
 const depotDistribution = requireElement<HTMLSelectElement>('#depot-distribution')
 const depotWorkers = requireElement<HTMLInputElement>('#depot-workers')
 const depotWorkersValue = requireElement<HTMLElement>('#depot-workers-value')
@@ -1412,7 +1208,6 @@ const visitorPagePrevious =
 const visitorPageNext =
   requireElement<HTMLButtonElement>('#visitor-page-next')
 const visitorPageLabel = requireElement<HTMLElement>('#visitor-page-label')
-const followVisitorButton = requireElement<HTMLButtonElement>('#follow-visitor')
 const multiplayerToggle = requireElement<HTMLButtonElement>('#toggle-multiplayer')
 const multiplayerPanel = requireElement<HTMLElement>('#multiplayer-panel')
 const multiplayerStatusBadge = requireElement<HTMLElement>('#multiplayer-status-badge')
@@ -1468,6 +1263,7 @@ stageEditorButton.addEventListener('click', () => {
 })
 document.querySelector('#action-group-festival')!.append(stageEditorButton)
 const editStageButton = document.createElement('button')
+editStageButton.id = 'edit-selected-stage'
 editStageButton.textContent='Bühne gestalten';editStageButton.hidden=true
 entityOverview.append(editStageButton)
 editStageButton.addEventListener('click',()=>{if(selectedEntity?.type==='building')stageEditor.open(selectedEntity.id)})
@@ -1475,8 +1271,6 @@ const multiplayer = new MultiplayerSession(game)
 let hoveredCell: CellPosition | null = null
 let rideAccessPlacement: {id:string;type:'entrance'|'exit'} | null = null
 let activeRideId: string | null = null
-let selectedVisitorId: string | null = null
-let followedVisitorId: string | null = null
 let staffPanelFingerprint = ''
 let visitorOverviewFingerprint = ''
 let dayPlanFingerprint = ''
@@ -1492,7 +1286,6 @@ const hourOptions = Array.from(
 ).join('')
 dayEntryHour.innerHTML = hourOptions
 dayExitHour.innerHTML = hourOptions
-let securityItemsFingerprint = ''
 let pathWindowOpen = false
 let roadEditorOpen = false
 let pathEditorActive = false
@@ -1511,12 +1304,6 @@ let pathHistory: Array<{
   previousRoad?: RoadCell
   roadExisted?: boolean
 }> = []
-let dragPathStart: CellPosition | null = null
-let dragPathEnd: CellPosition | null = null
-let dragPathElevation = 0
-let terrainDragOriginHeight = 0
-let sceneryDragSlot: number | null = null
-let sceneryDragRotation = 0
 let copyClipboard: Blueprint | null = null
 let cameraQuarter = 0
 let coasterBuilderActive = false
@@ -1529,7 +1316,7 @@ let coasterTargetBank = 0
 let pendingCoasterTypeId: CoasterTypeId = 'classicSteel'
 let coasterSelectedKind: TrackPieceKind = 'station'
 let lastCoasterConstructionKey: string | null = null
-let selectedEntity: { type: 'building' | 'coaster' | 'vehicle' | 'access' | 'depot' | 'wasteDump' | 'backstage'; id: string } | null = null
+let selectedEntity: EntitySelection | null = null
 let logisticsOverlayVisible = false
 let accessAreaDrawing = false
 let entityTab: 'overview' | 'dynamics' = 'overview'
@@ -1538,6 +1325,8 @@ let toastTimer = 0
 let crowdingOverlayVisible = false
 let attractivenessOverlayVisible = false
 let partyOverlayVisible = false
+const differentialUpdates = new DifferentialUpdates()
+let pathToolController: PathToolController
 
 let view: WorldView
 try {
@@ -1546,6 +1335,7 @@ try {
     (cell) => handleCellClick(cell),
     (cell) => {
       hoveredCell = cell
+      refreshPlacementPreview()
       updateRideAccessPreview(cell)
       updateCopyPreview(cell)
       if (shiftElevationApplies()) {
@@ -1555,7 +1345,7 @@ try {
       updateContextHelp()
     },
     (visitorId) => selectVisitor(visitorId),
-    (cell) => paintPath(cell),
+    (cell) => pathToolController.paint(cell),
     (delta) => {
       if (pathEditorActive) {
         setPathSlope(pathSlope + delta)
@@ -1563,8 +1353,8 @@ try {
         game.adjustBuildElevation(delta)
       }
     },
-    (cell) => startPathDrag(cell),
-    () => finishPathDrag(),
+    (cell) => pathToolController.start(cell),
+    () => pathToolController.finish(),
     (coasterId, pieceIndex) => {
       if (!coasterBuilderActive) return
       const coaster = game.getCoaster(coasterId)
@@ -1596,7 +1386,21 @@ try {
 }
 
 const supplyPlanner = mountLogisticsUI(() => game, view, showToast)
-view.setPlacementValidator((kind, x, z, slot) => game.canPlace(kind, x, z, slot).ok)
+pathToolController = createPathToolController({
+  getGame: () => game,
+  getModes: () => ({
+    editorActive: pathEditorActive,
+    demolishActive: pathDemolishActive,
+    constructionType: pathConstructionType,
+    direction: pathDirection,
+    backstageEraseMode,
+  }),
+  getFootType: () => supplyPlanner.getFootType(),
+  getRoadType: () => supplyPlanner.getRoadType(),
+  applyCopySelection,
+  demolish: demolishPathAt,
+  showToast,
+}, view)
 view.setConstructionHandlers((height, cell) => {
   game.setBuildElevation(height)
   if (pathEditorActive && cell) {
@@ -1618,6 +1422,12 @@ view.setConstructionHandlers((height, cell) => {
   return true
 })
 const staffDetails = mountStaffDetails(() => game, view, showToast, () => supplyPlanner.releaseTool())
+const visitorPanelController = mountVisitorPanel({
+  getGame: () => game,
+  getPreviewMode: () => visitorPreviewMode,
+  view,
+  closeEntityPanel: () => { closeEntityPanel(); staffDetails.close() },
+})
 const tickerUI = mountTickerUI({
   focusWorld: (x, z) => view.focusWorldPosition(x, z),
 })
@@ -1772,8 +1582,9 @@ function bindGameState(nextGame: GameState): void {
   closeRideBuilder(false)
   // Whichever way a game arrives — a scenario, a save, a multiplayer join — it is a
   // game now, so the title screen steps out of the way.
-  setTitleScreenOpen(false)
+  titleScreenController.setOpen(false)
   game = nextGame
+  differentialUpdates.invalidate()
   enableMultiplayerCommands(game)
   multiplayer.attach(game)
   view.invalidate()
@@ -1871,26 +1682,37 @@ function bindGameState(nextGame: GameState): void {
     if (activeRideId && snapshot.selectedTool!=='ride' && snapshot.selectedTool!=='inspect') closeRideBuilder(false)
     if (pathWindowOpen && !(roadEditorOpen ? ROAD_WINDOW_TOOLS : PATH_WINDOW_TOOLS).includes(snapshot.selectedTool)) closePathEditor()
     else if (pathWindowOpen) updatePathEditor()
-    document.querySelectorAll<HTMLElement>('[data-tool]').forEach((button) => {
-      const typeMatch = !button.dataset.coasterType || button.dataset.coasterType === selectedCoasterTypeId()
-      button.classList.toggle(
-        'active',
-        button.dataset.tool === snapshot.selectedTool &&
-          typeMatch &&
-          (snapshot.selectedTool !== 'ride' || (button.dataset.bungee === 'true') === (view.bungeePreviewHeight !== null)),
-      )
-    })
-    if (!buildCatalogStatus.hidden && !catalogHoverActive) showSelectedCatalogStatus()
-    const activeCategory = categoryForTool(
-      snapshot.selectedTool,
-      snapshot.selectedTool === 'ride' && view.bungeePreviewHeight !== null,
+    differentialUpdates.run(
+      'tool-and-speed-controls',
+      listFingerprint([
+        snapshot.selectedTool,
+        snapshot.speed,
+        selectedCoasterTypeId(),
+        view.bungeePreviewHeight,
+      ]),
+      () => {
+        document.querySelectorAll<HTMLElement>('[data-tool]').forEach((button) => {
+          const typeMatch = !button.dataset.coasterType || button.dataset.coasterType === selectedCoasterTypeId()
+          button.classList.toggle(
+            'active',
+            button.dataset.tool === snapshot.selectedTool &&
+              typeMatch &&
+              (snapshot.selectedTool !== 'ride' || (button.dataset.bungee === 'true') === (view.bungeePreviewHeight !== null)),
+          )
+        })
+        if (!buildCatalogStatus.hidden) buildCatalog.syncSelection()
+        const activeCategory = categoryForTool(
+          snapshot.selectedTool,
+          snapshot.selectedTool === 'ride' && view.bungeePreviewHeight !== null,
+        )
+        document.querySelectorAll<HTMLElement>('.rct-toolbar [data-build-category]').forEach((button) => {
+          button.classList.toggle('contains-active', button.dataset.buildCategory === activeCategory)
+        })
+        document.querySelectorAll<HTMLElement>('[data-speed]').forEach((button) => {
+          button.classList.toggle('active', Number(button.dataset.speed) === snapshot.speed)
+        })
+      },
     )
-    document.querySelectorAll<HTMLElement>('.rct-toolbar [data-build-category]').forEach((button) => {
-      button.classList.toggle('contains-active', button.dataset.buildCategory === activeCategory)
-    })
-    document.querySelectorAll<HTMLElement>('[data-speed]').forEach((button) => {
-      button.classList.toggle('active', Number(button.dataset.speed) === snapshot.speed)
-    })
     updateContextHelp()
     updateVisitorPanel()
     updateCoasterBuilder()
@@ -2511,20 +2333,6 @@ function updateVisitorOverview(force = false): void {
   visitorSortDirection.textContent = visitorOverviewAscending ? '↑' : '↓'
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(
-    /[&<>"']/g,
-    (character) =>
-      ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;',
-      })[character]!,
-  )
-}
-
 let bungeeBuildMode = false
 requireElement<HTMLInputElement>('#bungee-height').addEventListener('input', e => {
   if (bungeeBuildMode) view.bungeePreviewHeight = Math.max(4, Math.min(200, Number((e.target as HTMLInputElement).value) || 20))
@@ -2542,47 +2350,12 @@ function handleCellClick(cell: CellPosition): void {
     showToast(result.message,!result.ok); return
   }
   if (supplyPlanner.handleCell(cell)) return
-  if (coasterBuilderActive) {
-    if (coasterAccessMode && activeCoasterId) {
-      const result = game.setCoasterAccess(
-        activeCoasterId,
-        coasterAccessMode,
-        cell.x,
-        cell.z,
-      )
-      if (result.ok) coasterAccessMode = null
-      showToast(result.message, !result.ok)
-      updateCoasterBuilder()
-      return
-    }
-    const clickedCoaster = game.getCoasterAt(cell.x, cell.z)
-    if (
-      clickedCoaster &&
-      !clickedCoaster.closed
-    ) {
-      activeCoasterId = clickedCoaster.id
-      coasterStartCandidate = null
-      coasterEditIndex = clickedCoaster.pieces.length - 1
-      showToast(`${clickedCoaster.name} wird weitergebaut`)
-      updateCoasterBuilder()
-      return
-    }
-    if (
-      clickedCoaster &&
-      clickedCoaster.closed
-    ) {
-      openEntityInfoForCoaster(clickedCoaster.id)
-      return
-    }
-    if (!activeCoasterId) {
-      coasterStartCandidate = { ...cell }
-      showToast('Startpunkt gesetzt – ausrichten und im Menü bauen')
-      updateCoasterBuilder()
-      return
-    }
-    showToast('Wähle im Achterbahn-Editor das nächste Element')
-    return
-  }
+  if (handleCoasterCell(game, cell, { active: coasterBuilderActive, coasterId: activeCoasterId, accessMode: coasterAccessMode }, {
+    setAccessMode: () => { coasterAccessMode = null },
+    continueCoaster: (coaster) => { activeCoasterId = coaster.id; coasterStartCandidate = null; coasterEditIndex = coaster.pieces.length - 1 },
+    setStart: (target) => { coasterStartCandidate = { ...target } },
+    openFinished: openEntityInfoForCoaster, update: updateCoasterBuilder, toast: showToast,
+  })) return
 
   if (pathWindowOpen && pathDemolishActive) {
     demolishPathAt(cell)
@@ -2594,70 +2367,15 @@ function handleCellClick(cell: CellPosition): void {
     return
   }
 
-  if (pathEditorActive) {
-    if (roadEditorOpen) {
-      const existing = game.getRoadCellAt(cell.x, cell.z)
-      const result = existing ? { ok: true, message: 'Startpunkt gewählt' } : buildRoadCell(cell)
-      if (result.ok) {
-        pathAnchor = {
-          x: cell.x,
-          z: cell.z,
-          elevation: existing?.elevation ?? game.getTerrainHeight(cell.x, cell.z),
-        }
-        pathHistory = []
-        if (shiftElevationHeld) {
-          shiftElevationOrigin = lockShiftElevationOrigin(shiftElevationOrigin, pathAnchor)
-        }
-        updatePathEditor()
-      }
-      showToast(result.message, !result.ok)
-      return
-    }
-    const path =
-      game.getPathAt(cell.x, cell.z, game.snapshot.buildElevation) ??
-      game.getPathAt(cell.x, cell.z)
-    if (path) {
-      pathAnchor = { x: path.x, z: path.z, elevation: path.elevation }
-      pathHistory = []
-      if (shiftElevationHeld) {
-        shiftElevationOrigin = lockShiftElevationOrigin(shiftElevationOrigin, pathAnchor)
-      }
-      updatePathEditor()
-      showToast('Startpunkt gewählt')
-      return
-    }
-    const elevation = game.snapshot.buildElevation
-    let result = game.placePathSegment(
-      cell.x,
-      cell.z,
-      elevation,
-      pathConstructionType,
-      pathDirection,
-      pathSlope,
-      supplyPlanner.getFootType(),
-    )
-    if (!result.ok && pathSlope !== 0) {
-      result = game.placePathSegment(
-        cell.x,
-        cell.z,
-        elevation,
-        pathConstructionType,
-        pathDirection,
-        0,
-        supplyPlanner.getFootType(),
-      )
-    }
-    if (!result.ok) {
-      showToast(result.message, true)
-      return
-    }
-    pathAnchor = { x: cell.x, z: cell.z, elevation }
-    pathHistory = []
-    if (shiftElevationHeld) {
-      shiftElevationOrigin = lockShiftElevationOrigin(shiftElevationOrigin, pathAnchor)
-    }
-    updatePathEditor()
-    showToast(result.message)
+  const pathClick = handlePathEditorCell(game, cell, {
+    active: pathEditorActive, road: roadEditorOpen, buildElevation: game.snapshot.buildElevation,
+    constructionType: pathConstructionType, direction: pathDirection, slope: pathSlope,
+    footType: supplyPlanner.getFootType(), roadType: supplyPlanner.getRoadType(),
+    shiftHeld: shiftElevationHeld, shiftOrigin: shiftElevationOrigin,
+  })
+  if (pathClick.handled) {
+    if (pathClick.anchor) { pathAnchor = pathClick.anchor; pathHistory = []; shiftElevationOrigin = pathClick.shiftOrigin ?? shiftElevationOrigin; updatePathEditor() }
+    if (pathClick.message) showToast(pathClick.message, pathClick.error)
     return
   }
 
@@ -2669,7 +2387,7 @@ function handleCellClick(cell: CellPosition): void {
       updateCopyPreview(cell)
       return
     }
-    applyCopySelection(createCampingArea(cell, cell))
+    applyCopySelection(rectangleCells(cell, cell))
     return
   }
   if (isBusPlannerOpen()) {
@@ -2678,505 +2396,40 @@ function handleCellClick(cell: CellPosition): void {
       (cell.buildingId ? game.getBusStopAt(cell.x, cell.z, cell.buildingId) : undefined)
     if (stop && addPlannedBusStop(stop.id)) return
   }
-  if (tool === 'inspect') {
-    const vehicle = game.getVehicleAt(cell.x, cell.z)
-    if (vehicle) {
-      if (vehicle.kind === 'sweeper') {
-        openSweeperStaff(vehicle.id)
-        return
-      }
-      openEntityInfoForVehicle(vehicle.id)
-      return
-    }
-    const coaster = game.getCoasterAt(cell.x, cell.z)
-    if (coaster) {
-      if (!coaster.closed) {
-        openCoasterBuilder(coaster.id)
-        showToast(`${coaster.name} wird am letzten Element fortgesetzt`)
-      } else {
-        openEntityInfoForCoaster(coaster.id)
-      }
-      return
-    }
-    const access = game.getAccessControlAt(cell.x, cell.z)
-    if (access) {
-      openEntityInfoForAccess(access.id)
-      return
-    }
-    const building = cell.buildingId ? game.snapshot.buildings.find(b => b.id === cell.buildingId) : game.getAt(cell.x, cell.z, undefined, cell.localX, cell.localZ)
-    const depot = game.getDepotAt(cell.x, cell.z)
-    if (building?.kind === 'ride') openRideBuilder(building.id)
-    else if (building) openEntityInfoForBuilding(building.id)
-    else if (depot) openEntityInfoForDepot(depot.id)
-    else if (game.getCampingCellAt(cell.x, cell.z)) showToast('Ausgewiesener Zeltbereich')
-    else if (game.getWasteDumpAt(cell.x, cell.z)) openEntityInfoForWasteDump(cell.x, cell.z)
-    else if (game.getBackstageCellAt(cell.x, cell.z)) openEntityInfoForBackstage(cell.x, cell.z)
-    else {
-      const height = game.getTerrainHeight(cell.x, cell.z)
-      const label =
-        isWaterHeight(height, game.getWaterLevel())
-          ? isSwimmableHeight(height, game.getWaterLevel())
-            ? 'Wasser zum Baden'
-            : 'Wasser'
-          : height > 0
-            ? `Hügel Ebene ${height}`
-            : 'Unbebautes Grundstück'
-      showToast(label)
-    }
-    return
-  }
+  if (handleInspectCell(game, cell, {
+    openSweeper: openSweeperStaff, openVehicle: openEntityInfoForVehicle,
+    openCoasterBuilder, openCoaster: openEntityInfoForCoaster, openAccess: openEntityInfoForAccess,
+    openRide: openRideBuilder, openBuilding: openEntityInfoForBuilding, openDepot: openEntityInfoForDepot,
+    openWasteDump: openEntityInfoForWasteDump, openBackstage: openEntityInfoForBackstage, toast: showToast,
+  })) return
 
-  if (
-    isTerrainEditTool(tool)
-  ) {
-    const mode = terrainToolMode(tool)
-    if (!mode) return
-    const result = game.editTerrain(
-      cell.x,
-      cell.z,
-      mode,
-      terrainCornerIndex(cell.localX, cell.localZ),
-    )
-    showToast(result.message, !result.ok)
-    return
+  const routed = applyDirectCellTool(game, cell, {
+    pathConstructionType,
+    pathDirection,
+    footType: supplyPlanner.getFootType(),
+    roadType: supplyPlanner.getRoadType(),
+    backstageEraseMode,
+    bungeeBuildMode,
+    bungeeHeight: Number(requireElement<HTMLInputElement>('#bungee-height').value),
+  })
+  if (!routed.handled || !routed.result) return
+  showToast(routed.result.message, !routed.result.ok)
+  if (routed.placedAccessId) {
+    if (tool === 'trafficLight') game.setTool('inspect')
+    openEntityInfoForAccess(routed.placedAccessId)
+    if (tool === 'pathBarrier' && !pathWindowOpen) game.setTool('inspect')
   }
-
-  if (tool === 'road') {
-    const result = buildRoadCell(cell)
-    showToast(result.message, !result.ok)
-    return
-  }
-  if (tool === 'parkingArea') {
-    const result = game.designateParkingArea([cell])
-    showToast(result.message, !result.ok)
-    return
-  }
-  if (tool === 'roadDirection') {
-    const result = game.setRoadDirection(
-      cell.x,
-      cell.z,
-      game.snapshot.buildRotation as 0 | 1 | 2 | 3,
-    )
-    showToast(result.message, !result.ok)
-    return
-  }
-  if (tool === 'trafficLight') {
-    const result = game.placeTrafficLight(
-      cell.x,
-      cell.z,
-      game.snapshot.buildRotation as 0 | 1 | 2 | 3,
-    )
-    showToast(result.message, !result.ok)
-    if (result.ok && result.placedId) {
+  if (routed.placedDepot) {
+    const depot = game.getDepotAt(routed.placedDepot.x, routed.placedDepot.z)
+    if (depot) {
       game.setTool('inspect')
-      openEntityInfoForAccess(result.placedId)
+      openEntityInfoForDepot(depot.id)
     }
-    return
   }
-  if (tool === 'pathBarrier') {
-    const result = game.placePathBarrier(
-      cell.x,
-      cell.z,
-      game.snapshot.buildElevation,
-      game.snapshot.buildRotation as 0 | 1 | 2 | 3,
-    )
-    showToast(result.message, !result.ok)
-    if (result.ok && result.placedId) {
-      openEntityInfoForAccess(result.placedId)
-      if (!pathWindowOpen) game.setTool('inspect')
-    }
-    return
-  }
-  if (tool === 'roadSeparator') {
-    const result = game.toggleRoadSeparator(
-      cell.x,
-      cell.z,
-      game.snapshot.buildRotation as 0 | 1 | 2 | 3,
-    )
-    showToast(result.message, !result.ok)
-    return
-  }
-  if (tool === 'deliveryYard' || tool === 'supplyDepot') {
-    const result = game.manageFestival({
-      type: 'depot',
-      x: cell.x,
-      z: cell.z,
-      role: tool === 'deliveryYard' ? 'delivery' : 'storage',
-    })
-    showToast(result.message, !result.ok)
-    if (result.ok) {
-      const depot = game.getDepotAt(cell.x, cell.z)
-      if (depot) {
-        game.setTool('inspect')
-        openEntityInfoForDepot(depot.id)
-      }
-    }
-    return
-  }
-  if (tool === 'staffGate') {
-    const path = game.snapshot.buildings.find(
-      (building) => building.kind === 'path' && building.x === cell.x && building.z === cell.z,
-    )
-    const result = game.manageFestival({
-      type: 'staffGate',
-      ...cell,
-      elevation: path?.elevation ?? 0,
-      direction: game.snapshot.buildRotation as 0 | 1 | 2 | 3,
-    })
-    showToast(result.message, !result.ok)
-    return
-  }
-  if (tool === 'crosswalk') {
-    const result = game.toggleCrosswalk(cell.x, cell.z)
-    showToast(result.message, !result.ok)
-    return
-  }
-  if (
-    tool === 'roadSpeed10' ||
-    tool === 'roadSpeed30' ||
-    tool === 'roadSpeed50'
-  ) {
-    const speed = Number(tool.replace('roadSpeed', '')) as 10 | 30 | 50
-    const result = game.setRoadSpeed(cell.x, cell.z, speed)
-    showToast(result.message, !result.ok)
-    return
-  }
-
-  if (tool === 'path') {
-    const result = game.placePathSegment(
-      cell.x,
-      cell.z,
-      game.snapshot.buildElevation,
-      pathConstructionType,
-      pathConstructionType === 'queue' ? pathDirection : 0,
-      0,
-      supplyPlanner.getFootType(),
-    )
-    showToast(result.message, !result.ok)
-    return
-  }
-
-  if (tool === 'bulldoze') {
-    const result = game.bulldoze(
-      cell.x,
-      cell.z,
-      cell.buildingId ?? game.getAt(cell.x, cell.z, undefined, cell.localX, cell.localZ)?.id,
-    )
-    showToast(result.message, !result.ok)
-    return
-  }
-
-  const result =
-    tool === 'camping'
-        ? game.designateCampingCell(cell.x, cell.z)
-        : tool === 'medicalArea'
-          ? game.designateMedicalArea([cell])
-          : tool === 'wasteDump'
-            ? game.designateWasteDump([cell])
-          : tool === 'stageForecourt'
-            ? game.designateStageForecourt([cell])
-          : tool === 'backstageArea'
-            ? game.designateBackstageArea([cell], !backstageEraseMode)
-        : tool === 'powerCable'
-          ? game.designatePowerCable(
-              cell.x,
-              cell.z,
-              !game.getPowerCableAt(cell.x, cell.z),
-            )
-      : tool === 'ride' && bungeeBuildMode ? game.placeBungee(cell.x, cell.z, Number(requireElement<HTMLInputElement>('#bungee-height').value))
-      : game.place(tool as BuildingKind, cell.x, cell.z, scenerySlot(tool, cell.localX, cell.localZ, game.snapshot.buildRotation))
-  showToast(result.message, !result.ok)
-  if (result.ok && tool==='ride') {
-    const building=game.snapshot.buildings.find(b=>b.kind==='ride' && b.x===cell.x && b.z===cell.z && b.elevation===game.snapshot.buildElevation+game.getTerrainHeight(cell.x,cell.z))
+  if (routed.placedRide) {
+    const building=game.snapshot.buildings.find(b=>b.kind==='ride' && b.x===routed.placedRide!.x && b.z===routed.placedRide!.z && b.elevation===routed.placedRide!.elevation)
     if (building) { openRideBuilder(building.id); startRideAccessPlacement(building.id,'entrance') }
   }
-}
-
-function paintPath(cell: CellPosition): void {
-  if ((pathEditorActive && !pathDemolishActive) || !dragPathStart) return
-  dragPathEnd = { ...cell }
-  view.setPathDragPreview(
-    game.snapshot.selectedTool === 'camping' ||
-    game.snapshot.selectedTool === 'medicalArea' ||
-    game.snapshot.selectedTool === 'wasteDump' ||
-    game.snapshot.selectedTool === 'stageForecourt' ||
-    game.snapshot.selectedTool === 'backstageArea' ||
-    game.snapshot.selectedTool === 'parkingArea' ||
-    game.snapshot.selectedTool === 'powerCable' ||
-    game.snapshot.selectedTool === 'bulldoze' ||
-    isCopyTool(game.snapshot.selectedTool) ||
-    isTerrainEditTool(game.snapshot.selectedTool)
-      ? createCampingArea(dragPathStart, dragPathEnd)
-      : createConnectedPathLine(dragPathStart, dragPathEnd),
-    dragPathElevation,
-  )
-}
-
-function startPathDrag(cell: CellPosition): void {
-  if (pathEditorActive && !pathDemolishActive) {
-    dragPathStart = null
-    return
-  }
-  dragPathStart = { ...cell }
-  dragPathEnd = { ...cell }
-  terrainDragOriginHeight = game.getTerrainHeight(cell.x, cell.z)
-  if (isScenery(game.snapshot.selectedTool)) {
-    sceneryDragRotation = game.snapshot.buildRotation
-    sceneryDragSlot = scenerySlot(
-      game.snapshot.selectedTool,
-      cell.localX,
-      cell.localZ,
-      sceneryDragRotation,
-    ) ?? 0
-  } else {
-    sceneryDragSlot = null
-  }
-  dragPathElevation =
-    game.snapshot.selectedTool === 'camping' ||
-    game.snapshot.selectedTool === 'medicalArea' ||
-    game.snapshot.selectedTool === 'wasteDump' ||
-    game.snapshot.selectedTool === 'stageForecourt' ||
-    game.snapshot.selectedTool === 'backstageArea' ||
-    game.snapshot.selectedTool === 'parkingArea' ||
-    game.snapshot.selectedTool === 'powerCable' ||
-    game.snapshot.selectedTool === 'road' ||
-    game.snapshot.selectedTool === 'roadDirection' ||
-    game.snapshot.selectedTool === 'roadSeparator' ||
-    game.snapshot.selectedTool === 'fence' ||
-    game.snapshot.selectedTool === 'crosswalk' ||
-    game.snapshot.selectedTool === 'roadSpeed10' ||
-    game.snapshot.selectedTool === 'roadSpeed30' ||
-    game.snapshot.selectedTool === 'roadSpeed50' ||
-    isTerrainEditTool(game.snapshot.selectedTool) ||
-    game.snapshot.selectedTool === 'bulldoze' ||
-    isCopyTool(game.snapshot.selectedTool)
-      ? 0
-      : game.snapshot.buildElevation
-  view.setPathDragPreview([cell], dragPathElevation)
-}
-
-function finishPathDrag(): void {
-  if (!dragPathStart || !dragPathEnd || (pathEditorActive && !pathDemolishActive)) {
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-
-  const cells =
-    game.snapshot.selectedTool === 'camping' ||
-    game.snapshot.selectedTool === 'medicalArea' ||
-    game.snapshot.selectedTool === 'wasteDump' ||
-    game.snapshot.selectedTool === 'stageForecourt' ||
-    game.snapshot.selectedTool === 'backstageArea' ||
-    game.snapshot.selectedTool === 'parkingArea' ||
-    game.snapshot.selectedTool === 'powerCable' ||
-    game.snapshot.selectedTool === 'bulldoze' ||
-    isCopyTool(game.snapshot.selectedTool) ||
-    isTerrainEditTool(game.snapshot.selectedTool)
-      ? createCampingArea(dragPathStart, dragPathEnd)
-      : createConnectedPathLine(dragPathStart, dragPathEnd)
-  let built = 0
-  if (isCopyTool(game.snapshot.selectedTool)) {
-    applyCopySelection(cells)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (isScenery(game.snapshot.selectedTool)) {
-    const tool = game.snapshot.selectedTool as BuildingKind
-    const slot =
-      sceneryDragSlot ??
-      scenerySlot(tool, dragPathStart.localX, dragPathStart.localZ, sceneryDragRotation)!
-    const result = game.placeSceneryLine(tool, cells, slot, sceneryDragRotation)
-    showToast(result.message, !result.ok)
-    dragPathStart = null; dragPathEnd = null; view.setPathDragPreview([], 0)
-    return
-  }
-  if (game.snapshot.selectedTool === 'bulldoze') {
-    const result = game.bulldozeArea(cells)
-    showToast(result.message, !result.ok)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (game.snapshot.selectedTool === 'camping') {
-    const result = game.designateCampingArea(cells)
-    showToast(result.message, !result.ok)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (game.snapshot.selectedTool === 'medicalArea') {
-    const result = game.designateMedicalArea(cells)
-    showToast(result.message, !result.ok)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (game.snapshot.selectedTool === 'wasteDump') {
-    const result = game.designateWasteDump(cells)
-    showToast(result.message, !result.ok)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (game.snapshot.selectedTool === 'stageForecourt') {
-    const result = game.designateStageForecourt(cells)
-    showToast(result.message, !result.ok)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (game.snapshot.selectedTool === 'backstageArea') {
-    const result = game.designateBackstageArea(cells, !backstageEraseMode)
-    showToast(result.message, !result.ok)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (game.snapshot.selectedTool === 'parkingArea') {
-    const result = game.designateParkingArea(cells)
-    showToast(result.message, !result.ok)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (game.snapshot.selectedTool === 'powerCable') {
-    const result = game.designatePowerCableArea(cells)
-    showToast(result.message, !result.ok)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (game.snapshot.selectedTool === 'road') {
-    if (pathDemolishActive) {
-      for (const cell of cells) if (demolishPathAt(cell, true)) built++
-    } else {
-      for (const cell of cells) if (buildRoadCell(cell).ok) built++
-    }
-    showToast(`${built} Straßenfelder ${pathDemolishActive ? 'entfernt' : 'gebaut'}`, built === 0)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (
-    game.snapshot.selectedTool === 'roadDirection' ||
-    game.snapshot.selectedTool === 'trafficLight' ||
-    game.snapshot.selectedTool === 'pathBarrier' ||
-    game.snapshot.selectedTool === 'roadSeparator' ||
-    game.snapshot.selectedTool === 'crosswalk' ||
-    game.snapshot.selectedTool === 'roadSpeed10' ||
-    game.snapshot.selectedTool === 'roadSpeed30' ||
-    game.snapshot.selectedTool === 'roadSpeed50'
-  ) {
-    let changed = 0
-    cells.forEach((cell) => {
-      const tool = game.snapshot.selectedTool
-      const direction = game.snapshot.buildRotation as 0 | 1 | 2 | 3
-      const result =
-        tool === 'roadDirection'
-          ? game.setRoadDirection(cell.x, cell.z, direction)
-          : tool === 'trafficLight'
-            ? game.placeTrafficLight(cell.x, cell.z, direction)
-            : tool === 'pathBarrier'
-              ? game.placePathBarrier(cell.x, cell.z, game.snapshot.buildElevation, direction)
-              : tool === 'roadSeparator'
-                ? game.toggleRoadSeparator(cell.x, cell.z, direction)
-                : tool === 'crosswalk'
-                  ? game.toggleCrosswalk(cell.x, cell.z)
-                  : game.setRoadSpeed(
-                      cell.x,
-                      cell.z,
-                      Number(tool.replace('roadSpeed', '')) as 10 | 30 | 50,
-                    )
-      if (result.ok) changed += 1
-    })
-    showToast(
-      game.snapshot.selectedTool === 'trafficLight'
-        ? `${changed} Ampel${changed === 1 ? '' : 'n'} gesetzt`
-        : game.snapshot.selectedTool === 'pathBarrier'
-          ? `${changed} Schranke${changed === 1 ? '' : 'n'} gesetzt`
-          : `${changed} Straßenfelder geändert`,
-      changed === 0,
-    )
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (isTerrainEditTool(game.snapshot.selectedTool)) {
-    const mode = terrainToolMode(game.snapshot.selectedTool)
-    if (!mode) return
-    const result = game.editTerrainArea(cells, mode, terrainDragOriginHeight)
-    showToast(result.message, !result.ok)
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (game.snapshot.selectedTool === 'fence') {
-    let placed = 0
-    cells.forEach((cell) => {
-      const result = game.place('fence', cell.x, cell.z)
-      if (result.ok) placed += 1
-    })
-    showToast(
-      placed > 0
-        ? `${placed} Bauzaun${placed === 1 ? '' : 'e'} gesetzt`
-        : 'Hier konnte kein Bauzaun gesetzt werden',
-      placed === 0,
-    )
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  if (pathDemolishActive) {
-    let removed = 0
-    for (const cell of cells) {
-      if (demolishPathAt(cell, true)) removed += 1
-    }
-    showToast(
-      removed > 0 ? `${removed} Wegfeld${removed === 1 ? '' : 'er'} abgerissen` : 'Hier liegt kein Weg',
-      removed === 0,
-    )
-    dragPathStart = null
-    dragPathEnd = null
-    view.setPathDragPreview([], 0)
-    return
-  }
-  for (const cell of cells) {
-    if (game.getPathAt(cell.x, cell.z, dragPathElevation)) continue
-    const result = game.placePathSegment(
-      cell.x,
-      cell.z,
-      dragPathElevation,
-      pathConstructionType,
-      pathConstructionType === 'queue' ? pathDirection : 0,
-      0,
-      supplyPlanner.getFootType(),
-    )
-    if (!result.ok) {
-      showToast(`${result.message} – Bau an dieser Stelle beendet`, true)
-      break
-    }
-    built += 1
-  }
-  if (built > 0) showToast(`${built} zusammenhängende Wegfelder gebaut`)
-  dragPathStart = null
-  dragPathEnd = null
-  view.setPathDragPreview([], 0)
 }
 
 function applyCopySelection(cells: ReadonlyArray<{ x: number; z: number }>): void {
@@ -3198,13 +2451,19 @@ function updateCopySelectionSummary(): void {
 }
 
 function updateCopyPreview(cell: CellPosition | null): void {
-  if (!isCopyTool(game.snapshot.selectedTool) || !copyClipboard || !cell || dragPathStart) {
+  if (!isCopyTool(game.snapshot.selectedTool) || !copyClipboard || !cell || pathToolController.isDragging()) {
     view.setBlueprintPreview([])
     return
   }
-  const preview = game.previewBlueprint(cell.x, cell.z, game.snapshot.buildRotation, copyClipboard.items)
+  const preview = game.previewPlacement({
+    type: 'blueprint',
+    originX: cell.x,
+    originZ: cell.z,
+    rotation: game.snapshot.buildRotation,
+    items: copyClipboard.items,
+  })
   view.setBlueprintPreview(
-    preview.placements.map((entry) => ({
+    (preview.placements ?? []).map((entry) => ({
       x: entry.x,
       z: entry.z,
       kind: entry.item.type === 'road' ? 'road' : entry.item.kind,
@@ -3247,46 +2506,6 @@ async function renderCopyLibrary(): Promise<void> {
         </div>`,
     )
     .join('')
-}
-
-function createCampingArea(start: CellPosition, end: CellPosition): CellPosition[] {
-  const cells: CellPosition[] = []
-  const minX = Math.min(start.x, end.x)
-  const maxX = Math.max(start.x, end.x)
-  const minZ = Math.min(start.z, end.z)
-  const maxZ = Math.max(start.z, end.z)
-  for (let x = minX; x <= maxX; x += 1) {
-    for (let z = minZ; z <= maxZ; z += 1) cells.push({ x, z })
-  }
-  return cells
-}
-
-function createConnectedPathLine(start: CellPosition, end: CellPosition): CellPosition[] {
-  const cells: CellPosition[] = [{ ...start }]
-  let x = start.x
-  let z = start.z
-  const deltaX = Math.abs(end.x - x)
-  const deltaZ = Math.abs(end.z - z)
-  const stepX = x < end.x ? 1 : -1
-  const stepZ = z < end.z ? 1 : -1
-  let error = deltaX - deltaZ
-
-  while (x !== end.x || z !== end.z) {
-    const previousX = x
-    const previousZ = z
-    const doubleError = error * 2
-    if (doubleError > -deltaZ) {
-      error -= deltaZ
-      x += stepX
-    }
-    if (doubleError < deltaX) {
-      error += deltaX
-      z += stepZ
-    }
-    if (x !== previousX && z !== previousZ) cells.push({ x, z: previousZ })
-    cells.push({ x, z })
-  }
-  return cells
 }
 
 const PATH_DIRECTIONS = [
@@ -3670,10 +2889,6 @@ function updatePathEditor(): void {
   }
 }
 
-function buildRoadCell(cell: { x: number; z: number }) {
-  return game.manageFestival({ type: 'wayArea', from: cell, to: cell, kind: supplyPlanner.getRoadType() })
-}
-
 function openCoasterBuilder(coasterId: string | null = null, typeId?: CoasterTypeId): void {
   closeRideBuilder(false)
   buildMenuPanel.hidden = true
@@ -3746,18 +2961,6 @@ function applyCoasterWindow(next: CoasterWindowState): void {
   coasterTargetPitch = next.targetPitch
   coasterTargetBank = next.targetBank
   chainLiftInput.checked = next.chainLift
-}
-
-function coasterTypeHintText(typeId: CoasterTypeId): string {
-  const type = getCoasterType(typeId)
-  if (type.liftStyle === 'none') return 'Kein Kettenlift — nur Launch.'
-  if (type.liftStyle === 'cable') return 'Seillift. Kettenlift-Flag ist nicht verfügbar.'
-  if (type.liftStyle === 'powered') return 'Powered Launch. Kettenlift ist kein Standard.'
-  if (type.liftStyle === 'curved') return 'Nur sanfte Steigung, gebogener Lift.'
-  if (type.trainStyle === 'mouse') return 'Einzelwagen, keine Seitenneigung, enge 1-Feld-Kurven.'
-  if (type.id === 'wooden') return 'Holzachterbahn: Looping und Wassersplash, keine 1-Feld-Kurven.'
-  if (type.trackStyle === 'bobsledTrough') return 'Nur sanfte Steigung. Rinnenbahn ohne große Kurven.'
-  return type.name
 }
 
 function selectCoasterPitch(targetPitch: number): void {
@@ -3885,615 +3088,105 @@ function deleteCoasterFromSelection(): void {
 }
 
 function updateCoasterBuilder(): void {
-  coasterBuilder.classList.toggle('visible', coasterBuilderActive)
-  if (!coasterBuilderActive) {
-    lastCoasterConstructionKey = null
-    return
-  }
+  const result = updateCoasterBuilderPanel({
+    active: coasterBuilderActive,
+    coaster: activeCoasterId ? game.getCoaster(activeCoasterId) ?? null : null,
+    editIndex: coasterEditIndex,
+    startCandidate: coasterStartCandidate,
+    buildRotation: game.snapshot.buildRotation,
+    buildElevation: game.snapshot.buildElevation,
+    cameraQuarter,
+    window: currentCoasterWindow(),
+    lastConstructionKey: lastCoasterConstructionKey,
+  }, {
+    root: coasterBuilder, title: coasterConstructionTitle, status: coasterStatus,
+    direction: coasterDirection, piecePreview: coasterPiecePreview, pieceLabel: coasterPieceLabel,
+    typeName: coasterTypeName, typeHint: coasterTypeHint, rotate: coasterRotateButton,
+    build: coasterBuildButton, undo: coasterUndoButton, entrance: coasterEntranceButton,
+    exit: coasterExitButton, demolish: demolishCoasterConstructionButton, chainLift: chainLiftInput,
+    pieceSelect: trackPieceSelect, previous: trackPreviousButton, next: trackNextButton,
+    selection: trackSelection, deleteTrack: deleteTrackButton, directionPalette: trackDirectionPalette,
+    slopePalette: trackSlopePalette, bankPalette: trackBankPalette, specialPalette: trackSpecialPalette,
+    specialToggle: trackSpecialToggle,
+  }, view)
+  lastCoasterConstructionKey = result.key
+  coasterEditIndex = result.editIndex
+  chainLiftInput.checked = result.chainLift
+}
 
-  const coaster = activeCoasterId ? game.getCoaster(activeCoasterId) : null
-  if (coaster) {
-    coasterEditIndex = Math.max(0, Math.min(coaster.pieces.length - 1, coasterEditIndex))
-  }
-  const construction = updateCoasterConstruction(
-    lastCoasterConstructionKey,
-    describeCoasterConstructionChrome({
-      window: currentCoasterWindow(),
-      ride: coaster ?? null,
-      editIndex: coasterEditIndex,
-      startCandidate: coasterStartCandidate,
-      buildRotation: game.snapshot.buildRotation,
-      buildElevation: game.snapshot.buildElevation,
-      cameraQuarter,
-    }),
-  )
-  if (!construction.changed) return
-  lastCoasterConstructionKey = construction.key
-
-  const typeId = selectedCoasterTypeId()
-  const type = getCoasterType(typeId)
-  pendingCoasterTypeId = typeId
-  coasterTypeName.textContent = type.name
-  coasterTypeHint.textContent = coasterTypeHintText(typeId)
-  coasterConstructionTitle.textContent = `${coaster?.name ?? type.name} Konstruktion`
-  const anchorPiece = coaster?.pieces[coasterEditIndex]
-  coasterDirection.textContent = getIsoDirectionIcon(
-    anchorPiece?.end.heading ?? game.snapshot.buildRotation,
-  )
-  coasterBuildButton.disabled = !coaster && !coasterStartCandidate
-  coasterBuildButton.title = coaster
-    ? 'Ausgewähltes Schienenstück bauen'
-    : 'Startplattform bauen'
-  coasterBuildButton.setAttribute('aria-label', coasterBuildButton.title)
-  coasterRotateButton.disabled = Boolean(coaster)
-  coasterUndoButton.disabled = !coaster || coaster.pieces.length <= 1
-  coasterEntranceButton.disabled = !coaster
-  coasterExitButton.disabled = !coaster
-  demolishCoasterConstructionButton.hidden = !coaster
-  trackPieceSelect.disabled = !coaster
-  const resolved = resolveNextTrackPiece(
-    currentCoasterWindow(),
-    anchorPiece?.end ?? null,
-    Boolean(coaster),
-  )
-  trackPieceSelect.value = resolved.kind
-  const selectedPiece = TRACK_PIECES[resolved.kind]
-  const directionEntries = listTrackPalettePieces(
-    TRACK_DIRECTION_KINDS,
-    anchorPiece?.end ?? null,
-    Boolean(coaster),
-    typeId,
-  )
-  const specialEntries = listTrackPalettePieces(
-    TRACK_SPECIAL_KINDS,
-    anchorPiece?.end ?? null,
-    Boolean(coaster),
-    typeId,
-  )
-  renderTrackPalette(trackDirectionPalette, directionEntries, coasterSelectedKind)
-  trackDirectionPalette.style.gridTemplateColumns = `repeat(${Math.max(1, directionEntries.length)}, minmax(0, 1fr))`
-  renderTrackPalette(trackSpecialPalette, specialEntries, coasterSelectedKind)
-  trackSpecialToggle.hidden = specialEntries.length === 0
-  if (specialEntries.length === 0) {
-    trackSpecialPalette.hidden = true
-    trackSpecialToggle.setAttribute('aria-expanded', 'false')
-  }
-  const pitchEntries = listTrackPitchChoices(
-    anchorPiece?.end.pitch ?? 0,
-    typeId,
-    anchorPiece?.end.bank ?? 0,
-  ).map((entry) => ({ ...entry, enabled: Boolean(coaster) && entry.enabled }))
-  const chainVisible = isTrackChainLiftVisible(typeId)
-  const chainEnabled = Boolean(
-    coaster &&
-      isTrackChainLiftEligible(
-        selectedPiece.kind,
-        anchorPiece?.end.pitch ?? 0,
-        resolved.options.targetPitch ?? coasterTargetPitch,
-        typeId,
-      ),
-  )
-  if (!chainVisible || !chainEnabled) chainLiftInput.checked = false
-  const slopeSpecs: CoasterPaletteButtonSpec[] = TRACK_PITCH_BUTTONS.filter((entry) =>
-    pitchEntries.some((choice) => Math.abs(choice.pitch - entry.pitch) < 0.001),
-  ).map((entry) => {
-    const choice = pitchEntries.find((item) => Math.abs(item.pitch - entry.pitch) < 0.001)
-    const enabled = choice?.enabled ?? false
-    return {
-      id: trackPitchPaletteId(entry.pitch),
-      enabled,
-      active: enabled && Math.abs(entry.pitch - coasterTargetPitch) < 0.001,
-      title: entry.title,
-      icon: entry.icon,
-      label: entry.label,
-      attrs: { 'data-track-pitch': String(entry.pitch) },
-    }
-  })
-  if (chainVisible) {
-    slopeSpecs.push({
-      id: TRACK_CHAIN_PALETTE_ID,
-      enabled: chainEnabled,
-      active: chainEnabled && chainLiftInput.checked,
-      title: 'Kettenlift für das nächste geeignete Stück',
-      icon: '⛓',
-      label: 'Kette',
+function placementPreviewAt(cell: CellPosition | null): PlacementPreviewResult | null {
+  if (!cell) return null
+  if (rideAccessPlacement) {
+    return game.previewPlacement({
+      type: 'rideAccess',
+      buildingId: rideAccessPlacement.id,
+      accessType: rideAccessPlacement.type,
+      x: cell.x,
+      z: cell.z,
     })
   }
-  syncCoasterPaletteElement(trackSlopePalette, slopeSpecs)
-  const slopeCount = pitchEntries.length + (chainVisible ? 1 : 0)
-  trackSlopePalette.style.gridTemplateColumns = `repeat(${Math.max(1, slopeCount)}, minmax(0, 1fr))`
-  const bankEntries = listTrackBankChoices(
-    anchorPiece?.end.bank ?? 0,
-    typeId,
-    anchorPiece?.end.pitch ?? 0,
-  ).map((entry) => ({ ...entry, enabled: Boolean(coaster) && entry.enabled }))
-  const bankSpecs: CoasterPaletteButtonSpec[] = TRACK_BANK_BUTTONS.filter((entry) =>
-    bankEntries.some((choice) => Math.abs(choice.bank - entry.bank) < 0.001),
-  ).map((entry) => {
-    const choice = bankEntries.find((item) => Math.abs(item.bank - entry.bank) < 0.001)
-    const enabled = choice?.enabled ?? false
-    return {
-      id: trackBankPaletteId(entry.bank),
-      enabled,
-      active: enabled && Math.abs(entry.bank - coasterTargetBank) < 0.001,
-      title: entry.title,
-      icon: entry.icon,
-      label: entry.label,
-      attrs: { 'data-track-bank': String(entry.bank) },
-    }
-  })
-  syncCoasterPaletteElement(trackBankPalette, bankSpecs)
-  trackBankPalette.style.gridTemplateColumns = `repeat(${Math.max(1, bankEntries.length)}, minmax(0, 1fr))`
-  const displayedPiece = coaster ? selectedPiece : TRACK_PIECES.station
-  coasterPiecePreview.textContent = `${TRACK_PIECE_ICONS[displayedPiece.kind]} ${getIsoDirectionIcon(
-    anchorPiece?.end.heading ?? game.snapshot.buildRotation,
-  )}`
-  chainLiftInput.disabled = !chainVisible || !chainEnabled
-  const displayedCost =
-    displayedPiece.cost +
-    (chainLiftInput.checked ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
-  coasterPieceLabel.textContent =
-    `${displayedPiece.name} · Kosten: ${formatMoney(displayedCost)}`
-
-  if (!coaster || !anchorPiece) {
-    trackPreviousButton.disabled = true
-    trackNextButton.disabled = true
-    deleteTrackButton.disabled = true
-    trackSelection.textContent = '–'
-    view.setCoasterTrackSelection([])
-    if (coasterStartCandidate) {
-      const stationPreview = createTrackPiece(
-        'station-preview',
-        'station',
-        {
-          x: coasterStartCandidate.x,
-          z: coasterStartCandidate.z,
-          elevation: game.snapshot.buildElevation,
-          heading: game.snapshot.buildRotation,
-          pitch: 0,
-          bank: 0,
-        },
-        false,
-      )
-      view.setCoasterConstructionPreview(stationPreview.points, {
-        kind: 'station',
-        chainLift: false,
-        styleId: type.trackStyle,
-        railColor: type.railColor,
-        structureColor: type.color,
-      })
-      coasterStatus.textContent =
-        `Startpunkt: ${coasterStartCandidate.x}, ${coasterStartCandidate.z} · ` +
-        `Ebene ${game.snapshot.buildElevation} · Richtung ${getIsoDirectionIcon(game.snapshot.buildRotation)}. ` +
-        'Zum Bestätigen „Startplattform bauen“ drücken.'
-    } else {
-      coasterStatus.textContent =
-        'Klicke auf das Gelände, um den Startpunkt als Vorschau zu setzen.'
-      view.setCoasterConstructionPreview([])
-    }
-    return
+  const tool = game.snapshot.selectedTool
+  if (isCopyTool(tool)) {
+    return copyClipboard
+      ? game.previewPlacement({
+          type: 'blueprint',
+          originX: cell.x,
+          originZ: cell.z,
+          rotation: game.snapshot.buildRotation,
+          items: copyClipboard.items,
+        })
+      : null
   }
-  const selectedTrackPiece = coaster.pieces[coasterEditIndex]
-  trackPreviousButton.disabled = coasterEditIndex <= 0
-  trackNextButton.disabled = coasterEditIndex >= coaster.pieces.length - 1
-  deleteTrackButton.disabled = coasterEditIndex <= 0
-  trackSelection.textContent = selectedTrackPiece
-    ? `${coasterEditIndex + 1}/${coaster.pieces.length} · ${TRACK_PIECES[selectedTrackPiece.kind].name}`
-    : '–'
-  view.setCoasterTrackSelection(selectedTrackPiece?.points ?? [])
-  const previewPiece = createTrackPiece(
-    'preview',
-    resolved.kind,
-    anchorPiece.end,
-    resolved.chainLift,
-    resolved.options,
-  )
-  view.setCoasterConstructionPreview(previewPiece.points, {
-    kind: resolved.kind,
-    chainLift: resolved.chainLift,
-    styleId: type.trackStyle,
-    railColor: type.railColor,
-    structureColor: type.color,
+  if ((BUILDING_KINDS as readonly string[]).includes(tool)) {
+    const kind = tool as BuildingKind
+    return game.previewPlacement({
+      type: 'building',
+      kind,
+      x: cell.x,
+      z: cell.z,
+      decorationSlot: scenerySlot(
+        kind,
+        cell.localX,
+        cell.localZ,
+        game.snapshot.buildRotation,
+      ),
+      bungeeHeight:
+        kind === 'ride' && bungeeBuildMode
+          ? Number(requireElement<HTMLInputElement>('#bungee-height').value)
+          : undefined,
+    })
+  }
+  if (tool === 'inspect') return null
+  return game.previewPlacement({
+    type: 'tool',
+    tool: tool as Exclude<Tool, BuildingKind | 'copy'>,
+    x: cell.x,
+    z: cell.z,
+    enabled: tool === 'backstageArea' ? !backstageEraseMode : undefined,
   })
-  const accessState = `${coaster.entrance ? '✓ Eingang' : '○ Eingang'} · ${coaster.exit ? '✓ Ausgang' : '○ Ausgang'}`
-  coasterStatus.textContent =
-    `Bauanker: ${anchorPiece.end.x}, ${anchorPiece.end.z} · Höhe ${anchorPiece.end.elevation.toFixed(2)} · ` +
-    `Neigung ${(anchorPiece.end.pitch * 180 / Math.PI).toFixed(1)}° · Banking ${(anchorPiece.end.bank * 180 / Math.PI).toFixed(0)}°. ` +
-    `${coaster.closed ? '✓ Strecke geschlossen' : 'Strecke noch offen'} · ${accessState}`
+}
+
+function refreshPlacementPreview(): PlacementPreviewResult | null {
+  const result = placementPreviewAt(hoveredCell)
+  view.setPlacementPreviewResult(result)
+  return result
 }
 
 function updateContextHelp(): void {
-  if (coasterBuilderActive) {
-    contextHelp.textContent = !activeCoasterId
-      ? coasterStartCandidate
-        ? 'Startpunkt gesetzt: drehen oder Höhe ändern, dann „Startplattform bauen“.'
-        : 'Klicke auf das Gelände, um den Startpunkt festzulegen.'
-      : coasterAccessMode
-        ? `Klicke neben eine Stationsplattform: ${coasterAccessMode === 'entrance' ? 'Eingang' : 'Ausgang'}`
-        : 'Wähle im Achterbahn-Editor das nächste Schienenelement.'
-    return
-  }
-  if (pathWindowOpen && pathDemolishActive) {
-    contextHelp.textContent = roadEditorOpen ? 'Straße anklicken oder ziehen, um sie abzureißen.' : 'Weg anklicken oder ziehen, um ihn abzureißen.'
-    return
-  }
-  if (pathWindowOpen && pathEditorActive) {
-    if (roadEditorOpen) {
-      contextHelp.textContent = pathAnchor ? 'Richtung wählen, dann Bauen oder Enter. Zurück mit Backspace.' : 'Feld anklicken, um das erste Straßenstück zu setzen.'
-      return
-    }
-    contextHelp.textContent = pathAnchor
-      ? 'Richtung und Neigung wählen, dann „Bauen“ oder das nächste Feld anklicken.'
-      : 'Feld anklicken, um das erste Wegstück zu setzen.'
-    return
-  }
-  if (pathWindowOpen && !pathEditorActive) {
-    contextHelp.textContent =
-      pathConstructionType === 'queue'
-        ? 'Schlange ziehen. Belag oben gedrückt halten.'
-        : 'Wegbelag gedrückt halten, dann Felder ziehen.'
-    return
-  }
-  const tool = game.snapshot.selectedTool
-  if (rideAccessPlacement) {
-    contextHelp.textContent=hoveredCell
-      ? game.canPlaceRideAccess(rideAccessPlacement.id,rideAccessPlacement.type,hoveredCell.x,hoveredCell.z).message
-      : 'Ein- oder Ausgang auf ein freies Nachbarfeld setzen'
-    return
-  }
-  if (!hoveredCell) {
-    contextHelp.textContent = 'Bewege den Mauszeiger über das Gelände.'
-    return
-  }
-  const cell = hoveredCell
-
-  const rideAccess = cell.buildingId
-    ? game.getRideAccessAt(cell.x, cell.z)
-    : undefined
-  const existing =
-    rideAccess && rideAccess.building.id === cell.buildingId
-      ? undefined
-      : cell.buildingId
-        ? game.snapshot.buildings.find((building) => building.id === cell.buildingId)
-        : game.getAt(cell.x, cell.z, undefined, cell.localX, cell.localZ)
-  if (tool === 'inspect') {
-    const height = game.getTerrainHeight(hoveredCell.x, hoveredCell.z)
-    const dump = game.getWasteDumpAt(hoveredCell.x, hoveredCell.z)
-    const dumpArea = dump
-      ? connectedWasteDumpStats(game.snapshot.wasteDumpCells ?? [], dump)
-      : null
-    const backstage = game.getBackstageCellAt(hoveredCell.x, hoveredCell.z)
-    const backstageStats = backstage
-      ? game.getBandSupplyAt(hoveredCell.x, hoveredCell.z)
-      : undefined
-    const ground = groundInfo(game.snapshot, hoveredCell.x, hoveredCell.z)
-    const soilName = { field: 'Ackerboden', clay: 'Lehmboden', gravel: 'Kiesboden', sand: 'Sandboden', grass: 'Wiesenboden', urban: 'Stadtboden' }[ground.type]
-    const cellX = hoveredCell.x
-    const cellZ = hoveredCell.z
-    const parking = game.snapshot.logistics.parkingCells.some(
-      (cell) => cell.x === cellX && cell.z === cellZ,
-    )
-    const surfaceName = parking
-      ? 'Parkfläche'
-      : ground.surface === 'paved' ? 'Gepflastert' : ground.surface === 'gravel' ? 'Geschottert' : ground.compacted ? 'Verdichtet' : 'Unbefestigt'
-    const depot = game.getDepotAt(hoveredCell.x, hoveredCell.z)
-    contextHelp.textContent =
-      rideAccess && rideAccess.building.id === hoveredCell.buildingId
-      ? `${rideAccess.type === 'entrance' ? 'Eingang' : 'Ausgang'} auswählen`
-      : existing
-      ? `${BUILDINGS[existing.kind].name} auswählen`
-      : depot
-        ? `${depot.role === 'delivery' ? 'Anlieferungsplatz' : 'Depot'} auswählen`
-      : dumpArea
-        ? formatWasteDumpAreaHover(dumpArea)
-      : dump
-        ? `Müllablage · ${dump.stored} Säcke gelagert`
-      : backstageStats
-        ? formatBackstageHover(backstageStats)
-      : backstage
-        ? 'Backstage auswählen'
-      : isWaterHeight(height, game.getWaterLevel())
-        ? isSwimmableHeight(height, game.getWaterLevel())
-          ? 'Wasser – Gäste können baden'
-          : 'Wasser'
-        : `${game.getCampingCellAt(hoveredCell.x, hoveredCell.z) ? 'Zeltbereich · ' : ''}${parking ? 'Parkplatz · ' : ''}${soilName} · ${surfaceName}${ground.drained ? ' · Entwässert' : ''} · Tragfähigkeit ${ground.bearing}/3${height > 0 ? ` · Ebene ${height}` : ''}`
-  } else if (tool === 'terrainRaise') {
-    contextHelp.textContent =
-      'Rechteck ziehen: Fläche um 0,5 anheben. Hänge höchstens 0,5, Rest als Steilklippe.'
-  } else if (tool === 'terrainLower') {
-    contextHelp.textContent =
-      'Rechteck ziehen: Fläche um 0,5 senken. Unter −0,5 liegt Wasser.'
-  } else if (tool === 'terrainSmooth') {
-    contextHelp.textContent =
-      'Rechteck ziehen: alle Felder auf die Höhe unter dem Startpunkt setzen.'
-  } else if (isCopyTool(tool)) {
-    contextHelp.textContent = copyClipboard
-      ? game.previewBlueprint(hoveredCell.x, hoveredCell.z, game.snapshot.buildRotation, copyClipboard.items).message
-      : 'Rechteck aufziehen, um Gebäude, Deko und Wege zu kopieren.'
-  } else if (tool === 'bulldoze') {
-    const access = game.getAccessControlAt(hoveredCell.x, hoveredCell.z)
-    const removableCoaster = game.getRemovableCoasterAt(hoveredCell.x, hoveredCell.z)
-    contextHelp.textContent =
-      rideAccess && rideAccess.building.id === hoveredCell.buildingId
-        ? `${rideAccess.type === 'entrance' ? 'Eingang' : 'Ausgang'} entfernen`
-        : existing
-          ? existing.kind === 'tree'
-            ? `Baum entfernen (${SIMULATION_CONFIG.economy.treeClearCost} €)`
-            : `${BUILDINGS[existing.kind].name} abreißen`
-          : removableCoaster
-            ? `${removableCoaster.name} abreißen`
-          : access
-            ? 'Kontrolle entfernen'
-          : game.getCampingCellAt(hoveredCell.x, hoveredCell.z)
-            ? 'Zeltbereich aufheben'
-            : game.snapshot.logistics.parkingCells.some(
-                (parking) => parking.x === cell.x && parking.z === cell.z,
-              )
-              ? 'Parkplatz aufheben'
-            : game.getMedicalCellAt(hoveredCell.x, hoveredCell.z)
-              ? 'Krankenbereich aufheben'
-            : game.getWasteDumpAt(hoveredCell.x, hoveredCell.z)
-              ? 'Müllablage aufheben'
-            : game.getRoadCellAt(hoveredCell.x, hoveredCell.z)
-              ? 'Straße entfernen'
-            : 'Leeres Feld'
-    contextHelp.textContent += ' · Klicken oder rechteckig ziehen'
-  } else if (tool === 'coaster') {
-    contextHelp.textContent = 'Öffne den Achterbahn-Editor, um eine Bahn zu bauen.'
-  } else if (tool === 'camping') {
-    contextHelp.textContent = game.getCampingCellAt(hoveredCell.x, hoveredCell.z)
-      ? 'Dieses Feld gehört bereits zum Zeltbereich.'
-      : 'Klicken oder rechteckig ziehen, um freie Flächen als Zeltbereich auszuweisen.'
-  } else if (tool === 'medicalArea') {
-    contextHelp.textContent = 'Klicken oder ziehen, um einen Krankenbereich auszuweisen.'
-  } else if (tool === 'wasteDump') {
-    contextHelp.textContent =
-      game.getWasteDumpAt(hoveredCell.x, hoveredCell.z)
-        ? 'Diese Müllablage senkt die Attraktivität stark. Reinigungskräfte bringen hierher Müll.'
-        : 'Klicken oder ziehen, um eine Müllablage auszuweisen. Sie ist extrem unattraktiv; Müllfahrzeuge brauchen eine Straße daneben.'
-  } else if (isWasteBin(tool)) {
-    contextHelp.textContent =
-      'Mülleimer setzen. Gäste im Umkreis von 7 Feldern werfen gebrauchte Dinge hier hinein.'
-  } else if (isSealedWasteContainer(tool)) {
-    contextHelp.textContent =
-      'Versiegelter Müllcontainer (80 Beutel). Reinigung bringt Müll hierher, wenn er näher als die Ablage ist. Müllwagen leeren ihn nur, wenn er auf einer Straße steht.'
-  } else if (tool === 'stageForecourt') {
-    contextHelp.textContent =
-      'Klicken oder rechteckig ziehen, um einen Bühnenvorplatz mit 9 Plätzen je Feld auszuweisen.'
-  } else if (tool === 'backstageArea') {
-    const cost = SIMULATION_CONFIG.bandSupply.backstageDesignationCost
-    contextHelp.textContent = backstageEraseMode
-      ? 'Klicken oder ziehen, um Backstage zu entfernen. Getrennte Reste bleiben ausgewiesen, zählen aber nicht.'
-      : `Klicken oder ziehen, um Backstage auszuweisen (${cost} € je Feld). Muss an eine Bühne anschließen.`
-  } else if (tool === 'powerCable') {
-    contextHelp.textContent = game.getPowerCableAt(hoveredCell.x, hoveredCell.z)
-      ? 'Hier liegt ein Kabel. Klick entfernt es, Ziehen verlegt weitere.'
-      : 'Klicken oder ziehen, um Stromkabel zu Generatoren und Verbrauchern zu legen.'
-  } else if (tool === 'road') {
-    contextHelp.textContent = 'Klicken oder ziehen, um eine ebenerdige Straße zu bauen.'
-  } else if (tool === 'parkingArea') {
-    contextHelp.textContent = 'Rechteckig ziehen, um Parkplätze auszuweisen.'
-  } else if (tool === 'roadDirection') {
-    contextHelp.textContent = 'Straße anklicken: aktuelle Baurichtung als Fahrtrichtung setzen.'
-  } else if (tool === 'trafficLight') {
-    contextHelp.textContent = 'Straße anklicken: Ampel in aktueller Baurichtung setzen. Danach öffnet sich die Steuerung.'
-  } else if (tool === 'pathBarrier') {
-    contextHelp.textContent = 'Personenweg anklicken: Tor in aktueller Baurichtung setzen. Danach öffnet sich die Steuerung.'
-  } else if (tool === 'deliveryYard') {
-    contextHelp.textContent = 'Anlieferungsplatz neben einer Straße auf verdichtetem Boden setzen (400 €).'
-  } else if (tool === 'supplyDepot') {
-    contextHelp.textContent = 'Depot an einem Fußweg auf verdichtetem Boden setzen (400 €).'
-  } else if (tool === 'staffGate') {
-    contextHelp.textContent = 'Fußweg anklicken: Personaleingang an die Kante in der aktuellen Baurichtung setzen (80 €). Nochmaliger Klick entfernt es.'
-  } else if (tool === 'roadSeparator') {
-    contextHelp.textContent = 'Straße anklicken: Kante in aktueller Baurichtung sperren.'
-  } else if (tool === 'fence') {
-    contextHelp.textContent =
-      'Bauzaun setzen: die aktuelle Baurichtung wählt die gesperrte Seite. Ziehen setzt eine Linie.'
-  } else if (tool === 'securityGate') {
-    contextHelp.textContent =
-      'Festival-Einlass auf einen Weg setzen. Die Baurichtung zeigt ins Gelände; im Objektfenster lässt sich der Besucheranteil einstellen.'
-  } else if (tool === 'crosswalk') {
-    contextHelp.textContent = 'Straße anklicken, um einen Zebrastreifen umzuschalten.'
-  } else if (
-    tool === 'roadSpeed10' ||
-    tool === 'roadSpeed30' ||
-    tool === 'roadSpeed50'
-  ) {
-    contextHelp.textContent = 'Straßenfeld anklicken, um die Geschwindigkeitszone festzulegen.'
-  } else if (
-    tool === 'path' &&
-    game.getRoadCellAt(hoveredCell.x, hoveredCell.z)
-  ) {
-    contextHelp.textContent =
-      game.snapshot.buildElevation >= 1
-        ? 'Gehweg als Überweg über die Straße. Besucher laufen oben, Autos darunter.'
-        : 'Auf der Straße nur als Überweg: Bauhöhe auf Ebene 1 stellen.'
-  } else if (terrainToolMode(tool)) {
-    contextHelp.textContent =
-      'Rechteck ziehen: Fläche anheben, senken oder auf die Starthöhe glätten.'
-  } else if ((BUILDING_KINDS as readonly string[]).includes(tool)) {
-    const kind = tool as BuildingKind
-    contextHelp.textContent = game.canPlace(kind, hoveredCell.x, hoveredCell.z, scenerySlot(kind, hoveredCell.localX, hoveredCell.localZ, game.snapshot.buildRotation)).message
-    if (isScenery(kind)) contextHelp.textContent += isEdgeScenery(kind) ? ' · Maus: Feldkante · R: nächste Seite · Shift: Bauhöhe (0,5)' : isLargeScenery(kind) ? ' · Ganzes Feld · R: drehen' : ' · Maus: Viertelfeld · R: drehen'
-  }
-}
-
-function hideVisitorPanel(): void {
-  selectedVisitorId = null
-  followedVisitorId = null
-  view.followVisitor(null)
-  view.setVisitorPreviewTarget(null)
-  visitorPanel.classList.remove('visible')
-}
-
-function selectVisitor(visitorId: string): void {
-  selectedVisitorId = visitorId
-  if (followedVisitorId) {
-    followedVisitorId = visitorId
-    view.followVisitor(visitorId)
-  }
-  selectedEntity = null
-  entityPanel.hidden = true
-  view.setInspectedVehicle(null)
-  staffDetails.close()
-  view.setVisitorPreviewTarget(visitorId)
-  view.setVisitorPreviewMode(visitorPreviewMode)
-  visitorPanel.classList.add('visible')
-  updateVisitorPanel()
-}
-
-function updateVisitorPanel(): void {
-  if (!selectedVisitorId) return
-  const visitor = game.getVisitor(selectedVisitorId)
-  if (!visitor) {
-    if (followedVisitorId === selectedVisitorId) {
-      followedVisitorId = null
-      view.followVisitor(null)
-    }
-    selectedVisitorId = null
-    view.setVisitorPreviewTarget(null)
-    visitorPanel.classList.remove('visible')
-    return
-  }
-  const isFollowing = followedVisitorId === visitor.id
-  followVisitorButton.classList.toggle('active', isFollowing)
-  followVisitorButton.setAttribute('aria-pressed', String(isFollowing))
-  followVisitorButton.textContent = isFollowing
-    ? '⏹ Verfolgung beenden'
-    : '📍 Besucher verfolgen'
-
-  const stateLabels = {
-    entering: 'Betritt den Park',
-    exploring: 'Erkundet den Park',
-    seeking: 'Auf dem Weg zu einem Ziel',
-    using: 'Benutzt eine Attraktion',
-    queuing: 'Wartet an einer Achterbahn',
-    riding: 'Fährt Achterbahn',
-    sleeping: 'Schläft auf dem Boden',
-    camping: 'Am eigenen Zeltplatz',
-    socializing: 'Chillt auf dem Zeltplatz',
-    vomiting: 'Übergibt sich',
-    'security-check': 'Wird kontrolliert',
-    'medical-transport': 'Wird zum Krankenbereich gebracht',
-    medical: 'Wird medizinisch versorgt',
-    partying: 'Feiert zur Musik',
-    'bench-resting': 'Ruht sich auf einer Bank aus',
-    relaxing: 'Hält sich an einem Lieblingsort auf',
-    swimming: 'Baden im Wasser',
-    'camp-waiting': 'Wartet auf einen Campingplatz',
-    'vehicle-arrival': 'Sitzt im anreisenden Auto',
-    'bus-waiting': 'Wartet auf einen Bus',
-    'bus-riding': 'Fährt mit dem Bus',
-    injured: 'Wartet verletzt auf Hilfe',
-    exiting: 'Verlässt die Attraktion',
-    leaving: 'Verlässt den Park',
-    panicking: 'Flieht aus dem Gedränge',
-  }
-  visitorName.textContent = visitor.name
-  visitorThought.textContent = `„${visitor.thought}“`
-  visitorState.textContent =
-    visitor.streakingMinutes > 0
-      ? 'Flitzt nackt über das Gelände'
-      : stateLabels[visitor.state]
-  visitorBudget.textContent = formatMoney(visitor.budget)
-  requireElement<HTMLElement>('#visitor-music').textContent=GENRES.find(g=>g.id===visitor.musicTaste)?.name??'Noch offen'
-  requireElement<HTMLElement>('#visitor-audience').textContent = visitor.audience ? AUDIENCE_NAMES[visitor.audience] : 'Freies Spiel'
-  visitorAlcoholDisposition.textContent =
-    visitor.alcoholDisposition === 'aggressive' ? 'Eher aggressiv' : 'Eher ruhig'
-  visitorCamping.textContent =
-    visitor.campingPhase === 'none'
-      ? 'Kein Zelt'
-      : visitor.campingPhase === 'seeking'
-        ? 'Auf dem Weg zur Parzelle'
-        : visitor.campingPhase === 'building'
-          ? 'Baut das Zelt auf'
-          : visitor.campingPhase === 'packing'
-            ? 'Packt das Zelt ein'
-            : visitor.campingPhase === 'resting' || visitor.campingPhase === 'returning'
-              ? 'Erholt sich im eigenen Zelt'
-              : 'Zelt aufgebaut'
-  visitorTicket.textContent =
-    visitor.ticketType === 'camping' ? 'Campingpass' : 'Tageskarte'
-  visitorSleepRhythm.textContent =
-    `${formatTime(visitor.preferredBedtime)}–${formatTime(visitor.preferredWakeTime)}`
-  visitorCrowding.textContent = `${Math.round(visitor.crowding)}%`
-  visitorAttractiveness.textContent =
-    `${Math.round(visitor.localAttractiveness)}%`
-  visitorParty.textContent = `${Math.round(visitor.localPartyMood)}%`
-  visitorPreferences.textContent =
-    `Schönheit ${Math.round(visitor.beautyPreference * 100)}% · Party ${Math.round(visitor.partyPreference * 100)}%`
-  visitorInventory.innerHTML =
-    visitor.inventory.length > 0
-      ? visitor.inventory
-          .map((item) => {
-            const definition = INVENTORY_ITEMS[item.kind]
-            const deployed =
-              item.kind === 'tent' &&
-              visitor.campsite &&
-              visitor.campingPhase !== 'seeking' &&
-              visitor.campingPhase !== 'building'
-                ? ' · aufgebaut'
-                : (item.kind === 'chairs' ||
-                    item.kind === 'pavilion' ||
-                    item.kind === 'musicBox') &&
-                    game.snapshot.campInstallations.some(
-                      (installation) =>
-                        installation.kind === item.kind &&
-                        installation.contributorIds.includes(visitor.id),
-                    )
-                  ? ' · aufgestellt'
-                  : ''
-            return `<span title="${definition.name}${deployed}">${definition.icon} ${definition.name} ×${item.quantity}${deployed}</span>`
-          })
-          .join('')
-      : ''
-  const souvenirBits: string[] = []
-  if (visitor.ownedMascot) {
-    souvenirBits.push(
-      `<span title="Maskottchen">${visitor.heldMascot ? '🧸 Maskottchen · in der Hand' : '🧸 Maskottchen'}</span>`,
-    )
-  }
-  if (visitor.wornShirt) {
-    souvenirBits.push(
-      `<span title="Festival-Shirt">👕 ${SHIRT_STYLE_LABELS[visitor.wornShirt.style]}</span>`,
-    )
-  }
-  visitorInventory.innerHTML =
-    [visitorInventory.innerHTML, ...souvenirBits].filter(Boolean).join('') ||
-    '<small>Keine Gegenstände</small>'
-
-  const needKeys = ['hunger', 'toilet', 'fun', 'energy'] as const
-  needKeys.forEach((key) => {
-    const value = Math.round(visitor.needs[key])
-    const bar = requireElement<HTMLElement>(`#${key}-bar`)
-    const output = requireElement<HTMLElement>(`#${key}-value`)
-    bar.style.width = `${value}%`
-    bar.dataset.level = value < 30 ? 'critical' : value < 60 ? 'warning' : 'good'
-    output.textContent = `${value}%`
+  const placementPreview = refreshPlacementPreview()
+  contextHelp.textContent = contextHelpText({
+    game, hoveredCell, placementPreview,
+    modes: {
+      coaster: { active: coasterBuilderActive, coasterId: activeCoasterId, startCandidate: coasterStartCandidate, accessMode: coasterAccessMode },
+      path: { open: pathWindowOpen, constructing: pathEditorActive, demolishing: pathDemolishActive, road: roadEditorOpen, anchor: pathAnchor, constructionType: pathConstructionType },
+      rideAccess: rideAccessPlacement, backstageEraseMode, copyClipboard,
+    },
   })
-  const alcoholValue = Math.round(visitor.alcoholLevel)
-  const alcoholBar = requireElement<HTMLElement>('#alcohol-bar')
-  const alcoholOutput = requireElement<HTMLElement>('#alcohol-value')
-  alcoholBar.style.width = `${alcoholValue}%`
-  alcoholBar.dataset.level =
-    alcoholValue >= 70 ? 'critical' : alcoholValue >= 40 ? 'warning' : 'good'
-  alcoholOutput.textContent = `${alcoholValue}%`
-  const nauseaValue = Math.round(visitor.nausea)
-  const nauseaBar = requireElement<HTMLElement>('#nausea-bar')
-  const nauseaOutput = requireElement<HTMLElement>('#nausea-value')
-  nauseaBar.style.width = `${nauseaValue}%`
-  nauseaBar.dataset.level =
-    nauseaValue >= 75 ? 'critical' : nauseaValue >= 40 ? 'warning' : 'good'
-  nauseaOutput.textContent = `${nauseaValue}%`
-  const motivationValue = Math.round(visitor.motivation)
-  const motivationBar = requireElement<HTMLElement>('#motivation-bar')
-  const motivationOutput = requireElement<HTMLElement>('#motivation-value')
-  motivationBar.style.width = `${motivationValue}%`
-  motivationBar.dataset.level =
-    motivationValue < 25 ? 'critical' : motivationValue < 55 ? 'warning' : 'good'
-  motivationOutput.textContent = `${motivationValue}%`
 }
+
+function hideVisitorPanel(): void { visitorPanelController.hide() }
+function selectVisitor(visitorId: string): void { visitorPanelController.select(visitorId) }
+function updateVisitorPanel(): void { visitorPanelController.update() }
 
 function closeRideBuilder(resetTool = true): void {
   activeRideId = null
@@ -4710,559 +3403,12 @@ function openEntityInfoForBackstage(x: number, z: number): void {
 }
 
 function updateEntityPanel(): void {
-  requireElement<HTMLElement>('#open-ride-construction').hidden=true
-  editStageButton.hidden = true
-  if (!selectedEntity) return
-  accessControlOptions.hidden = selectedEntity.type !== 'access'
-  accessControlOptions.classList.toggle('visible', selectedEntity.type === 'access')
-  depotOptions.classList.toggle('visible', selectedEntity.type === 'depot')
-  if (selectedEntity.type === 'depot') {
-    const depot = game.getDepot(selectedEntity.id)
-    if (!depot) {
-      closeEntityPanel()
-      return
-    }
-    const delivery = depot.role === 'delivery'
-    entityIcon.textContent = delivery ? '📦' : '🏪'
-    entityType.textContent = delivery ? 'Anlieferungsplatz' : 'Warendepot'
-    entityName.textContent = delivery ? 'Anlieferung' : 'Depot'
-    entityStatus.textContent = delivery
-      ? 'Lastwagen laden hier ab. Träger bringen Ware zu Depots und Ständen.'
-      : depot.distribution === 'relay'
-        ? 'Zwischenlager: andere Depots dürfen entnehmen.'
-        : 'Versorgt Stände bis zum Mindestbestand.'
-    const workers = depotWorkerCount(depot.id)
-    entityStats.innerHTML = `
-      <span>Position <b>${depot.x}, ${depot.z}</b></span>
-      <span>Träger <b>${workers}</b></span>
-      ${Object.entries(SUPPLIES)
-        .map(
-          ([kind, item]) =>
-            `<span>${item.name} <b>${Math.floor(depot.stock[kind as Supply])} / ${depot.minimum[kind as Supply]}</b></span>`,
-        )
-        .join('')}
-    `
-    depotRoleHint.textContent = delivery
-      ? 'Mindestbestand löst Nachbestellungen aus. Träger holen Ware hier ab.'
-      : 'Mindestbestand und Träger gelten für dieses Depot.'
-    if (document.activeElement !== depotWorkers) depotWorkers.value = String(workers)
-    depotWorkersValue.textContent = depotWorkers.value
-    if (document.activeElement !== depotDistribution) {
-      depotDistribution.value = depot.distribution ?? 'shops'
-    }
-    syncStockSliders(depotOptions, 'data-depot-min', depot)
-    entityTabs.classList.remove('visible')
-    entityOverview.hidden = false
-    entityDynamics.classList.remove('visible')
-    priceOptions.classList.remove('visible')
-    shirtOptions.classList.remove('visible')
-    applyPriceToKindButton.hidden = true
-    securityOptions.classList.remove('visible')
-    coasterOptions.classList.remove('visible')
-    return
-  }
-  if (selectedEntity.type === 'access') {
-    const control = game.getAccessControl(selectedEntity.id)
-    if (!control) {
-      closeEntityPanel()
-      return
-    }
-    const isLight = control.kind === 'trafficLight'
-    entityIcon.textContent = isLight ? '🚦' : '🚧'
-    entityType.textContent = isLight ? 'Ampel' : 'Personentor'
-    entityName.textContent = isLight ? 'Straßenampel' : 'Personentor'
-    entityStatus.textContent = accessStatusText(control)
-    accessSignal.textContent = entityStatus.textContent
-    entityStats.innerHTML = `
-      <span>Modus <b>${accessModeLabel(control.mode)}</b></span>
-      <span>Richtung <b>${getIsoDirectionIcon(control.direction)}</b></span>
-      ${
-        control.kind === 'pathBarrier'
-          ? `<span>Durchgang <b>${control.passage === 'both' ? 'beide Richtungen' : 'eine Richtung'}</b></span>`
-          : ''
-      }
-      <span>Gebiet <b>${control.area.length} Felder</b></span>
-    `
-    entityTabs.classList.remove('visible')
-    entityOverview.hidden = false
-    entityDynamics.classList.remove('visible')
-    priceOptions.classList.remove('visible')
-    shirtOptions.classList.remove('visible')
-    applyPriceToKindButton.hidden = true
-    securityOptions.classList.remove('visible')
-    coasterOptions.classList.remove('visible')
-    depotOptions.classList.remove('visible')
-    accessControlOptions.hidden = false
-    accessControlOptions.classList.add('visible')
-    renderAccessControlForm(control)
-    return
-  }
-  if (selectedEntity.type === 'vehicle') {
-    const vehicle = game.snapshot.logistics.roadVehicles.find(
-      (item) => item.id === selectedEntity?.id,
-    )
-    if (!vehicle) {
-      closeEntityPanel()
-      return
-    }
-    const kind = ROAD_VEHICLE_KIND_LABELS[vehicle.kind]
-    const destination = describeRoadVehicleDestination(vehicle)
-    entityIcon.textContent = kind.icon
-    entityType.textContent = kind.name
-    entityName.textContent = kind.name
-    entityStatus.textContent = describeRoadVehicleActivity(vehicle)
-    entityStats.innerHTML = `
-      <span>Status <b>${describeRoadVehicleActivity(vehicle)}</b></span>
-      ${destination ? `<span>Ziel <b>${destination}</b></span>` : ''}
-      <span>Route <b>${vehicle.route.length} Felder</b></span>
-      ${formatRoadVehicleInspectLoad(
-        vehicle,
-        game.snapshot.logistics.arrivalGroups.find(
-          (group) => group.id === vehicle.groupId,
-        )?.memberIds.length,
-      )
-        .map((stat) => `<span>${stat.label} <b>${stat.value}</b></span>`)
-        .join('')}
-      ${
-        vehicle.waitMinutes > 0
-          ? `<span>Wartet seit <b>${vehicle.waitMinutes.toFixed(1)} min</b></span>`
-          : ''
-      }
-      ${
-        vehicle.kind === 'ambulance'
-          ? `<button type="button" data-sell-ambulance-vehicle="${vehicle.id}">Krankenwagen verkaufen</button>`
-          : ''
-      }
-    `
-    entityTabs.classList.remove('visible')
-    entityOverview.hidden = false
-    entityDynamics.classList.remove('visible')
-    priceOptions.classList.remove('visible')
-    shirtOptions.classList.remove('visible')
-    applyPriceToKindButton.hidden = true
-    securityOptions.classList.remove('visible')
-    coasterOptions.classList.remove('visible')
-    depotOptions.classList.remove('visible')
-    return
-  }
-  if (selectedEntity.type === 'wasteDump') {
-    const origin = parseWasteDumpId(selectedEntity.id)
-    const stats =
-      origin &&
-      connectedWasteDumpStats(game.snapshot.wasteDumpCells ?? [], origin)
-    if (!stats) {
-      closeEntityPanel()
-      return
-    }
-    const inspect = formatWasteDumpAreaInspect(stats)
-    entityIcon.textContent = '🗑️'
-    entityType.textContent = 'Müllsammelplatz'
-    entityName.textContent = 'Müllablage'
-    entityStatus.textContent = inspect.status
-    entityStats.innerHTML = inspect.lines
-      .map((line) => `<span>${line.label} <b>${line.value}</b></span>`)
-      .join('')
-    entityTabs.classList.remove('visible')
-    entityOverview.hidden = false
-    entityDynamics.classList.remove('visible')
-    priceOptions.classList.remove('visible')
-    shirtOptions.classList.remove('visible')
-    applyPriceToKindButton.hidden = true
-    securityOptions.classList.remove('visible')
-    coasterOptions.classList.remove('visible')
-    depotOptions.classList.remove('visible')
-    return
-  }
-  if (selectedEntity.type === 'backstage') {
-    const match = /^backstage:(-?\d+):(-?\d+)$/.exec(selectedEntity.id)
-    const stats =
-      match && game.getBandSupplyAt(Number(match[1]), Number(match[2]))
-    if (!stats) {
-      closeEntityPanel()
-      return
-    }
-    const inspect = formatBackstageInspect(stats)
-    entityIcon.textContent = '🎤'
-    entityType.textContent = 'Bandversorgung'
-    entityName.textContent = 'Backstage'
-    entityStatus.textContent = inspect.status
-    entityStats.innerHTML = inspect.lines
-      .map((line) => `<span>${line.label} <b>${line.value}</b></span>`)
-      .join('')
-    entityTabs.classList.remove('visible')
-    entityOverview.hidden = false
-    entityDynamics.classList.remove('visible')
-    priceOptions.classList.remove('visible')
-    shirtOptions.classList.remove('visible')
-    applyPriceToKindButton.hidden = true
-    securityOptions.classList.remove('visible')
-    coasterOptions.classList.remove('visible')
-    depotOptions.classList.remove('visible')
-    return
-  }
-  if (selectedEntity.type === 'building') {
-    const building = game.snapshot.buildings.find((item) => item.id === selectedEntity?.id)
-    if (!building) {
-      closeEntityPanel()
-      return
-    }
-    editStageButton.hidden = building.kind !== 'stage'
-    const definition = BUILDINGS[building.kind]
-    entityIcon.textContent = definition.icon
-    entityType.textContent = 'Gebäude'
-    entityName.textContent = building.rideType === 'bungee' ? `Bungee-Turm · ${building.bungeeHeight ?? 20} m` : definition.name
-    requireElement<HTMLElement>('#open-ride-construction').hidden=building.kind!=='ride'
-    const scheduledActive = game.isBuildingCurrentlyActive(building)
-    const needsPower = (SIMULATION_CONFIG.power.demand[building.kind] ?? 0) > 0
-    const hasPower = game.isBuildingPowered(building.id)
-    const stageDayPlanActive =
-      building.kind === 'stage' &&
-      game.isOfferCurrentlyActive('stages')
-    entityStatus.textContent =
-      game.getRideAccessIssue(building) ?? (needsPower && !hasPower
-        ? 'Kein Strom – Kabel zum Generator verlegen'
-      : stageDayPlanActive && !scheduledActive
-        ? `☕ ${building.bandName ?? 'Band'} macht 30 Minuten Pause`
-      : !scheduledActive
-        ? 'Nach Tagesplan derzeit geschlossen'
-        : building.kind === 'stage'
-        ? `🎸 ${building.bandName ?? 'Band'} spielt gerade`
-        : building.kind === 'directionalSpeaker'
-          ? `Schallrichtung ${getIsoDirectionIcon(building.rotation)} · direkt davor zu laut`
-          : building.kind === 'omniSpeaker'
-            ? 'Beschallt die Umgebung in alle Richtungen'
-            : isWasteBin(building.kind)
-              ? `Füllstand ${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity} · Gäste im Umkreis von 7 Feldern nutzen ihn`
-            : isSealedWasteContainer(building.kind)
-              ? formatSealedContainerInspect({
-                  stored: building.wasteFill ?? 0,
-                  onRoad: Boolean(
-                    game.getRoadCellAt(building.x, building.z, building.elevation),
-                  ),
-                  truckReachable: Boolean(
-                    game.getRoadCellAt(building.x, building.z, building.elevation),
-                  ),
-                }).status
-            : `Zugang ${getIsoDirectionIcon(building.rotation)} · Ebene ${building.elevation}`)
-    const demand = SIMULATION_CONFIG.power.demand[building.kind] ?? 0
-    const output = SIMULATION_CONFIG.power.output[building.kind] ?? 0
-    entityStats.innerHTML = `
-      <span>Baukosten <b>${formatMoney(definition.cost + (building.stageDesign ? stageStats(building.stageDesign).cost : 0))}</b></span>
-      ${building.stageDesign ? `<span>Eigene Bühne <b>${escapeHtml(building.stageDesign.name)}</b></span><span>Party / Umgebung <b>${stageStats(building.stageDesign).party} / ${stageStats(building.stageDesign).beauty}</b></span><span>Technik zusätzlich <b>${stageStats(building.stageDesign).power} kW · ${stageStats(building.stageDesign).upkeep} €/h</b></span>` : ''}
-      <span>Unterhalt <b>${formatMoney(definition.upkeep)}/h</b></span>
-      <span>Kapazität <b>${building.rideType === 'bungee' ? '1 Springer' : definition.capacity}</b></span>
-      ${shopSupplyKind(building.kind) ? `<span>Warenbestand <b>${Math.floor(game.snapshot.festival.infrastructure.shops[building.id]?.[shopSupplyKind(building.kind)!]??0)} / Ziel 40</b></span>` : ''}
-      ${
-        isWasteBin(building.kind)
-          ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity}</b></span>`
-          : isSealedWasteContainer(building.kind)
-            ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.sealedContainerCapacity}</b></span>`
-          : ''
-      }
-      ${
-        output > 0
-          ? `<span>Leistung <b>${output} kW</b></span>`
-          : demand > 0
-            ? `<span>Strom <b>${demand} kW ${hasPower ? 'versorgt' : 'ohne Netz'}</b></span>`
-            : ''
-      }
-    `
-    entityTabs.classList.remove('visible')
-    entityOverview.hidden = false
-    entityDynamics.classList.remove('visible')
-    const hasPrice = isPricedShopKind(building.kind)
-    const isShirtStall = building.kind === 'shirt'
-    priceOptions.classList.toggle('visible', hasPrice)
-    shirtOptions.classList.toggle('visible', isShirtStall)
-    if (isShirtStall) {
-      const selectedColor = building.shirtColor ?? SHIRT_COLORS[0]!.color
-      if (shirtColorPalette.dataset.built !== '1') {
-        shirtColorPalette.innerHTML = SHIRT_COLORS.map(
-          (swatch) =>
-            `<button type="button" class="shirt-color-swatch" data-shirt-color="${swatch.color}" title="${swatch.name}" style="background:#${swatch.color.toString(16).padStart(6, '0')}"></button>`,
-        ).join('')
-        shirtColorPalette.dataset.built = '1'
-      }
-      shirtColorPalette.querySelectorAll<HTMLButtonElement>('[data-shirt-color]').forEach((button) => {
-        button.classList.toggle('selected', Number(button.dataset.shirtColor) === selectedColor)
-      })
-      if (document.activeElement !== shirtStyleSelect) {
-        shirtStyleSelect.value = building.shirtStyle ?? 'basic'
-      }
-    }
-    applyPriceToKindButton.hidden = !hasPrice
-    if (hasPrice) {
-      applyPriceToKindButton.textContent =
-        `Für alle ${BUILDINGS[building.kind].name}-Gebäude übernehmen`
-    }
-    if (hasPrice && document.activeElement !== entityPriceInput) {
-      entityPriceInput.value = String(building.price)
-    }
-    depotOptions.classList.remove('visible')
-    const isSecurityGate = building.kind === 'securityGate'
-    securityOptions.classList.toggle('visible', isSecurityGate)
-    if (isSecurityGate) {
-      const config = building.securityConfig!
-      const assigned = game.snapshot.staff.find(
-        (member) =>
-          member.role === 'security' && member.assignedBuildingId === building.id,
-      )
-      securityStaffing.textContent = assigned
-        ? `Besetzt durch ${assigned.name}`
-        : 'Unbesetzt – Kontrollen finden nicht statt'
-      if (document.activeElement !== securityThoroughness) {
-        securityThoroughness.value = String(Math.round(config.thoroughness * 100))
-      }
-      securityThoroughnessValue.textContent = `${Math.round(config.thoroughness * 100)}%`
-      if (document.activeElement !== securityFlowShare) {
-        securityFlowShare.value = String(Math.round(config.flowShare * 100))
-      }
-      securityFlowShareValue.textContent = `${Math.round(config.flowShare * 100)}%`
-      const itemsFingerprint = `${building.id}:${[...config.prohibitedItems].sort().join(',')}`
-      if (itemsFingerprint !== securityItemsFingerprint) {
-        securityItemsFingerprint = itemsFingerprint
-        securityProhibitedItems.innerHTML = Object.values(INVENTORY_ITEMS)
-          .map(
-            (item) =>
-              `<label><input type="checkbox" data-security-item="${item.kind}" ${config.prohibitedItems.includes(item.kind) ? 'checked' : ''}> ${item.icon} ${item.name}</label>`,
-          )
-          .join('')
-      }
-    }
-    coasterOptions.classList.remove('visible')
-    return
-  }
-
-  const coaster = game.getCoaster(selectedEntity.id)
-  if (!coaster) {
-    closeEntityPanel()
-    return
-  }
-  const type = getCoasterType(coaster.typeId)
-  const train = coaster.train
-  const operationLabels = {
-    closed: 'Geschlossen',
-    open: 'Geöffnet',
-    test: 'Testbetrieb',
-  }
-  entityIcon.textContent = '🎢'
-  entityType.textContent = type.name
-  entityName.textContent = coaster.name
-  entityStatus.textContent = !coaster.closed
-    ? 'Die Strecke ist noch nicht geschlossen.'
-    : coaster.operationMode === 'open' && (!coaster.entrance || !coaster.exit)
-      ? 'Die Station benötigt einen Eingang und einen Ausgang.'
-      : coaster.operationMode === 'closed'
-        ? 'Die Achterbahn ist geschlossen.'
-        : coaster.operationMode === 'open' &&
-            !game.isOfferCurrentlyActive('rides')
-          ? 'Nach Tagesplan derzeit geschlossen.'
-      : train.state === 'running'
-        ? `Zug unterwegs · ${Math.round(train.progress * 100)}% · ${Math.abs(train.speed * 3.6).toFixed(1)} km/h${train.speed < 0 ? ' rückwärts' : ''}`
-        : train.state === 'unloading'
-          ? `Aussteigen · noch ${train.passengers} Gäste im Zug`
-          : `Einsteigen · ${train.passengers}/${train.capacity} Gäste · ${Math.floor(train.waitMinutes)} min`
-  entityStats.innerHTML = `
-    <span>Status <b>${operationLabels[coaster.operationMode]}</b></span>
-    <span>Schienenelemente <b>${coaster.pieces.length}</b></span>
-    <span>Stationsplattformen/Wagen <b>${train.cars}</b></span>
-    <span>Warteschlange <b>${coaster.queue.length}/${game.getCoasterQueueCapacity(coaster.id)}</b></span>
-    <span>Stationskettenantrieb <b>Automatisch</b></span>
-    <span>Kettenzüge <b>${coaster.pieces.filter((piece) => piece.chainLift).length}</b></span>
-    <span>Geschwindigkeit <b>${Math.abs(train.speed * 3.6).toFixed(1)} km/h</b></span>
-  `
-  coasterOptions.classList.add('visible')
-  shirtOptions.classList.remove('visible')
-  securityOptions.classList.remove('visible')
-  depotOptions.classList.remove('visible')
-  entityTabs.classList.add('visible')
-  entityOverview.hidden = entityTab !== 'overview'
-  entityDynamics.classList.toggle('visible', entityTab === 'dynamics')
-  document.querySelectorAll<HTMLButtonElement>('[data-entity-tab]').forEach((button) => {
-    button.classList.toggle('active', button.dataset.entityTab === entityTab)
-  })
-  priceOptions.classList.add('visible')
-  applyPriceToKindButton.hidden = true
-  if (document.activeElement !== entityPriceInput) {
-    entityPriceInput.value = String(coaster.ticketPrice)
-  }
-  operationModeSelect.value = coaster.operationMode
-  dispatchModeSelect.value = coaster.settings.dispatchMode
-  dispatchIntervalInput.value = String(coaster.settings.dispatchIntervalMinutes)
-  dispatchValue.textContent = `${coaster.settings.dispatchIntervalMinutes} min`
-  if (entityTab === 'dynamics') updateCoasterDynamics(coaster)
-}
-
-function updateCoasterDynamics(coaster: Coaster): void {
-  const telemetry = coaster.telemetry
-  const hasData = telemetry.samples.length > 1
-  const minimumVertical = Number.isFinite(telemetry.minVerticalG)
-    ? telemetry.minVerticalG
-    : 0
-  const maximumVertical = Number.isFinite(telemetry.maxVerticalG)
-    ? telemetry.maxVerticalG
-    : 0
-  const minimumLateral = hasData
-    ? Math.min(...telemetry.samples.map((sample) => sample.lateralG))
-    : 0
-  const maximumLateral = hasData
-    ? Math.max(...telemetry.samples.map((sample) => sample.lateralG))
-    : 0
-  const minimumLongitudinal = hasData
-    ? Math.min(...telemetry.samples.map((sample) => sample.longitudinalG))
-    : 0
-  const maximumLongitudinal = hasData
-    ? Math.max(...telemetry.samples.map((sample) => sample.longitudinalG))
-    : 0
-  const worldUnitMeters = getCoasterType(coaster.typeId).physics.worldUnitMeters
-  const trackLengthMeters = coaster.pieces.reduce(
-    (total, piece) =>
-      total +
-      piece.points.slice(1).reduce((pieceLength, point, index) => {
-        const previous = piece.points[index]
-        return previous
-          ? pieceLength +
-              Math.hypot(
-                point.x - previous.x,
-                point.y - previous.y,
-                point.z - previous.z,
-              ) *
-                worldUnitMeters
-          : pieceLength
-      }, 0),
-    0,
-  )
-  const activeRunCount = telemetry.measuring ? 1 : 0
-  const measuredRunCount = Math.max(1, telemetry.completedRuns + activeRunCount)
-  const averageSpeedKmh =
-    telemetry.durationSeconds > 0
-      ? (telemetry.cumulativeDistanceMeters / telemetry.durationSeconds) * 3.6
-      : 0
-  const averageDurationSeconds = telemetry.durationSeconds / measuredRunCount
-  const averageAirtimeSeconds = telemetry.airtimeSeconds / measuredRunCount
-  const dangers: string[] = []
-  const warnings: string[] = []
-  if (minimumVertical < -1.5) dangers.push('zu starke negative Vertikalkraft')
-  else if (minimumVertical < -0.8) warnings.push('hohe negative Vertikalkraft')
-  if (maximumVertical > 5) dangers.push('zu starke positive Vertikalkraft')
-  else if (maximumVertical > 4) warnings.push('hohe positive Vertikalkraft')
-  if (telemetry.maxAbsLateralG > 2.5) dangers.push('zu starke Seitenkraft')
-  else if (telemetry.maxAbsLateralG > 1.8) warnings.push('hohe Seitenkraft')
-  if (telemetry.maxAbsLongitudinalG > 3) dangers.push('zu starke Längskraft')
-  else if (telemetry.maxAbsLongitudinalG > 2) warnings.push('hohe Längskraft')
-
-  const safetyLevel = !hasData ? 'unknown' : dangers.length > 0 ? 'danger' : warnings.length > 0 ? 'warning' : 'safe'
-  dynamicsSafety.className = `dynamics-safety ${safetyLevel}`
-  dynamicsSafety.textContent = !hasData
-    ? 'Noch keine vollständige Messfahrt'
-    : dangers.length > 0
-      ? '⚠ Potenziell gesundheitsschädlich'
-      : warnings.length > 0
-        ? '△ Hohe Belastung – Strecke prüfen'
-        : '✓ Belastungen im sicheren Bereich'
-
-  dynamicsStats.innerHTML = `
-    <span><small>Vertikal-G</small><b>${minimumVertical.toFixed(2)} bis ${maximumVertical.toFixed(2)} g</b></span>
-    <span><small>Seiten-G</small><b>${minimumLateral.toFixed(2)} bis ${maximumLateral.toFixed(2)} g</b></span>
-    <span><small>Längs-G</small><b>${minimumLongitudinal.toFixed(2)} bis ${maximumLongitudinal.toFixed(2)} g</b></span>
-    <span><small>Ø Hängezeit</small><b>${averageAirtimeSeconds.toFixed(1)} s</b></span>
-    <span><small>Höchsttempo</small><b>${telemetry.maxSpeedKmh.toFixed(1)} km/h</b></span>
-    <span><small>Ø Tempo</small><b>${averageSpeedKmh.toFixed(1)} km/h</b></span>
-    <span><small>Ø Fahrtdauer</small><b>${averageDurationSeconds.toFixed(1)} s</b></span>
-    <span><small>Streckenlänge</small><b>${trackLengthMeters.toFixed(0)} m</b></span>
-  `
-  dynamicsInfo.textContent = !hasData
-    ? 'Öffne den Testbetrieb oder lasse einen Zug fahren, um Messwerte zu erfassen.'
-    : dangers.length > 0
-      ? `Kritische Werte: ${dangers.join(', ')}. Grenzwerte: −1,5 bis +5 g vertikal, 2,5 g seitlich und 3 g längs.`
-      : warnings.length > 0
-        ? `Hinweise: ${warnings.join(', ')}. Kurven und Übergänge sollten weicher gestaltet werden.`
-        : `${telemetry.completedRuns} abgeschlossene Messfahrt${telemetry.completedRuns === 1 ? '' : 'en'} · Hängezeit wird unter 0,2 Vertikal-g gezählt.`
-  drawTelemetryChart(coaster)
-}
-
-function drawTelemetryChart(coaster: Coaster): void {
-  const context = telemetryChart.getContext('2d')
-  if (!context) return
-  const width = telemetryChart.width
-  const height = telemetryChart.height
-  context.clearRect(0, 0, width, height)
-  context.fillStyle = '#172720'
-  context.fillRect(0, 0, width, height)
-
-  const samples = coaster.telemetry.samples
-  if (samples.length < 2) {
-    context.fillStyle = '#8fa69c'
-    context.font = '22px sans-serif'
-    context.textAlign = 'center'
-    context.fillText('Messfahrt erforderlich', width / 2, height / 2)
-    return
-  }
-
-  const padding = { left: 48, right: 16, top: 16, bottom: 30 }
-  const plotWidth = width - padding.left - padding.right
-  const plotHeight = height - padding.top - padding.bottom
-  const maximumDistance = Math.max(1, ...samples.map((sample) => sample.distance))
-  const forceValues = samples.flatMap((sample) => [
-    sample.verticalG,
-    sample.lateralG,
-    sample.longitudinalG,
-  ])
-  const minimumForce = Math.max(-8, Math.floor(Math.min(-2, ...forceValues)))
-  const maximumForce = Math.min(8, Math.ceil(Math.max(6, ...forceValues)))
-  const forceRange = Math.max(1, maximumForce - minimumForce)
-  const xFor = (distance: number) =>
-    padding.left + (distance / maximumDistance) * plotWidth
-  const yFor = (force: number) =>
-    padding.top + ((maximumForce - force) / forceRange) * plotHeight
-
-  context.fillStyle = 'rgba(218, 82, 82, 0.1)'
-  context.fillRect(
-    padding.left,
-    padding.top,
-    plotWidth,
-    Math.max(0, yFor(5) - padding.top),
-  )
-  context.fillRect(
-    padding.left,
-    yFor(-1.5),
-    plotWidth,
-    Math.max(0, padding.top + plotHeight - yFor(-1.5)),
-  )
-
-  context.font = '16px sans-serif'
-  context.textAlign = 'right'
-  context.textBaseline = 'middle'
-  for (let force = Math.ceil(minimumForce); force <= maximumForce; force += 1) {
-    const y = yFor(force)
-    context.strokeStyle = force === 0 ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.08)'
-    context.beginPath()
-    context.moveTo(padding.left, y)
-    context.lineTo(width - padding.right, y)
-    context.stroke()
-    context.fillStyle = '#80978c'
-    context.fillText(`${force}g`, padding.left - 7, y)
-  }
-  context.textAlign = 'center'
-  context.textBaseline = 'top'
-  context.fillText('Streckenposition', padding.left + plotWidth / 2, height - 22)
-
-  const series = [
-    { key: 'verticalG', color: '#72df91' },
-    { key: 'lateralG', color: '#ef79bd' },
-    { key: 'longitudinalG', color: '#f0c85a' },
-  ] as const
-  series.forEach(({ key, color }) => {
-    context.strokeStyle = color
-    context.lineWidth = 3
-    context.beginPath()
-    samples.forEach((sample, index) => {
-      const x = xFor(sample.distance)
-      const y = yFor(sample[key])
-      if (index === 0) context.moveTo(x, y)
-      else context.lineTo(x, y)
-    })
-    context.stroke()
+  renderEntityPanel({ selection: selectedEntity, tab: entityTab, cameraQuarter }, {
+    game, close: closeEntityPanel, depotWorkerCount,
+    syncDepotStock: (root, depot) => syncStockSliders(root, 'data-depot-min', depot),
+    renderAccessControl: renderAccessControlForm,
+    accessStatus: accessStatusText,
+    accessMode: accessModeLabel,
   })
 }
 
@@ -5503,176 +3649,33 @@ const buildCatalogCost = requireElement<HTMLElement>('#build-catalog-cost')
 let lastBuildCategory: BuildCategoryId = 'paths'
 let lastBuildGroup = new Map<BuildCategoryId, string>()
 let lastDecorationTheme: DecorationThemeId = DEFAULT_DECORATION_THEME
-let catalogHoverActive = false
-
-function fillBuildThumbnails(): void {
-  buildGrid.querySelectorAll<HTMLElement>('[data-preview-kind]').forEach((element) => {
-    const kind = element.dataset.previewKind as BuildingKind
-    const image = document.createElement('img')
-    image.src = view.buildingThumbnail(kind)
-    image.alt = ''
-    image.setAttribute('aria-hidden', 'true')
-    element.replaceChildren(image)
-    delete element.dataset.previewKind
-  })
-  buildGrid.querySelectorAll<HTMLElement>('[data-preview-supply]').forEach((element) => {
-    const kind = element.dataset.previewSupply as 'delivery' | 'supply'
-    const image = document.createElement('img')
-    image.src = view.supplyThumbnail(kind)
-    image.alt = ''
-    image.setAttribute('aria-hidden', 'true')
-    element.replaceChildren(image)
-    delete element.dataset.previewSupply
-  })
-  buildGrid.querySelectorAll<HTMLElement>('[data-preview-coaster]').forEach((element) => {
-    const typeId = element.dataset.previewCoaster as CoasterTypeId
-    const image = document.createElement('img')
-    image.src = view.coasterTrainThumbnail(typeId)
-    image.alt = ''
-    image.setAttribute('aria-hidden', 'true')
-    element.replaceChildren(image)
-    delete element.dataset.previewCoaster
-  })
-}
-
-function showCatalogStatus(button: HTMLButtonElement | null): void {
-  if (buildCatalogStatus.hidden) return
-  if (!button) {
-    buildCatalogName.textContent = 'Objekt wählen'
-    buildCatalogDetail.textContent = ''
-    buildCatalogDetail.hidden = true
-    buildCatalogCost.textContent = ''
-    return
-  }
-  const name = button.dataset.catalogName ?? button.textContent?.trim() ?? 'Objekt wählen'
-  const detail = button.dataset.catalogDetail ?? ''
-  const cost = button.dataset.catalogCost ?? ''
-  buildCatalogName.textContent = name
-  buildCatalogDetail.textContent = detail
-  buildCatalogDetail.hidden = detail.length === 0
-  buildCatalogCost.textContent = cost ? `Kosten: ${cost}` : ''
-}
-
-function showSelectedCatalogStatus(): void {
-  const active = buildGrid.querySelector<HTMLButtonElement>('.tool.active')
-  showCatalogStatus(active ?? buildGrid.querySelector<HTMLButtonElement>('.tool'))
-}
-
-function catalogTileHtml(item: BuildMenuItem, catalog: boolean): string {
-  const stageTemplate =
-    item.tool === 'stage'
-      ? game.snapshot.festival.stageTemplates?.find(
-          (template) => template.name === game.snapshot.festival.selectedStageTemplate,
-        )
-      : undefined
-  const name = escapeHtml(stageTemplate ? stageTemplate.name : item.name)
-  const buildingCost =
-    item.tool === 'stage'
-      ? formatMoney(BUILDINGS.stage.cost + (stageTemplate ? stageStats(stageTemplate).cost : 0))
-      : item.previewKind && !item.bungee
-        ? formatMoney(BUILDINGS[item.previewKind].cost)
-        : ''
-  const cost = buildingCost || (/€/.test(item.detail) ? item.detail : '')
-  const extraDetail = item.detail !== cost && item.detail !== buildingCost ? item.detail : ''
-  const preview = item.previewKind
-    ? `<span class="building-preview" data-preview-kind="${item.previewKind}">${item.icon}</span>`
-    : item.previewSupply
-      ? `<span class="building-preview" data-preview-supply="${item.previewSupply}">${item.icon}</span>`
-      : item.coasterTypeId
-        ? `<span class="building-preview" data-preview-coaster="${item.coasterTypeId}">${item.icon}</span>`
-        : `<span>${item.icon}</span>`
-  const speedClass =
-    item.tool === 'roadSpeed10'
-      ? ' speed-10'
-      : item.tool === 'roadSpeed30'
-        ? ' speed-30'
-        : item.tool === 'roadSpeed50'
-          ? ' speed-50'
-          : ''
-  const label = [name, extraDetail, cost].filter(Boolean).join(', ')
-  const catalogAttrs = catalog
-    ? ` data-catalog-name="${name}" data-catalog-detail="${escapeHtml(extraDetail)}" data-catalog-cost="${escapeHtml(cost)}" aria-label="${escapeHtml(label)}"`
-    : ''
-  const caption = catalog ? '' : `<em>${name}<small>${item.tool === 'stage' ? cost : item.detail}</small></em>`
-  return `<button class="tool${speedClass}" data-tool="${item.tool}"${item.bungee ? ' data-bungee="true"' : ''}${item.coasterTypeId ? ` data-coaster-type="${item.coasterTypeId}"` : ''}${catalogAttrs} type="button">${preview}${caption}</button>`
-}
-
-function decorationItem(kind: BuildingKind): BuildMenuItem {
-  const building = BUILDINGS[kind]
-  return {
-    tool: kind,
-    name: building.name,
-    icon: building.icon,
-    detail: `${Math.floor(building.cost).toLocaleString('de-DE')} €`,
-    previewKind: kind,
-  }
-}
-
-function renderDecorationThemes(): void {
-  const host = document.querySelector<HTMLElement>('#decoration-themes')
-  if (!host) return
-  host.innerHTML = DECORATION_THEMES.map(
-    (theme) =>
-      `<button type="button" data-decoration-theme="${theme.id}" aria-pressed="${theme.id === lastDecorationTheme}" title="${escapeHtml(theme.rationale)}">${theme.icon}<small>${escapeHtml(theme.label)}</small></button>`,
-  ).join('')
-}
+const buildCatalog = createBuildCatalog(
+  {
+    panel: buildMenuPanel,
+    title: buildMenuTitle,
+    grid: buildGrid,
+    subtabs: buildSubtabs,
+    status: buildCatalogStatus,
+    statusName: buildCatalogName,
+    statusDetail: buildCatalogDetail,
+    statusCost: buildCatalogCost,
+    decorationThemes: document.querySelector<HTMLElement>('#decoration-themes'),
+  },
+  () => game.snapshot,
+  view,
+  formatMoney,
+)
 
 function renderDecorationCatalog(): void {
-  renderDecorationThemes()
-  buildSubtabs.hidden = true
-  buildSubtabs.replaceChildren()
-  const sections = DECORATION_CATEGORY_IDS.flatMap((category) => {
-    const kinds = filterDecorationKinds(lastDecorationTheme, category)
-    if (kinds.length === 0) return []
-    const tiles = kinds.map((kind) => catalogTileHtml(decorationItem(kind), true)).join('')
-    return [
-      `<section class="decoration-category" data-decoration-category="${category}"><h3>${DECORATION_CATEGORY_LABELS[category]}</h3><div class="decoration-category-grid">${tiles}</div></section>`,
-    ]
-  })
-  buildGrid.innerHTML = sections.length
-    ? sections.join('')
-    : '<p class="decoration-empty">Keine Deko in diesem Thema.</p>'
-  fillBuildThumbnails()
-  showSelectedCatalogStatus()
+  buildCatalog.renderDecoration(lastDecorationTheme)
 }
 
 function renderBuildGrid(categoryId: BuildCategoryId, groupId?: string): void {
-  const category = buildCategoryById(categoryId)
-  const group =
-    category.groups.find((entry) => entry.id === groupId) ?? category.groups[0]!
-  const catalog = isCatalogBuildCategory(categoryId)
-  lastBuildGroup.set(categoryId, group.id)
-  catalogHoverActive = false
-  buildMenuTitle.textContent = category.label
-  buildMenuPanel.classList.toggle('build-menu-catalog', catalog)
-  buildMenuPanel.classList.toggle('build-menu-decoration', categoryId === 'decoration')
-  buildCatalogStatus.hidden = !catalog
-  document.querySelectorAll<HTMLElement>('.build-extra').forEach((extra) => {
-    extra.hidden = extra.id !== `build-extra-${category.extra ?? ''}`
-  })
+  const groupIdUsed = buildCatalog.render(categoryId, groupId)
+  lastBuildGroup.set(categoryId, groupIdUsed)
   if (categoryId === 'decoration') {
     renderDecorationCatalog()
-    return
   }
-  if (category.groups.length > 1) {
-    buildSubtabs.hidden = false
-    buildSubtabs.innerHTML = category.groups
-      .map(
-        (entry) =>
-          `<button type="button" data-build-group="${entry.id}" aria-pressed="${entry.id === group.id}">${entry.label}</button>`,
-      )
-      .join('')
-  } else {
-    buildSubtabs.hidden = true
-    buildSubtabs.replaceChildren()
-  }
-  const attractionsExtra = document.querySelector<HTMLElement>('#build-extra-attractions')
-  if (attractionsExtra && categoryId === 'attractions') {
-    attractionsExtra.hidden = group.id !== 'rides'
-  }
-  buildGrid.innerHTML = group.items.map((item) => catalogTileHtml(item, catalog)).join('')
-  fillBuildThumbnails()
-  if (catalog) showSelectedCatalogStatus()
 }
 
 function setToolbarCategoryOpen(categoryId: BuildCategoryId | null): void {
@@ -5819,24 +3822,7 @@ buildGrid.addEventListener('click', (event) => {
   const button = (event.target as Element).closest<HTMLButtonElement>('[data-tool]')
   if (button) activateBuildTool(button)
 })
-buildGrid.addEventListener('pointerover', (event) => {
-  const button = (event.target as Element).closest<HTMLButtonElement>('[data-tool]')
-  if (!button || !buildGrid.contains(button) || buildCatalogStatus.hidden) return
-  catalogHoverActive = true
-  showCatalogStatus(button)
-})
-buildGrid.addEventListener('pointerleave', () => {
-  catalogHoverActive = false
-  showSelectedCatalogStatus()
-})
-buildGrid.addEventListener('focusin', (event) => {
-  const button = (event.target as Element).closest<HTMLButtonElement>('[data-tool]')
-  if (button && !buildCatalogStatus.hidden) showCatalogStatus(button)
-})
-buildGrid.addEventListener('focusout', (event) => {
-  if (buildCatalogStatus.hidden || buildGrid.contains(event.relatedTarget as Node | null)) return
-  if (!catalogHoverActive) showSelectedCatalogStatus()
-})
+buildCatalog.bindStatusEvents()
 buildMenuToggle.addEventListener('click', () => {
   if (pathWindowOpen) {
     closePathEditor()
@@ -6141,84 +4127,14 @@ const scenarioAggression = requireElement<HTMLInputElement>('#scenario-aggressio
 const scenarioMoney = requireElement<HTMLInputElement>('#scenario-money')
 const scenarioEnvironment = requireElement<HTMLSelectElement>('#scenario-environment')
 const scenarioUnevenness = requireElement<HTMLInputElement>('#scenario-unevenness')
-const scenarioGroundDetails = requireElement<HTMLElement>('#scenario-ground-details')
-const scenarioUnevennessValue = requireElement<HTMLElement>('#scenario-unevenness-value')
-const scenarioWorldSize = requireElement<HTMLSelectElement>('#scenario-world-size')
-const scenarioSummary = requireElement<HTMLElement>('#scenario-summary')
 scenarioEnvironment.addEventListener('change', () => updateScenarioLabels())
-const scenarioCarValue = requireElement<HTMLElement>('#scenario-car-value')
-const scenarioPartyValue = requireElement<HTMLElement>('#scenario-party-value')
-const scenarioBeautyValue = requireElement<HTMLElement>('#scenario-beauty-value')
-const scenarioAggressionValue = requireElement<HTMLElement>('#scenario-aggression-value')
-const scenarioMoneyValue = requireElement<HTMLElement>('#scenario-money-value')
 
 /** The free-play form on the title screen: a site without a template, without debt and without goals. */
-function readScenarioForm(): ScenarioSettings {
-  const worldSize = Number(scenarioWorldSize.value)
-  return normalizeScenarioSettings({
-    environment: scenarioEnvironment.value as Environment,
-    unevenness: Number(scenarioUnevenness.value) / 100,
-    carArrivalShare: Number(scenarioCarShare.value) / 100,
-    partyAffinity: Number(scenarioParty.value) / 100,
-    beautyAffinity: Number(scenarioBeauty.value) / 100,
-    aggressiveShare: Number(scenarioAggression.value) / 100,
-    startingMoney: Number(scenarioMoney.value),
-    worldSize: SCENARIO_WORLD_SIZES.includes(
-      worldSize as (typeof SCENARIO_WORLD_SIZES)[number],
-    )
-      ? (worldSize as (typeof SCENARIO_WORLD_SIZES)[number])
-      : 48,
-  })
-}
-
-function fillScenarioForm(settings: ScenarioSettings): void {
-  scenarioEnvironment.value = settings.environment
-  scenarioUnevenness.value = String(Math.round(settings.unevenness * 100))
-  scenarioCarShare.value = String(Math.round(settings.carArrivalShare * 100))
-  scenarioParty.value = String(Math.round(settings.partyAffinity * 100))
-  scenarioBeauty.value = String(Math.round(settings.beautyAffinity * 100))
-  scenarioAggression.value = String(Math.round(settings.aggressiveShare * 100))
-  scenarioMoney.value = String(settings.startingMoney)
-  scenarioWorldSize.value = String(settings.worldSize)
-  updateScenarioLabels()
-}
-
-/**
- * What the running festival was started on. Read-only by design: the ground, the crowd
- * and the starting capital are decided once, at the start, and the park is played with
- * what it was given — so the settings window reports them instead of offering them.
- */
-function updateScenarioSummary(): void {
-  const settings = game.snapshot.scenario
-  const preset = scenarioPreset(settings.preset)
-  const goals = settings.goals
-  const rows: [string, string][] = [
-    ['Szenario', preset?.name ?? 'Freies Spiel'],
-    ['Umgebung', ENVIRONMENTS[settings.environment].name],
-    ['Kartengröße', `${settings.worldSize}×${settings.worldSize}`],
-    ['Unebenheit', `${Math.round(settings.unevenness * 100)} %`],
-    ['Autobesucher', `${Math.round(settings.carArrivalShare * 100)} %`],
-    ['Party-Affinität', `${Math.round(settings.partyAffinity * 100)} %`],
-    ['Schönheits-Affinität', `${Math.round(settings.beautyAffinity * 100)} %`],
-    ['Gewaltbereitschaft', `${Math.round(settings.aggressiveShare * 100)} %`],
-    ['Startkapital', `${settings.startingMoney.toLocaleString('de-DE')} €`],
-  ]
-  if (settings.startingLoan > 0) rows.push(['Startdarlehen', `${settings.startingLoan.toLocaleString('de-DE')} €`])
-  if (goals.length) rows.push(['Ziele', goals.map((goal) => `${goalName(goal)} bis zur ${goal.edition}. Ausgabe`).join(' · ')])
-  scenarioSummary.innerHTML = rows
-    .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
-    .join('')
-}
-
-function updateScenarioLabels(): void {
-  scenarioGroundDetails.textContent = ENVIRONMENTS[scenarioEnvironment.value as Environment].detail
-  scenarioUnevennessValue.textContent = `${scenarioUnevenness.value} % · ${Number(scenarioUnevenness.value) === 0 ? 'Flach' : Number(scenarioUnevenness.value) <= 30 ? 'Sanft gewellt' : Number(scenarioUnevenness.value) <= 65 ? 'Hügelig' : 'Stark hügelig'}`
-  scenarioCarValue.textContent = `${scenarioCarShare.value}%`
-  scenarioPartyValue.textContent = `${scenarioParty.value}%`
-  scenarioBeautyValue.textContent = `${scenarioBeauty.value}%`
-  scenarioAggressionValue.textContent = `${scenarioAggression.value}%`
-  scenarioMoneyValue.textContent = `${Number(scenarioMoney.value).toLocaleString('de-DE')} €`
-}
+const scenarioForm = createScenarioFormController(() => game)
+const readScenarioForm = scenarioForm.read
+const fillScenarioForm = scenarioForm.fill
+const updateScenarioSummary = scenarioForm.updateSummary
+const updateScenarioLabels = scenarioForm.updateLabels
 
 function setScenarioPanelOpen(open: boolean): void {
   scenarioPanel.hidden = !open
@@ -6342,339 +4258,6 @@ makeResizable(scenarioPanel)
  * the save management and the settings window are the same ones the running game uses,
  * lifted above the backdrop while it is open so closing them returns here.
  */
-const titleScreen = requireElement<HTMLElement>('#title-screen')
-const titleCrowd = mountTitleCrowd(requireElement<HTMLCanvasElement>('#title-crowd'))
-const titleScreenOpen = (): boolean => titleScreen.classList.contains('visible')
-function setTitleScreenOpen(open: boolean): void {
-  titleScreen.classList.toggle('visible', open)
-  // The crowd on the heading only walks while anyone can see it.
-  titleCrowd.setRunning(open)
-  if (open) {
-    openTitleFreeplay(false)
-    openTitleSubmenu(false)
-    closeTitleLoad()
-    setAccountMaskOpen(false)
-    // The running game's own windows belong to the running game: whatever was left
-    // open behind the start screen is closed, so nothing of it still holds the keys.
-    setScenarioPanelOpen(false)
-    setSaveSlotsPanelOpen(false)
-    syncAccountBar()
-    void refreshResumeEntry()
-  }
-  // The start screen is the whole screen: every readout, toolbar and hint of the running
-  // game is hidden behind it (see the body.title-open rules), and the keyboard shortcuts
-  // that would otherwise reach the world are switched off.
-  document.body.classList.toggle('title-open', open)
-  if (!open) scenarioPanel.classList.remove('above-title')
-}
-/** Opens one of the existing windows on top of the title screen instead of behind it. */
-function openAboveTitle(panel: HTMLElement, open: () => void): void {
-  if (titleScreenOpen()) panel.classList.add('above-title')
-  open()
-}
-const titleFreeplayMask = requireElement<HTMLElement>('#title-freeplay-mask')
-const titleSubmenu = requireElement<HTMLElement>('#title-submenu')
-const titleLoadMask = requireElement<HTMLElement>('#title-load-mask')
-const titleLoadRows = requireElement<HTMLElement>('#title-load-rows')
-const titleLoadKicker = requireElement<HTMLElement>('#title-load-kicker')
-const titleLoadNote = requireElement<HTMLElement>('#title-load-note')
-const accountMask = requireElement<HTMLElement>('#title-account-mask')
-const accountForm = requireElement<HTMLFormElement>('#title-account-form')
-const accountTitle = requireElement<HTMLElement>('#title-account-title')
-const accountNameInput = requireElement<HTMLInputElement>('#account-name')
-const accountPasswordInput = requireElement<HTMLInputElement>('#account-password')
-const accountRepeatField = requireElement<HTMLElement>('#account-repeat-field')
-const accountRepeatInput = requireElement<HTMLInputElement>('#account-repeat')
-const accountMessage = requireElement<HTMLElement>('#account-message')
-const accountSubmit = requireElement<HTMLButtonElement>('#account-submit')
-const accountSwitch = requireElement<HTMLButtonElement>('#account-switch')
-const accountNameLabel = requireElement<HTMLElement>('#title-account-name')
-
-/** Which of the two the mask is showing; the fields and the buttons follow from it. */
-let accountMode: 'login' | 'register' = 'login'
-function setAccountMode(mode: 'login' | 'register'): void {
-  accountMode = mode
-  const register = mode === 'register'
-  accountTitle.textContent = register ? 'Registrieren' : 'Anmelden'
-  accountSubmit.textContent = register ? 'Konto anlegen' : 'Anmelden'
-  accountSwitch.textContent = register ? 'Konto vorhanden? Anmelden' : 'Noch kein Konto? Registrieren'
-  accountRepeatField.hidden = !register
-  accountRepeatInput.required = register
-  accountPasswordInput.autocomplete = register ? 'new-password' : 'current-password'
-  accountMessage.textContent = ''
-}
-function setAccountMaskOpen(open: boolean, mode: 'login' | 'register' = accountMode): void {
-  accountMask.hidden = !open
-  if (!open) return
-  setAccountMode(mode)
-  accountForm.reset()
-  accountMessage.textContent = ''
-  accountNameInput.focus()
-}
-/** The bar under the menu: either the two ways in, or who is signed in and the way out. */
-function syncAccountBar(): void {
-  const name = currentAccount()
-  accountNameLabel.hidden = !name
-  accountNameLabel.textContent = name ? `Angemeldet als ${name}` : ''
-  titleScreen.querySelectorAll<HTMLButtonElement>('[data-account="login"], [data-account="register"]').forEach((button) => {
-    button.hidden = !!name
-  })
-  titleScreen.querySelector<HTMLButtonElement>('[data-account="logout"]')!.hidden = !name
-}
-accountSwitch.addEventListener('click', () => setAccountMode(accountMode === 'login' ? 'register' : 'login'))
-accountForm.addEventListener('submit', (event) => {
-  event.preventDefault()
-  const name = accountNameInput.value
-  const password = accountPasswordInput.value
-  accountSubmit.disabled = true
-  accountMessage.textContent = 'Einen Moment …'
-  const done = (result: { ok: boolean; message: string }): void => {
-    accountSubmit.disabled = false
-    accountMessage.textContent = result.message
-    if (!result.ok) return
-    syncAccountBar()
-    setAccountMaskOpen(false)
-    showToast(result.message)
-  }
-  void (accountMode === 'register'
-    ? registerAccount(name, password, accountRepeatInput.value)
-    : signIn(name, password)
-  ).then(done, () => done({ ok: false, message: 'Konto konnte nicht geprüft werden' }))
-})
-
-const titleMenuButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-menu]')]
-const titleResumeButton = requireElement<HTMLButtonElement>('[data-title-menu="resume"]')
-const titleResumeMeta = requireElement<HTMLElement>('#title-resume-meta')
-
-/**
- * Picking the game back up. The last save that was written or opened is remembered
- * here — by id, not by content — and the title screen offers exactly that one. If it
- * is gone, or nothing has been played yet, the plate stays greyed out.
- */
-const LAST_SAVE_KEY = 'festival-last-save'
-type LastSave = { id: string; source: 'server' | 'browser'; name: string }
-let resumeSlot: SaveSlotView | null = null
-function rememberLastSave(slot: { id: string; source: 'server' | 'browser'; name: string }): void {
-  try {
-    window.localStorage.setItem(LAST_SAVE_KEY, JSON.stringify({ id: slot.id, source: slot.source, name: slot.name } satisfies LastSave))
-  } catch { /* without storage the button simply falls back to the newest save */ }
-}
-function readLastSave(): LastSave | null {
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(LAST_SAVE_KEY) ?? 'null') as LastSave | null
-    return stored && typeof stored.id === 'string' ? stored : null
-  } catch { return null }
-}
-async function refreshResumeEntry(): Promise<void> {
-  const archive = await fetchSaveSlots()
-  const pointer = readLastSave()
-  // The remembered one if it is still there, otherwise the newest of your own —
-  // clearing the browser's storage should not hide an archive full of festivals.
-  resumeSlot = (pointer ? findSaveSlot(pointer.id) : undefined) ?? archive.own[0] ?? null
-  titleResumeButton.disabled = !resumeSlot
-  titleResumeMeta.textContent = resumeSlot
-    ? `${resumeSlot.name} · ${formatSaveTime(resumeSlot.savedAt)}`
-    : 'Noch nicht gespielt'
-  if (titleResumeButton.disabled && titleResumeButton.classList.contains('selected')) markTitleSelection(0)
-}
-async function resumeLastGame(): Promise<void> {
-  if (!resumeSlot) return
-  const loaded = await readSaveSlot(resumeSlot)
-  if (!loaded) {
-    // It was there when the screen opened and is not any more: say so and re-read.
-    showToast('Dieser Spielstand ist nicht mehr vorhanden', true)
-    void refreshResumeEntry()
-    return
-  }
-  bindLoadedGame(loaded, `„${resumeSlot.name}“ fortgesetzt`)
-  setTitleScreenOpen(false)
-}
-const titleRowButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-scenario]')]
-
-/**
- * The menu is keyboard-first, the way the design draws it: one entry is always the
- * current one, the arrow keys move between them and Enter opens. Which list the keys
- * walk depends on whether the scenario submenu is open.
- */
-let titleSelection = 0
-function titleEntries(): HTMLButtonElement[] {
-  if (!titleFreeplayMask.hidden) return [...titleFreeplayMask.querySelectorAll<HTMLButtonElement>('.title-freeplay-actions button')]
-  if (!titleLoadMask.hidden) return [...titleLoadRows.querySelectorAll<HTMLButtonElement>('[data-title-load-slot]')]
-  return (titleSubmenu.hidden ? titleMenuButtons : titleRowButtons).filter((entry) => !entry.disabled)
-}
-
-/**
- * The title screen's own archive: your saves first, then everything other people
- * have made public, each with the name behind it. It only offers the one thing that
- * belongs here — picking one up. Naming, sharing and deleting stay in the running
- * game, and a public festival you take from here is never written back to: saving it
- * puts a copy in your own archive.
- */
-function titleSlotRow(slot: SaveSlotView, withOwner: boolean): string {
-  const meta = withOwner ? `von ${escapeHtml(slot.owner)} · ${formatSaveTime(slot.savedAt)}` : formatSaveTime(slot.savedAt)
-  return `<button type="button" data-title-load-slot="${slot.id}"><span class="title-row-text"><span class="title-row-label">${escapeHtml(slot.name)}</span><span class="title-row-meta">${meta}</span></span><span class="title-row-value">Laden</span></button>`
-}
-async function openTitleLoad(): Promise<void> {
-  titleLoadMask.hidden = false
-  titleLoadRows.innerHTML = '<p class="title-load-empty">Spielstände werden gelesen …</p>'
-  titleLoadNote.textContent = ''
-  markTitleSelection(0)
-  const archive = await fetchSaveSlots()
-  const total = archive.own.length + archive.shared.length
-  titleLoadKicker.textContent = total
-    ? `${archive.own.length} eigene · ${archive.shared.length} öffentlich`
-    : 'Archiv leer'
-  const own = archive.own.length
-    ? `<h3 class="title-submenu-heading">${archive.onServer ? `Deine Spielstände · ${escapeHtml(archive.account ?? '')}` : 'Spielstände in diesem Browser'}</h3>${archive.own.map((slot) => titleSlotRow(slot, false)).join('')}`
-    : ''
-  const shared = archive.shared.length
-    ? `<h3 class="title-submenu-heading">Öffentliche Spielstände</h3>${archive.shared.map((slot) => titleSlotRow(slot, true)).join('')}`
-    : ''
-  titleLoadRows.innerHTML = own + shared ||
-    `<p class="title-load-empty">${archive.serverError ? `${escapeHtml(archive.serverError)} ` : ''}Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto oder' : ''} in diesem Browser. Im laufenden Spiel legst du sie über „Spielstand“ an.</p>`
-  titleLoadNote.textContent = saveStorageNote(archive)
-  markTitleSelection(0)
-}
-function closeTitleLoad(): void {
-  titleLoadMask.hidden = true
-  markTitleSelection(0)
-}
-async function loadTitleSlot(id: string): Promise<void> {
-  const slot = findSaveSlot(id)
-  const loaded = slot ? await readSaveSlot(slot) : null
-  if (!slot || !loaded) {
-    titleLoadNote.textContent = 'Dieser Spielstand ist ungültig oder nicht mehr vorhanden.'
-    void openTitleLoad()
-    return
-  }
-  const foreign = !saveArchive.own.some((own) => own.id === id)
-  bindLoadedGame(loaded, foreign ? `Öffentlicher Spielstand von ${slot.owner} geladen` : 'Spielstand geladen')
-  closeTitleLoad()
-  setTitleScreenOpen(false)
-}
-function markTitleSelection(index: number): void {
-  const entries = titleEntries()
-  if (!entries.length) return
-  titleSelection = (index + entries.length) % entries.length
-  entries.forEach((entry, position) => entry.classList.toggle('selected', position === titleSelection))
-  entries[titleSelection]?.scrollIntoView({ block: 'nearest' })
-}
-function openTitleSubmenu(open: boolean): void {
-  titleSubmenu.hidden = !open
-  if (!open) titleFreeplayMask.hidden = true
-  markTitleSelection(0)
-}
-/**
- * Free play asks its questions on a plate of its own, one step further in: the scenario
- * list steps aside for it and comes back when this one is left, so the screen always
- * shows one thing at a time rather than growing a form under the list.
- */
-function openTitleFreeplay(open: boolean): void {
-  titleFreeplayMask.hidden = !open
-  titleSubmenu.hidden = open
-  if (open) fillScenarioForm(game.snapshot.scenario)
-  markTitleSelection(0)
-}
-// Only a pointer that actually moves takes the selection over. `pointerover` alone
-// would also fire when the list shifts under a resting cursor — opening the submenu
-// or scrolling a row into view would then snap the selection back under the mouse.
-let titlePointer = { x: -1, y: -1 }
-titleScreen.addEventListener('pointermove', (event) => {
-  if (event.clientX === titlePointer.x && event.clientY === titlePointer.y) return
-  titlePointer = { x: event.clientX, y: event.clientY }
-  const entry = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-title-menu], [data-title-scenario]')
-  const index = entry ? titleEntries().indexOf(entry) : -1
-  if (index >= 0) markTitleSelection(index)
-})
-titleScreen.addEventListener('click', (event) => {
-  const target = event.target as HTMLElement
-  if (target.closest('[data-account-close]')) { setAccountMaskOpen(false); return }
-  const account = target.closest<HTMLButtonElement>('[data-account]')
-  if (account) {
-    const mode = account.dataset.account
-    if (mode === 'logout') {
-      void signOut().then((result) => {
-        syncAccountBar()
-        showToast(result.message, !result.ok)
-      })
-    } else setAccountMaskOpen(true, mode === 'register' ? 'register' : 'login')
-    return
-  }
-  if (target.closest('[data-title-freeplay-close]')) { openTitleFreeplay(false); return }
-  if (target.closest('[data-title-back]')) { openTitleSubmenu(false); return }
-  if (target.closest('[data-title-load-close]')) { closeTitleLoad(); return }
-  const slot = target.closest<HTMLButtonElement>('[data-title-load-slot]')
-  if (slot) { void loadTitleSlot(slot.dataset.titleLoadSlot!); return }
-  const menu = target.closest<HTMLButtonElement>('[data-title-menu]')
-  if (menu) {
-    if (menu.dataset.titleMenu === 'resume') void resumeLastGame()
-    else if (menu.dataset.titleMenu === 'new') openTitleSubmenu(true)
-    else if (menu.dataset.titleMenu === 'quickload') {
-      void tryQuickLoad()
-    }
-    else if (menu.dataset.titleMenu === 'load') void openTitleLoad()
-    else openAboveTitle(scenarioPanel, () => setScenarioPanelOpen(true))
-    return
-  }
-  const scenario = target.closest<HTMLButtonElement>('[data-title-scenario]')
-  if (!scenario) return
-  if (multiplayer.status.mode === 'client') {
-    showToast('Nur der Host kann ein neues Szenario starten', true)
-    return
-  }
-  // A scenario that carries a price is not part of the base game: it is shown, it can
-  // be read, and that is all — nothing here charges anyone or collects anything.
-  if (scenario.dataset.titleLocked) {
-    showToast(`Dieses Szenario gehört nicht zum Grundspiel · ${scenario.dataset.titleLocked}`, true)
-    return
-  }
-  const preset = scenarioPreset(scenario.dataset.titleScenario || undefined)
-  // A prepared scenario brings its own site and starts straight away; free play first
-  // asks what the site should look like, because afterwards none of it can be changed.
-  if (!preset) {
-    openTitleFreeplay(true)
-    return
-  }
-  startFestival(normalizeScenarioSettings({ ...preset.settings, preset: preset.id }), `${preset.name} gestartet`)
-})
-window.addEventListener('keydown', (event) => {
-  if (!titleScreenOpen() || !scenarioPanel.hidden || !saveSlotsPanel.hidden) return
-  if (!accountMask.hidden) {
-    if (event.key === 'Escape') setAccountMaskOpen(false)
-    return
-  }
-  if (isTextEntryTarget(event.target) || isTextEntryTarget(document.activeElement)) return
-  if (event.key === 'Escape' || event.key === 'Backspace') {
-    if (!titleFreeplayMask.hidden) { event.preventDefault(); openTitleFreeplay(false) }
-    else if (!titleLoadMask.hidden) { event.preventDefault(); closeTitleLoad() }
-    else if (!titleSubmenu.hidden) { event.preventDefault(); openTitleSubmenu(false) }
-    return
-  }
-  if (event.key === 'ArrowDown' || event.key === 'ArrowRight') { event.preventDefault(); markTitleSelection(titleSelection + 1) }
-  else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') { event.preventDefault(); markTitleSelection(titleSelection - 1) }
-  else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); titleEntries()[titleSelection]?.click() }
-})
-function startFestival(settings: ScenarioSettings, message: string): void {
-  if (pathWindowOpen) closePathEditor()
-  hideVisitorPanel()
-  bindGameState(GameState.startNew(settings))
-  setScenarioPanelOpen(false)
-  setSaveSlotsPanelOpen(false)
-  setTitleScreenOpen(false)
-  showToast(message)
-}
-requireElement<HTMLButtonElement>('#open-title-screen').addEventListener('click', () => {
-  setScenarioPanelOpen(false)
-  setTitleScreenOpen(true)
-})
-
-requireElement<HTMLButtonElement>('#start-scenario').addEventListener('click', () => {
-  if (multiplayer.status.mode === 'client') {
-    showToast('Nur der Host kann ein neues Szenario starten', true)
-    return
-  }
-  startFestival(readScenarioForm(), 'Freies Spiel gestartet')
-})
 fillScenarioForm(game.snapshot.scenario)
 requireElement<HTMLButtonElement>('#close-logistics').addEventListener('click', () => {
   setPanelOpen(logisticsPanel, logisticsPanelToggle, false)
@@ -7352,426 +4935,52 @@ coasterExitButton.addEventListener('click', () => {
   updateContextHelp()
 })
 
-document.querySelector<HTMLButtonElement>('#save')?.addEventListener('click', () => {
-  void persistQuicksave()
+let titleScreenController: TitleScreenController
+const saveController = mountSaveController({
+  getGame: () => game,
+  getMultiplayerMode: () => multiplayer.status.mode,
+  isTitleOpen: () => titleScreenController?.isOpen() ?? false,
+  rememberLastSave: (slot) => titleScreenController?.rememberLastSave(slot),
+  isPathWindowOpen: () => pathWindowOpen,
+  closePathEditor,
+  bindGameState,
+  fillScenarioForm,
+  showToast,
 })
-document.querySelector<HTMLButtonElement>('#load')?.addEventListener('click', () => {
-  void tryQuickLoad()
-})
+const saveSlotsPanel = saveController.panel
+const setSaveSlotsPanelOpen = saveController.setPanelOpen
+const fetchSaveSlots = saveController.fetchSlots
+const findSaveSlot = saveController.findSlot
+const readSaveSlot = saveController.readSlot
+const bindLoadedGame = saveController.bindLoadedGame
+const tryQuickLoad = saveController.tryQuickLoad
+const formatSaveTime = saveController.formatSaveTime
 
-const saveSlotsPanel = requireElement<HTMLElement>('#save-slots-panel')
-const saveSlotsList = saveSlotsPanel.querySelector<HTMLElement>('.save-slots-list')!
-const saveSlotsMessage = saveSlotsPanel.querySelector<HTMLElement>('.save-slots-message')!
-const saveStorageInfo = saveSlotsPanel.querySelector<HTMLElement>('[data-save-storage]')!
-const saveSlotName = saveSlotsPanel.querySelector<HTMLInputElement>('[name=name]')!
-makeDraggable(saveSlotsPanel.querySelector<HTMLElement>('.panel-header')!, saveSlotsPanel)
-makeResizable(saveSlotsPanel)
-let saveSlotsPausedSpeed = 0
-function setSaveSlotsPanelOpen(open: boolean): void {
-  saveSlotsPanel.hidden = !open
-  if (open) {
-    saveSlotsPausedSpeed = game.snapshot.speed
-    if (saveSlotsPausedSpeed !== 0) game.setSpeed(0)
-  } else if (saveSlotsPausedSpeed !== 0) {
-    game.setSpeed(saveSlotsPausedSpeed)
-  }
-}
-const formatSaveTime = (value: number) => new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' }).format(value)
-
-/**
- * Where the game's saves come from. With an account they live on the server, under
- * that account; without one - no login, or no server at all - they stay in this
- * browser. Public saves other people shared are read along either way, and every
- * slot carries where it came from, so loading one asks the right archive.
- */
-type SaveSlotView = ServerSaveSlot & { source: 'server' | 'browser' }
-type SaveArchiveView = {
-  own: SaveSlotView[]
-  shared: SaveSlotView[]
-  account: string | null
-  /** True when writing goes to the server: it answers and someone is signed in. */
-  onServer: boolean
-  reachable: boolean
-  serverError: string
-}
-let saveArchive: SaveArchiveView = { own: [], shared: [], account: null, onServer: false, reachable: false, serverError: '' }
-const browserSlots = (): SaveSlotView[] =>
-  GameState.listSaveSlots().map((slot) => ({ ...slot, public: false, owner: '', source: 'browser' as const }))
-const findSaveSlot = (id: string): SaveSlotView | undefined =>
-  saveArchive.own.find((slot) => slot.id === id) ?? saveArchive.shared.find((slot) => slot.id === id)
-function saveStorageNote(archive: SaveArchiveView): string {
-  const local = 'Lokale Spielstände liegen in diesem Browser (bis 20), unabhängig vom Server.'
-  if (archive.onServer) return `Server-Spielstände liegen beim Konto „${archive.account}“ (bis 20). ${local}`
-  if (archive.reachable) return `Ohne Konto bleiben neue Server-Stände leer. Melde dich im Titelbildschirm an. ${local}`
-  return `${archive.serverError || 'Der Spielserver ist nicht erreichbar.'} ${local}`
-}
-function bindLoadedGame(loaded: GameState, message: string): void {
-  if (pathWindowOpen) closePathEditor()
-  bindGameState(loaded)
-  fillScenarioForm(loaded.snapshot.scenario)
-  showToast(message)
-}
-async function persistQuicksave(): Promise<void> {
-  try {
-    const json = serializeSnapshot(game.snapshot)
-    await writeQuicksaveJson(json)
-    showToast('Spiel gespeichert')
-  } catch (error) {
-    showToast(storageErrorMessage(error, 'Schnellspeichern ist fehlgeschlagen'), true)
-  }
-}
-/** Loads the single quick-save slot (`SAVE_KEY` / overflow store), not a named archive entry. */
-async function tryQuickLoad(): Promise<boolean> {
-  if (multiplayer.status.mode === 'client') {
-    showToast('Nur der Host kann einen Spielstand laden', true)
-    return false
-  }
-  const raw = await readQuicksaveJson()
-  const loaded = raw ? GameState.fromJSON(raw) : GameState.load()
-  if (!loaded) {
-    showToast('Kein gültiger Spielstand gefunden', true)
-    return false
-  }
-  bindLoadedGame(loaded, 'Spielstand geladen')
-  return true
-}
-/** One row of the public list: someone else's festival, with the name behind it. */
-const sharedSlotRow = (slot: SaveSlotView): string =>
-  `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>von ${escapeHtml(slot.owner)} · ${formatSaveTime(slot.savedAt)}</small></div><div><button data-load-slot="${slot.id}">Laden</button></div></article>`
-
-function ownSlotRow(slot: SaveSlotView, archive: SaveArchiveView): string {
-  const share = slot.source === 'server'
-    ? `<button data-share-slot="${slot.id}">${slot.public ? 'Nicht mehr teilen' : 'Teilen'}</button>`
-    : ''
-  return `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}${slot.source === 'browser' && archive.onServer ? ' · dieser Browser' : ''}</small></div><div><button data-load-slot="${slot.id}">Laden</button><button data-overwrite-slot="${slot.id}">Überschreiben</button>${share}<button data-delete-slot="${slot.id}" aria-label="${escapeHtml(slot.name)} löschen">×</button></div></article>`
-}
-function showSaveSlots(archive: SaveArchiveView): void {
-  const serverOwn = archive.own.filter((slot) => slot.source === 'server')
-  const localOwn = archive.own.filter((slot) => slot.source === 'browser')
-  const serverBlock = archive.onServer
-    ? (serverOwn.length
-      ? `<h3 class="save-slots-heading">Konto „${escapeHtml(archive.account ?? '')}“</h3>${serverOwn.map((slot) => ownSlotRow(slot, archive)).join('')}`
-      : `<h3 class="save-slots-heading">Konto „${escapeHtml(archive.account ?? '')}“</h3><p class="save-slots-empty">Noch keine Server-Spielstände unter diesem Konto.</p>`)
-    : archive.serverError
-      ? `<p class="save-slots-empty">${escapeHtml(archive.serverError)}</p>`
-      : ''
-  const localBlock = localOwn.length
-    ? `${archive.onServer || archive.serverError ? '<h3 class="save-slots-heading">Dieser Browser</h3>' : ''}${localOwn.map((slot) => ownSlotRow(slot, archive)).join('')}`
-    : `<p class="save-slots-empty">Noch keine benannten Spielstände in diesem Browser. „Schnell speichern“ bleibt der einzelne Schnellstand.</p>`
-  const shared = archive.shared.length
-    ? `<h3 class="save-slots-heading">Öffentliche Spielstände</h3><p class="save-slots-empty">Laden ja, überschreiben nein — gespeichert wird immer unter deinem eigenen Konto.</p>${archive.shared.map(sharedSlotRow).join('')}`
-    : ''
-  saveSlotsList.innerHTML = serverBlock + localBlock + shared
-}
-async function fetchSaveSlots(): Promise<SaveArchiveView> {
-  const local = browserSlots()
-  try {
-    const archive = await listServerSaves()
-    const shared = archive.shared.map((slot) => ({ ...slot, source: 'server' as const }))
-    const serverOwn = archive.account
-      ? archive.own.map((slot) => ({ ...slot, source: 'server' as const }))
-      : []
-    saveArchive = {
-      own: [...serverOwn, ...local].sort((a, b) => b.savedAt - a.savedAt),
-      shared,
-      account: archive.account,
-      onServer: Boolean(archive.account),
-      reachable: true,
-      serverError: '',
-    }
-  } catch (error) {
-    saveArchive = {
-      own: local,
-      shared: [],
-      account: null,
-      onServer: false,
-      reachable: false,
-      serverError: error instanceof Error ? error.message : 'Server-Spielstände sind nicht erreichbar.',
-    }
-  }
-  return saveArchive
-}
-async function renderSaveSlots(): Promise<void> {
-  const archive = await fetchSaveSlots()
-  saveStorageInfo.textContent = saveStorageNote(archive)
-  showSaveSlots(archive)
-}
-async function openSaveSlots(): Promise<void> {
-  if (multiplayer.status.mode === 'client') { showToast('Nur der Host kann Spielstände verwalten', true); return }
-  saveSlotsMessage.textContent = ''
-  saveSlotName.value = ''
-  setSaveSlotsPanelOpen(true)
-  await renderSaveSlots()
-  saveSlotName.focus()
-}
-saveSlotsPanel.querySelector('[data-close]')!.addEventListener('click', () => setSaveSlotsPanelOpen(false))
-saveSlotsPanel.querySelector<HTMLFormElement>('[data-save-slot]')!.addEventListener('submit', async event => {
-  event.preventDefault()
-  try {
-    saveSlotsMessage.textContent = await persistNamedSave(saveSlotName.value)
-    saveSlotName.value = ''
-    await renderSaveSlots()
-  } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht gespeichert werden' }
+titleScreenController = mountTitleScreen({
+  getGame: () => game,
+  getMultiplayerMode: () => multiplayer.status.mode,
+  scenarioPanel,
+  saveSlotsPanel,
+  setScenarioPanelOpen,
+  setSaveSlotsPanelOpen,
+  fillScenarioForm,
+  readScenarioForm,
+  closePathEditor,
+  isPathWindowOpen: () => pathWindowOpen,
+  hideVisitorPanel,
+  bindGameState,
+  showToast,
+  fetchSaveSlots,
+  findSaveSlot,
+  isOwnSave: saveController.isOwnSave,
+  readSaveSlot,
+  bindLoadedGame,
+  tryQuickLoad,
+  formatSaveTime,
 })
-/** Reads one slot back, from wherever it came from, and makes it the one to resume. */
-async function readSaveSlot(slot: SaveSlotView): Promise<GameState | null> {
-  try {
-    if (slot.source === 'server') {
-      const loaded = GameState.fromJSON((await loadServerSave(slot.id)).snapshot)
-      if (loaded) rememberLastSave(slot)
-      return loaded
-    }
-    const raw = await readNamedSlotJson(slot.id)
-    const loaded = raw ? GameState.fromJSON(raw) : GameState.loadSlot(slot.id)
-    if (loaded) rememberLastSave(slot)
-    return loaded
-  } catch {
-    return null
-  }
-}
-
-async function persistLocalNamedSave(name: string, id?: string): Promise<string> {
-  const json = serializeSnapshot(game.snapshot)
-  const result = game.saveSlot(name, id)
-  if (result.ok) {
-    rememberBrowserSave(name)
-    return result.message
-  }
-  if (!result.slotId) throw new Error(result.message)
-  await writeNamedSlotJson(result.slotId, json)
-  rememberLastSave({ id: result.slotId, source: 'browser', name: name.trim().replace(/\s+/g, ' ') })
-  return `Spielstand „${name.trim().replace(/\s+/g, ' ')}“ im erweiterten Browser-Speicher gespeichert`
-}
-
-async function persistNamedSave(name: string, id?: string, source: 'server' | 'browser' = saveArchive.onServer ? 'server' : 'browser'): Promise<string> {
-  const json = serializeSnapshot(game.snapshot)
-  if (source === 'server') {
-    try {
-      const saved = await saveServerSave(name, json, id)
-      rememberLastSave({ ...saved, source: 'server' })
-      return `Spielstand „${saved.name}“ unter deinem Konto gespeichert`
-    } catch (error) {
-      const local = await persistLocalNamedSave(name, undefined)
-      return `${error instanceof Error ? error.message : 'Server-Speichern fehlgeschlagen'} Stattdessen lokal: ${local}`
-    }
-  }
-  return persistLocalNamedSave(name, id)
-}
-/** A browser slot has no id until it exists, so it is looked up after the write. */
-function rememberBrowserSave(name: string): void {
-  const slot = browserSlots().find((entry) => entry.name === name.trim().replace(/\s+/g, ' '))
-  if (slot) rememberLastSave(slot)
-}
-
-/**
- * The automatic save. It always writes to one slot of its own — never over a save
- * the player named — and that slot is what „Fortsetzen“ then offers. The clock is
- * real time, not festival time, and it only runs while a game is actually being
- * played: not behind the title screen, and not as a multiplayer guest, whose host
- * owns the world anyway.
- */
-let autosaveTimer: ReturnType<typeof setInterval> | undefined
-let autosaveRunning = false
-async function runAutosave(): Promise<void> {
-  if (autosaveRunning || titleScreenOpen() || multiplayer.status.mode === 'client') return
-  autosaveRunning = true
-  try {
-    const archive = await fetchSaveSlots()
-    const existing = archive.own.find((slot) => slot.name === AUTOSAVE_NAME)
-    await persistNamedSave(AUTOSAVE_NAME, existing?.id, existing?.source ?? (archive.onServer ? 'server' : 'browser'))
-    showToast('Automatisch gespeichert')
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : 'Automatisches Speichern fehlgeschlagen', true)
-  } finally {
-    autosaveRunning = false
-  }
-}
-const autosaveSelect = requireElement<HTMLSelectElement>('#setting-autosave')
-function applyAutosaveInterval(minutes: number): void {
-  if (autosaveTimer) clearInterval(autosaveTimer)
-  autosaveTimer = minutes > 0 ? setInterval(() => void runAutosave(), minutes * 60_000) : undefined
-}
-function readAutosaveSetting(): number {
-  try {
-    const stored = Number(window.localStorage.getItem(AUTOSAVE_KEY))
-    return AUTOSAVE_INTERVALS.some((option) => option.minutes === stored) ? stored : AUTOSAVE_DEFAULT_MINUTES
-  } catch { return AUTOSAVE_DEFAULT_MINUTES }
-}
-autosaveSelect.value = String(readAutosaveSetting())
-applyAutosaveInterval(Number(autosaveSelect.value))
-autosaveSelect.addEventListener('change', () => {
-  const minutes = Number(autosaveSelect.value)
-  applyAutosaveInterval(minutes)
-  try { window.localStorage.setItem(AUTOSAVE_KEY, String(minutes)) } catch { /* then it lasts for this session */ }
-  showToast(minutes > 0 ? `Autospeichern: ${AUTOSAVE_INTERVALS.find((option) => option.minutes === minutes)?.label.toLowerCase()}` : 'Autospeichern aus')
-})
-saveSlotsPanel.addEventListener('click', async event => {
-  const button = (event.target as Element).closest<HTMLButtonElement>('[data-load-slot],[data-overwrite-slot],[data-share-slot],[data-delete-slot]')
-  if (!button) return
-  const id = button.dataset.loadSlot ?? button.dataset.overwriteSlot ?? button.dataset.shareSlot ?? button.dataset.deleteSlot!
-  if (button.dataset.loadSlot) {
-    const slot = findSaveSlot(id)
-    const loaded = slot ? await readSaveSlot(slot) : null
-    if (!slot || !loaded) { saveSlotsMessage.textContent = 'Dieser Spielstand ist ungültig oder nicht mehr vorhanden.'; renderSaveSlots(); return }
-    const foreign = !saveArchive.own.some((own) => own.id === id)
-    bindLoadedGame(loaded, foreign ? `Öffentlicher Spielstand von ${slot.owner} geladen` : 'Spielstand geladen')
-    setSaveSlotsPanelOpen(false)
-    return
-  }
-  // Overwriting, sharing and deleting are offered on your own rows only, so an id
-  // from anywhere else is simply not there.
-  const slot = saveArchive.own.find((item) => item.id === id)
-  if (!slot) { renderSaveSlots(); return }
-  if (button.dataset.overwriteSlot) {
-    try {
-      saveSlotsMessage.textContent = await persistNamedSave(slot.name, id, slot.source)
-      await renderSaveSlots()
-    } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht überschrieben werden' }
-    return
-  }
-  if (button.dataset.shareSlot) {
-    try {
-      const updated = await shareServerSave(id, !slot.public)
-      saveSlotsMessage.textContent = updated.public
-        ? `Spielstand „${slot.name}“ ist jetzt öffentlich — andere können ihn laden, aber nicht überschreiben.`
-        : `Spielstand „${slot.name}“ ist wieder privat`
-      await renderSaveSlots()
-    } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Sichtbarkeit konnte nicht geändert werden' }
-    return
-  }
-  if (!window.confirm(`Spielstand „${slot.name}“ wirklich löschen?`)) return
-  try {
-    if (slot.source === 'server') await deleteServerSave(id)
-    else {
-      const result = GameState.deleteSaveSlot(id)
-      if (!result.ok) throw new Error(result.message)
-      await deleteNamedSlotJson(id)
-    }
-    saveSlotsMessage.textContent = 'Spielstand gelöscht'
-    await renderSaveSlots()
-  } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht gelöscht werden' }
-})
-document.querySelector<HTMLButtonElement>('#save-slots')?.addEventListener('click', openSaveSlots)
-
-const saveAsPanel = requireElement<HTMLElement>('#save-as-panel')
-const saveAsList = saveAsPanel.querySelector<HTMLElement>('[data-save-as-list]')!
-const saveAsMessage = saveAsPanel.querySelector<HTMLElement>('[data-save-as-message]')!
-const saveAsStorageInfo = saveAsPanel.querySelector<HTMLElement>('[data-save-as-storage]')!
-const saveAsName = saveAsPanel.querySelector<HTMLInputElement>('[name=name]')!
-let saveAsPausedSpeed = 0
-function setSaveAsPanelOpen(open: boolean): void {
-  saveAsPanel.hidden = !open
-  if (open) {
-    saveAsPausedSpeed = game.snapshot.speed
-    if (saveAsPausedSpeed !== 0) game.setSpeed(0)
-  } else if (saveAsPausedSpeed !== 0) {
-    game.setSpeed(saveAsPausedSpeed)
-  }
-}
-/**
- * Only your own saves are listed here: this window overwrites, and that is the one
- * thing a public save of someone else's never allows.
- */
-async function renderSaveAsSlots(): Promise<void> {
-  const archive = await fetchSaveSlots()
-  saveAsStorageInfo.textContent = saveStorageNote(archive)
-  saveAsList.innerHTML = archive.own.length
-    ? archive.own.map((slot) => `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatSaveTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}${slot.source === 'browser' && archive.onServer ? ' · dieser Browser' : ''}</small></div><div><button data-overwrite-slot="${slot.id}">Überschreiben</button></div></article>`).join('')
-    : `<p class="save-slots-empty">Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto oder' : ''} in diesem Browser.</p>`
-}
-async function openSaveAs(): Promise<void> {
-  if (multiplayer.status.mode === 'client') { showToast('Nur der Host kann Spielstände verwalten', true); return }
-  saveAsMessage.textContent = ''
-  saveAsName.value = ''
-  setSaveAsPanelOpen(true)
-  await renderSaveAsSlots()
-  saveAsName.focus()
-}
-requireElement<HTMLButtonElement>('#close-save-as').addEventListener('click', () => setSaveAsPanelOpen(false))
-makeDraggable(saveAsPanel.querySelector<HTMLElement>('.panel-header')!, saveAsPanel)
-makeResizable(saveAsPanel)
-saveAsPanel.querySelector<HTMLFormElement>('[data-save-as]')!.addEventListener('submit', async event => {
-  event.preventDefault()
-  try {
-    saveAsMessage.textContent = await persistNamedSave(saveAsName.value)
-    saveAsName.value = ''
-    await renderSaveAsSlots()
-  } catch (error) { saveAsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht gespeichert werden' }
-})
-saveAsPanel.addEventListener('click', async event => {
-  const button = (event.target as Element).closest<HTMLButtonElement>('[data-overwrite-slot]'); if (!button) return
-  const id = button.dataset.overwriteSlot!
-  const slot = saveArchive.own.find((item) => item.id === id)
-  if (!slot) { renderSaveAsSlots(); return }
-  try {
-    saveAsMessage.textContent = await persistNamedSave(slot.name, id, slot.source)
-    await renderSaveAsSlots()
-  } catch (error) { saveAsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht überschrieben werden' }
-})
-document.querySelector<HTMLButtonElement>('#save-as')?.addEventListener('click', openSaveAs)
-
-const saveTextDialog = document.createElement('dialog')
-saveTextDialog.className = 'save-text-dialog'
-saveTextDialog.innerHTML = `<h2>Spielstand als Text</h2><p>Base64-Text kopieren oder einen erhaltenen Spielstand einfügen.</p><textarea aria-label="Base64-Spielstand" spellcheck="false"></textarea><p class="save-text-error" role="alert"></p><div><button data-import>Spielstand laden</button><button data-close>Schließen</button></div>`
-document.body.append(saveTextDialog)
-const saveTextArea = saveTextDialog.querySelector('textarea')!
-const saveTextError = saveTextDialog.querySelector('.save-text-error')!
-const saveTextImport = saveTextDialog.querySelector<HTMLButtonElement>('[data-import]')!
-function openSaveText(text: string, importing: boolean): void {
-  saveTextArea.value = text
-  saveTextArea.readOnly = !importing
-  saveTextImport.hidden = !importing
-  saveTextError.textContent = ''
-  saveTextDialog.showModal()
-  saveTextArea.focus()
-  if (!importing) saveTextArea.select()
-}
-saveTextDialog.querySelector('[data-close]')!.addEventListener('click', () => saveTextDialog.close())
-document.querySelector('#copy-save')!.addEventListener('click', async () => {
-  const text = encodeSaveText(serializeSnapshot(game.snapshot))
-  try {
-    await navigator.clipboard.writeText(text)
-    showToast('Base64-Spielstand in die Zwischenablage kopiert')
-  } catch {
-    openSaveText(text, false)
-    showToast('Text mit Strg+C kopieren')
-  }
-})
-document.querySelector('#paste-save')!.addEventListener('click', () => {
-  if (multiplayer.status.mode === 'client') { showToast('Nur der Host kann einen Spielstand laden', true); return }
-  openSaveText('', true)
-  // Manual paste works without clipboard permissions in every browser.
-})
-saveTextImport.addEventListener('click', () => {
-  if (multiplayer.status.mode === 'client') { saveTextError.textContent = 'Nur der Host kann einen Spielstand laden'; return }
-  try {
-    const loaded = GameState.fromJSON(decodeSaveText(saveTextArea.value))
-    if (!loaded) throw new Error('invalid save')
-    if (pathWindowOpen) closePathEditor()
-    bindGameState(loaded)
-    fillScenarioForm(loaded.snapshot.scenario)
-    saveTextDialog.close()
-    showToast('Spielstand aus Base64 geladen')
-  } catch {
-    saveTextError.textContent = 'Ungültiger oder unvollständiger Base64-Spielstand.'
-  }
-})
-
 toggleParkButton.addEventListener('click', () => {
   const result = game.setParkOpen(!game.snapshot.parkOpen)
   showToast(result.message)
-})
-
-document.querySelector<HTMLButtonElement>('#close-visitor')?.addEventListener('click', () => {
-  hideVisitorPanel()
-})
-
-followVisitorButton.addEventListener('click', () => {
-  if (!selectedVisitorId) return
-  followedVisitorId =
-    followedVisitorId === selectedVisitorId ? null : selectedVisitorId
-  view.followVisitor(followedVisitorId)
-  updateVisitorPanel()
 })
 
 document.querySelector<HTMLButtonElement>('#close-entity')?.addEventListener('click', () => {
@@ -7979,7 +5188,7 @@ window.addEventListener('keydown', (event) => {
   if (isTextEntryTarget(event.target) || isTextEntryTarget(document.activeElement)) return
   // Nothing reaches the world while the start screen is up — not the build shortcuts,
   // not the camera keys, not the speed keys.
-  if (titleScreenOpen()) return
+  if (titleScreenController.isOpen()) return
   if (event.key === 'Shift') {
     shiftElevationHeld = true
     beginShiftElevationLock(hoveredCell)
@@ -8124,75 +5333,20 @@ debugToolsToggle.addEventListener('change', () => {
     window.localStorage.setItem(DEBUG_TOOLS_KEY, debugToolsToggle.checked ? 'on' : 'off')
   } catch { /* the setting simply does not survive a reload then */ }
 })
-let measurementStart = performance.now()
-let measuredFrames = 0
-let measuredTicks = 0
-let measuredSimulationMs = 0
-let measuredViewMs = 0
-let measuredRenderMs = 0
-document.addEventListener('visibilitychange', () => {
-  measurementStart = performance.now()
-  measuredFrames = 0
-  measuredTicks = 0
-  measuredSimulationMs = measuredViewMs = measuredRenderMs = 0
+startGameLoop({
+  getGame: () => game,
+  multiplayer,
+  view,
+  audio: festivalAudio,
+  performanceIndicator,
+  versionLabel,
+  isTitleOpen: () => document.body.classList.contains('title-open'),
 })
-let previousTime = performance.now()
-// Hidden tabs stop animation frames; keep the authoritative host responsive.
-window.setInterval(() => {
-  if (!document.hidden || multiplayer.status.mode !== 'host') return
-  game.tick(0.1)
-  multiplayer.tick(0.1)
-}, 100)
-function animate(time: number): void {
-  // A transient rendering error must not permanently stop simulation/network updates.
-  requestAnimationFrame(animate)
-  const deltaSeconds = Math.min((time - previousTime) / 1000, 0.1)
-  previousTime = time
-  const simulationStart = performance.now()
-  const ticksBefore = game.executedLogicTicks
-  game.tick(deltaSeconds)
-  measuredTicks += game.executedLogicTicks - ticksBefore
-  multiplayer.tick(deltaSeconds)
-  const viewStart = performance.now()
-  measuredSimulationMs += viewStart - simulationStart
-  view.update(game.snapshot, game.renderAlpha, game.worldRevision)
-  view.advanceWalk(deltaSeconds)
-  festivalAudio.updateListener(view.audioListenerPose())
-  if (!document.body.classList.contains('title-open')) {
-    festivalAudio.syncSnapshot(game.snapshot)
-  }
-  const renderStart = performance.now()
-  measuredViewMs += renderStart - viewStart
-  view.render()
-  measuredRenderMs += performance.now() - renderStart
-  measuredFrames += 1
-  const elapsed = time - measurementStart
-  if (elapsed >= 1000) {
-    performanceIndicator.textContent = `${versionLabel}\nFPS ${(measuredFrames * 1000 / elapsed).toFixed(0)} · TPS ${(measuredTicks * 1000 / elapsed).toFixed(1)}`
-    performanceIndicator.textContent += `
-Sim ${(measuredSimulationMs / measuredFrames).toFixed(1)} · Szene ${(measuredViewMs / measuredFrames).toFixed(1)} · Render ${(measuredRenderMs / measuredFrames).toFixed(1)} ms`
-    measuredSimulationMs = measuredViewMs = measuredRenderMs = 0
-    measuredFrames = 0
-    measuredTicks = 0
-    measurementStart = time
-  }
-}
-requestAnimationFrame(animate)
-
-function formatMoney(value: number): string {
-  return `${Math.floor(value).toLocaleString('de-DE')} €`
-}
-
-function formatTime(minute: number): string {
-  const hours = Math.floor(minute / 60)
-  const minutes = Math.floor(minute % 60)
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
-}
 
 // The game opens on its title screen. Last thing in the module, so everything it can
 // reach — the scenario form, the save management — has been built by the time it shows.
-setTitleScreenOpen(true)
+titleScreenController.setOpen(true)
 
 // Who the session cookie belongs to. Asked once, after everything is wired, and the
 // account bar redraws itself when the answer arrives.
-void refreshAccount().then(() => syncAccountBar())
+void refreshAccount().then(() => titleScreenController.syncAccountBar())

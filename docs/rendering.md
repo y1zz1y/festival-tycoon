@@ -9,7 +9,8 @@ am Kamera-Listener und nicht an Unique-Materials ([audio.md](audio.md)).
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Szene, Kamera, Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | Haupt-View; `pickPlacedObject` für Info/Abriss (Batches, Tore, Ampeln, Logistik); ein `LineSegments`-Baugitter 7×7 auf `buildElevation` (Shift oder Höhe ≠ 0); Personalzonen: ein InstancedMesh für zugewiesene 3×3 plus Hover-Vorschau (`setStaffZonePaintTool`) |
+| Szene, Kamera, Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | Haupt-View; `setPlacementPreviewResult` rendert den autoritativen Game-Layer-Vertrag; `pickPlacedObject` für Info/Abriss; ein `LineSegments`-Baugitter 7×7 auf `buildElevation`; Personalzonen als InstancedMesh |
+| Frame-Orchestrierung | `src/app/gameLoop.ts` | `startGameLoop`: Tick, Interpolation, Audio-Listener, Render und Messzeile; Hidden-Tab-Hosttick 100 ms |
 | Pixel-Personen | `src/view/pixelPeople.ts` | 6 Visitor-Batches + Accessoires |
 | Souvenir-Props | `src/view/souvenirMeshes.ts` | 1 Maskottchen- + 4 Shirt-Schnitt-Batches, Instanzfarbe |
 | Gebäude-Instancing | `src/view/retroBuildings.ts` | ein gemergtes Vertex-Color-Mesh je `DETAILED_BUILDINGS`-Art inkl. aller `SCENERY_KINDS`; Themen-Deko über `buildThemedScenery` (Familien + Vertexfarben); Instanz-`buildingIds` für Picking |
@@ -41,6 +42,9 @@ Snapshot nicht autoritativ schreiben.
 ## Wichtige Regeln
 
 - Statische Details: shared/merged Geometry, Vertex Colors, Instancing.
+- Renderframes mutieren weiterhin keine Fachlogik. `gameLoop.ts` reicht nur
+  verstrichene Zeit an den festen Tick weiter und aktualisiert/interpoliert
+  anschließend die View. Verdeckte Tabs ticken ausschließlich den Host.
 - Die Inspektionsroute in `LogisticsView` berücksichtigt die Straßenlage
   und Rampenhöhe jedes Wegpunkts. Ihr Cache-Schlüssel enthält `elevation`;
   die Linie liegt auch auf Überführungen auf der Fahrbahn. Die
@@ -76,6 +80,11 @@ Snapshot nicht autoritativ schreiben.
   sind InstancedMeshes außerhalb der statischen Scenery-Batches. Kein
   Material oder Draw-Call pro Glühbirne.
 - Preview-Materials dürfen gebaute Instanzen nicht einfärben oder disposen.
+- `WorldView` entscheidet keine Platzierungslegalität. Es rendert
+  `PlacementPreviewResult` (`model`, `scenery`, `footprint`, `path`,
+  `blueprint`, `access`) und behält die spezialisierten Schienen-, Weg-,
+  Blueprint- und Zugangsdarstellungen. Katalogobjekte mit Modellvorschau
+  verwenden dasselbe Modell transparent als 3D-Ghost.
 - Depot-Träger teilen die Gäste-Körperteile. Warnweste, Handkarren und
   Ladung sind je eine gemergte, vertex-gefärbte Geometrie — kein Mesh
   pro Latte, Schloss oder Kiste. Picking bleibt `staffId` auf der Figur.
@@ -95,7 +104,8 @@ Batch-Plan, bevor einzelne Meshes entstehen.
 
 `retroBuildings.ts` ergänzt Nicht-Klassik-Modelle durch `embellishTheme` und
 überarbeitete Blätter, Laternen, Möbel, Zahnräder und Eisdetails.
-40 Fassadenmodelle stammen aus `decorationWalls.ts`; offene Fenster/Türen,
+40 Fassadenmodelle stammen aus `src/game/decorationWalls.ts`
+(`wallSpec`, `roofSpec`, `isFacade`); offene Fenster/Türen,
 Materialstruktur und Rahmen sind je Art ein gemeinsames Vertexfarben-Mesh.
 Instancing und Building-IDs bleiben erhalten. Wände verwenden die gespeicherte
 Höhe ohne Terrain-Nachkorrektur, damit Lagen nahtlos stapeln. Slot 4 rendert
@@ -112,7 +122,8 @@ echten WorldView-Renderer für erhöhte Fassaden und interaktive Bauhöhe.
 
 ## Wege und Brücken (0.1.127)
 
-`wayStructures.ts` erzeugt gemeinsame gemergte Geometrie für Randsteine,
+`src/view/wayStructures.ts` erzeugt über `wayStructurePlan` und
+`createWayStructure` gemeinsame gemergte Geometrie für Randsteine,
 Geländer, Brückendeck-Unterbau und schlanke Vierkantstützen. `indexWayStructures`
 indiziert die Lagen einmal je Neuaufbau; Anschlussprüfungen lesen nur Nachbarn.
 `wayStructurePlan` hält verbundene Kanten frei, einschließlich Kurven/Kreuzungen,

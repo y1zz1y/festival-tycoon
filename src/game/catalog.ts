@@ -1,5 +1,6 @@
 import { WALL_KINDS, wallSpec, ROOF_KINDS, roofSpec, THEMED_BIN_KINDS, binSpec } from './decorationWalls'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import type { GhostRenderMode } from './placementPreview'
 
 export const BUILDING_KINDS = [
   ...WALL_KINDS, ...ROOF_KINDS, ...THEMED_BIN_KINDS,
@@ -497,6 +498,15 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
   gearStack: { kind: 'gearStack', name: 'Zahnräder', cost: 38, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .55, color: 0xc4a15a, icon: '⚙️' },
   pipeRail: { kind: 'pipeRail', name: 'Rohrgitter', cost: 26, upkeep: 0, capacity: 0, appeal: 2, defaultPrice: 0, height: .75, color: 0x3a3530, icon: '🛤️' },
 }
+
+/** Catalog-owned default; scenery and specialist tools refine this in the preview contract. */
+export const BUILDING_GHOST_MODES: Record<BuildingKind, GhostRenderMode> =
+  Object.fromEntries(
+    BUILDING_KINDS.map((kind) => [
+      kind,
+      kind === 'path' ? 'path' : kind === 'stage' ? 'footprint' : 'model',
+    ]),
+  ) as Record<BuildingKind, GhostRenderMode>
 
 export const STARTING_MONEY = SIMULATION_CONFIG.economy.startingMoney
 export const WORLD_SIZE = 48

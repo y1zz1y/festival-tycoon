@@ -25,7 +25,6 @@ import {
 import { createAttractionAccess } from './attractionAccess'
 import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
-import { stageSiteIssue } from '../game/stageSite'
 import { createStageModel, animateStageModel, updateStageLightPool } from './stageModel'
 import { stagePhase, stageSize, occupiesBuildingCell, fohDeskRole } from '../game/stageDesign'
 import { activeBookings, showIssue } from '../game/festivalManagement'
@@ -42,6 +41,7 @@ import { groundInfo } from '../game/ground'
 import { SupplyChainView } from './SupplyChainView'
 import { scenePixelRatio } from './renderResolution'
 import { isTextEntryTarget } from '../uiFocus'
+import type { AreaDesignationHandler } from '../ui/areaDesignation'
 import {
   AmbientLight,
   BoxGeometry,
@@ -146,6 +146,7 @@ import {
   placementGroundCell, draggedBuildElevation, buildElevationAbove,
   showsPlacementGroundMarker,
 } from '../game/placementPreview'
+import type { PlacementPreviewResult } from '../game/placementPreview'
 
 export type CellPosition = { x: number; z: number; localX?: number; localZ?: number; buildingId?: string }
 export type PathAnchor = CellPosition & { elevation: number }
@@ -549,9 +550,12 @@ export class WorldView {
   }
   private sceneryPreview = new Group()
   private sceneryPreviewKind = ''
-  private placementValidator: ((kind: BuildingKind, x: number, z: number, slot?: number) => boolean) | null = null
+  private placementResult: PlacementPreviewResult | null = null
 
-  setPlacementValidator(validate: (kind: BuildingKind, x: number, z: number, slot?: number) => boolean): void { this.placementValidator = validate }
+  setPlacementPreviewResult(result: PlacementPreviewResult | null): void {
+    this.placementResult = result
+    this.updatePreview()
+  }
 
   buildingThumbnail(kind: BuildingKind): string {
     const scene = new Scene()
@@ -626,11 +630,11 @@ export class WorldView {
   private constructionSlope: Mesh
   private pathDragPreview = new Group()
   private blueprintPreview = new Group()
-  private groundAreaHandler: ((from: CellPosition, to: CellPosition, preview: boolean) => void) | null = null
+  private groundAreaHandler: AreaDesignationHandler<CellPosition> | null = null
   private groundAreaStart: CellPosition | null = null
   private groundAreaEndKey = ''
   private groundAreaCancelled = false
-  setGroundAreaTool(handler: ((from: CellPosition, to: CellPosition, preview: boolean) => void) | null): void {
+  setGroundAreaTool(handler: AreaDesignationHandler<CellPosition> | null): void {
     this.groundAreaHandler = handler
     this.groundAreaStart = null
     this.groundAreaEndKey = ''
@@ -3940,7 +3944,7 @@ export class WorldView {
         elevation,
         isWasteBin(tool) ? this.currentSnapshot.buildRotation : undefined,
       ) ?? this.currentSnapshot.buildRotation
-      const valid = this.placementValidator?.(tool as BuildingKind, cell.x, cell.z) ?? true
+      const valid = this.placementResult?.ok ?? true
       this.sceneryPreview.visible = true
       this.sceneryPreview.position.set(cell.x + .5, elevation, cell.z + .5)
       this.sceneryPreview.rotation.y = (rotation ?? 0) * Math.PI / 2
@@ -3966,7 +3970,7 @@ export class WorldView {
         })
         this.sceneryPreview.add(model)
       }
-      const valid = this.placementValidator?.(tool as BuildingKind, cell.x, cell.z, slot) ?? true
+      const valid = this.placementResult?.ok ?? true
       this.sceneryPreview.visible = true
       this.sceneryPreview.position.set(cell.x + placement.x, getTerrainHeight(this.currentSnapshot.terrain, cell.x, cell.z) + this.currentSnapshot.buildElevation, cell.z + placement.z)
       if (!isFacade(tool) && this.terrainShape) this.sceneryPreview.position.y = this.terrainShape.sample(cell.x + placement.x, cell.z + placement.z) + this.currentSnapshot.buildElevation
@@ -3981,6 +3985,50 @@ export class WorldView {
       const marker = this.preview.material as MeshStandardMaterial
       marker.color.setHex(valid ? 0x8fdab0 : 0xf05a65)
       marker.emissive.copy(marker.color); marker.emissiveIntensity = .3
+      return
+    }
+    if (
+      this.placementResult?.renderMode === 'model' &&
+      this.placementResult.kind === tool &&
+      this.placementResult.x === this.hoveredCell.x &&
+      this.placementResult.z === this.hoveredCell.z
+    ) {
+      const cell = this.hoveredCell
+      const key = `building:${tool}`
+      if (this.sceneryPreviewKind !== key) {
+        disposeChildren(this.sceneryPreview)
+        this.sceneryPreviewKind = key
+        const model = this.createBuildingModel(tool as BuildingKind, 0)
+        model.traverse((object) => {
+          if (!(object instanceof Mesh)) return
+          const source = Array.isArray(object.material) ? object.material[0] : object.material
+          const material = (source as MeshStandardMaterial).clone()
+          material.userData = {}
+          material.transparent = true
+          material.opacity = 0.68
+          material.depthWrite = false
+          object.material = material
+          object.castShadow = false
+        })
+        this.sceneryPreview.add(model)
+      }
+      const valid = this.placementResult.ok
+      const ground = getTerrainHeight(this.currentSnapshot.terrain, cell.x, cell.z)
+      this.sceneryPreview.visible = true
+      this.sceneryPreview.position.set(
+        cell.x + 0.5,
+        ground + this.currentSnapshot.buildElevation,
+        cell.z + 0.5,
+      )
+      this.sceneryPreview.rotation.y = this.currentSnapshot.buildRotation * Math.PI / 2
+      this.sceneryPreview.scale.setScalar(1)
+      this.sceneryPreview.traverse((object) => {
+        if (object instanceof Mesh) {
+          ;(object.material as MeshStandardMaterial).color.setHex(valid ? 0xffffff : 0xf05a65)
+        }
+      })
+      this.preview.visible = false
+      this.previewArrow.visible = false
       return
     }
     if (tool === 'bulldoze' && this.hoveredCell.buildingId) {
@@ -4030,19 +4078,6 @@ export class WorldView {
       .filter((item) => occupiesBuildingCell(item,this.hoveredCell!.x,this.hoveredCell!.z))
       .sort((a, b) => b.elevation - a.elevation)
     const existing = objectsAtCell[0]
-    const hovered = this.hoveredCell
-    const campingOccupied = this.currentSnapshot.campingCells.some(
-      (cell) => cell.x === hovered?.x && cell.z === hovered?.z,
-    )
-    const medicalOccupied = this.currentSnapshot.medicalCells.some(
-      (cell) => cell.x === this.hoveredCell?.x && cell.z === this.hoveredCell?.z,
-    )
-    const parkingOccupied = this.currentSnapshot.logistics.parkingCells.some(
-      (cell) => cell.x === this.hoveredCell?.x && cell.z === this.hoveredCell?.z,
-    )
-    const forecourtOccupied = this.currentSnapshot.stageForecourtCells.some(
-      (cell) => cell.x === this.hoveredCell?.x && cell.z === this.hoveredCell?.z,
-    )
     const ground = getTerrainHeight(
       this.currentSnapshot.terrain,
       this.hoveredCell.x,
@@ -4057,8 +4092,7 @@ export class WorldView {
       isTerrainEditTool(tool)
         ? existing?.elevation ?? ground
         : ground + this.currentSnapshot.buildElevation
-    const stageDesign = tool==='stage' ? this.currentSnapshot.festival.stageTemplates?.find(t=>t.name===this.currentSnapshot!.festival.selectedStageTemplate) : undefined
-    const footprint=stageSize(stageDesign,this.currentSnapshot.buildRotation)
+    const footprint = this.placementResult?.footprint ?? { width: 1, depth: 1 }
     this.preview.scale.set(footprint.width,1,footprint.depth)
     this.preview.visible = true
     this.preview.position.set(
@@ -4066,109 +4100,8 @@ export class WorldView {
       elevation + 0.07,
       this.hoveredCell.z + footprint.depth/2,
     )
-    const accessOccupied =
-      this.currentSnapshot.accessControls.trafficLights.some(
-        (item) => item.x === hovered.x && item.z === hovered.z,
-      ) ||
-      this.currentSnapshot.accessControls.pathBarriers.some(
-        (item) => item.x === hovered.x && item.z === hovered.z,
-      )
-    const roadOccupied = this.currentSnapshot.logistics.roadCells.some(
-      (road) => road.x === hovered.x && road.z === hovered.z,
-    )
-    const wasteOccupied = (this.currentSnapshot.wasteDumpCells ?? []).some(
-      (cell) => cell.x === hovered.x && cell.z === hovered.z,
-    )
-    const cableOccupied = this.currentSnapshot.power.cableCells.some(
-      (cell) => cell.x === hovered.x && cell.z === hovered.z,
-    )
-    const occupied =
-      Boolean(existing) ||
-      Boolean(hovered.buildingId) ||
-      campingOccupied ||
-      medicalOccupied ||
-      parkingOccupied ||
-      forecourtOccupied ||
-      (tool === 'bulldoze' &&
-        (accessOccupied || roadOccupied || wasteOccupied || cableOccupied))
+    const valid = this.placementResult?.ok ?? true
     const buildingDefinition = BUILDINGS[tool as BuildingKind]
-    const validBusStopPosition =
-      tool === 'busStop' &&
-      Boolean(
-        objectsAtCell.find(
-          (item) =>
-            item.kind === 'path' &&
-            item.elevation === 0 &&
-            item.pathType === 'normal',
-        ),
-      ) &&
-      !this.currentSnapshot.logistics.roadCells.some(
-        (road) =>
-          road.x === this.hoveredCell?.x &&
-          road.z === this.hoveredCell?.z,
-      ) &&
-      this.currentSnapshot.logistics.roadCells.some(
-        (road) =>
-          Math.abs(road.x - this.hoveredCell!.x) +
-            Math.abs(road.z - this.hoveredCell!.z) ===
-          1,
-      )
-    const collides =
-      Boolean(buildingDefinition) &&
-      tool !== 'busStop' &&
-      objectsAtCell.some((item) => {
-        if (
-          (tool === 'securityGate' || tool === 'fence') &&
-          item.kind === 'path'
-        ) {
-          return false
-        }
-        if (
-          tool === 'fence' &&
-          item.kind === 'fence' &&
-          item.rotation !== this.currentSnapshot?.buildRotation
-        ) {
-          return false
-        }
-        const itemTop = item.elevation + BUILDINGS[item.kind].height
-        const previewTop = elevation + buildingDefinition.height
-        return item.elevation < previewTop && elevation < itemTop
-      })
-    const valid = stageDesign ? !stageSiteIssue(this.currentSnapshot,stageDesign,hovered.x,hovered.z,this.currentSnapshot.buildRotation) :
-      tool === 'bulldoze'
-        ? occupied
-        : tool === 'camping'
-          ? !existing
-          : tool === 'medicalArea'
-            ? !existing && !campingOccupied
-            : tool === 'stageForecourt'
-              ? !existing && !campingOccupied && !medicalOccupied
-            : tool === 'backstageArea'
-              ? !campingOccupied && !medicalOccupied && !wasteOccupied
-              : tool === 'busStop'
-                ? validBusStopPosition
-              : tool === 'trafficLight'
-                ? this.currentSnapshot.logistics.roadCells.some(
-                    (road) => road.x === hovered.x && road.z === hovered.z,
-                  )
-                : tool === 'pathBarrier'
-                  ? objectsAtCell.some(
-                      (item) => item.kind === 'path' && item.pathType === 'normal',
-                    )
-                : tool === 'staffGate'
-                  ? objectsAtCell.some((item) => item.kind === 'path')
-                : tool === 'deliveryYard' || tool === 'supplyDepot'
-                  ? !existing &&
-                    !campingOccupied &&
-                    groundInfo(this.currentSnapshot, hovered.x, hovered.z).bearing >= 2 &&
-                    !this.currentSnapshot.festival.infrastructure.depots.some(
-                      (depot) => depot.x === hovered.x && depot.z === hovered.z,
-                    ) &&
-                    (tool === 'supplyDepot' ||
-                      this.currentSnapshot.logistics.roadCells.some(
-                        (road) => Math.abs(road.x - hovered.x) + Math.abs(road.z - hovered.z) === 1,
-                      ))
-          : tool === 'inspect' || tool === 'coaster' || !collides
     const showDirectionArrow =
       (Boolean(buildingDefinition) && tool !== 'path') ||
       tool === 'roadDirection' ||

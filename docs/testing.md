@@ -8,6 +8,7 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | Kommando | Zweck |
 | --- | --- |
 | `npm test` | gesamte Suite über `scripts/test.mjs` / `tests/regression.ts` |
+| `npm run test:docs` | dokumentierte Pfade, Regression-Suite, Snapshot-Version und kritische Modulzuordnung |
 | `npm run build` | `tsc` + Vite-Produktion |
 | `npm run test:performance -- rtest3 120` | CPU-Ticks, 1×/3×/8× |
 | `npm run test:performance -- rtest3 1200` | langer Lauf (Festival kann enden) |
@@ -19,8 +20,13 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | Datei | Inhalt |
 | --- | --- |
 | `tests/regression.ts` | Orchestrierung, Tick-Partition, Multiplayer-Sockets, Saves, Abreise durch Camping-Ausweisungen nach Festivalende |
-| `tests/browserSaves.ts` | Lokaler Slot- und Schnellspeichern-Roundtrip (Besucher/Gebäude bleiben), Liste ohne `fromJSON`, gemockter Server-Client (HTML/401) |
-| `tests/browserSaves.ts` | Lokaler Slot- und Schnellspeichern-Roundtrip mit Besuchern/Gebäuden; Listing ohne `fromJSON`; Server-Client-Liste stürzt bei HTML/Netz nicht ab |
+| `tests/accounts.ts` | Registrierung, Sessions, Passwort-Hashes und Rate-Limit |
+| `tests/saves.ts` | kontoabhängige und öffentliche Server-Spielstände |
+| `tests/finance.ts` | Bücher, Kredite, vorbereitete Szenarien und Ziele |
+| `tests/snapshotModules.ts` | Deterministischer Snapshot-Bootstrap, sichere Migration, delegierendes `GameState.fromJSON` |
+| `tests/simulationModules.ts` | Extraktionsgrenzen: Logistik/Visitor-Phasen, `RoadVehicleSimulation`, `VisitorBehaviorService`, `VisitorSpawning`, `VisitorCrowdingSimulation`, `CoasterSimulation`, `PlacementService` und `snapshotRepair`; faire Routingqueue und direkte Aufrufe außerhalb des Ticks |
+| `tests/uiModules.ts` | Extraktionsgrenzen: Command-Registry/Optimistic-Policy, Flächen-Preview/Execute, Weglinien-/Rechteckbildung, autoritative Kontexthilfe, differentielle Update-Gates, Archiv-Merge/Escaping, gemeinsame Geld-/Zeit-/HTML-Formatierung, Katalog-HTML und Kartenwerkzeuge weiterhin durch Multiplayer-Gate |
+| `tests/browserSaves.ts` | Gemeinsame Quota-Erkennung, lokaler Slot- und Schnellspeichern-Roundtrip (Besucher/Gebäude bleiben), Liste ohne `fromJSON`, gemockter Server-Client (HTML/401) |
 | `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, Lights, Achterbahnwagen, Logistik-Modelle |
 | `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust |
 | `tests/headlineMagazine.ts` | HEADLINE Magazin nur nach Festivalende, ≥1 Pro/Kontra, deterministisch, nicht mitten im Wochenende |
@@ -49,7 +55,7 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/picking.ts` | Abriss-Raycast: Instanz-IDs, getroffenes Mesh vs. Nachbar/Kachelmitte, Reittor-Zelle |
 | `tests/buildMenu.ts` | Jedes platzierbare Tool außer `inspect` genau einmal im Baumenü; Deko/Attraktionen/Logistik als Katalog; Achterbahn-Kacheln mit Zugstil/`coasterVehiclePreview`; Camping-, Krankenhaus- und Bandversorgung-Tabs (`backstageArea`, `tourBusParking`); Bauhöhe bleibt beim gleichen Tool und fällt bei neuem `setTool` auf 0; Deko-Gruppen kommen aus `decoration.ts` |
 | `tests/blueprints.ts` | 2×2 mit zwei Dekos stempeln, Preview ohne Mutation, Bibliothek-Roundtrip ohne `SAVE_KEY` |
-| `tests/placementPreview.ts` | Bauhöhe rastet auf 0.5; Vorschau meldet die Bodenkachel (`y` = Gelände, nicht Ghost-Höhe) |
+| `tests/placementPreview.ts` | Bauhöhe/Bodenkachel; autoritative Preview-Matrix für Gebäude, Slots, Haltestelle, Bandversorgung, Medizin/Dächer, Depots, Blueprint und Ride-Zugang; jede Anfrage bleibt mutationsfrei |
 | `tests/terrainSurface.ts` | Gelände-Mesh (zwei Dreiecke je Kachel), Pads, Parkplatz-Asphalt nur auf Parkfeldern |
 | `tests/terrainLand.ts` | Drei Geländewerkzeuge, Stufe 0,5, Fläche auf Starthöhe, Klippe nach 0,5, Wasser am Uferhang, Baden, Nav nach Edit, Stützen nur im Freiraum, Fußweg land-0→0,5 ja / land-0→1 nein |
 | `tests/environments.ts` | Umgebungen |

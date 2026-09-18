@@ -113,7 +113,8 @@ Slot **4** ist ein explizites Vollfeld; 0–3 bleiben historische Viertel/Kanten
 Fehlende Slots bleiben Legacy-Vollfelder. Gespeicherte Viertel werden nicht vergrößert.
 Vorschau, Kollision und Fußgängersolidität berücksichtigen die volle Fläche.
 
-`decorationWalls.ts` definiert 40 `wall<Style><Shape>`-Arten: je Thema
+`src/game/decorationWalls.ts` definiert über `WALL_KINDS` und `wallSpec`
+40 `wall<Style><Shape>`-Arten: je Thema
 Lehm, Waldholz, Neon, Wellblech, Bambus, Runenstein, Zirkus, Fachwerk, Eis,
 Kupfer; jeweils Full, Half, Window, Door. Kategorie **Wände** in jedem
 Nicht-Klassik-Thema. Breite 1, Höhe 1 oder 0,5; Fenster und Türen sind echte
@@ -136,7 +137,8 @@ und zweigeschossiger Ecke. Bestehende Draw-Call-Guards erfassen auch Wände.
 
 ## Dächer und Wegmöbel (0.1.126)
 
-`decorationWalls.ts` ergänzt `ROOF_KINDS` (Flach-/Schrägdach je Material,
+`src/game/decorationWalls.ts` ergänzt `ROOF_KINDS`/`roofSpec`
+(Flach-/Schrägdach je Material,
 20 Arten) und `THEMED_BIN_KINDS` (zehn funktionsfähige Themen-Mülleimer).
 Dächer sind Vollfelder (Slot 4), Kategorie **Dächer**, 0,1/0,5 hoch und mit R
 drehbar. Sie dürfen Wände berühren, kollidieren mit anderen Dächern und
@@ -147,7 +149,7 @@ Mülleimer liegen ausschließlich unter **Deko → Möbel**, klassisch und je
 Thema. `isWasteBin` wird von Spielstand-Normalisierung, Gästezielen,
 Reinigung, Liefer-/Müllträgern, Atmosphäre, Inspektion und Füllstandsrendering
 verwendet. Kosten/Kapazität bleiben `economy.buildings.wasteBin` und `waste`.
-`pathFurniture.ts:pathFurnitureRotation` wählt eine freie äußere Wegkante
+`src/game/pathFurniture.ts:pathFurnitureRotation` wählt eine freie äußere Wegkante
 auf Bauhöhe; Bank und Eimer reservieren verschiedene Kanten. Mülleimer bleiben
 auch ohne freie Außenkante platzierbar; dann gilt Baurichtung. Bestehende
 Mülleimer erscheinen nun ebenfalls am Rand. Die Vorschau nutzt dieselbe Wahl.

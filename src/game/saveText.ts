@@ -1,3 +1,7 @@
+import { isQuotaError } from './browserPersistence'
+
+export { isQuotaError } from './browserPersistence'
+
 export function encodeSaveText(json: string): string {
   const bytes = new TextEncoder().encode(json)
   const chunks: string[] = []
@@ -21,13 +25,6 @@ export function serializeSnapshot(state: unknown): string {
     throw new Error('Spielstand ist unvollständig — Gebäude oder Besucher fehlen')
   }
   return json
-}
-
-export function isQuotaError(error: unknown): boolean {
-  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
-    return error.name === 'QuotaExceededError' || error.code === 22
-  }
-  return error instanceof Error && /quota/i.test(error.name + error.message)
 }
 
 export function storageErrorMessage(error: unknown, fallback: string): string {
