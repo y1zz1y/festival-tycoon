@@ -3,7 +3,8 @@
 ## Documentation map (read and keep current)
 
 Important per-system facts live in `docs/*.md`, not only in this file. Start at
-`docs/README.md`, then open the topic file for the feature you touch.
+`docs/README.md`, the canonical task router, then open the topic file for the
+feature you touch. Keep detailed file maps and feature history in topic docs.
 
 | When working on | Read |
 | --- | --- |
@@ -20,6 +21,8 @@ Important per-system facts live in `docs/*.md`, not only in this file. Start at
 | Staff, medical, security | `docs/staff.md` |
 | Waste, incidents, panic | `docs/incidents.md` |
 | Festival weekend, bands, tickets | `docs/festival.md` |
+| Finance, ledger, loans | `docs/finance.md` |
+| Accounts, sessions, authentication | `docs/accounts.md` |
 | Stage workshop / shows | `docs/stages.md` |
 | Coasters, rides, queues | `docs/attractions.md` |
 | Coasters / track editor | `docs/coaster.md` |

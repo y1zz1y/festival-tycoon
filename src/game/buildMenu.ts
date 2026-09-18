@@ -57,7 +57,7 @@ export type BuildCategory = {
   groups: BuildSubgroup[]
 }
 
-function buildingItem(kind: BuildingKind, detail?: string): BuildMenuItem {
+export function buildingMenuItem(kind: BuildingKind, detail?: string): BuildMenuItem {
   const building = BUILDINGS[kind]
   return {
     tool: kind,
@@ -171,7 +171,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
     groups: DECORATION_CATEGORY_IDS.map((id) => ({
       id,
       label: DECORATION_CATEGORY_LABELS[id],
-      items: decorationKindsInCategory(id).map((kind) => buildingItem(kind)),
+      items: decorationKindsInCategory(id).map((kind) => buildingMenuItem(kind)),
     })),
   },
   {
@@ -184,7 +184,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
       {
         id: 'main',
         label: 'Wege',
-        items: [buildingItem('path', 'Linie ziehen')],
+        items: [buildingMenuItem('path', 'Linie ziehen')],
       },
     ],
   },
@@ -199,7 +199,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         id: 'rides',
         label: 'Fahrgeschäfte',
         items: [
-          buildingItem('ride'),
+          buildingMenuItem('ride'),
           toolItem('ride', 'Bungee-Turm', '🪂', '1.200 € + 25 €/Meter', {
             bungee: true,
             previewKind: 'ride',
@@ -215,12 +215,12 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         id: 'stalls',
         label: 'Stände',
         items: [
-          buildingItem('food'),
-          buildingItem('toilet'),
-          buildingItem('alcohol'),
-          buildingItem('mascot'),
-          buildingItem('shirt'),
-          buildingItem('securityGate'),
+          buildingMenuItem('food'),
+          buildingMenuItem('toilet'),
+          buildingMenuItem('alcohol'),
+          buildingMenuItem('mascot'),
+          buildingMenuItem('shirt'),
+          buildingMenuItem('securityGate'),
         ],
       },
       {
@@ -232,17 +232,17 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         id: 'festival',
         label: 'Festival',
         items: [
-          buildingItem('stage'),
-          buildingItem('directionalSpeaker'),
-          buildingItem('omniSpeaker'),
+          buildingMenuItem('stage'),
+          buildingMenuItem('directionalSpeaker'),
+          buildingMenuItem('omniSpeaker'),
           toolItem('powerCable', 'Stromkabel', '🔌', '18 € je Feld'),
-          buildingItem('generator'),
-          buildingItem('backupGenerator'),
-          buildingItem('foh'),
-          buildingItem('delayTower'),
-          buildingItem('videoWall'),
-          buildingItem('laserShow'),
-          buildingItem('fireworkBattery'),
+          buildingMenuItem('generator'),
+          buildingMenuItem('backupGenerator'),
+          buildingMenuItem('foh'),
+          buildingMenuItem('delayTower'),
+          buildingMenuItem('videoWall'),
+          buildingMenuItem('laserShow'),
+          buildingMenuItem('fireworkBattery'),
         ],
       },
     ],
@@ -295,7 +295,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
       {
         id: 'bus',
         label: 'Bus',
-        items: [buildingItem('busStop'), buildingItem('busDepot')],
+        items: [buildingMenuItem('busStop'), buildingMenuItem('busDepot')],
       },
       {
         id: 'band',
@@ -307,7 +307,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
             '🎤',
             `${SIMULATION_CONFIG.bandSupply.backstageDesignationCost} € je Feld · begehbar und bebaubar`,
           ),
-          buildingItem(
+          buildingMenuItem(
             'tourBusParking',
             `${Math.floor(BUILDINGS.tourBusParking.cost).toLocaleString('de-DE')} € · nur Backstage`,
           ),
@@ -318,19 +318,19 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         label: 'Müll',
         items: [
           toolItem('wasteDump', 'Müllablage', '🗑️', 'sehr unattraktiv'),
-          buildingItem(
+          buildingMenuItem(
             'sealedWasteContainer',
             `${Math.floor(BUILDINGS.sealedWasteContainer.cost).toLocaleString('de-DE')} € · 80 Beutel, versiegelt`,
           ),
-          buildingItem('wasteDepot'),
-          buildingItem('specialDepot'),
+          buildingMenuItem('wasteDepot'),
+          buildingMenuItem('specialDepot'),
         ],
       },
       {
         id: 'medical',
         label: 'Krankenhaus',
         items: [
-          buildingItem('ambulanceGarage'),
+          buildingMenuItem('ambulanceGarage'),
           toolItem('medicalArea', 'Krankenbereich', '🏥', '3 Liegen je Feld'),
         ],
       },

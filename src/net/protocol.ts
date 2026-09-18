@@ -32,7 +32,7 @@ export type GameCommand = GameCommandAction & {
   originPlayerId?: string
 }
 
-type GameCommandAction =
+export type GameCommandAction =
   | { type: 'setRideAccess'; buildingId: string; accessType: 'entrance' | 'exit'; x: number; z: number }
   | { type: 'placeBungee'; x: number; z: number; height: number }
   | { type: 'setBungeeHeight'; id: string; height: number }

@@ -58,6 +58,9 @@ import { testSaves } from './saves'
 import { testBrowserSaves, testServerSaveClient } from './browserSaves'
 import { testBlueprints, testBlueprintLibraryRoundtrip } from './blueprints'
 import { testFestivalAudio } from './audio'
+import { testSnapshotModules } from './snapshotModules'
+import { testSimulationModules } from './simulationModules'
+import { testUiModules } from './uiModules'
 
 function test(name: string, run: () => void) {
   run()
@@ -65,6 +68,9 @@ function test(name: string, run: () => void) {
 }
 
 testFacadeReveal()
+testSnapshotModules()
+testSimulationModules()
+testUiModules()
 testFestivalAudio()
 testWayStructures()
 testMobileTouch()

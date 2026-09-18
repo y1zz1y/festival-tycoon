@@ -36,13 +36,15 @@ RCT2 60° is not mixed into comments or the palette. Gentle is `atan(0.5)`.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Piece kinds, geometry, trains, sampling | `src/game/coasters.ts` | `TRACK_PIECE_KINDS`, `TrackAnchor`, `createTrackPiece`, `sampleCoasterTrack`, `getSmoothedCoasterPiecePoints` |
+| Fester Betriebs-/Physik-Tick | `src/game/coasterSimulation.ts` | `CoasterSimulation`; Queue, Dispatch, Integration, Telemetrie, Recall, Ausstieg |
 | Playable type catalog + styles | `src/game/coasterTypes.ts` | `COASTER_CATALOG`, `resolveSupportedTrackPieces`, `resolveCoasterTypeId`, `coasterVehiclePreview` |
 | Live type table / helix geometry | `src/game/coasters.ts` | `COASTER_TYPES`, `getCoasterType`, `createHelixTrack` |
 | Connection / palette legality | `src/game/coasterConnections.ts` | `describeTrackAppendIssue`, `resolveNextTrackPiece`, `applyConstructionPitch` / `Bank` / `Kind`, `listTrackPalettePieces` (type-supported + `enabled`) |
-| Build, demolish, gates, operation | `src/game/GameState.ts` | `startCoaster`, `appendCoasterPiece`, `undoCoasterPiece`, `deleteCoasterPiece`, `removeCoaster`, `setCoasterAccess`, `setCoasterOperationMode` |
+| Schienen-Baucommands | `src/game/commands/coasterCommands.ts`, `src/game/GameState.ts` | Services `startCoasterCommand`, `appendCoasterPieceCommand`, `undoCoasterPieceCommand`, `deleteCoasterPieceCommand`; gleichnamige Fassadenmethoden bleiben für Netz/UI |
+| Abriss, Tore, Betrieb | `src/game/GameState.ts` | `removeCoaster`, `setCoasterAccess`, `setCoasterOperationMode` |
 | Commands | `src/net/protocol.ts`, `src/net/commands.ts`, `src/net/bind.ts` | `GameCommand` coaster variants |
 | Balancing / SI physics | `src/game/simulationConfig.ts` | `coasters`, `classicSteel.physics` (shared SI baseline + per-type overrides), `trackPieceCosts.helixLeft/Right`, `physicsSimulation`, `trackJoinSmoothing`. Speed keys: `stationLaunchSpeed` 22.4, `stationDriveSpeed` 6.72, `chainSpeed` 10.4, `dragArea` 0.53, `maximumSpeed` 90; gravity stays 9.81 |
-| Construction window | `src/main.ts` (`#coaster-builder`) | `updateCoasterBuilder` skips unless `updateCoasterConstruction` says the window changed; palettes **diff-updated** in place |
+| Construction window | `src/ui/coasterBuilderPanel.ts`, `src/main.ts` (`#coaster-builder`) | `updateCoasterBuilderPanel` owns rendering/preview; the composition root supplies typed state and DOM groups |
 | Palette mount helper | `src/game/coasterConstructionUI.ts` | `updateCoasterConstruction` / `coasterConstructionViewKey`, `syncCoasterPalette`, stable ids, `coasterConstructionPreviewKey` |
 | Catalog train tiles | `src/view/WorldView.ts` | `coasterTrainThumbnail` — same `createCoasterCar` family as in-world trains |
 | Track styles | `src/view/coasterTrack.ts` | one merged vertex-color mesh per piece; family rails / ties / supports; posts stop at land or a solid and skip if the bay is filled |
@@ -212,12 +214,13 @@ Palette visibility **must** go through `src/game/coasterConnections.ts`
 (`listTrackPalettePieces`, `listTrackPitchChoices`, `listTrackBankChoices`,
 `isTrackChainLiftVisible` / `isTrackChainLiftEligible`,
 `resolveNextTrackPiece`, `applyConstructionPitch` / `applyConstructionBank` /
-`applyConstructionKind`), not only DOM conditionals. `updateCoasterBuilder`
-in `main.ts` is called from the snapshot listener, but **returns immediately**
+`applyConstructionKind`), not only DOM conditionals. `updateCoasterBuilderPanel`
+in `src/ui/coasterBuilderPanel.ts` is called through the composition root's
+snapshot listener, but **returns immediately**
 unless `updateCoasterConstruction` reports a change (open end, type,
 selected kind/pitch/bank, legal ride flags, start pose). Visitor/vehicle
 ticks do not remount or re-style the palette. When the window *does*
-change, `main.ts` **diff-updates** the direction / special / slope / bank /
+change, `coasterBuilderPanel.ts` **diff-updates** the direction / special / slope / bank /
 chain buttons via `syncCoasterPalette` (no leftover `[hidden]` nodes). Do
 **not** `innerHTML`-replace or `replaceChildren` the construction window on
 every tick, hover, or mousemove — that remounts buttons, wipes `:hover`,
@@ -269,6 +272,10 @@ Left ↔ Right.
 
 ### Game commands
 
+Die Schienenmutationen laufen hinter `CoasterCommandContext`; das Modul
+importiert keinen konkreten `GameState`. Netzwerk-Bindung und öffentliche
+Fassadenmethoden bleiben unverändert.
+
 | Command | GameState |
 | --- | --- |
 | `startCoaster` `{ typeId, x, z }` | `startCoaster` — first piece is always `station`, flat, unbanked, heading = `buildRotation` |
@@ -284,7 +291,11 @@ Left ↔ Right.
 
 Circuit close: `isCoasterCircuitClosed` / `trackAnchorsAlign(last.end, first.start)`.
 Operation cannot leave `closed` until the circuit is closed.
-`setCoasterOperationMode(..., 'test')` recalls the train, then `updateCoasters` launches it from boarding with `stationLaunchSpeed` on the next tick. That tick still runs in planning (`stepFixed` → `updateCoastersForCurrentTick`) so Testfahrt works before **Festival starten**.
+`setCoasterOperationMode(..., 'test')` recalls the train, then
+`CoasterSimulation.update` launches it from boarding with
+`stationLaunchSpeed` on the next tick. That tick still runs in planning
+(`stepFixed` → `updateCoastersForCurrentTick`) so Testfahrt works before
+**Festival starten**. Der Service importiert keinen konkreten `GameState`.
 
 ## Per-type matrix
 

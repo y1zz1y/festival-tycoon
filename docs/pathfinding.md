@@ -9,9 +9,9 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Generischer A* | `src/game/pathfinding.ts` | `findWeightedPath`, `createPathScratch` |
-| Fußgänger-Graph, Cache, `findPath` | `src/game/GameState.ts` | `ensurePedestrianNav`, `findPath`, `worldRevision` |
+| Fußgänger-Graph, Cache, `findPath` | `src/game/pedestrianNavigation.ts`, `src/game/GameState.ts` | `PedestrianNavigation`; kompatible Fassaden `ensurePedestrianNav`, `findPath`, `getPedestrianNeighbors`, `worldRevision` |
 | Hecke / Zaun / Wand im Fußgraphen | `src/game/scenery.ts` | `isPedestrianBarrierKind`, `pedestrianBarrierOccupancy` (`fenceMask` / `NAV_SOLID`) |
-| Crowd-Kosten und Belegung | `src/game/crowding.ts` | Crowd-Index, Kosten |
+| Crowd-Kosten und Belegung | `src/game/crowding.ts`, `src/game/visitorCrowdingSimulation.ts` | Crowd-Index; Kosten-, Motivations- und Panik-Orchestrierung |
 | Gerichtete Wege / Queues | `src/game/pathFlow.ts`, `src/game/queueLanes.ts`, `GameState.recalculateQueueDirections` | `allowsPathFlow`, Queue-Kette, Stand-Spuren |
 | Weg-Darstellung | `src/view/PathFlowView.ts` | Bodenmarkierungen |
 | Straßen-Graph (Fahrzeuge) | `src/game/logistics.ts` | `createRoadGraph`, `findRoadRoute`; Nachbarn nur bei passender Kantenhöhe / Rampe |
@@ -53,6 +53,9 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
 - Crowd-Kosten ändern sich häufiger: gecachte Routen **gestaffelt** nach
   30–59 Ticks verfallen lassen. Nicht den ganzen Cache bei jedem Crowd-Update
   oder bei Cap leeren; bei Cap eine Eintrag entfernen.
+- `VisitorCrowdingSimulation` baut Personen-/Panikbelegung einmal pro
+  Crowd-Pass und stellt gepackte Kosten für `PedestrianNavigation` bereit.
+  Der Service kennt keinen konkreten `GameState`.
 - Ein budgetbegrenzter Miss ist **kein** Beweis für Unerreichbarkeit; den
   Reachability-Cache nicht damit vergiften.
 - `findPath` erkennt vor A*, wenn alle Zielknoten fehlen oder wegen fester
@@ -77,6 +80,10 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
   bleiben ein eigenes System.
   Fahrzeuge bleiben auf dem Straßengraphen. `place` / Abriss erhöht
   `worldRevision` und baut den Fußgraphen beim nächsten `findPath` neu.
+- `PedestrianNavigation` besitzt Graphknoten/-links, A*-Scratch, Pfadcache und
+  Gedränge-Zuschläge. Das Modul kennt `GameState` nicht; ein schmaler Callback-
+  Kontext liefert Weltabfragen, Kantenregeln und Revisionswerte. Die bisherigen
+  privaten `GameState`-Methodensignaturen bleiben als Fassaden erhalten.
 - Camping-Ausweisungen sind keine Wände: Nach dem normalen Weg-Pass darf die
   Wegsuche ausgewiesenen Campingboden als Fallback queren. Wege bleiben durch
   ihre niedrigeren Oberflächenkosten bevorzugt; Gelände-, Gedränge- und
@@ -153,6 +160,7 @@ Shortcuts, Rückwärtsgehen, Stand-Spuren, Saugroboter durch `staffOnly`).
 `tests/queueLanes.ts` (Geometrie
 der hälftigen Stand-Spuren).
 Wasser für Gäste, Invalidierung nach Geländedit und Klippen-Nav: `tests/terrainLand.ts`.
+Die Modulgrenze und unveränderte Logistik-Phasenfolge: `tests/simulationModules.ts`.
 `tests/pedestrianBarriers.ts` (Hecke/Wand/Zaun sperren, Wandtür passierbar,
 Vollfeld vs. Kante, Nav-Invalidierung bei Setzen/Abriss).
 `tests/operations.ts` / `tests/accessControl.ts` (Personaleingang: bemalte

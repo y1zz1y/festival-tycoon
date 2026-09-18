@@ -8,10 +8,12 @@ sind abgeleitete Darstellung desselben Zustands.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Typen, Spawn, Bewegung, Ziele | `src/game/GameState.ts` | `Visitor`, `VisitorState` (inkl. `swimming`), `trySpawnVisitor`, `walkVisitors`, `findSwimDestination` |
+| Tick-Phase, Entscheidungsqueue | `src/game/visitorSimulation.ts` | `VisitorSimulation`, `VisitorSimulationContext`, `runTickPhase`, `flushDecisions` |
+| Detailverhalten, Bewegung, Ziele | `src/game/visitorBehavior.ts` | `VisitorBehaviorService`, `VisitorBehaviorContext`; Bewegung/Ankunft, Needs, Konzert, Shop, Camping, Baden, Müll und Laufzeit-Caches |
+| Typen, Spawn, Fassade | `src/game/types/entities.ts`, `src/game/visitorSpawning.ts`, `src/game/GameState.ts` | `Visitor`, `VisitorState`; Admission, Ankunftsgruppen und stabile Kompatibilitäts-Einstiege |
 | Stand-Queue-Spuren | `src/game/queueLanes.ts` | `queueStandOffset`, `stallQueueTileOffset` |
 | Need-/Alkohol-/Übelkeitswerte | `src/game/simulationConfig.ts` | `visitors`, `needs` (`interactionMinutes.stockout`), `alcohol`, `nausea` |
-| Festivallust (`motivation`) | `src/game/GameState.ts`, `src/game/simulationConfig.ts` | `Visitor.motivation`, `crowding.motivation*`, `atmosphere.concertMotivationPerMinute` |
+| Festivallust / Gedränge | `src/game/visitorCrowdingSimulation.ts`, `src/game/simulationConfig.ts` | `Visitor.motivation`, Crowd-/Panikpass, `crowding.motivation*` |
 | Festival-Schlafrhythmus | `src/game/visitorSleep.ts`, `src/game/simulationConfig.ts` | `camping.sleepSchedule`, `sampleFestivalSleepRhythm`, `isMinuteInSleepWindow` |
 | Inventar (Zelt, Essen, Pyro, …) | `src/game/inventory.ts` | Inventarfelder und Verbrauch |
 | Gedanken gruppieren | `src/game/visitorThoughts.ts` | `groupVisitorsByThought` |
@@ -31,6 +33,20 @@ sind abgeleitete Darstellung desselben Zustands.
   Räumliche / Belegungsindizes einmal pro Pass bauen.
 - Zielwahl und Interaktions-Callbacks zählen gegen das Entscheidungsbudget
   (`docs/pathfinding.md`, `docs/simulation.md`).
+- `VisitorSimulation` besitzt FIFO- und Routing-Auftragsqueue sowie den aktiven
+  Entscheidungs-Scope. Der schmale Callback-Kontext importiert keinen konkreten
+  `GameState`; das gemeinsame Tick-Budget bleibt in der Fassade, weil auch
+  Band-Akteure daraus Arbeit entnehmen.
+- `VisitorBehaviorService` besitzt die umfangreichen, zusammenhängenden
+  Bewegungs-, Ziel-, Interaktions- und Needs-Abläufe samt reinem Laufzeitcache.
+  Autoritativer Zustand bleibt im `GameSnapshot`; ein typisierter Callback-Kontext
+  liefert Navigation, Camping, Medizin, Security und Fassadenaktionen ohne
+  Rückimport von `GameState`. Die Fassade behält die von Regressionen und
+  Tick-Orchestrierung verwendeten Einstiegspunkte.
+- `VisitorSpawning` besitzt Intervallsteuerung, Gruppen-/Autoankünfte,
+  Ticket-/Campingzulassung und Visitor-Erzeugung. `VisitorCrowdingSimulation`
+  besitzt den einmaligen räumlichen Crowd-Pass, Motivation und Panik. Beide
+  erhalten schmale Kontexte und importieren keinen konkreten `GameState`.
 - Gäste erreichen Imbiss und Getränkestand ausschließlich an der gedrehten
   Vorderseite (`getFacilityAccessCells`); auch die Queue muss dort anschließen.
   Warenträger dürfen weiterhin von allen vier Seiten liefern.
@@ -159,6 +175,9 @@ ergibt Bodenmüll statt Stillstand, leerer Eimer wird weiter benutzt:
 `tests/operations.ts` (inkl. leerer Bus holt lang wartende Gäste,
 `busCapacity` 40),
 `tests/queueLanes.ts`.
+Der Modul-Seam (Service-Verantwortung, Phasenreihenfolge, verzögerte
+Routing-Aufträge und direkter Aufruf außerhalb eines Ticks) liegt in
+`tests/simulationModules.ts`.
 Festival-Schlafzeiten, Legacy-Remap, zirkadianer Energieverbrauch und
 Zelt-/Abreiseziele: `tests/visitorSleep.ts`. Baden und Wassertiefe:
 `tests/terrainLand.ts`.

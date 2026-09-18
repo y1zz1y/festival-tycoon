@@ -1,800 +1,126 @@
-import { pathFurnitureRotation } from './pathFurniture'
-import { isWasteBin, isWallDoor, THEMED_BIN_KINDS } from './decorationWalls'
-import { wallSpec } from './decorationWalls'
-import { musicTaste, musicAppeal, type MusicGenre } from './musicTaste'
-import { isScenery, isLargeScenery, isEdgeScenery, sceneryOverlaps, sceneryTransform, isPedestrianBarrierKind, pedestrianBarrierOccupancy } from './scenery'
-import { syncStageAudience } from './stageAudience'
-import { stageSiteIssue } from './stageSite'
-import { isStageAudienceCell, stageDistance, stageSize, buildingFootprint, occupiesBuildingCell, stageDesignIssue, stageStats, migrateStageDesign, type StageDesign } from './stageDesign'
-import { WAY_TYPES, wayInfo, wayIssue } from './wayTypes'
-import type { WayType } from './wayTypes'
-import { groundRectangle } from './ground'
-import { createInfrastructure, updateSupplyChain, localStock, consumeLocal, normalizeInfrastructure, normalizeStock } from './supplyChain'
-import { CARDINAL_OFFSETS, isShopServiceKind } from './shopAccess'
-import {
-  defaultShirtSettings,
-  isPricedShopKind,
-  isQueuedFacilityKind,
-  normalizeShirtColor,
-  normalizeShirtStyle,
-  normalizeWornShirt,
-  shopSupplyKind,
-  souvenirPurchaseThought,
-  souvenirSeekThought,
-  stockoutThought,
-  type ShirtStyle,
-  type WornShirt,
-} from './shopGoods'
-import {
-  QUEUE_CARDINALS,
-  isStallQueueKind,
-  queueStandOffset as computeQueueStandOffset,
-  queueTravelLane,
-  stallQueueLaneFromLocal,
-  stallQueueTileOffset,
-} from './queueLanes'
-import { groundInfo, groundKey, buildingEfficiency, roadGroundLimit } from './ground'
-import { BUILDING_KINDS, BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY, saveSlotDataKey } from './catalog'
-import { serializeSnapshot, storageErrorMessage } from './saveText'
-import { bookFinance, createFinanceState, financeEdition, financeForecast, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance'
-import { createScenarioProgress, updateScenarioProgress, type ScenarioProgress } from './scenarioGoals'
-import { createFestivalManagement, festivalAction, updateFestival, assignAudience, activeBookings, watchableBookings, showIssue, BANDS } from './festivalManagement'
-import type { FestivalManagement, FestivalAction, Audience, Booking } from './festivalManagement'
-import {
-  createDefaultScenarioSettings,
-  createScenarioEntrance,
-  createScenarioRoadEntry,
-  normalizeScenarioSettings,
-  sampleBiasedPreference,
-} from './scenario'
-import type { ScenarioSettings } from './scenario'
-import type { BuildingKind, Tool } from './catalog'
-import {
-  TRACK_PIECES,
-  createCoasterTelemetry,
-  createTrackPiece,
-  computeTrackFrame,
-  getCoasterType,
-  isCoasterCircuitClosed,
-  migrateTrackPiece,
-  resolveCoasterTypeId,
-  sampleCoasterTrack,
-  snapTrackPieceToAnchor,
-  trackAnchorsAlign,
-} from './coasters'
-import { describeTrackAppendIssue, isTrackChainLiftEligible } from './coasterConnections'
-import type {
-  Coaster,
-  CoasterOperationMode,
-  CoasterTypeId,
-  DispatchMode,
-  TrackSample,
-  TrackBuildOptions,
-  TrackPiece,
-  TrackPieceKind,
-} from './coasters'
-import {
-  abandonVisitorCamp,
-  CampingSystem,
-  decayUnclaimedInstallations,
-  installationIsClaimed,
-  isCollectibleCamp,
-} from './camping'
-import type {
-  CampingCell,
-  CampingPhase,
-  CampInstallation,
-  CampSetupKind,
-} from './camping'
-import {
-  createFestivalInventory,
-  addItem,
-  consumeItem,
-  getItemQuantity,
-  INVENTORY_ITEMS,
-  normalizeInventory,
-} from './inventory'
-import type { InventoryItem } from './inventory'
-import { FireworksSystem } from './fireworks'
-import type { FireworkEffect } from './fireworks'
-import { CrowdingSystem } from './crowding'
-import type { CrowdingSnapshot } from './crowding'
-import {
-  denseClusterSize,
-  neighborhoodPeople,
-  panicSpreadChance,
-  spontaneousPanicChance,
-} from './visitorBubbles'
-import { CONCERT_TOPLESS_CROWD_THOUGHT, CONCERT_TOPLESS_THOUGHT } from './visitorThoughts'
-import {
-  createPathScratch,
-  createSeededRng,
-  findWeightedPath,
-} from './pathfinding'
-import { DeterministicRng, hashStringSeed, rollsBungeeNude, visitorLooksFemale } from './rng'
-import { applyGameCommand } from '../net/commands'
-import { allowsPathFlow, normalizeFlowDirection } from './pathFlow'
-import { createStaffMember, STAFF_DEFINITIONS } from './staff'
-import type { StaffMember, StaffRole } from './staff'
-import { isInAnyZone, setAssignedWorkZones, zonePaintActive } from './staffZones'
-import { StaffSimulation } from './staffSimulation'
-import { MedicalSystem, allowsMedicalOverlay, normalizeMedicalCell } from './medical'
-import type { MedicalCell } from './medical'
-import { IncidentSystem } from './incidents'
-import type {
-  GroundIncident,
-  GroundIncidentKind,
-} from './incidents'
-import { DEFAULT_SECURITY_CONFIG, SecuritySystem } from './security'
-import type { SecurityGateConfig } from './security'
-import { SIMULATION_CONFIG } from './simulationConfig'
-import {
-  blueprintCatalogCost,
-  blueprintStampCharge,
-  preserveLegacyScenerySlot,
-  transformBlueprintItems,
-  type BlueprintItem,
-} from './blueprints'
-import {
-  circadianEnergyDecayMultiplier,
-  isMinuteInSleepWindow,
-  remapLegacySleepRhythm,
-  sampleFestivalSleepRhythm,
-  sleepRhythmFromVisitorId,
-} from './visitorSleep'
-import type { GameCommand, SimSnapshot, WorldSnapshot } from '../net/protocol'
-import { applySim, applyWorld } from '../net/codec'
-import { AtmosphereSystem } from './atmosphere'
-import type { AtmosphereSnapshot } from './atmosphere'
-import { FestivalAreaSystem } from './festivalAreas'
-import type { StageForecourtCell } from './festivalAreas'
-import {
-  acceptWasteAtDump,
-  acceptWasteAtSealedContainer,
-  clampSealedContainerStored,
-  clampWasteDumpStored,
-  designateWasteDumps,
-  emptySealedContainerStored,
-  findNearestWasteBin,
-  findNearestWasteBinInRange,
-  isSealedWasteContainer,
-  normalizeWasteDumpCell,
-  wasteBinHasRoom,
-  wasteBinManhattan,
-  wasteDumpRemaining,
-} from './waste'
-import type { SealedWasteContainerInfo, WasteBinInfo, WasteDumpCell } from './waste'
-import {
-  bandSupplyAt,
-  bandSupplyForStage,
-  buildBandSupplyGraph,
-  collectBandSupplySnapshot,
-  designateBackstageAreas,
-  emptyBandSupplySnapshot,
-  isBandSupplyKind,
-  isFanIntrusionEligible,
-  normalizeBackstageCell,
-  showQualityForStage,
-  type BackstageCell,
-  type BandSupplyComponent,
-  type BandSupplySnapshot,
-  type BandSupplyStats,
-} from './bandSupply'
-import {
-  bandActorShouldPerform,
-  createBandActor,
-  createTourBusVehicle,
-  idleWanderReady,
-  isBandOnSiteMinute,
-  nextWanderDelay,
-  normalizeBandActor,
-  placeActorOnCell,
-  planBandPresence,
-  stepBandActor,
-  type BandActor,
-  type PlannedBandPresence,
-} from './bandActors'
-import { bandCostumeId, bandRoles } from './bandLooks'
-import {
-  consumesPower,
-  createEmptyPower,
-  normalizePower,
-  PowerSystem,
-} from './power'
-import type { PowerCableCell, PowerSnapshot } from './power'
-import {
-  createDefaultDayPlan,
-  getFestivalCycleStatus,
-  getOpenWindowHours,
-  isDayVisitorAdmissionOpen,
-  isFestivalOfferActive,
-  normalizeDayPlan,
-} from './dayPlan'
-import type { DayPlan, DayPlanOffer } from './dayPlan'
-import {
-  createComplaintCounts,
-  createComplaintSnapshot,
-  normalizeComplaintSnapshot,
-} from './complaints'
-import type {
-  ComplaintSnapshot,
-  ComplaintTopic,
-} from './complaints'
-import {
-  cellKey as roadCellKey,
-  chooseParkingDisembarkPath,
-  collectEligibleBusWaiters,
-  collectSeatedPassengerIds,
-  createDefaultLogisticsSnapshot,
-  createRoadGraph,
-  DIRECTION_OFFSETS,
-  DIRECTIONS,
-  directionBit,
-  directionFromDelta,
-  findRoadRoute,
-  isPlayerOwnedFleetVehicle,
-  isRoadDirectionAllowed,
-  isVehicleReversing,
-  normalizeLogisticsSnapshot,
-  previewBusLineRoute as buildBusLineRoutePreview,
-  oppositeDirection,
-  resolveRoadLayer,
-  roadLayerElevation,
-  roadLayerKey,
-  toRoadPosition,
-} from './logistics'
-import {
-  MAX_PATH_ELEVATION,
-  WAY_ELEVATION_EPSILON,
-  WAY_LEVEL_MATCH,
-  canStepPedestrianHeight,
-  canTraverseWayElevation,
-  elevationsMatch,
-  maxRoadElevation,
-  pedestrianEdgesMeet,
-  wayEdgeHeights,
-  wayOverlapsRoadGrade,
-  waySurfaceY,
-  waySurfaceYAt,
-  packWayElevation,
-  snapWayElevation,
-} from './wayElevation'
-import { snapBuildElevation, stepBuildElevation } from './placementPreview'
-import type {
-  ArrivalGroup,
-  Direction,
-  FindRoadRouteOptions,
-  LogisticsSnapshot,
-  ParkingCell,
-  ParkingDisembarkCandidate,
-  RoadCell,
-  RoadPosition,
-  RoadGraph,
-  RoadVehicle,
-  SpeedLimit,
-} from './logistics'
-import {
-  previewBusLineMarkers as buildBusLineMarkers,
-  sortBusLineStops as orderBusLineStops,
-  type BusPlannerStopMarker,
-} from './busPlanner'
-import {
-  accessCellKey,
-  accessEdgeKey,
-  closedAccessEdges,
-  createAccessControlSnapshot,
-  createPathBarrier,
-  createTrafficLight,
-  evaluateAccessSignal,
-  statsForArea,
-  stepUsesClosedEdge,
-  toggleAreaCells,
-  normalizeAccessControls,
-  normalizeScheduleHours,
-  normalizeScheduleOffer,
-  normalizeSchedulePhases,
-  normalizeScheduleTime,
-  normalizeStaffGateDirection,
-  staffGateBlocksVisitor,
-  type AccessAreaCell,
-  type AccessAreaIndexes,
-  type AccessAreaStats,
-  type AccessControl,
-  type AccessControlKind,
-  type AccessControlPatch,
-  type AccessControlSnapshot,
-  type AccessScheduleContext,
-} from './accessControl'
-import {
-  applyTerrainChanges,
-  createEmptyTerrain,
-  DEFAULT_WATER_LEVEL,
-  generateTerrain,
-  getTerrainHeight as readTerrainHeight,
-  getWaterLevel,
-  isMudHeight,
-  isSwimmableHeight,
-  isWaterHeight,
-  normalizeTerrain,
-  normalizeWaterLevel,
-  planTerrainAreaEdit,
-  planTerrainEdit,
-  sampleTerrainSurface,
-  scatterWildTrees,
-  terrainWalkEdgeHeights,
-} from './terrain'
-import type { TerrainEditMode, TerrainSnapshot } from './terrain'
+import { pathFurnitureRotation } from './pathFurniture';
+import { isWasteBin } from './decorationWalls';
+import { wallSpec } from './decorationWalls';
+import { isScenery, isLargeScenery, isEdgeScenery, sceneryOverlaps, sceneryTransform, pedestrianBarrierOccupancy } from './scenery';
+import { syncStageAudience } from './stageAudience';
+import { stageSiteIssue } from './stageSite';
+import { isStageAudienceCell, buildingFootprint, occupiesBuildingCell, stageDesignIssue, stageStats, type StageDesign } from './stageDesign';
+import { WAY_TYPES, wayInfo, wayIssue } from './wayTypes';
+import type { WayType } from './wayTypes';
+import { groundRectangle } from './ground';
+import { createInfrastructure, updateSupplyChain, localStock, normalizeInfrastructure, normalizeStock } from './supplyChain';
+import { CARDINAL_OFFSETS, isShopServiceKind } from './shopAccess';
+import { isPricedShopKind, isQueuedFacilityKind, normalizeShirtColor, normalizeShirtStyle, shopSupplyKind, stockoutThought, type ShirtStyle } from './shopGoods';
+import { QUEUE_CARDINALS, isStallQueueKind, queueStandOffset as computeQueueStandOffset, queueTravelLane, stallQueueLaneFromLocal, stallQueueTileOffset } from './queueLanes';
+import { groundInfo, groundKey, roadGroundLimit } from './ground';
+import { BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY, saveSlotDataKey } from './catalog';
+import { serializeSnapshot, storageErrorMessage } from './saveText';
+import { bookFinance, financeEdition, financeForecast, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance';
+import { updateScenarioProgress } from './scenarioGoals';
+import { createFestivalManagement, festivalAction, updateFestival, activeBookings, showIssue } from './festivalManagement';
+import type { Booking, FestivalAction } from './festivalManagement';
+import { createScenarioEntrance, createScenarioRoadEntry, normalizeScenarioSettings } from './scenario';
+import type { ScenarioSettings } from './scenario';
+import type { BuildingKind, Tool } from './catalog';
+import { TRACK_PIECES, computeTrackFrame, isCoasterCircuitClosed, snapTrackPieceToAnchor, trackAnchorsAlign } from './coasters';
+import type { Coaster, CoasterOperationMode, CoasterTypeId, DispatchMode, TrackBuildOptions, TrackPiece, TrackPieceKind } from './coasters';
+import { abandonVisitorCamp, CampingSystem, decayUnclaimedInstallations, isCollectibleCamp } from './camping';
+import type { CampingCell } from './camping';
+import { getItemQuantity } from './inventory';
+import { FireworksSystem } from './fireworks';
+import { PedestrianNavigation, isPedestrianSolidKind, type PedestrianNeighborOptions } from './pedestrianNavigation';
+import { updateLogisticsSimulation, type LogisticsTickState } from './logisticsSimulation';
+import { RoadVehicleSimulation } from './roadVehicleSimulation';
+import { DeterministicRng, rollsBungeeNude } from './rng';
+import { applyGameCommand } from '../net/commands';
+import { isOptimisticCommand } from '../net/commandRegistry';
+import { allowsPathFlow, normalizeFlowDirection } from './pathFlow';
+import { createStaffMember, STAFF_DEFINITIONS } from './staff';
+import type { StaffRole } from './staff';
+import { setAssignedWorkZones, zonePaintActive } from './staffZones';
+import { StaffSimulation } from './staffSimulation';
+import { MedicalSystem, allowsMedicalOverlay, normalizeMedicalCell } from './medical';
+import type { MedicalCell } from './medical';
+import { IncidentSystem } from './incidents';
+import type { GroundIncident, GroundIncidentKind } from './incidents';
+import { DEFAULT_SECURITY_CONFIG, SecuritySystem } from './security';
+import type { SecurityGateConfig } from './security';
+import { SIMULATION_CONFIG } from './simulationConfig';
+import { blueprintCatalogCost, blueprintStampCharge, preserveLegacyScenerySlot, transformBlueprintItems, type BlueprintItem } from './blueprints';
+import type { GameCommand, SimSnapshot, WorldSnapshot } from '../net/protocol';
+import { applySim, applyWorld } from '../net/codec';
+import { AtmosphereSystem } from './atmosphere';
+import { FestivalAreaSystem } from './festivalAreas';
+import type { StageForecourtCell } from './festivalAreas';
+import { acceptWasteAtDump, acceptWasteAtSealedContainer, designateWasteDumps, emptySealedContainerStored, isSealedWasteContainer } from './waste';
+import type { SealedWasteContainerInfo, WasteDumpCell } from './waste';
+import { bandSupplyAt, bandSupplyForStage, buildBandSupplyGraph, collectBandSupplySnapshot, designateBackstageAreas, isBandSupplyKind, isFanIntrusionEligible, showQualityForStage, type BackstageCell, type BandSupplyComponent, type BandSupplyStats } from './bandSupply';
+import { bandActorShouldPerform, createBandActor, createTourBusVehicle, idleWanderReady, isBandOnSiteMinute, nextWanderDelay, placeActorOnCell, planBandPresence, stepBandActor, type BandActor, type PlannedBandPresence } from './bandActors';
+import { bandCostumeId, bandRoles } from './bandLooks';
+import { consumesPower, normalizePower, PowerSystem } from './power';
+import type { PowerCableCell } from './power';
+import { getFestivalCycleStatus, getOpenWindowHours, isFestivalOfferActive } from './dayPlan';
+import type { DayPlanOffer } from './dayPlan';
+import { createComplaintCounts } from './complaints';
+import type { ComplaintTopic } from './complaints';
+import { cellKey as roadCellKey, chooseParkingDisembarkPath, collectSeatedPassengerIds, createRoadGraph, directionBit, directionFromDelta, isRoadDirectionAllowed, previewBusLineRoute as buildBusLineRoutePreview, oppositeDirection, resolveRoadLayer, roadLayerElevation, roadLayerKey, toRoadPosition } from './logistics';
+import { WAY_ELEVATION_EPSILON, WAY_LEVEL_MATCH, canStepPedestrianHeight, canTraverseWayElevation, pedestrianEdgesMeet, wayEdgeHeights, wayOverlapsRoadGrade, waySurfaceY, waySurfaceYAt, packWayElevation, snapWayElevation } from './wayElevation';
+import { snapBuildElevation, stepBuildElevation } from './placementPreview';
+import { VisitorSimulation } from './visitorSimulation';
+import { VisitorBehaviorService } from './visitorBehavior';
+import { VisitorCrowdingSimulation } from './visitorCrowdingSimulation';
+import { VisitorSpawning } from './visitorSpawning';
+import { CoasterSimulation } from './coasterSimulation';
+import { PlacementService } from './placementService';
+import { normalizeSnapshotForRuntime, repairSnapshotEntities, type SnapshotRepairContext } from './snapshotRepair';
+export { FEMALE_VISITOR_NAMES, MALE_VISITOR_NAMES, visitorGivenName } from './visitorSpawning';
+import { appendCoasterPieceCommand, deleteCoasterPieceCommand, startCoasterCommand, undoCoasterPieceCommand, type CoasterCommandContext } from './commands/coasterCommands';
+import { placeBuildingCommand, previewPlacementCommand } from './commands/placementCommands';
+import { bulldozeAreaCommand, bulldozeCommand } from './commands/bulldozeCommands';
+import type { ArrivalGroup, Direction, FindRoadRouteOptions, ParkingCell, ParkingDisembarkCandidate, RoadCell, RoadPosition, RoadGraph, RoadVehicle, SpeedLimit } from './logistics';
+import { previewBusLineMarkers as buildBusLineMarkers, sortBusLineStops as orderBusLineStops, type BusPlannerStopMarker } from './busPlanner';
+import { accessCellKey, accessEdgeKey, closedAccessEdges, createPathBarrier, createTrafficLight, evaluateAccessSignal, statsForArea, stepUsesClosedEdge, toggleAreaCells, normalizeScheduleHours, normalizeScheduleOffer, normalizeSchedulePhases, normalizeScheduleTime, type AccessAreaCell, type AccessAreaIndexes, type AccessAreaStats, type AccessControl, type AccessControlKind, type AccessControlPatch, type AccessScheduleContext } from './accessControl';
+import { applyTerrainChanges, getTerrainHeight as readTerrainHeight, getWaterLevel, isMudHeight, isSwimmableHeight, isWaterHeight, planTerrainAreaEdit, planTerrainEdit, sampleTerrainSurface, terrainWalkEdgeHeights } from './terrain';
+import type { TerrainEditMode } from './terrain';
+import { createInitialSnapshot, ENTRANCE_PATH_ID } from './snapshotBootstrap';
+import { migrateSnapshot } from './snapshotMigration';
+import type { PlacementPreviewRequest, PlacementPreviewResult } from './placementPreview';
+import type { Cell, PlacedBuilding, Visitor } from './types/entities';
+import type { ActionResult, GameSnapshot, LocalSaveSlot, SimTurn } from './types/snapshot';
 
-export type Cell = { x: number; z: number; elevation: number }
 
-export type PlacedBuilding = {
-  rideEntrance?: { x: number; y: number; z: number }
-  rideExit?: { x: number; y: number; z: number }
-  rideType?: 'bungee'
-  bungeeHeight?: number
-  bungeeVisitorId?: string
-  decorationSlot?: number
-  id: string
-  kind: BuildingKind
-  x: number
-  z: number
-  rotation: number
-  elevation: number
-  stageDesign?: StageDesign
-  staffOnly?: boolean
-  staffGateDirection?: Direction
-  wayType?: WayType
-  pathType?: 'normal' | 'queue'
-  queueDirection?: number
-  queueEntryDirection?: number
-  /** Stall queues only: derived 50/50 inbound (wait) / outbound (return) lanes. */
-  queueSplit?: boolean
-  pathSlope?: number
-  pathSlopeDirection?: number
-  price: number
-  flowDirection?: number | null
-  securityConfig?: SecurityGateConfig
-  bandName?: string
-  wasteFill?: number
-  shirtColor?: number
-  shirtStyle?: ShirtStyle
-}
-
-export type VisitorNeeds = {
-  hunger: number
-  toilet: number
-  fun: number
-  energy: number
-}
-
-export type VisitorState =
-  | 'entering'
-  | 'exploring'
-  | 'seeking'
-  | 'using'
-  | 'queuing'
-  | 'riding'
-  | 'sleeping'
-  | 'camping'
-  | 'socializing'
-  | 'vomiting'
-  | 'security-check'
-  | 'medical-transport'
-  | 'medical'
-  | 'partying'
-  | 'bench-resting'
-  | 'relaxing'
-  | 'swimming'
-  | 'camp-waiting'
-  | 'vehicle-arrival'
-  | 'bus-waiting'
-  | 'bus-riding'
-  | 'injured'
-  | 'exiting'
-  | 'leaving'
-  | 'panicking'
-
-export type VisitorEmotion = 'neutral' | 'happy' | 'sad' | 'angry' | 'excited'
-
-export type Visitor = {
-  musicTaste?: MusicGenre
-  audience?: Audience
-  concertId?: string | null
-  id: string
-  name: string
-  x: number
-  y: number
-  z: number
-  cellX: number
-  cellZ: number
-  cellElevation: number
-  color: number
-  state: VisitorState
-  thought: string
-  needs: VisitorNeeds
-  route: Cell[]
-  targetId: string | null
-  interactionRemaining: number
-  walkSpeed: number
-  movementBoostMinutes: number
-  avoidedCoasterId: string | null
-  avoidanceMinutes: number
-  facing: number
-  emotion: VisitorEmotion
-  emotionMinutes: number
-  budget: number
-  alcoholLevel: number
-  alcoholDisposition: 'calm' | 'aggressive'
-  alcoholDesire: number
-  campsite: Cell | null
-  campingPhase: CampingPhase
-  hasHandcart: boolean
-  inventory: InventoryItem[]
-  motivation: number
-  crowding: number
-  crowdStress: number
-  isPanicking: boolean
-  panicRecoverMinutes: number
-  tileOffsetX: number
-  tileOffsetZ: number
-  campActivityTarget: Cell | null
-  campActivity: 'standing' | 'sitting'
-  campActivityKind: CampSetupKind | null
-  campActivitySlot: number
-  campActivityCapacity: number
-  nausea: number
-  nauseaCooldown: number
-  medicalCell: Cell | null
-  medicalSlot: number | null
-  securityGateId: string | null
-  securityResumeState: VisitorState | null
-  beautyPreference: number
-  partyPreference: number
-  localAttractiveness: number
-  localPartyMood: number
-  activityTarget: Cell | null
-  activitySlot: number
-  activityCapacity: number
-  isDancing: boolean
-  preferredBedtime: number
-  preferredWakeTime: number
-  ticketType: 'day' | 'camping'
-  consumptionCooldown: number
-  isConversing: boolean
-  campingWaitMinutes: number
-  campingWaitRetryMinutes: number
-  entryFeePaid: number
-  complaintsFiled: ComplaintTopic[]
-  arrivalGroupId: string | null
-  arrivalMode: 'car' | 'pedestrian'
-  injuryVehicleId: string | null
-  rescueVehicleId: string | null
-  busWaitMinutes: number
-  busLineId: string | null
-  busDestination: Cell | null
-  busDestinationStopId: string | null
-  busResumeState: VisitorState | null
-  busResumeTargetId: string | null
-  walkingToCampDistance: number
-  pendingWaste: number
-  streakingMinutes: number
-  streakingCooldownMinutes: number
-  toplessMinutes: number
-  bungeeNude: boolean
-  ownedMascot?: boolean
-  heldMascot?: boolean
-  wornShirt?: WornShirt
-  backstageIntrusion?: boolean
-  backstageLingerMinutes?: number
-  pathSeed: number
-  wanderNonce: number
-  netX?: number
-  netY?: number
-  netZ?: number
-  netFacing?: number
-}
-
-export type CashEffect = {
-  id: string
-  amount: number
-  x: number
-  y: number
-  z: number
-  age: number
-}
-
-export type SimTurn = {
-  tick: number
-  commands: GameCommand[]
-  step: boolean
-  hash: number
-}
-
-export type GameSnapshot = {
-  festival: FestivalManagement
-  version: 30
-  waterLevel: number
-  simTick: number
-  rngState: number
-  money: number
-  entryPrice: number
-  campingTicketPrice: number
-  parkOpen: boolean
-  guests: number
-  reputation: number
-  day: number
-  minute: number
-  speed: number
-  selectedTool: Tool
-  buildElevation: number
-  buildRotation: number
-  buildings: PlacedBuilding[]
-  campingCells: CampingCell[]
-  campInstallations: CampInstallation[]
-  visitors: Visitor[]
-  coasters: Coaster[]
-  cashEffects: CashEffect[]
-  fireworkEffects: FireworkEffect[]
-  crowding: CrowdingSnapshot
-  staff: StaffMember[]
-  medicalCells: MedicalCell[]
-  wasteDumpCells: WasteDumpCell[]
-  incidents: GroundIncident[]
-  stageForecourtCells: StageForecourtCell[]
-  backstageCells: BackstageCell[]
-  bandActors: BandActor[]
-  bandSupply: BandSupplySnapshot
-  attractiveness: AtmosphereSnapshot
-  partyMood: AtmosphereSnapshot
-  dayPlan: DayPlan
-  complaints: ComplaintSnapshot
-  logistics: LogisticsSnapshot
-  accessControls: AccessControlSnapshot
-  scenario: ScenarioSettings
-  finance: FinanceState
-  scenarioProgress: ScenarioProgress
-  terrain: TerrainSnapshot
-  power: PowerSnapshot
-}
-
-export type ActionResult = {
-  ok: boolean
-  message: string
-  placedId?: string
-  slotId?: string
-}
-
-export type LocalSaveSlot = {
-  id: string
-  name: string
-  savedAt: number
-}
+export type {
+  CashEffect,
+  Cell,
+  PlacedBuilding,
+  Visitor,
+  VisitorEmotion,
+  VisitorNeeds,
+  VisitorState,
+} from './types/entities'
+export type {
+  ActionResult,
+  GameSnapshot,
+  LocalSaveSlot,
+  SimTurn,
+} from './types/snapshot'
 
 type StoredSaveSlot = LocalSaveSlot & { snapshot?: string }
 
 type Listener = (snapshot: Readonly<GameSnapshot>) => void
 
-const ENTRANCE_PATH_ID = 'entrance-path'
 const SIMULATION_SPEED_MULTIPLIERS = SIMULATION_CONFIG.time.speedMultipliers
-const VISITOR_SPAWN_INTERVAL_MINUTES =
-  SIMULATION_CONFIG.visitors.spawnIntervalMinutes
-const BOARDING_MINUTES_PER_PERSON =
-  SIMULATION_CONFIG.coasters.boardingMinutesPerPerson
-export const FEMALE_VISITOR_NAMES = [
-  'Mia',
-  'Emma',
-  'Lea',
-  'Lina',
-  'Sofia',
-  'Mila',
-  'Nina',
-  'Marie',
-  'Hannah',
-  'Clara',
-  'Ida',
-  'Greta',
-  'Lara',
-  'Pia',
-  'Anna',
-  'Luisa',
-]
-export const MALE_VISITOR_NAMES = [
-  'Noah',
-  'Finn',
-  'Ben',
-  'Elias',
-  'Jonas',
-  'Paul',
-  'Leon',
-  'Max',
-  'Theo',
-  'Otto',
-  'Jan',
-  'Felix',
-  'Luis',
-  'Oskar',
-  'Karl',
-  'Tim',
-]
-
-export function visitorGivenName(id: string, salt = 0): string {
-  const names = visitorLooksFemale(id) ? FEMALE_VISITOR_NAMES : MALE_VISITOR_NAMES
-  return names[(hashStringSeed(id) + salt) % names.length]!
-}
 const BAND_NAMES = ['Neon Echo', 'Festival Riot', 'Moonlight Avenue', 'Bassgarten']
-const PEDESTRIAN_SOLID_KINDS = new Set<BuildingKind>([
-  'food',
-  'toilet',
-  'ride',
-  'alcohol',
-  'tree',
-  'hedge',
-  'stage',
-  'directionalSpeaker',
-  'omniSpeaker',
-  'ambulanceGarage',
-  'busDepot',
-  'wasteDepot',
-  'specialDepot',
-  'generator',
-  'backupGenerator',
-  'foh',
-  'delayTower',
-  'videoWall',
-  'laserShow',
-  'fireworkBattery',
-  'tourBusParking',
-])
-const PEDESTRIAN_OFFSETS = [
-  [0, 1],
-  [1, 0],
-  [0, -1],
-  [-1, 0],
-] as const
-
-const NAV_PATH = 1
-const NAV_ROAD = 2
-const NAV_CAMPING = 4
-const NAV_MEDICAL = 8
-const NAV_FORECOURT = 16
-const NAV_PARKING = 32
-const NAV_WATER = 64
-const NAV_GROUND = 128
-const NAV_SOLID = 256
-const NAV_PAVED = 512
-const NAV_BACKSTAGE = 1024
-
-type PedestrianNavLink = {
-  node: PedestrianNavNode
-  toPath?: PlacedBuilding
-}
-
-type PedestrianNavNode = {
-  cell: Cell
-  packed: number
-  flags: number
-  cost: number
-  fenceMask: number
-  roadBlocked: number
-  path?: PlacedBuilding
-  links: PedestrianNavLink[]
-}
-
-const PATH_COMPATIBLE_KINDS = new Set<BuildingKind>([
-  'path',
-  'fence',
-  'bench',
-  'lighting',
-  'lightBalloon',
-  'securityGate',
-  'busStop',
-  'wasteBin', ...THEMED_BIN_KINDS,
-])
-
-function createBlankSnapshot(
-  scenario: ScenarioSettings = createDefaultScenarioSettings(),
-): GameSnapshot {
-  const settings = normalizeScenarioSettings(scenario)
-  const entrance = createScenarioEntrance(settings.worldSize)
-  return {
-    festival: createFestivalManagement(),
-    version: 30,
-    waterLevel: DEFAULT_WATER_LEVEL,
-    simTick: 0,
-    rngState: hashStringSeed(
-      `festival-${settings.worldSize}-${settings.startingMoney}`,
-    ),
-    money: settings.startingMoney,
-    finance: createFinanceState(settings.startingLoan),
-    scenarioProgress: createScenarioProgress(settings.goals),
-    entryPrice: SIMULATION_CONFIG.economy.defaultEntryPrice,
-    campingTicketPrice: SIMULATION_CONFIG.economy.defaultCampingTicketPrice,
-    parkOpen: true,
-    guests: 0,
-    reputation: SIMULATION_CONFIG.economy.startingReputation,
-    day: 1,
-    minute: SIMULATION_CONFIG.time.startMinute,
-    speed: 1,
-    selectedTool: 'inspect',
-    buildElevation: 0,
-    buildRotation: 0,
-    buildings: [
-      {
-        id: ENTRANCE_PATH_ID,
-        kind: 'path',
-        x: entrance.x,
-        z: entrance.z,
-        rotation: 0,
-        elevation: 0,
-        pathType: 'normal',
-        pathSlope: 0,
-        pathSlopeDirection: 0,
-        price: 0,
-      },
-    ],
-    campingCells: [],
-    campInstallations: [],
-    visitors: [],
-    coasters: [],
-    cashEffects: [],
-    fireworkEffects: [],
-    crowding: { average: 0, maximum: 0, cells: [] },
-    staff: [],
-    medicalCells: [],
-    wasteDumpCells: [],
-    incidents: [],
-    stageForecourtCells: [],
-    backstageCells: [],
-    bandActors: [],
-    bandSupply: emptyBandSupplySnapshot(),
-    attractiveness: { average: 0, maximum: 0, minimum: 0, cells: [] },
-    partyMood: { average: 0, maximum: 0, minimum: 0, cells: [] },
-    dayPlan: createDefaultDayPlan(),
-    complaints: createComplaintSnapshot(),
-    logistics: createDefaultLogisticsSnapshot(),
-    accessControls: createAccessControlSnapshot(),
-    scenario: settings,
-    terrain: createEmptyTerrain(),
-    power: createEmptyPower(),
-  }
-}
-
-function createInitialSnapshot(
-  scenario: ScenarioSettings = createDefaultScenarioSettings(),
-): GameSnapshot {
-  const snapshot = createBlankSnapshot(scenario)
-  snapshot.parkOpen = false
-  snapshot.festival.planning = true
-  snapshot.festival.tickets = {day:150,camping:0,usedDay:{},usedCamping:0}
-  const entrance = createScenarioEntrance(snapshot.scenario.worldSize)
-  const rng = new DeterministicRng(snapshot.rngState)
-  snapshot.terrain = generateTerrain(snapshot.scenario.worldSize, rng, snapshot.scenario.unevenness, snapshot.scenario.environment)
-  snapshot.buildings.push(
-    ...scatterWildTrees(
-      snapshot.terrain,
-      snapshot.scenario.worldSize,
-      [entrance, createScenarioRoadEntry(snapshot.scenario.worldSize)],
-      rng,
-      snapshot.scenario.environment,
-    ),
-  )
-  snapshot.rngState = rng.getState()
-  return snapshot
-}
 
 export class GameState {
-  private concertToplessVisitorId: string | null = null
   private state: GameSnapshot
   private listeners = new Set<Listener>()
   private idCounter = 0
   private simulatedMinutes = 0
-  private spawnMinutes = 0
   private uiRefreshSeconds = 0
   private crowdingMinutes = 0
   private camping: CampingSystem
   private fireworks = new FireworksSystem()
-  private crowding = new CrowdingSystem()
-  private crowdingCosts = new Map<string, number>()
   private buildingCellIndex = new Map<number, PlacedBuilding[]>()
   private rideAccessIndex = new Map<number, Array<{ building: PlacedBuilding; type: 'entrance' | 'exit'; point: { x: number; y: number; z: number } }>>()
   private pathExactIndex = new Map<number, PlacedBuilding>()
@@ -818,22 +144,70 @@ export class GameState {
   private indexedParkingCount = -1
   private indexedMedicalRef: readonly MedicalCell[] | null = null
   private indexedWasteDumpRef: readonly WasteDumpCell[] | null = null
-  private visitorWasteBinTick = -1
-  private visitorWasteBinBuildings: PlacedBuilding[] = []
   private indexedForecourtRef: readonly StageForecourtCell[] | null = null
   /** Packed half-steps (`height * 2`) so 0.5 land edits stay exact. */
   private terrainHeights: Int8Array | null = null
   private cachedWorldSize = 0
   private cachedWorldHalf = 0
-  private crowdingCostPacked = new Map<number, number>()
   private attractivenessPacked = new Map<number, number>()
-  private readonly neighborScratch: Cell[] = []
-  private readonly neighborSeen = new Set<number>()
-  private readonly pedestrianPathScratch = createPathScratch<Cell>()
-  private readonly sweeperPathScratch = createPathScratch<Cell>()
-  private readonly pedestrianPathCache = new Map<string, { path: readonly Cell[] | null; expires: number }>()
-  private pedestrianNav = new Map<number, PedestrianNavNode>()
-  private pedestrianNavKey = ''
+  private readonly pedestrianNavigation = new PedestrianNavigation({
+    worldRevision: () => this.worldRevision,
+    simTick: () => this.state.simTick,
+    accessSignalRevision: () => this.accessSignalRevision,
+    worldSize: () => this.getWorldSize(),
+    terrainStorageSize: () => this.terrainHeights?.byteLength ?? 0,
+    buildings: () => this.state.buildings,
+    roadCells: () => this.state.logistics.roadCells,
+    parkingCount: () => this.state.logistics.parkingCells.length,
+    campingCount: () => this.state.campingCells.length,
+    medicalCount: () => this.state.medicalCells.length,
+    forecourtCount: () => this.state.stageForecourtCells.length,
+    prepareGraph: () => {
+      this.refreshBandSupplyGraph()
+      this.ensureSpatialIndexes()
+    },
+    packCell: (cell) => this.packCell(cell),
+    packXZ: (x, z) => this.packXZ(x, z),
+    directionIndex: (dx, dz) => this.getDirectionIndex(dx, dz),
+    getTerrainHeight: (x, z) => this.getTerrainHeight(x, z),
+    getPathAt: (x, z, elevation) => this.getPathAt(x, z, elevation),
+    getRoadAt: (x, z) => this.getRoadCellAt(x, z),
+    getBuildingsAt: (x, z) => this.getBuildingsAtCell(x, z),
+    isCampingAt: (x, z) => Boolean(this.getCampingCellAt(x, z)),
+    isMedicalAt: (x, z) => Boolean(this.getMedicalCellAt(x, z)),
+    isForecourtAt: (x, z) => Boolean(this.getStageForecourtCellAt(x, z)),
+    hasParkingAt: (x, z) => this.hasParkingAt(x, z),
+    isBackstageAt: (x, z) => this.activeBackstagePacked.has(this.packXZ(x, z)),
+    isWaterAt: (x, z) => isWaterHeight(this.getTerrainHeight(x, z), this.getWaterLevel()),
+    isSolidAt: (x, z, elevation) => this.isPedestrianSolidAt(x, z, elevation),
+    surfaceCost: (cell) => this.getPedestrianSurfaceCost(cell),
+    walkEdgeHeights: (cell, path, direction) => path
+      ? wayEdgeHeights(
+          path.elevation,
+          path.pathSlope ?? 0,
+          path.pathSlopeDirection ?? 0,
+          direction,
+        )
+      : terrainWalkEdgeHeights(
+          this.state.terrain,
+          cell.x,
+          cell.z,
+          direction,
+          this.getWaterLevel(),
+          (x, z) => this.isInWorld(x, z),
+        ),
+    edgesMeet: (left, right) => pedestrianEdgesMeet(left, right),
+    canTraversePath: (from, to, fromX, fromZ, allowQueue, ignore, elevation) =>
+      this.canTraversePath(from, to, fromX, fromZ, allowQueue, ignore, elevation),
+    searchNeighbors: (cell, options) => this.getPedestrianNeighbors(cell, options),
+    isClosedPathEdge: (x, z, direction) =>
+      this.closedPathEdges.has(accessEdgeKey(x, z, direction)),
+    crowdingCost: (packed) => this.visitorCrowding?.costAtPacked(packed) ?? 0,
+  })
+  /** Compatibility seam for regression diagnostics; ownership stays in the module. */
+  get pedestrianPathCache() {
+    return this.pedestrianNavigation.pathCacheView()
+  }
   private accessSignalRevision = 0
   private accessEmergency = false
   private closedTrafficEdges = new Set<string>()
@@ -841,11 +215,6 @@ export class GameState {
   private visitorIndex = new Map<string, Visitor>()
   private facilityQueues = new Map<string, string[]>()
   private indexedVisitorCount = -1
-  private occupancyTick = -1
-  private activityHeadcount = new Map<string, number>()
-  private activitySlotBits = new Map<string, number>()
-  private benchHeadcount = new Map<string, number>()
-  private benchSlotBits = new Map<string, number>()
   private medical = new MedicalSystem()
   private incidents = new IncidentSystem()
   private security = new SecuritySystem()
@@ -861,23 +230,13 @@ export class GameState {
   private roadGraph: RoadGraph | null = null
   // At most eight entries per road layer (four headings, two U-turn modes).
   // A replaced graph drops all results, including proven unreachable exits.
-  private readonly roadExitRoutes = new WeakMap<RoadGraph, Map<string,
-    { position: RoadPosition; route: RoadCell[] } | null>>()
-  private visitorsAwaitingDecision = new Set<string>()
+  private visitorSimulation: VisitorSimulation
+  private visitorBehavior: VisitorBehaviorService
   /** Guests walking a stall return lane; full speed, then an immediate next goal. */
   private stallQueueReturnIds = new Set<string>()
   private processingSimulationStep = false
   private decisionBudget = 0
   private decidedThisTick = new Set<string>()
-  private activeVisitorDecision: string | null = null
-  private pendingVisitorRouting = new Map<string, 'departure' | 'exit' | 'waste'>()
-  private concertChoiceKey = ''
-  private concertChoices:Array<{booking:Booking;band:(typeof BANDS)[number];stage:GameSnapshot['buildings'][number]}>=[]
-  private concertSlotTick = -1
-  private concertSlots = new Map<number, Set<number>>()
-  private concertForecourtByStage = new Map<string, StageForecourtCell[]>()
-  private concertForecourtStageIds = new Map<number, string>()
-  private danceFloorFocusByStage = new Map<string, { x: number; z: number }>()
   /** Local diagnostic counter; deliberately excluded from saves and network state. */
   executedLogicTicks = 0
   networkMode: 'solo' | 'host' | 'client' = 'solo'
@@ -892,19 +251,47 @@ export class GameState {
   readonly rng: DeterministicRng = new DeterministicRng(1)
   private tickAccumulator = 0
   private lastNavRevision = -1
-  private swimGoalCells: Cell[] | null = null
-  private swimGoalRevision = -1
   private scheduledCommands = new Map<number, GameCommand[]>()
   private turnHashes = new Map<number, number>()
   private optimisticCommandSequence = 0
   private optimisticCommands = new Map<string, GameCommand>()
-  private claimedTentCellsCache: Set<string> | null = null
-  private visitorsOnCellsThisTick: Set<string> | null = null
+  private roadVehicleSimulation: RoadVehicleSimulation
+  private visitorCrowding: VisitorCrowdingSimulation
+  private visitorSpawning: VisitorSpawning
+  private coasterSimulation: CoasterSimulation
+  private placementService: PlacementService
 
   constructor(snapshot?: GameSnapshot) {
     this.state = snapshot
       ? structuredClone(snapshot)
       : createInitialSnapshot()
+    this.visitorSimulation = new VisitorSimulation({
+      state: this.state,
+      getVisitor: (id) => this.getVisitor(id),
+      isProcessingStep: () => this.processingSimulationStep,
+      takeDecision: (visitorId) => {
+        if (
+          this.decisionBudget <= 0 ||
+          this.decidedThisTick.has(visitorId) ||
+          this.visitorSimulation.hasPendingRouting(visitorId)
+        ) {
+          return false
+        }
+        this.decisionBudget -= 1
+        this.decidedThisTick.add(visitorId)
+        return true
+      },
+      beginDeparture: (visitor) => this.beginVisitorDeparture(visitor),
+      ensureExitRoute: (visitor) => this.ensureExitRoute(visitor),
+      routeWaste: (visitor) => this.visitorBehavior.tryDisposeWaste(visitor),
+      chooseNextAction: (visitor) => this.visitorBehavior.chooseNextVisitorAction(visitor),
+      updateVisitors: (minutes) => this.updateVisitors(minutes),
+      updateFanIntrusion: (minutes) => this.updateFanIntrusion(minutes),
+      updateBandActors: (minutes) => this.updateBandActors(minutes),
+      updateFacilityQueues: (minutes) => this.updateFacilityQueues(minutes),
+      updateVisitorFireworks: (minutes) => this.updateVisitorFireworks(minutes),
+      updateCoasters: () => this.updateCoastersForCurrentTick(),
+    })
     this.state.selectedTool = 'inspect'
     this.state.festival ??= createFestivalManagement()
     this.state.festival.infrastructure ??= createInfrastructure()
@@ -944,315 +331,255 @@ export class GameState {
       getPartyMood: (x, z, elevation) =>
         this.getAtmosphereValue(this.partyMoodValues, x, z, elevation),
     })
-    this.state.simTick ??= 0
-    this.state.rngState ??= hashStringSeed('festival')
-    this.rng.setState(this.state.rngState)
-    this.state.entryPrice ??= SIMULATION_CONFIG.economy.defaultEntryPrice
-    this.state.campingTicketPrice ??=
-      this.state.entryPrice ?? SIMULATION_CONFIG.economy.defaultCampingTicketPrice
-    this.state.parkOpen ??= true
-    this.state.campingCells ??= []
-    this.state.campInstallations ??= []
-    this.state.campInstallations.forEach((installation) => {
-      installation.decay ??= 0
-      installation.contributorIds ??= installation.ownerId ? [installation.ownerId] : []
+    const owner = this
+    this.visitorBehavior = new VisitorBehaviorService({
+      get state() { return owner.state },
+      get medical() { return owner.medical },
+      get incidents() { return owner.incidents },
+      get visitorSimulation() { return owner.visitorSimulation },
+      get camping() { return owner.camping },
+      get rng() { return owner.rng },
+      get indexedVisitorCount() { return owner.indexedVisitorCount },
+      set indexedVisitorCount(value) { owner.indexedVisitorCount = value },
+      get stallQueueReturnIds() { return owner.stallQueueReturnIds },
+      get pedestrianNavigation() { return owner.pedestrianNavigation },
+      get lastNavRevision() { return owner.lastNavRevision },
+      set lastNavRevision(value) { owner.lastNavRevision = value },
+      get worldRevision() { return owner.worldRevision },
+      get attractivenessValues() { return owner.attractivenessValues },
+      get partyMoodValues() { return owner.partyMoodValues },
+      get security() { return owner.security },
+      get crowdingCosts() { return owner.visitorCrowding.costMap() },
+      getWorldSize: () => this.getWorldSize(),
+      getEntrance: () => this.getEntrance(),
+      getTerrainHeight: (x, z) => this.getTerrainHeight(x, z),
+      getWaterLevel: () => this.getWaterLevel(),
+      isWaterTerrain: (x, z) => this.isWaterTerrain(x, z),
+      isSwimmableTerrain: (x, z) => this.isSwimmableTerrain(x, z),
+      isMudTerrain: (x, z) => this.isMudTerrain(x, z),
+      isVisitorSeatedInVehicle: (visitor, seated) => this.isVisitorSeatedInVehicle(visitor, seated),
+      beginVisitorDeparture: (visitor) => this.beginVisitorDeparture(visitor),
+      ensureExitRoute: (visitor) => this.ensureExitRoute(visitor),
+      getVisitorArrivalCar: (visitor) => this.getVisitorArrivalCar(visitor),
+      shouldReturnToArrivalCar: (visitor) => this.shouldReturnToArrivalCar(visitor),
+      tryBoardDepartureCar: (visitor) => this.tryBoardDepartureCar(visitor),
+      getMedicalCellAt: (x, z) => this.getMedicalCellAt(x, z),
+      getWasteDumpAt: (x, z) => this.getWasteDumpAt(x, z),
+      getStageForecourtCellAt: (x, z) => this.getStageForecourtCellAt(x, z),
+      showQualityForStage: (stageId) => this.showQualityForStage(stageId),
+      getPathAt: (x, z, elevation) => this.getPathAt(x, z, elevation),
+      getSecurityGateAt: (x, z, elevation) => this.getSecurityGateAt(x, z, elevation),
+      getCampingCellAt: (x, z) => this.getCampingCellAt(x, z),
+      getVisitor: (id) => this.getVisitor(id),
+      getCoaster: (id) => this.getCoaster(id),
+      getCoasterQueueCapacity: (coasterId) => this.getCoasterQueueCapacity(coasterId),
+      getRoadCellAt: (x, z, elevation) => this.getRoadCellAt(x, z, elevation),
+      isOfferCurrentlyActive: (offer) => this.isOfferCurrentlyActive(offer),
+      isBuildingCurrentlyActive: (building) => this.isBuildingCurrentlyActive(building),
+      normalizeCarManifest: (group) => this.normalizeCarManifest(group),
+      addGroundIncident: (kind, cell, severity) => this.addGroundIncident(kind, cell, severity),
+      leaveVisitorCampBehind: (visitor) => this.leaveVisitorCampBehind(visitor),
+      ensurePanicFleeRoute: (visitor) => this.ensurePanicFleeRoute(visitor),
+      queueVisitorDecision: (visitor) => this.queueVisitorDecision(visitor),
+      runVisitorRouting: (visitor, kind, action) => this.runVisitorRouting(visitor, kind, action),
+      flushVisitorDecisions: (limit) => this.flushVisitorDecisions(limit),
+      getCoasterQueueCells: (coaster) => this.getCoasterQueueCells(coaster),
+      getBuildingQueueCells: (building) => this.getBuildingQueueCells(building),
+      getFacilityQueue: (buildingId) => this.getFacilityQueue(buildingId),
+      startFacilityInteraction: (visitor, target) => this.startFacilityInteraction(visitor, target),
+      findPath: (start, goals, allowQueue, allowCamping, allowMedical, ignoreDirectionalRestrictions, allowFestival, maxVisited, allowStaff, allowBackstage) => this.findPath(start, goals, allowQueue, allowCamping, allowMedical, ignoreDirectionalRestrictions, allowFestival, maxVisited, allowStaff, allowBackstage),
+      getPedestrianNeighbors: (cell, options) => this.getPedestrianNeighbors(cell, options),
+      ensurePedestrianNav: (revalidate) => this.ensurePedestrianNav(revalidate),
+      isPedestrianSolidAt: (x, z, elevation) => this.isPedestrianSolidAt(x, z, elevation),
+      isPedestrianEdgeBlocked: (from, to) => this.isPedestrianEdgeBlocked(from, to),
+      getDirectionIndex: (deltaX, deltaZ) => this.getDirectionIndex(deltaX, deltaZ),
+      getAccessPathNeighbors: (access) => this.getAccessPathNeighbors(access),
+      removeVisitorFromCoasterQueues: (visitorId) => this.removeVisitorFromCoasterQueues(visitorId),
+      buildQueueExitRoute: (from, queueCells) => this.buildQueueExitRoute(from, queueCells),
+      leaveQueueOnFoot: (visitor, thought) => this.leaveQueueOnFoot(visitor, thought),
+      getFacilityAccessCells: (building) => this.getFacilityAccessCells(building),
+      isVisitorAtShopCounter: (visitor, building) => this.isVisitorAtShopCounter(visitor, building),
+      isWalkableServiceCell: (cell) => this.isWalkableServiceCell(cell),
+      isAtParkExit: (visitor) => this.isAtParkExit(visitor),
+      packCell: (cell) => this.packCell(cell),
+      occupancyKeyForCell: (cell, path, localX, localZ) => this.occupancyKeyForCell(cell, path, localX, localZ),
+      visitorOccupancyKey: (visitor) => this.visitorOccupancyKey(visitor),
+      beginStallQueueReturn: (visitor, next) => this.beginStallQueueReturn(visitor, next),
+      continueAfterStallQueueReturn: (visitor) => this.continueAfterStallQueueReturn(visitor),
+      applyQueueLaneOffset: (visitor, next) => this.applyQueueLaneOffset(visitor, next),
+      isInWorld: (x, z) => this.isInWorld(x, z),
+      cellKey: (x, z, elevation) => this.cellKey(x, z, elevation),
+      samplePedestrianSurfaceY: (x, z, path, fallback) => this.samplePedestrianSurfaceY(x, z, path, fallback),
+      recordComplaint: (visitor, topic) => this.recordComplaint(visitor, topic),
+      refundEntryFee: (visitor) => this.refundEntryFee(visitor),
+      chargeVisitor: (visitor, amount, position, category) => this.chargeVisitor(visitor, amount, position, category),
     })
-    this.state.staff ??= []
-    this.state.medicalCells ??= []
-    this.state.wasteDumpCells = (this.state.wasteDumpCells ?? []).map((cell) =>
-      clampWasteDumpStored({ ...cell }),
-    )
-    this.state.incidents ??= []
-    this.state.incidents = this.mergeIncidentStacks(this.state.incidents)
-    this.state.stageForecourtCells ??= []
-    this.state.backstageCells = (this.state.backstageCells ?? [])
-      .map(normalizeBackstageCell)
-      .filter((cell): cell is BackstageCell => cell !== null)
-    this.state.bandActors = (this.state.bandActors ?? [])
-      .map(normalizeBandActor)
-      .filter((actor): actor is BandActor => actor !== null)
-    this.state.bandSupply ??= emptyBandSupplySnapshot()
-    this.state.version = 30
-    this.state.waterLevel = normalizeWaterLevel(this.state.waterLevel)
-    syncStageAudience(this.state)
-    this.state.attractiveness ??= {
-      average: 0,
-      maximum: 0,
-      minimum: 0,
-      cells: [],
+    const snapshotRepairContext: SnapshotRepairContext = {
+      state: this.state,
+      rng: this.rng,
+      mergeIncidentStacks: (incidents) => this.mergeIncidentStacks(incidents),
+      rebuildTerrainCache: () => this.rebuildTerrainCache(),
+      recalculateCoasterTrackState: (coaster) => this.recalculateCoasterTrackState(coaster),
+      getAt: (x, z) => this.getAt(x, z),
+      getPathAt: (x, z, elevation) => this.getPathAt(x, z, elevation),
+      restoreVisitorSleepRhythm: (visitor) => this.visitorBehavior.restoreVisitorSleepRhythm(visitor),
+      repairDesignatedOccupancyReservations: () => this.repairDesignatedOccupancyReservations(),
+      ensureEntrancePath: () => this.ensureEntrancePath(),
+      ensureRoadIngress: () => this.ensureRoadIngress(),
+      migrateWayElevations: () => this.migrateWayElevations(),
+      migrateLegacyBusStopsToRoadside: () => this.migrateLegacyBusStopsToRoadside(),
+      recalculateQueueDirections: () => this.recalculateQueueDirections(),
+      refreshPower: () => this.refreshPower(),
+      refreshBandSupplyGraph: () => this.refreshBandSupplyGraph(),
+      evaluateAccessSignals: () => this.evaluateAccessSignals(),
     }
-    this.state.partyMood ??= {
-      average: 0,
-      maximum: 0,
-      minimum: 0,
-      cells: [],
-    }
-    this.state.dayPlan = normalizeDayPlan(this.state.dayPlan)
-    this.state.complaints = normalizeComplaintSnapshot(
-      this.state.complaints,
-    )
-    this.state.logistics = normalizeLogisticsSnapshot(
-      this.state.logistics,
-    )
-    this.state.logistics.wasteDepots ??= []
-    this.state.logistics.specialDepots ??= []
-    this.state.accessControls = normalizeAccessControls(this.state.accessControls)
-    this.state.finance ??= createFinanceState()
-    this.state.finance.periods ??= []
-    this.state.finance.today ??= {}
-    this.state.finance.previousDay ??= {}
-    this.state.scenarioProgress ??= createScenarioProgress(this.state.scenario.goals)
-    this.state.terrain = normalizeTerrain(this.state.terrain)
-    this.state.power = normalizePower(this.state.power)
-    this.rebuildTerrainCache()
-    this.state.coasters ??= []
-    this.state.cashEffects = []
-    this.state.fireworkEffects = []
-    this.state.crowding = { average: 0, maximum: 0, cells: [] }
-    this.state.coasters.forEach((coaster) => {
-      coaster.typeId = resolveCoasterTypeId(coaster.typeId)
-      const type = getCoasterType(coaster.typeId)
-      const track = sampleCoasterTrack(coaster, 0)
-      coaster.train.distance ??= (coaster.train.progress ?? 0) * (track?.totalLength ?? 0)
-      coaster.train.speed ??= 0
-      coaster.train.passengerIds ??= []
-      coaster.train.passengers = coaster.train.passengerIds.length
-      coaster.queue ??= []
-      coaster.operationMode ??= 'closed'
-      coaster.ticketPrice ??= type.defaultTicketPrice
-      coaster.pieces.forEach((piece) => migrateTrackPiece(piece))
-      this.recalculateCoasterTrackState(coaster)
-      coaster.telemetry ??= createCoasterTelemetry()
-      coaster.telemetry.samples = Array.isArray(coaster.telemetry.samples)
-        ? coaster.telemetry.samples
-        : []
-      coaster.telemetry.durationSeconds ??= 0
-      coaster.telemetry.airtimeSeconds ??= 0
-      coaster.telemetry.maxSpeedKmh ??= 0
-      coaster.telemetry.minVerticalG =
-        typeof coaster.telemetry.minVerticalG === 'number' &&
-        Number.isFinite(coaster.telemetry.minVerticalG)
-          ? coaster.telemetry.minVerticalG
-          : Number.POSITIVE_INFINITY
-      coaster.telemetry.maxVerticalG =
-        typeof coaster.telemetry.maxVerticalG === 'number' &&
-        Number.isFinite(coaster.telemetry.maxVerticalG)
-          ? coaster.telemetry.maxVerticalG
-          : Number.NEGATIVE_INFINITY
-      coaster.telemetry.maxAbsLateralG ??= 0
-      coaster.telemetry.maxAbsLongitudinalG ??= 0
-      coaster.telemetry.completedRuns ??= 0
-      coaster.telemetry.measuring ??= false
-      coaster.telemetry.cumulativeDistanceMeters ??= 0
+    normalizeSnapshotForRuntime(snapshotRepairContext)
+    this.roadVehicleSimulation = new RoadVehicleSimulation({
+      state: this.state,
+      closedTrafficEdges: () => this.closedTrafficEdges,
+      lastNavRevision: () => this.lastNavRevision,
+      worldRevision: () => this.worldRevision,
+      nextRandom: () => this.rng.next(),
+      pedestrianCostAt: (cell) => this.pedestrianNavigation.costAt(cell),
+      decideNextAction: (visitor) => this.visitorBehavior.decideNextAction(visitor),
+      beginVehiclePullIn: this.beginVehiclePullIn.bind(this),
+      canParkedCarDepart: this.canParkedCarDepart.bind(this),
+      completeVisitorCarArrival: this.completeVisitorCarArrival.bind(this),
+      createRoadVehicle: this.createRoadVehicle.bind(this),
+      dispatchTourBuses: this.dispatchTourBuses.bind(this),
+      emit: this.emit.bind(this),
+      ensurePedestrianNav: this.ensurePedestrianNav.bind(this),
+      findAvailableRoadEntry: this.findAvailableRoadEntry.bind(this),
+      findPath: this.findPath.bind(this),
+      finishTourBusLeg: this.finishTourBusLeg.bind(this),
+      finishVehicleParking: this.finishVehicleParking.bind(this),
+      getAdjacentParkingCells: this.getAdjacentParkingCells.bind(this),
+      getAdjacentRoadPositions: this.getAdjacentRoadPositions.bind(this),
+      getDirectionIndex: this.getDirectionIndex.bind(this),
+      getLogisticsBuildingAccess: this.getLogisticsBuildingAccess.bind(this),
+      getLogisticsPathAccess: this.getLogisticsPathAccess.bind(this),
+      getOpenParkingApproachRoads: (parking) => this.getOpenParkingApproachRoads(parking),
+      getParkingApproachRoads: this.getParkingApproachRoads.bind(this),
+      getPathAt: this.getPathAt.bind(this),
+      getPedestrianNeighbors: this.getPedestrianNeighbors.bind(this),
+      getPedestrianSurfaceCost: this.getPedestrianSurfaceCost.bind(this),
+      getRoadCellAt: this.getRoadCellAt.bind(this),
+      getRoadCellsAt: this.getRoadCellsAt.bind(this),
+      getRoadEntry: this.getRoadEntry.bind(this),
+      getRoadGraph: this.getRoadGraph.bind(this),
+      getSweeperAccessCells: this.getSweeperAccessCells.bind(this),
+      getTerrainHeight: this.getTerrainHeight.bind(this),
+      getVisitor: this.getVisitor.bind(this),
+      getWorldSize: this.getWorldSize.bind(this),
+      hasArrivalPassengersStillSeated: this.hasArrivalPassengersStillSeated.bind(this),
+      isIllegalParkingPullIn: this.isIllegalParkingPullIn.bind(this),
+      isMudTerrain: this.isMudTerrain.bind(this),
+      isSealedWasteContainerOnRoad: this.isSealedWasteContainerOnRoad.bind(this),
+      isSweeperDriveCell: this.isSweeperDriveCell.bind(this),
+      isVehicleAtParkingAccess: this.isVehicleAtParkingAccess.bind(this),
+      isVehicleOnItsParkingCell: this.isVehicleOnItsParkingCell.bind(this),
+      isVisitorSeatedInVehicle: this.isVisitorSeatedInVehicle.bind(this),
+      listFreeRoadEntries: this.listFreeRoadEntries.bind(this),
+      nextId: this.nextId.bind(this),
+      normalizeCarManifest: this.normalizeCarManifest.bind(this),
+      packCell: this.packCell.bind(this),
+      recordComplaint: this.recordComplaint.bind(this),
+      refundEntryFee: this.refundEntryFee.bind(this),
+      roadPositionKey: this.roadPositionKey.bind(this),
+      searchReachableRoadExit: (start, direction, blocked, allowUTurn) =>
+        this.searchReachableRoadExit(start, direction, blocked, allowUTurn),
     })
-    this.state.buildElevation ??= 0
-    this.state.buildRotation ??= 0
-    this.state.buildings = this.state.buildings.filter((building) =>
-      (BUILDING_KINDS as readonly string[]).includes(building.kind),
-    )
-    this.state.buildings.forEach((building) => {
-      building.elevation ??= 0
-      building.price ??= BUILDINGS[building.kind].defaultPrice
-      if (building.kind === 'path') {
-        building.pathType ??= 'normal'
-        building.queueDirection ??= building.rotation
-        building.queueEntryDirection ??= undefined
-        building.queueSplit ??= false
-        building.pathSlope = snapWayElevation(building.pathSlope ?? 0)
-        building.pathSlopeDirection ??= building.rotation
-        building.elevation = snapWayElevation(building.elevation)
-        building.flowDirection ??= null
-        if (building.staffOnly) {
-          const direction = normalizeStaffGateDirection(building.staffGateDirection)
-          if (direction === undefined) delete building.staffGateDirection
-          else building.staffGateDirection = direction
-        } else if (building.staffGateDirection !== undefined) {
-          delete building.staffGateDirection
-        }
-      }
-      if (building.kind === 'securityGate') {
-        building.securityConfig ??= structuredClone(DEFAULT_SECURITY_CONFIG)
-        building.securityConfig.flowShare ??= DEFAULT_SECURITY_CONFIG.flowShare
-      }
-      if (building.kind === 'stage') {
-        building.bandName ??=
-          BAND_NAMES[Math.abs(building.x + building.z) % BAND_NAMES.length]
-      }
-      if (isWasteBin(building.kind)) {
-        building.wasteFill ??= 0
-      }
-      if (isSealedWasteContainer(building.kind)) {
-        building.wasteFill = clampSealedContainerStored(building.wasteFill ?? 0)
-      }
-      if (building.kind === 'shirt') {
-        const fallback = defaultShirtSettings()
-        building.shirtColor = normalizeShirtColor(building.shirtColor ?? fallback.color)
-        building.shirtStyle = normalizeShirtStyle(building.shirtStyle ?? fallback.style)
-      }
+    this.idCounter = repairSnapshotEntities(snapshotRepairContext)
+    this.visitorCrowding = new VisitorCrowdingSimulation({
+      state: this.state,
+      nextRandom: () => this.rng.next(),
+      cellKey: (x, z, elevation) => this.cellKey(x, z, elevation),
+      packCell: (cell) => this.packCell(cell),
+      isVisitorSeated: (visitor, seated) => this.isVisitorSeatedInVehicle(visitor, seated),
+      hasStageForecourt: (x, z) => Boolean(this.getStageForecourtCellAt(x, z)),
+      clearVisitorActivity: (visitor) => this.visitorBehavior.clearVisitorActivity(visitor),
+      removeVisitorFromCoasterQueues: (id) => this.removeVisitorFromCoasterQueues(id),
+      isAtParkExit: (visitor) => this.isAtParkExit(visitor),
+      getPedestrianNeighbors: (cell) => this.getPedestrianNeighbors(cell, {
+        allowQueue: true, allowCamping: true, allowMedical: true,
+        allowFestival: true, allowGrass: true, ignoreDirectionalRestrictions: true,
+      }),
+      getPathAt: (x, z, elevation) => this.getPathAt(x, z, elevation),
+      findPathToEntrance: (start) => this.findPath(start, [this.getEntrance()], true, true, true, true),
+      recordComplaint: (visitor, topic) => this.recordComplaint(visitor, topic),
+      beginVisitorDeparture: (visitor) => this.beginVisitorDeparture(visitor),
     })
-    if (this.state.campInstallations.length === 0) {
-      const legacyVisitors = this.state.visitors as Array<
-        Visitor & { campSetup?: Array<{ cell: Cell; kind: CampSetupKind }> }
-      >
-      legacyVisitors.forEach((visitor) => {
-        visitor.campSetup?.forEach((setup, index) => {
-          const sharedChairs = this.state.campInstallations.find(
-            (installation) =>
-              installation.kind === 'chairs' &&
-              installation.cell.x === setup.cell.x &&
-              installation.cell.z === setup.cell.z,
-          )
-          if (sharedChairs) {
-            if (!sharedChairs.contributorIds.includes(visitor.id)) {
-              sharedChairs.contributorIds.push(visitor.id)
-            }
-            return
-          }
-          this.state.campInstallations.push({
-            id: `legacy-camp-installation-${visitor.id}-${index}`,
-            cell: { ...setup.cell },
-            kind: setup.kind,
-            ownerId: visitor.id,
-            contributorIds: [visitor.id],
-          })
-        })
-      })
-    }
-    this.state.visitors.forEach((visitor) => {
-      visitor.y ??= this.getAt(visitor.cellX, visitor.cellZ)?.elevation ?? 0
-      visitor.cellElevation ??= visitor.y
-      visitor.walkSpeed ??=
-        SIMULATION_CONFIG.visitors.walkSpeedMinimum +
-        this.rng.next() * SIMULATION_CONFIG.visitors.walkSpeedRandomRange
-      visitor.movementBoostMinutes ??= 0
-      visitor.avoidedCoasterId ??= null
-      visitor.avoidanceMinutes ??= 0
-      visitor.facing ??= 0
-      visitor.emotion ??= 'neutral'
-      visitor.emotionMinutes ??= 0
-      visitor.budget ??= SIMULATION_CONFIG.visitors.budget
-      visitor.alcoholLevel ??= 0
-      visitor.alcoholDisposition ??=
-        this.rng.next() < SIMULATION_CONFIG.visitors.aggressiveProbability
-          ? 'aggressive'
-          : 'calm'
-      visitor.alcoholDesire ??= 25 + this.rng.next() * 60
-      visitor.campsite ??= null
-      if ((visitor.campingPhase as string | undefined) === 'socializing') {
-        visitor.state = 'socializing'
-        visitor.campingPhase = visitor.campsite ? 'ready' : 'none'
-      }
-      visitor.campingPhase ??= visitor.campsite ? 'ready' : 'none'
-      visitor.hasHandcart ??=
-        visitor.campingPhase === 'seeking' ||
-        visitor.campingPhase === 'building' ||
-        visitor.campingPhase === 'packing'
-      visitor.inventory = visitor.inventory
-        ? normalizeInventory(visitor.inventory, Boolean(visitor.campsite))
-        : normalizeInventory(createFestivalInventory(this.rng), Boolean(visitor.campsite))
-      visitor.motivation ??= 100
-      visitor.crowding ??= 0
-      visitor.crowdStress ??= 0
-      visitor.isPanicking ??= false
-      visitor.panicRecoverMinutes ??= 0
-      visitor.tileOffsetX ??= 0.1 + this.rng.next() * 0.8
-      visitor.tileOffsetZ ??= 0.1 + this.rng.next() * 0.8
-      visitor.campActivityTarget ??= null
-      visitor.campActivity ??= 'standing'
-      visitor.campActivityKind ??= null
-      visitor.campActivitySlot ??= 0
-      visitor.campActivityCapacity ??= 1
-      visitor.nausea ??= 0
-      visitor.nauseaCooldown ??= 0
-      visitor.medicalCell ??= null
-      visitor.medicalSlot ??= null
-      visitor.securityGateId ??= null
-      visitor.securityResumeState ??= null
-      visitor.beautyPreference ??=
-        SIMULATION_CONFIG.atmosphere.preferenceMinimum +
-        this.rng.next() * SIMULATION_CONFIG.atmosphere.preferenceRandomRange
-      visitor.partyPreference ??=
-        SIMULATION_CONFIG.atmosphere.preferenceMinimum +
-        this.rng.next() * SIMULATION_CONFIG.atmosphere.preferenceRandomRange
-      visitor.localAttractiveness ??= 0
-      visitor.localPartyMood ??= 0
-      visitor.activityTarget ??= null
-      visitor.activitySlot ??= 0
-      visitor.activityCapacity ??= 1
-      visitor.isDancing ??= false
-      this.restoreVisitorSleepRhythm(visitor)
-      visitor.ticketType ??=
-        getItemQuantity(visitor.inventory, 'tent') > 0
-          ? 'camping'
-          : 'day'
-      visitor.consumptionCooldown ??= 0
-      visitor.isConversing ??= false
-      visitor.campingWaitMinutes ??= 0
-      visitor.campingWaitRetryMinutes ??= 0
-      visitor.entryFeePaid ??= this.state.entryPrice
-      visitor.complaintsFiled ??= []
-      visitor.arrivalGroupId ??= null
-      visitor.arrivalMode ??= 'pedestrian'
-      visitor.injuryVehicleId ??= null
-      visitor.rescueVehicleId ??= null
-      visitor.busWaitMinutes ??= 0
-      visitor.busLineId ??= null
-      visitor.busDestination ??= null
-      visitor.busDestinationStopId ??= null
-      visitor.busResumeState ??= null
-      visitor.busResumeTargetId ??= null
-      visitor.walkingToCampDistance ??= 0
-      visitor.pendingWaste ??= 0
-      visitor.streakingMinutes ??= 0
-      visitor.streakingCooldownMinutes ??= 0
-      visitor.toplessMinutes ??= 0
-      visitor.bungeeNude ??= false
-      visitor.ownedMascot = Boolean(visitor.ownedMascot)
-      visitor.heldMascot = Boolean(visitor.heldMascot)
-      visitor.wornShirt = normalizeWornShirt(visitor.wornShirt)
-      visitor.pathSeed ??= hashStringSeed(visitor.id)
-      const given = visitor.name.split(' ')[0] ?? ''
-      const female = visitorLooksFemale(visitor.id)
-      if (
-        (female && !FEMALE_VISITOR_NAMES.includes(given)) ||
-        (!female && !MALE_VISITOR_NAMES.includes(given))
-      ) {
-        const suffix = visitor.name.split(' ').slice(1).join(' ')
-        visitor.name = `${visitorGivenName(visitor.id)} ${suffix}`.trim()
-      }
-      visitor.wanderNonce ??= 0
-      visitor.route = (visitor.route ?? []).map((cell) => ({
-        ...cell,
-        elevation:
-          cell.elevation ?? this.getPathAt(cell.x, cell.z)?.elevation ?? visitor.cellElevation,
-      }))
+    this.visitorSpawning = new VisitorSpawning({
+      state: this.state,
+      rng: this.rng,
+      getScenario: () => this.getScenario(),
+      getEntrance: () => this.getEntrance(),
+      getRoadEntry: () => this.getRoadEntry(),
+      findAvailableRoadEntry: () => this.findAvailableRoadEntry(),
+      nextId: (prefix) => this.nextId(prefix),
+      idCounter: () => this.idCounter,
+      getBookableCampingCapacity: () => this.getBookableCampingCapacity(),
+      createPreferredSleepRhythm: () => this.visitorBehavior.createPreferredSleepRhythm(),
+      samplePoisson: (lambda) => this.visitorBehavior.samplePoisson(lambda),
+      ticketPriceFor: (ticketType) => this.ticketPriceFor(ticketType),
+      chargeVisitor: (visitor, amount, position, category) => this.chargeVisitor(visitor, amount, position, category),
+      queueVisitorDecision: (visitor) => this.queueVisitorDecision(visitor),
+      assignCampsite: (visitor) => this.camping.assignCampsite(visitor),
+      dispatchIncomingVisitorCar: (vehicle) => this.dispatchIncomingVisitorCar(vehicle),
+      visitorsChanged: () => { this.indexedVisitorCount = -1 },
     })
-    this.state.staff.forEach((member) => {
-      member.route ??= []
-      member.targetId ??= null
-      member.assignedBuildingId ??= null
-      member.medicalCell ??= null
-      member.medicalSlot ??= null
-      member.workMinutes ??= 0
-      member.carryingWaste ??= 0
+    this.coasterSimulation = new CoasterSimulation({
+      state: this.state,
+      getVisitor: (id) => this.getVisitor(id),
+      getCoasterQueueCells: (coaster) => this.getCoasterQueueCells(coaster),
+      getPathAt: (x, z, elevation) => this.getPathAt(x, z, elevation),
+      getEntrance: () => this.getEntrance(),
+      isOfferCurrentlyActive: () => this.isOfferCurrentlyActive('rides'),
+      chargeVisitor: (visitor, amount, position) => this.chargeVisitor(visitor, amount, position, 'rides'),
+      queueStandOffset: (index, direction, packed) => this.queueStandOffset(index, direction, packed),
+      samplePedestrianSurfaceY: (x, z, path, fallback) => this.samplePedestrianSurfaceY(x, z, path, fallback),
+      prioritizeArrivedQueueVisitors: (queue) => this.prioritizeArrivedQueueVisitors(queue),
+      getAccessPathNeighbors: (access) => this.getAccessPathNeighbors(access),
+      addRideNausea: (visitor) => this.incidents.addRideNausea(visitor, SIMULATION_CONFIG.nausea.coasterIntensity),
     })
-    this.repairDesignatedOccupancyReservations()
-    this.ensureEntrancePath()
-    this.ensureRoadIngress()
-    this.migrateWayElevations()
-    this.migrateLegacyBusStopsToRoadside()
-    this.recalculateQueueDirections()
-    this.refreshPower()
-    this.refreshBandSupplyGraph()
-    this.state.guests = this.state.visitors.length
-    this.idCounter =
-      this.state.buildings.length +
-      this.state.visitors.length +
-      this.state.campInstallations.length +
-      this.state.accessControls.trafficLights.length +
-      this.state.accessControls.pathBarriers.length +
-      this.state.coasters.reduce((total, coaster) => total + coaster.pieces.length + 1, 0)
-    this.evaluateAccessSignals()
+    this.placementService = new PlacementService({
+      state: this.state,
+      isInWorld: (x, z) => this.isInWorld(x, z),
+      getTerrainHeight: (x, z) => this.getTerrainHeight(x, z),
+      getWaterLevel: () => this.getWaterLevel(),
+      isWaterTerrain: (x, z) => this.isWaterTerrain(x, z),
+      getRideAccessAt: (x, z) => this.getRideAccessAt(x, z),
+      isLogisticsBuildingCell: (x, z) => this.isLogisticsBuildingCell(x, z),
+      getCampingCellAt: (x, z) => this.getCampingCellAt(x, z),
+      getMedicalCellAt: (x, z) => this.getMedicalCellAt(x, z),
+      getStageForecourtCellAt: (x, z) => this.getStageForecourtCellAt(x, z),
+      getBuildingVerticalBounds: (building) => this.getBuildingVerticalBounds(building),
+      coasterOccupiesVolume: (x, z, elevation, height) => this.coasterOccupiesVolume(x, z, elevation, height),
+      getRoadCellsAt: (x, z) => this.getRoadCellsAt(x, z),
+      getRoadCellAt: (x, z, elevation) => this.getRoadCellAt(x, z, elevation),
+      getPathAt: (x, z, elevation) => this.getPathAt(x, z, elevation),
+      hasLiveParkingOccupancy: (x, z) => this.hasLiveParkingOccupancy(x, z),
+      isAtTerrainLevel: (x, z, elevation) => this.isAtTerrainLevel(x, z, elevation),
+      getTreeClearCost: (x, z, elevation, height) => this.getTreeClearCost(x, z, elevation, height),
+      clearTreesAt: (x, z, elevation, height) => this.clearTreesAt(x, z, elevation, height),
+      clearDesignatedOccupancyAt: (x, z, refund, options) => this.clearDesignatedOccupancyAt(x, z, refund, options),
+      nextId: (prefix) => this.nextId(prefix),
+      invalidateBuildingIndex: () => { this.indexedBuildingCount = -1 },
+      invalidateRoadGraph: () => this.invalidateRoadGraph(),
+      recalculateQueueDirections: () => this.recalculateQueueDirections(),
+      relocateVisitorsFromPath: (path) => this.relocateVisitorsFromPath(path),
+      removeAccessControlsAt: (x, z) => this.removeAccessControlsAt(x, z),
+      evaluateAccessSignals: () => this.evaluateAccessSignals(),
+      designateCampingCell: (x, z, enabled) => this.designateCampingCell(x, z, enabled),
+      getPowerCableAt: (x, z) => this.getPowerCableAt(x, z),
+      clearVisitorActivity: (visitor) => this.visitorBehavior.clearVisitorActivity(visitor),
+      decideNextVisitorAction: (visitor) => this.visitorBehavior.decideNextAction(visitor),
+      getAt: (x, z) => this.getAt(x, z),
+      recalculatePark: () => this.recalculatePark(),
+      refreshPower: () => this.refreshPower(),
+      emit: () => this.emit(),
+      getWorldSize: () => this.getWorldSize(),
+    })
   }
 
   static startNew(settings: ScenarioSettings): GameState {
@@ -1261,6 +588,16 @@ export class GameState {
 
   get snapshot(): Readonly<GameSnapshot> {
     return this.state
+  }
+
+  /** @deprecated Diagnostic seam; runtime ownership is VisitorSimulation. */
+  get visitorsAwaitingDecision(): Set<string> {
+    return this.visitorSimulation.decisionQueue
+  }
+
+  /** @deprecated Diagnostic seam; runtime ownership is VisitorSimulation. */
+  get pendingVisitorRouting(): Map<string, 'departure' | 'exit' | 'waste'> {
+    return this.visitorSimulation.routingQueue
   }
 
   get renderAlpha(): number {
@@ -1301,7 +638,7 @@ export class GameState {
     if (this.applyingCommand) return null
     if (this.networkMode === 'solo') return null
     if (this.networkMode === 'host') return this.executeHostCommand(command)
-    if (this.networkMode === 'client' && this.isOptimisticConstruction(command)) {
+    if (this.networkMode === 'client' && isOptimisticCommand(command)) {
       const commandId = `client-${Date.now().toString(36)}-${++this.optimisticCommandSequence}`
       command.clientCommandId = commandId
       this.applyingCommand = true
@@ -1318,24 +655,6 @@ export class GameState {
     }
     this.commandOutbox?.(command)
     return { ok: true, message: 'Befehl eingeplant' }
-  }
-
-  private isOptimisticConstruction(command: GameCommand): boolean {
-    if (command.type === 'festival') {
-      return ['ground', 'groundArea', 'depot', 'removeDepot', 'staffGate', 'wayArea', 'stageDesign'].includes(command.action.type)
-    }
-    return [
-      'place', 'placeBungee', 'setBungeeHeight', 'placeSceneryLine', 'placePath', 'undoPath', 'placeRoad', 'undoRoad', 'bulldoze', 'bulldozeArea', 'editTerrain', 'editTerrainArea',
-      'designateRoad', 'designateParking', 'designateCampingCell',
-      'designateCampingArea', 'designateMedicalArea', 'designateWasteDump',
-      'designateStageForecourt', 'designateBackstageArea', 'designatePowerCable', 'designatePowerCableArea',
-      'setRoadDirection', 'toggleRoadSeparator', 'toggleCrosswalk', 'setRoadSpeed',
-      'placeTrafficLight', 'placePathBarrier', 'configureAccessControl',
-      'toggleAccessControlArea', 'clearAccessControlArea',
-      'setPathFlow', 'startCoaster', 'appendCoasterPiece', 'undoCoasterPiece',
-      'deleteCoasterPiece', 'removeCoaster', 'setCoasterAccess', 'setRideAccess',
-      'stampBlueprint',
-    ].includes(command.type)
   }
 
   resolveOptimisticCommand(commandId: string): boolean {
@@ -1513,7 +832,14 @@ export class GameState {
   manageFestival(action: FestivalAction): ActionResult {
     const blocked = this.gate({ type: 'festival', action })
     if (blocked) return blocked
-    if (action.type === 'depot' && (this.getRideAccessAt(action.x, action.z) || this.isLogisticsBuildingCell(action.x, action.z) || this.coasterOccupiesVolume(action.x, action.z, this.getTerrainHeight(action.x, action.z), 1))) return { ok: false, message: 'Diese Fläche ist bereits bebaut' }
+    if (action.type === 'depot') {
+      const preview = this.canPlaceSupplyDepot(action.x, action.z, action.role ?? 'storage')
+      if (!preview.ok) return preview
+    }
+    if (action.type === 'staffGate') {
+      const preview = this.canPlaceStaffGate(action.x, action.z, action.elevation)
+      if (!preview.ok) return preview
+    }
     if (action.type === 'stageDesign' && action.stageId) {
       const invalid = stageDesignIssue(action.design)
       if(invalid)return {ok:false,message:invalid}
@@ -1788,8 +1114,7 @@ export class GameState {
     if (this.isVisitorInDepartureVehicle(visitor)) return
     // Closing from a UI/network command must not search for the entire crowd
     // outside the tick budget, including while the simulation is paused.
-    this.pendingVisitorRouting.set(visitor.id, 'departure')
-    this.visitorsAwaitingDecision.add(visitor.id)
+    this.visitorSimulation.deferRouting(visitor.id, 'departure')
     this.clearVisitorForDeparture(visitor)
     visitor.state = 'leaving'
     visitor.route = []
@@ -1798,7 +1123,7 @@ export class GameState {
 
   private planVisitorDeparture(visitor: Visitor): void {
     if ((visitor.pendingWaste ?? 0) > 0 && visitor.campingPhase !== 'packing') {
-      this.tryDisposeWaste(visitor)
+      this.visitorBehavior.tryDisposeWaste(visitor)
       if (
         visitor.state === 'seeking' &&
         visitor.pendingWaste > 0 &&
@@ -1815,7 +1140,7 @@ export class GameState {
   }
 
   private clearVisitorForDeparture(visitor: Visitor): void {
-    this.clearVisitorActivity(visitor)
+    this.visitorBehavior.clearVisitorActivity(visitor)
     this.removeVisitorFromCoasterQueues(visitor.id)
     visitor.streakingMinutes = 0
     visitor.toplessMinutes = 0
@@ -1836,7 +1161,7 @@ export class GameState {
   private ensureExitRoute(visitor: Visitor): void {
     if (visitor.state !== 'leaving') return
     // A loaded snapshot can reconstruct a departure whose routing was deferred.
-    if (this.pendingVisitorRouting.get(visitor.id) === 'departure' ||
+    if (this.visitorSimulation.pendingRoutingKind(visitor.id) === 'departure' ||
         (visitor.campsite && visitor.campingPhase !== 'none') || visitor.pendingWaste > 0) {
       this.beginVisitorDeparture(visitor)
       return
@@ -2106,13 +1431,7 @@ export class GameState {
     const result = this.medical.designate(
       this.state.medicalCells,
       cells,
-      (x, z) =>
-        this.isInWorld(x, z) &&
-        !this.isWaterTerrain(x, z) &&
-        !this.tileBlocksMedicalDesignation(x, z) &&
-        !this.getCampingCellAt(x, z) &&
-        !this.getWasteDumpAt(x, z) &&
-        !this.getCoasterAt(x, z),
+      (x, z) => this.canDesignateMedicalCell(x, z),
     )
     result.cells.forEach((cell) => {
       this.clearTreesAt(cell.x, cell.z, 0, 1)
@@ -2142,9 +1461,7 @@ export class GameState {
     this.parkingIndex.clear()
     this.medicalIndex.clear()
     this.backstageIndex.clear()
-    this.pedestrianNav.clear()
-    this.pedestrianNavKey = ''
-    this.pedestrianPathCache.clear()
+    this.pedestrianNavigation.clear()
     this.lastNavRevision = -1
   }
 
@@ -2254,7 +1571,7 @@ export class GameState {
       if (visitor.state === 'medical' || visitor.state === 'medical-transport') {
         visitor.state = 'exploring'
         visitor.thought = 'Die Liege ist verschwunden.'
-        this.decideNextAction(visitor)
+        this.visitorBehavior.decideNextAction(visitor)
       }
     }
     this.state.staff.forEach((member) => {
@@ -2404,17 +1721,7 @@ export class GameState {
     const result = designateWasteDumps(
       this.state.wasteDumpCells,
       cells,
-      (x, z) =>
-        this.isInWorld(x, z) &&
-        !this.isWaterTerrain(x, z) &&
-        (!this.getAt(x, z) || this.getAt(x, z)?.kind === 'tree') &&
-        !this.getCampingCellAt(x, z) &&
-        !this.getMedicalCellAt(x, z) &&
-        !this.getStageForecourtCellAt(x, z) &&
-        !this.getWasteDumpAt(x, z) &&
-        !this.getRoadCellAt(x, z) &&
-        !this.hasParkingAt(x, z) &&
-        !this.getCoasterAt(x, z),
+      (x, z) => this.canDesignateWasteDumpCell(x, z),
       this.state.money,
     )
     result.cells.forEach((cell) => {
@@ -2510,13 +1817,7 @@ export class GameState {
     const result = designateBackstageAreas(
       this.state.backstageCells,
       cells,
-      (x, z) =>
-        this.isInWorld(x, z) &&
-        !this.isWaterTerrain(x, z) &&
-        !this.getCampingCellAt(x, z) &&
-        !this.getMedicalCellAt(x, z) &&
-        !this.getWasteDumpAt(x, z) &&
-        !this.getStageForecourtCellAt(x, z),
+      (x, z) => this.canDesignateBackstageCell(x, z),
       this.state.money,
       enabled,
       (x, z) => this.getTerrainHeight(x, z),
@@ -2842,7 +2143,7 @@ export class GameState {
     )
     if (changed) {
       this.accessSignalRevision += 1
-      this.pedestrianPathCache.clear()
+      this.pedestrianNavigation.clearPathCache()
     }
   }
 
@@ -2949,7 +2250,7 @@ export class GameState {
     if (cell) cell.elevation = this.getTerrainHeight(x, z)
     result.displacedVisitors.forEach((visitor) => {
       const current = this.getVisitor(visitor.id)
-      if (current) this.decideNextAction(current)
+      if (current) this.visitorBehavior.decideNextAction(current)
     })
     this.emit()
     return { ok: result.ok, message: result.message }
@@ -3008,66 +2309,21 @@ export class GameState {
     )
   }
 
-  startCoaster(typeId: CoasterTypeId, x: number, z: number): ActionResult & { id?: string } {
-    const type = getCoasterType(typeId)
-    typeId = type.id
-    const piece = createTrackPiece(
-      this.nextId('track'),
-      'station',
-      {
-        x,
-        z,
-        elevation: this.getPlaceElevation(x, z),
-        heading: this.state.buildRotation,
-        pitch: 0,
-        bank: 0,
-      },
-      false,
-    )
-    if (!this.canBuildTrackPiece(piece)) {
-      return { ok: false, message: 'Für die Startplattform ist nicht genug Platz' }
+  private coasterCommandContext(): CoasterCommandContext {
+    return {
+      state: this.state,
+      nextId: (prefix) => this.nextId(prefix),
+      getPlaceElevation: (x, z) => this.getPlaceElevation(x, z),
+      isInWorld: (x, z) => this.isInWorld(x, z),
+      canBuildTrackPiece: (piece, options) => this.canBuildTrackPiece(piece, options),
+      recalculateTrackState: (coaster) => this.recalculateCoasterTrackState(coaster),
+      recallTrain: (coaster) => this.recallCoasterTrainInternal(coaster),
+      emit: () => this.emit(),
     }
-    if (this.state.money < TRACK_PIECES.station.cost) {
-      return { ok: false, message: 'Nicht genug Geld' }
-    }
+  }
 
-    const id = this.nextId('coaster')
-    bookFinance(this.state, 'construction', -TRACK_PIECES.station.cost)
-    this.state.coasters.push({
-      id,
-      typeId,
-      name: `${type.name} ${this.state.coasters.length + 1}`,
-      pieces: [piece],
-      entrance: null,
-      exit: null,
-      settings: {
-        dispatchMode: 'full-or-timed',
-        dispatchIntervalMinutes:
-          SIMULATION_CONFIG.coasters.defaultDispatchIntervalMinutes,
-      },
-      operationMode: 'closed',
-      ticketPrice: type.defaultTicketPrice,
-      train: {
-        state: 'boarding',
-        cars: 1,
-        passengers: 0,
-        passengerIds: [],
-        capacity: type.carCapacity,
-        waitMinutes: 0,
-        boardingProgress: 0,
-        progress: 0,
-        distance: 0,
-        speed: 0,
-        x,
-        y: this.state.buildElevation,
-        z,
-      },
-      telemetry: createCoasterTelemetry(),
-      queue: [],
-      closed: false,
-    })
-    this.emit()
-    return { ok: true, message: 'Startplattform gebaut', id }
+  startCoaster(typeId: CoasterTypeId, x: number, z: number): ActionResult & { id?: string } {
+    return startCoasterCommand(this.coasterCommandContext(), typeId, x, z)
   }
 
   appendCoasterPiece(
@@ -3077,83 +2333,21 @@ export class GameState {
     afterPieceIndex?: number,
     options: TrackBuildOptions = {},
   ): ActionResult {
-    const coaster = this.getCoaster(coasterId)
-    if (!coaster) return { ok: false, message: 'Achterbahn nicht gefunden' }
-    const anchorIndex = Math.max(
-      0,
-      Math.min(coaster.pieces.length - 1, afterPieceIndex ?? coaster.pieces.length - 1),
-    )
-    const anchorPiece = coaster.pieces[anchorIndex]
-    if (!anchorPiece) return { ok: false, message: 'Startplattform fehlt' }
-    const appendIssue = describeTrackAppendIssue(anchorPiece.end, kind, options, coaster.typeId)
-    if (appendIssue) return { ok: false, message: appendIssue }
-    if (chainLift && !isTrackChainLiftEligible(kind, anchorPiece.end.pitch, options.targetPitch ?? anchorPiece.end.pitch, coaster.typeId)) {
-      chainLift = false
-    }
-    const piece = createTrackPiece(
-      this.nextId('track'),
+    return appendCoasterPieceCommand(
+      this.coasterCommandContext(),
+      this.getCoaster(coasterId),
       kind,
-      anchorPiece.end,
       chainLift,
+      afterPieceIndex,
       options,
     )
-    if (
-      piece.points.some(
-        (point) => point.y < 0 || point.y > 10 || !this.isInWorld(point.x, point.z),
-      )
-    ) {
-      return { ok: false, message: 'Das Schienenelement liegt außerhalb des Baubereichs' }
-    }
-    if (
-      !this.canBuildTrackPiece(piece, {
-        coasterId: coaster.id,
-        attachPieceIndex: anchorIndex,
-      })
-    ) {
-      return { ok: false, message: 'Das Schienenelement kollidiert mit einem Bauwerk' }
-    }
-    const cost =
-      TRACK_PIECES[kind].cost +
-      (piece.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
-    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld' }
-
-    bookFinance(this.state, 'construction', -cost)
-    coaster.pieces.splice(anchorIndex + 1, 0, piece)
-    const stations = coaster.pieces.filter((item) => item.kind === 'station').length
-    coaster.train.cars = stations
-    coaster.train.capacity = stations * getCoasterType(coaster.typeId).carCapacity
-    this.recalculateCoasterTrackState(coaster)
-    coaster.telemetry = createCoasterTelemetry()
-    coaster.operationMode = 'closed'
-    this.recallCoasterTrainInternal(coaster)
-    this.emit()
-    return {
-      ok: true,
-      message: coaster.closed
-        ? `${TRACK_PIECES[kind].name} gebaut – Strecke geschlossen`
-        : piece.chainLift
-          ? `${TRACK_PIECES[kind].name} mit Kettenzug gebaut`
-          : `${TRACK_PIECES[kind].name} gebaut`,
-    }
   }
 
   undoCoasterPiece(coasterId: string): ActionResult {
-    const coaster = this.getCoaster(coasterId)
-    if (!coaster || coaster.pieces.length <= 1) {
-      return { ok: false, message: 'Die Startplattform kann nicht entfernt werden' }
-    }
-    const piece = coaster.pieces.pop()
-    if (!piece) return { ok: false, message: 'Kein Element vorhanden' }
-    bookFinance(this.state, 'construction', TRACK_PIECES[piece.kind].cost + (piece.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0))
-    this.recalculateCoasterTrackState(coaster)
-    coaster.telemetry = createCoasterTelemetry()
-    coaster.operationMode = 'closed'
-    const stations = coaster.pieces.filter((item) => item.kind === 'station').length
-    coaster.train.cars = stations
-    coaster.train.capacity = stations * getCoasterType(coaster.typeId).carCapacity
-    this.recallCoasterTrainInternal(coaster)
-    this.emit()
-    return { ok: true, message: 'Letztes Schienenelement entfernt' }
+    return undoCoasterPieceCommand(
+      this.coasterCommandContext(),
+      this.getCoaster(coasterId),
+    )
   }
 
   getRideAccessAt(x: number, z: number, elevation?: number) {
@@ -3316,7 +2510,7 @@ export class GameState {
     }
     this.state.dayPlan.dayVisitorEntryHour = entry
     this.state.dayPlan.dayVisitorExitHour = exit
-    this.enforceDayPlan()
+    this.visitorBehavior.enforceDayPlan()
     this.emit()
     return {
       ok: true,
@@ -3336,7 +2530,7 @@ export class GameState {
     this.state.dayPlan.festivalDays = festival
     this.state.dayPlan.breakDays = pause
     this.state.dayPlan.cycleStartDay = this.state.day
-    this.enforceDayPlan()
+    this.visitorBehavior.enforceDayPlan()
     this.updateAtmosphere()
     this.emit()
     return {
@@ -3558,11 +2752,8 @@ export class GameState {
   }
 
   placeBungee(x: number, z: number, height: number): ActionResult {
-    if (!Number.isInteger(height) || height < 4 || height > 200) return { ok: false, message: 'Turmhöhe: 4 bis 200 Meter in Meterschritten' }
-    const elevation = this.getPlaceElevation(x, z)
-    const top = height / 4 + .4
-    if (this.coasterOccupiesVolume(x, z, elevation, top) || this.state.buildings.some(b => b.x === x && b.z === z && this.volumesOverlap(b, elevation, top))) return { ok: false, message: 'Über der Turmfläche muss Platz frei bleiben' }
-    if (this.state.money < BUILDINGS.ride.cost + height * 25) return { ok: false, message: 'Nicht genug Geld für diese Turmhöhe' }
+    const preview = this.canPlaceBungee(x, z, height)
+    if (!preview.ok) return preview
     const result = this.place('ride', x, z)
     if (!result.ok) return result
     const tower = this.state.buildings.at(-1)!
@@ -3570,6 +2761,15 @@ export class GameState {
     bookFinance(this.state, 'construction', -(height * 25))
     this.emit()
     return { ok: true, message: `Bungee-Turm (${height} m) gebaut` }
+  }
+
+  private canPlaceBungee(x: number, z: number, height: number): ActionResult {
+    if (!Number.isInteger(height) || height < 4 || height > 200) return { ok: false, message: 'Turmhöhe: 4 bis 200 Meter in Meterschritten' }
+    const elevation = this.getPlaceElevation(x, z)
+    const top = height / 4 + .4
+    if (this.coasterOccupiesVolume(x, z, elevation, top) || this.state.buildings.some(b => b.x === x && b.z === z && this.volumesOverlap(b, elevation, top))) return { ok: false, message: 'Über der Turmfläche muss Platz frei bleiben' }
+    if (this.state.money < BUILDINGS.ride.cost + height * 25) return { ok: false, message: 'Nicht genug Geld für diese Turmhöhe' }
+    return this.canPlace('ride', x, z)
   }
 
   setBungeeHeight(id: string, height: number): ActionResult {
@@ -3711,153 +2911,12 @@ export class GameState {
     }
   }
 
-  placeRoadSegment(
-    x: number,
-    z: number,
-    elevation: number,
-    slope = 0,
-    slopeDirection = 0,
-    wayType?: WayType,
-  ): ActionResult {
-    if (wayType && WAY_TYPES[wayType]?.mode !== 'road') {
-      return { ok: false, message: 'Gültigen Straßenbelag wählen' }
-    }
-    if (!this.isInWorld(x, z)) return { ok: false, message: 'Außerhalb des Geländes' }
-    const terrain = this.getTerrainHeight(x, z)
-    elevation = snapWayElevation(elevation)
-    slope = snapWayElevation(slope)
-    const direction = ((slopeDirection % 4) + 4) % 4 as Direction
-    const rampStart = elevation - slope
-    if (elevation < terrain - WAY_LEVEL_MATCH || rampStart < terrain - WAY_LEVEL_MATCH) {
-      return { ok: false, message: 'Die Straße kann nicht unter das Gelände' }
-    }
-    if (
-      elevation > maxRoadElevation(terrain) + WAY_ELEVATION_EPSILON ||
-      rampStart > maxRoadElevation(terrain) + WAY_ELEVATION_EPSILON
-    ) {
-      return { ok: false, message: 'Autos dürfen höchstens eine Höhenstufe über dem Gelände fahren' }
-    }
-    if (this.isWaterTerrain(x, z) && elevation <= this.getWaterLevel()) {
-      return { ok: false, message: 'Im Wasser kann keine Straße gebaut werden' }
-    }
-    if (this.getRideAccessAt(x, z) || this.isLogisticsBuildingCell(x, z) || this.getCampingCellAt(x, z) || this.getMedicalCellAt(x, z) || this.getStageForecourtCellAt(x, z)) {
-      return { ok: false, message: 'Hier konnte keine Straße gebaut werden' }
-    }
-    const candidateBase = Math.min(elevation, rampStart)
-    const candidateTop = Math.max(elevation, rampStart) + 0.28
-    if (
-      this.state.buildings.some((building) => {
-        if (
-          !occupiesBuildingCell(building, x, z) ||
-          building.kind === 'tree' ||
-          isSealedWasteContainer(building.kind)
-        ) {
-          return false
-        }
-        const bounds = this.getBuildingVerticalBounds(building)
-        return bounds.base < candidateTop && candidateBase < bounds.top
-      }) ||
-      this.coasterOccupiesVolume(x, z, candidateBase, candidateTop - candidateBase)
-    ) {
-      return { ok: false, message: 'Auf dieser Höhe ist nicht genug Platz' }
-    }
-    const offsets = DIRECTION_OFFSETS[direction]
-    const layersHere = this.getRoadCellsAt(x, z)
-    const existing = layersHere.find((layer) =>
-      wayOverlapsRoadGrade(elevation, slope, layer.elevation ?? terrain),
-    )
-    const hasLowerRoad = layersHere.some(
-      (layer) => (layer.elevation ?? terrain) + WAY_LEVEL_MATCH < Math.min(elevation, rampStart),
-    )
-    if (slope !== 0) {
-      const previous = this.getRoadCellsAt(x - offsets.x, z - offsets.z).find((layer) =>
-        elevationsMatch(layer.elevation ?? this.getTerrainHeight(layer.x, layer.z), rampStart),
-      )
-      if (!previous && !existing) {
-        return { ok: false, message: 'Eine Rampe muss an eine bestehende Straße anschließen' }
-      }
-    } else if (!this.isAtTerrainLevel(x, z, elevation)) {
-      const hasNeighbor = DIRECTIONS.some((neighborDirection) => {
-        const offset = DIRECTION_OFFSETS[neighborDirection]
-        return this.getRoadCellsAt(x + offset.x, z + offset.z).some((neighbor) =>
-          elevationsMatch(
-            neighbor.elevation ?? this.getTerrainHeight(neighbor.x, neighbor.z),
-            elevation,
-          ),
-        )
-      })
-      if (!hasNeighbor && !existing && !hasLowerRoad) {
-        return { ok: false, message: 'Eine erhöhte Straße muss anschließen' }
-      }
-    }
-    if (wayType && elevation <= terrain) {
-      const issue = wayIssue(this.state, x, z, wayType)
-      if (issue) return { ok: false, message: issue }
-    }
-    const clearCost = this.getTreeClearCost(x, z, candidateBase, candidateTop - candidateBase)
-    const roadCost = wayType ? WAY_TYPES[wayType].cost : SIMULATION_CONFIG.logistics.roadBuildCost
-    const extra = existing && wayType ? Math.max(0, roadCost - SIMULATION_CONFIG.logistics.roadBuildCost) : existing ? 0 : roadCost
-    if (this.state.money < extra + clearCost) return { ok: false, message: 'Nicht genug Geld' }
-    this.clearTreesAt(x, z, candidateBase, candidateTop - candidateBase)
-    if (extra) bookFinance(this.state, 'construction', -extra)
-    const crossingPath = this.state.buildings.find((building) => {
-      if (building.kind !== 'path' || building.x !== x || building.z !== z) return false
-      return wayOverlapsRoadGrade(building.elevation, building.pathSlope ?? 0, elevation)
-    })
-    if (existing) {
-      existing.roadSlope = slope
-      existing.roadSlopeDirection = direction
-      if (wayType) existing.speedLimit = WAY_TYPES[wayType].limit as SpeedLimit
-      if (crossingPath) existing.crosswalk = true
-    } else {
-      this.state.logistics.roadCells.push({
-        x,
-        z,
-        allowedDirections: null,
-        blockedEdges: 0,
-        speedLimit: wayType ? (WAY_TYPES[wayType].limit as SpeedLimit) : SIMULATION_CONFIG.logistics.defaultSpeedLimit,
-        crosswalk: Boolean(crossingPath),
-        elevation,
-        roadSlope: slope,
-        roadSlopeDirection: direction,
-      })
-    }
-    if (wayType) {
-      const cell = this.state.festival.infrastructure.ground[groundKey(x, z)] ??= {}
-      cell.roadway = wayType
-    }
-    this.invalidateRoadGraph()
-    this.emit()
-    return {
-      ok: true,
-      message:
-        existing
-          ? 'Straße aktualisiert'
-          : hasLowerRoad
-            ? 'Straße über die Autostraße gebaut'
-          : slope === 0
-            ? `Straße auf Ebene ${elevation} gebaut`
-            : `${slope > 0 ? 'Aufwärts-' : 'Abwärts-'}Rampe gebaut`,
-    }
+  placeRoadSegment(x: number, z: number, elevation: number, slope = 0, slopeDirection = 0, wayType?: WayType): ActionResult {
+    return this.placementService.placeRoadSegment(x, z, elevation, slope, slopeDirection, wayType)
   }
 
   undoRoadSegment(x: number, z: number, previousRoad?: RoadCell, elevation?: number): ActionResult {
-    const layerElevation = previousRoad
-      ? roadLayerElevation(previousRoad, this.getTerrainHeight(x, z))
-      : elevation
-    const road = this.getRoadCellAt(x, z, layerElevation)
-    if (!road) return { ok: false, message: 'Dieses Straßenstück kann nicht zurückgenommen werden' }
-    if (previousRoad) {
-      Object.assign(road, structuredClone(previousRoad))
-    } else {
-      this.state.logistics.roadCells = this.state.logistics.roadCells.filter(
-        (cell) => cell !== road,
-      )
-      bookFinance(this.state, 'construction', SIMULATION_CONFIG.logistics.roadBuildCost)
-    }
-    this.invalidateRoadGraph()
-    this.emit()
-    return { ok: true, message: previousRoad ? 'Vorheriges Straßenfeld' : 'Straße zurückgenommen' }
+    return this.placementService.undoRoadSegment(x, z, previousRoad, elevation)
   }
 
   designateParkingArea(cells: readonly RoadPosition[]): ActionResult {
@@ -3996,7 +3055,7 @@ export class GameState {
     if (!this.state.dayPlan.offers[offer]) return
     const normalizedHour = Math.max(0, Math.min(23, Math.floor(hour)))
     this.state.dayPlan.offers[offer][normalizedHour] = active
-    this.enforceDayPlan()
+    this.visitorBehavior.enforceDayPlan()
     this.updateAtmosphere()
     this.emit()
   }
@@ -4012,7 +3071,7 @@ export class GameState {
 
   isBuildingCurrentlyActive(building: PlacedBuilding): boolean {
     if (building.kind === 'ride' && this.getRideAccessIssue(building)) return false
-    const offer = this.getBuildingDayPlanOffer(building.kind)
+    const offer = this.visitorBehavior.getBuildingDayPlanOffer(building.kind)
     if (offer && !this.isOfferCurrentlyActive(offer)) return false
     if (consumesPower(building.kind) && !this.poweredBuildingIds.has(building.id)) {
       return false
@@ -4243,29 +3302,11 @@ export class GameState {
   }
 
   deleteCoasterPiece(coasterId: string, pieceIndex: number): ActionResult {
-    const coaster = this.getCoaster(coasterId)
-    if (!coaster) return { ok: false, message: 'Achterbahn nicht gefunden' }
-    if (pieceIndex <= 0 || pieceIndex >= coaster.pieces.length) {
-      return { ok: false, message: 'Die erste Startplattform kann nicht gelöscht werden' }
-    }
-    const removed = coaster.pieces.splice(pieceIndex, 1)[0]
-    if (!removed) return { ok: false, message: 'Schienenelement nicht gefunden' }
-    const refund =
-      TRACK_PIECES[removed.kind].cost +
-      (removed.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
-    bookFinance(this.state, 'construction', refund)
-    this.recalculateCoasterTrackState(coaster)
-    coaster.telemetry = createCoasterTelemetry()
-    coaster.operationMode = 'closed'
-    const stations = coaster.pieces.filter((piece) => piece.kind === 'station').length
-    coaster.train.cars = stations
-    coaster.train.capacity = stations * getCoasterType(coaster.typeId).carCapacity
-    this.recallCoasterTrainInternal(coaster)
-    this.emit()
-    return {
-      ok: true,
-      message: `${TRACK_PIECES[removed.kind].name} entfernt`,
-    }
+    return deleteCoasterPieceCommand(
+      this.coasterCommandContext(),
+      this.getCoaster(coasterId),
+      pieceIndex,
+    )
   }
 
   private checkStageSite(design:StageDesign,x:number,z:number,rotation:number,elevation:number,ignoreId?:string):string|null {
@@ -4279,6 +3320,173 @@ export class GameState {
     return null
   }
 
+  /**
+   * Authoritative, read-only placement query used by every hover consumer.
+   * Keep this as delegation to the same validators used by the matching action.
+   */
+  previewPlacement(request: PlacementPreviewRequest): PlacementPreviewResult {
+    return previewPlacementCommand({
+      state: this.state,
+      previewBlueprint: (originX, originZ, rotation, items) =>
+        this.previewBlueprint(originX, originZ, rotation, items),
+      canPlaceRideAccess: (buildingId, accessType, x, z) =>
+        this.canPlaceRideAccess(buildingId, accessType, x, z),
+      canPlaceBungee: (x, z, height) => this.canPlaceBungee(x, z, height),
+      canPlace: (kind, x, z, decorationSlot, preserveLegacySlot) =>
+        this.canPlace(kind, x, z, decorationSlot, preserveLegacySlot),
+      previewTool: (tool, x, z, enabled) =>
+        this.previewToolPlacement(tool, x, z, enabled),
+    }, request)
+  }
+
+  private canDesignateMedicalCell(x: number, z: number): boolean {
+    return (
+      this.isInWorld(x, z) &&
+      !this.isWaterTerrain(x, z) &&
+      !this.tileBlocksMedicalDesignation(x, z) &&
+      !this.getCampingCellAt(x, z) &&
+      !this.getWasteDumpAt(x, z) &&
+      !this.getCoasterAt(x, z)
+    )
+  }
+
+  private canDesignateWasteDumpCell(x: number, z: number): boolean {
+    const at = this.getAt(x, z)
+    return (
+      this.isInWorld(x, z) &&
+      !this.isWaterTerrain(x, z) &&
+      (!at || at.kind === 'tree') &&
+      !this.getCampingCellAt(x, z) &&
+      !this.getMedicalCellAt(x, z) &&
+      !this.getStageForecourtCellAt(x, z) &&
+      !this.getWasteDumpAt(x, z) &&
+      !this.getRoadCellAt(x, z) &&
+      !this.hasParkingAt(x, z) &&
+      !this.getCoasterAt(x, z)
+    )
+  }
+
+  private canDesignateBackstageCell(x: number, z: number): boolean {
+    return (
+      this.isInWorld(x, z) &&
+      !this.isWaterTerrain(x, z) &&
+      !this.getCampingCellAt(x, z) &&
+      !this.getMedicalCellAt(x, z) &&
+      !this.getWasteDumpAt(x, z) &&
+      !this.getStageForecourtCellAt(x, z)
+    )
+  }
+
+  private canPlaceStaffGate(x: number, z: number, elevation: number): ActionResult {
+    const path = this.getPathAt(x, z, elevation)
+    if (!path) return { ok: false, message: 'Personaltor auf einem Fußweg platzieren' }
+    if (path.staffOnly) return { ok: true, message: 'Personaltor entfernen' }
+    return this.state.money < 80
+      ? { ok: false, message: 'Personaltor kostet 80 €' }
+      : { ok: true, message: 'Personaltor setzen' }
+  }
+
+  private previewToolPlacement(
+    tool: Exclude<Tool, BuildingKind | 'copy'>,
+    x: number,
+    z: number,
+    enabled = true,
+  ): PlacementPreviewResult {
+    let result: ActionResult
+    if (tool === 'camping') {
+      const clearCost = this.getTreeClearCost(x, z, 0, 1)
+      result = this.isWaterTerrain(x, z)
+        ? { ok: false, message: 'Im Wasser kann kein Zeltbereich entstehen' }
+        : this.getCampingCellAt(x, z)
+          ? { ok: false, message: 'Dieses Feld gehört bereits zum Zeltbereich' }
+          : this.state.money < clearCost
+            ? { ok: false, message: 'Nicht genug Geld, um den Baum zu entfernen' }
+            : { ok: true, message: 'Zeltbereich ausweisen' }
+    } else if (tool === 'medicalArea') {
+      const valid = this.canDesignateMedicalCell(x, z)
+      result = valid
+        ? { ok: true, message: 'Krankenbereich ausweisen' }
+        : { ok: false, message: 'Keine freien Felder für den Krankenbereich' }
+    } else if (tool === 'wasteDump') {
+      const valid = this.canDesignateWasteDumpCell(x, z)
+      result = !valid
+        ? { ok: false, message: 'Keine freien Felder für eine Müllablage' }
+        : this.state.money < SIMULATION_CONFIG.waste.dumpDesignationCost
+          ? { ok: false, message: 'Nicht genug Geld für eine Müllablage' }
+          : { ok: true, message: 'Müllablage ausweisen' }
+    } else if (tool === 'backstageArea') {
+      const existing = Boolean(this.getBackstageCellAt(x, z))
+      const valid = enabled
+        ? this.canDesignateBackstageCell(x, z) && !existing
+        : existing
+      result = !valid
+        ? { ok: false, message: enabled ? 'Keine neuen Backstage-Felder' : 'Keine Backstage-Felder zum Entfernen' }
+        : enabled && this.state.money < SIMULATION_CONFIG.bandSupply.backstageDesignationCost
+          ? { ok: false, message: 'Nicht genug Geld für Backstage' }
+          : { ok: true, message: enabled ? 'Backstage ausweisen' : 'Backstage entfernen' }
+    } else if (tool === 'deliveryYard' || tool === 'supplyDepot') {
+      result = this.canPlaceSupplyDepot(x, z, tool === 'deliveryYard' ? 'delivery' : 'storage')
+    } else if (tool === 'trafficLight') {
+      result = this.getRoadCellAt(x, z)
+        ? { ok: true, message: 'Ampel bauen' }
+        : { ok: false, message: 'Ampeln stehen nur auf einer Straße' }
+    } else if (tool === 'pathBarrier') {
+      const path = this.getPathAt(x, z, this.state.buildElevation) ?? this.getPathAt(x, z)
+      result = path?.pathType === 'normal'
+        ? { ok: true, message: 'Wegschranke bauen' }
+        : { ok: false, message: 'Schranken stehen nur auf normalen Wegen' }
+    } else if (tool === 'staffGate') {
+      const path = this.getPathAt(x, z)
+      result = this.canPlaceStaffGate(x, z, path?.elevation ?? 0)
+    } else {
+      result = { ok: true, message: 'Platzierung möglich' }
+    }
+    return {
+      ...result,
+      renderMode: 'footprint',
+      x,
+      z,
+      rotation: this.state.buildRotation,
+      footprint: { width: 1, depth: 1 },
+    }
+  }
+
+  private canPlaceSupplyDepot(
+    x: number,
+    z: number,
+    role: 'delivery' | 'storage',
+  ): ActionResult {
+    if (!Number.isInteger(x) || !Number.isInteger(z) || !this.isInWorld(x, z)) {
+      return { ok: false, message: 'Außerhalb des Geländes' }
+    }
+    if (
+      this.getTerrainHeight(x, z) < 0 ||
+      this.state.buildings.some((building) => occupiesBuildingCell(building, x, z)) ||
+      [
+        ...this.state.festival.infrastructure.depots,
+        ...this.state.logistics.roadCells,
+        ...this.state.logistics.parkingCells,
+        ...this.state.campingCells,
+        ...this.state.wasteDumpCells,
+        ...this.state.stageForecourtCells,
+        ...this.state.medicalCells,
+      ].some((cell) => cell.x === x && cell.z === z) ||
+      this.getRideAccessAt(x, z) ||
+      this.isLogisticsBuildingCell(x, z) ||
+      this.coasterOccupiesVolume(x, z, this.getTerrainHeight(x, z), 1)
+    ) {
+      return { ok: false, message: 'Depot benötigt ein freies, trockenes Feld' }
+    }
+    if (groundInfo(this.state, x, z).bearing < 2) {
+      return { ok: false, message: 'Depot benötigt verdichteten Untergrund' }
+    }
+    if (this.state.money < 400) return { ok: false, message: 'Depot kostet 400 €' }
+    if (role === 'delivery' && this.getAdjacentRoadPositions({ x, z }).length === 0) {
+      return { ok: false, message: 'Anlieferungsplatz direkt neben einer Straße setzen' }
+    }
+    return { ok: true, message: 'Depot bauen' }
+  }
+
   canPlace(kind: BuildingKind, x: number, z: number, decorationSlot?: number, preserveLegacySlot = false): ActionResult {
     if (this.getRideAccessAt(x,z,this.getPlaceElevation(x,z))) return {ok:false,message:'Hier befindet sich ein Fahrgeschäft-Zugang'}
     if (isScenery(kind)) {
@@ -4287,6 +3495,19 @@ export class GameState {
         if (!Number.isInteger(decorationSlot) || decorationSlot < 0 || decorationSlot > (isLargeScenery(kind) ? 4 : 3)) return { ok: false, message: 'Ungültige Dekoposition' }
       }
     } else if (decorationSlot !== undefined) return { ok: false, message: 'Dieses Objekt benötigt ein ganzes Feld' }
+    if (kind === 'ambulanceGarage') {
+      return this.canPlaceLogisticsFootprint(this.createFootprint(x, z, 2), BUILDINGS.ambulanceGarage.cost)
+    }
+    if (kind === 'busDepot') {
+      return this.canPlaceLogisticsFootprint(this.createFootprint(x, z, 3), BUILDINGS.busDepot.cost)
+    }
+    if (kind === 'wasteDepot') {
+      return this.canPlaceLogisticsFootprint(this.createFootprint(x, z, 2), BUILDINGS.wasteDepot.cost)
+    }
+    if (kind === 'specialDepot') {
+      return this.canPlaceLogisticsFootprint(this.createFootprint(x, z, 3), BUILDINGS.specialDepot.cost, 'path')
+    }
+    if (kind === 'busStop') return this.canPlaceBusStop(x, z)
     const selected = kind==='stage' ? this.state.festival.stageTemplates?.find(t=>t.name===this.state.festival.selectedStageTemplate) : undefined
     if(selected){const issue=this.checkStageSite(selected,x,z,this.state.buildRotation,this.getPlaceElevation(x,z));if(issue)return {ok:false,message:issue}}
 
@@ -4422,67 +3643,34 @@ export class GameState {
   }
 
   place(kind: BuildingKind, x: number, z: number, decorationSlot?: number, preserveLegacySlot = false): ActionResult {
-    if (isScenery(kind) && !(preserveLegacySlot && decorationSlot === undefined)) {
-      decorationSlot ??= isLargeScenery(kind) ? 4 : isEdgeScenery(kind) ? this.state.buildRotation : 0
-    }
-    if (kind === 'ambulanceGarage') {
-      return this.placeAmbulanceGarage(x, z)
-    }
-    if (kind === 'busDepot') return this.placeBusDepot(x, z)
-    if (kind === 'wasteDepot') return this.placeWasteDepot(x, z)
-    if (kind === 'specialDepot') return this.placeSpecialDepot(x, z)
-    if (kind === 'busStop') return this.placeBusStop(x, z)
-    const result = this.canPlace(kind, x, z, decorationSlot, preserveLegacySlot)
-    if (!result.ok) return result
-    this.clearDesignatedOccupancyAt(x, z, false, { preserveMedical: true })
-
-    const placeElevation = this.getPlaceElevation(x, z)
-    if (!isScenery(kind)) this.clearTreesAt(x, z, placeElevation, BUILDINGS[kind].height)
-    const design = kind === 'stage' ? this.state.festival.stageTemplates?.find(t=>t.name===this.state.festival.selectedStageTemplate) : undefined
-    bookFinance(this.state, 'construction', -(BUILDINGS[kind].cost + (design ? stageStats(design).cost : 0)))
-    this.state.buildings.push({
-      stageDesign: design ? structuredClone(design) : undefined,
-      decorationSlot,
-      id: this.nextId('building'),
-      kind,
-      x,
-      z,
-      rotation:
-        kind === 'bench'
-          ? (this.findBenchRotation(x, z) ?? this.state.buildRotation)
-          : isWasteBin(kind)
-            ? (this.findBenchRotation(x, z, this.state.buildRotation) ?? this.state.buildRotation)
-          : this.state.buildRotation,
-      elevation: placeElevation,
-      pathType: kind === 'path' ? 'normal' : undefined,
-      pathSlope: kind === 'path' ? 0 : undefined,
-      pathSlopeDirection: kind === 'path' ? this.state.buildRotation : undefined,
-      price: BUILDINGS[kind].defaultPrice,
-      securityConfig:
-        kind === 'securityGate' ? structuredClone(DEFAULT_SECURITY_CONFIG) : undefined,
-      bandName:
-        kind === 'stage'
-          ? BAND_NAMES[this.idCounter % BAND_NAMES.length]
-          : undefined,
-      wasteFill: isWasteBin(kind) || isSealedWasteContainer(kind) ? 0 : undefined,
-      ...(kind === 'shirt'
-        ? {
-            shirtColor: defaultShirtSettings().color,
-            shirtStyle: defaultShirtSettings().style,
-          }
-        : {}),
-    })
-    // A delay tower standing in the crowd clears the audience ground under its own feet; the sync
-    // leaves it clear from then on, since it skips cells a building occupies.
-    if (kind === 'delayTower') this.state.stageForecourtCells = this.state.stageForecourtCells.filter(cell => cell.x !== x || cell.z !== z)
-    if(design)syncStageAudience(this.state)
-    if (isQueuedFacilityKind(kind) || kind === 'stage') {
-      this.recalculateQueueDirections()
-    }
-    this.recalculatePark()
-    this.refreshPower()
-    this.emit()
-    return { ok: true, message: `${BUILDINGS[kind].name} gebaut` }
+    return placeBuildingCommand({
+      state: this.state,
+      canPlace: (buildingKind, cellX, cellZ, slot, legacy) =>
+        this.canPlace(buildingKind, cellX, cellZ, slot, legacy),
+      placeSpecial: (buildingKind, cellX, cellZ) => {
+        if (buildingKind === 'ambulanceGarage') return this.placeAmbulanceGarage(cellX, cellZ)
+        if (buildingKind === 'busDepot') return this.placeBusDepot(cellX, cellZ)
+        if (buildingKind === 'wasteDepot') return this.placeWasteDepot(cellX, cellZ)
+        if (buildingKind === 'specialDepot') return this.placeSpecialDepot(cellX, cellZ)
+        if (buildingKind === 'busStop') return this.placeBusStop(cellX, cellZ)
+        return null
+      },
+      clearDesignatedOccupancy: (cellX, cellZ) => {
+        this.clearDesignatedOccupancyAt(cellX, cellZ, false, { preserveMedical: true })
+      },
+      getPlaceElevation: (cellX, cellZ) => this.getPlaceElevation(cellX, cellZ),
+      clearTrees: (cellX, cellZ, elevation, height) =>
+        this.clearTreesAt(cellX, cellZ, elevation, height),
+      nextId: (prefix) => this.nextId(prefix),
+      findFurnitureRotation: (cellX, cellZ, preferred) =>
+        this.findBenchRotation(cellX, cellZ, preferred),
+      nextBandName: () => BAND_NAMES[this.idCounter % BAND_NAMES.length]!,
+      syncStageAudience: () => syncStageAudience(this.state),
+      recalculateQueueDirections: () => this.recalculateQueueDirections(),
+      recalculatePark: () => this.recalculatePark(),
+      refreshPower: () => this.refreshPower(),
+      emit: () => this.emit(),
+    }, kind, x, z, decorationSlot, preserveLegacySlot)
   }
 
   previewBlueprint(
@@ -4734,6 +3922,23 @@ export class GameState {
   }
 
   private placeBusStop(x: number, z: number): ActionResult {
+    const result = this.canPlaceBusStop(x, z)
+    if (!result.ok) return result
+    const adjacentRoads = this.getAdjacentRoadPositions({ x, z })
+    const id = this.nextId('bus-stop')
+    bookFinance(this.state, 'construction', -BUILDINGS.busStop.cost)
+    this.state.logistics.busStops.push({
+      id,
+      x,
+      z,
+      name: `Haltestelle ${this.state.logistics.busStops.length + 1}`,
+      roadCell: { ...adjacentRoads[0]! },
+    })
+    this.emit()
+    return { ok: true, message: 'Bushaltestelle gebaut' }
+  }
+
+  private canPlaceBusStop(x: number, z: number): ActionResult {
     const sidewalk = this.getPathAt(x, z, 0)
     if (
       this.getRoadCellAt(x, z) ||
@@ -4762,17 +3967,7 @@ export class GameState {
     if (this.state.money < BUILDINGS.busStop.cost) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
-    const id = this.nextId('bus-stop')
-    bookFinance(this.state, 'construction', -BUILDINGS.busStop.cost)
-    this.state.logistics.busStops.push({
-      id,
-      x,
-      z,
-      name: `Haltestelle ${this.state.logistics.busStops.length + 1}`,
-      roadCell: { ...adjacentRoads[0]! },
-    })
-    this.emit()
-    return { ok: true, message: 'Bushaltestelle gebaut' }
+    return { ok: true, message: 'Bushaltestelle bauen' }
   }
 
   private createFootprint(
@@ -5098,7 +4293,7 @@ export class GameState {
       } else {
         visitor.state = 'exploring'
         visitor.route = []
-        this.decideNextAction(visitor)
+        this.visitorBehavior.decideNextAction(visitor)
       }
     })
     depot.busIds = depot.busIds.filter((id) => id !== busId)
@@ -5504,456 +4699,42 @@ export class GameState {
     return Boolean(this.getStageForecourtCellAt(to.x, to.z))
   }
 
-  placePathSegment(
-    x: number,
-    z: number,
-    elevation: number,
-    pathType: 'normal' | 'queue' = 'normal',
-    queueDirection = 0,
-    slope = 0,
-    wayType?: WayType,
-  ): ActionResult {
-    elevation = snapWayElevation(elevation)
-    slope = snapWayElevation(slope)
-    if (wayType && WAY_TYPES[wayType]?.mode !== 'foot') return { ok: false, message: 'Gültigen Fußwegbelag wählen' }
-    if (wayType && elevation <= this.getTerrainHeight(x, z)) { const issue = wayIssue(this.state, x, z, wayType); if (issue) return { ok: false, message: issue } }
-    const pathCost = wayType ? WAY_TYPES[wayType].cost : BUILDINGS.path.cost
-    if (!this.isInWorld(x, z)) return { ok: false, message: 'Außerhalb des Geländes' }
-    if (this.hasLiveParkingOccupancy(x, z) || this.isLogisticsBuildingCell(x, z)) {
-      return { ok: false, message: 'Hier liegt bereits eine Logistikfläche' }
-    }
-    const road = this.getRoadCellsAt(x, z).find((layer) =>
-      wayOverlapsRoadGrade(
-        elevation,
-        slope,
-        layer.elevation ?? this.getTerrainHeight(x, z),
-      ),
-    )
-    if (road && pathType === 'queue') {
-      return { ok: false, message: 'Eine Warteschlange kann nicht auf der Autostraße liegen' }
-    }
-    if (this.getCampingCellAt(x, z) && elevation < 1.2) {
-      return { ok: false, message: 'Durch einen Zeltplatz kann kein Weg führen' }
-    }
-    if (this.getMedicalCellAt(x, z) && elevation < 1.2) {
-      return { ok: false, message: 'Durch den Krankenbereich kann kein Weg führen' }
-    }
-    if (this.getStageForecourtCellAt(x, z) && elevation < 1.2) {
-      return { ok: false, message: 'Durch den Bühnenvorplatz kann kein Weg führen' }
-    }
-    const rampStartElevation = elevation - slope
-    const candidateBase = Math.min(elevation, rampStartElevation)
-    const candidateTop =
-      Math.max(elevation, rampStartElevation) + BUILDINGS.path.height
-    const gate = this.getRideAccessAt(x, z)
-    if (gate && gate.point.y < candidateTop && candidateBase < gate.point.y + .8) {
-      return { ok: false, message: 'Hier steht ein Ein- oder Ausgang – den Weg daneben anschließen' }
-    }
-    const occupants = this.state.buildings.filter((building) => {
-      if (!occupiesBuildingCell(building,x,z)) return false
-      const bounds = this.getBuildingVerticalBounds(building)
-      return bounds.base < candidateTop && candidateBase < bounds.top
-    })
-    const existingPath = occupants.find((building) => building.kind === 'path')
-    const blocking = occupants.find(
-      (building) =>
-        building.kind !== 'tree' && !PATH_COMPATIBLE_KINDS.has(building.kind) &&
-        !(building.decorationSlot !== undefined && isEdgeScenery(building.kind) && slope === 0),
-    )
-    if (
-      blocking ||
-      this.coasterOccupiesVolume(
-        x,
-        z,
-        candidateBase,
-        candidateTop - candidateBase,
-      )
-    ) {
-      return { ok: false, message: 'Auf dieser Höhe ist nicht genug Platz' }
-    }
-    if (this.isWaterTerrain(x, z) && elevation <= this.getWaterLevel()) {
-      return { ok: false, message: 'Im Wasser kann kein Weg gebaut werden' }
-    }
-    if (elevation < this.getWaterLevel() || elevation > MAX_PATH_ELEVATION) {
-      return { ok: false, message: 'Diese Bauhöhe ist nicht möglich' }
-    }
-    const directions = [
-      { x: 0, z: 1 },
-      { x: 1, z: 0 },
-      { x: 0, z: -1 },
-      { x: -1, z: 0 },
-    ]
-    const direction = directions[queueDirection]
-    if (
-      slope !== 0 &&
-      (!direction ||
-        !this.getPathAt(
-          x - direction.x,
-          z - direction.z,
-          elevation - slope,
-        ))
-    ) {
-      return { ok: false, message: 'Eine Rampe muss an einen bestehenden Weg anschließen' }
-    }
-    const clearCost = this.getTreeClearCost(x, z, candidateBase, candidateTop - candidateBase)
-    if (this.state.money < pathCost + clearCost) {
-      return { ok: false, message: 'Nicht genug Geld' }
-    }
-
-    this.clearTreesAt(x, z, candidateBase, candidateTop - candidateBase)
-    this.clearDesignatedOccupancyAt(x, z, false, { preserveMedical: true })
-    bookFinance(this.state, 'construction', -pathCost)
-    const pathData: Omit<PlacedBuilding, 'id'> = {
-      kind: 'path',
-      x,
-      z,
-      rotation: queueDirection,
-      elevation,
-      pathType,
-      wayType,
-      queueDirection: pathType === 'queue' ? queueDirection : undefined,
-      queueEntryDirection: undefined,
-      queueSplit: false,
-      pathSlope: slope,
-      pathSlopeDirection: queueDirection,
-      price: 0,
-    }
-    if (existingPath) {
-      Object.assign(existingPath, pathData)
-    } else {
-      this.state.buildings.push({
-        id: this.nextId('building'),
-        ...pathData,
-      })
-    }
-    if (wayType && elevation === this.getTerrainHeight(x, z)) {
-      const cell = this.state.festival.infrastructure.ground[groundKey(x, z)] ??= {}
-      cell.footway = wayType
-    }
-    // Replacing a tree or moving an existing path can leave the count unchanged.
-    // Invalidate before queue recalculation and any immediate path lookup.
-    this.indexedBuildingCount = -1
-    const roadElevation = road ? (road.elevation ?? this.getTerrainHeight(x, z)) : this.getTerrainHeight(x, z)
-    const crossing = Boolean(road && wayOverlapsRoadGrade(elevation, slope, roadElevation))
-    if (crossing && road && !road.crosswalk) {
-      road.crosswalk = true
-      this.invalidateRoadGraph()
-    }
-    const overRoad =
-      !crossing &&
-      this.getRoadCellsAt(x, z).some(
-        (layer) =>
-          (layer.elevation ?? this.getTerrainHeight(x, z)) + WAY_LEVEL_MATCH <
-          Math.min(elevation, elevation - slope),
-      )
-    this.recalculateQueueDirections()
-    this.emit()
-    return {
-      ok: true,
-      message:
-        existingPath
-          ? `${pathType === 'queue' ? 'Warteschlange' : 'Weg'} ersetzt`
-          : crossing
-            ? 'Übergang über die Autostraße gebaut'
-          : overRoad
-            ? 'Gehweg über die Straße gebaut'
-          : slope === 0
-          ? `Weg auf Ebene ${elevation} gebaut`
-          : `${slope > 0 ? 'Aufwärts-' : 'Abwärts-'}Rampe gebaut`,
-    }
+  placePathSegment(x: number, z: number, elevation: number, pathType: 'normal' | 'queue' = 'normal', queueDirection = 0, slope = 0, wayType?: WayType): ActionResult {
+    return this.placementService.placePathSegment(x, z, elevation, pathType, queueDirection, slope, wayType)
   }
 
-  undoPathSegment(
-    x: number,
-    z: number,
-    elevation: number,
-    previousPath?: PlacedBuilding,
-  ): ActionResult {
-    const path = this.getPathAt(x, z, elevation)
-    if (
-      !path ||
-      path.kind !== 'path' ||
-      (path.id === ENTRANCE_PATH_ID && !previousPath)
-    ) {
-      return { ok: false, message: 'Dieses Wegstück kann nicht zurückgenommen werden' }
-    }
-    if (previousPath) {
-      const index = this.state.buildings.findIndex((building) => building.id === path.id)
-      if (index >= 0) this.state.buildings[index] = structuredClone(previousPath)
-    } else {
-      this.relocateVisitorsFromPath(path)
-      this.state.buildings = this.state.buildings.filter((building) => building.id !== path.id)
-    }
-    bookFinance(this.state, 'construction', BUILDINGS.path.cost)
-    this.recalculateQueueDirections()
-    if (elevation === this.getTerrainHeight(x, z)) {
-      const ground = this.state.festival.infrastructure.ground[groundKey(x, z)]
-      if (ground) { if (previousPath?.wayType) ground.footway = previousPath.wayType; else delete ground.footway }
-    }
-    this.emit()
-    return {
-      ok: true,
-      message: previousPath ? 'Vorheriger Weg wiederhergestellt' : 'Letztes Wegstück zurückgenommen',
-    }
+  undoPathSegment(x: number, z: number, elevation: number, previousPath?: PlacedBuilding): ActionResult {
+    return this.placementService.undoPathSegment(x, z, elevation, previousPath)
   }
 
   bulldoze(x: number, z: number, buildingId?: string): ActionResult {
-    const gate = this.getRideAccessAt(x,z)
-    if (gate && (!buildingId || gate.building.id === buildingId)) {
-      if (this.state.visitors.some(v=>v.targetId===gate.building.id && v.state==='using')) return {ok:false,message:'Bitte die laufende Fahrt abwarten'}
-      delete gate.building[gate.type==='entrance'?'rideEntrance':'rideExit']
-      this.indexedBuildingCount=-1; this.recalculateQueueDirections(); this.emit()
-      return {ok:true,message:'Zugang entfernt'}
-    }
-    if (!buildingId) {
-      const occupying = this.getRemovableCoasterAt(x, z)
-      if (occupying) return this.removeCoaster(occupying.id)
-    }
-    if (buildingId && !this.state.buildings.some(b => b.id === buildingId && occupiesBuildingCell(b, x, z))) {
-      const cleared = this.clearDesignatedOccupancyAt(x, z, true)
-      if (cleared) {
-        this.emit()
-        return cleared
-      }
-      return { ok: false, message: 'Objekt nicht mehr vorhanden' }
-    }
-    const result = this.bulldozeAt(x, z, buildingId)
-    const cell = this.state.festival.infrastructure.ground[groundKey(x, z)]
-    if (result.ok && cell) {
-      if (!this.state.buildings.some(b => b.kind === 'path' && b.x === x && b.z === z)) delete cell.footway
-      if (!this.state.logistics.roadCells.some(b => b.x === x && b.z === z)) delete cell.roadway
-      this.emit()
-    }
-    return result
+    return bulldozeCommand({
+      state: this.state,
+      getRideAccessAt: (cellX, cellZ) => this.getRideAccessAt(cellX, cellZ),
+      getRemovableCoasterAt: (cellX, cellZ) => this.getRemovableCoasterAt(cellX, cellZ),
+      removeCoaster: (coasterId) => this.removeCoaster(coasterId),
+      clearDesignatedOccupancy: (cellX, cellZ) => {
+        const result = this.clearDesignatedOccupancyAt(cellX, cellZ, true)
+        if (result) this.emit()
+        return result
+      },
+      bulldozeAt: (cellX, cellZ, id) => this.bulldozeAt(cellX, cellZ, id),
+      recalculateQueueDirections: () => this.recalculateQueueDirections(),
+      invalidateBuildingIndex: () => { this.indexedBuildingCount = -1 },
+      emit: () => this.emit(),
+    }, x, z, buildingId)
   }
 
   bulldozeArea(cells: ReadonlyArray<{ x: number; z: number }>): ActionResult {
-    const unique = new Map(cells.map(cell => [`${cell.x},${cell.z}`, cell]))
-    let removed = 0
-    let lastIssue = 'Auf der Fläche gibt es nichts abzureißen'
-    for (const cell of unique.values()) {
-      const limit = this.getBuildingsAtCell(cell.x, cell.z).length + 1
-      for (let i = 0; i < limit; i++) {
-        const result = this.bulldoze(cell.x, cell.z)
-        if (result.ok) removed += 1
-        else { if (result.message !== 'Hier gibt es nichts abzureißen') lastIssue = result.message; break }
-      }
-    }
-    return removed > 0
-      ? {
-          ok: true,
-          message: `${removed} ${removed === 1 ? 'Element' : 'Elemente'} entfernt`,
-        }
-      : { ok: false, message: lastIssue }
+    return bulldozeAreaCommand(
+      cells,
+      (x, z) => this.bulldoze(x, z),
+      (x, z) => this.getBuildingsAtCell(x, z).length,
+    )
   }
 
   private bulldozeAt(x: number, z: number, buildingId?: string): ActionResult {
-    if (!buildingId && this.removeAccessControlsAt(x, z) > 0) {
-      this.evaluateAccessSignals()
-      this.emit()
-      return { ok: true, message: 'Kontrolle entfernt' }
-    }
-    const busStop = this.state.logistics.busStops.find(
-      (stop) => stop.x === x && stop.z === z,
-    )
-    if (busStop && (!buildingId || busStop.id === buildingId)) {
-      this.state.logistics.busStops =
-        this.state.logistics.busStops.filter(
-          (stop) => stop.id !== busStop.id,
-        )
-      this.state.logistics.busLines =
-        this.state.logistics.busLines.filter(
-          (line) => !line.stopIds.includes(busStop.id),
-        )
-      this.emit()
-      return { ok: true, message: 'Bushaltestelle entfernt' }
-    }
-    const building = buildingId ? this.state.buildings.find(b => b.id === buildingId) : this.getAt(x, z)
-    if (!building) {
-      const cleared = this.clearDesignatedOccupancyAt(x, z, true)
-      if (cleared) {
-        this.emit()
-        return cleared
-      }
-      const layers = this.getRoadCellsAt(x, z)
-      const road =
-        layers.length > 1
-          ? [...layers].sort(
-              (a, b) =>
-                roadLayerElevation(b, this.getTerrainHeight(x, z)) -
-                roadLayerElevation(a, this.getTerrainHeight(x, z)),
-            )[0]
-          : layers[0]
-      if (road) {
-        if (
-          z === -this.getWorldSize() / 2 &&
-          x >= -3 &&
-          x <= 2 &&
-          layers.length === 1
-        ) {
-          return { ok: false, message: 'Die Einfahrtsstraße kann nicht entfernt werden' }
-        }
-        if (
-          this.state.logistics.roadVehicles.some((vehicle) => {
-            if (vehicle.cell?.x !== x || vehicle.cell.z !== z) return false
-            if (vehicle.cell.elevation === undefined) return layers.length === 1
-            return elevationsMatch(
-              vehicle.cell.elevation,
-              roadLayerElevation(road, this.getTerrainHeight(x, z)),
-            )
-          })
-        ) {
-          return { ok: false, message: 'Auf der Straße befindet sich ein Fahrzeug' }
-        }
-        this.state.logistics.roadCells =
-          this.state.logistics.roadCells.filter((cell) => cell !== road)
-        this.invalidateRoadGraph()
-        if (this.getRoadCellsAt(x, z).length === 0) this.removeAccessControlsAt(x, z)
-        this.emit()
-        return { ok: true, message: 'Straße entfernt' }
-      }
-      if (this.getCampingCellAt(x, z)) return this.designateCampingCell(x, z, false)
-      if (this.getPowerCableAt(x, z)) {
-        this.state.power.cableCells = this.state.power.cableCells.filter(
-          (cell) => cell.x !== x || cell.z !== z,
-        )
-        this.refreshPower()
-        this.emit()
-        return { ok: true, message: 'Kabel entfernt' }
-      }
-      const wasteDump = this.getWasteDumpAt(x, z)
-      if (wasteDump) {
-        if (wasteDump.stored > 0) {
-          return {
-            ok: false,
-            message: 'Die Müllablage ist noch beladen und kann nicht aufgehoben werden',
-          }
-        }
-        this.state.wasteDumpCells = this.state.wasteDumpCells.filter(
-          (cell) => cell.x !== x || cell.z !== z,
-        )
-        this.emit()
-        return { ok: true, message: 'Müllablage aufgehoben' }
-      }
-      const forecourt = this.getStageForecourtCellAt(x, z)
-      if (forecourt) {
-        // A stage's own audience ground comes with the stage and goes with it — see
-        // syncStageAudience, which would lay it straight back down anyway.
-        if (forecourt.stageId) {
-          return {
-            ok: false,
-            message: 'Die Zuschauerfläche gehört zur Bühne und lässt sich nicht einzeln entfernen',
-          }
-        }
-        this.state.stageForecourtCells =
-          this.state.stageForecourtCells.filter(
-            (cell) => cell.x !== x || cell.z !== z,
-          )
-        this.state.visitors.forEach((visitor) => {
-          if (
-            visitor.activityTarget?.x === x &&
-            visitor.activityTarget.z === z
-          ) {
-            this.clearVisitorActivity(visitor)
-            this.decideNextAction(visitor)
-          }
-        })
-        this.recalculateQueueDirections()
-        this.emit()
-        return { ok: true, message: 'Bühnenvorplatz aufgehoben' }
-      }
-      return { ok: false, message: 'Hier gibt es nichts abzureißen' }
-    }
-    if (building.id === ENTRANCE_PATH_ID) {
-      return { ok: false, message: 'Der Parkeingang kann nicht abgerissen werden' }
-    }
-    if (
-      building.kind === 'tree' &&
-      this.state.money < SIMULATION_CONFIG.economy.treeClearCost
-    ) {
-      return { ok: false, message: 'Nicht genug Geld, um den Baum zu entfernen' }
-    }
-
-    if (building.kind === 'path') {
-      this.relocateVisitorsFromPath(building)
-      this.removeAccessControlsAt(x, z)
-    }
-    if (building.kind === 'ambulanceGarage') {
-      const garage = this.state.logistics.ambulanceGarages.find(
-        (candidate) => candidate.id === building.id,
-      )
-      if (garage?.bays.some(Boolean)) {
-        return { ok: false, message: 'Vor dem Abriss müssen alle Krankenwagen entfernt werden' }
-      }
-      this.state.logistics.ambulanceGarages =
-        this.state.logistics.ambulanceGarages.filter(
-          (candidate) => candidate.id !== building.id,
-        )
-    }
-    if (building.kind === 'busDepot') {
-      const depot = this.state.logistics.busDepots.find(
-        (candidate) => candidate.id === building.id,
-      )
-      if (depot?.busIds.length) {
-        return { ok: false, message: 'Vor dem Abriss müssen alle Busse entfernt werden' }
-      }
-      this.state.logistics.busDepots =
-        this.state.logistics.busDepots.filter(
-          (candidate) => candidate.id !== building.id,
-        )
-    }
-    if (building.kind === 'wasteDepot') {
-      const depot = this.state.logistics.wasteDepots.find(
-        (candidate) => candidate.id === building.id,
-      )
-      if (depot?.truckIds.length) {
-        return { ok: false, message: 'Vor dem Abriss müssen alle Müllfahrzeuge entfernt werden' }
-      }
-      this.state.logistics.wasteDepots =
-        this.state.logistics.wasteDepots.filter(
-          (candidate) => candidate.id !== building.id,
-        )
-    }
-    if (building.kind === 'specialDepot') {
-      const depot = this.state.logistics.specialDepots.find(
-        (candidate) => candidate.id === building.id,
-      )
-      if (depot?.vehicleIds.length) {
-        return { ok: false, message: 'Vor dem Abriss müssen alle Spezialfahrzeuge entfernt werden' }
-      }
-      this.state.logistics.specialDepots =
-        this.state.logistics.specialDepots.filter(
-          (candidate) => candidate.id !== building.id,
-        )
-    }
-    this.state.buildings = this.state.buildings.filter((item) => item.id !== building.id)
-    if(building.stageDesign)syncStageAudience(this.state)
-    if (
-      building.kind === 'path' ||
-      isQueuedFacilityKind(building.kind) || building.kind === 'stage'
-    ) {
-      this.recalculateQueueDirections()
-    }
-    if (building.kind === 'tree') {
-      bookFinance(this.state, 'landscaping', -SIMULATION_CONFIG.economy.treeClearCost)
-    } else {
-      bookFinance(this.state, 'construction', Math.floor(
-        BUILDINGS[building.kind].cost *
-          SIMULATION_CONFIG.economy.demolitionRefundRate,
-      ))
-    }
-    this.state.visitors.forEach((visitor) => {
-      if (visitor.targetId === building.id) {
-        visitor.targetId = null
-        visitor.route = []
-        visitor.state = 'exploring'
-        visitor.thought = 'Mein Ziel ist verschwunden.'
-      }
-    })
-    this.recalculatePark()
-    this.refreshPower()
-    this.emit()
-    return { ok: true, message: `${BUILDINGS[building.kind].name} abgerissen` }
+    return this.placementService.bulldozeAt(x, z, buildingId)
   }
 
   tick(realSeconds: number): void {
@@ -6027,11 +4808,10 @@ export class GameState {
     } else {
       this.ensurePedestrianNav(false)
     }
-    this.walkVisitors(this.toSimulationMinutes(realSeconds))
+    this.visitorBehavior.walkVisitors(this.toSimulationMinutes(realSeconds))
     const minutes = this.toSimulationMinutes(realSeconds)
     this.state.minute += minutes
     this.simulatedMinutes += minutes
-    this.spawnMinutes += minutes
 
     while (this.state.minute >= SIMULATION_CONFIG.time.minutesPerDay) {
       this.state.minute -= SIMULATION_CONFIG.time.minutesPerDay
@@ -6046,48 +4826,12 @@ export class GameState {
       }
     }
     this.evaluateAccessSignals()
-    this.enforceDayPlan()
+    this.visitorBehavior.enforceDayPlan()
     this.syncBandSupply()
     updateFestival(this.state)
     updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, true, undefined, true), (a, b) => this.canCarrierStep(a, b))
 
-    while (this.spawnMinutes >= VISITOR_SPAWN_INTERVAL_MINUTES) {
-      this.spawnMinutes -= VISITOR_SPAWN_INTERVAL_MINUTES
-      const hour = Math.floor(this.state.minute / 60) % 24
-      const baseArrivals =
-        (SIMULATION_CONFIG.visitors.arrivalsPerIntervalByHour[hour] ?? 0) *
-        (this.state.festival.enabled ? 0.7 + Math.min(2, this.state.festival.bookings
-          .filter(b => b.day === this.state.day)
-          .reduce((sum, b) => sum + (BANDS.find(band => band.id === b.bandId)?.draw ?? 0), 0) / 100) +
-          Object.values(this.state.festival.reputation).reduce((a, b) => a + b, 0) / 800 : 1)
-      const phase = getFestivalCycleStatus(
-        this.state.dayPlan,
-        this.state.day,
-      )
-      const tuning = SIMULATION_CONFIG.visitors.festivalArrivals
-      if (phase.phase === 'lead') {
-        const campers = this.samplePoisson(
-          baseArrivals * tuning.leadDayCamperMultiplier,
-        )
-        for (let index = 0; index < campers; index += 1) {
-          this.trySpawnVisitor('camping')
-        }
-      } else if (phase.phase === 'festival') {
-        const dayGuests = this.samplePoisson(
-          baseArrivals * tuning.festivalDayGuestMultiplier,
-        )
-        for (let index = 0; index < dayGuests; index += 1) {
-          this.trySpawnVisitor('day')
-        }
-        const camperMultiplier = phase.firstFestivalDay
-          ? tuning.firstFestivalDayCamperMultiplier
-          : tuning.laterFestivalDayCamperMultiplier
-        const campers = this.samplePoisson(baseArrivals * camperMultiplier)
-        for (let index = 0; index < campers; index += 1) {
-          this.trySpawnVisitor('camping')
-        }
-      }
-    }
+    this.visitorSpawning.update(minutes)
 
     this.state.incidents.forEach((incident) => {
       incident.ageMinutes += minutes
@@ -6108,15 +4852,10 @@ export class GameState {
       this.crowdingMinutes >=
       SIMULATION_CONFIG.crowding.updateIntervalMinutes
     ) {
-      this.updateCrowdingAndMotivation(this.crowdingMinutes)
+      this.visitorCrowding.update(this.crowdingMinutes)
       this.crowdingMinutes = 0
     }
-    this.updateVisitors(minutes)
-    this.updateFanIntrusion(minutes)
-    this.updateBandActors(minutes)
-    this.updateFacilityQueues(minutes)
-    this.updateVisitorFireworks(minutes)
-    this.updateCoastersForCurrentTick()
+    this.visitorSimulation.runTickPhase(minutes)
 
     if (this.simulatedMinutes >= SIMULATION_CONFIG.time.economyIntervalMinutes) {
       const hours = Math.floor(
@@ -6148,3507 +4887,61 @@ export class GameState {
   }
 
   private updateLogistics(minutes: number): void {
-    this.evaluateAccessSignals()
-    this.syncFreightToVehicles()
-    this.restoreMissingGarbageTrucks()
-    this.claimedTentCellsCache = null
-    this.visitorsOnCellsThisTick = null
-    const logistics = this.state.logistics
-    const occupied = new Map<string, string>()
-    for (const vehicle of logistics.roadVehicles) {
-      if (vehicle.cell && vehicle.state !== 'parked' && vehicle.kind !== 'sweeper') {
-        occupied.set(this.roadPositionKey(vehicle.cell), vehicle.id)
-        if (vehicle.kind === 'visitorCar' && vehicle.state === 'returning' && vehicle.route[0] &&
-          !this.getRoadCellAt(vehicle.cell.x, vehicle.cell.z, vehicle.cell.elevation)) {
-          occupied.set(this.roadPositionKey(vehicle.route[0]), vehicle.id)
-        }
-      }
-    }
-    const removedVehicles = new Set<string>()
-    const removedGroups = new Set<string>()
-    const removedVisitors = new Set<string>()
-    const vehicleIds = new Set(
-      logistics.roadVehicles.map((vehicle) => vehicle.id),
-    )
-    const vehiclesById = new Map(
-      logistics.roadVehicles.map((vehicle) => [vehicle.id, vehicle]),
-    )
-    const pedestriansByCell = new Map<string, Visitor[]>()
-    const busWaitersByCell = new Map<string, Visitor[]>()
-    const seatedPassengers = collectSeatedPassengerIds(logistics.roadVehicles)
-    let parkingSearches = 0
-    this.state.visitors.forEach((visitor) => {
-      if (visitor.state === 'bus-waiting') {
-        const waitKey = roadCellKey(visitor.cellX, visitor.cellZ)
-        const waiters = busWaitersByCell.get(waitKey)
-        if (waiters) waiters.push(visitor)
-        else busWaitersByCell.set(waitKey, [visitor])
-      }
-      if (
-        this.isVisitorSeatedInVehicle(visitor, seatedPassengers) ||
-        visitor.state === 'riding' ||
-        visitor.state === 'medical'
-      ) {
-        return
-      }
-      const key = roadCellKey(visitor.cellX, visitor.cellZ)
-      const pedestrians = pedestriansByCell.get(key) ?? []
-      pedestrians.push(visitor)
-      pedestriansByCell.set(key, pedestrians)
-    })
-    this.visitorsOnCellsThisTick = new Set(pedestriansByCell.keys())
-    logistics.parkingCells.forEach((parking) => {
-      if (parking.occupiedBy && !vehicleIds.has(parking.occupiedBy)) {
-        parking.occupiedBy = null
-      }
-    })
-    logistics.roadVehicles.forEach((vehicle) => {
-      if (
-        vehicle.kind === 'visitorCar' &&
-        vehicle.state === 'parked'
-      ) {
-        const group = logistics.arrivalGroups.find(
-          (candidate) => candidate.id === vehicle.groupId,
-        )
-        if (!group) {
-          if (vehicle.parkingCell) {
-            const parking = logistics.parkingCells.find(
-              (cell) =>
-                cell.x === vehicle.parkingCell?.x &&
-                cell.z === vehicle.parkingCell?.z,
-            )
-            if (parking) parking.occupiedBy = null
-          }
-          removedVehicles.add(vehicle.id)
-          return
-        }
-        this.normalizeCarManifest(group)
-        if (this.hasArrivalPassengersStillSeated(vehicle, group)) {
-          this.finishVehicleParking(vehicle)
-        }
-        if (this.canParkedCarDepart(vehicle, group)) {
-          const departure = this.startParkedCarDeparture(vehicle, group, occupied)
-          vehicle.waitMinutes = departure === 'no-route'
-            ? Math.min(vehicle.waitMinutes + minutes, 2)
-            : 0
-          if (departure === 'started' && vehicle.route[0]) {
-            occupied.set(this.roadPositionKey(vehicle.route[0]), vehicle.id)
-          }
-        } else {
-          vehicle.waitMinutes = 0
-        }
-      }
-      if (vehicle.cell && vehicle.state !== 'parked' && vehicle.kind !== 'sweeper') {
-        occupied.set(
-          this.roadPositionKey(vehicle.cell),
-          vehicle.id,
-        )
-      }
-    })
-
-    this.dispatchIdleAmbulances()
-    this.returnIdleAmbulancesToGarage()
-    this.dispatchTourBuses()
-    logistics.roadVehicles.forEach((vehicle) => {
-      if (removedVehicles.has(vehicle.id)) return
-      if (vehicle.kind === 'bus') {
-        this.updateBusAtStop(vehicle, minutes, busWaitersByCell)
-        if (vehicle.state === 'idle') this.dispatchBus(vehicle)
-      }
-      if (vehicle.kind === 'garbageTruck') {
-        if (vehicle.state === 'idle') {
-          this.dispatchGarbageTruck(vehicle)
-          if (vehicle.state === 'idle' && !this.isGarbageTruckAtHome(vehicle)) {
-            this.continueGarbageTruck(vehicle)
-          }
-        }
-        if (vehicle.state === 'waiting') {
-          if (this.isAccidentVictimBlockingVehicle(vehicle)) return
-          if (
-            this.isOffMapRoadExit(vehicle.cell ?? vehicle.position) &&
-            vehicle.cargo <= 0
-          ) {
-            vehicle.waitMinutes += minutes
-            if (vehicle.waitMinutes < SIMULATION_CONFIG.waste.truckUnloadMinutes) {
-              return
-            }
-            if (this.reenterGarbageTruck(vehicle)) return
-            if (
-              vehicle.waitMinutes >=
-              SIMULATION_CONFIG.waste.truckUnloadMinutes +
-                SIMULATION_CONFIG.logistics.vehicleUnstickMinutes
-            ) {
-              this.returnGarbageTruckToDepot(vehicle)
-            }
-            return
-          }
-          if (this.resumeVehicleAfterIncident(vehicle)) {
-            // continue into movement below
-          } else {
-            vehicle.waitMinutes -= minutes
-            if (vehicle.waitMinutes <= 0) {
-              this.continueGarbageTruck(vehicle)
-            }
-            return
-          }
-        }
-      }
-      if (vehicle.kind === 'sweeper') {
-        this.updateSweeper(vehicle, minutes)
-        return
-      }
-      if (vehicle.state === 'waiting' && this.isAccidentVictimBlockingVehicle(vehicle)) {
-        return
-      }
-      if (
-        vehicle.kind !== 'visitorCar' &&
-        vehicle.state === 'waiting' &&
-        this.resumeVehicleAfterIncident(vehicle)
-      ) {
-        // continue into movement below
-      }
-      if (vehicle.kind === 'visitorCar' && vehicle.state === 'waiting') {
-        if (this.resumeVehicleAfterIncident(vehicle)) {
-          // continue into movement or parking pull-in
-        } else if (vehicle.parkingCell && vehicle.target?.kind === 'parking') {
-          vehicle.state = 'parking'
-          vehicle.resumeState = null
-          vehicle.waitMinutes = 0
-        } else {
-          const canSearch = parkingSearches < 2
-          this.assignVisitorCarParking(
-            vehicle,
-            minutes,
-            removedVisitors,
-            removedGroups,
-            removedVehicles,
-            canSearch,
-          )
-          if (canSearch) parkingSearches += 1
-          if (vehicle.state === 'waiting') return
-        }
-      }
-      if (this.claimAdjacentFreeParking(vehicle)) {
-        // pull into the first free bay beside this cell
-      }
-
-      if (
-        vehicle.state !== 'driving' &&
-        vehicle.state !== 'responding' &&
-        vehicle.state !== 'returning' &&
-        vehicle.state !== 'parking'
-      ) {
-        return
-      }
-      const mudSlowdown = vehicle.cell && this.isMudTerrain(vehicle.cell.x, vehicle.cell.z)
-        ? SIMULATION_CONFIG.terrain.mudMoveMultiplier
-        : 1
-      if ((vehicle.stuckMinutes ?? 0) > 0) { vehicle.stuckMinutes = Math.max(0, vehicle.stuckMinutes! - minutes); return }
-      const ground = vehicle.cell ? groundInfo(this.state, vehicle.cell.x, vehicle.cell.z) : null
-      const groundCell = vehicle.cell ? groundKey(vehicle.cell.x, vehicle.cell.z) : ''
-      if (vehicle.testedGroundCell !== groundCell) {
-        vehicle.testedGroundCell = groundCell
-        if (ground && ground.wet > .5 && hashStringSeed(`${vehicle.id}:${groundCell}`) % 100 < ground.wet * wayInfo(this.state, vehicle.cell!.x, vehicle.cell!.z, 'road').stuck * 100) { vehicle.stuckMinutes = 8; return }
-      }
-      vehicle.speed += minutes * mudSlowdown * (vehicle.cell ? wayInfo(this.state, vehicle.cell.x, vehicle.cell.z, 'road').speed : 1)
-      const currentRoad = vehicle.cell
-        ? this.getRoadCellAt(vehicle.cell.x, vehicle.cell.z, vehicle.cell.elevation)
-        : undefined
-      if (currentRoad?.allowedDirections != null) {
-        const facing = this.getVehicleDirection(vehicle)
-        if (!isRoadDirectionAllowed(currentRoad, facing) &&
-            isRoadDirectionAllowed(currentRoad, oppositeDirection(facing))) {
-          vehicle.facing = oppositeDirection(facing) * Math.PI / 2
-          this.rebuildVehicleRouteFromHere(vehicle)
-        }
-      }
-      const interval =
-        SIMULATION_CONFIG.logistics.vehicleMoveIntervalMinutes *
-        (30 / Math.min(currentRoad?.speedLimit ?? 30, vehicle.cell ? roadGroundLimit(this.state, vehicle.cell.x, vehicle.cell.z) : 30))
-      const next = vehicle.route[0]
-      if (!next) {
-        if (vehicle.kind === 'visitorCar' && vehicle.state === 'returning' &&
-          !this.isVisitorCarExit(vehicle.cell ?? vehicle.position)) {
-          this.rebuildVehicleRouteFromHere(vehicle)
-          if (vehicle.route.length === 0) vehicle.waitMinutes += minutes
-          return
-        }
-        if (vehicle.kind === 'tourBus') {
-          this.finishTourBusLeg(vehicle, removedVehicles)
-        } else if (vehicle.kind === 'ambulance') {
-          this.finishAmbulanceLeg(vehicle)
-        } else if (vehicle.kind === 'garbageTruck') {
-          this.finishGarbageTruckLeg(vehicle)
-        } else if (vehicle.kind === 'deliveryTruck') {
-          this.finishDeliveryTruckLeg(vehicle, removedVehicles)
-        } else if (
-          vehicle.kind === 'bus' &&
-          vehicle.target?.kind === 'busStop'
-        ) {
-          vehicle.state = 'at-stop'
-          vehicle.waitMinutes = 0
-        } else if (
-          vehicle.state === 'returning' &&
-          !isPlayerOwnedFleetVehicle(vehicle)
-        ) {
-          vehicle.passengerIds.forEach((visitorId) => {
-            removedVisitors.add(visitorId)
-          })
-          removedVehicles.add(vehicle.id)
-          if (vehicle.groupId) removedGroups.add(vehicle.groupId)
-        } else if (vehicle.kind === 'visitorCar') {
-          this.completeVisitorCarArrival(vehicle)
-        } else {
-          vehicle.state = 'idle'
-        }
-        return
-      }
-      const nextKey = this.roadPositionKey(next)
-      const here = vehicle.cell ?? vehicle.position
-      if (!this.isLegalRoadStep(here, next)) {
-        vehicle.route = []
-        this.rebuildVehicleRouteFromHere(vehicle)
-        return
-      }
-      if (this.isIllegalParkingPullIn(vehicle, here, next)) {
-        this.releaseVisitorCarParking(vehicle)
-        vehicle.route = []
-        vehicle.state = 'waiting'
-        vehicle.waitMinutes = 0
-        return
-      }
-      if (stepUsesClosedEdge(here.x, here.z, next.x, next.z, this.closedTrafficEdges)) {
-        if (this.rerouteAwayFromRedLight(vehicle, next)) return
-        vehicle.waitMinutes += minutes
-        return
-      }
-      const truckBlocks = this.state.festival.infrastructure.trucks.some(
-        (truck) =>
-          !this.state.logistics.roadVehicles.some(
-            (candidate) =>
-              candidate.kind === 'deliveryTruck' &&
-              (candidate.deliveryId === truck.id || candidate.id === truck.id),
-          ) &&
-          truck.x === next.x &&
-          truck.z === next.z &&
-          this.roadPositionKey(truck) === nextKey,
-      )
-      const blocker = occupied.get(nextKey)
-      if (truckBlocks || (blocker && blocker !== vehicle.id)) {
-        if (this.replanOffMapDelivery(vehicle, occupied)) return
-        if (this.replanBlockedReverse(vehicle, occupied)) return
-        if (this.replanBlockedTurn(vehicle, occupied)) return
-        vehicle.waitMinutes += minutes
-        if (
-          vehicle.waitMinutes >=
-          SIMULATION_CONFIG.logistics.vehicleUnstickMinutes
-        ) {
-          this.unstickVehicle(vehicle, occupied, removedVehicles, removedGroups, removedVisitors)
-        }
-        return
-      }
-      if (
-        vehicle.waitMinutes < 2 &&
-        this.mustYieldToVehicleFromRight(
-          vehicle,
-          next,
-          occupied,
-          vehiclesById,
-        )
-      ) {
-        vehicle.waitMinutes += minutes
-        return
-      }
-      const road = this.getRoadCellAt(next.x, next.z, next.elevation)
-      const pedestrians = (pedestriansByCell.get(roadCellKey(next.x, next.z)) ?? []).filter(
-        (visitor) =>
-          elevationsMatch(visitor.cellElevation,
-            road ? roadLayerElevation(road) : this.getTerrainHeight(next.x, next.z)),
-      )
-      if (
-        pedestrians.length > 0 &&
-        vehicle.kind !== 'ambulance'
-      ) {
-        const blockingInjured = pedestrians.some(
-          (visitor) =>
-            visitor.state === 'injured' ||
-            visitor.state === 'medical-transport',
-        )
-        const brakingChance = road?.crosswalk
-          ? 1
-          : SIMULATION_CONFIG.logistics.brakingChanceBySpeed[
-              road?.speedLimit ?? 30
-            ]
-        if (blockingInjured) {
-          vehicle.waitMinutes += minutes
-          if (
-            vehicle.waitMinutes >=
-            SIMULATION_CONFIG.logistics.vehicleUnstickMinutes
-          ) {
-            this.unstickVehicle(vehicle, occupied, removedVehicles, removedGroups, removedVisitors)
-          }
-          return
-        }
-        if (
-          vehicle.waitMinutes <
-            SIMULATION_CONFIG.logistics.vehicleUnstickMinutes &&
-          this.rng.next() < brakingChance
-        ) {
-          vehicle.waitMinutes += minutes
-          return
-        }
-        if (
-          vehicle.waitMinutes <
-            SIMULATION_CONFIG.logistics.vehicleUnstickMinutes
-        ) {
-          const victim = pedestrians[0]!
-          if (this.isVisitorSeatedInVehicle(victim, seatedPassengers)) {
-            return
-          }
-          victim.needs.energy = 0
-          victim.state = 'injured'
-          victim.route = []
-          victim.streakingMinutes = 0
-          victim.toplessMinutes = 0
-          victim.injuryVehicleId = vehicle.id
-          victim.thought = 'Ich wurde von einem Fahrzeug angefahren!'
-          this.recordComplaint(victim, 'traffic-accident')
-          vehicle.resumeState = vehicle.state
-          vehicle.state = 'waiting'
-          vehicle.speed = 0
-          return
-        }
-      }
-      if (vehicle.speed < interval) return
-      vehicle.speed %= interval
-      const reversing = isVehicleReversing(vehicle)
-      if (vehicle.cell) {
-        occupied.delete(this.roadPositionKey(vehicle.cell))
-      }
-      vehicle.cell = { ...next }
-      if (!reversing) {
-        vehicle.facing = Math.atan2(
-          next.x - vehicle.position.x,
-          next.z - vehicle.position.z,
-        )
-      }
-      vehicle.position = { ...next }
-      if (road?.allowedDirections != null) {
-        const facing = this.getVehicleDirection(vehicle)
-        if (!isRoadDirectionAllowed(road, facing) && isRoadDirectionAllowed(road, oppositeDirection(facing))) {
-          vehicle.facing = oppositeDirection(facing) * Math.PI / 2
-        }
-      }
-      vehicle.passengerIds.forEach((visitorId) => {
-        const passenger = this.getVisitor(visitorId)
-        if (!passenger) return
-        passenger.x = next.x + 0.5
-        passenger.z = next.z + 0.5
-        passenger.cellX = next.x
-        passenger.cellZ = next.z
-        passenger.cellElevation = next.elevation ?? this.getTerrainHeight(next.x, next.z)
-        passenger.y = passenger.cellElevation
-      })
-      vehicle.route.shift()
-      vehicle.waitMinutes = 0
-      occupied.set(nextKey, vehicle.id)
-      if (this.claimAdjacentFreeParking(vehicle)) {
-        return
-      }
-      if (vehicle.route.length === 0 && vehicle.kind === 'visitorCar') {
-        if (vehicle.state === 'returning') {
-          if (!this.isVisitorCarExit(vehicle.cell ?? vehicle.position)) return
-          vehicle.passengerIds.forEach((visitorId) => {
-            removedVisitors.add(visitorId)
-          })
-          removedVehicles.add(vehicle.id)
-          if (vehicle.groupId) removedGroups.add(vehicle.groupId)
-        } else {
-          this.completeVisitorCarArrival(vehicle)
-        }
-      }
-    })
-
-    if (removedVisitors.size > 0) {
-      this.state.visitors.forEach((visitor) => {
-        if (removedVisitors.has(visitor.id)) this.leaveVisitorCampBehind(visitor)
-      })
-      this.state.visitors = this.state.visitors.filter(
-        (visitor) => !removedVisitors.has(visitor.id),
-      )
-      this.indexedVisitorCount = -1
-      this.state.guests = this.state.visitors.length
-      this.state.logistics.arrivalGroups.forEach((group) => {
-        this.normalizeCarManifest(group)
-      })
-    }
-    logistics.roadVehicles = logistics.roadVehicles.filter(
-      (vehicle) => !removedVehicles.has(vehicle.id),
-    )
-    logistics.arrivalGroups = logistics.arrivalGroups.filter(
-      (group) => !removedGroups.has(group.id),
-    )
-    this.syncVehiclesToFreight()
-  }
-
-  private mustYieldToVehicleFromRight(
-    vehicle: RoadVehicle,
-    target: RoadPosition,
-    occupied: ReadonlyMap<string, string>,
-    vehiclesById: ReadonlyMap<string, RoadVehicle>,
-  ): boolean {
-    if (!vehicle.cell) return false
-    const neighbors = this.getAdjacentRoadPositions(target)
-    if (neighbors.length < 3) return false
-    const direction = this.getDirectionIndex(
-      target.x - vehicle.cell.x,
-      target.z - vehicle.cell.z,
-    ) as Direction
-    const rightSide = (direction + 3) % 4
-    const offset = [
-      { x: 0, z: 1 },
-      { x: 1, z: 0 },
-      { x: 0, z: -1 },
-      { x: -1, z: 0 },
-    ][rightSide]!
-    return this.getRoadCellsAt(target.x + offset.x, target.z + offset.z).some((road) => {
-      const candidateId = occupied.get(this.roadPositionKey(road))
-      const candidate = candidateId ? vehiclesById.get(candidateId) : undefined
-      const next = candidate?.route[0]
-      return Boolean(candidate && candidate.id !== vehicle.id && next &&
-        this.roadPositionKey(next) === this.roadPositionKey(target) &&
-        this.isLegalRoadStep(road, target))
-    })
-  }
-
-  private getVehicleDirection(vehicle: RoadVehicle): Direction {
-    return ((Math.round(vehicle.facing / (Math.PI / 2)) % 4 + 4) %
-      4) as Direction
-  }
-
-  private isAccidentVictimBlockingVehicle(vehicle: RoadVehicle): boolean {
-    const here = vehicle.cell ?? vehicle.position
-    const next = vehicle.route[0]
-    const seated = collectSeatedPassengerIds(this.state.logistics.roadVehicles)
-    return this.state.visitors.some((visitor) => {
-      if (
-        visitor.state !== 'injured' ||
-        visitor.injuryVehicleId !== vehicle.id ||
-        this.isVisitorSeatedInVehicle(visitor, seated)
-      ) {
-        return false
-      }
-      if (visitor.cellX === here.x && visitor.cellZ === here.z) return true
-      return Boolean(next && visitor.cellX === next.x && visitor.cellZ === next.z)
-    })
-  }
-
-  private resumeVehicleAfterIncident(vehicle: RoadVehicle): boolean {
-    if (vehicle.state !== 'waiting' || vehicle.route.length === 0) return false
-    vehicle.state =
-      vehicle.resumeState === 'returning' ||
-      vehicle.resumeState === 'responding' ||
-      vehicle.resumeState === 'parking'
-        ? vehicle.resumeState
-        : vehicle.target?.kind === 'parking'
-          ? 'driving'
-          : vehicle.resumeState ?? 'driving'
-    vehicle.resumeState = null
-    vehicle.waitMinutes = 0
-    return true
-  }
-
-  private assignVisitorCarParking(
-    vehicle: RoadVehicle,
-    minutes: number,
-    removedVisitors: Set<string>,
-    removedGroups: Set<string>,
-    removedVehicles: Set<string>,
-    canSearch: boolean,
-  ): void {
-    const group = this.state.logistics.arrivalGroups.find(
-      (candidate) => candidate.id === vehicle.groupId,
-    )
-    if (!group) {
-      removedVehicles.add(vehicle.id)
-      return
-    }
-    if (!canSearch) {
-      if (this.isVisitorCarOnIngress(vehicle) && vehicle.route.length === 0) {
-        this.sendVisitorCarCirculating(vehicle)
-      }
-      return
-    }
-    if (group.state === 'waiting-for-parking') {
-      group.parkingWaitMinutes += minutes
-      vehicle.waitMinutes += minutes
-      if (
-        group.parkingWaitMinutes >=
-        SIMULATION_CONFIG.logistics.parkingSearchTimeoutMinutes
-      ) {
-        group.memberIds.forEach((visitorId) => {
-          const visitor = this.getVisitor(visitorId)
-          if (!visitor) return
-          this.refundEntryFee(visitor)
-          this.recordComplaint(visitor, 'no-parking')
-          removedVisitors.add(visitor.id)
-        })
-        removedGroups.add(group.id)
-        removedVehicles.add(vehicle.id)
-        return
-      }
-      if (
-        vehicle.waitMinutes <
-        SIMULATION_CONFIG.logistics.parkingRetryMinutes
-      ) {
-        return
-      }
-      vehicle.waitMinutes = 0
-    }
-    if (this.claimAdjacentFreeParking(vehicle)) {
-      group.state = 'approaching'
-      return
-    }
-    const freeBays = this.state.logistics.parkingCells.some(
-      (cell) => cell.occupiedBy === null,
-    )
-    if (!freeBays) {
-      group.state = 'waiting-for-parking'
-      group.memberIds.forEach((visitorId) => {
-        const visitor = this.getVisitor(visitorId)
-        if (visitor) {
-          visitor.motivation = Math.max(
-            0,
-            visitor.motivation - minutes * 0.018,
-          )
-          visitor.thought = this.isVisitorCarHoldingNearParking(vehicle)
-            ? 'Wir warten vor dem Parkplatz, bis einer frei wird.'
-            : 'Wir fahren erstmal weiter und suchen einen freien Parkplatz.'
-        }
-      })
-    }
-    const plan =
-      this.findRouteTowardParking(vehicle) ??
-      this.findVisitorCarCirculation(vehicle)
-    if (plan) {
-      this.applyVisitorCarSearchRoute(vehicle, plan)
-      if (freeBays) group.state = 'approaching'
-      return
-    }
-    group.state = 'waiting-for-parking'
-    vehicle.waitMinutes = 0
-    if (
-      this.isVisitorCarOnIngress(vehicle) ||
-      !this.isVisitorCarHoldingNearParking(vehicle)
-    ) {
-      this.sendVisitorCarCirculating(vehicle)
-    }
-  }
-
-  private dispatchIncomingVisitorCar(vehicle: RoadVehicle): void {
-    const unused = new Set<string>()
-    this.assignVisitorCarParking(vehicle, 0, unused, unused, unused, true)
-    if (vehicle.state === 'waiting' && vehicle.route.length === 0) {
-      this.sendVisitorCarCirculating(vehicle)
-    }
-  }
-
-  private isVisitorCarOnIngress(vehicle: RoadVehicle): boolean {
-    const cell = vehicle.cell ?? vehicle.position
-    return cell.z === -this.getWorldSize() / 2 && cell.x >= -3 && cell.x <= 2
-  }
-
-  private isVisitorCarHoldingNearParking(vehicle: RoadVehicle): boolean {
-    const cell = vehicle.cell ?? vehicle.position
-    return this.state.logistics.parkingCells.some((parking) =>
-      this.getParkingApproachRoads(parking).some(
-        (approach) => this.roadPositionKey(approach) === this.roadPositionKey(cell),
-      ),
-    )
-  }
-
-  private releaseVisitorCarParking(vehicle: RoadVehicle): void {
-    if (!vehicle.parkingCell) return
-    const parking = this.state.logistics.parkingCells.find(
-      (cell) =>
-        cell.x === vehicle.parkingCell?.x &&
-        cell.z === vehicle.parkingCell?.z &&
-        cell.occupiedBy === vehicle.id,
-    )
-    if (parking) parking.occupiedBy = null
-    vehicle.parkingCell = null
-    if (vehicle.target?.kind === 'parking') vehicle.target = null
-  }
-
-  private isVisitorCarSeekingParking(vehicle: RoadVehicle): boolean {
-    return (
-      vehicle.kind === 'visitorCar' &&
-      vehicle.state !== 'returning' &&
-      vehicle.state !== 'parked' &&
-      vehicle.state !== 'parking' &&
-      !vehicle.parkingCell
-    )
-  }
-
-  private forgetDistantParkingReservation(vehicle: RoadVehicle): void {
-    if (!vehicle.parkingCell) return
-    if (vehicle.state === 'parking' || vehicle.state === 'parked') return
-    if (
-      this.isVehicleOnItsParkingCell(vehicle) ||
-      this.isVehicleAtParkingAccess(vehicle)
-    ) {
-      return
-    }
-    this.releaseVisitorCarParking(vehicle)
-  }
-
-  private claimAdjacentFreeParking(vehicle: RoadVehicle): boolean {
-    if (vehicle.kind !== 'visitorCar' || vehicle.state === 'returning') return false
-    if (vehicle.state === 'parked' || vehicle.state === 'parking') return false
-    this.forgetDistantParkingReservation(vehicle)
-    if (vehicle.parkingCell) return false
-    const here = vehicle.cell ?? vehicle.position
-    const bay = this.getAdjacentParkingCells(here)
-      .filter(
-        (cell) =>
-          cell.occupiedBy === null &&
-          this.getOpenParkingApproachRoads(cell).some(
-            (access) => this.roadPositionKey(access) === this.roadPositionKey(here),
-          ),
-      )
-      .sort((left, right) => left.x - right.x || left.z - right.z)[0]
-    if (!bay) return false
-    bay.occupiedBy = vehicle.id
-    vehicle.parkingCell = { x: bay.x, z: bay.z }
-    this.beginVehiclePullIn(vehicle)
-    return true
-  }
-
-  private applyVisitorCarSearchRoute(
-    vehicle: RoadVehicle,
-    plan: { route: RoadPosition[]; target: NonNullable<RoadVehicle['target']> },
-  ): void {
-    this.forgetDistantParkingReservation(vehicle)
-    vehicle.route = plan.route.map(toRoadPosition)
-    vehicle.target = plan.target
-    vehicle.state = plan.route.length > 0 ? 'driving' : 'waiting'
-    vehicle.waitMinutes = 0
-  }
-
-  private routePreferringOpenLights(
-    options: FindRoadRouteOptions,
-  ): RoadCell[] | null {
-    return (
-      findRoadRoute({
-        ...options,
-        blockedEdges: this.closedTrafficEdges,
-      }) ?? findRoadRoute({ ...options, blockedEdges: undefined })
-    )
-  }
-
-  private findRouteTowardParking(
-    vehicle: RoadVehicle,
-    blockedCells?: ReadonlySet<string>,
-  ): { route: RoadPosition[]; target: NonNullable<RoadVehicle['target']> } | null {
-    const start = vehicle.cell ?? vehicle.position
-    const freeApproaches: RoadPosition[] = []
-    const allApproaches: RoadPosition[] = []
-    const seenFree = new Set<string>()
-    const seenAll = new Set<string>()
-    const nearbyParking = new Map<string, RoadPosition>()
-    for (const parking of this.state.logistics.parkingCells) {
-      for (const approach of this.getParkingApproachRoads(parking)) {
-        const key = roadCellKey(approach.x, approach.z)
-        if (approach.x === start.x && approach.z === start.z) continue
-        if (!seenAll.has(key)) {
-          seenAll.add(key)
-          allApproaches.push(approach)
-        }
-        if (!nearbyParking.has(key)) nearbyParking.set(key, { x: parking.x, z: parking.z })
-      }
-      if (parking.occupiedBy !== null) continue
-      for (const approach of this.getOpenParkingApproachRoads(parking)) {
-        const key = roadCellKey(approach.x, approach.z)
-        if (approach.x === start.x && approach.z === start.z) continue
-        if (!seenFree.has(key)) {
-          seenFree.add(key)
-          freeApproaches.push(approach)
-        }
-      }
-    }
-    const tryTargets = (targets: RoadPosition[]): RoadCell[] | null => {
-      if (!targets.length) return null
-      return this.routePreferringOpenLights({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start,
-        targets,
-        initialDirection: this.getVehicleDirection(vehicle),
-        blockedCells,
-        allowUTurn: false,
-      })
-    }
-    const route = tryTargets(freeApproaches) ?? tryTargets(allApproaches)
-    if (!route?.length) return null
-    const last = route.at(-1)!
-    const parking = nearbyParking.get(roadCellKey(last.x, last.z))
-    return {
-      route: route.map(toRoadPosition),
-      target: parking
-        ? { kind: 'hold', parkingCell: { ...parking } }
-        : { kind: 'cruise' },
-    }
-  }
-
-  private rerouteAwayFromRedLight(
-    vehicle: RoadVehicle,
-    blockedNext: RoadPosition,
-  ): boolean {
-    if (vehicle.kind === 'sweeper') return false
-    const waited =
-      vehicle.waitMinutes >=
-      SIMULATION_CONFIG.logistics.accessRerouteMinutes
-    const allowUTurn =
-      waited &&
-      (vehicle.kind === 'deliveryTruck' || vehicle.kind === 'garbageTruck')
-    if (this.isVisitorCarSeekingParking(vehicle)) {
-      const plan =
-        this.findRouteTowardParking(vehicle) ??
-        this.findVisitorCarCirculation(vehicle)
-      if (!plan?.route.length) return false
-      if (!this.adoptOpenLightDetour(vehicle, plan.route, blockedNext, allowUTurn)) {
-        return false
-      }
-      vehicle.target = plan.target
-      return true
-    }
-    const targets = this.collectVehicleRouteTargets(vehicle)
-    if (!targets.length) return false
-    const here = vehicle.cell ?? vehicle.position
-    const route = this.routePreferringOpenLights({
-      roadCells: this.state.logistics.roadCells,
-      graph: this.getRoadGraph(),
-      start: here,
-      targets,
-      initialDirection: this.getVehicleDirection(vehicle),
-      allowUTurn,
-    })
-    if (!route?.length) return false
-    return this.adoptOpenLightDetour(vehicle, route, blockedNext, allowUTurn)
-  }
-
-  private adoptOpenLightDetour(
-    vehicle: RoadVehicle,
-    route: readonly RoadPosition[],
-    blockedNext: RoadPosition,
-    allowUTurn: boolean,
-  ): boolean {
-    const first = route[0]
-    if (!first) return false
-    if (first.x === blockedNext.x && first.z === blockedNext.z) return false
-    const here = vehicle.cell ?? vehicle.position
-    if (
-      stepUsesClosedEdge(
-        here.x,
-        here.z,
-        first.x,
-        first.z,
-        this.closedTrafficEdges,
-      )
-    ) {
-      return false
-    }
-    const facing = this.getVehicleDirection(vehicle)
-    const step = directionFromDelta(first.x - here.x, first.z - here.z)
-    if (step === oppositeDirection(facing) && !allowUTurn) return false
-    if (step !== null) vehicle.facing = step * (Math.PI / 2)
-    vehicle.route = route.map(toRoadPosition)
-    vehicle.waitMinutes = 0
-    if (vehicle.state === 'waiting') {
-      vehicle.state = vehicle.resumeState ?? 'driving'
-      vehicle.resumeState = null
-    }
-    const truck = this.getDeliveryFreight(vehicle)
-    if (truck) {
-      truck.path = vehicle.route.map(toRoadPosition)
-    }
-    return true
-  }
-
-  private sendVisitorCarCirculating(
-    vehicle: RoadVehicle,
-    blockedCells?: ReadonlySet<string>,
-  ): boolean {
-    const plan = this.findVisitorCarCirculation(vehicle, blockedCells)
-    if (plan) {
-      vehicle.route = plan.route
-      vehicle.target = plan.target
-      vehicle.state = plan.route.length > 0 ? 'driving' : 'waiting'
-      vehicle.waitMinutes = 0
-      return plan.route.length > 0 || vehicle.state === 'waiting'
-    }
-    return this.nudgeVehicleAlongRoad(vehicle, blockedCells)
-  }
-
-  private findVisitorCarCirculation(
-    vehicle: RoadVehicle,
-    blockedCells?: ReadonlySet<string>,
-  ): { route: RoadPosition[]; target: NonNullable<RoadVehicle['target']> } | null {
-    const start = vehicle.cell ?? vehicle.position
-    const edgeZ = -this.getWorldSize() / 2
-    const taken = new Set(
-      this.state.logistics.roadVehicles
-        .filter(
-          (other) =>
-            other.id !== vehicle.id &&
-            other.cell &&
-            other.state !== 'parked',
-        )
-        .map((other) => this.roadPositionKey(other.cell!)),
-    )
-    blockedCells?.forEach((key) => taken.add(key))
-    const holdFor = new Map<string, { x: number; z: number }>()
-    const holds: RoadPosition[] = []
-    for (const parking of this.state.logistics.parkingCells) {
-      for (const approach of this.getParkingApproachRoads(parking)) {
-        const key = roadCellKey(approach.x, approach.z)
-        if (approach.x === start.x && approach.z === start.z) continue
-        if (taken.has(this.roadPositionKey(approach)) || taken.has(key) || holdFor.has(key)) continue
-        holdFor.set(key, { x: parking.x, z: parking.z })
-        holds.push(approach)
-      }
-    }
-    holds.sort(
-      (left, right) =>
-        Math.abs(left.x - start.x) +
-        Math.abs(left.z - start.z) -
-        (Math.abs(right.x - start.x) + Math.abs(right.z - start.z)),
-    )
-    const holdTargets = holds.slice(0, 8)
-    if (holdTargets.length) {
-      const route = findRoadRoute({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start,
-        targets: holdTargets,
-        initialDirection: this.getVehicleDirection(vehicle),
-        blockedCells,
-        allowUTurn: false,
-      })
-      if (route && route.length) {
-        const last = route.at(-1)!
-        const parking = holdFor.get(roadCellKey(last.x, last.z))
-        return {
-          route: route.map(toRoadPosition),
-          target: parking
-            ? { kind: 'hold', parkingCell: { ...parking } }
-            : { kind: 'cruise' },
-        }
-      }
-    }
-    const inland = this.state.logistics.roadCells
-      .filter((cell) => {
-        if (cell.x === start.x && cell.z === start.z) return false
-        const distance = Math.abs(cell.x - start.x) + Math.abs(cell.z - start.z)
-        return cell.z >= edgeZ + 2 && distance >= 3 && !taken.has(this.roadPositionKey(cell)) && !taken.has(roadCellKey(cell.x, cell.z))
-      })
-      .sort(
-        (left, right) =>
-          right.z - left.z ||
-          Math.abs(left.x - start.x) +
-            Math.abs(left.z - start.z) -
-            (Math.abs(right.x - start.x) + Math.abs(right.z - start.z)),
-      )
-      .slice(0, 8)
-    const cruiseTargets = inland.length
-      ? inland
-      : this.state.logistics.roadCells
-          .filter(
-            (cell) =>
-              !(cell.x === start.x && cell.z === start.z) && cell.z > edgeZ,
-          )
-          .slice(0, 8)
-    if (!cruiseTargets.length) return null
-    const cruise = findRoadRoute({
-      roadCells: this.state.logistics.roadCells,
-      graph: this.getRoadGraph(),
-      start,
-      targets: cruiseTargets,
-      initialDirection: this.getVehicleDirection(vehicle),
-      blockedCells,
-      allowUTurn: false,
-    })
-    if (!cruise?.length) return null
-    return {
-      route: cruise.map(toRoadPosition),
-      target: { kind: 'cruise' },
-    }
-  }
-
-  private nudgeVehicleAlongRoad(
-    vehicle: RoadVehicle,
-    blockedCells?: ReadonlySet<string>,
-  ): boolean {
-    const start = vehicle.cell
-    if (!start) return false
-    const here = this.getRoadCellAt(start.x, start.z, start.elevation)
-    if (!here) return false
-    const facing = this.getVehicleDirection(vehicle)
-    const order: Direction[] = [
-      facing,
-      ((facing + 1) % 4) as Direction,
-      ((facing + 3) % 4) as Direction,
-    ]
-    const neighbors = this.getRoadGraph().neighbors.get(this.roadPositionKey(here)) ?? []
-    const next = order.flatMap((direction) => neighbors.filter((cell) =>
-      directionFromDelta(cell.x - start.x, cell.z - start.z) === direction,
-    )).find((cell) => !blockedCells?.has(this.roadPositionKey(cell)) &&
-      !blockedCells?.has(roadCellKey(cell.x, cell.z)))
-    if (!next) return false
-    vehicle.route = [toRoadPosition(next)]
-    if (vehicle.state === 'waiting') vehicle.state = 'driving'
-    if (vehicle.kind === 'visitorCar' && !vehicle.target) vehicle.target = { kind: 'cruise' }
-    vehicle.waitMinutes = 0
-    return true
-  }
-
-  private unstickVehicle(
-    vehicle: RoadVehicle,
-    occupied: ReadonlyMap<string, string>,
-    removedVehicles: Set<string>,
-    removedGroups: Set<string>,
-    removedVisitors: Set<string>,
-  ): void {
-    const blockedCells = this.collectRouteBlockedCells(vehicle, occupied)
-    if (vehicle.state === 'returning') {
-      if (
-        this.isQueueTail(vehicle, occupied) &&
-        this.reverseQueueTail(vehicle, occupied, blockedCells)
-      ) {
-        return
-      }
-      if (
-        vehicle.waitMinutes >=
-        SIMULATION_CONFIG.logistics.vehicleAbandonMinutes
-      ) {
-        if (isPlayerOwnedFleetVehicle(vehicle) ||
-          (vehicle.kind === 'visitorCar' && vehicle.passengerIds.length > 0)) {
-          if (!this.isQueueTail(vehicle, occupied)) vehicle.waitMinutes = 0
-          return
-        }
-        vehicle.passengerIds.forEach((visitorId) => {
-          removedVisitors.add(visitorId)
-        })
-        removedVehicles.add(vehicle.id)
-        if (vehicle.groupId) removedGroups.add(vehicle.groupId)
-        return
-      }
-      if (!this.isQueueTail(vehicle, occupied)) vehicle.waitMinutes = 0
-      return
-    }
-    if (!this.isQueueTail(vehicle, occupied)) {
-      vehicle.waitMinutes = 0
-      return
-    }
-    if (this.reverseQueueTail(vehicle, occupied, blockedCells)) return
-    vehicle.waitMinutes = 0
-  }
-
-  private collectRouteBlockedCells(
-    vehicle: RoadVehicle,
-    occupied: ReadonlyMap<string, string>,
-    keepOpen: readonly RoadPosition[] = [],
-  ): Set<string> {
-    const blocked = new Set(
-      [...occupied.entries()]
-        .filter(([, id]) => id !== vehicle.id)
-        .map(([key]) => key),
-    )
-    this.state.festival.infrastructure.trucks.forEach((truck) => {
-      if (this.state.logistics.roadVehicles.some((other) => other.kind === 'deliveryTruck' &&
-        (other.deliveryId === truck.id || other.id === truck.id))) return
-      blocked.add(this.roadPositionKey(truck))
-    })
-    if (vehicle.cell) blocked.delete(this.roadPositionKey(vehicle.cell))
-    keepOpen.forEach((cell) => blocked.delete(this.roadPositionKey(cell)))
-    return blocked
-  }
-
-  private isSideTurn(vehicle: RoadVehicle, next: RoadPosition): boolean {
-    const here = vehicle.cell
-    if (!here) return false
-    const move = directionFromDelta(next.x - here.x, next.z - here.z)
-    if (move === null) return false
-    const facing = this.getVehicleDirection(vehicle)
-    return move !== facing && move !== oppositeDirection(facing)
-  }
-
-  private adoptVehicleRoute(
-    vehicle: RoadVehicle,
-    route: readonly RoadPosition[],
-    blockedNext: RoadPosition,
-  ): boolean {
-    const here = vehicle.cell
-    const first = route[0]
-    if (!here || !first) return false
-    if (first.x === blockedNext.x && first.z === blockedNext.z) return false
-    const firstDir = directionFromDelta(first.x - here.x, first.z - here.z)
-    if (firstDir === oppositeDirection(this.getVehicleDirection(vehicle))) {
-      return false
-    }
-    vehicle.route = route.map(toRoadPosition)
-    if (vehicle.state === 'waiting') vehicle.state = 'driving'
-    vehicle.waitMinutes = 0
-    return true
-  }
-
-  private replanBlockedTurn(
-    vehicle: RoadVehicle,
-    occupied: ReadonlyMap<string, string>,
-  ): boolean {
-    const here = vehicle.cell
-    const next = vehicle.route[0]
-    if (!here || !next || !this.isSideTurn(vehicle, next)) return false
-    const destination = vehicle.route.at(-1)
-    const keepOpen =
-      destination &&
-      (destination.x !== next.x || destination.z !== next.z)
-        ? [destination]
-        : []
-    const blocked = this.collectRouteBlockedCells(vehicle, occupied, keepOpen)
-    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
-      if (vehicle.state !== 'parking') {
-        const plan =
-          this.findRouteTowardParking(vehicle, blocked) ??
-          this.findVisitorCarCirculation(vehicle, blocked)
-        if (plan && this.adoptVehicleRoute(vehicle, plan.route, next)) {
-          vehicle.target = plan.target
-          return true
-        }
-      }
-    }
-    if (vehicle.state === 'returning') {
-      const exit = this.findReachableRoadExit(
-        here,
-        this.getVehicleDirection(vehicle),
-        blocked,
-        false,
-      )
-      if (exit && this.adoptVehicleRoute(vehicle, exit.route, next)) return true
-    }
-    const targets = this.collectVehicleRouteTargets(vehicle)
-    const searchTargets = [
-      ...targets,
-      ...(destination &&
-      this.getRoadCellAt(destination.x, destination.z) &&
-      !targets.some(
-        (cell) => cell.x === destination.x && cell.z === destination.z,
-      )
-        ? [destination]
-        : []),
-    ]
-    if (searchTargets.length) {
-      const rebuilt = findRoadRoute({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start: here,
-        targets: searchTargets,
-        initialDirection: this.getVehicleDirection(vehicle),
-        blockedCells: blocked,
-        allowUTurn: false,
-      })
-      if (
-        rebuilt &&
-        this.adoptVehicleRoute(
-          vehicle,
-          rebuilt.map(toRoadPosition),
-          next,
-        )
-      ) {
-        return true
-      }
-    }
-    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
-      const plan = this.findVisitorCarCirculation(vehicle, blocked)
-      if (plan && this.adoptVehicleRoute(vehicle, plan.route, next)) {
-        vehicle.target = plan.target
-        return true
-      }
-    }
-    return false
-  }
-
-  private realignVehiclesOnRoad(
-    x: number,
-    z: number,
-    facing: Direction | null,
-    elevation: number,
-  ): void {
-    this.state.logistics.roadVehicles.forEach((vehicle) => {
-      if (vehicle.state === 'parked') return
-      const here = vehicle.cell ?? vehicle.position
-      const onTile =
-        this.roadPositionKey(here) === roadLayerKey(x, z, elevation)
-      if (!onTile) return
-      if (facing !== null) vehicle.facing = facing * (Math.PI / 2)
-      this.rebuildVehicleRouteFromHere(vehicle)
-    })
-    this.state.festival.infrastructure.trucks.forEach((truck) => {
-      if (truck.x !== x || truck.z !== z) return
-      const vehicle = this.state.logistics.roadVehicles.find((candidate) =>
-        candidate.kind === 'deliveryTruck' && (candidate.deliveryId === truck.id || candidate.id === truck.id))
-      if (this.roadPositionKey(vehicle?.cell ?? vehicle?.position ?? truck) !== roadLayerKey(x, z, elevation)) return
-      this.rebuildFreightTruckPath(truck)
-    })
-  }
-
-  private collectMapExitTargets(): RoadPosition[] {
-    const edgeZ = -this.getWorldSize() / 2
-    return this.state.logistics.roadCells.filter(
-      (road) =>
-        road.z === edgeZ &&
-        road.x >= -3 &&
-        road.x <= 2 &&
-        isRoadDirectionAllowed(road, 2),
-    )
-  }
-
-  private collectRoadOrAccessTargets(position: RoadPosition): RoadPosition[] {
-    if (this.getRoadCellAt(position.x, position.z)) {
-      return [{ x: position.x, z: position.z }]
-    }
-    return this.getAdjacentRoadPositions(position)
-  }
-
-  private collectGarbageTruckTargets(vehicle: RoadVehicle): RoadPosition[] {
-    const target = vehicle.target
-    if (vehicle.cargo > 0) return this.collectMapExitTargets()
-    if (target?.kind === 'wasteDump') {
-      return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
-    }
-    if (target?.kind === 'sealedWasteContainer') {
-      return this.sealedContainerPullUpRoads(target)
-    }
-    if (target?.kind === 'depot') {
-      const depot = this.state.logistics.wasteDepots.find(
-        (candidate) => candidate.id === target.depotId,
-      )
-      const access = depot ? this.getLogisticsBuildingAccess(depot, 2) : null
-      return access ? [access] : []
-    }
-    if (target?.kind === 'cell') {
-      if (this.isRoadExitCell(target) || this.isOffMapRoadExit(target)) {
-        return this.collectMapExitTargets()
-      }
-      return this.collectRoadOrAccessTargets(target)
-    }
-    const last = vehicle.route.at(-1)
-    return last ? this.collectRoadOrAccessTargets(last) : []
-  }
-
-  private collectVehicleRouteTargets(vehicle: RoadVehicle): RoadPosition[] {
-    if (vehicle.kind === 'deliveryTruck') {
-      return this.collectDeliveryTruckTargets(vehicle)
-    }
-    if (vehicle.kind === 'garbageTruck') {
-      return this.collectGarbageTruckTargets(vehicle)
-    }
-    if (vehicle.kind === 'visitorCar' && vehicle.state === 'returning') {
-      return this.collectMapExitTargets()
-    }
-    const target = vehicle.target
-    if (!target) {
-      const last = vehicle.route.at(-1)
-      return last ? this.collectRoadOrAccessTargets(last) : []
-    }
-    if (target.kind === 'wasteDump') {
-      return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
-    }
-    if (target.kind === 'sealedWasteContainer') {
-      return this.sealedContainerPullUpRoads(target)
-    }
-    if (target.kind === 'cell') {
-      if (this.isRoadExitCell(target) || this.isOffMapRoadExit(target)) {
-        return this.collectMapExitTargets()
-      }
-      return this.collectRoadOrAccessTargets(target)
-    }
-    if (target.kind === 'parking' || target.kind === 'hold') {
-      const parking = target.parkingCell ?? vehicle.parkingCell
-      return parking ? this.getParkingApproachRoads(parking) : []
-    }
-    if (target.kind === 'cruise') {
-      const last = vehicle.route.at(-1)
-      return last ? [last] : []
-    }
-    if (target.kind === 'busStop') {
-      const stop = this.state.logistics.busStops.find(
-        (candidate) => candidate.id === target.stopId,
-      )
-      return stop ? [stop.roadCell] : []
-    }
-    if (target.kind === 'garage') {
-      const garage = this.state.logistics.ambulanceGarages.find(
-        (candidate) => candidate.id === target.garageId,
-      )
-      const access = garage
-        ? this.getLogisticsBuildingAccess(garage, 2)
-        : null
-      return access ? [access] : []
-    }
-    if (target.kind === 'depot') {
-      const depot =
-        this.state.logistics.wasteDepots.find(
-          (candidate) => candidate.id === target.depotId,
-        ) ??
-        this.state.logistics.busDepots.find(
-          (candidate) => candidate.id === target.depotId,
-        )
-      const access = depot
-        ? this.getLogisticsBuildingAccess(depot, 2)
-        : null
-      return access ? [access] : []
-    }
-    if (target.kind === 'tourBusParking') {
-      const parking = this.state.buildings.find(
-        (building) => building.id === target.buildingId,
-      )
-      if (!parking) return []
-      if (vehicle.state === 'parking') {
-        return [{ x: parking.x, z: parking.z, elevation: parking.elevation }]
-      }
-      return this.getAdjacentRoadPositions(parking)
-    }
-    return []
-  }
-
-  private rebuildVehicleRouteFromHere(vehicle: RoadVehicle): void {
-    if (
-      vehicle.state === 'idle' ||
-      vehicle.state === 'parked' ||
-      vehicle.state === 'at-stop'
-    ) {
-      return
-    }
-    const start = vehicle.cell ?? vehicle.position
-    const occupied = new Map(
-      this.state.logistics.roadVehicles
-        .filter(
-          (other) =>
-            other.id !== vehicle.id &&
-            other.cell &&
-            other.state !== 'parked',
-        )
-        .map((other) => [
-          this.roadPositionKey(other.cell!),
-          other.id,
-        ]),
-    )
-    const blocked = this.collectRouteBlockedCells(vehicle, occupied)
-    const facing = this.getVehicleDirection(vehicle)
-    const applyRoute = (route: readonly RoadPosition[]): boolean => {
-      if (!route.length) return false
-      const first = route[0]!
-      const step = directionFromDelta(first.x - start.x, first.z - start.z)
-      if (step === oppositeDirection(facing)) {
-        if (
-          vehicle.kind !== 'deliveryTruck' &&
-          vehicle.kind !== 'garbageTruck'
-        ) {
-          return false
-        }
-        vehicle.facing = step * (Math.PI / 2)
-      }
-      vehicle.route = route.map(toRoadPosition)
-      vehicle.waitMinutes = 0
-      if (vehicle.state === 'waiting') {
-        vehicle.state = vehicle.resumeState ?? 'driving'
-        vehicle.resumeState = null
-      }
-      return true
-    }
-    if (vehicle.kind === 'visitorCar' && vehicle.state === 'returning') {
-      const exit =
-        this.findReachableRoadExit(start, facing, blocked, false) ??
-        this.findReachableRoadExit(start, facing, undefined, false)
-      if (exit && applyRoute(exit.route)) return
-    }
-    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
-      if (vehicle.state === 'parking' && vehicle.parkingCell) {
-        if (this.isVehicleAtParkingAccess(vehicle)) {
-          this.beginVehiclePullIn(vehicle)
-          return
-        }
-        const accesses = this.getParkingApproachRoads(vehicle.parkingCell)
-        const reserved = accesses.length
-          ? this.routePreferringOpenLights({
-              roadCells: this.state.logistics.roadCells,
-              graph: this.getRoadGraph(),
-              start,
-              targets: accesses,
-              initialDirection: facing,
-              blockedCells: blocked,
-              allowUTurn: false,
-            })
-          : null
-        if (reserved && applyRoute(reserved)) return
-        this.releaseVisitorCarParking(vehicle)
-      }
-      const plan =
-        this.findRouteTowardParking(vehicle, blocked) ??
-        this.findVisitorCarCirculation(vehicle, blocked)
-      if (plan && applyRoute(plan.route)) {
-        vehicle.target = plan.target
-        return
-      }
-    }
-    const targets = this.collectVehicleRouteTargets(vehicle)
-    if (targets.length) {
-      const rebuilt =
-        this.routePreferringOpenLights({
-          roadCells: this.state.logistics.roadCells,
-          graph: this.getRoadGraph(),
-          start,
-          targets,
-          initialDirection: facing,
-          blockedCells: blocked,
-          allowUTurn: false,
-        }) ??
-        findRoadRoute({
-          roadCells: this.state.logistics.roadCells,
-          graph: this.getRoadGraph(),
-          start,
-          targets,
-          initialDirection: facing,
-          allowUTurn: false,
-        }) ??
-        findRoadRoute({
-          roadCells: this.state.logistics.roadCells,
-          graph: this.getRoadGraph(),
-          start,
-          targets,
-          allowUTurn: false,
-        })
-      if (rebuilt && applyRoute(rebuilt)) return
-    }
-    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
-      if (this.sendVisitorCarCirculating(vehicle, blocked)) return
-    }
-    const next = vehicle.route[0]
-    if (!next) return
-    const step = directionFromDelta(next.x - start.x, next.z - start.z)
-    const here = this.getRoadCellAt(start.x, start.z, start.elevation)
-    if (
-      step !== null &&
-      here &&
-      !isRoadDirectionAllowed(here, step)
-    ) {
-      vehicle.route = []
-    }
-  }
-
-  private rebuildFreightTruckPath(truck: {
-    id?: string
-    x: number
-    z: number
-    path: Array<{ x: number; z: number }>
-    phase: 'inbound' | 'return'
-    depotId: string
-  }): void {
-    const northZ = -this.getWorldSize() / 2
-    const edges = this.state.logistics.roadCells.filter(
-      (road) => road.z === northZ,
-    )
-    const depot = this.state.festival.infrastructure.depots.find(
-      (candidate) => candidate.id === truck.depotId,
-    )
-    const targets =
-      truck.phase === 'return'
-        ? edges
-        : depot
-          ? this.getAdjacentRoadPositions(depot)
-          : []
-    if (!targets.length) return
-    const blocked = this.collectRouteBlockedCells(
-      {
-        id: `freight:${truck.x}:${truck.z}`,
-        cell: { x: truck.x, z: truck.z },
-      } as RoadVehicle,
-      new Map(
-        this.state.logistics.roadVehicles
-          .filter((vehicle) => vehicle.cell && vehicle.state !== 'parked')
-          .map((vehicle) => [
-            this.roadPositionKey(vehicle.cell!),
-            vehicle.id,
-          ]),
-      ),
-      targets,
-    )
-    const vehicle = this.state.logistics.roadVehicles.find(
-      (candidate) =>
-        candidate.kind === 'deliveryTruck' &&
-        (candidate.deliveryId === truck.id || candidate.id === truck.id),
-    )
-    if (vehicle) {
-      const rebuilt = this.findServiceVehicleRoute(vehicle, targets, blocked)
-      if (rebuilt?.length) {
-        this.adoptServiceRoute(vehicle, rebuilt)
-        if (vehicle.state === 'waiting') {
-          vehicle.state = vehicle.resumeState ?? 'driving'
-          vehicle.resumeState = null
-        }
-        truck.path = rebuilt.map(toRoadPosition)
-      }
-      return
-    }
-    const route =
-      findRoadRoute({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start: truck,
-        targets,
-        blockedCells: blocked,
-        allowUTurn: false,
-      }) ??
-      findRoadRoute({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start: truck,
-        targets,
-        allowUTurn: false,
-      })
-    if (route?.length) {
-      truck.path = route.map(toRoadPosition)
-    }
-  }
-
-  private cellBehindVehicle(vehicle: RoadVehicle): RoadPosition | null {
-    const here = vehicle.cell
-    if (!here) return null
-    const back = oppositeDirection(this.getVehicleDirection(vehicle))
-    const road = (this.getRoadGraph().neighbors.get(this.roadPositionKey(here)) ?? []).find(
-      (cell) => directionFromDelta(cell.x - here.x, cell.z - here.z) === back,
-    )
-    return road ? toRoadPosition(road) : null
-  }
-
-  private isQueueTail(
-    vehicle: RoadVehicle,
-    occupied: ReadonlyMap<string, string>,
-  ): boolean {
-    const here = vehicle.cell
-    const next = vehicle.route[0]
-    if (!here || !next) return false
-    const blocker = occupied.get(this.roadPositionKey(next))
-    if (!blocker || blocker === vehicle.id) return false
-    const behind = this.cellBehindVehicle(vehicle)
-    return !this.state.logistics.roadVehicles.some((other) => {
-      if (other.id === vehicle.id || other.state === 'parked') return false
-      if (other.route[0] && this.roadPositionKey(other.route[0]) === this.roadPositionKey(here)) {
-        return true
-      }
-      return Boolean(
-        behind && other.cell && this.roadPositionKey(other.cell) === this.roadPositionKey(behind),
-      )
-    })
-  }
-
-  private reverseQueueTail(
-    vehicle: RoadVehicle,
-    occupied: ReadonlyMap<string, string>,
-    blockedCells: ReadonlySet<string>,
-  ): boolean {
-    const here = vehicle.cell
-    if (!here) return false
-    const behind = this.cellBehindVehicle(vehicle)
-    if (!behind || !this.getRoadCellAt(behind.x, behind.z)) return false
-    if (!this.isLegalRoadStep(here, behind)) return false
-    if (occupied.has(this.roadPositionKey(behind))) return false
-    const searchBlocked = new Set(blockedCells)
-    searchBlocked.add(this.roadPositionKey(here))
-    const fromBehind = {
-      ...vehicle,
-      cell: behind,
-      position: behind,
-    }
-    let continuation: RoadPosition[] = []
-    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
-      if (vehicle.state !== 'parking') {
-        const plan =
-          this.findRouteTowardParking(fromBehind, searchBlocked) ??
-          this.findVisitorCarCirculation(fromBehind, searchBlocked)
-        if (plan?.route.length) {
-          continuation = plan.route
-          vehicle.target = plan.target
-        }
-      }
-    }
-    if (!continuation.length && vehicle.state === 'returning') {
-      const exit = this.findReachableRoadExit(
-        behind,
-        this.getVehicleDirection(vehicle),
-        searchBlocked,
-        false,
-      )
-      if (exit?.route.length) {
-        continuation = exit.route.map(toRoadPosition)
-      }
-    }
-    if (!continuation.length) {
-      const destination = vehicle.route.at(-1)
-      if (destination) {
-        const rebuilt = findRoadRoute({
-          roadCells: this.state.logistics.roadCells,
-          graph: this.getRoadGraph(),
-          start: behind,
-          targets: [destination],
-          initialDirection: this.getVehicleDirection(vehicle),
-          blockedCells: searchBlocked,
-          allowUTurn: false,
-        })
-        if (rebuilt?.length) {
-          continuation = rebuilt.map(toRoadPosition)
-        }
-      }
-    }
-    if (
-      !continuation.length &&
-      vehicle.kind === 'visitorCar' &&
-      vehicle.state !== 'returning'
-    ) {
-      const plan = this.findVisitorCarCirculation(fromBehind, searchBlocked)
-      if (plan?.route.length) {
-        continuation = plan.route
-        vehicle.target = plan.target
-      }
-    }
-    const planned = [toRoadPosition(behind), ...continuation]
-    vehicle.route = this.roadRouteIsConnected(here, planned)
-      ? planned
-      : [toRoadPosition(behind)]
-    if (vehicle.state === 'waiting') vehicle.state = 'driving'
-    vehicle.waitMinutes = 0
-    return true
-  }
-
-  private roadRouteIsConnected(
-    start: RoadPosition,
-    route: readonly RoadPosition[],
-  ): boolean {
-    let previous = start
-    for (const cell of route) {
-      if (Math.abs(cell.x - previous.x) + Math.abs(cell.z - previous.z) !== 1) {
-        return false
-      }
-      previous = cell
-    }
-    return route.length > 0
-  }
-
-  private isLegalRoadStep(from: RoadPosition, to: RoadPosition): boolean {
-    const road = this.getRoadCellAt(from.x, from.z, from.elevation)
-    const next = this.getRoadCellAt(to.x, to.z, to.elevation)
-    // Parking and off-map access have their own checks.
-    if (!road || !next) return true
-    const fromKey = roadLayerKey(from.x, from.z, roadLayerElevation(road))
-    return (this.getRoadGraph().neighbors.get(fromKey) ?? []).some(
-      (neighbor) =>
-        neighbor.x === to.x &&
-        neighbor.z === to.z &&
-        (to.elevation === undefined ||
-          elevationsMatch(roadLayerElevation(neighbor), to.elevation)),
-    )
-  }
-
-  private replanBlockedReverse(
-    vehicle: RoadVehicle,
-    occupied: ReadonlyMap<string, string>,
-  ): boolean {
-    if (!isVehicleReversing(vehicle)) return false
-    const here = vehicle.cell
-    const next = vehicle.route[0]
-    if (!here || !next) return false
-    const blocker = occupied.get(this.roadPositionKey(next))
-    if (!blocker || blocker === vehicle.id) return false
-    const targets = this.collectVehicleRouteTargets(vehicle)
-    if (!targets.length) {
-      vehicle.route = []
-      vehicle.waitMinutes = 0
-      return true
-    }
-    const facing = this.getVehicleDirection(vehicle)
-    const blocked = this.collectRouteBlockedCells(vehicle, occupied)
-    const forward =
-      findRoadRoute({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start: here,
-        targets,
-        initialDirection: facing,
-        blockedCells: blocked,
-        allowUTurn: false,
-      }) ??
-      findRoadRoute({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start: here,
-        targets,
-        initialDirection: facing,
-        allowUTurn: false,
-      })
-    if (!forward?.length) return false
-    vehicle.route = forward.map(toRoadPosition)
-    vehicle.waitMinutes = 0
-    return true
-  }
-
-  private parkingApproachStarts(parking: RoadPosition): RoadPosition[] {
-    return this.getParkingApproachRoads(parking).map((approach) => {
-      const road = this.getRoadCellAt(approach.x, approach.z)
-      return road ? toRoadPosition(road) : approach
-    })
-  }
-
-  private startParkedCarDeparture(
-    vehicle: RoadVehicle,
-    group: ArrivalGroup,
-    occupied: ReadonlyMap<string, string>,
-  ): 'started' | 'blocked' | 'no-route' {
-    if (!vehicle.parkingCell) return 'no-route'
-    const approaches = this.parkingApproachStarts(vehicle.parkingCell)
-    const free = approaches.filter(
-      (cell) => !occupied.has(this.roadPositionKey(cell)),
-    )
-    const departure =
-      this.findDepartureFromAccesses(vehicle, free, true) ??
-      this.findDepartureFromAccesses(vehicle, approaches, true)
-    if (!departure) return 'no-route'
-    const { access, exit, initialDirection } = departure
-    if (occupied.has(this.roadPositionKey(access))) return 'blocked'
-    const parking = this.state.logistics.parkingCells.find(
-      (cell) =>
-        cell.x === vehicle.parkingCell?.x &&
-        cell.z === vehicle.parkingCell?.z,
-    )
-    if (parking) parking.occupiedBy = null
-    const parkedAt = { ...vehicle.parkingCell }
-    vehicle.cell = parkedAt
-    vehicle.position = parkedAt
-    // Cars are parked nose-in. Keep the nose toward the bay while the first
-    // route step backs onto the adjacent road, then turn along the exit route.
-    vehicle.facing = oppositeDirection(initialDirection) * (Math.PI / 2)
-    vehicle.parkingCell = null
-    vehicle.route = [
-      { ...access },
-      ...exit.route.map((cell) => toRoadPosition(cell)),
-    ]
-    vehicle.state = 'returning'
-    vehicle.waitMinutes = 0
-    group.state = 'leaving'
-    return 'started'
-  }
-
-  private findDepartureFromAccesses(
-    vehicle: RoadVehicle,
-    accesses: readonly RoadPosition[],
-    allowUTurn: boolean,
-  ): {
-    access: RoadPosition
-    exit: { position: RoadPosition; route: RoadCell[] }
-    initialDirection: Direction
-  } | null {
-    for (const access of accesses) {
-      const initialDirection = this.getDirectionIndex(
-        access.x - vehicle.parkingCell!.x,
-        access.z - vehicle.parkingCell!.z,
-      ) as Direction
-      const exit = this.findReachableRoadExit(
-        access,
-        initialDirection,
-        undefined,
-        allowUTurn,
-      )
-      if (exit) return { access, exit, initialDirection }
-    }
-    return null
-  }
-
-  private findReachableRoadExit(
-    start: RoadPosition,
-    initialDirection: Direction,
-    blockedCells?: ReadonlySet<string>,
-    allowUTurn = false,
-  ): { position: RoadPosition; route: RoadCell[] } | null {
-    // Occupancy-dependent detours must always use the current blocking cells.
-    if (blockedCells?.size) {
-      return this.searchReachableRoadExit(start, initialDirection, blockedCells, allowUTurn)
-    }
-    const graph = this.getRoadGraph()
-    const road = this.getRoadCellAt(start.x, start.z, start.elevation)
-    if (!road) return null
-    let cache = this.roadExitRoutes.get(graph)
-    if (!cache) {
-      cache = new Map()
-      this.roadExitRoutes.set(graph, cache)
-    }
-    const key = `${roadLayerKey(road.x, road.z, roadLayerElevation(road))}:${initialDirection}:${Number(allowUTurn)}`
-    if (!cache.has(key)) {
-      cache.set(key, this.searchReachableRoadExit(start, initialDirection, undefined, allowUTurn))
-    }
-    const result = cache.get(key)
-    return result ? {
-      position: { ...result.position },
-      route: result.route.map((cell) => ({ ...cell })),
-    } : null
-  }
-
-  private searchReachableRoadExit(
-    start: RoadPosition,
-    initialDirection: Direction,
-    blockedCells?: ReadonlySet<string>,
-    allowUTurn = false,
-  ): { position: RoadPosition; route: RoadCell[] } | null {
-    const search = (targets: RoadPosition[]) => {
-      if (targets.length === 0) return null
-      return findRoadRoute({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start,
-        targets,
-        initialDirection,
-        blockedCells,
-        allowUTurn,
-      })
-    }
-    const exits = this.collectMapExitTargets()
-    const route =
-      search(exits) ??
-      search(
-        this.state.logistics.roadCells.filter(
-          (road) =>
-            road.z === -this.getWorldSize() / 2 &&
-            isRoadDirectionAllowed(road, 2),
-        ),
-      )
-    if (!route) return null
-    const last = route.at(-1) ?? start
-    return {
-      position: { x: last.x, z: last.z },
-      route,
-    }
-  }
-
-  private dispatchGarbageTruck(vehicle: RoadVehicle): void {
-    if (!vehicle.cell) return
-    const claimed = new Set(
-      this.state.logistics.roadVehicles
-        .filter(
-          (candidate) =>
-            candidate.kind === 'garbageTruck' &&
-            candidate.id !== vehicle.id &&
-            candidate.state !== 'idle',
-        )
-        .map((candidate) => {
-          if (candidate.target?.kind === 'wasteDump') {
-            return `${candidate.target.x}:${candidate.target.z}`
-          }
-          if (candidate.target?.kind === 'sealedWasteContainer') {
-            return `sealed:${candidate.target.buildingId}`
-          }
-          return ''
-        }),
-    )
-    const dumps = this.state.wasteDumpCells.filter(
-      (cell) =>
-        cell.stored > 0 && !claimed.has(`${cell.x}:${cell.z}`),
-    )
-    const containers = this.state.buildings.filter(
-      (building) =>
-        isSealedWasteContainer(building.kind) &&
-        (building.wasteFill ?? 0) > 0 &&
-        this.isSealedWasteContainerOnRoad(building) &&
-        !claimed.has(`sealed:${building.id}`),
-    )
-    const totalStored =
-      dumps.reduce((sum, cell) => sum + cell.stored, 0) +
-      containers.reduce((sum, building) => sum + (building.wasteFill ?? 0), 0)
-    if (totalStored < SIMULATION_CONFIG.waste.truckDispatchThreshold) return
-    const containerAccesses = this.getSealedContainerRoadAccesses(containers)
-    const dumpAccesses = this.getWasteDumpRoadAccesses(dumps)
-    // A dump pad beside the depot (or the truck's current cell) used to win
-    // `alreadyThere` and keep the wagon vacuuming dumps forever. Filled
-    // roadside boxes must be their own trip.
-    const accesses: Array<{
-      road: RoadPosition
-      dump?: { x: number; z: number; stored: number }
-      container?: { id: string; x: number; z: number; stored: number }
-    }> = containerAccesses.length > 0 ? containerAccesses : dumpAccesses
-    if (accesses.length === 0) return
-    const here = vehicle.cell
-    const sittingOn = here
-      ? containers.find(
-          (building) => building.x === here.x && building.z === here.z,
-        )
-      : undefined
-    if (sittingOn) {
-      this.assignGarbageTruckAccessTarget(vehicle, {
-        container: { id: sittingOn.id, x: sittingOn.x, z: sittingOn.z },
-      })
-      vehicle.route = []
-      vehicle.state = 'responding'
-      this.finishGarbageTruckLeg(vehicle)
-      return
-    }
-    const alreadyThere = this.pickGarbageTruckAccess(accesses, here)
-    if (alreadyThere) {
-      this.assignGarbageTruckAccessTarget(vehicle, alreadyThere)
-      vehicle.route = []
-      vehicle.state = 'responding'
-      this.finishGarbageTruckLeg(vehicle)
-      return
-    }
-    const route = this.findGarbageTruckRoute(
-      vehicle,
-      accesses.map((access) => access.road),
-    )
-    if (!route) return
-    const last = route.at(-1) ?? vehicle.cell
-    const access = this.pickGarbageTruckAccess(accesses, last) ?? accesses[0]
-    if (!access) return
-    this.assignGarbageTruckAccessTarget(vehicle, access)
-    vehicle.route = route.map(toRoadPosition)
-    vehicle.state = 'responding'
-  }
-
-  private pickGarbageTruckAccess(
-    accesses: readonly {
-      road: RoadPosition
-      dump?: { x: number; z: number }
-      container?: { id: string; x: number; z: number }
-    }[],
-    at: RoadPosition | null | undefined,
-  ) {
-    if (!at) return undefined
-    const matching = accesses.filter(
-      (access) => access.road.x === at.x && access.road.z === at.z,
-    )
-    return matching.find((access) => access.container) ?? matching[0]
-  }
-
-  private assignGarbageTruckAccessTarget(
-    vehicle: RoadVehicle,
-    access: {
-      dump?: { x: number; z: number }
-      container?: { id: string; x: number; z: number }
-    },
-  ): void {
-    if (access.container) {
-      vehicle.target = {
-        kind: 'sealedWasteContainer',
-        buildingId: access.container.id,
-        x: access.container.x,
-        z: access.container.z,
-      }
-      return
-    }
-    if (access.dump) {
-      vehicle.target = { kind: 'wasteDump', x: access.dump.x, z: access.dump.z }
-    }
-  }
-
-  private getWasteDumpRoadAccesses(
-    dumps: readonly { x: number; z: number; stored: number }[],
-  ): Array<{ dump: { x: number; z: number; stored: number }; road: RoadPosition }> {
-    const dumpArea =
-      dumps.length > 0
-        ? this.state.wasteDumpCells
-        : []
-    const seeds = dumps.length > 0 ? dumpArea : dumps
-    const seen = new Set<string>()
-    const accesses: Array<{
-      dump: { x: number; z: number; stored: number }
-      road: RoadPosition
-    }> = []
-    seeds.forEach((dump) => {
-      this.getAdjacentRoadPositions(dump).forEach((road) => {
-        const key = `${road.x}:${road.z}`
-        if (seen.has(key)) return
-        seen.add(key)
-        accesses.push({ dump, road })
-      })
-    })
-    return accesses.sort((left, right) => right.dump.stored - left.dump.stored)
-  }
-
-  private getSealedContainerRoadAccesses(
-    containers: readonly PlacedBuilding[],
-  ): Array<{
-    container: { id: string; x: number; z: number; stored: number }
-    road: RoadPosition
-  }> {
-    const seen = new Set<string>()
-    const accesses: Array<{
-      container: { id: string; x: number; z: number; stored: number }
-      road: RoadPosition
-    }> = []
-    containers.forEach((container) => {
-      this.sealedContainerPullUpRoads(container).forEach((road) => {
-        const cell = this.getRoadCellAt(road.x, road.z, road.elevation)
-        if (!cell) return
-        const key = roadLayerKey(
-          cell.x,
-          cell.z,
-          cell.elevation ?? this.getTerrainHeight(cell.x, cell.z),
-        )
-        if (seen.has(key)) return
-        seen.add(key)
-        accesses.push({
-          container: {
-            id: container.id,
-            x: container.x,
-            z: container.z,
-            stored: container.wasteFill ?? 0,
-          },
-          road: toRoadPosition(cell),
-        })
-      })
-    })
-    return accesses.sort((left, right) => right.container.stored - left.container.stored)
-  }
-
-  private sealedContainerPullUpRoads(container: {
-    x: number
-    z: number
-    elevation?: number
-  }): RoadPosition[] {
-    if (!this.getRoadCellAt(container.x, container.z, container.elevation)) {
-      return []
-    }
-    const adjacent = this.getAdjacentRoadPositions(container)
-    if (adjacent.length > 0) return adjacent
-    const here = this.getRoadCellAt(container.x, container.z, container.elevation)
-    return here ? [toRoadPosition(here)] : []
-  }
-
-  private sealedContainerRoadIsReachable(
-    container: { x: number; z: number; elevation?: number },
-    reachable: ReadonlySet<string>,
-  ): boolean {
-    return this.sealedContainerPullUpRoads(container).some((road) => {
-      const cell = this.getRoadCellAt(road.x, road.z, road.elevation)
-      if (!cell) return false
-      return reachable.has(
-        roadLayerKey(
-          cell.x,
-          cell.z,
-          cell.elevation ?? this.getTerrainHeight(cell.x, cell.z),
-        ),
-      )
-    })
-  }
-
-  private garbageTruckCanServiceSealedContainer(
-    here: RoadPosition,
-    building: { x: number; z: number; elevation: number; kind?: string },
-  ): boolean {
-    if (building.kind !== undefined && !isSealedWasteContainer(building.kind)) {
-      return false
-    }
-    if (!this.isSealedWasteContainerOnRoad(building)) return false
-    return Math.abs(building.x - here.x) + Math.abs(building.z - here.z) <= 1
-  }
-
-  private getDeliveryFreight(vehicle: RoadVehicle) {
-    return this.state.festival.infrastructure.trucks.find(
-      (truck) =>
-        truck.id === vehicle.deliveryId || truck.id === vehicle.id,
-    )
-  }
-
-  private collectDeliveryTruckTargets(vehicle: RoadVehicle): RoadPosition[] {
-    const truck = this.getDeliveryFreight(vehicle)
-    const northZ = -this.getWorldSize() / 2
-    const edges = this.state.logistics.roadCells.filter(
-      (road) => road.z === northZ,
-    )
-    if (vehicle.state === 'returning' || truck?.phase === 'return') {
-      return edges
-    }
-    const depot = this.state.festival.infrastructure.depots.find(
-      (candidate) => candidate.id === truck?.depotId,
-    )
-    return depot ? this.getAdjacentRoadPositions(depot) : []
-  }
-
-  private findServiceVehicleRoute(
-    vehicle: RoadVehicle,
-    targets: readonly RoadPosition[],
-    blockedCells?: ReadonlySet<string>,
-  ): RoadPosition[] | null {
-    if (targets.length === 0) return null
-    const northZ = -this.getWorldSize() / 2
-    let start = vehicle.cell ?? vehicle.position
-    const prefix: RoadPosition[] = []
-    if (start.z < northZ) {
-      prefix.push({ x: start.x, z: northZ })
-      start = { x: start.x, z: northZ }
-    }
-    if (!this.getRoadCellAt(start.x, start.z)) return null
-    const facing = this.getVehicleDirection(vehicle)
-    const hereRoad = this.getRoadCellAt(start.x, start.z)
-    const exits = hereRoad
-      ? DIRECTIONS.filter((direction) =>
-          isRoadDirectionAllowed(hereRoad, direction),
-        )
-      : []
-    const graph = this.getRoadGraph()
-    const search = (
-      blocked?: ReadonlySet<string>,
-      direction?: Direction,
-    ) =>
-      this.routePreferringOpenLights({
-        roadCells: this.state.logistics.roadCells,
-        graph,
-        start,
-        targets,
-        blockedCells: blocked,
-        initialDirection: direction,
-        allowUTurn: false,
-      })
-    for (const direction of [facing, ...exits, undefined]) {
-      const route = search(blockedCells, direction) ?? search(undefined, direction)
-      if (!route?.length) continue
-      if (direction !== undefined && direction !== facing) {
-        vehicle.facing = direction * (Math.PI / 2)
-      }
-      return [
-        ...prefix,
-        ...route.map(toRoadPosition),
-      ]
-    }
-    return null
-  }
-
-  private adoptServiceRoute(
-    vehicle: RoadVehicle,
-    route: RoadPosition[],
-  ): void {
-    vehicle.route = route
-    const here = vehicle.cell ?? vehicle.position
-    const first = route[0]
-    const step = first
-      ? directionFromDelta(first.x - here.x, first.z - here.z)
-      : null
-    if (step !== null) vehicle.facing = step * (Math.PI / 2)
-    vehicle.waitMinutes = 0
-  }
-
-  private deliverySpawnFacing(truck: {
-    x: number
-    z: number
-    path: Array<{ x: number; z: number }>
-    phase: 'inbound' | 'return'
-  }): number {
-    const inbound = truck.phase === 'return' ? 2 : 0
-    const next = truck.path[0]
-    const step = next
-      ? directionFromDelta(next.x - truck.x, next.z - truck.z)
-      : null
-    if (step === inbound || step === oppositeDirection(inbound as Direction)) {
-      return step * (Math.PI / 2)
-    }
-    return inbound * (Math.PI / 2)
-  }
-
-  private syncFreightToVehicles(): void {
-    const trucks = this.state.festival.infrastructure.trucks
-    const vehicles = this.state.logistics.roadVehicles
-    const byId = new Map<string, RoadVehicle>()
-    for (const vehicle of vehicles) {
-      if (vehicle.kind !== 'deliveryTruck') continue
-      byId.set(vehicle.id, vehicle)
-      if (vehicle.deliveryId) byId.set(vehicle.deliveryId, vehicle)
-    }
-    const keep = new Set<string>()
-    for (const truck of trucks) {
-      let vehicle = byId.get(truck.id)
-      if (!vehicle) {
-        vehicle = this.createRoadVehicle(truck.id, 'deliveryTruck', {
-          x: truck.x,
-          z: truck.z,
-        })
-        vehicle.deliveryId = truck.id
-        vehicle.route = truck.path.map(toRoadPosition)
-        vehicle.cargo = truck.cargo
-        vehicle.stuckMinutes = truck.stuck
-        vehicle.testedGroundCell = truck.testedCell
-        vehicle.state = truck.phase === 'return' ? 'returning' : 'driving'
-        vehicle.target =
-          truck.phase === 'return'
-            ? {
-                kind: 'cell',
-                x: truck.path.at(-1)?.x ?? truck.x,
-                z: truck.path.at(-1)?.z ?? truck.z,
-              }
-            : { kind: 'depot', depotId: truck.depotId }
-        vehicle.facing = this.deliverySpawnFacing(truck)
-        vehicles.push(vehicle)
-      }
-      keep.add(vehicle.id)
-    }
-    this.state.logistics.roadVehicles = vehicles.filter(
-      (vehicle) =>
-        vehicle.kind !== 'deliveryTruck' || keep.has(vehicle.id),
-    )
-  }
-
-  private syncVehiclesToFreight(): void {
-    for (const vehicle of this.state.logistics.roadVehicles) {
-      if (vehicle.kind !== 'deliveryTruck') continue
-      const truck = this.getDeliveryFreight(vehicle)
-      if (!truck) continue
-      const here = vehicle.cell ?? vehicle.position
-      truck.x = here.x
-      truck.z = here.z
-      truck.path = vehicle.route.map(toRoadPosition)
-      truck.phase = vehicle.state === 'returning' ? 'return' : 'inbound'
-      truck.cargo = vehicle.cargo
-      truck.stuck = vehicle.stuckMinutes ?? 0
-      truck.testedCell = vehicle.testedGroundCell ?? ''
-      truck.progress = 0
-    }
-  }
-
-  private finishDeliveryTruckLeg(
-    vehicle: RoadVehicle,
-    removedVehicles: Set<string>,
-  ): void {
-    const truck = this.getDeliveryFreight(vehicle)
-    if (!truck) {
-      removedVehicles.add(vehicle.id)
-      return
-    }
-    const here = vehicle.cell ?? vehicle.position
-    truck.x = here.x
-    truck.z = here.z
-    const northZ = -this.getWorldSize() / 2
-    const edges = this.state.logistics.roadCells.filter(
-      (road) => road.z === northZ,
-    )
-    const depot = this.state.festival.infrastructure.depots.find(
-      (candidate) => candidate.id === truck.depotId,
-    )
-    const atBay = Boolean(
-      depot &&
-        this.getAdjacentRoadPositions(depot).some(
-          (cell) => cell.x === here.x && cell.z === here.z,
-        ),
-    )
-    const atEdge = edges.some((edge) => edge.x === here.x && edge.z === here.z)
-    const leaveMap = () => {
-      this.state.festival.infrastructure.trucks =
-        this.state.festival.infrastructure.trucks.filter(
-          (candidate) => candidate.id !== truck.id,
-        )
-      removedVehicles.add(vehicle.id)
-    }
-    if (vehicle.state === 'returning' || truck.phase === 'return') {
-      if (atEdge || here.z < northZ) {
-        leaveMap()
-        return
-      }
-      const route = this.findServiceVehicleRoute(vehicle, edges)
-      vehicle.state = 'returning'
-      truck.phase = 'return'
-      if (route?.length) {
-        this.adoptServiceRoute(vehicle, route)
-        vehicle.target = { kind: 'cell', ...(route.at(-1) ?? here) }
-        truck.path = route
-      } else if (atEdge) {
-        leaveMap()
-      }
-      return
-    }
-    if (depot && atBay) {
-      depot.stock[truck.kind] += truck.cargo
-      truck.cargo = 0
-      vehicle.cargo = 0
-      this.state.festival.deliveries = this.state.festival.deliveries.filter(
-        (delivery) => delivery.id !== truck.deliveryId,
-      )
-      truck.deliveryId = null
-      truck.phase = 'return'
-      this.state.festival.infrastructure.status =
-        'Ware im Depot entladen – Träger verteilen sie an die Stände'
-      vehicle.state = 'returning'
-      const route = this.findServiceVehicleRoute(vehicle, edges)
-      if (route?.length) {
-        this.adoptServiceRoute(vehicle, route)
-        vehicle.target = { kind: 'cell', ...(route.at(-1) ?? here) }
-        truck.path = route
-      }
-      return
-    }
-    const bays = depot ? this.getAdjacentRoadPositions(depot) : []
-    const route = this.findServiceVehicleRoute(vehicle, bays)
-    if (route?.length) {
-      this.adoptServiceRoute(vehicle, route)
-      vehicle.state = 'driving'
-      vehicle.target = { kind: 'depot', depotId: truck.depotId }
-      truck.path = route
-    }
-  }
-
-  private replanOffMapDelivery(
-    vehicle: RoadVehicle,
-    occupied: ReadonlyMap<string, string>,
-  ): boolean {
-    if (vehicle.kind !== 'deliveryTruck') return false
-    const northZ = -this.getWorldSize() / 2
-    const here = vehicle.cell ?? vehicle.position
-    if (here.z >= northZ) return false
-    const edges = this.state.logistics.roadCells.filter(
-      (road) => road.z === northZ,
-    )
-    const targets = this.collectDeliveryTruckTargets(vehicle)
-    if (!targets.length) return false
-    for (const edge of edges) {
-      if (occupied.has(this.roadPositionKey(edge))) continue
-      const rest = findRoadRoute({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start: edge,
-        targets,
-        initialDirection: 0,
-        allowUTurn: false,
-        blockedCells: this.collectRouteBlockedCells(vehicle, occupied, targets),
-      })
-      if (!rest) continue
-      vehicle.cell = { x: edge.x, z: northZ - 1 }
-      vehicle.position = { ...vehicle.cell }
-      vehicle.facing = 0
-      vehicle.route = [
-        { x: edge.x, z: edge.z },
-        ...rest.map(toRoadPosition),
-      ]
-      vehicle.waitMinutes = 0
-      const truck = this.getDeliveryFreight(vehicle)
-      if (truck) {
-        truck.x = vehicle.cell.x
-        truck.z = vehicle.cell.z
-        truck.path = vehicle.route.map(toRoadPosition)
-      }
-      return true
-    }
-    return false
-  }
-
-  private findGarbageTruckRoute(
-    vehicle: RoadVehicle,
-    targets: readonly RoadPosition[],
-    blockedCells?: ReadonlySet<string>,
-  ): RoadPosition[] | null {
-    return this.findServiceVehicleRoute(vehicle, targets, blockedCells)
-  }
-
-  private emptySealedContainersForGarbageTruck(
-    vehicle: RoadVehicle,
-    room: number,
-  ): number {
-    if (room <= 0) return 0
-    let remaining = room
-    let takenTotal = 0
-    const emptied = new Set<string>()
-    const take = (building: PlacedBuilding | undefined) => {
-      if (!building || remaining <= 0 || emptied.has(building.id)) return
-      if (!isSealedWasteContainer(building.kind)) return
-      if (!this.isSealedWasteContainerOnRoad(building)) return
-      const taken = emptySealedContainerStored(building, remaining)
-      if (taken <= 0) return
-      vehicle.cargo += taken
-      remaining -= taken
-      takenTotal += taken
-      emptied.add(building.id)
-    }
-    if (vehicle.target?.kind === 'sealedWasteContainer') {
-      const target = vehicle.target
-      take(
-        this.state.buildings.find(
-          (candidate) =>
-            isSealedWasteContainer(candidate.kind) &&
-            candidate.id === target.buildingId,
-        ) ??
-          this.state.buildings.find(
-            (candidate) =>
-              isSealedWasteContainer(candidate.kind) &&
-              candidate.x === target.x &&
-              candidate.z === target.z,
-          ),
-      )
-    }
-    const here = vehicle.cell ?? vehicle.position
-    for (const building of this.state.buildings) {
-      if (!this.garbageTruckCanServiceSealedContainer(here, building)) continue
-      take(building)
-    }
-    return takenTotal
-  }
-
-  private finishGarbageTruckLeg(vehicle: RoadVehicle): void {
-    if (vehicle.state === 'responding') {
-      let room = Math.max(
-        0,
-        SIMULATION_CONFIG.logistics.garbageTruckCapacity - vehicle.cargo,
-      )
-      room -= this.emptySealedContainersForGarbageTruck(vehicle, room)
-      const dumps = this.state.wasteDumpCells
-        .filter((cell) => cell.stored > 0)
-        .sort((left, right) => {
-          const truck = vehicle.cell ?? vehicle.position
-          return (
-            Math.abs(left.x - truck.x) +
-            Math.abs(left.z - truck.z) -
-            (Math.abs(right.x - truck.x) + Math.abs(right.z - truck.z))
-          )
-        })
-      dumps.forEach((dump) => {
-        if (room <= 0) return
-        const taken = Math.min(dump.stored, room)
-        dump.stored -= taken
-        vehicle.cargo += taken
-        room -= taken
-      })
-      vehicle.state = 'waiting'
-      vehicle.waitMinutes = SIMULATION_CONFIG.waste.truckLoadMinutes
-      vehicle.resumeState = 'returning'
-      return
-    }
-    if (vehicle.state === 'returning' && vehicle.cargo > 0) {
-      if (!this.isOffMapRoadExit(vehicle.cell ?? vehicle.position)) {
-        const offMap = this.getOffMapRoadExit(vehicle.cell ?? vehicle.position)
-        vehicle.route = [offMap]
-        vehicle.target = { kind: 'cell', ...offMap }
-        vehicle.facing = Math.PI
-        return
-      }
-      vehicle.cargo = 0
-      vehicle.state = 'waiting'
-      vehicle.waitMinutes = 0
-      vehicle.resumeState = 'returning'
-      return
-    }
-    if (this.isOffMapRoadExit(vehicle.cell ?? vehicle.position)) {
-      if (!this.reenterGarbageTruck(vehicle)) {
-        this.holdGarbageTruckOffMap(vehicle)
-      }
-      return
-    }
-    vehicle.state = 'idle'
-    vehicle.target = null
-    vehicle.route = []
-    vehicle.resumeState = null
-  }
-
-  private continueGarbageTruck(vehicle: RoadVehicle): void {
-    if (!vehicle.cell) {
-      vehicle.state = 'idle'
-      return
-    }
-    if (vehicle.cargo > 0) {
-      if (
-        this.isRoadExitCell(vehicle.cell) ||
-        this.isOffMapRoadExit(vehicle.cell)
-      ) {
-        const offMap = this.getOffMapRoadExit(vehicle.cell)
-        vehicle.route = this.isOffMapRoadExit(vehicle.cell) ? [] : [offMap]
-        vehicle.target = { kind: 'cell', ...offMap }
-        vehicle.state = 'returning'
-        vehicle.resumeState = null
-        vehicle.facing = Math.PI
-        if (vehicle.route.length === 0) this.finishGarbageTruckLeg(vehicle)
-        return
-      }
-      const exit = this.findReachableRoadExit(
-        vehicle.cell,
-        this.getVehicleDirection(vehicle),
-        undefined,
-        true,
-      )
-      if (!exit) {
-        vehicle.state = 'idle'
-        return
-      }
-      const offMap = this.getOffMapRoadExit(exit.position)
-      vehicle.route = [
-        ...exit.route.map(toRoadPosition),
-        offMap,
-      ]
-      vehicle.target = { kind: 'cell', ...offMap }
-      vehicle.state = 'returning'
-      vehicle.resumeState = null
-      return
-    }
-    if (this.isOffMapRoadExit(vehicle.cell)) {
-      if (!this.reenterGarbageTruck(vehicle)) {
-        this.holdGarbageTruckOffMap(vehicle)
-      }
-      return
-    }
-    const depot = this.state.logistics.wasteDepots.find((candidate) =>
-      candidate.truckIds.includes(vehicle.id),
-    )
-    const access = depot ? this.getLogisticsBuildingAccess(depot, 2) : null
-    if (!depot || !access) {
-      vehicle.state = 'idle'
-      return
-    }
-    if (access.x === vehicle.cell.x && access.z === vehicle.cell.z) {
-      vehicle.state = 'idle'
-      vehicle.target = { kind: 'depot', depotId: depot.id }
-      vehicle.route = []
-      vehicle.resumeState = null
-      return
-    }
-    const route = this.findGarbageTruckRoute(vehicle, [access])
-    if (!route?.length) {
-      if (this.isRoadExitCell(vehicle.cell) || this.isOffMapRoadExit(vehicle.cell)) {
-        this.holdGarbageTruckOffMap(vehicle)
-        return
-      }
-      vehicle.state = 'idle'
-      return
-    }
-    vehicle.route = route
-    vehicle.target = { kind: 'depot', depotId: depot.id }
-    vehicle.state = 'returning'
-    vehicle.resumeState = null
-  }
-
-  private restoreMissingGarbageTrucks(): void {
-    const existing = new Set(
-      this.state.logistics.roadVehicles.map((vehicle) => vehicle.id),
-    )
-    for (const depot of this.state.logistics.wasteDepots) {
-      for (const id of depot.truckIds) {
-        if (existing.has(id)) continue
-        const access =
-          this.getLogisticsBuildingAccess(depot, 2) ??
-          this.findAvailableRoadEntry() ??
-          this.getRoadEntry()
-        this.state.logistics.roadVehicles.push(
-          this.createRoadVehicle(id, 'garbageTruck', access),
-        )
-        existing.add(id)
-      }
-    }
-  }
-
-  private returnGarbageTruckToDepot(vehicle: RoadVehicle): void {
-    const depot = this.state.logistics.wasteDepots.find((candidate) =>
-      candidate.truckIds.includes(vehicle.id),
-    )
-    const access = depot ? this.getLogisticsBuildingAccess(depot, 2) : null
-    const here = access ?? this.findAvailableRoadEntry() ?? this.getRoadEntry()
-    vehicle.cell = { ...here }
-    vehicle.position = { ...here }
-    vehicle.facing = 0
-    vehicle.cargo = 0
-    vehicle.route = []
-    vehicle.waitMinutes = 0
-    vehicle.resumeState = null
-    vehicle.target = depot ? { kind: 'depot', depotId: depot.id } : null
-    vehicle.state = 'idle'
-  }
-
-  private isGarbageTruckAtHome(vehicle: RoadVehicle): boolean {
-    const here = vehicle.cell ?? vehicle.position
-    if (this.isOffMapRoadExit(here)) return false
-    const depot = this.state.logistics.wasteDepots.find((candidate) =>
-      candidate.truckIds.includes(vehicle.id),
-    )
-    const access = depot ? this.getLogisticsBuildingAccess(depot, 2) : null
-    return Boolean(access && access.x === here.x && access.z === here.z)
-  }
-
-  private holdGarbageTruckOffMap(vehicle: RoadVehicle): void {
-    const offMap = this.getOffMapRoadExit(vehicle.cell ?? vehicle.position)
-    vehicle.cell = { ...offMap }
-    vehicle.position = { ...offMap }
-    vehicle.facing = Math.PI
-    vehicle.route = []
-    vehicle.target = { kind: 'cell', ...offMap }
-    vehicle.state = 'waiting'
-    vehicle.resumeState = 'returning'
-  }
-
-  private reenterGarbageTruck(vehicle: RoadVehicle): boolean {
-    const depot = this.state.logistics.wasteDepots.find((candidate) =>
-      candidate.truckIds.includes(vehicle.id),
-    )
-    const access = depot ? this.getLogisticsBuildingAccess(depot, 2) : null
-    const entries = this.listFreeRoadEntries(vehicle.id, false)
-    if (entries.length === 0) {
-      this.holdGarbageTruckOffMap(vehicle)
-      return false
-    }
-    for (const entry of entries) {
-      vehicle.cell = { ...entry }
-      vehicle.position = { ...entry }
-      vehicle.facing = 0
-      vehicle.cargo = 0
-      if (!depot || !access) {
-        vehicle.target = null
-        vehicle.route = []
-        vehicle.waitMinutes = 0
-        vehicle.state = 'idle'
-        vehicle.resumeState = null
-        return true
-      }
-      if (access.x === entry.x && access.z === entry.z) {
-        vehicle.target = { kind: 'depot', depotId: depot.id }
-        vehicle.route = []
-        vehicle.waitMinutes = 0
-        vehicle.state = 'idle'
-        vehicle.resumeState = null
-        return true
-      }
-      const route = this.findGarbageTruckRoute(vehicle, [access])
-      if (!route?.length) continue
-      vehicle.target = { kind: 'depot', depotId: depot.id }
-      vehicle.route = route
-      vehicle.waitMinutes = 0
-      vehicle.state = 'returning'
-      vehicle.resumeState = null
-      return true
-    }
-    this.holdGarbageTruckOffMap(vehicle)
-    return false
-  }
-
-  private claimedTentCellKeys(): Set<string> {
-    if (this.claimedTentCellsCache) return this.claimedTentCellsCache
-    const living = new Set(this.state.visitors.map((visitor) => visitor.id))
-    const keys = new Set<string>()
-    this.state.campInstallations.forEach((installation) => {
-      if (installation.kind !== 'tent') return
-      if (!installationIsClaimed(installation, living)) return
-      keys.add(roadCellKey(installation.cell.x, installation.cell.z))
-    })
-    this.claimedTentCellsCache = keys
-    return keys
-  }
-
-  private updateSweeper(vehicle: RoadVehicle, minutes: number): void {
-    if (vehicle.state === 'waiting') {
-      vehicle.waitMinutes -= minutes
-      if (vehicle.waitMinutes <= 0) this.continueSweeper(vehicle)
-      return
-    }
-    if (vehicle.state === 'idle') this.dispatchSweeper(vehicle)
-    if (!vehicle.route.length) {
-      if (vehicle.state !== 'idle') this.finishSweeperLeg(vehicle)
-      return
-    }
-    const path = vehicle.cell
-      ? this.getPathAt(
-          vehicle.cell.x,
-          vehicle.cell.z,
-          this.getTerrainHeight(vehicle.cell.x, vehicle.cell.z),
-        ) ?? this.getPathAt(vehicle.cell.x, vehicle.cell.z)
-      : undefined
-    const mudSlowdown =
-      vehicle.cell && this.isMudTerrain(vehicle.cell.x, vehicle.cell.z)
-        ? SIMULATION_CONFIG.terrain.mudMoveMultiplier
-        : 1
-    const footSpeed = vehicle.cell
-      ? wayInfo(
-          this.state,
-          vehicle.cell.x,
-          vehicle.cell.z,
-          'foot',
-          path?.wayType,
-        ).speed
-      : 1
-    vehicle.speed += minutes * mudSlowdown * Math.min(1, footSpeed)
-    const interval = SIMULATION_CONFIG.logistics.sweeperMoveIntervalMinutes
-    if (vehicle.speed < interval) return
-    vehicle.speed %= interval
-    const next = vehicle.route[0]
-    if (!next) {
-      this.finishSweeperLeg(vehicle)
-      return
-    }
-    if (this.claimedTentCellKeys().has(roadCellKey(next.x, next.z))) {
-      vehicle.route = []
-      vehicle.state = 'idle'
-      this.dispatchSweeper(vehicle)
-      return
-    }
-    if (this.visitorsOnCellsThisTick?.has(roadCellKey(next.x, next.z))) {
-      vehicle.speed = 0
-      return
-    }
-    if (!this.isSweeperDriveCell(next.x, next.z)) {
-      vehicle.route = []
-      return
-    }
-    vehicle.facing = Math.atan2(
-      next.x - (vehicle.cell?.x ?? vehicle.position.x),
-      next.z - (vehicle.cell?.z ?? vehicle.position.z),
-    )
-    vehicle.cell = { x: next.x, z: next.z }
-    vehicle.position = { x: next.x, z: next.z }
-    vehicle.route.shift()
-    vehicle.waitMinutes = 0
-    this.sweepAround(vehicle)
-    if (vehicle.cargo >= SIMULATION_CONFIG.logistics.sweeperCapacity) {
-      vehicle.route = []
-      this.sendSweeperToDump(vehicle)
-    }
-  }
-
-  private sweeperCell(vehicle: RoadVehicle): Cell {
-    const x = vehicle.cell?.x ?? vehicle.position.x
-    const z = vehicle.cell?.z ?? vehicle.position.z
-    const path =
-      this.getPathAt(x, z, this.getTerrainHeight(x, z)) ?? this.getPathAt(x, z)
-    return {
-      x,
-      z,
-      elevation: path?.elevation ?? this.getTerrainHeight(x, z),
-    }
-  }
-
-  private findSweeperRoute(
-    vehicle: RoadVehicle,
-    goals: readonly Cell[],
-  ): RoadPosition[] | null {
-    const start = this.sweeperCell(vehicle)
-    const usable = goals.filter(
-      (goal) => !this.claimedTentCellKeys().has(roadCellKey(goal.x, goal.z)),
-    )
-    if (usable.length === 0) return null
-    this.ensurePedestrianNav(this.lastNavRevision !== this.worldRevision)
-    const goalKeys = new Set(usable.map((goal) => this.packCell(goal)))
-    const path = findWeightedPath(
-      {
-        start,
-        key: (cell) => this.packCell(cell),
-        isGoal: (cell) => goalKeys.has(this.packCell(cell)),
-        maxVisited: 4000,
-        neighbors: (cell) =>
-          this.getPedestrianNeighbors(cell, {
-            allowQueue: false,
-            allowCamping: true,
-            allowMedical: true,
-            allowFestival: true,
-            allowGrass: false,
-            // Same staff-only access as walking staff so robots can use Personaleingang.
-            allowStaff: true,
-          }).filter((next) => this.isSweeperDriveCell(next.x, next.z, next.elevation)),
-        movementCost: (_from, to) =>
-          this.pedestrianNav.get(this.packCell(to))?.cost ??
-          this.getPedestrianSurfaceCost(to),
-        heuristic: (cell) => {
-          let nearest = Number.POSITIVE_INFINITY
-          for (const goal of usable) {
-            const distance =
-              Math.abs(goal.x - cell.x) + Math.abs(goal.z - cell.z)
-            if (distance < nearest) nearest = distance
-          }
-          return nearest
-        },
+    updateLogisticsSimulation({
+      state: this.state,
+      roadPositionKey: (position) => this.roadPositionKey(position),
+      isRoadPosition: (position) =>
+        Boolean(this.getRoadCellAt(position.x, position.z, position.elevation)),
+      isVisitorSeated: (visitor, seated) =>
+        this.isVisitorSeatedInVehicle(visitor, seated),
+      evaluateAccessSignals: () => this.evaluateAccessSignals(),
+      syncFreightToVehicles: () => this.syncFreightToVehicles(),
+      restoreMissingGarbageTrucks: () => this.restoreMissingGarbageTrucks(),
+      resetPerTickCaches: () => {
+        this.roadVehicleSimulation.resetPerTickCaches()
       },
-      this.sweeperPathScratch,
-    )
-    if (!path?.length) return null
-    return path.map(toRoadPosition)
+      processVehicles: (tickMinutes, tick) =>
+        this.processLogisticsVehicles(tickMinutes, tick),
+      leaveVisitorCampBehind: (visitor) => this.leaveVisitorCampBehind(visitor),
+      normalizeCarManifest: (group) => this.normalizeCarManifest(group),
+      visitorsRemoved: () => {
+        this.indexedVisitorCount = -1
+      },
+      syncVehiclesToFreight: () => this.syncVehiclesToFreight(),
+    }, minutes)
   }
 
-  private dispatchSweeper(vehicle: RoadVehicle): void {
-    if (!vehicle.cell) return
-    if (vehicle.cargo >= SIMULATION_CONFIG.logistics.sweeperCapacity) {
-      this.sendSweeperToDump(vehicle)
-      return
-    }
-    const accesses = this.getSweeperDirtAccesses(vehicle.workZones)
-    if (accesses.length === 0) {
-      if (vehicle.cargo > 0) {
-        this.sendSweeperToDump(vehicle)
-        return
-      }
-      this.sendSweeperToDepot(vehicle)
-      return
-    }
-    const here = accesses.find(
-      (access) =>
-        access.path.x === vehicle.cell?.x && access.path.z === vehicle.cell?.z,
-    )
-    if (here) {
-      vehicle.target = { kind: 'cell', x: here.dirt.x, z: here.dirt.z }
-      vehicle.route = []
-      vehicle.state = 'responding'
-      return
-    }
-    const route = this.findSweeperRoute(
-      vehicle,
-      accesses.map((access) => access.path),
-    )
-    if (!route?.length) return
-    const last = route.at(-1) ?? vehicle.cell
-    const dirt =
-      accesses.find(
-        (access) => access.path.x === last.x && access.path.z === last.z,
-      )?.dirt ?? accesses[0]?.dirt
-    if (!dirt) return
-    vehicle.target = { kind: 'cell', x: dirt.x, z: dirt.z }
-    vehicle.route = route
-    vehicle.state = 'responding'
+  private processLogisticsVehicles(minutes: number, tick: LogisticsTickState): void {
+    this.roadVehicleSimulation.processLogisticsVehicles(minutes, tick)
   }
 
-  private getSweeperDirtAccesses(zones?: string[]): Array<{
-    dirt: { x: number; z: number }
-    path: Cell
-  }> {
-    const blocked = this.claimedTentCellKeys()
-    const accesses: Array<{ dirt: { x: number; z: number }; path: Cell }> = []
-    const seen = new Set<string>()
-    this.state.incidents.forEach((incident) => {
-      if (incident.kind !== 'litter' && incident.kind !== 'vomit') return
-      if (incident.severity <= 0) return
-      if (!isInAnyZone(zones, incident.x, incident.z)) return
-      if (blocked.has(roadCellKey(incident.x, incident.z))) return
-      const paths: Cell[] = []
-      this.getSweeperAccessCells(incident).forEach((path) => {
-        if (!blocked.has(roadCellKey(path.x, path.z))) paths.push(path)
-      })
-      paths.forEach((path) => {
-        const key = `${path.x}:${path.z}:${incident.x}:${incident.z}`
-        if (seen.has(key)) return
-        seen.add(key)
-        accesses.push({ dirt: { x: incident.x, z: incident.z }, path })
-      })
-    })
-    return accesses
-  }
+  private syncFreightToVehicles(): void { this.roadVehicleSimulation.syncFreightToVehicles() }
+  private syncVehiclesToFreight(): void { this.roadVehicleSimulation.syncVehiclesToFreight() }
+  private restoreMissingGarbageTrucks(): void { this.roadVehicleSimulation.restoreMissingGarbageTrucks() }
+  private dispatchIncomingVisitorCar(vehicle: RoadVehicle): void { this.roadVehicleSimulation.dispatchIncomingVisitorCar(vehicle) }
+  private realignVehiclesOnRoad(x: number, z: number, facing: Direction | null, elevation: number): void { this.roadVehicleSimulation.realignVehiclesOnRoad(x, z, facing, elevation) }
+  private sealedContainerRoadIsReachable(container: { x: number; z: number; elevation?: number }, reachable: ReadonlySet<string>): boolean { return this.roadVehicleSimulation.sealedContainerRoadIsReachable(container, reachable) }
+  private isOffMapRoadExit(position: RoadPosition): boolean { return this.roadVehicleSimulation.isOffMapRoadExit(position) }
+  private requestAmbulanceSale(vehicleId: string): ActionResult { return this.roadVehicleSimulation.requestAmbulanceSale(vehicleId) }
 
-  private finishSweeperLeg(vehicle: RoadVehicle): void {
-    if (vehicle.state === 'responding') {
-      if (vehicle.cell && vehicle.target?.kind === 'cell') {
-        vehicle.facing = Math.atan2(
-          vehicle.target.x - vehicle.cell.x,
-          vehicle.target.z - vehicle.cell.z,
-        )
-      }
-      this.sweepAround(vehicle)
-      if (vehicle.cargo >= SIMULATION_CONFIG.logistics.sweeperCapacity) {
-        this.sendSweeperToDump(vehicle)
-        return
-      }
-      const remaining = this.getSweeperDirtAccesses(vehicle.workZones).filter(
-        (access) =>
-          access.path.x !== vehicle.cell?.x || access.path.z !== vehicle.cell?.z,
-      )
-      if (remaining.length > 0) {
-        const route = this.findSweeperRoute(
-          vehicle,
-          remaining.map((access) => access.path),
-        )
-        if (route?.length) {
-          const last = route.at(-1) ?? vehicle.cell
-          const dirt = last
-            ? remaining.find(
-                (access) =>
-                  access.path.x === last.x && access.path.z === last.z,
-              )?.dirt
-            : undefined
-          if (dirt) {
-            vehicle.target = { kind: 'cell', x: dirt.x, z: dirt.z }
-            vehicle.route = route
-            vehicle.state = 'responding'
-            return
-          }
-        }
-      }
-      if (vehicle.cargo > 0) {
-        this.sendSweeperToDump(vehicle)
-        return
-      }
-      this.sendSweeperToDepot(vehicle)
-      return
-    }
-    if (vehicle.state === 'returning' && vehicle.cargo > 0) {
-      this.depositSweeperCargo(vehicle)
-      vehicle.state = 'waiting'
-      vehicle.waitMinutes = SIMULATION_CONFIG.waste.truckUnloadMinutes
-      vehicle.resumeState = 'idle'
-      return
-    }
-    if (vehicle.target?.kind === 'depot') {
-      vehicle.state = 'idle'
-      vehicle.route = []
-      vehicle.resumeState = null
-      return
-    }
-    vehicle.state = 'idle'
-    vehicle.target = null
-    vehicle.route = []
-    vehicle.resumeState = null
-  }
-
-  private continueSweeper(vehicle: RoadVehicle): void {
-    if (!vehicle.cell) {
-      vehicle.state = 'idle'
-      return
-    }
-    if (vehicle.cargo > 0) {
-      this.sendSweeperToDump(vehicle)
-      return
-    }
-    if (this.getSweeperDirtAccesses(vehicle.workZones).length > 0) {
-      vehicle.state = 'idle'
-      this.dispatchSweeper(vehicle)
-      return
-    }
-    this.sendSweeperToDepot(vehicle)
-  }
-
-  private sendSweeperToDump(vehicle: RoadVehicle): void {
-    if (!vehicle.cell) return
-    const accesses = this.getWasteDumpPathAccesses(true)
-    if (accesses.length === 0) {
-      vehicle.state = 'idle'
-      vehicle.route = []
-      return
-    }
-    const here = accesses.find(
-      (access) =>
-        access.path.x === vehicle.cell?.x && access.path.z === vehicle.cell?.z,
-    )
-    if (here) {
-      vehicle.target = { kind: 'wasteDump', x: here.dump.x, z: here.dump.z }
-      vehicle.route = []
-      vehicle.state = 'returning'
-      return
-    }
-    const route = this.findSweeperRoute(
-      vehicle,
-      accesses.map((access) => access.path),
-    )
-    if (!route?.length) {
-      vehicle.state = 'idle'
-      return
-    }
-    const last = route.at(-1) ?? vehicle.cell
-    const dump =
-      accesses.find(
-        (access) => access.path.x === last.x && access.path.z === last.z,
-      )?.dump ?? accesses[0]?.dump
-    if (!dump) return
-    vehicle.target = { kind: 'wasteDump', x: dump.x, z: dump.z }
-    vehicle.route = route
-    vehicle.state = 'returning'
-    vehicle.resumeState = null
-  }
-
-  private getWasteDumpPathAccesses(requireRoom = false): Array<{
-    dump: WasteDumpCell
-    path: Cell
-  }> {
-    const seen = new Set<string>()
-    const accesses: Array<{ dump: WasteDumpCell; path: Cell }> = []
-    this.state.wasteDumpCells.forEach((dump) => {
-      if (requireRoom && wasteDumpRemaining(dump) <= 0) return
-      this.getSweeperAccessCells(dump).forEach((path) => {
-        const key = `${path.x}:${path.z}:${path.elevation}`
-        if (seen.has(key)) return
-        seen.add(key)
-        accesses.push({ dump, path })
-      })
-    })
-    return accesses
-  }
-
-  private sendSweeperToDepot(vehicle: RoadVehicle): void {
-    if (!vehicle.cell) {
-      vehicle.state = 'idle'
-      return
-    }
-    const depot = this.state.logistics.specialDepots.find((candidate) =>
-      candidate.vehicleIds.includes(vehicle.id),
-    )
-    const access = depot ? this.getLogisticsPathAccess(depot, 3) : null
-    if (!depot || !access) {
-      vehicle.state = 'idle'
-      vehicle.target = null
-      vehicle.route = []
-      return
-    }
-    if (access.x === vehicle.cell.x && access.z === vehicle.cell.z) {
-      vehicle.state = 'idle'
-      vehicle.target = { kind: 'depot', depotId: depot.id }
-      vehicle.route = []
-      vehicle.resumeState = null
-      return
-    }
-    const route = this.findSweeperRoute(vehicle, [access])
-    if (!route?.length) {
-      vehicle.state = 'idle'
-      return
-    }
-    vehicle.route = route
-    vehicle.target = { kind: 'depot', depotId: depot.id }
-    vehicle.state = 'returning'
-    vehicle.resumeState = null
-  }
-
-  private depositSweeperCargo(vehicle: RoadVehicle): void {
-    if (vehicle.cargo <= 0) return
-    const truck = vehicle.cell ?? vehicle.position
-    const dump = [...this.state.wasteDumpCells]
-      .filter((cell) => wasteDumpRemaining(cell) > 0)
-      .sort((left, right) => {
-        return (
-          Math.abs(left.x - truck.x) +
-          Math.abs(left.z - truck.z) -
-          (Math.abs(right.x - truck.x) + Math.abs(right.z - truck.z))
-        )
-      })[0]
-    if (!dump) return
-    vehicle.cargo -= acceptWasteAtDump(dump, vehicle.cargo)
-  }
-
-  private sweepAround(vehicle: RoadVehicle): void {
-    if (!vehicle.cell) return
-    const blocked = this.claimedTentCellKeys()
-    const direction = this.getVehicleDirection(vehicle)
-    const forward = DIRECTION_OFFSETS[direction]
-    const right = DIRECTION_OFFSETS[(((direction + 1) % 4) as Direction)]
-    const width = SIMULATION_CONFIG.logistics.sweeperCleanWidth
-    const depth = SIMULATION_CONFIG.logistics.sweeperCleanDepth
-    const half = Math.floor(width / 2)
-    const cells = new Set<string>()
-    for (let step = 0; step <= depth; step += 1) {
-      for (let lateral = -half; lateral <= half; lateral += 1) {
-        const x = vehicle.cell.x + forward.x * step + right.x * lateral
-        const z = vehicle.cell.z + forward.z * step + right.z * lateral
-        if (blocked.has(roadCellKey(x, z))) continue
-        cells.add(roadCellKey(x, z))
-      }
-    }
-    const room = () =>
-      Math.max(0, SIMULATION_CONFIG.logistics.sweeperCapacity - vehicle.cargo)
-    this.state.incidents.forEach((incident) => {
-      if (incident.kind !== 'litter' && incident.kind !== 'vomit') return
-      if (!isInAnyZone(vehicle.workZones, incident.x, incident.z)) return
-      if (!cells.has(roadCellKey(incident.x, incident.z))) return
-      const taken = Math.min(incident.severity, room())
-      if (taken <= 0) return
-      incident.severity -= taken
-      vehicle.cargo += taken
-    })
-    this.state.incidents = this.state.incidents.filter(
-      (incident) =>
-        (incident.kind !== 'litter' && incident.kind !== 'vomit') ||
-        incident.severity > 0,
-    )
-  }
-
-  private getWorldSouthEdge(): number {
-    return -this.getWorldSize() / 2
-  }
-
-  private isRoadExitCell(position: RoadPosition): boolean {
-    return (
-      position.z === this.getWorldSouthEdge() &&
-      position.x >= -3 &&
-      position.x <= 2
-    )
-  }
-
-  private isVisitorCarExit(position: RoadPosition): boolean {
-    if (this.isOffMapRoadExit(position)) return true
-    if (position.z !== this.getWorldSouthEdge()) return false
-    const road = this.getRoadCellAt(position.x, position.z, position.elevation)
-    return Boolean(road && isRoadDirectionAllowed(road, 2))
-  }
-
-  private isOffMapRoadExit(position: RoadPosition): boolean {
-    return position.z < this.getWorldSouthEdge()
-  }
-
-  private getOffMapRoadExit(position: RoadPosition): RoadPosition {
-    return {
-      x: Math.max(-3, Math.min(2, position.x)),
-      z: this.getWorldSouthEdge() - 1,
-    }
-  }
-
-  private dispatchIdleAmbulances(): void {
-    const idle: RoadVehicle[] = []
-    const claimed = new Set<string>()
-    const seated = collectSeatedPassengerIds(this.state.logistics.roadVehicles)
-    for (const vehicle of this.state.logistics.roadVehicles) {
-      if (vehicle.kind !== 'ambulance') continue
-      for (const passengerId of vehicle.passengerIds) claimed.add(passengerId)
-      if (vehicle.pendingSale) continue
-      if (vehicle.state === 'idle' && vehicle.cell) idle.push(vehicle)
-    }
-    if (idle.length === 0) return
-    for (const visitor of this.state.visitors) {
-      if (visitor.rescueVehicleId) claimed.add(visitor.id)
-    }
-    const victims = this.state.visitors.filter(
-      (visitor) =>
-        visitor.state === 'injured' &&
-        !claimed.has(visitor.id) &&
-        !this.isVisitorSeatedInVehicle(visitor, seated),
-    )
-    if (victims.length === 0) return
-    const pairs: Array<{
-      vehicle: RoadVehicle
-      victim: Visitor
-      distance: number
-    }> = []
-    for (const vehicle of idle) {
-      const cell = vehicle.cell
-      if (!cell) continue
-      for (const victim of victims) {
-        pairs.push({
-          vehicle,
-          victim,
-          distance:
-            Math.abs(victim.cellX - cell.x) + Math.abs(victim.cellZ - cell.z),
-        })
-      }
-    }
-    pairs.sort(
-      (left, right) =>
-        left.distance - right.distance ||
-        left.vehicle.id.localeCompare(right.vehicle.id) ||
-        left.victim.id.localeCompare(right.victim.id),
-    )
-    const usedVehicles = new Set<string>()
-    const usedVictims = new Set<string>()
-    for (const pair of pairs) {
-      if (usedVehicles.has(pair.vehicle.id) || usedVictims.has(pair.victim.id)) {
-        continue
-      }
-      if (this.sendAmbulanceToVictim(pair.vehicle, pair.victim)) {
-        usedVehicles.add(pair.vehicle.id)
-        usedVictims.add(pair.victim.id)
-      }
-    }
-  }
-
-  private sendAmbulanceToVictim(vehicle: RoadVehicle, victim: Visitor): boolean {
-    if (!vehicle.cell) return false
-    const target = { x: victim.cellX, z: victim.cellZ }
-    const route = this.routePreferringOpenLights({
-      roadCells: this.state.logistics.roadCells,
-      graph: this.getRoadGraph(),
-      start: vehicle.cell,
-      target,
-      initialDirection: this.getVehicleDirection(vehicle),
-    })
-    if (!route) return false
-    vehicle.target = { kind: 'cell', ...target }
-    victim.rescueVehicleId = vehicle.id
-    vehicle.route = route.map(toRoadPosition)
-    vehicle.state = 'responding'
-    return true
-  }
-
-  private finishAmbulanceLeg(vehicle: RoadVehicle): void {
-    if (vehicle.state === 'responding' && vehicle.cell) {
-      const seated = collectSeatedPassengerIds(this.state.logistics.roadVehicles)
-      const victims = this.state.visitors
-        .filter(
-          (visitor) =>
-            visitor.state === 'injured' &&
-            visitor.cellX === vehicle.cell?.x &&
-            visitor.cellZ === vehicle.cell?.z &&
-            !this.isVisitorSeatedInVehicle(visitor, seated),
-        )
-        .slice(0, SIMULATION_CONFIG.logistics.ambulanceCapacity)
-      victims.forEach((visitor) => {
-        visitor.state = 'medical-transport'
-        visitor.injuryVehicleId = null
-        visitor.rescueVehicleId = null
-        vehicle.passengerIds.push(visitor.id)
-      })
-      const garage = this.state.logistics.ambulanceGarages.find((candidate) =>
-        candidate.bays.includes(vehicle.id),
-      )
-      const access = garage
-        ? this.getLogisticsBuildingAccess(garage, 2)
-        : null
-      if (!access || vehicle.passengerIds.length === 0) {
-        vehicle.state = 'idle'
-        vehicle.target = null
-        if (vehicle.pendingSale || vehicle.passengerIds.length === 0) {
-          this.sendAmbulanceHome(vehicle)
-        }
-        return
-      }
-      const route = this.routePreferringOpenLights({
-        roadCells: this.state.logistics.roadCells,
-        graph: this.getRoadGraph(),
-        start: vehicle.cell,
-        target: access,
-        initialDirection: this.getVehicleDirection(vehicle),
-        allowUTurn: true,
-      })
-      if (!route) {
-        vehicle.state = 'idle'
-        return
-      }
-      vehicle.route = route.map(toRoadPosition)
-      vehicle.state = 'returning'
-      vehicle.target = garage
-        ? { kind: 'garage', garageId: garage.id }
-        : null
-      return
-    }
-    if (vehicle.state === 'returning') {
-      vehicle.passengerIds.forEach((visitorId) => {
-        const visitor = this.getVisitor(visitorId)
-        if (!visitor || !vehicle.cell) return
-        visitor.state = 'sleeping'
-        visitor.x = vehicle.cell.x + visitor.tileOffsetX
-        visitor.z = vehicle.cell.z + visitor.tileOffsetZ
-        visitor.cellX = vehicle.cell.x
-        visitor.cellZ = vehicle.cell.z
-        visitor.thought =
-          'Der Krankenwagen hat mich an der Garage an die Sanitäter übergeben.'
-      })
-      vehicle.passengerIds = []
-      vehicle.target = null
-      if (vehicle.pendingSale) {
-        this.completeAmbulanceSale(vehicle)
-        return
-      }
-      vehicle.state = 'idle'
-    }
-  }
-
-  private returnIdleAmbulancesToGarage(): void {
-    const idle = this.state.logistics.roadVehicles.filter(
-      (vehicle) =>
-        vehicle.kind === 'ambulance' &&
-        vehicle.state === 'idle' &&
-        vehicle.passengerIds.length === 0,
-    )
-    for (const vehicle of idle) {
-      if (this.isAmbulanceAtHome(vehicle)) {
-        if (vehicle.pendingSale) this.completeAmbulanceSale(vehicle)
-        continue
-      }
-      this.sendAmbulanceHome(vehicle)
-    }
-  }
-
-  private isAmbulanceAtHome(vehicle: RoadVehicle): boolean {
-    const here = vehicle.cell ?? vehicle.position
-    const garage = this.state.logistics.ambulanceGarages.find((candidate) =>
-      candidate.bays.includes(vehicle.id),
-    )
-    const access = garage ? this.getLogisticsBuildingAccess(garage, 2) : null
-    return Boolean(access && access.x === here.x && access.z === here.z)
-  }
-
-  private sendAmbulanceHome(vehicle: RoadVehicle): void {
-    const garage = this.state.logistics.ambulanceGarages.find((candidate) =>
-      candidate.bays.includes(vehicle.id),
-    )
-    const access = garage ? this.getLogisticsBuildingAccess(garage, 2) : null
-    const start = vehicle.cell ?? vehicle.position
-    if (!garage || !access) {
-      vehicle.state = 'idle'
-      vehicle.route = []
-      return
-    }
-    if (access.x === start.x && access.z === start.z) {
-      vehicle.state = 'idle'
-      vehicle.route = []
-      vehicle.target = { kind: 'garage', garageId: garage.id }
-      if (vehicle.pendingSale) this.completeAmbulanceSale(vehicle)
-      return
-    }
-    const route = this.routePreferringOpenLights({
-      roadCells: this.state.logistics.roadCells,
-      graph: this.getRoadGraph(),
-      start,
-      target: access,
-      initialDirection: this.getVehicleDirection(vehicle),
-      allowUTurn: true,
-    })
-    if (!route) {
-      vehicle.state = 'idle'
-      vehicle.route = []
-      vehicle.target = { kind: 'garage', garageId: garage.id }
-      return
-    }
-    vehicle.route = route.map(toRoadPosition)
-    vehicle.state = 'returning'
-    vehicle.target = { kind: 'garage', garageId: garage.id }
-    vehicle.resumeState = null
-    vehicle.waitMinutes = 0
-  }
-
-  private requestAmbulanceSale(vehicleId: string): ActionResult {
-    const vehicle = this.state.logistics.roadVehicles.find(
-      (candidate) => candidate.id === vehicleId && candidate.kind === 'ambulance',
-    )
-    if (!vehicle) {
-      for (const garage of this.state.logistics.ambulanceGarages) {
-        garage.bays = [
-          garage.bays[0] === vehicleId ? null : garage.bays[0],
-          garage.bays[1] === vehicleId ? null : garage.bays[1],
-        ]
-      }
-      this.emit()
-      return { ok: false, message: 'Der Krankenwagen war nicht mehr vorhanden und wurde bereinigt' }
-    }
-    vehicle.pendingSale = true
-    if (vehicle.passengerIds.length === 0 && vehicle.state === 'responding') {
-      this.cancelAmbulanceAssignment(vehicle)
-    }
-    if (
-      this.isAmbulanceAtHome(vehicle) &&
-      vehicle.passengerIds.length === 0 &&
-      (vehicle.state === 'idle' || vehicle.state === 'waiting' || vehicle.route.length === 0)
-    ) {
-      this.completeAmbulanceSale(vehicle)
-      this.emit()
-      return { ok: true, message: 'Krankenwagen verkauft' }
-    }
-    if (vehicle.passengerIds.length === 0 && vehicle.state !== 'returning') {
-      this.sendAmbulanceHome(vehicle)
-    } else if (vehicle.passengerIds.length > 0 && vehicle.state !== 'returning' && vehicle.cell) {
-      this.sendAmbulanceHome(vehicle)
-    }
-    this.emit()
-    return {
-      ok: true,
-      message: 'Krankenwagen fährt zur Garage und wird dann verkauft',
-    }
-  }
-
-  private cancelAmbulanceAssignment(vehicle: RoadVehicle): void {
-    for (const visitor of this.state.visitors) {
-      if (visitor.rescueVehicleId === vehicle.id) visitor.rescueVehicleId = null
-    }
-    vehicle.route = []
-    vehicle.target = null
-    vehicle.state = 'idle'
-    vehicle.waitMinutes = 0
-  }
-
-  private completeAmbulanceSale(vehicle: RoadVehicle): void {
-    const position = vehicle.cell ?? vehicle.position
-    vehicle.passengerIds.forEach((visitorId) => {
-      const visitor = this.getVisitor(visitorId)
-      if (!visitor) return
-      visitor.x = position.x + visitor.tileOffsetX
-      visitor.z = position.z + visitor.tileOffsetZ
-      visitor.cellX = position.x
-      visitor.cellZ = position.z
-      visitor.rescueVehicleId = null
-      visitor.injuryVehicleId = null
-      visitor.state = 'sleeping'
-      visitor.thought = 'Der Krankenwagen wurde an der Garage übergeben.'
-    })
-    for (const visitor of this.state.visitors) {
-      if (visitor.rescueVehicleId === vehicle.id) visitor.rescueVehicleId = null
-    }
-    for (const garage of this.state.logistics.ambulanceGarages) {
-      garage.bays = [
-        garage.bays[0] === vehicle.id ? null : garage.bays[0],
-        garage.bays[1] === vehicle.id ? null : garage.bays[1],
-      ]
-    }
-    this.state.logistics.roadVehicles =
-      this.state.logistics.roadVehicles.filter((candidate) => candidate.id !== vehicle.id)
-    const refund = Math.floor(
-      SIMULATION_CONFIG.logistics.ambulanceCost *
-        SIMULATION_CONFIG.logistics.busResaleFraction,
-    )
-    bookFinance(this.state, 'construction', refund)
-    this.state.cashEffects.push({
-      id: this.nextId('ambulance-sale'),
-      amount: refund,
-      x: position.x + 0.5,
-      y: 1.4,
-      z: position.z + 0.5,
-      age: 0,
-    })
-  }
-
-  private dispatchBus(vehicle: RoadVehicle): void {
-    const line = this.state.logistics.busLines.find(
-      (candidate) => candidate.id === vehicle.lineId && candidate.active,
-    )
-    if (!line || !vehicle.cell || line.stopIds.length < 2) return
-    const absoluteMinute = this.state.day * 1440 + this.state.minute
-    if (
-      line.lastDepartureMinute !== null &&
-      absoluteMinute - line.lastDepartureMinute < line.headway
-    ) {
-      return
-    }
-    vehicle.nextStopIndex = 0
-    if (this.routeBusToStop(vehicle, line, 0)) {
-      line.lastDepartureMinute = absoluteMinute
-    }
-  }
-
-  private updateBusAtStop(
-    vehicle: RoadVehicle,
-    minutes: number,
-    busWaitersByCell: Map<string, Visitor[]>,
-  ): void {
-    if (vehicle.kind !== 'bus' || vehicle.state !== 'at-stop') return
-    const line = this.state.logistics.busLines.find(
-      (candidate) => candidate.id === vehicle.lineId,
-    )
-    const stopId =
-      vehicle.target?.kind === 'busStop'
-        ? vehicle.target.stopId
-        : null
-    const stop =
-      stopId
-        ? this.state.logistics.busStops.find(
-            (candidate) => candidate.id === stopId,
-          )
-        : undefined
-    if (!line || !stop) {
-      vehicle.state = 'idle'
-      return
-    }
-    vehicle.passengerIds = vehicle.passengerIds.filter((visitorId) => {
-      const visitor = this.getVisitor(visitorId)
-      return Boolean(visitor && visitor.state === 'bus-riding')
-    })
-    const disembarkingIds = new Set(
-      vehicle.passengerIds.filter((visitorId) => {
-        const visitor = this.getVisitor(visitorId)
-        return (
-          !visitor?.busDestinationStopId ||
-          visitor.busDestinationStopId === stop.id
-        )
-      }),
-    )
-    disembarkingIds.forEach((visitorId) => {
-      const visitor = this.getVisitor(visitorId)
-      if (!visitor) return
-      visitor.x = stop.x + visitor.tileOffsetX
-      visitor.z = stop.z + visitor.tileOffsetZ
-      visitor.cellX = stop.x
-      visitor.cellZ = stop.z
-      visitor.cellElevation = 0
-      visitor.busLineId = null
-      visitor.busWaitMinutes = 0
-      const destination = visitor.busDestination
-      const resumeState = visitor.busResumeState
-      const resumeTargetId = visitor.busResumeTargetId
-      visitor.busDestination = null
-      visitor.busDestinationStopId = null
-      visitor.busResumeState = null
-      visitor.busResumeTargetId = null
-      const route = destination
-        ? this.findPath(
-            { x: stop.x, z: stop.z, elevation: 0 },
-            [destination],
-          )
-        : null
-      if (destination && route) {
-        visitor.state = resumeState ?? 'exploring'
-        visitor.targetId = resumeTargetId
-        visitor.route = route
-        visitor.thought = 'Nach der Busfahrt gehe ich den Rest des Weges zu Fuß.'
-      } else {
-        visitor.state = resumeState ?? 'exploring'
-        visitor.targetId = resumeTargetId
-        visitor.route = []
-      }
-    })
-    vehicle.passengerIds = vehicle.passengerIds.filter(
-      (visitorId) => !disembarkingIds.has(visitorId),
-    )
-    disembarkingIds.forEach((visitorId) => {
-      const visitor = this.getVisitor(visitorId)
-      if (!visitor || visitor.route.length > 0) return
-      this.decideNextAction(visitor)
-    })
-    const radius = SIMULATION_CONFIG.logistics.busBoardingRadiusTiles
-    const waiting = collectEligibleBusWaiters(
-      busWaitersByCell,
-      line.id,
-      stop,
-      radius,
-      roadCellKey,
-    )
-    const freeSeats = Math.max(
-      0,
-      SIMULATION_CONFIG.logistics.busCapacity - vehicle.passengerIds.length,
-    )
-    const boardsThisTick = Math.min(
-      freeSeats,
-      SIMULATION_CONFIG.logistics.busBoardsPerTick,
-      waiting.length,
-    )
-    for (let index = 0; index < boardsThisTick; index += 1) {
-      const visitor = waiting[index]!
-      visitor.state = 'bus-riding'
-      visitor.route = []
-      if (!vehicle.passengerIds.includes(visitor.id)) {
-        vehicle.passengerIds.push(visitor.id)
-      }
-    }
-    const leftover = waiting.length - boardsThisTick
-    const remainingSeats = freeSeats - boardsThisTick
-    vehicle.waitMinutes += minutes
-    if (vehicle.waitMinutes < SIMULATION_CONFIG.logistics.busStopDwellMinutes) {
-      return
-    }
-    if (remainingSeats > 0 && leftover > 0) {
-      return
-    }
-    if (remainingSeats === 0 && leftover > 0) {
-      waiting.slice(boardsThisTick).forEach((visitor) => {
-        this.recordComplaint(visitor, 'bus-full')
-        visitor.emotion = 'angry'
-      })
-    }
-    const nextIndex = (vehicle.nextStopIndex + 1) % line.stopIds.length
-    this.routeBusToStop(vehicle, line, nextIndex)
-  }
-
-  private routeBusToStop(
-    vehicle: RoadVehicle,
-    line: { stopIds: string[] },
-    stopIndex: number,
-  ): boolean {
-    const stop = this.state.logistics.busStops.find(
-      (candidate) => candidate.id === line.stopIds[stopIndex],
-    )
-    if (!stop || !vehicle.cell) return false
-    const route = this.routePreferringOpenLights({
-      roadCells: this.state.logistics.roadCells,
-      graph: this.getRoadGraph(),
-      start: vehicle.cell,
-      target: stop.roadCell,
-      initialDirection: this.getVehicleDirection(vehicle),
-    })
-    if (!route) return false
-    vehicle.nextStopIndex = stopIndex
-    vehicle.target = { kind: 'busStop', stopId: stop.id }
-    vehicle.route = route.map(toRoadPosition)
-    vehicle.state = route.length > 0 ? 'driving' : 'at-stop'
-    vehicle.waitMinutes = 0
-    return true
-  }
+  private releaseVisitorCarParking(vehicle: RoadVehicle): void { this.roadVehicleSimulation.releaseVisitorCarParking(vehicle) }
+  private findRouteTowardParking(vehicle: RoadVehicle, blockedCells?: ReadonlySet<string>) { return this.roadVehicleSimulation.findRouteTowardParking(vehicle, blockedCells) }
+  private findVisitorCarCirculation(vehicle: RoadVehicle, blockedCells?: ReadonlySet<string>) { return this.roadVehicleSimulation.findVisitorCarCirculation(vehicle, blockedCells) }
+  private applyVisitorCarSearchRoute(vehicle: RoadVehicle, plan: { route: RoadPosition[]; target: NonNullable<RoadVehicle['target']> }): void { this.roadVehicleSimulation.applyVisitorCarSearchRoute(vehicle, plan) }
+  private routePreferringOpenLights(options: FindRoadRouteOptions): RoadCell[] | null { return this.roadVehicleSimulation.routePreferringOpenLights(options) }
+  private getVehicleDirection(vehicle: RoadVehicle): Direction { return this.roadVehicleSimulation.getVehicleDirection(vehicle) }
+  private claimedTentCellKeys(): Set<string> { return this.roadVehicleSimulation.claimedTentCellKeys() }
+  assignVisitorCarParking(vehicle: RoadVehicle, minutes: number, removedVisitors: Set<string>, removedGroups: Set<string>, removedVehicles: Set<string>, canSearch: boolean): void { this.roadVehicleSimulation.assignVisitorCarParking(vehicle, minutes, removedVisitors, removedGroups, removedVehicles, canSearch) }
+  nudgeVehicleAlongRoad(vehicle: RoadVehicle, blockedCells?: ReadonlySet<string>): boolean { return this.roadVehicleSimulation.nudgeVehicleAlongRoad(vehicle, blockedCells) }
+  reverseQueueTail(vehicle: RoadVehicle, occupied: ReadonlyMap<string, string>, blockedCells: ReadonlySet<string>): boolean { return this.roadVehicleSimulation.reverseQueueTail(vehicle, occupied, blockedCells) }
+  dispatchGarbageTruck(vehicle: RoadVehicle): void { this.roadVehicleSimulation.dispatchGarbageTruck(vehicle) }
+  finishGarbageTruckLeg(vehicle: RoadVehicle): void { this.roadVehicleSimulation.finishGarbageTruckLeg(vehicle) }
+  findSweeperRoute(vehicle: RoadVehicle, goals: readonly Cell[]): RoadPosition[] | null { return this.roadVehicleSimulation.findSweeperRoute(vehicle, goals) }
+  getSweeperDirtAccesses(zones?: string[]): Array<{ dirt: { x: number; z: number }; path: Cell }> { return this.roadVehicleSimulation.getSweeperDirtAccesses(zones) }
+  sweepAround(vehicle: RoadVehicle): void { this.roadVehicleSimulation.sweepAround(vehicle) }
+  findReachableRoadExit(start: RoadPosition, initialDirection: Direction, blockedCells?: ReadonlySet<string>, allowUTurn = false): { position: RoadPosition; route: RoadCell[] } | null { return this.roadVehicleSimulation.findReachableRoadExit(start, initialDirection, blockedCells, allowUTurn) }
+  claimAdjacentFreeParking(vehicle: RoadVehicle): boolean { return this.roadVehicleSimulation.claimAdjacentFreeParking(vehicle) }
+  private searchReachableRoadExit(start: RoadPosition, initialDirection: Direction, blockedCells?: ReadonlySet<string>, allowUTurn = false): { position: RoadPosition; route: RoadCell[] } | null { return this.roadVehicleSimulation.searchReachableRoadExit(start, initialDirection, blockedCells, allowUTurn) }
 
   private getAdjacentRoadPositions(position: RoadPosition): RoadPosition[] {
     return [
@@ -9820,7 +5113,7 @@ export class GameState {
     })
     vehicle.passengerIds = remainingPassengers
     toActivate.forEach((visitor) => {
-      this.decideNextAction(visitor)
+      this.visitorBehavior.decideNextAction(visitor)
       this.keepDisembarkRouteOnFoot(visitor)
     })
   }
@@ -9857,19 +5150,19 @@ export class GameState {
   }
 
   private snapToPedestrianNavCell(cell: Cell): Cell {
-    if (this.pedestrianNav.has(this.packCell(cell))) return { ...cell }
+    if (this.pedestrianNavigation.hasNode(cell)) return { ...cell }
     const path =
       this.getPathAt(cell.x, cell.z, cell.elevation) ?? this.getPathAt(cell.x, cell.z)
     if (path) {
       const snapped = { x: path.x, z: path.z, elevation: path.elevation }
-      if (this.pedestrianNav.has(this.packCell(snapped))) return snapped
+      if (this.pedestrianNavigation.hasNode(snapped)) return snapped
     }
     const ground = {
       x: cell.x,
       z: cell.z,
       elevation: this.getTerrainHeight(cell.x, cell.z),
     }
-    if (this.pedestrianNav.has(this.packCell(ground))) return ground
+    if (this.pedestrianNavigation.hasNode(ground)) return ground
     return { ...cell }
   }
 
@@ -9886,14 +5179,14 @@ export class GameState {
       visitor.route = []
     }
     if (visitor.route.length > 0) return
-    visitor.route = this.pickSeededWalk(
+    visitor.route = this.visitorBehavior.pickSeededWalk(
       {
         x: visitor.cellX,
         z: visitor.cellZ,
         elevation: visitor.cellElevation,
       },
       SIMULATION_CONFIG.pathfinding.wanderMinSteps,
-      this.visitorDecisionRng(visitor),
+      this.visitorBehavior.visitorDecisionRng(visitor),
       { allowFestival: true },
     )
   }
@@ -9957,7 +5250,7 @@ export class GameState {
           100,
           visitor.needs.fun + SIMULATION_CONFIG.fireworks.funGain,
         )
-        this.giveWaste(visitor, 1)
+        this.visitorBehavior.giveWaste(visitor, 1)
       }
       this.state.fireworkEffects.push(effect)
       if (startsFire) {
@@ -10353,375 +5646,12 @@ export class GameState {
     if (visitor.campingPhase !== 'packing') visitor.campingPhase = 'none'
   }
 
-  private updateCrowdingAndMotivation(minutes: number): void {
-    const config = SIMULATION_CONFIG.crowding
-    const danceFloorKeys = new Set<string>()
-    for (const cell of this.state.stageForecourtCells) {
-      danceFloorKeys.add(`${cell.x}:${cell.z}:${cell.elevation}`)
-    }
-    const seated = collectSeatedPassengerIds(this.state.logistics.roadVehicles)
-    const result = this.crowding.calculate(
-      this.state.visitors.filter(
-        (visitor) => !this.isVisitorSeatedInVehicle(visitor, seated),
-      ),
-      danceFloorKeys,
-    )
-    this.state.crowding = result.snapshot
-    this.crowdingCosts = new Map(
-      result.snapshot.cells.map((cell) => [
-        this.cellKey(cell.x, cell.z, cell.elevation),
-        cell.value,
-      ]),
-    )
-    this.crowdingCostPacked.clear()
-    result.snapshot.cells.forEach((cell) => {
-      this.crowdingCostPacked.set(this.packCell(cell), cell.value)
-    })
-    const vomitCells = new Set(
-      this.state.incidents
-        .filter((incident) => incident.kind === 'vomit')
-        .map((incident) =>
-          this.cellKey(incident.x, incident.z, incident.elevation),
-        ),
-    )
-    const peopleByCell = new Map<string, number>()
-    const panicByCell = new Map<string, number>()
-    for (const visitor of this.state.visitors) {
-      if (this.isVisitorSeatedInVehicle(visitor, seated)) continue
-      const key = this.cellKey(visitor.cellX, visitor.cellZ, visitor.cellElevation)
-      peopleByCell.set(key, (peopleByCell.get(key) ?? 0) + 1)
-      if (visitor.isPanicking || visitor.state === 'panicking') {
-        panicByCell.set(key, (panicByCell.get(key) ?? 0) + 1)
-      }
-    }
-    this.state.visitors.forEach((visitor) => {
-      if (this.isVisitorSeatedInVehicle(visitor, seated)) {
-        visitor.crowding = 0
-        return
-      }
-      visitor.crowding = result.visitorValues.get(visitor.id) ?? 0
-      if (visitor.state === 'medical' || visitor.state === 'medical-transport') {
-        visitor.motivation = Math.min(
-          100,
-          visitor.motivation +
-            minutes * config.medicalMotivationRecoveryPerMinute,
-        )
-        return
-      }
-      this.updateCrowdPanicStress(visitor, minutes, this.countOnTouchingCells(visitor, peopleByCell))
-      const crowdingPressure = Math.max(
-        0,
-        (visitor.crowding - config.pressureStart) / config.pressureRange,
-      )
-      const hungerPressure = Math.max(
-        0,
-        (config.lowNeedThreshold - visitor.needs.hunger) /
-          config.lowNeedThreshold,
-      )
-      const toiletPressure = Math.max(
-        0,
-        (config.lowNeedThreshold - visitor.needs.toilet) /
-          config.lowNeedThreshold,
-      )
-      const energyPressure =
-        visitor.campsite || visitor.state === 'sleeping'
-          ? 0
-          : Math.max(
-              0,
-              (config.lowEnergyThreshold - visitor.needs.energy) /
-                config.lowEnergyThreshold,
-            )
-      const litterPressure = vomitCells.has(
-        this.cellKey(
-          visitor.cellX,
-          visitor.cellZ,
-          visitor.cellElevation,
-        ),
-      )
-        ? config.vomitPressure
-        : 0
-      const atmosphere = SIMULATION_CONFIG.atmosphere
-      const beautyDeficit =
-        Math.max(
-          0,
-          atmosphere.preferenceDeficitThreshold -
-            visitor.localAttractiveness,
-        ) / atmosphere.preferenceDeficitThreshold
-      const partyDeficit =
-        Math.max(
-          0,
-          atmosphere.preferenceDeficitThreshold - visitor.localPartyMood,
-        ) / atmosphere.preferenceDeficitThreshold
-      const atmospherePressure =
-        (beautyDeficit * visitor.beautyPreference +
-          partyDeficit * visitor.partyPreference) *
-        atmosphere.preferenceMotivationLossPerMinute /
-        config.motivationLossPerMinute
-      const forecourtOvercrowding =
-        this.getStageForecourtCellAt(visitor.cellX, visitor.cellZ) &&
-        visitor.crowding >= atmosphere.danceFloorOvercrowdingStart
-          ? atmosphere.overcrowdingMotivationLossPerMinute /
-            config.motivationLossPerMinute
-          : 0
-      if (beautyDeficit + partyDeficit > 0.7) {
-        visitor.needs.fun = Math.max(
-          0,
-          visitor.needs.fun -
-            minutes * atmosphere.preferenceFunLossPerMinute,
-        )
-      }
-      const badConditions = Math.min(
-        config.maximumBadConditions,
-        crowdingPressure +
-          hungerPressure * config.hungerPressureWeight +
-          toiletPressure * config.toiletPressureWeight +
-          energyPressure * config.energyPressureWeight +
-          litterPressure +
-          atmospherePressure +
-          forecourtOvercrowding,
-      )
-      const needsFulfilled =
-        visitor.needs.hunger >= config.fulfilledNeedThreshold &&
-        visitor.needs.toilet >= config.fulfilledNeedThreshold &&
-        visitor.needs.fun >= config.fulfilledNeedThreshold &&
-        visitor.needs.energy >= config.fulfilledEnergyThreshold
-      const recoveryPerMinute =
-        (badConditions === 0 ? config.motivationRecoveryPerMinute : 0) +
-        (needsFulfilled ? config.fulfilledNeedsRecoveryPerMinute : 0)
-      visitor.motivation = Math.min(
-        100,
-        Math.max(
-          0,
-          visitor.motivation +
-            minutes *
-              (recoveryPerMinute -
-                config.motivationLossPerMinute * badConditions),
-        ),
-      )
-      if (
-        visitor.motivation === 0 &&
-        !visitor.isPanicking &&
-        visitor.state !== 'riding' &&
-        visitor.state !== 'sleeping' &&
-        visitor.state !== 'leaving' &&
-        visitor.state !== 'vehicle-arrival' &&
-        visitor.state !== 'bus-riding' &&
-        visitor.campingPhase !== 'packing'
-      ) {
-        visitor.emotion = 'sad'
-        visitor.emotionMinutes = 60
-        visitor.thought = 'Unter diesen Bedingungen habe ich keine Lust mehr.'
-        if (visitor.crowding >= 70) {
-          this.recordComplaint(visitor, 'overcrowding')
-        }
-        if (litterPressure > 0 || visitor.localAttractiveness < -20) {
-          this.recordComplaint(visitor, 'dirty-grounds')
-        }
-        this.beginVisitorDeparture(visitor)
-      }
-    })
-    this.resolveCrowdPanic(minutes, peopleByCell, panicByCell)
-  }
-
-  private canEnterCrowdPanic(visitor: Visitor): boolean {
-    return (
-      !visitor.isPanicking &&
-      visitor.state !== 'riding' &&
-      visitor.state !== 'sleeping' &&
-      visitor.state !== 'leaving' &&
-      visitor.state !== 'vehicle-arrival' &&
-      visitor.state !== 'bus-riding' &&
-      visitor.state !== 'medical' &&
-      visitor.state !== 'medical-transport' &&
-      visitor.state !== 'injured' &&
-      visitor.campingPhase !== 'packing' &&
-      visitor.campingPhase !== 'resting'
-    )
-  }
-
-  private updateCrowdPanicStress(visitor: Visitor, minutes: number, nearbyPeople: number): void {
-    const crowd = SIMULATION_CONFIG.crowding
-    if (visitor.crowding >= crowd.denseThreshold) {
-      const intensity = Math.min(
-        1,
-        (visitor.crowding - crowd.denseThreshold) / Math.max(1, 100 - crowd.denseThreshold),
-      )
-      visitor.crowdStress = Math.min(
-        100,
-        visitor.crowdStress +
-          minutes * crowd.stressGainPerMinute * (0.4 + intensity * 0.6) *
-            (1 + Math.min(crowd.panicNearbyCap, nearbyPeople) / 80),
-      )
-      return
-    }
-    if (visitor.crowding <= crowd.calmThreshold) {
-      visitor.crowdStress = Math.max(0, visitor.crowdStress - minutes * crowd.stressDecayPerMinute)
-    }
-  }
-
-  private countOnTouchingCells(
-    visitor: { cellX: number; cellZ: number; cellElevation: number },
-    counts: Map<string, number>,
-  ): number {
-    const x = visitor.cellX
-    const z = visitor.cellZ
-    const elevation = visitor.cellElevation
-    return (
-      (counts.get(this.cellKey(x, z, elevation)) ?? 0) +
-      (counts.get(this.cellKey(x + 1, z, elevation)) ?? 0) +
-      (counts.get(this.cellKey(x - 1, z, elevation)) ?? 0) +
-      (counts.get(this.cellKey(x, z + 1, elevation)) ?? 0) +
-      (counts.get(this.cellKey(x, z - 1, elevation)) ?? 0)
-    )
-  }
-
-  private markPanicCell(visitor: Visitor, panicByCell: Map<string, number>): void {
-    const key = this.cellKey(visitor.cellX, visitor.cellZ, visitor.cellElevation)
-    panicByCell.set(key, (panicByCell.get(key) ?? 0) + 1)
-  }
-
-  private resolveCrowdPanic(
-    minutes: number,
-    peopleByCell: Map<string, number>,
-    panicByCell: Map<string, number>,
-  ): void {
-    const crowd = SIMULATION_CONFIG.crowding
-    const crowdingAt = (x: number, z: number, elevation: number) =>
-      this.crowdingCosts.get(this.cellKey(x, z, elevation)) ?? 0
-    const peopleAt = (x: number, z: number, elevation: number) =>
-      peopleByCell.get(this.cellKey(x, z, elevation)) ?? 0
-    this.state.visitors.forEach((visitor) => {
-      if (!this.canEnterCrowdPanic(visitor) || visitor.crowding < crowd.denseThreshold) return
-      const denseCells = denseClusterSize(visitor, crowdingAt, crowd.denseThreshold)
-      const clusterPeople = neighborhoodPeople(visitor, peopleAt)
-      const nearby = this.countOnTouchingCells(visitor, peopleByCell)
-      const chance =
-        spontaneousPanicChance(visitor.crowding, visitor.crowdStress, nearby, denseCells, clusterPeople) *
-        minutes
-      if (this.rng.next() < chance) {
-        this.beginCrowdPanic(visitor)
-        this.markPanicCell(visitor, panicByCell)
-      }
-    })
-    this.state.visitors.forEach((visitor) => {
-      if (!this.canEnterCrowdPanic(visitor) || visitor.crowding < crowd.denseThreshold) return
-      const denseCells = denseClusterSize(visitor, crowdingAt, crowd.denseThreshold)
-      const nearbyPanic = this.countOnTouchingCells(visitor, panicByCell)
-      if (this.rng.next() < panicSpreadChance(visitor.crowding, nearbyPanic, denseCells) * minutes) {
-        this.beginCrowdPanic(visitor)
-        this.markPanicCell(visitor, panicByCell)
-      }
-    })
-    this.state.visitors.forEach((visitor) => {
-      if (!visitor.isPanicking) return
-      const alcohol = visitor.alcoholLevel
-      visitor.needs.hunger = Math.max(0, visitor.needs.hunger - minutes * crowd.panicNeedLossPerMinute)
-      visitor.needs.toilet = Math.max(0, visitor.needs.toilet - minutes * crowd.panicNeedLossPerMinute)
-      visitor.needs.fun = Math.max(0, visitor.needs.fun - minutes * crowd.panicNeedLossPerMinute)
-      visitor.needs.energy = Math.max(0, visitor.needs.energy - minutes * crowd.panicNeedLossPerMinute)
-      visitor.alcoholLevel = alcohol
-      visitor.motivation = Math.max(0, visitor.motivation - minutes * crowd.panicMotivationLossPerMinute)
-      visitor.emotion = 'angry'
-      visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 8)
-      if (visitor.crowding <= crowd.calmThreshold) {
-        visitor.panicRecoverMinutes += minutes
-        if (visitor.panicRecoverMinutes >= crowd.panicRecoverMinutes) {
-          this.endCrowdPanic(visitor)
-        }
-        return
-      }
-      visitor.panicRecoverMinutes = 0
-      this.ensurePanicFleeRoute(visitor)
-      if (visitor.motivation === 0 && visitor.crowding >= crowd.denseThreshold) {
-        this.recordComplaint(visitor, 'overcrowding')
-        this.beginVisitorDeparture(visitor)
-      }
-    })
-  }
-
-  private beginCrowdPanic(visitor: Visitor): void {
-    this.clearVisitorActivity(visitor)
-    this.removeVisitorFromCoasterQueues(visitor.id)
-    visitor.isPanicking = true
-    visitor.panicRecoverMinutes = 0
-    visitor.crowdStress = Math.max(visitor.crowdStress, 70)
-    visitor.isConversing = false
-    visitor.state = 'panicking'
-    visitor.targetId = null
-    visitor.concertId = null
-    visitor.emotion = 'angry'
-    visitor.emotionMinutes = 20
-    visitor.thought = 'Massenpanik! Ich muss hier raus!'
-    this.ensurePanicFleeRoute(visitor)
-  }
-
-  private endCrowdPanic(visitor: Visitor): void {
-    visitor.isPanicking = false
-    visitor.panicRecoverMinutes = 0
-    visitor.crowdStress = Math.min(visitor.crowdStress, 24)
-    visitor.motivation = Math.min(100, Math.max(visitor.motivation, 32))
-    visitor.state = 'exploring'
-    visitor.targetId = null
-    visitor.route = []
-    visitor.emotion = 'happy'
-    visitor.emotionMinutes = 10
-    visitor.thought = 'Das Gedränge lässt nach. Kurz durchatmen, dann geht es weiter.'
-  }
-
   private ensurePanicFleeRoute(visitor: Visitor): void {
-    if (this.isAtParkExit(visitor)) {
-      visitor.route = []
-      return
-    }
-    if (visitor.route.length > 0) return
-    const current = this.crowdingCosts.get(
-      this.cellKey(visitor.cellX, visitor.cellZ, visitor.cellElevation),
-    ) ?? visitor.crowding
-    const quieter = [...this.getPedestrianNeighbors(
-      {
-        x: visitor.cellX,
-        z: visitor.cellZ,
-        elevation: visitor.cellElevation,
-      },
-      {
-        allowQueue: true,
-        allowCamping: true,
-        allowMedical: true,
-        allowFestival: true,
-        allowGrass: true,
-        ignoreDirectionalRestrictions: true,
-      },
-    )]
-      .map((cell) => ({
-        ...cell,
-        path: this.getPathAt(cell.x, cell.z, cell.elevation),
-        crowding: this.crowdingCosts.get(
-          this.cellKey(cell.x, cell.z, cell.elevation),
-        ) ?? 0,
-      }))
-      .filter((cell) => cell.crowding < current - 2)
-      .sort(
-        (left, right) =>
-          left.crowding - right.crowding ||
-          Number(Boolean(left.path)) - Number(Boolean(right.path)),
-      )
-    if (quieter[0]) {
-      visitor.route = [{
-        x: quieter[0].x,
-        z: quieter[0].z,
-        elevation: quieter[0].elevation,
-      }]
-      return
-    }
-    visitor.route =
-      this.findPath(
-        { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation },
-        [this.getEntrance()],
-        true,
-        true,
-        true,
-        true,
-      ) ?? []
+    this.visitorCrowding.ensurePanicFleeRoute(visitor)
+  }
+
+  updateCrowdingAndMotivation(minutes: number): void {
+    this.visitorCrowding.update(minutes)
   }
 
   save(): ActionResult {
@@ -10840,331 +5770,34 @@ export class GameState {
 
   static fromJSON(raw: string): GameState | null {
     try {
-      const data = JSON.parse(raw) as Partial<GameSnapshot> & { version?: number }
-      if (!Array.isArray(data.buildings)) return null
-      const migrated: GameSnapshot = {
-        ...createBlankSnapshot(),
-        ...data,
-        version: 30,
-        waterLevel: normalizeWaterLevel(data.waterLevel),
-        terrain: normalizeTerrain(data.terrain),
-        buildings: data.buildings.map(b => b.stageDesign ? { ...b, stageDesign: migrateStageDesign(b.stageDesign) } : b),
-        campingCells: Array.isArray(data.campingCells) ? data.campingCells : [],
-        campInstallations: Array.isArray(data.campInstallations)
-          ? data.campInstallations
-          : [],
-        staff: Array.isArray(data.staff) ? data.staff : [],
-        medicalCells: Array.isArray(data.medicalCells) ? data.medicalCells : [],
-        wasteDumpCells: Array.isArray(data.wasteDumpCells)
-          ? data.wasteDumpCells
-              .map(normalizeWasteDumpCell)
-              .filter((cell): cell is WasteDumpCell => cell !== null)
-          : [],
-        incidents: Array.isArray(data.incidents) ? data.incidents : [],
-        logistics: normalizeLogisticsSnapshot(data.logistics),
-        scenario: normalizeScenarioSettings(data.scenario),
-        finance: data.finance && Array.isArray(data.finance.periods)
-          ? {
-              loan: Math.max(0, Number(data.finance.loan) || 0),
-              periods: data.finance.periods,
-              today: data.finance.today ?? {},
-              previousDay: data.finance.previousDay ?? {},
-            }
-          : createFinanceState(),
-        scenarioProgress: data.scenarioProgress && Array.isArray(data.scenarioProgress.status)
-          ? data.scenarioProgress
-          : createScenarioProgress(normalizeScenarioSettings(data.scenario).goals),
-        stageForecourtCells: Array.isArray(data.stageForecourtCells)
-          ? data.stageForecourtCells
-          : [],
-        backstageCells: Array.isArray(data.backstageCells)
-          ? data.backstageCells
-              .map(normalizeBackstageCell)
-              .filter((cell): cell is BackstageCell => cell !== null)
-          : [],
-        bandActors: Array.isArray(data.bandActors)
-          ? data.bandActors
-              .map(normalizeBandActor)
-              .filter((actor): actor is BandActor => actor !== null)
-          : [],
-        bandSupply: emptyBandSupplySnapshot(),
-        visitors: Array.isArray(data.visitors) ? data.visitors : [],
-        coasters: Array.isArray(data.coasters) ? data.coasters : [],
-        power: normalizePower(data.power),
-        campingTicketPrice:
-          data.campingTicketPrice ??
-          data.entryPrice ??
-          SIMULATION_CONFIG.economy.defaultCampingTicketPrice,
-      }
-      if (migrated.festival.stageTemplates) migrated.festival.stageTemplates = migrated.festival.stageTemplates.map(migrateStageDesign)
+      const migrated = migrateSnapshot(JSON.parse(raw))
+      if (!migrated) return null
       return new GameState(migrated)
     } catch {
       return null
     }
   }
 
-  private trySpawnVisitor(forcedTicketType?: 'day' | 'camping'): void {
-    if (!this.state.parkOpen) return
-    const mode =
-      this.rng.next() < this.getScenario().carArrivalShare
-        ? 'car'
-        : 'pedestrian'
-    const roadEntry =
-      mode === 'car' ? this.findAvailableRoadEntry() : this.getRoadEntry()
-    if (mode === 'car' && !roadEntry) return
-    const requestedSize =
-      mode === 'car' ? this.sampleArrivalGroupSize() : 1
-    const groupId = this.nextId('arrival')
-    const members: Visitor[] = []
-    for (let index = 0; index < requestedSize; index += 1) {
-      const visitor = this.spawnVisitorMember(
-        forcedTicketType,
-        groupId,
-        mode,
-        mode === 'car',
-      )
-      if (visitor) members.push(visitor)
-    }
-    if (members.length === 0) return
-    const group: ArrivalGroup = {
-      id: groupId,
-      memberIds: members.map((visitor) => visitor.id),
-      vehicleId: null,
-      mode,
-      state: mode === 'car' ? 'approaching' : 'arrived',
-      arrivedMinute: this.state.day * 1440 + this.state.minute,
-      parkingWaitMinutes: 0,
-      entryFeesPaid: members.every((visitor) => visitor.entryFeePaid > 0),
-    }
-    this.state.logistics.arrivalGroups.push(group)
-    if (mode === 'car') {
-      const vehicleEntry = roadEntry ?? this.getRoadEntry()
-      const vehicle: RoadVehicle = {
-        id: this.nextId('car'),
-        kind: 'visitorCar',
-        position: { ...vehicleEntry },
-        cell: { ...vehicleEntry },
-        route: [],
-        state: 'waiting',
-        speed: 0,
-        passengerIds: [...group.memberIds],
-        groupId,
-        parkingCell: null,
-        target: null,
-        facing: 0,
-        waitMinutes: 0,
-        resumeState: null,
-        lineId: null,
-        nextStopIndex: 0,
-        cargo: 0,
-      }
-      group.vehicleId = vehicle.id
-      this.state.logistics.roadVehicles.push(vehicle)
-      this.dispatchIncomingVisitorCar(vehicle)
-      members.forEach((visitor) => {
-        visitor.thought = vehicle.parkingCell
-          ? 'Wir suchen mit dem Auto einen Parkplatz.'
-          : 'Kein freier Parkplatz – wir fahren erstmal weiter.'
-      })
-    }
+  trySpawnVisitor(forcedTicketType?: 'day' | 'camping'): void {
+    this.visitorSpawning.trySpawn(forcedTicketType)
   }
 
-  private spawnVisitorMember(
+  spawnVisitorMember(
     forcedTicketType: 'day' | 'camping' | undefined,
     groupId: string,
     arrivalMode: 'car' | 'pedestrian',
     deferArrival: boolean,
   ): Visitor | null {
-    if (!this.state.parkOpen) return null
-    let inventory = createFestivalInventory(this.rng)
-    if (forcedTicketType === 'camping' && getItemQuantity(inventory, 'tent') === 0) {
-      addItem(inventory, 'tent')
-    } else if (forcedTicketType === 'day') {
-      inventory = inventory.filter(
-        (item) =>
-          item.kind !== 'tent' &&
-          item.kind !== 'chairs' &&
-          item.kind !== 'pavilion' &&
-          item.kind !== 'musicBox',
-      )
-    }
-    const ticketType =
-      forcedTicketType ??
-      (getItemQuantity(inventory, 'tent') > 0 ? 'camping' : 'day')
-    const tickets = this.state.festival.enabled ? this.state.festival.tickets : undefined
-    if (tickets && (ticketType === 'camping' ? tickets.usedCamping >= tickets.camping : (tickets.usedDay[this.state.day] ?? 0) >= tickets.day)) return null
-    if (ticketType === 'camping') {
-      const admittedCampers = this.state.visitors.filter(
-        (visitor) => visitor.ticketType === 'camping',
-      ).length
-      if (admittedCampers >= this.getBookableCampingCapacity()) return null
-    }
-    if (
-      ticketType === 'day' &&
-      (getFestivalCycleStatus(this.state.dayPlan, this.state.day).phase !==
-        'festival' ||
-        !isDayVisitorAdmissionOpen(this.state.dayPlan, this.state.minute))
-    ) {
-      return null
-    }
-
-    const id = this.nextId('visitor')
-    const tileOffsetX =
-      SIMULATION_CONFIG.visitors.tileOffsetMinimum +
-      this.rng.next() * SIMULATION_CONFIG.visitors.tileOffsetRandomRange
-    const tileOffsetZ =
-      SIMULATION_CONFIG.visitors.tileOffsetMinimum +
-      this.rng.next() * SIMULATION_CONFIG.visitors.tileOffsetRandomRange
-    const initialNeeds = SIMULATION_CONFIG.visitors.initialNeeds
-    const visitor: Visitor = {
-      id,
-      name: `${visitorGivenName(id, this.state.day)} ${this.idCounter}`,
-      x: this.getEntrance().x + tileOffsetX,
-      y: this.getEntrance().elevation,
-      z: this.getEntrance().z + tileOffsetZ,
-      cellX: this.getEntrance().x,
-      cellZ: this.getEntrance().z,
-      cellElevation: this.getEntrance().elevation,
-      color: Math.floor(this.rng.next() * 0xffffff),
-      state: 'entering',
-      thought: 'Ich bin gespannt auf den Park!',
-      needs: {
-        hunger: initialNeeds.hungerMinimum + this.rng.next() * initialNeeds.hungerRandomRange,
-        toilet: initialNeeds.toiletMinimum + this.rng.next() * initialNeeds.toiletRandomRange,
-        fun: initialNeeds.funMinimum + this.rng.next() * initialNeeds.funRandomRange,
-        energy: initialNeeds.energyMinimum + this.rng.next() * initialNeeds.energyRandomRange,
-      },
-      route: [],
-      targetId: null,
-      interactionRemaining: 0,
-      walkSpeed:
-        SIMULATION_CONFIG.visitors.walkSpeedMinimum +
-        this.rng.next() * SIMULATION_CONFIG.visitors.walkSpeedRandomRange,
-      movementBoostMinutes: 0,
-      avoidedCoasterId: null,
-      avoidanceMinutes: 0,
-      facing: 0,
-      emotion: 'neutral',
-      emotionMinutes: 0,
-      budget: SIMULATION_CONFIG.visitors.budget,
-      alcoholLevel: 0,
-      alcoholDisposition:
-        this.rng.next() < this.getScenario().aggressiveShare
-          ? 'aggressive'
-          : 'calm',
-      alcoholDesire:
-        SIMULATION_CONFIG.visitors.alcoholDesireMinimum +
-        this.rng.next() * SIMULATION_CONFIG.visitors.alcoholDesireRandomRange,
-      campsite: null,
-      campingPhase: 'none',
-      hasHandcart: ticketType === 'camping',
-      inventory,
-      motivation: 100,
-      crowding: 0,
-      crowdStress: 0,
-      isPanicking: false,
-      panicRecoverMinutes: 0,
-      tileOffsetX,
-      tileOffsetZ,
-      campActivityTarget: null,
-      campActivity: 'standing',
-      campActivityKind: null,
-      campActivitySlot: 0,
-      campActivityCapacity: 1,
-      nausea: 0,
-      nauseaCooldown: 0,
-      medicalCell: null,
-      medicalSlot: null,
-      securityGateId: null,
-      securityResumeState: null,
-      beautyPreference: sampleBiasedPreference(
-        this.getScenario().beautyAffinity,
-        this.rng,
-      ),
-      partyPreference: sampleBiasedPreference(
-        this.getScenario().partyAffinity,
-        this.rng,
-      ),
-      localAttractiveness: 0,
-      localPartyMood: 0,
-      activityTarget: null,
-      activitySlot: 0,
-      activityCapacity: 1,
-      isDancing: false,
-      ...this.createPreferredSleepRhythm(),
-      ticketType,
-      consumptionCooldown: 0,
-      isConversing: false,
-      campingWaitMinutes: 0,
-      campingWaitRetryMinutes: 0,
-      entryFeePaid: 0,
-      complaintsFiled: [],
-      arrivalGroupId: groupId,
+    return this.visitorSpawning.spawnMember(
+      forcedTicketType,
+      groupId,
       arrivalMode,
-      injuryVehicleId: null,
-      rescueVehicleId: null,
-      busWaitMinutes: 0,
-      busLineId: null,
-      busDestination: null,
-      busDestinationStopId: null,
-      busResumeState: null,
-      busResumeTargetId: null,
-      walkingToCampDistance: 0,
-      pendingWaste: 0,
-      streakingMinutes: 0,
-      streakingCooldownMinutes: 0,
-      toplessMinutes: 0,
-      bungeeNude: false,
-      ownedMascot: false,
-      heldMascot: false,
-      pathSeed: hashStringSeed(id),
-      wanderNonce: 0,
-    }
-    if (this.state.festival.enabled) assignAudience(visitor, this.state.festival)
-    const admissionPrice = this.ticketPriceFor(ticketType)
-    const paidEntry = this.chargeVisitor(visitor, admissionPrice, {
-      x: (arrivalMode === 'car' ? this.getRoadEntry().x : this.getEntrance().x) + 0.5,
-      y: 0.85,
-      z: (arrivalMode === 'car' ? this.getRoadEntry().z : this.getEntrance().z) + 0.5,
-    }, ticketType === 'camping' ? 'camping' : 'tickets')
-    if (paidEntry) visitor.entryFeePaid = admissionPrice
-    this.state.visitors.push(visitor)
-    if (tickets) { if (ticketType === 'camping') tickets.usedCamping++; else tickets.usedDay[this.state.day] = (tickets.usedDay[this.state.day] ?? 0) + 1 }
-    if (this.state.festival.enabled) { this.state.festival.admissions++; this.state.festival.metrics.guests++ }
-    this.indexedVisitorCount = -1
-    this.state.guests = this.state.visitors.length
-    if (deferArrival) {
-      visitor.state = 'vehicle-arrival'
-      visitor.x = this.getRoadEntry().x + tileOffsetX
-      visitor.z = this.getRoadEntry().z + tileOffsetZ
-      visitor.cellX = this.getRoadEntry().x
-      visitor.cellZ = this.getRoadEntry().z
-      return visitor
-    }
-    if (getItemQuantity(visitor.inventory, 'tent') === 0) {
-      visitor.hasHandcart = false
-      this.queueVisitorDecision(visitor)
-    } else if (!this.camping.assignCampsite(visitor)) {
-      visitor.state = 'camp-waiting'
-      visitor.route = []
-      visitor.campingWaitMinutes = 0
-      visitor.campingWaitRetryMinutes =
-        SIMULATION_CONFIG.camping.unplacedRetryIntervalMinutes
-      visitor.emotion = 'sad'
-      visitor.thought =
-        'Alle Campingflächen wirken belegt. Ich warte auf einen freien Platz.'
-    }
-    return visitor
+      deferArrival,
+    )
   }
 
-  private sampleArrivalGroupSize(): number {
-    let roll = this.rng.next()
-    const weights = SIMULATION_CONFIG.logistics.groupSizeWeights
-    for (let index = 0; index < weights.length; index += 1) {
-      roll -= weights[index] ?? 0
-      if (roll <= 0) return index + 1
-    }
-    return 1
+  sampleArrivalGroupSize(): number {
+    return this.visitorSpawning.sampleArrivalGroupSize()
   }
 
   private listFreeRoadEntries(
@@ -11205,808 +5838,23 @@ export class GameState {
   }
 
   private queueVisitorDecision(visitor: Visitor): void {
-    // Camping arrivals belong to the camping state machine, not destination selection.
-    if (visitor.state === 'camping') return
-    this.visitorsAwaitingDecision.add(visitor.id)
+    this.visitorSimulation.queueDecision(visitor)
   }
 
   private runVisitorRouting(visitor: Visitor, kind: 'departure' | 'exit' | 'waste', action: () => void): boolean {
-    if (!this.processingSimulationStep || this.activeVisitorDecision === visitor.id) {
-      action()
-      return true
-    }
-    if (this.decisionBudget <= 0 || this.decidedThisTick.has(visitor.id) ||
-        this.pendingVisitorRouting.has(visitor.id)) {
-      const existing = this.pendingVisitorRouting.get(visitor.id)
-      if (!existing || kind === 'departure') this.pendingVisitorRouting.set(visitor.id, kind)
-      this.visitorsAwaitingDecision.add(visitor.id)
-      return false
-    }
-    this.decisionBudget--
-    this.decidedThisTick.add(visitor.id)
-    this.activeVisitorDecision = visitor.id
-    try { action() } finally { this.activeVisitorDecision = null }
-    return true
+    return this.visitorSimulation.runRouting(visitor, kind, action)
   }
 
   private flushVisitorDecisions(limit = 2): void {
-    const seated = collectSeatedPassengerIds(this.state.logistics.roadVehicles)
-    let decided = 0
-    while (decided < limit && this.visitorsAwaitingDecision.size > 0) {
-      const visitorId = this.visitorsAwaitingDecision.values().next().value
-      if (!visitorId) break
-      this.visitorsAwaitingDecision.delete(visitorId)
-      decided += 1
-      const visitor = this.getVisitor(visitorId)
-      const routing = this.pendingVisitorRouting.get(visitorId)
-      this.pendingVisitorRouting.delete(visitorId)
-      if (visitor && routing) {
-        if (routing === 'departure') this.beginVisitorDeparture(visitor)
-        else if (routing === 'exit') this.ensureExitRoute(visitor)
-        else this.tryDisposeWaste(visitor)
-        continue
-      }
-      if (
-        !visitor ||
-        visitor.state === 'camping' ||
-        visitor.state === 'vehicle-arrival' ||
-        visitor.state === 'bus-riding' ||
-        visitor.state === 'riding' ||
-        visitor.state === 'leaving' ||
-        this.isVisitorSeatedInVehicle(visitor, seated)
-      ) {
-        continue
-      }
-      if (visitor.route.length > 0 || visitor.targetId) continue
-      this.decideNextAction(visitor)
-    }
-  }
-
-  private updateVisitors(minutes: number): void {
-    // Rebuild once per pass, also repairing older saves with mass events.
-    this.concertToplessVisitorId = null
-    for (const visitor of this.state.visitors) {
-      if (visitor.toplessMinutes <= 0) continue
-      if (this.concertToplessVisitorId === null) this.concertToplessVisitorId = visitor.id
-      else visitor.toplessMinutes = 0
-    }
-    this.flushVisitorDecisions(SIMULATION_CONFIG.pathfinding.decisionsPerTick)
-    const leavingIds = new Set<string>()
-    const seatedPassengers = collectSeatedPassengerIds(
-      this.state.logistics.roadVehicles,
-    )
-
-    this.state.visitors.forEach((visitor) => {
-      if (this.isVisitorSeatedInVehicle(visitor, seatedPassengers)) return
-      visitor.alcoholLevel = Math.max(
-        0,
-        visitor.alcoholLevel -
-          minutes * SIMULATION_CONFIG.alcohol.decayPerMinute,
-      )
-      visitor.alcoholDesire = Math.min(
-        100,
-        visitor.alcoholDesire +
-          minutes * SIMULATION_CONFIG.alcohol.desireGainPerMinute,
-      )
-      if (
-        !this.state.parkOpen &&
-        visitor.state !== 'riding' &&
-        visitor.state !== 'vehicle-arrival' &&
-        visitor.state !== 'bus-riding'
-      ) {
-        if (visitor.state === 'leaving') {
-          this.ensureExitRoute(visitor)
-        } else if (
-          visitor.state !== 'camping' ||
-          visitor.campingPhase !== 'packing'
-        ) {
-          this.beginVisitorDeparture(visitor)
-        }
-      }
-      if (visitor.state === 'leaving') {
-        this.ensureExitRoute(visitor)
-      }
-      if (visitor.state === 'leaving' && this.tryBoardDepartureCar(visitor)) {
-        return
-      }
-      if (
-        (visitor.state === 'leaving' || visitor.isPanicking || visitor.state === 'panicking') &&
-        !(visitor.state === 'leaving' && ((visitor.campsite && visitor.campingPhase !== 'none') || visitor.pendingWaste > 0)) &&
-        this.isAtParkExit(visitor) &&
-        !this.getVisitorArrivalCar(visitor)
-      ) {
-        leavingIds.add(visitor.id)
-        return
-      }
-      if (visitor.isPanicking || visitor.state === 'panicking') {
-        if (visitor.state !== 'leaving') visitor.state = 'panicking'
-        if (visitor.route.length === 0) this.ensurePanicFleeRoute(visitor)
-      }
-      if (visitor.state === 'medical') {
-        const medical = SIMULATION_CONFIG.medical
-        visitor.alcoholLevel = Math.max(
-          0,
-          visitor.alcoholLevel - minutes * medical.alcoholDecayPerMinute,
-        )
-        visitor.nausea = Math.max(
-          0,
-          visitor.nausea - minutes * medical.nauseaRecoveryPerMinute,
-        )
-        visitor.needs.energy = Math.min(
-          100,
-          visitor.needs.energy + minutes * medical.energyRecoveryPerMinute,
-        )
-        visitor.motivation = Math.min(
-          100,
-          visitor.motivation + minutes * medical.motivationRecoveryPerMinute,
-        )
-        if (
-          visitor.alcoholLevel < medical.dischargeAlcoholBelow &&
-          visitor.needs.energy >= medical.dischargeEnergy
-        ) {
-          this.medical.releaseBed(this.state.medicalCells, visitor.id)
-          visitor.medicalCell = null
-          visitor.medicalSlot = null
-          visitor.thought = 'Mir geht es wieder besser.'
-          if (this.shouldReturnToArrivalCar(visitor)) {
-            visitor.state = 'leaving'
-            this.ensureExitRoute(visitor)
-          } else {
-            visitor.state = 'exploring'
-            this.decideNextAction(visitor)
-          }
-        }
-        return
-      }
-      if (visitor.state === 'medical-transport') return
-      if (visitor.state === 'sleeping') {
-        const camping = SIMULATION_CONFIG.camping
-        visitor.needs.energy = Math.min(
-          100,
-          visitor.needs.energy + minutes * camping.groundSleepEnergyPerMinute,
-        )
-        visitor.needs.hunger = Math.max(
-          0,
-          visitor.needs.hunger -
-            minutes * camping.sleepingHungerDecayPerMinute,
-        )
-        visitor.needs.toilet = Math.max(
-          0,
-          visitor.needs.toilet -
-            minutes * camping.sleepingToiletDecayPerMinute,
-        )
-        if (
-          visitor.alcoholLevel < camping.wakeAlcoholBelow &&
-          visitor.needs.energy >= camping.wakeEnergy
-        ) {
-          visitor.state = 'exploring'
-          visitor.emotion = 'sad'
-          visitor.emotionMinutes = 30
-          visitor.thought = 'Ich bin wieder wach. Mein Kopf brummt.'
-          this.decideNextAction(visitor)
-        }
-        return
-      }
-      this.decayNeeds(visitor, minutes)
-      if (this.state.parkOpen && this.incidents.updateNausea(visitor, minutes)) {
-        const path = this.getPathAt(
-          visitor.cellX,
-          visitor.cellZ,
-          visitor.cellElevation,
-        )
-        if (path) {
-          this.addGroundIncident('vomit', {
-            x: visitor.cellX,
-            z: visitor.cellZ,
-            elevation: visitor.cellElevation,
-          })
-          visitor.state = 'vomiting'
-          visitor.route = []
-          visitor.targetId = null
-          visitor.interactionRemaining =
-            SIMULATION_CONFIG.needs.interactionMinutes.vomiting
-          visitor.emotion = 'sad'
-          visitor.emotionMinutes = 30
-          visitor.thought = 'Mir ist richtig übel!'
-        }
-      }
-      this.updateVisitorEmotion(visitor, minutes)
-      if ((visitor.pendingWaste ?? 0) > 0) this.discardWasteIfCannotUseBin(visitor)
-      if (this.state.parkOpen && this.updateAlcoholBehavior(visitor)) return
-      if (this.state.parkOpen) this.updateStreaking(visitor, minutes)
-      if (
-        this.state.parkOpen &&
-        visitor.campsite &&
-        visitor.campingPhase === 'ready' &&
-        visitor.needs.energy <=
-          SIMULATION_CONFIG.visitors.decisions.exhaustedEnergy &&
-        visitor.state !== 'riding' &&
-        visitor.state !== 'camping' &&
-        visitor.state !== 'bench-resting' &&
-        !visitor.concertId &&
-        !this.visitorsAwaitingDecision.has(visitor.id)
-      ) {
-        this.removeVisitorFromCoasterQueues(visitor.id)
-        visitor.targetId = null
-        visitor.route = []
-        this.decideNextAction(visitor)
-      } else if (
-        this.state.parkOpen &&
-        !visitor.campsite &&
-        visitor.needs.energy <=
-          SIMULATION_CONFIG.visitors.decisions.exhaustedEnergy &&
-        visitor.state !== 'riding' &&
-        visitor.state !== 'leaving' &&
-        visitor.state !== 'bench-resting' &&
-        !visitor.concertId &&
-        !this.visitorsAwaitingDecision.has(visitor.id)
-      ) {
-        this.removeVisitorFromCoasterQueues(visitor.id)
-        visitor.targetId = null
-        visitor.route = []
-        this.decideNextAction(visitor)
-      }
-      visitor.movementBoostMinutes = Math.max(0, visitor.movementBoostMinutes - minutes)
-      visitor.avoidanceMinutes = Math.max(0, visitor.avoidanceMinutes - minutes)
-      if (visitor.avoidanceMinutes === 0) visitor.avoidedCoasterId = null
-
-      if (visitor.state === 'camp-waiting') {
-        visitor.campingWaitMinutes += minutes
-        visitor.campingWaitRetryMinutes -= minutes
-        visitor.motivation = Math.max(
-          0,
-          visitor.motivation -
-            minutes *
-              SIMULATION_CONFIG.camping.unplacedMotivationLossPerMinute,
-        )
-        visitor.emotion = 'sad'
-        visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 20)
-        if (visitor.campingWaitRetryMinutes <= 0) {
-          visitor.campingWaitRetryMinutes =
-            SIMULATION_CONFIG.camping.unplacedRetryIntervalMinutes
-          if (this.camping.assignCampsite(visitor)) {
-            visitor.thought =
-              'Endlich ist ein Campingplatz frei geworden!'
-            return
-          }
-        }
-        if (
-          visitor.campingWaitMinutes >=
-          SIMULATION_CONFIG.camping.unplacedWaitMaximumMinutes
-        ) {
-          this.refundEntryFee(visitor)
-          this.recordComplaint(visitor, 'no-campsite')
-          this.beginVisitorDeparture(visitor)
-          visitor.thought =
-            'Ich habe einen Tag vergeblich gewartet. Ich verlange mein Geld zurück!'
-          return
-        }
-        visitor.thought = `Ich warte seit ${Math.floor(visitor.campingWaitMinutes / 60)} Stunden auf einen Campingplatz.`
-        return
-      }
-
-      if (visitor.state === 'camping' && visitor.route.length === 0) {
-        if (visitor.campingPhase === 'seeking' || visitor.campingPhase === 'returning') {
-          this.visitorsAwaitingDecision.delete(visitor.id)
-          this.arriveOrDecide(visitor)
-        }
-        if (
-          visitor.campingPhase === 'packing' &&
-          visitor.interactionRemaining <= 0
-        ) {
-          visitor.interactionRemaining =
-            SIMULATION_CONFIG.camping.tentPackMinutes
-          visitor.thought = 'Ich packe Zelt und Campingsachen ein.'
-        }
-        if (
-          (visitor.campingPhase === 'building' || visitor.campingPhase === 'packing') &&
-          visitor.interactionRemaining > 0
-        ) {
-          visitor.interactionRemaining -= minutes
-          if (visitor.interactionRemaining <= 0) {
-            if (visitor.campingPhase === 'building') {
-              visitor.campingPhase = 'ready'
-              this.camping.createCampSetup(visitor)
-              visitor.hasHandcart = false
-              visitor.state = 'exploring'
-              visitor.emotion = 'happy'
-              visitor.emotionMinutes = 40
-              visitor.thought = 'Mein Zelt steht – jetzt kann das Festival beginnen!'
-              this.decideNextAction(visitor)
-            } else {
-              this.camping.removeVisitorInstallations(visitor.id)
-              visitor.campsite = null
-              visitor.campingPhase = 'none'
-              visitor.hasHandcart = true
-              if (this.rng.next() < SIMULATION_CONFIG.waste.tentPackLitterChance) {
-                this.giveWaste(visitor, 1)
-              }
-              if (visitor.pendingWaste > 0 && visitor.route.length > 0) {
-                visitor.thought =
-                  'Vor dem Heimweg werfe ich den Zeltmüll noch in den Eimer.'
-                return
-              }
-              visitor.state = 'leaving'
-              visitor.thought = 'Alles eingepackt. Zeit für den Heimweg.'
-              visitor.route = []
-              this.ensureExitRoute(visitor)
-            }
-          }
-          return
-        }
-        if (visitor.campingPhase === 'resting') {
-          visitor.needs.energy = Math.min(
-            100,
-            visitor.needs.energy +
-              minutes * SIMULATION_CONFIG.camping.restEnergyPerMinute,
-          )
-          if (
-            visitor.needs.energy >=
-              SIMULATION_CONFIG.camping.restCompleteEnergy &&
-            !this.isVisitorSleepTime(visitor)
-          ) {
-            visitor.campingPhase = 'ready'
-            visitor.state = 'exploring'
-            visitor.thought = 'Im Zelt habe ich mich gut erholt.'
-            this.decideNextAction(visitor)
-          }
-          return
-        }
-      }
-
-      if (visitor.state === 'socializing' && visitor.route.length === 0) {
-        visitor.interactionRemaining -= minutes
-        this.consumeWhileStationary(visitor, minutes)
-        if (visitor.pendingWaste > 0 && visitor.route.length > 0) return
-        visitor.needs.fun = Math.min(
-          100,
-          visitor.needs.fun +
-            minutes * SIMULATION_CONFIG.camping.socialFunPerMinute,
-        )
-        visitor.emotion = 'happy'
-        visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 10)
-        if (visitor.interactionRemaining <= 0) {
-          visitor.state = 'exploring'
-          visitor.campActivityTarget = null
-          visitor.campActivity = 'standing'
-          visitor.campActivityKind = null
-          visitor.campActivitySlot = 0
-          visitor.campActivityCapacity = 1
-          visitor.thought = 'Das Treffen am Zeltplatz war schön.'
-          this.decideNextAction(visitor)
-        }
-        return
-      }
-
-      if (visitor.state === 'partying' && visitor.route.length === 0) {
-        const atmosphere = SIMULATION_CONFIG.atmosphere
-        visitor.interactionRemaining -= minutes
-        const consumed = this.consumeWhileStationary(visitor, minutes)
-        if (visitor.pendingWaste > 0 && visitor.route.length > 0) return
-        visitor.isDancing = this.visitorShouldDance(visitor)
-        visitor.needs.fun = Math.min(
-          100,
-          visitor.needs.fun + minutes * (atmosphere.partyFunPerMinute +
-            (visitor.isDancing ? atmosphere.dancingFunBonusPerMinute : 0)),
-        )
-        visitor.needs.energy = Math.max(
-          0,
-          visitor.needs.energy -
-            minutes * atmosphere.partyEnergyCostPerMinute,
-        )
-        visitor.emotion = 'excited'
-        visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 10)
-        const concert = visitor.concertId
-          ? this.availableConcerts().find((show) => show.booking.id === visitor.concertId)
-          : undefined
-        if (visitor.concertId) {
-          if (concert) {
-            this.updateConcertAttendance(visitor, minutes, concert, consumed)
-            return
-          }
-          this.clearVisitorActivity(visitor)
-          visitor.state = 'exploring'
-          this.decideNextAction(visitor)
-          return
-        }
-        if (!consumed) {
-          visitor.thought = visitor.isDancing
-            ? 'Die Stimmung ist großartig – ich tanze!'
-            : 'Ich genieße die Musik und die Atmosphäre.'
-        }
-        if (
-          visitor.interactionRemaining <= 0 ||
-          visitor.localPartyMood < atmosphere.partyDestinationMinimumMood * 0.5 ||
-          visitor.needs.energy <
-            SIMULATION_CONFIG.visitors.decisions.lowEnergy
-        ) {
-          this.clearVisitorActivity(visitor)
-          visitor.state = 'exploring'
-          this.decideNextAction(visitor)
-        }
-        return
-      }
-
-      if (visitor.state === 'bench-resting' && visitor.route.length === 0) {
-        visitor.interactionRemaining -= minutes
-        const consumed = this.consumeWhileStationary(visitor, minutes)
-        if (visitor.pendingWaste > 0 && visitor.route.length > 0) return
-        visitor.needs.energy = Math.min(
-          100,
-          visitor.needs.energy +
-            minutes *
-              SIMULATION_CONFIG.atmosphere.benchRestEnergyPerMinute,
-        )
-        visitor.emotion = 'happy'
-        visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 10)
-        if (!consumed) {
-          visitor.thought = 'Auf der Bank kann ich mich kurz erholen.'
-        }
-        if (visitor.interactionRemaining <= 0) {
-          this.clearVisitorActivity(visitor)
-          visitor.state = 'exploring'
-          this.decideNextAction(visitor)
-        }
-        return
-      }
-
-      if (visitor.state === 'relaxing' && visitor.route.length === 0) {
-        const atmosphere = SIMULATION_CONFIG.atmosphere
-        visitor.interactionRemaining -= minutes
-        const consumed = this.consumeWhileStationary(visitor, minutes)
-        if (visitor.pendingWaste > 0 && visitor.route.length > 0) return
-        visitor.needs.fun = Math.min(
-          100,
-          visitor.needs.fun +
-            minutes *
-              (atmosphere.leisureFunPerMinute +
-                (visitor.isConversing
-                  ? atmosphere.conversationFunPerMinute
-                  : 0)),
-        )
-        visitor.emotion = visitor.isConversing ? 'happy' : 'neutral'
-        visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 8)
-        if (!consumed) {
-          visitor.thought = visitor.isConversing
-            ? 'Hier gefällt es mir – wir unterhalten uns.'
-            : 'Hier ist es schön. Ich bleibe eine Weile.'
-        }
-        if (
-          visitor.interactionRemaining <= 0 ||
-          visitor.needs.energy <
-            SIMULATION_CONFIG.visitors.decisions.lowEnergy
-        ) {
-          this.clearVisitorActivity(visitor)
-          visitor.state = 'exploring'
-          this.decideNextAction(visitor)
-        }
-        return
-      }
-
-      if (visitor.state === 'swimming' && visitor.route.length === 0) {
-        visitor.interactionRemaining -= minutes
-        const consumed = this.consumeWhileStationary(visitor, minutes)
-        if (visitor.pendingWaste > 0 && visitor.route.length > 0) return
-        visitor.needs.fun = Math.min(
-          100,
-          visitor.needs.fun + minutes * SIMULATION_CONFIG.terrain.swimFunPerMinute,
-        )
-        visitor.emotion = 'happy'
-        visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 10)
-        if (!consumed) {
-          visitor.thought = 'Das Wasser ist herrlich. Ich bleibe noch ein bisschen.'
-        }
-        if (
-          visitor.interactionRemaining <= 0 ||
-          visitor.needs.energy <
-            SIMULATION_CONFIG.visitors.decisions.lowEnergy ||
-          !this.isSwimmableTerrain(visitor.cellX, visitor.cellZ)
-        ) {
-          this.clearVisitorActivity(visitor)
-          visitor.state = 'exploring'
-          this.decideNextAction(visitor)
-        }
-        return
-      }
-
-      if (visitor.state === 'security-check') {
-        visitor.interactionRemaining -= minutes
-        if (visitor.interactionRemaining <= 0) {
-          visitor.state = visitor.securityResumeState ?? 'exploring'
-          visitor.securityResumeState = null
-          if (visitor.route.length === 0) this.arriveOrDecide(visitor)
-        }
-        return
-      }
-
-      if (visitor.state === 'vomiting') {
-        visitor.interactionRemaining -= minutes
-        if (visitor.interactionRemaining <= 0) {
-          visitor.state = 'exploring'
-          this.decideNextAction(visitor)
-        }
-        return
-      }
-
-      if (visitor.state === 'using') {
-        const facility = visitor.targetId ? this.state.buildings.find(b => b.id === visitor.targetId) : null
-        visitor.interactionRemaining -= minutes * (facility ? buildingEfficiency(this.state, facility.x, facility.z) : 1)
-        if (visitor.interactionRemaining <= 0) this.finishInteraction(visitor)
-        return
-      }
-      if (visitor.state === 'bus-waiting') {
-        visitor.busWaitMinutes += minutes
-        if (
-          visitor.busWaitMinutes >=
-          SIMULATION_CONFIG.logistics.busMaximumWaitMinutes
-        ) {
-          this.recordComplaint(visitor, 'bus-wait')
-          visitor.emotion = 'angry'
-          visitor.thought = 'Ich warte schon viel zu lange auf den Bus.'
-        }
-        if (visitor.route.length === 0) return
-      }
-      if (
-        visitor.state === 'queuing' ||
-        visitor.state === 'riding' ||
-        visitor.state === 'bus-riding' ||
-        visitor.state === 'vehicle-arrival' ||
-        visitor.state === 'injured'
-      ) {
-        return
-      }
-
-      if (visitor.route.length > 0) return
-      if (
-        visitor.state === 'leaving' &&
-        this.tryBoardDepartureCar(visitor)
-      ) {
-        return
-      }
-      if (
-        (visitor.state === 'leaving' || visitor.isPanicking || visitor.state === 'panicking') &&
-        this.isAtParkExit(visitor) &&
-        !this.getVisitorArrivalCar(visitor)
-      ) {
-        if (!(visitor.state === 'leaving' && ((visitor.campsite && visitor.campingPhase !== 'none') || visitor.pendingWaste > 0))) {
-          leavingIds.add(visitor.id)
-        }
-      } else if (visitor.targetId) {
-        this.arriveOrDecide(visitor)
-      } else {
-        this.queueVisitorDecision(visitor)
-      }
-    })
-
-    if (leavingIds.size > 0) {
-      this.state.visitors.forEach((visitor) => {
-        if (leavingIds.has(visitor.id)) this.leaveVisitorCampBehind(visitor)
-      })
-      this.state.visitors = this.state.visitors.filter((visitor) => !leavingIds.has(visitor.id))
-      this.indexedVisitorCount = -1
-      this.state.guests = this.state.visitors.length
-      this.state.logistics.arrivalGroups.forEach((group) => {
-        this.normalizeCarManifest(group)
-      })
-    }
+    this.visitorSimulation.flushDecisions(limit)
   }
 
   private updateCoasters(minutes: number, physicsSeconds: number): void {
-    this.state.coasters.forEach((coaster) => {
-      this.scrubCoasterQueue(coaster)
-      const train = coaster.train
-      const canRun =
-        coaster.closed &&
-        (coaster.operationMode === 'test' ||
-          (coaster.operationMode === 'open' &&
-            Boolean(coaster.entrance) &&
-            Boolean(coaster.exit)))
-      if (!canRun) {
-        if (
-          coaster.queue.length > 0 ||
-          train.passengerIds.length > 0 ||
-          train.state !== 'boarding' ||
-          train.distance !== 0
-        ) {
-          this.recallCoasterTrainInternal(coaster)
-        }
-        this.positionTrain(coaster)
-        return
-      }
-
-      if (coaster.operationMode === 'test') {
-        if (train.state === 'boarding') {
-          coaster.telemetry.measuring = false
-          train.state = 'running'; train.photoPieces = []
-          train.distance = 0
-          train.progress = 0
-          train.speed = getCoasterType(coaster.typeId).physics.stationLaunchSpeed
-        } else if (train.state === 'unloading') {
-          train.state = 'boarding'
-        } else {
-          this.integrateTrainPhysics(coaster, physicsSeconds)
-        }
-        this.positionTrain(coaster)
-        return
-      }
-
-      if (
-        !this.isOfferCurrentlyActive('rides') &&
-        train.state === 'boarding'
-      ) {
-        if (train.passengerIds.length === 0) {
-          this.positionTrain(coaster)
-          return
-        }
-        coaster.telemetry.measuring = false
-        train.state = 'running'; train.photoPieces = []
-        train.progress = 0
-        train.distance = 0
-        train.speed =
-          getCoasterType(coaster.typeId).physics.stationLaunchSpeed
-      }
-
-      this.positionCoasterQueue(coaster, minutes)
-
-      if (train.state === 'boarding') {
-        const frontVisitor = this.getVisitor(coaster.queue[0] ?? '')
-        const frontQueueCell = this.getCoasterQueueCells(coaster)[0]
-        const frontIsReady =
-          frontVisitor?.state === 'queuing' &&
-          frontQueueCell?.x === frontVisitor.cellX &&
-          frontQueueCell?.z === frontVisitor.cellZ &&
-          frontQueueCell?.elevation === frontVisitor.cellElevation
-        train.boardingProgress =
-          frontIsReady ? train.boardingProgress + minutes : 0
-        while (
-          train.boardingProgress >= BOARDING_MINUTES_PER_PERSON &&
-          train.passengerIds.length < train.capacity
-        ) {
-          const visitorId = coaster.queue[0]
-          const visitor = visitorId ? this.getVisitor(visitorId) : undefined
-          if (
-            !visitorId ||
-            visitor?.state !== 'queuing' ||
-            visitor.cellX !== frontQueueCell?.x ||
-            visitor.cellZ !== frontQueueCell?.z ||
-            visitor.cellElevation !== frontQueueCell?.elevation
-          ) {
-            break
-          }
-          coaster.queue.shift()
-          train.boardingProgress -= BOARDING_MINUTES_PER_PERSON
-          const paymentPosition = coaster.entrance ?? {
-            x: coaster.pieces[0]?.start.x ?? 0,
-            y: coaster.pieces[0]?.start.elevation ?? 0,
-            z: coaster.pieces[0]?.start.z ?? 0,
-          }
-          const paid = this.chargeVisitor(visitor, coaster.ticketPrice, {
-            x: paymentPosition.x + 0.5,
-            y: paymentPosition.y + 0.85,
-            z: paymentPosition.z + 0.5,
-          }, 'rides')
-          if (!paid) {
-            visitor.state = 'exploring'
-            visitor.targetId = null
-            visitor.avoidedCoasterId = coaster.id
-            visitor.avoidanceMinutes =
-              SIMULATION_CONFIG.coasters.paymentAvoidanceMinutes
-            visitor.emotion = 'sad'
-            visitor.emotionMinutes = 45
-            visitor.thought = 'Dafür reicht mein Budget nicht.'
-            continue
-          }
-          train.passengerIds.push(visitor.id)
-          train.passengers = train.passengerIds.length
-          visitor.state = 'riding'
-          visitor.thought = `Ich fahre mit ${coaster.name}!`
-        }
-        train.waitMinutes = train.passengers > 0 ? train.waitMinutes + minutes : 0
-        const full = train.passengers >= train.capacity
-        const timed = train.waitMinutes >= coaster.settings.dispatchIntervalMinutes
-        const shouldDispatch =
-          coaster.settings.dispatchMode === 'full-only'
-            ? full
-            : coaster.settings.dispatchMode === 'timed'
-              ? timed
-              : full || timed
-        if (shouldDispatch && train.passengers > 0) {
-          coaster.telemetry.measuring = false
-          train.state = 'running'; train.photoPieces = []
-          train.progress = 0
-          train.distance = 0
-          train.speed = getCoasterType(coaster.typeId).physics.stationLaunchSpeed
-        }
-      } else if (train.state === 'unloading') {
-        train.boardingProgress += minutes
-        while (
-          train.boardingProgress >= BOARDING_MINUTES_PER_PERSON &&
-          train.passengerIds.length > 0
-        ) {
-          train.boardingProgress -= BOARDING_MINUTES_PER_PERSON
-          const visitorId = train.passengerIds.shift()
-          if (!visitorId) continue
-          const visitor = this.getVisitor(visitorId)
-          if (visitor) this.releaseCoasterPassenger(coaster, visitor)
-          train.passengers = train.passengerIds.length
-        }
-        if (train.passengerIds.length === 0) {
-          train.state = 'boarding'
-          train.waitMinutes = 0
-          train.boardingProgress = 0
-        }
-      } else {
-        this.integrateTrainPhysics(coaster, physicsSeconds)
-      }
-      this.positionTrain(coaster)
-    })
+    this.coasterSimulation.update(minutes, physicsSeconds)
   }
 
-  private positionCoasterQueue(coaster: Coaster, minutes: number): void {
-    if (!coaster.entrance || coaster.queue.length === 0) return
-    const directions = [
-      { x: 0, z: 1 },
-      { x: 1, z: 0 },
-      { x: 0, z: -1 },
-      { x: -1, z: 0 },
-    ]
-    const queueCells = this.getCoasterQueueCells(coaster)
-
-    coaster.queue.forEach((visitorId, index) => {
-      const visitor = this.getVisitor(visitorId)
-      if (!visitor || visitor.state !== 'queuing') return
-      const desiredCellIndex = Math.min(
-        queueCells.length - 1,
-        Math.floor(index / SIMULATION_CONFIG.coasters.queueSlotsPerCell),
-      )
-      const currentCellIndex = queueCells.findIndex(
-        (cell) =>
-          cell.x === visitor.cellX &&
-          cell.z === visitor.cellZ &&
-          cell.elevation === visitor.cellElevation,
-      )
-      const targetCellIndex =
-        currentCellIndex > desiredCellIndex ? currentCellIndex - 1 : desiredCellIndex
-      const cell = queueCells[targetCellIndex]
-      if (!cell) return
-      const path = this.getPathAt(cell.x, cell.z, cell.elevation)
-      const direction = directions[path?.queueDirection ?? 0] ?? directions[0]!
-      const stand = this.queueStandOffset(
-        index,
-        direction,
-        targetCellIndex === desiredCellIndex,
-      )
-      const targetX = cell.x + 0.5 + stand.x
-      const targetZ = cell.z + 0.5 + stand.z
-      const deltaX = targetX - visitor.x
-      const deltaZ = targetZ - visitor.z
-      const distance = Math.hypot(deltaX, deltaZ)
-      const movement =
-        minutes * SIMULATION_CONFIG.coasters.queueMovementPerMinute
-      visitor.facing = Math.atan2(deltaX || direction.x, deltaZ || direction.z)
-      if (distance <= movement || distance < 0.001) {
-        visitor.x = targetX
-        visitor.z = targetZ
-        visitor.y = this.samplePedestrianSurfaceY(
-          visitor.x,
-          visitor.z,
-          path,
-          cell.elevation,
-        )
-        visitor.cellX = cell.x
-        visitor.cellZ = cell.z
-        visitor.cellElevation = cell.elevation
-      } else {
-        visitor.x += (deltaX / distance) * movement
-        visitor.z += (deltaZ / distance) * movement
-        visitor.y = this.samplePedestrianSurfaceY(
-          visitor.x,
-          visitor.z,
-          path,
-          cell.elevation,
-        )
-      }
-    })
+  integrateTrainPhysics(coaster: Coaster, elapsedSeconds: number): void {
+    this.coasterSimulation.integratePhysics(coaster, elapsedSeconds)
   }
 
   private getCoasterQueueCells(coaster: Coaster): Cell[] {
@@ -12383,2719 +6231,11 @@ export class GameState {
     visitor.thought = target.rideType === 'bungee' ? 'Jetzt geht es hoch zum Bungeesprung!' : `Ich besuche ${BUILDINGS[target.kind].name}.`
   }
 
-  private integrateTrainPhysics(coaster: Coaster, elapsedSeconds: number): void {
-    const train = coaster.train
-    const physics = getCoasterType(coaster.typeId).physics
-    const tuning = SIMULATION_CONFIG.coasters.physicsSimulation
-    const steps = Math.max(
-      1,
-      Math.ceil(elapsedSeconds / tuning.integrationStepSeconds),
-    )
-    const deltaSeconds = elapsedSeconds / steps
-
-    for (let step = 0; step < steps && train.state === 'running'; step += 1) {
-      const sample = sampleCoasterTrack(coaster, train.distance)
-      if (!sample) return
-      const carSamples = Array.from({ length: train.cars }, (_, index) =>
-        sampleCoasterTrack(coaster, train.distance + index * physics.carSpacing),
-      ).filter((carSample) => carSample !== null)
-      const averageSlope =
-        carSamples.reduce((total, carSample) => total + carSample.tangent.y, 0) /
-        Math.max(1, carSamples.length)
-      const chainEngaged = carSamples.some(
-        (carSample) => carSample.chainLift && carSample.tangent.y > 0,
-      )
-      const stationDriveEngaged = carSamples.some((carSample) => carSample.stationDrive)
-      const mass =
-        train.cars * physics.carMassKg + train.passengers * physics.passengerMassKg
-      const slopeCosine = Math.sqrt(Math.max(0, 1 - averageSlope ** 2))
-      const gravityAcceleration = -tuning.gravity * averageSlope
-      const direction = Math.abs(train.speed) < 0.01 ? 1 : Math.sign(train.speed)
-      const rollingAcceleration =
-        -direction * physics.rollingResistance * tuning.gravity * slopeCosine
-      const aerodynamicAcceleration =
-        -direction *
-        (0.5 * tuning.airDensity * physics.dragArea * train.speed ** 2) /
-        mass
-      let acceleration =
-        gravityAcceleration + rollingAcceleration + aerodynamicAcceleration
-      if (sample.pieceKind === 'brakes' && Math.abs(train.speed) > 4) acceleration -= Math.sign(train.speed) * 4
-      if (sample.pieceKind === 'splash' && Math.abs(train.speed) > 3) acceleration -= Math.sign(train.speed) * Math.min(5, train.speed * train.speed * .025)
-      if (sample.pieceKind === 'photo' && !train.photoPieces?.includes(sample.pieceId)) {
-        ;(train.photoPieces ??= []).push(sample.pieceId)
-        for (const id of train.passengerIds) {
-          const visitor = this.getVisitor(id)
-          if (visitor && this.chargeVisitor(visitor, 2, sample.point, 'rides')) visitor.thought = 'Ein Erinnerungsfoto von der Achterbahn!'
-        }
-      }
-      const remainingMeters =
-        (sample.totalLength - train.distance) * physics.worldUnitMeters
-
-      if (chainEngaged) {
-        if (train.speed < 0) train.speed = 0
-        if (train.speed <= physics.chainSpeed) {
-          acceleration = Math.max(
-            0,
-            (physics.chainSpeed - train.speed) *
-              tuning.chainAccelerationFactor,
-          )
-        }
-      }
-
-      if (stationDriveEngaged) {
-        if (train.speed < 0) train.speed = 0
-        const approachDistance =
-          train.cars * physics.carSpacing * physics.worldUnitMeters +
-          tuning.stationApproachBufferMeters
-        const brakingDistance =
-          (train.speed * train.speed) /
-            (2 * tuning.stationBrakingDeceleration) +
-          tuning.stationBrakingBufferMeters
-        const targetSpeed =
-          remainingMeters <= Math.max(approachDistance, brakingDistance)
-            ? Math.min(
-                physics.stationDriveSpeed,
-                Math.sqrt(
-                  Math.max(
-                    0,
-                    2 * tuning.stationBrakingDeceleration * remainingMeters,
-                  ),
-                ),
-              )
-            : physics.stationLaunchSpeed
-        acceleration = Math.max(
-          -tuning.stationDriveAccelerationLimit,
-          Math.min(
-            tuning.stationDriveAccelerationLimit,
-            (targetSpeed - train.speed) * tuning.stationDriveResponse,
-          ),
-        )
-      } else if (
-        remainingMeters < tuning.endBrakeDistanceMeters &&
-        train.speed > 0
-      ) {
-        const safeSpeed = Math.sqrt(
-          Math.max(0, 2 * tuning.endBrakeDeceleration * remainingMeters),
-        )
-        if (train.speed > safeSpeed) {
-          acceleration -= tuning.endBrakeDeceleration
-        }
-      }
-
-      if (!coaster.telemetry.measuring && !stationDriveEngaged) {
-        coaster.telemetry.measuring = true
-      }
-      if (coaster.telemetry.measuring) {
-        this.recordCoasterTelemetry(coaster, sample, acceleration, deltaSeconds)
-      }
-      train.speed = Math.max(
-        tuning.minimumSpeed,
-        Math.min(
-          tuning.maximumSpeed,
-          train.speed + acceleration * deltaSeconds,
-        ),
-      )
-      train.distance += (train.speed / physics.worldUnitMeters) * deltaSeconds
-
-      if (
-        train.distance >= sample.totalLength &&
-        stationDriveEngaged &&
-        Math.abs(train.speed) >= tuning.stationStopSpeed
-      ) {
-        train.distance =
-          sample.totalLength - tuning.stationOvershootDistance
-        train.speed *= tuning.stationOvershootDamping
-      } else if (
-        train.distance >= sample.totalLength ||
-        (stationDriveEngaged &&
-          remainingMeters < tuning.stationStopDistanceMeters &&
-          Math.abs(train.speed) < tuning.stationStopSpeed)
-      ) {
-        this.finishTrainRide(coaster, true)
-      } else if (train.distance < 0) {
-        this.finishTrainRide(coaster, false)
-      } else {
-        train.progress = train.distance / sample.totalLength
-      }
-    }
-  }
-
-  private scrubCoasterQueue(coaster: Coaster): void {
-    const seen = new Set<string>()
-    coaster.queue = coaster.queue.filter((visitorId) => {
-      if (seen.has(visitorId)) return false
-      const visitor = this.getVisitor(visitorId)
-      const valid =
-        visitor?.targetId === coaster.id &&
-        (visitor.state === 'seeking' ||
-          visitor.state === 'queuing' ||
-          visitor.state === 'security-check')
-      if (!valid) return false
-      seen.add(visitorId)
-      return true
-    })
-    this.prioritizeArrivedQueueVisitors(coaster.queue)
-  }
-
-  private recordCoasterTelemetry(
-    coaster: Coaster,
-    sample: TrackSample,
-    longitudinalAcceleration: number,
-    elapsedSeconds: number,
-  ): void {
-    const telemetry = coaster.telemetry
-    const physics = getCoasterType(coaster.typeId).physics
-    const train = coaster.train
-    const smoothingDistance = 0.35
-    const before = sampleCoasterTrack(coaster, train.distance - smoothingDistance)
-    const after = sampleCoasterTrack(coaster, train.distance + smoothingDistance)
-    if (!before || !after) return
-
-    const forward = sample.tangent
-    const right = sample.right
-    const up = sample.up
-    const curvatureScale =
-      (train.speed * train.speed) /
-      (2 * smoothingDistance * physics.worldUnitMeters)
-    const acceleration = {
-      x:
-        forward.x * longitudinalAcceleration +
-        (after.tangent.x - before.tangent.x) * curvatureScale,
-      y:
-        forward.y * longitudinalAcceleration +
-        (after.tangent.y - before.tangent.y) * curvatureScale,
-      z:
-        forward.z * longitudinalAcceleration +
-        (after.tangent.z - before.tangent.z) * curvatureScale,
-    }
-    const properAcceleration = {
-      x: acceleration.x,
-      y: acceleration.y + 9.81,
-      z: acceleration.z,
-    }
-    const verticalG = this.clampForce(this.dotVector(properAcceleration, up) / 9.81)
-    const lateralG = this.clampForce(this.dotVector(properAcceleration, right) / 9.81)
-    const longitudinalG = this.clampForce(
-      this.dotVector(properAcceleration, forward) / 9.81,
-    )
-    const speedKmh = Math.abs(train.speed) * 3.6
-
-    telemetry.durationSeconds += elapsedSeconds
-    telemetry.cumulativeDistanceMeters += Math.abs(train.speed) * elapsedSeconds
-    if (verticalG < 0.2) telemetry.airtimeSeconds += elapsedSeconds
-    telemetry.maxSpeedKmh = Math.max(telemetry.maxSpeedKmh, speedKmh)
-    telemetry.minVerticalG = Math.min(telemetry.minVerticalG, verticalG)
-    telemetry.maxVerticalG = Math.max(telemetry.maxVerticalG, verticalG)
-    telemetry.maxAbsLateralG = Math.max(
-      telemetry.maxAbsLateralG,
-      Math.abs(lateralG),
-    )
-    telemetry.maxAbsLongitudinalG = Math.max(
-      telemetry.maxAbsLongitudinalG,
-      Math.abs(longitudinalG),
-    )
-
-    const distance = train.distance * physics.worldUnitMeters
-    const existingSampleIndex = telemetry.samples.findIndex(
-      (existing) => Math.abs(existing.distance - distance) < 0.3,
-    )
-    if (existingSampleIndex >= 0) {
-      const existing = telemetry.samples[existingSampleIndex]
-      if (existing) {
-        telemetry.samples[existingSampleIndex] = {
-          distance,
-          speedKmh: existing.speedKmh * 0.7 + speedKmh * 0.3,
-          verticalG: existing.verticalG * 0.7 + verticalG * 0.3,
-          lateralG: existing.lateralG * 0.7 + lateralG * 0.3,
-          longitudinalG: existing.longitudinalG * 0.7 + longitudinalG * 0.3,
-        }
-      }
-    } else {
-      telemetry.samples.push({
-        distance,
-        speedKmh,
-        verticalG,
-        lateralG,
-        longitudinalG,
-      })
-      telemetry.samples.sort((left, right) => left.distance - right.distance)
-      if (telemetry.samples.length > 600) {
-        telemetry.samples = telemetry.samples.filter((_, index) => index % 2 === 0)
-      }
-    }
-  }
-
-  private dotVector(
-    left: { x: number; y: number; z: number },
-    right: { x: number; y: number; z: number },
-  ): number {
-    return left.x * right.x + left.y * right.y + left.z * right.z
-  }
-
-  private clampForce(value: number): number {
-    return Math.max(-8, Math.min(8, value))
-  }
-
-  private finishTrainRide(coaster: Coaster, _completed: boolean): void {
-    const train = coaster.train
-    if (_completed) coaster.telemetry.completedRuns += 1
-    coaster.telemetry.measuring = false
-    train.state = 'unloading'
-    train.waitMinutes = 0
-    train.boardingProgress = 0
-    train.progress = 0
-    train.distance = 0
-    train.speed = 0
-  }
-
   private recallCoasterTrainInternal(coaster: Coaster): void {
-    coaster.telemetry.measuring = false
-    coaster.queue.forEach((visitorId) => {
-      const visitor = this.getVisitor(visitorId)
-      if (!visitor) return
-      visitor.state = 'exploring'
-      visitor.targetId = null
-      visitor.avoidedCoasterId = coaster.id
-      visitor.avoidanceMinutes =
-        SIMULATION_CONFIG.coasters.recallAvoidanceMinutes
-      visitor.thought = 'Die Achterbahn ist derzeit nicht verfügbar.'
-    })
-    coaster.queue = []
-
-    coaster.train.passengerIds.forEach((visitorId) => {
-      const visitor = this.getVisitor(visitorId)
-      if (!visitor) return
-      if (coaster.exit) {
-        this.releaseCoasterPassenger(coaster, visitor)
-      } else {
-        visitor.state = 'exploring'
-        visitor.targetId = null
-        visitor.thought = 'Die Fahrt wurde sicher beendet.'
-      }
-    })
-    coaster.train.passengerIds = []
-    coaster.train.passengers = 0
-    coaster.train.state = 'boarding'
-    coaster.train.waitMinutes = 0
-    coaster.train.boardingProgress = 0
-    coaster.train.progress = 0
-    coaster.train.distance = 0
-    coaster.train.speed = 0
-    this.positionTrain(coaster)
-  }
-
-  private releaseCoasterPassenger(coaster: Coaster, visitor: Visitor): void {
-    const exit = coaster.exit
-    if (!exit) return
-    const nextPath =
-      this.getAccessPathNeighbors(exit).find(
-        (cell) => this.getPathAt(cell.x, cell.z, cell.elevation)?.pathType !== 'queue',
-      ) ?? this.getEntrance()
-    visitor.x = exit.x + 0.5
-    visitor.y = exit.y
-    visitor.z = exit.z + 0.5
-    visitor.cellX = Math.round(exit.x)
-    visitor.cellZ = Math.round(exit.z)
-    visitor.cellElevation = exit.y
-    visitor.route = [nextPath]
-    visitor.targetId = null
-    visitor.state = 'exiting'
-    visitor.needs.fun = 100
-    visitor.needs.energy = Math.max(
-      0,
-      visitor.needs.energy - SIMULATION_CONFIG.coasters.rideEnergyCost,
-    )
-    this.incidents.addRideNausea(
-      visitor,
-      SIMULATION_CONFIG.nausea.coasterIntensity,
-    )
-    visitor.emotion = 'excited'
-    visitor.emotionMinutes = 90
-    visitor.thought = `${coaster.name} war großartig!`
-  }
-
-  private positionTrain(coaster: Coaster): void {
-    const sample = sampleCoasterTrack(coaster, coaster.train.distance)
-    if (!sample) return
-    coaster.train.x = sample.point.x
-    coaster.train.y = sample.point.y
-    coaster.train.z = sample.point.z
-    coaster.train.progress =
-      sample.totalLength === 0 ? 0 : coaster.train.distance / sample.totalLength
-  }
-
-  private visitorTravelSpeed(visitor: Visitor): number {
-    const movement = SIMULATION_CONFIG.visitors.movement
-    const emotionSpeed =
-      visitor.emotion === 'angry'
-        ? movement.angryMultiplier
-        : visitor.emotion === 'sad'
-          ? movement.sadMultiplier
-          : visitor.emotion === 'excited'
-            ? movement.excitedMultiplier
-            : visitor.emotion === 'happy'
-              ? movement.happyMultiplier
-              : 1
-    const speedMultiplier =
-      movement.baseMultiplier *
-      (visitor.streakingMinutes > 0
-        ? SIMULATION_CONFIG.alcohol.streaking.speedMultiplier
-        : (visitor.movementBoostMinutes > 0 ? movement.boostMultiplier : 1) *
-          emotionSpeed *
-          (visitor.alcoholLevel >= movement.veryDrunkThreshold
-            ? movement.veryDrunkMultiplier
-            : visitor.alcoholLevel >= movement.moderatelyDrunkThreshold
-              ? movement.moderatelyDrunkMultiplier
-              : 1)) *
-      (this.isWaterTerrain(visitor.cellX, visitor.cellZ) &&
-      !this.getPathAt(visitor.cellX, visitor.cellZ, visitor.cellElevation)
-        ? SIMULATION_CONFIG.terrain.swimMoveMultiplier
-        : this.isMudTerrain(visitor.cellX, visitor.cellZ)
-          ? SIMULATION_CONFIG.terrain.mudMoveMultiplier
-          : 1)
-    const ground = wayInfo(this.state, visitor.cellX, visitor.cellZ, 'foot', this.getPathAt(visitor.cellX, visitor.cellZ, visitor.cellElevation)?.wayType)
-    const surface = visitor.cellElevation > this.getTerrainHeight(visitor.cellX, visitor.cellZ) ? 1 : ground.speed
-    const returningOnStallQueue = this.stallQueueReturnIds.has(visitor.id)
-    const crowdSlowdown = returningOnStallQueue
-      ? 1
-      : visitor.isPanicking
-        ? 1 + Math.max(0, visitor.crowding - 50) / 90
-        : 1 + Math.max(0, visitor.crowding - 35) / 55
-    return visitor.walkSpeed * speedMultiplier * (visitor.isPanicking ? SIMULATION_CONFIG.crowding.panicFleeBoost : 1) * surface / crowdSlowdown
+    this.coasterSimulation.recall(coaster)
   }
 
   private groundWetBucket = -1
-  private movementOccupancy = new Map<number, number>()
-  private pedestrianCongestionCosts = new Map<number, number>()
-
-  private refreshPedestrianCongestion(): void {
-    const costs = new Map<number, number>()
-    const visited = new Set<number>()
-    const consider = (x: number, z: number, elevation: number): void => {
-      const key = this.packCell({ x, z, elevation })
-      if (visited.has(key)) return
-      visited.add(key)
-      const count = this.movementOccupancy.get(key) ?? 0
-      const capacity = wayInfo(this.state, x, z, 'foot', this.getPathAt(x, z, elevation)?.wayType).capacity
-      const density = count / capacity
-      const penalty = Math.min(24, Math.floor(7 * Math.pow(Math.max(0, density - 0.5) * 2, 2)))
-      if (penalty > 0) costs.set(key, penalty)
-    }
-    for (const visitor of this.state.visitors) {
-      consider(visitor.cellX, visitor.cellZ, visitor.cellElevation)
-    }
-    for (const route of this.state.festival.infrastructure.routes) {
-      consider(route.position.x, route.position.z, route.position.elevation)
-    }
-    if (costs.size !== this.pedestrianCongestionCosts.size ||
-      [...costs].some(([key, value]) => this.pedestrianCongestionCosts.get(key) !== value)) {
-      this.pedestrianCongestionCosts = costs
-      // Congestion actually changed: cached routes may no longer reflect it, so
-      // invalidate immediately instead of waiting out their gradual expiry.
-      this.pedestrianPathCache.clear()
-    }
-  }
-  /** Keep the current segment and destination; only reconsider the journey between them.
-   * The tick-based schedule survives saves and bounds searches even in large crowds. */
-  private reviewVisitorRoutes(): void {
-    const visitors = this.state.visitors
-    const period = Math.max(100, Math.ceil(visitors.length / 4))
-    const first = (this.state.simTick % period) * 4
-    for (let index = first; index < Math.min(first + 4, visitors.length); index++) {
-      const visitor = visitors[index]!
-      if (this.stallQueueReturnIds.has(visitor.id)) continue
-      if (visitor.route.length < 3 || ['security-check', 'vomiting', 'using', 'queuing', 'riding', 'bus-riding', 'vehicle-arrival', 'injured'].includes(visitor.state)) continue
-      const next = visitor.route[0]!
-      const goal = visitor.route.at(-1)!
-      const atCellCenter = Math.hypot(visitor.x - visitor.cellX - visitor.tileOffsetX, visitor.z - visitor.cellZ - visitor.tileOffsetZ) < 0.001
-      const start = atCellCenter ? { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation } : next
-      this.ensurePedestrianNav(this.lastNavRevision !== this.worldRevision)
-      let access = 0, allowQueue = false
-      for (const cell of visitor.route) {
-        access |= this.pedestrianNav.get(this.packCell(cell))?.flags ?? 0
-        if (!allowQueue) allowQueue = this.getPathAt(cell.x, cell.z, cell.elevation)?.pathType === 'queue'
-      }
-      // Reuse indexed navigation flags rather than searching every area four times per route.
-      const route = this.findPath(start, [goal],
-        allowQueue,
-        Boolean(access & NAV_CAMPING),
-        Boolean(access & NAV_MEDICAL),
-        false,
-        Boolean(access & NAV_FORECOURT),
-        512,
-      )
-      if (route) visitor.route = atCellCenter ? route : [{ ...next }, ...route]
-    }
-  }
-
-  private walkVisitors(minutes: number): void {
-    if (minutes <= 0) return
-    this.movementOccupancy.clear()
-    const seated = collectSeatedPassengerIds(this.state.logistics.roadVehicles)
-    for (const v of this.state.visitors) {
-      if (
-        this.isVisitorSeatedInVehicle(v, seated) ||
-        v.state === 'riding'
-      ) {
-        continue
-      }
-      const key = this.visitorOccupancyKey(v)
-      this.movementOccupancy.set(key, (this.movementOccupancy.get(key) ?? 0) + 1)
-    }
-    for (const route of this.state.festival.infrastructure.routes) {
-      if (route.phase === 'idle' && !route.path.length) continue
-      const key = this.packCell(route.position)
-      this.movementOccupancy.set(key, (this.movementOccupancy.get(key) ?? 0) + (route.cargo > 0 ? 3 : 2))
-    }
-    // Occupancy for movement stays live; route costs update once per simulated second.
-    // Keep the shared A* cache useful between updates instead of flushing every step.
-    if (this.state.simTick % 10 === 0) this.refreshPedestrianCongestion()
-    this.reviewVisitorRoutes()
-    this.state.visitors.forEach((visitor) => {
-      if (
-        visitor.state === 'security-check' ||
-        visitor.state === 'vomiting' ||
-        visitor.state === 'using' ||
-        visitor.state === 'queuing' ||
-        visitor.state === 'riding' ||
-        visitor.state === 'bus-riding' ||
-        visitor.state === 'vehicle-arrival' ||
-        visitor.state === 'injured' ||
-        seated.has(visitor.id)
-      ) {
-        return
-      }
-      if (visitor.route.length === 0) return
-      this.moveVisitor(
-        visitor,
-        minutes * this.visitorTravelSpeed(visitor),
-        false,
-      )
-    })
-  }
-
-  private moveVisitor(
-    visitor: Visitor,
-    distance: number,
-    decideOnArrival = true,
-  ): void {
-    while (distance > 0 && visitor.route.length > 0) {
-      const next = visitor.route[0]
-      const oldKey = this.visitorOccupancyKey(visitor)
-      const nextPath = this.getPathAt(next.x, next.z, next.elevation)
-      this.applyQueueLaneOffset(visitor, next)
-      const nextKey = this.occupancyKeyForCell(next, nextPath, visitor.tileOffsetX, visitor.tileOffsetZ)
-      const capacity = wayInfo(this.state, next.x, next.z, 'foot', nextPath?.wayType).capacity
-      const density = Math.max(0, (this.movementOccupancy.get(nextKey) ?? 0) - (nextKey === oldKey ? 1 : 0)) / capacity
-      // Destination occupancy controls flow: leaving a packed tile for a free one must stay easy.
-      // At capacity retain 12.5% speed, and at least 4% even in extreme crowds.
-      // Stall return lanes keep normal walking speed — only the inbound wait lane crawls.
-      const returningOnStallQueue = this.stallQueueReturnIds.has(visitor.id)
-      const crowdSpeed = returningOnStallQueue
-        ? 1
-        : Math.max(0.04, 1 / (1 + 7 * Math.pow(Math.max(0, density - 0.5) * 2, 2)))
-      if (!returningOnStallQueue && density >= 1) visitor.thought = 'Hier ist es eng – ich komme nur langsam voran.'
-      const nextCampingCell = this.getCampingCellAt(next.x, next.z)
-      const nextMedicalCell = this.getMedicalCellAt(next.x, next.z)
-      const nextFestivalCell = this.getStageForecourtCellAt(next.x, next.z)
-      const currentCell = {
-        x: visitor.cellX,
-        z: visitor.cellZ,
-        elevation: visitor.cellElevation,
-      }
-      const travel = this.getDirectionIndex(next.x - currentCell.x, next.z - currentCell.z)
-      const currentPath = this.getPathAt(currentCell.x, currentCell.z, currentCell.elevation)
-      if (
-        (travel >= 0 &&
-          staffGateBlocksVisitor(currentPath, nextPath, travel as Direction)) ||
-        !this.isInWorld(next.x, next.z) ||
-        this.isPedestrianSolidAt(next.x, next.z, next.elevation) ||
-        this.isPedestrianEdgeBlocked(currentCell, next)
-      ) {
-        this.removeVisitorFromCoasterQueues(visitor.id)
-        visitor.route = []
-        visitor.targetId = null
-        visitor.state = 'exploring'
-        visitor.thought = 'Der Weg ist versperrt.'
-        return
-      }
-
-      const targetX = next.x + visitor.tileOffsetX
-      const targetZ = next.z + visitor.tileOffsetZ
-      const fallbackY =
-        nextCampingCell?.elevation ??
-        nextMedicalCell?.elevation ??
-        nextFestivalCell?.elevation ??
-        next.elevation
-      const deltaX = targetX - visitor.x
-      const deltaZ = targetZ - visitor.z
-      const remaining = Math.hypot(deltaX, deltaZ)
-      visitor.facing = Math.atan2(deltaX, deltaZ)
-
-      if (remaining <= distance * crowdSpeed) {
-        visitor.x = targetX
-        visitor.z = targetZ
-        visitor.y = this.samplePedestrianSurfaceY(
-          visitor.x,
-          visitor.z,
-          nextPath,
-          fallbackY,
-        )
-        if (nextKey !== oldKey) {
-          this.movementOccupancy.set(oldKey, Math.max(0, (this.movementOccupancy.get(oldKey) ?? 0) - 1))
-          this.movementOccupancy.set(nextKey, (this.movementOccupancy.get(nextKey) ?? 0) + 1)
-        }
-        visitor.cellX = next.x
-        visitor.cellZ = next.z
-        visitor.cellElevation = next.elevation
-        const atmosphereKey = this.cellKey(next.x, next.z, next.elevation)
-        visitor.localAttractiveness =
-          this.attractivenessValues.get(atmosphereKey) ?? 0
-        visitor.localPartyMood =
-          this.partyMoodValues.get(atmosphereKey) ?? 0
-        visitor.route.shift()
-        distance -= remaining / crowdSpeed
-        this.applyCampWalkPenalty(visitor, remaining)
-        const gate = this.getSecurityGateAt(next.x, next.z, next.elevation)
-        if (!gate) visitor.securityGateId = null
-        const staffed =
-          gate &&
-          this.state.staff.some(
-            (member) =>
-              member.role === 'security' && member.assignedBuildingId === gate.id,
-          )
-        if (gate && staffed && visitor.securityGateId !== gate.id) {
-          const inspection = this.security.inspect(
-            visitor.inventory,
-            gate.securityConfig ?? DEFAULT_SECURITY_CONFIG,
-            this.rng,
-          )
-          visitor.securityResumeState = visitor.state
-          visitor.state = 'security-check'
-          visitor.securityGateId = gate.id
-          visitor.interactionRemaining = inspection.durationMinutes
-          visitor.needs.fun = Math.max(0, visitor.needs.fun - inspection.funPenalty)
-          visitor.motivation = Math.max(
-            0,
-            visitor.motivation - inspection.motivationPenalty,
-          )
-          visitor.emotion = inspection.confiscated.length > 0 ? 'angry' : 'sad'
-          visitor.emotionMinutes = 35
-          visitor.thought =
-            inspection.confiscated.length > 0
-              ? `Beschlagnahmt: ${inspection.confiscated.map((kind) => INVENTORY_ITEMS[kind].name).join(', ')}.`
-              : 'Diese Kontrolle dauert ganz schön lange.'
-          if (inspection.confiscated.length > 0) {
-            this.recordComplaint(visitor, 'security-confiscation')
-          }
-          return
-        }
-      } else {
-        distance *= crowdSpeed
-        visitor.x += (deltaX / remaining) * distance
-        visitor.z += (deltaZ / remaining) * distance
-        const steppedX = Math.floor(visitor.x)
-        const steppedZ = Math.floor(visitor.z)
-        const onNext = steppedX === next.x && steppedZ === next.z
-        visitor.y = this.samplePedestrianSurfaceY(
-          visitor.x,
-          visitor.z,
-          onNext ? nextPath : currentPath ?? nextPath,
-          onNext ? fallbackY : visitor.cellElevation,
-        )
-        this.applyCampWalkPenalty(visitor, distance)
-        distance = 0
-      }
-    }
-
-    if (visitor.route.length === 0) {
-      if (this.stallQueueReturnIds.has(visitor.id)) {
-        this.continueAfterStallQueueReturn(visitor)
-        return
-      }
-      if (decideOnArrival) this.arriveOrDecide(visitor)
-    }
-  }
-
-  private applyCampWalkPenalty(visitor: Visitor, distance: number): void {
-    if (visitor.campingPhase !== 'returning' || visitor.needs.energy >= 35) {
-      return
-    }
-    visitor.walkingToCampDistance += distance
-    visitor.needs.fun = Math.max(
-      0,
-      visitor.needs.fun -
-        distance *
-          SIMULATION_CONFIG.logistics.longCampWalkFunLossPerTile,
-    )
-    if (
-      visitor.walkingToCampDistance >=
-      SIMULATION_CONFIG.logistics.longCampWalkComplaintTiles
-    ) {
-      this.recordComplaint(visitor, 'long-walk-to-camp')
-    }
-  }
-
-  private arriveOrDecide(visitor: Visitor): void {
-    if (this.visitorsAwaitingDecision.has(visitor.id)) return
-    if (visitor.state === 'leaving' || visitor.isPanicking || visitor.state === 'panicking') return
-    if (visitor.state === 'bus-waiting') {
-      visitor.thought = 'Ich warte an der Haltestelle auf den Bus.'
-      return
-    }
-
-    if (visitor.state === 'socializing') {
-      visitor.thought = 'Wir sitzen zusammen, essen, trinken und unterhalten uns.'
-      return
-    }
-    if (
-      visitor.state === 'partying' ||
-      visitor.state === 'bench-resting' ||
-      visitor.state === 'relaxing' ||
-      visitor.state === 'swimming'
-    ) {
-      return
-    }
-
-    if (visitor.campsite && visitor.state === 'camping') {
-      if (visitor.campingPhase === 'seeking') {
-        visitor.campingPhase = 'building'
-        visitor.interactionRemaining =
-          SIMULATION_CONFIG.camping.tentBuildMinutes
-        visitor.thought = 'Ich baue mein Zelt auf.'
-        return
-      }
-      if (visitor.campingPhase === 'returning') {
-        visitor.campingPhase = 'resting'
-        visitor.thought = 'Ich ruhe mich in meinem Zelt aus.'
-        return
-      }
-      if (visitor.campingPhase === 'packing') {
-        visitor.interactionRemaining =
-          SIMULATION_CONFIG.camping.tentPackMinutes
-        visitor.thought = 'Ich packe Zelt und Campingsachen ein.'
-        return
-      }
-    }
-
-    if (visitor.targetId) {
-      const target = this.state.buildings.find((building) => building.id === visitor.targetId)
-      if (target && isWasteBin(target.kind)) {
-        this.depositPendingWaste(visitor, target.id)
-        visitor.targetId = null
-        if (visitor.campingPhase === 'none' && visitor.hasHandcart) {
-          visitor.state = 'leaving'
-          visitor.route = []
-          this.ensureExitRoute(visitor)
-          return
-        }
-        visitor.state = 'exploring'
-        this.decideNextAction(visitor)
-        return
-      }
-      if (target) {
-        if (!this.isBuildingCurrentlyActive(target)) {
-          visitor.targetId = null
-          visitor.state = 'exploring'
-          visitor.thought = 'Dieses Angebot hat inzwischen geschlossen.'
-          this.decideNextAction(visitor)
-          return
-        }
-        if (this.getBuildingQueueCells(target).length > 0) {
-          const queue = this.getFacilityQueue(target.id)
-          if (!queue.includes(visitor.id)) queue.push(visitor.id)
-          visitor.state = 'queuing'
-          visitor.interactionRemaining = 0
-          visitor.thought = `Ich stehe bei ${BUILDINGS[target.kind].name} an.`
-          return
-        }
-        this.startFacilityInteraction(visitor, target)
-        return
-      }
-      const coaster = this.getCoaster(visitor.targetId)
-      if (
-        coaster?.closed &&
-        coaster.operationMode === 'open' &&
-        this.isOfferCurrentlyActive('rides') &&
-        coaster.entrance &&
-        coaster.exit
-      ) {
-        const queueCapacity = this.getCoasterQueueCapacity(coaster.id)
-        const hasReservation = coaster.queue.includes(visitor.id)
-        if (
-          !hasReservation &&
-          (queueCapacity === 0 || coaster.queue.length >= queueCapacity)
-        ) {
-          visitor.avoidedCoasterId = coaster.id
-          visitor.avoidanceMinutes =
-            SIMULATION_CONFIG.coasters.fullQueueAvoidanceMinutes
-          visitor.emotion = 'angry'
-          visitor.emotionMinutes = 35
-          visitor.targetId = null
-          visitor.state = 'exploring'
-          visitor.thought = 'Die Warteschlange ist voll. Ich gehe erst einmal weiter.'
-          this.decideNextAction(visitor)
-          return
-        }
-        if (!hasReservation) coaster.queue.push(visitor.id)
-        visitor.state = 'queuing'
-        visitor.thought = `Ich warte bei ${coaster.name}.`
-        return
-      }
-    }
-    this.decideNextAction(visitor)
-  }
-
-  private decideNextAction(visitor: Visitor): void {
-    if (this.processingSimulationStep) {
-      if (this.decisionBudget <= 0 || this.decidedThisTick.has(visitor.id) || this.pendingVisitorRouting.has(visitor.id)) {
-        this.queueVisitorDecision(visitor)
-        return
-      }
-      this.decisionBudget--
-      this.decidedThisTick.add(visitor.id)
-      this.visitorsAwaitingDecision.delete(visitor.id)
-    }
-    const previousDecision = this.activeVisitorDecision
-    this.activeVisitorDecision = visitor.id
-    try { this.chooseNextVisitorAction(visitor) }
-    finally { this.activeVisitorDecision = previousDecision }
-  }
-
-  private chooseNextVisitorAction(visitor: Visitor): void {
-    if (visitor.streakingMinutes > 0) {
-      this.continueStreakingRun(visitor)
-      return
-    }
-    if ((visitor.pendingWaste ?? 0) > 0) {
-      this.tryDisposeWaste(visitor)
-      if (
-        visitor.state === 'seeking' &&
-        visitor.pendingWaste > 0 &&
-        visitor.route.length > 0
-      ) {
-        return
-      }
-    }
-    const decisions = SIMULATION_CONFIG.visitors.decisions
-    if (visitor.isPanicking || visitor.state === 'panicking') {
-      this.ensurePanicFleeRoute(visitor)
-      return
-    }
-    if (
-      visitor.concertId &&
-      this.availableConcerts().some((show) => show.booking.id === visitor.concertId)
-    ) {
-      visitor.state = 'partying'
-      return
-    }
-    if (!this.state.parkOpen || visitor.motivation <= 0) {
-      this.beginVisitorDeparture(visitor)
-      return
-    }
-    const festivalPhase = getFestivalCycleStatus(
-      this.state.dayPlan,
-      this.state.day,
-    )
-    if (festivalPhase.phase === 'break') {
-      this.beginVisitorDeparture(visitor)
-      visitor.thought = 'Das Festival ist beendet. Ich reise ab.'
-      return
-    }
-    if (
-      visitor.ticketType === 'day' &&
-      (festivalPhase.phase !== 'festival' ||
-        !isDayVisitorAdmissionOpen(this.state.dayPlan, this.state.minute))
-    ) {
-      this.beginVisitorDeparture(visitor)
-      visitor.thought =
-        'Meine Zeit als Tagesgast ist vorbei. Ich gehe nach Hause.'
-      return
-    }
-    // Resume unfinished setup in saves made while camping arrivals were misrouted.
-    if (visitor.campsite && visitor.campingPhase === 'seeking') {
-      const route = this.camping.findRouteToCampsite(visitor, visitor.campsite)
-      if (route) {
-        visitor.state = 'camping'
-        visitor.targetId = null
-        visitor.route = route
-        return
-      }
-    }
-    if (
-      visitor.campsite &&
-      visitor.campingPhase === 'ready' &&
-      this.isVisitorSleepTime(visitor) &&
-      visitor.needs.energy <
-        SIMULATION_CONFIG.camping.sleepSchedule
-          .scheduledSleepEnergyBelow
-    ) {
-      const route = this.camping.findRouteToCampsite(
-        visitor,
-        visitor.campsite,
-      )
-      if (route) {
-        visitor.state = 'camping'
-        visitor.campingPhase = 'returning'
-        visitor.walkingToCampDistance = 0
-        visitor.targetId = null
-        if (this.tryBeginBusJourney(visitor, visitor.campsite, route)) return
-        visitor.route = route
-        visitor.thought = `Es ist Schlafenszeit. Ich gehe zu meinem Zelt.`
-        return
-      }
-    }
-    if (
-      !visitor.campsite &&
-      this.isVisitorSleepTime(visitor) &&
-      visitor.needs.energy <
-        SIMULATION_CONFIG.camping.sleepSchedule
-          .nonCamperDepartureEnergyBelow
-    ) {
-      this.beginVisitorDeparture(visitor)
-      visitor.thought = 'Es ist spät und ich brauche Schlaf. Ich gehe nach Hause.'
-      return
-    }
-    if (
-      (visitor.needs.hunger < decisions.seekFoodBelow &&
-        getItemQuantity(visitor.inventory, 'food') > 0) ||
-      (visitor.alcoholDesire >= decisions.seekAlcoholDesire &&
-        getItemQuantity(visitor.inventory, 'alcohol') > 0)
-    ) {
-      this.beginStationaryBreak(
-        visitor,
-        'Ich suche mir kurz einen Platz zum Essen oder Trinken.',
-      )
-      return
-    }
-    if (
-      visitor.needs.energy <
-      SIMULATION_CONFIG.atmosphere.benchRestEnergyThreshold
-    ) {
-      const bench = this.findBenchDestination(visitor)
-      if (bench) {
-        visitor.state = 'bench-resting'
-        visitor.targetId = bench.building.id
-        visitor.route = bench.route
-        visitor.activityTarget = {
-          x: bench.building.x,
-          z: bench.building.z,
-          elevation: bench.building.elevation,
-        }
-        visitor.activitySlot = bench.slot
-        visitor.activityCapacity =
-          SIMULATION_CONFIG.atmosphere.benchCapacity
-        this.adjustVisitorOccupancy(visitor, 1)
-        visitor.interactionRemaining =
-          SIMULATION_CONFIG.atmosphere.benchRestMinutes
-        if (
-          this.tryBeginBusJourney(
-            visitor,
-            visitor.activityTarget,
-            bench.route,
-          )
-        ) {
-          return
-        }
-        visitor.thought = 'Ich suche mir eine freie Bank zum Ausruhen.'
-        return
-      }
-    }
-    if (visitor.needs.energy < decisions.lowEnergy) {
-      if (visitor.campsite && visitor.campingPhase === 'ready') {
-        const route = this.camping.findRouteToCampsite(visitor, visitor.campsite)
-        if (route) {
-          visitor.state = 'camping'
-          visitor.campingPhase = 'returning'
-          visitor.walkingToCampDistance = 0
-          visitor.targetId = null
-          if (this.tryBeginBusJourney(visitor, visitor.campsite, route)) return
-          visitor.route = route
-          visitor.thought = 'Ich gehe zu meinem Zelt und ruhe mich aus.'
-          return
-        }
-      }
-      const route = this.findPath(
-        { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation },
-        [this.getEntrance()],
-      )
-      visitor.state = 'leaving'
-      visitor.thought = 'Ich bin müde und gehe nach Hause.'
-      visitor.targetId = null
-      visitor.route = route ?? []
-      return
-    }
-
-    const desiredKinds: BuildingKind[] = []
-    if (visitor.needs.toilet < decisions.seekToiletBelow) desiredKinds.push('toilet')
-    if (visitor.needs.hunger < decisions.seekFoodBelow) desiredKinds.push('food')
-    if (
-      visitor.alcoholDesire >= decisions.seekAlcoholDesire &&
-      visitor.alcoholLevel < decisions.maximumAlcoholForPurchase &&
-      visitor.needs.energy > decisions.minimumEnergyForAlcohol
-    ) {
-      desiredKinds.push('alcohol')
-    }
-    if (visitor.needs.fun < decisions.seekFunBelow) desiredKinds.push('ride')
-
-    const urgentNeed = desiredKinds.some(
-      (kind) => kind === 'toilet' || kind === 'food',
-    )
-    if (!urgentNeed && this.tryVisitConcert(visitor)) return
-    const decisionRng = this.visitorDecisionRng(visitor)
-    if (
-      !urgentNeed &&
-      visitor.needs.fun < decisions.seekSouvenirFunBelow &&
-      ((visitor.pathSeed + visitor.wanderNonce * 17) >>> 0) % 1000 <
-        decisions.seekSouvenirProbability * 1000
-    ) {
-      if (!visitor.ownedMascot && this.state.buildings.some((building) => building.kind === 'mascot')) {
-        desiredKinds.push('mascot')
-      }
-      if (!visitor.wornShirt && this.state.buildings.some((building) => building.kind === 'shirt')) {
-        desiredKinds.push('shirt')
-      }
-    }
-    const searchAtmosphere =
-      visitor.wanderNonce %
-        SIMULATION_CONFIG.pathfinding.exploreSearchEvery ===
-      0
-    if (
-      !urgentNeed &&
-      searchAtmosphere &&
-      decisionRng() <
-        SIMULATION_CONFIG.atmosphere.partyDecisionProbability *
-          (0.45 +
-            visitor.partyPreference *
-              SIMULATION_CONFIG.atmosphere.partyPreferenceDecisionWeight)
-    ) {
-      const party = this.findPartyDestination(visitor)
-      if (party) {
-        this.beginPartyVisit(visitor, party)
-        return
-      }
-    }
-
-    for (const kind of desiredKinds) {
-      if (kind === 'ride') {
-        const coasterDestination = this.findReachableCoaster(visitor)
-        if (coasterDestination) {
-          if (!coasterDestination.coaster.queue.includes(visitor.id)) {
-            coasterDestination.coaster.queue.push(visitor.id)
-          }
-          visitor.state = 'seeking'
-          visitor.targetId = coasterDestination.coaster.id
-          visitor.route = coasterDestination.route
-          visitor.thought = `Ich möchte ${coasterDestination.coaster.name} fahren!`
-          return
-        }
-        const fullCoaster = this.state.coasters.find((coaster) => {
-          const capacity = this.getCoasterQueueCapacity(coaster.id)
-          return (
-            coaster.operationMode === 'open' &&
-            this.isOfferCurrentlyActive('rides') &&
-            coaster.id !== visitor.avoidedCoasterId &&
-            capacity > 0 &&
-            coaster.queue.length >= capacity
-          )
-        })
-        if (fullCoaster) {
-          visitor.avoidedCoasterId = fullCoaster.id
-          visitor.avoidanceMinutes =
-            SIMULATION_CONFIG.coasters.fullQueueAvoidanceMinutes
-          visitor.emotion = 'angry'
-          visitor.emotionMinutes = 35
-        }
-      }
-      const destination = this.findReachableFacility(visitor, kind)
-      if (destination) {
-        visitor.state = 'seeking'
-        visitor.targetId = destination.building.id
-        if (
-          this.tryBeginBusJourney(
-            visitor,
-            {
-              x: destination.building.x,
-              z: destination.building.z,
-              elevation: destination.building.elevation,
-            },
-            destination.route,
-          )
-        ) {
-          return
-        }
-        if (this.getBuildingQueueCells(destination.building).length > 0) {
-          const queue = this.getFacilityQueue(destination.building.id)
-          if (!queue.includes(visitor.id)) queue.push(visitor.id)
-        }
-        visitor.route = destination.route
-        visitor.thought =
-          kind === 'food'
-            ? 'Ich habe Hunger.'
-            : kind === 'alcohol'
-              ? 'Ich hole mir etwas zu trinken.'
-            : kind === 'toilet'
-              ? 'Ich brauche dringend eine Toilette.'
-            : kind === 'mascot' || kind === 'shirt'
-              ? souvenirSeekThought(kind)
-              : 'Ich möchte etwas Spannendes erleben!'
-        return
-      }
-    }
-
-    if (
-      searchAtmosphere &&
-      decisionRng() < SIMULATION_CONFIG.atmosphere.partyDecisionProbability
-    ) {
-      const party = this.findPartyDestination(visitor)
-      if (party) {
-        this.beginPartyVisit(visitor, party)
-        return
-      }
-    }
-
-    if (
-      searchAtmosphere &&
-      visitor.needs.fun < decisions.socializingFunBelow &&
-      decisionRng() < decisions.socializingProbability
-    ) {
-      const gathering = this.camping.findRouteToGathering(visitor)
-      if (gathering) {
-        visitor.state = 'socializing'
-        visitor.targetId = null
-        if (
-          this.tryBeginBusJourney(
-            visitor,
-            gathering.target,
-            gathering.route,
-          )
-        ) {
-          return
-        }
-        visitor.route = gathering.route
-        visitor.interactionRemaining =
-          decisions.socializingMinutesMinimum +
-          this.rng.next() * decisions.socializingMinutesRandomRange
-        visitor.campActivityTarget = gathering.target
-        visitor.campActivityKind = gathering.kind
-        visitor.campActivitySlot = gathering.slot
-        visitor.campActivityCapacity = gathering.capacity
-        visitor.campActivity =
-          gathering.kind === 'chairs' ? 'sitting' : 'standing'
-        visitor.thought =
-          gathering.kind === 'pavilion'
-            ? 'Ich gehe zu den anderen unter den Pavillon.'
-            : gathering.kind === 'musicBox'
-              ? 'Ich gehe zur Musikbox am Zeltplatz.'
-              : 'Ich setze mich zu den anderen Campern.'
-        return
-      }
-    }
-
-    if (
-      !urgentNeed &&
-      visitor.needs.fun < decisions.seekFunBelow
-    ) {
-      const swim = this.findSwimDestination(visitor)
-      if (swim) {
-        visitor.state = 'swimming'
-        visitor.targetId = null
-        visitor.route = swim.route
-        visitor.activityTarget = swim.cell
-        visitor.activitySlot = swim.slot
-        visitor.activityCapacity = swim.capacity
-        this.adjustVisitorOccupancy(visitor, 1)
-        visitor.interactionRemaining =
-          SIMULATION_CONFIG.terrain.swimDurationMinimum +
-          this.rng.next() * SIMULATION_CONFIG.terrain.swimDurationRandomRange
-        visitor.isDancing = false
-        visitor.thought =
-          swim.route.length > 1
-            ? 'Ich gehe baden – das wird Spaß machen.'
-            : 'Ich springe ins Wasser.'
-        return
-      }
-    }
-
-    if (searchAtmosphere) {
-      const leisure = this.findLeisureDestination(visitor)
-      if (leisure) {
-        visitor.state = 'relaxing'
-        visitor.targetId = null
-        if (this.tryBeginBusJourney(visitor, leisure.cell, leisure.route)) return
-        visitor.route = leisure.route
-        visitor.activityTarget = leisure.cell
-        visitor.activitySlot = leisure.slot
-        visitor.activityCapacity = leisure.capacity
-        this.adjustVisitorOccupancy(visitor, 1)
-        visitor.interactionRemaining =
-          SIMULATION_CONFIG.atmosphere.leisureDurationMinimum +
-          this.rng.next() *
-            SIMULATION_CONFIG.atmosphere.leisureDurationRandomRange
-        visitor.isDancing = false
-        visitor.thought =
-          leisure.party > leisure.beauty
-            ? 'Dort ist gute Stimmung. Ich gehe zu den anderen.'
-            : 'Dort sieht es schön aus. Da möchte ich mich aufhalten.'
-        return
-      }
-    }
-
-    this.assignDeterministicWander(visitor, decisionRng)
-    visitor.thought =
-      desiredKinds.length > 0
-        ? 'Ich finde hier nicht, was ich brauche.'
-        : 'Ich schaue mich ein wenig um.'
-  }
-
-  private tryBeginBusJourney(
-    visitor: Visitor,
-    destination: Cell,
-    directRoute?: readonly Cell[],
-  ): boolean {
-    const routeToDestination =
-      directRoute ??
-      this.findPath(
-        {
-          x: visitor.cellX,
-          z: visitor.cellZ,
-          elevation: visitor.cellElevation,
-        },
-        [destination],
-      )
-    if (
-      !routeToDestination ||
-      routeToDestination.length <
-        SIMULATION_CONFIG.logistics.busMinimumJourneyTiles ||
-      this.state.logistics.busLines.length === 0
-    ) {
-      return false
-    }
-    const start = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    const choices = this.state.logistics.busLines
-      .filter(
-        (line) =>
-          line.active &&
-          line.stopIds.length >= 2 &&
-          line.busIds.some((busId) =>
-            this.state.logistics.roadVehicles.some(
-              (vehicle) => vehicle.id === busId && vehicle.kind === 'bus',
-            ),
-          ),
-      )
-      .flatMap((line) =>
-        line.stopIds.flatMap((stopId, boardingIndex) => {
-          const stop = this.state.logistics.busStops.find(
-            (candidate) => candidate.id === stopId,
-          )
-          if (!stop) return []
-          const route = this.findPath(start, [
-            { x: stop.x, z: stop.z, elevation: 0 },
-          ])
-          if (!route) return []
-          return Array.from(
-            { length: line.stopIds.length - 1 },
-            (_, index) => index + 1,
-          ).flatMap((rideStops) => {
-            const destinationStopId =
-              line.stopIds[
-                (boardingIndex + rideStops) % line.stopIds.length
-              ]
-            const destinationStop = this.state.logistics.busStops.find(
-              (candidate) => candidate.id === destinationStopId,
-            )
-            if (!destinationStop) return []
-            const finalRoute = this.findPath(
-              { x: destinationStop.x, z: destinationStop.z, elevation: 0 },
-              [destination],
-            )
-            if (!finalRoute) return []
-            const walkingDistance = route.length + finalRoute.length
-            const requiredSaving =
-              visitor.needs.energy <=
-              SIMULATION_CONFIG.logistics.busPreferenceEnergyThreshold
-                ? 0
-                : SIMULATION_CONFIG.logistics.busMinimumWalkSavingsTiles
-            if (
-              walkingDistance + requiredSaving >=
-              routeToDestination.length
-            ) {
-              return []
-            }
-            return [{
-              line,
-              stop,
-              destinationStop,
-              route,
-              score:
-                walkingDistance +
-                rideStops *
-                  SIMULATION_CONFIG.logistics.busStopRideCostTiles +
-                line.headway /
-                  SIMULATION_CONFIG.logistics.busHeadwayCostDivisor,
-            }]
-          })
-        }),
-      )
-      .sort((left, right) => left.score - right.score)
-    const choice = choices[0]
-    if (!choice) return false
-    visitor.busDestination = { ...destination }
-    visitor.busDestinationStopId = choice.destinationStop.id
-    visitor.busResumeState = visitor.state
-    visitor.busResumeTargetId = visitor.targetId
-    visitor.state = 'bus-waiting'
-    visitor.busLineId = choice.line.id
-    visitor.busWaitMinutes = 0
-    visitor.route = choice.route
-    visitor.targetId = choice.stop.id
-    visitor.thought = `Ich fahre mit ${choice.line.name}, damit ich nicht so weit laufen muss.`
-    return true
-  }
-
-  private beginPartyVisit(
-    visitor: Visitor,
-    party: {
-      cell: Cell
-      route: Cell[]
-      slot: number
-      capacity: number
-      forecourt: boolean
-    },
-  ): void {
-    visitor.state = 'partying'
-    visitor.targetId = null
-    visitor.route = party.forecourt
-      ? this.routeThroughFestivalEntrance(visitor, party.cell, party.route)
-      : party.route
-    visitor.activityTarget = party.cell
-    visitor.activitySlot = party.slot
-    visitor.activityCapacity = party.capacity
-    this.adjustVisitorOccupancy(visitor, 1)
-    const partyKey = this.cellKey(
-      party.cell.x,
-      party.cell.z,
-      party.cell.elevation,
-    )
-    if (party.route.length === 0) {
-      visitor.localAttractiveness =
-        this.attractivenessValues.get(partyKey) ?? 0
-      visitor.localPartyMood = this.partyMoodValues.get(partyKey) ?? 0
-    }
-    visitor.interactionRemaining =
-      SIMULATION_CONFIG.atmosphere.partyDurationMinimum +
-      this.rng.next() * SIMULATION_CONFIG.atmosphere.partyDurationRandomRange
-    visitor.isDancing = false
-    visitor.isConversing = false
-    visitor.thought = party.forecourt
-      ? 'Ich gehe zum Bühnenvorplatz!'
-      : 'Dort scheint gute Stimmung zu sein!'
-    this.tryBeginBusJourney(visitor, party.cell, visitor.route)
-  }
-
-  private routeThroughFestivalEntrance(
-    visitor: Visitor,
-    goal: Cell,
-    directRoute: Cell[],
-  ): Cell[] {
-    const start = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    const directDistance =
-      Math.abs(goal.x - start.x) + Math.abs(goal.z - start.z)
-    const directions = [
-      { x: 0, z: 1 },
-      { x: 1, z: 0 },
-      { x: 0, z: -1 },
-      { x: -1, z: 0 },
-    ]
-    const gates = this.state.buildings
-      .filter((building) => building.kind === 'securityGate')
-      .map((gate) => {
-        const direction = directions[gate.rotation % directions.length] ?? directions[0]!
-        const startSide =
-          (start.x - gate.x) * direction.x + (start.z - gate.z) * direction.z
-        const goalSide =
-          (goal.x - gate.x) * direction.x + (goal.z - gate.z) * direction.z
-        const detour =
-          Math.abs(gate.x - start.x) +
-          Math.abs(gate.z - start.z) +
-          Math.abs(goal.x - gate.x) +
-          Math.abs(goal.z - gate.z)
-        return {
-          gate,
-          weight: gate.securityConfig?.flowShare ?? 1,
-          eligible:
-            startSide < 0 &&
-            goalSide > 0 &&
-            detour <= directDistance * 2 + 8 &&
-            Boolean(this.getPathAt(gate.x, gate.z, gate.elevation)),
-        }
-      })
-      .filter((candidate) => candidate.eligible && candidate.weight > 0)
-      .sort((left, right) => left.gate.id.localeCompare(right.gate.id))
-    if (gates.length === 0) return directRoute
-
-    const totalWeight = gates.reduce((sum, candidate) => sum + candidate.weight, 0)
-    let hash = 2166136261
-    for (const character of visitor.id) {
-      hash ^= character.charCodeAt(0)
-      hash = Math.imul(hash, 16777619)
-    }
-    let selection = ((hash >>> 0) / 0x100000000) * totalWeight
-    const selected =
-      gates.find((candidate) => {
-        selection -= candidate.weight
-        return selection <= 0
-      }) ?? gates[gates.length - 1]
-    if (!selected) return directRoute
-
-    const gateCell = {
-      x: selected.gate.x,
-      z: selected.gate.z,
-      elevation: selected.gate.elevation,
-    }
-    const toGate = this.findPath(start, [gateCell], true)
-    const fromGate = this.findPath(
-      gateCell,
-      [goal],
-      true,
-      false,
-      false,
-      false,
-      true,
-    )
-    return toGate && fromGate ? [...toGate, ...fromGate] : directRoute
-  }
-
-  private availableConcerts(){
-    const key=`${this.state.simTick}:${this.worldRevision}:${this.state.day}:${this.state.minute}`
-    if(key!==this.concertChoiceKey){
-      this.concertChoiceKey=key
-      this.concertChoices=watchableBookings(this.state)
-        .filter(b=>!showIssue(this.state,b,Math.max(this.state.minute,b.start)))
-        .map(booking=>({booking,band:BANDS.find(b=>b.id===booking.bandId)!,stage:this.state.buildings.find(b=>b.id===booking.stageId)!}))
-    }
-    return this.concertChoices
-  }
-  private avoidsConcertAt(visitor:Visitor,cell:{x:number;z:number}){
-    if(!this.state.festival.enabled)return false
-    const nearby=this.availableConcerts().filter(show=>stageDistance(show.stage,cell)<=8)
-    if(!nearby.length)return false
-    visitor.musicTaste??=musicTaste(visitor.id,this.state.festival)
-    return !nearby.some(show=>musicAppeal(visitor.musicTaste!,show.band.id)>=.3)
-  }
-
-  private visitorShouldDance(visitor: Visitor): boolean {
-    const atmosphere = SIMULATION_CONFIG.atmosphere
-    const onDanceFloor = Boolean(
-      visitor.concertId ||
-        this.getStageForecourtCellAt(visitor.cellX, visitor.cellZ),
-    )
-    if (onDanceFloor) {
-      if (visitor.concertId) {
-        return visitor.partyPreference >= atmosphere.danceFloorPreferenceThreshold
-      }
-      return (
-        visitor.localPartyMood >= atmosphere.danceFloorMoodThreshold &&
-        visitor.partyPreference >= atmosphere.danceFloorPreferenceThreshold
-      )
-    }
-    return (
-      visitor.localPartyMood >= atmosphere.danceMoodThreshold &&
-      visitor.partyPreference >= atmosphere.dancePreferenceThreshold
-    )
-  }
-
-  private stageFocusPoint(stage: {
-    x: number
-    z: number
-    rotation: number
-    stageDesign?: StageDesign
-  }): { x: number; z: number } {
-    const size = stageSize(stage.stageDesign, stage.rotation)
-    return {
-      x: stage.x + (size.width - 1) / 2,
-      z: stage.z + (size.depth - 1) / 2,
-    }
-  }
-
-  private visitorDanceAngle(visitor: Visitor, stageId: string): number {
-    return ((((hashStringSeed(visitor.id) ^ hashStringSeed(stageId)) >>> 8) & 1023) / 1024) * Math.PI * 2
-  }
-
-  private angularDelta(
-    cell: { x: number; z: number },
-    focus: { x: number; z: number },
-    want: number,
-  ): number {
-    const angle = Math.atan2(cell.z - focus.z, cell.x - focus.x)
-    return Math.abs(Math.atan2(Math.sin(angle - want), Math.cos(angle - want)))
-  }
-
-  private ensureDanceFloorIndex(): void {
-    if (this.concertSlotTick === this.state.simTick) return
-    this.concertSlotTick = this.state.simTick
-    this.concertSlots.clear()
-    this.concertForecourtByStage.clear()
-    this.concertForecourtStageIds.clear()
-    this.danceFloorFocusByStage.clear()
-    for (const guest of this.state.visitors) {
-      if (!guest.activityTarget || !['partying', 'relaxing'].includes(guest.state)) continue
-      const key = this.packCell(guest.activityTarget)
-      const slots = this.concertSlots.get(key) ?? new Set<number>()
-      slots.add(guest.activitySlot)
-      this.concertSlots.set(key, slots)
-    }
-    const stages = this.state.buildings.filter((building) => building.kind === 'stage')
-    for (const stage of stages) {
-      this.danceFloorFocusByStage.set(stage.id, this.stageFocusPoint(stage))
-    }
-    for (const cell of this.state.stageForecourtCells) {
-      let nearest: { id: string; distance: number } | undefined
-      for (const stage of stages) {
-        const linked = cell.stageId
-          ? cell.stageId === stage.id
-          : stageDistance(stage, cell) <= 8
-        if (!linked) continue
-        const list = this.concertForecourtByStage.get(stage.id)
-        if (list) list.push(cell)
-        else this.concertForecourtByStage.set(stage.id, [cell])
-        const distance = stageDistance(stage, cell)
-        if (!nearest || distance < nearest.distance) nearest = { id: stage.id, distance }
-      }
-      if (nearest) this.concertForecourtStageIds.set(this.packCell(cell), nearest.id)
-    }
-  }
-
-  private tryVisitConcert(visitor: Visitor): boolean {
-    if (!this.state.festival.enabled) return false
-    this.ensureDanceFloorIndex()
-    visitor.musicTaste??=musicTaste(visitor.id,this.state.festival)
-    const shows = this.availableConcerts()
-      .filter(show=>musicAppeal(visitor.musicTaste!,show.band.id)>=.3)
-      .sort((a,b)=> (musicAppeal(visitor.musicTaste!,b.band.id)*120+b.band.draw*.25-stageDistance(b.stage,visitor)*.5)-(musicAppeal(visitor.musicTaste!,a.band.id)*120+a.band.draw*.25-stageDistance(a.stage,visitor)*.5))
-    const atmosphere = SIMULATION_CONFIG.atmosphere
-    const capacity = atmosphere.forecourtCapacityPerCell
-    const slotOrder = [4, 0, 2, 6, 8, 1, 3, 5, 7]
-    for (const show of shows.slice(0, 2)) {
-      if (visitor.audience === 'family' && this.state.minute >= 21 * 60) continue
-      const cells = this.concertForecourtByStage.get(show.stage.id) ?? []
-      const open = cells.filter((cell) => (this.concertSlots.get(this.packCell(cell))?.size ?? 0) < capacity)
-      if (!open.length) continue
-      const focus = this.danceFloorFocusByStage.get(show.stage.id) ?? this.stageFocusPoint(show.stage)
-      const want = this.visitorDanceAngle(visitor, show.stage.id)
-      const goals = open
-        .map((cell) => {
-          const used = this.concertSlots.get(this.packCell(cell))?.size ?? 0
-          const distance =
-            Math.abs(cell.x - visitor.cellX) + Math.abs(cell.z - visitor.cellZ)
-          return {
-            cell,
-            score: used * 24 + distance + this.angularDelta(cell, focus, want) * 0.4,
-          }
-        })
-        .sort((left, right) => left.score - right.score)
-        .slice(0, atmosphere.concertSpreadGoals)
-        .map((entry) => entry.cell)
-      const route = this.findPath(
-        { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation },
-        goals,
-        true,
-        true,
-        false,
-        false,
-        true,
-      )
-      if (!route) continue
-      const end = route.at(-1) ?? goals[0]!
-      const cell =
-        goals.find(
-          (goal) =>
-            goal.x === end.x &&
-            goal.z === end.z &&
-            Math.abs(goal.elevation - end.elevation) < 0.01,
-        ) ?? goals[0]!
-      const key = this.packCell(cell)
-      const used = this.concertSlots.get(key) ?? new Set<number>()
-      const slot = slotOrder.find((n) => !used.has(n))
-      if (slot === undefined) continue
-      used.add(slot)
-      this.concertSlots.set(key, used)
-      this.beginPartyVisit(visitor, { cell, route, slot, capacity, forecourt: true })
-      visitor.concertId = show.booking.id
-      visitor.interactionRemaining = show.booking.start + show.booking.duration - this.state.minute
-      visitor.thought = this.state.minute < show.booking.start
-        ? `Ich gehe schon zu ${show.band.name}, damit ich den Anfang nicht verpasse.`
-        : `Ich möchte ${show.band.name} sehen!`
-      return true
-    }
-    return false
-  }
-
-  private updateConcertAttendance(
-    visitor: Visitor,
-    minutes: number,
-    concert: { booking: Booking; band: (typeof BANDS)[number] },
-    consumed: boolean,
-  ): void {
-    visitor.interactionRemaining = Math.max(
-      visitor.interactionRemaining,
-      concert.booking.start + concert.booking.duration - this.state.minute,
-    )
-    if (this.state.minute < concert.booking.start) {
-      visitor.toplessMinutes = 0
-      if (!consumed) visitor.thought = `Ich warte auf ${concert.band.name}.`
-      return
-    }
-    visitor.motivation = Math.min(
-      100,
-      visitor.motivation +
-        minutes *
-          SIMULATION_CONFIG.atmosphere.concertMotivationPerMinute *
-          this.showQualityForStage(concert.booking.stageId),
-    )
-    this.updateConcertTopless(visitor, minutes, concert)
-    if (visitor.toplessMinutes > 0) return
-    if (visitor.thought === CONCERT_TOPLESS_CROWD_THOUGHT) return
-    if (!consumed) {
-      visitor.thought = visitor.isDancing
-        ? `${concert.band.name} spielen – ich tanze die ganze Show!`
-        : `${concert.band.name} spielen live – ich bleibe bis zum Ende.`
-    }
-  }
-
-  private updateConcertTopless(
-    visitor: Visitor,
-    minutes: number,
-    concert: { booking: Booking },
-  ): void {
-    const atmosphere = SIMULATION_CONFIG.atmosphere
-    const remaining = concert.booking.start + concert.booking.duration - this.state.minute
-    if (visitor.streakingMinutes > 0 || remaining <= 0) {
-      visitor.toplessMinutes = 0
-      return
-    }
-    if (visitor.toplessMinutes > 0) {
-      visitor.toplessMinutes = remaining
-      visitor.needs.fun = Math.min(
-        100,
-        visitor.needs.fun + minutes * atmosphere.concertToplessSelfFun,
-      )
-      visitor.thought = CONCERT_TOPLESS_THOUGHT
-      this.spreadConcertToplessFun(visitor, minutes)
-      return
-    }
-    if (visitor.audience === 'family' || this.concertToplessVisitorId !== null) return
-    if (this.rng.next() >= Math.min(1, minutes * atmosphere.concertToplessChancePerMinute / Math.max(1, this.state.visitors.length))) return
-    this.concertToplessVisitorId = visitor.id
-    visitor.toplessMinutes = remaining
-    visitor.needs.fun = Math.min(
-      100,
-      visitor.needs.fun + minutes * atmosphere.concertToplessSelfFun,
-    )
-    visitor.emotion = 'excited'
-    visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 12)
-    visitor.thought = CONCERT_TOPLESS_THOUGHT
-    this.spreadConcertToplessFun(visitor, minutes)
-  }
-
-  private spreadConcertToplessFun(source: Visitor, minutes: number): void {
-    const atmosphere = SIMULATION_CONFIG.atmosphere
-    const radius = atmosphere.concertToplessRadius
-    this.state.visitors.forEach((other) => {
-      if (other.id === source.id) return
-      if (
-        other.state === 'sleeping' ||
-        other.state === 'riding' ||
-        other.state === 'medical' ||
-        other.state === 'injured' ||
-        other.state === 'vehicle-arrival' ||
-        other.state === 'bus-riding'
-      ) {
-        return
-      }
-      const distance =
-        Math.abs(other.cellX - source.cellX) +
-        Math.abs(other.cellZ - source.cellZ)
-      if (distance > radius) return
-      other.needs.fun = Math.min(
-        100,
-        other.needs.fun + minutes * atmosphere.concertToplessNearbyFun,
-      )
-      if (other.emotion !== 'angry' && other.emotion !== 'sad') {
-        other.emotion = distance <= 1 ? 'excited' : 'happy'
-        other.emotionMinutes = Math.max(other.emotionMinutes, 8)
-      }
-      if ((other.toplessMinutes ?? 0) <= 0 && other.state !== 'leaving' && other.state !== 'panicking') {
-        other.thought = CONCERT_TOPLESS_CROWD_THOUGHT
-      }
-    })
-  }
-
-  private giveWaste(visitor: Visitor, amount: number): void {
-    if (amount <= 0) return
-    visitor.pendingWaste = (visitor.pendingWaste ?? 0) + amount
-    this.tryDisposeWaste(visitor)
-  }
-
-  private listVisitorWasteBins(): WasteBinInfo[] {
-    if (this.visitorWasteBinTick !== this.state.simTick) {
-      this.visitorWasteBinTick = this.state.simTick
-      this.visitorWasteBinBuildings = this.state.buildings.filter(
-        (building) => isWasteBin(building.kind),
-      )
-    }
-    return this.visitorWasteBinBuildings.map((building) => ({
-      id: building.id,
-      x: building.x,
-      z: building.z,
-      elevation: building.elevation,
-      stored: building.wasteFill ?? 0,
-    }))
-  }
-
-  private discardWasteIfCannotUseBin(visitor: Visitor): boolean {
-    if ((visitor.pendingWaste ?? 0) <= 0) return false
-    if (
-      visitor.state === 'vehicle-arrival' ||
-      visitor.state === 'bus-riding' ||
-      visitor.state === 'riding' ||
-      visitor.state === 'medical' ||
-      visitor.state === 'medical-transport' ||
-      collectSeatedPassengerIds(this.state.logistics.roadVehicles).has(
-        visitor.id,
-      )
-    ) {
-      return false
-    }
-    const config = SIMULATION_CONFIG.waste
-    const from = { x: visitor.cellX, z: visitor.cellZ }
-    const bins = this.listVisitorWasteBins()
-    const nearest = findNearestWasteBinInRange(from, bins, config.binRange)
-    const target = visitor.targetId
-      ? bins.find((bin) => bin.id === visitor.targetId)
-      : undefined
-    const nearestFull =
-      Boolean(nearest) && !wasteBinHasRoom(nearest!, config.binCapacity)
-    const targetFull =
-      Boolean(target) && !wasteBinHasRoom(target!, config.binCapacity)
-    if (!nearest || (config.visitorDropIfBinFull && (nearestFull || targetFull))) {
-      this.dropPendingWaste(visitor)
-      return true
-    }
-    return false
-  }
-
-  private tryDisposeWaste(visitor: Visitor): void {
-    if (this.discardWasteIfCannotUseBin(visitor)) return
-    if ((visitor.pendingWaste ?? 0) <= 0) return
-    const config = SIMULATION_CONFIG.waste
-    const from = { x: visitor.cellX, z: visitor.cellZ }
-    const bin = findNearestWasteBin(
-      from,
-      this.listVisitorWasteBins(),
-      config.binRange,
-      config.binCapacity,
-    )
-    if (!bin) {
-      this.dropPendingWaste(visitor)
-      return
-    }
-    const distance = wasteBinManhattan(from, bin)
-    if (distance <= 1) {
-      this.depositPendingWaste(visitor, bin.id)
-      return
-    }
-    if (
-      visitor.targetId === bin.id &&
-      visitor.state === 'seeking' &&
-      visitor.route.length > 0
-    ) {
-      return
-    }
-    this.runVisitorRouting(visitor, 'waste', () =>
-      this.routeVisitorToWasteBin(visitor, bin),
-    )
-  }
-
-  private routeVisitorToWasteBin(visitor: Visitor, bin: { id: string; x: number; z: number; elevation: number }): void {
-    const route = this.findPath(
-      {
-        x: visitor.cellX,
-        z: visitor.cellZ,
-        elevation: visitor.cellElevation,
-      },
-      [{ x: bin.x, z: bin.z, elevation: bin.elevation }],
-      false,
-      true,
-      true,
-    )
-    if (!route) {
-      this.dropPendingWaste(visitor)
-      return
-    }
-    this.clearVisitorActivity(visitor)
-    visitor.targetId = bin.id
-    visitor.state = 'seeking'
-    visitor.route = route
-    visitor.thought = 'Ich gehe zum Mülleimer.'
-  }
-
-  private depositPendingWaste(visitor: Visitor, binId: string): void {
-    const bin = this.state.buildings.find(
-      (building) => building.id === binId && isWasteBin(building.kind),
-    )
-    if (!bin) {
-      this.dropPendingWaste(visitor)
-      return
-    }
-    const room = Math.max(
-      0,
-      SIMULATION_CONFIG.waste.binCapacity - (bin.wasteFill ?? 0),
-    )
-    const stored = Math.min(visitor.pendingWaste, room)
-    bin.wasteFill = (bin.wasteFill ?? 0) + stored
-    visitor.pendingWaste -= stored
-    visitor.thought =
-      stored > 0
-        ? 'Ich werfe den Müll in den Eimer.'
-        : 'Der Mülleimer ist voll.'
-    if (visitor.pendingWaste > 0) this.dropPendingWaste(visitor)
-  }
-
-  private dropPendingWaste(visitor: Visitor): void {
-    if (visitor.pendingWaste <= 0) return
-    this.addGroundIncident(
-      'litter',
-      this.findLitterDropCell(visitor),
-      visitor.pendingWaste,
-    )
-    visitor.pendingWaste = 0
-    if (
-      visitor.targetId &&
-      this.listVisitorWasteBins().some((bin) => bin.id === visitor.targetId)
-    ) {
-      visitor.targetId = null
-      if (visitor.state === 'seeking') {
-        visitor.state = 'exploring'
-        visitor.route = []
-      }
-    }
-    visitor.thought = 'Hier liegt jetzt mein Müll. Ein Eimer wäre besser gewesen.'
-  }
-
-  private findLitterDropCell(visitor: Visitor): {
-    x: number
-    z: number
-    elevation: number
-  } {
-    const here = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    if (this.canDropLitterAt(here)) return here
-    const neighbor = this.getPedestrianNeighbors(here, {
-      allowCamping: Boolean(this.getCampingCellAt(here.x, here.z)),
-      allowMedical: Boolean(this.getMedicalCellAt(here.x, here.z)),
-      allowFestival: Boolean(this.getStageForecourtCellAt(here.x, here.z)),
-      allowQueue:
-        this.getPathAt(here.x, here.z, here.elevation)?.pathType === 'queue',
-    })[0]
-    return neighbor ?? here
-  }
-
-  private canDropLitterAt(cell: {
-    x: number
-    z: number
-    elevation: number
-  }): boolean {
-    return Boolean(
-      this.getPathAt(cell.x, cell.z, cell.elevation) ||
-        this.getCampingCellAt(cell.x, cell.z) ||
-        this.getStageForecourtCellAt(cell.x, cell.z) ||
-        this.getMedicalCellAt(cell.x, cell.z),
-    )
-  }
-
-  private beginStationaryBreak(visitor: Visitor, thought: string): void {
-    visitor.state = 'relaxing'
-    visitor.targetId = null
-    visitor.route = []
-    visitor.activityTarget = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    visitor.activityCapacity =
-      SIMULATION_CONFIG.atmosphere.leisureCapacityPerPathCell
-    visitor.activitySlot = this.getFreeActivitySlot(
-      visitor.activityTarget,
-      visitor.activityCapacity,
-      visitor.id,
-    )
-    this.adjustVisitorOccupancy(visitor, 1)
-    visitor.interactionRemaining =
-      SIMULATION_CONFIG.atmosphere.leisureDurationMinimum
-    visitor.consumptionCooldown = 0
-    visitor.thought = thought
-  }
-
-  private consumeWhileStationary(
-    visitor: Visitor,
-    minutes: number,
-  ): boolean {
-    visitor.consumptionCooldown = Math.max(
-      0,
-      visitor.consumptionCooldown - minutes,
-    )
-    if (visitor.consumptionCooldown > 0) return false
-    const config = SIMULATION_CONFIG.needs.stationaryConsumption
-    if (
-      visitor.needs.hunger < config.foodConsumeBelow &&
-      consumeItem(visitor.inventory, 'food')
-    ) {
-      visitor.needs.hunger = Math.min(
-        100,
-        visitor.needs.hunger + config.foodGain,
-      )
-      visitor.needs.toilet = Math.max(
-        0,
-        visitor.needs.toilet - config.foodToiletCost,
-      )
-      visitor.consumptionCooldown =
-        config.cooldownMinimumMinutes +
-        this.rng.next() * config.cooldownRandomMinutes
-      visitor.thought = 'Ich bleibe stehen und esse mein gekauftes Essen.'
-      this.giveWaste(visitor, 1)
-      return true
-    }
-    if (
-      visitor.alcoholDesire >= config.drinkDesireAbove &&
-      visitor.alcoholLevel < config.maximumAlcohol &&
-      consumeItem(visitor.inventory, 'alcohol')
-    ) {
-      visitor.alcoholLevel = Math.min(
-        100,
-        visitor.alcoholLevel + config.alcoholGain,
-      )
-      visitor.alcoholDesire = 0
-      visitor.needs.fun = Math.min(
-        100,
-        visitor.needs.fun + config.drinkFunGain,
-      )
-      visitor.needs.energy = Math.max(
-        0,
-        visitor.needs.energy - config.drinkEnergyCost,
-      )
-      visitor.needs.toilet = Math.max(
-        0,
-        visitor.needs.toilet - config.drinkToiletCost,
-      )
-      this.incidents.addDrinkNausea(visitor)
-      visitor.consumptionCooldown =
-        config.cooldownMinimumMinutes +
-        this.rng.next() * config.cooldownRandomMinutes
-      visitor.thought = 'Ich bleibe hier und trinke mein Getränk.'
-      this.giveWaste(visitor, 1)
-      return true
-    }
-    return false
-  }
-
-  private createPreferredSleepRhythm(): {
-    preferredBedtime: number
-    preferredWakeTime: number
-  } {
-    const rhythm = sampleFestivalSleepRhythm(
-      this.rng.next(),
-      this.rng.next(),
-      SIMULATION_CONFIG.camping.sleepSchedule,
-      SIMULATION_CONFIG.time.minutesPerDay,
-    )
-    return {
-      preferredBedtime: rhythm.bedtime,
-      preferredWakeTime: rhythm.wakeTime,
-    }
-  }
-
-  private restoreVisitorSleepRhythm(visitor: Visitor): void {
-    const schedule = SIMULATION_CONFIG.camping.sleepSchedule
-    const minutesPerDay = SIMULATION_CONFIG.time.minutesPerDay
-    if (
-      visitor.preferredBedtime == null ||
-      visitor.preferredWakeTime == null
-    ) {
-      const rhythm = sleepRhythmFromVisitorId(
-        visitor.id,
-        schedule,
-        minutesPerDay,
-      )
-      visitor.preferredBedtime = rhythm.bedtime
-      visitor.preferredWakeTime = rhythm.wakeTime
-      return
-    }
-    const remapped = remapLegacySleepRhythm(
-      visitor,
-      schedule,
-      minutesPerDay,
-    )
-    visitor.preferredBedtime = remapped.bedtime
-    visitor.preferredWakeTime = remapped.wakeTime
-  }
-
-  private samplePoisson(expected: number): number {
-    if (expected <= 0) return 0
-    const limit = Math.exp(-expected)
-    let product = 1
-    let count = 0
-    do {
-      count += 1
-      product *= this.rng.next()
-    } while (product > limit)
-    return count - 1
-  }
-
-  private isVisitorSleepTime(visitor: Visitor): boolean {
-    return isMinuteInSleepWindow(
-      this.state.minute,
-      visitor.preferredBedtime,
-      visitor.preferredWakeTime,
-    )
-  }
-
-  private getBuildingDayPlanOffer(
-    kind: BuildingKind,
-  ): DayPlanOffer | null {
-    if (kind === 'food') return 'food'
-    if (kind === 'alcohol') return 'drinks'
-    if (kind === 'toilet') return 'toilets'
-    if (kind === 'mascot' || kind === 'shirt') return 'shops'
-    if (kind === 'ride') return 'rides'
-    if (
-      kind === 'stage' ||
-      kind === 'directionalSpeaker' ||
-      kind === 'omniSpeaker' ||
-      kind === 'delayTower' ||
-      kind === 'videoWall' ||
-      kind === 'laserShow' ||
-      kind === 'fireworkBattery' ||
-      kind === 'foh'
-    ) {
-      return 'stages'
-    }
-    if (kind === 'lighting' || kind === 'lightBalloon') return 'lights'
-    return null
-  }
-
-  private adjustVisitorOccupancy(visitor: Visitor, delta: -1 | 1): void {
-    if (this.occupancyTick !== this.state.simTick) return
-    if (
-      (visitor.state === 'relaxing' ||
-        visitor.state === 'partying' ||
-        visitor.state === 'swimming') &&
-      visitor.activityTarget
-    ) {
-      const key = this.cellKey(
-        visitor.activityTarget.x,
-        visitor.activityTarget.z,
-        visitor.activityTarget.elevation,
-      )
-      const next = Math.max(0, (this.activityHeadcount.get(key) ?? 0) + delta)
-      if (next) this.activityHeadcount.set(key, next)
-      else this.activityHeadcount.delete(key)
-      if (delta > 0) {
-        this.activitySlotBits.set(
-          key,
-          (this.activitySlotBits.get(key) ?? 0) | (1 << (visitor.activitySlot & 31)),
-        )
-      } else {
-        this.activitySlotBits.set(
-          key,
-          (this.activitySlotBits.get(key) ?? 0) & ~(1 << (visitor.activitySlot & 31)),
-        )
-      }
-    } else if (visitor.state === 'bench-resting' && visitor.targetId) {
-      const next = Math.max(0, (this.benchHeadcount.get(visitor.targetId) ?? 0) + delta)
-      if (next) this.benchHeadcount.set(visitor.targetId, next)
-      else this.benchHeadcount.delete(visitor.targetId)
-      if (delta > 0) {
-        this.benchSlotBits.set(
-          visitor.targetId,
-          (this.benchSlotBits.get(visitor.targetId) ?? 0) |
-            (1 << (visitor.activitySlot & 31)),
-        )
-      } else {
-        this.benchSlotBits.set(
-          visitor.targetId,
-          (this.benchSlotBits.get(visitor.targetId) ?? 0) &
-            ~(1 << (visitor.activitySlot & 31)),
-        )
-      }
-    }
-  }
-
-  private ensureVisitorOccupancy(): void {
-    if (this.occupancyTick === this.state.simTick) return
-    this.occupancyTick = this.state.simTick
-    this.activityHeadcount.clear()
-    this.activitySlotBits.clear()
-    this.benchHeadcount.clear()
-    this.benchSlotBits.clear()
-    for (const visitor of this.state.visitors) {
-      if (
-        (visitor.state === 'relaxing' ||
-          visitor.state === 'partying' ||
-          visitor.state === 'swimming') &&
-        visitor.activityTarget
-      ) {
-        const key = this.cellKey(
-          visitor.activityTarget.x,
-          visitor.activityTarget.z,
-          visitor.activityTarget.elevation,
-        )
-        this.activityHeadcount.set(key, (this.activityHeadcount.get(key) ?? 0) + 1)
-        this.activitySlotBits.set(
-          key,
-          (this.activitySlotBits.get(key) ?? 0) | (1 << (visitor.activitySlot & 31)),
-        )
-      } else if (visitor.state === 'bench-resting' && visitor.targetId) {
-        this.benchHeadcount.set(
-          visitor.targetId,
-          (this.benchHeadcount.get(visitor.targetId) ?? 0) + 1,
-        )
-        this.benchSlotBits.set(
-          visitor.targetId,
-          (this.benchSlotBits.get(visitor.targetId) ?? 0) | (1 << (visitor.activitySlot & 31)),
-        )
-      }
-    }
-  }
-
-  private activityOccupantsAt(cell: Cell, excluded: Visitor): number {
-    this.ensureVisitorOccupancy()
-    let count =
-      this.activityHeadcount.get(this.cellKey(cell.x, cell.z, cell.elevation)) ?? 0
-    if (
-      (excluded.state === 'relaxing' ||
-        excluded.state === 'partying' ||
-        excluded.state === 'swimming') &&
-      excluded.activityTarget?.x === cell.x &&
-      excluded.activityTarget.z === cell.z &&
-      excluded.activityTarget.elevation === cell.elevation
-    ) {
-      count -= 1
-    }
-    return count
-  }
-
-  private getFreeActivitySlot(
-    cell: Cell,
-    capacity: number,
-    excludedVisitorId: string,
-  ): number {
-    this.ensureVisitorOccupancy()
-    const key = this.cellKey(cell.x, cell.z, cell.elevation)
-    let used = this.activitySlotBits.get(key) ?? 0
-    const excluded = this.getVisitor(excludedVisitorId)
-    if (
-      excluded &&
-      (excluded.state === 'relaxing' ||
-        excluded.state === 'partying' ||
-        excluded.state === 'swimming') &&
-      excluded.activityTarget?.x === cell.x &&
-      excluded.activityTarget.z === cell.z &&
-      excluded.activityTarget.elevation === cell.elevation
-    ) {
-      used &= ~(1 << (excluded.activitySlot & 31))
-    }
-    const order = [4, 0, 2, 6, 8, 1, 3, 5, 7].slice(0, capacity)
-    return order.find((slot) => (used & (1 << slot)) === 0) ?? 4
-  }
-
-  private findLeisureDestination(visitor: Visitor): {
-    cell: Cell
-    route: Cell[]
-    slot: number
-    capacity: number
-    beauty: number
-    party: number
-  } | null {
-    const config = SIMULATION_CONFIG.atmosphere
-    const candidates = new Map<string, Cell>()
-    ;[...this.state.attractiveness.cells, ...this.state.partyMood.cells].forEach(
-      (cell) => {
-        if (
-          !this.getPathAt(cell.x, cell.z, cell.elevation) ||
-          (this.attractivenessValues.get(
-            this.cellKey(cell.x, cell.z, cell.elevation),
-          ) ?? 0) < config.leisureMinimumFieldValue &&
-            (this.partyMoodValues.get(
-              this.cellKey(cell.x, cell.z, cell.elevation),
-            ) ?? 0) < config.leisureMinimumFieldValue
-        ) {
-          return
-        }
-        candidates.set(
-          this.cellKey(cell.x, cell.z, cell.elevation),
-          { x: cell.x, z: cell.z, elevation: cell.elevation },
-        )
-      },
-    )
-    const start = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    const scored = [...candidates.values()]
-      .filter(cell=>!this.avoidsConcertAt(visitor,cell))
-      .map((cell) => {
-        const cellKey = this.cellKey(cell.x, cell.z, cell.elevation)
-        const beauty = this.attractivenessValues.get(cellKey) ?? 0
-        const party = this.partyMoodValues.get(cellKey) ?? 0
-        const occupantCount = this.activityOccupantsAt(cell, visitor)
-        if (occupantCount >= config.leisureCapacityPerPathCell) return null
-        const distance =
-          Math.abs(cell.x - visitor.cellX) +
-          Math.abs(cell.z - visitor.cellZ)
-        return {
-          cell,
-          beauty,
-          party,
-          occupants: occupantCount,
-          score:
-            beauty * visitor.beautyPreference +
-            party * visitor.partyPreference -
-            occupantCount * config.occupancyScorePenalty -
-            distance * config.leisureDecisionDistancePenalty -
-            (this.crowdingCosts.get(cellKey) ?? 0) *
-              config.crowdingScorePenalty,
-        }
-      })
-      .filter((candidate): candidate is NonNullable<typeof candidate> =>
-        Boolean(candidate),
-      )
-      .sort((left, right) => right.score - left.score)
-      .slice(0, SIMULATION_CONFIG.pathfinding.maxScoredPathChecks)
-    for (const candidate of scored) {
-      const route = this.findPath(start, [candidate.cell])
-      if (!route) continue
-      return {
-        cell: candidate.cell,
-        route,
-        slot: this.getFreeActivitySlot(
-          candidate.cell,
-          config.leisureCapacityPerPathCell,
-          visitor.id,
-        ),
-        capacity: config.leisureCapacityPerPathCell,
-        beauty: candidate.beauty,
-        party: candidate.party,
-      }
-    }
-    return null
-  }
-
-  private ensureSwimGoals(): Cell[] {
-    if (this.swimGoalRevision === this.worldRevision && this.swimGoalCells) {
-      return this.swimGoalCells
-    }
-    this.swimGoalRevision = this.worldRevision
-    const cells: Cell[] = []
-    const size = this.getWorldSize()
-    const half = size / 2
-    const waterLevel = this.getWaterLevel()
-    for (let z = -half; z < half; z += 1) {
-      for (let x = -half; x < half; x += 1) {
-        const height = this.getTerrainHeight(x, z)
-        if (!isSwimmableHeight(height, waterLevel)) continue
-        if (this.getPathAt(x, z, height)) continue
-        if (this.isPedestrianSolidAt(x, z, height)) continue
-        if (this.getCampingCellAt(x, z)) continue
-        if (this.getRoadCellAt(x, z)) continue
-        if (this.getMedicalCellAt(x, z)) continue
-        if (this.getWasteDumpAt(x, z)) continue
-        if (this.getStageForecourtCellAt(x, z)) continue
-        cells.push({ x, z, elevation: height })
-      }
-    }
-    this.swimGoalCells = cells
-    return cells
-  }
-
-  private findSwimDestination(visitor: Visitor): {
-    cell: Cell
-    route: Cell[]
-    slot: number
-    capacity: number
-  } | null {
-    const goals = this.ensureSwimGoals()
-    if (goals.length === 0) return null
-    const capacity = SIMULATION_CONFIG.terrain.swimCapacityPerCell
-    const start = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    const open = goals
-      .map((cell) => {
-        const occupants = this.activityOccupantsAt(cell, visitor)
-        if (occupants >= capacity) return null
-        const distance =
-          Math.abs(cell.x - visitor.cellX) + Math.abs(cell.z - visitor.cellZ)
-        return { cell, occupants, distance }
-      })
-      .filter((candidate): candidate is NonNullable<typeof candidate> =>
-        Boolean(candidate),
-      )
-      .sort(
-        (left, right) =>
-          left.distance - right.distance ||
-          left.occupants - right.occupants ||
-          left.cell.x - right.cell.x ||
-          left.cell.z - right.cell.z,
-      )
-      .slice(0, SIMULATION_CONFIG.pathfinding.maxScoredPathChecks)
-    if (open.length === 0) return null
-    const route = this.findPath(
-      start,
-      open.map((candidate) => candidate.cell),
-    )
-    if (!route) return null
-    const end = route.at(-1) ?? start
-    const match =
-      open.find(
-        (candidate) =>
-          candidate.cell.x === end.x &&
-          candidate.cell.z === end.z &&
-          Math.abs(candidate.cell.elevation - end.elevation) < 0.01,
-      ) ?? open[0]
-    if (!match) return null
-    return {
-      cell: match.cell,
-      route,
-      slot: this.getFreeActivitySlot(match.cell, capacity, visitor.id),
-      capacity,
-    }
-  }
-
-  private enforceDayPlan(): void {
-    const festivalPhase = getFestivalCycleStatus(
-      this.state.dayPlan,
-      this.state.day,
-    )
-    const dayVisitorsAllowed =
-      festivalPhase.phase === 'festival' &&
-      isDayVisitorAdmissionOpen(this.state.dayPlan, this.state.minute)
-    const ridesActive = this.isOfferCurrentlyActive('rides')
-    const stagesActive = this.isOfferCurrentlyActive('stages')
-    const seated = collectSeatedPassengerIds(this.state.logistics.roadVehicles)
-    this.state.visitors.forEach((visitor) => {
-      if (this.isVisitorSeatedInVehicle(visitor, seated)) return
-      if (
-        festivalPhase.phase === 'break' &&
-        visitor.state !== 'leaving' &&
-        visitor.state !== 'riding' &&
-        visitor.state !== 'vehicle-arrival' &&
-        visitor.state !== 'bus-riding' &&
-        visitor.campingPhase !== 'packing'
-      ) {
-        this.beginVisitorDeparture(visitor)
-        visitor.thought =
-          'Das Festival ist vorbei. Jetzt beginnt die Veranstaltungspause.'
-        return
-      }
-      if (
-        visitor.ticketType === 'day' &&
-        !dayVisitorsAllowed &&
-        visitor.state !== 'leaving' &&
-        visitor.state !== 'riding' &&
-        visitor.state !== 'vehicle-arrival' &&
-        visitor.state !== 'bus-riding' &&
-        visitor.campingPhase !== 'packing'
-      ) {
-        this.beginVisitorDeparture(visitor)
-        visitor.thought =
-          'Die Besuchszeit für Tagesgäste ist vorbei. Ich gehe nach Hause.'
-        return
-      }
-      if (visitor.state === 'queuing' && !ridesActive) {
-        const target = visitor.targetId
-          ? this.state.buildings.find((building) => building.id === visitor.targetId)
-          : undefined
-        if (target?.kind === 'ride' || (visitor.targetId && this.getCoaster(visitor.targetId))) {
-          this.leaveQueueOnFoot(visitor, 'Die Fahrgeschäfte schließen für heute.')
-        }
-        return
-      }
-      if (
-        visitor.state === 'partying' &&
-        !stagesActive &&
-        visitor.activityTarget &&
-        this.getStageForecourtCellAt(
-          visitor.activityTarget.x,
-          visitor.activityTarget.z,
-        )
-      ) {
-        this.clearVisitorActivity(visitor)
-        visitor.state = 'exploring'
-        visitor.thought = 'Das Bühnenprogramm ist für heute beendet.'
-        this.decideNextAction(visitor)
-        return
-      }
-      if (visitor.state !== 'seeking' || !visitor.targetId) return
-      const targetBuilding = this.state.buildings.find(
-        (building) => building.id === visitor.targetId,
-      )
-      const targetCoaster = this.getCoaster(visitor.targetId)
-      const targetActive = targetBuilding
-        ? this.isBuildingCurrentlyActive(targetBuilding)
-        : targetCoaster
-          ? ridesActive
-          : true
-      if (targetActive) return
-      this.removeVisitorFromCoasterQueues(visitor.id)
-      visitor.state = 'exploring'
-      visitor.targetId = null
-      visitor.route = []
-      visitor.thought = 'Dieses Angebot ist gerade geschlossen.'
-      this.decideNextAction(visitor)
-    })
-  }
-
-  private findBenchDestination(visitor: Visitor): {
-    building: PlacedBuilding
-    route: Cell[]
-    slot: number
-  } | null {
-    const start = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    const candidates = this.state.buildings
-      .filter((building) => building.kind === 'bench')
-      .map((building) => {
-        this.ensureVisitorOccupancy()
-        let occupantCount = this.benchHeadcount.get(building.id) ?? 0
-        let usedBits = this.benchSlotBits.get(building.id) ?? 0
-        if (visitor.state === 'bench-resting' && visitor.targetId === building.id) {
-          occupantCount -= 1
-          usedBits &= ~(1 << (visitor.activitySlot & 31))
-        }
-        if (occupantCount >= SIMULATION_CONFIG.atmosphere.benchCapacity) {
-          return null
-        }
-        const slot =
-          Array.from(
-            { length: SIMULATION_CONFIG.atmosphere.benchCapacity },
-            (_, index) => index,
-          ).find((index) => (usedBits & (1 << index)) === 0) ?? 0
-        return {
-          building,
-          slot,
-          access: {
-            x: building.x,
-            z: building.z,
-            elevation: building.elevation,
-          },
-          distance:
-            Math.abs(building.x - start.x) + Math.abs(building.z - start.z),
-        }
-      })
-      .filter((candidate): candidate is NonNullable<typeof candidate> =>
-        Boolean(candidate),
-      )
-      .sort((left, right) => left.distance - right.distance)
-      .slice(0, SIMULATION_CONFIG.pathfinding.maxFacilityCandidates)
-    if (candidates.length === 0) return null
-    const route = this.findPath(
-      start,
-      candidates.map((candidate) => candidate.access),
-    )
-    if (!route) return null
-    const end = route.at(-1) ?? start
-    const match =
-      candidates.find(
-        (candidate) =>
-          candidate.access.x === end.x &&
-          candidate.access.z === end.z &&
-          Math.abs(candidate.access.elevation - end.elevation) < 0.01,
-      ) ?? candidates[0]
-    return match
-      ? { building: match.building, route, slot: match.slot }
-      : null
-  }
-
-  private findPartyDestination(visitor: Visitor): {
-    cell: Cell
-    route: Cell[]
-    slot: number
-    capacity: number
-    forecourt: boolean
-  } | null {
-    const atmosphere = SIMULATION_CONFIG.atmosphere
-    const start = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    const candidates = [
-      ...this.state.stageForecourtCells
-        .filter(
-          (cell) =>
-            this.isOfferCurrentlyActive('stages') &&
-            (this.partyMoodValues.get(
-              this.cellKey(cell.x, cell.z, cell.elevation),
-            ) ?? 0) >= atmosphere.partyDestinationMinimumMood,
-        )
-        .map((cell) => ({
-          cell,
-          capacity: atmosphere.forecourtCapacityPerCell,
-          forecourt: true,
-        })),
-      ...this.state.partyMood.cells
-        .filter(
-          (cell) =>
-            cell.value >= atmosphere.partyDestinationMinimumMood &&
-            Boolean(this.getPathAt(cell.x, cell.z, cell.elevation)),
-        )
-        .map((cell) => ({
-          cell,
-          capacity: atmosphere.hotspotCapacity,
-          forecourt: false,
-        })),
-    ]
-    this.ensureDanceFloorIndex()
-    const danceAngleByStage = new Map<string, number>()
-    const scored = candidates
-      .filter(candidate=>!this.avoidsConcertAt(visitor,candidate.cell))
-      .map((candidate) => {
-        const occupantCount = this.activityOccupantsAt(candidate.cell, visitor)
-        if (occupantCount >= candidate.capacity) return null
-        const cellKey = this.cellKey(
-          candidate.cell.x,
-          candidate.cell.z,
-          candidate.cell.elevation,
-        )
-        const beauty = this.attractivenessValues.get(cellKey) ?? 0
-        const party = this.partyMoodValues.get(cellKey) ?? 0
-        const distance =
-          Math.abs(candidate.cell.x - visitor.cellX) +
-          Math.abs(candidate.cell.z - visitor.cellZ)
-        const crowding = this.crowdingCosts.get(cellKey) ?? 0
-        const stageId = candidate.forecourt
-          ? this.concertForecourtStageIds.get(this.packCell(candidate.cell))
-          : undefined
-        const focus = stageId ? this.danceFloorFocusByStage.get(stageId) : undefined
-        let angle = 0
-        if (stageId && focus) {
-          let want = danceAngleByStage.get(stageId)
-          if (want === undefined) {
-            want = this.visitorDanceAngle(visitor, stageId)
-            danceAngleByStage.set(stageId, want)
-          }
-          angle = this.angularDelta(candidate.cell, focus, want)
-        }
-        return {
-          ...candidate,
-          occupantCount,
-          score:
-            beauty * visitor.beautyPreference +
-            party * visitor.partyPreference -
-            occupantCount * atmosphere.occupancyScorePenalty -
-            distance * atmosphere.distanceScorePenalty -
-            crowding * atmosphere.crowdingScorePenalty -
-            angle * atmosphere.danceFloorAnglePenalty +
-            (candidate.forecourt ? atmosphere.forecourtScoreBonus : 0),
-        }
-      })
-      .filter((candidate): candidate is NonNullable<typeof candidate> =>
-        Boolean(candidate),
-      )
-      .sort((left, right) => right.score - left.score)
-      .slice(0, SIMULATION_CONFIG.pathfinding.maxScoredPathChecks)
-    for (const candidate of scored) {
-      const route = this.findPath(
-        start,
-        [candidate.cell],
-        true,
-        false,
-        false,
-        false,
-        candidate.forecourt,
-      )
-      if (!route) continue
-      const slot = this.getFreeActivitySlot(
-        candidate.cell,
-        candidate.capacity,
-        visitor.id,
-      )
-      return {
-        cell: { ...candidate.cell },
-        route,
-        slot,
-        capacity: candidate.capacity,
-        forecourt: candidate.forecourt,
-      }
-    }
-    return null
-  }
-
-  private clearVisitorActivity(visitor: Visitor): void {
-    this.adjustVisitorOccupancy(visitor, -1)
-    visitor.concertId = null
-    visitor.activityTarget = null
-    visitor.activitySlot = 0
-    visitor.activityCapacity = 1
-    visitor.isDancing = false
-    visitor.toplessMinutes = 0
-    visitor.bungeeNude = false
-    if (visitor.state === 'bench-resting') visitor.targetId = null
-  }
-
-  private findReachableFacility(
-    visitor: Visitor,
-    kind: BuildingKind,
-  ): { building: PlacedBuilding; route: Cell[] } | null {
-    const start = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    const candidates = this.state.buildings
-      .filter(
-        (building) =>
-          building.kind === kind && this.isBuildingCurrentlyActive(building) &&
-          (!isShopServiceKind(kind) || localStock(this.state, building.id, shopSupplyKind(kind) ?? 'goods') >= 1),
-      )
-      .map((building) => {
-        const queueCells = this.getBuildingQueueCells(building)
-        const accessCells =
-          building.kind === 'ride' && queueCells[0]
-            ? [queueCells[0]]
-            : this.getFacilityAccessCells(building)
-        const queueLength =
-          queueCells.length > 0 ? this.getFacilityQueue(building.id).length : 0
-        const goals =
-          queueCells.length > 0
-            ? [
-                queueCells[
-                  Math.min(
-                    queueCells.length - 1,
-                    Math.floor(
-                      queueLength / SIMULATION_CONFIG.coasters.queueSlotsPerCell,
-                    ),
-                  )
-                ]!,
-              ]
-            : accessCells
-        const distance = goals.reduce((minimum, goal) => {
-          const next = Math.abs(goal.x - start.x) + Math.abs(goal.z - start.z)
-          return next < minimum ? next : minimum
-        }, Number.POSITIVE_INFINITY)
-        return {
-          building,
-          goals,
-          queueCells,
-          queueLength,
-          distance,
-        }
-      })
-      .filter(
-        (candidate) =>
-          candidate.goals.some((goal) => this.isWalkableServiceCell(goal)) &&
-          (candidate.queueCells.length === 0 ||
-            candidate.queueLength <
-              candidate.queueCells.length *
-                SIMULATION_CONFIG.coasters.queueSlotsPerCell),
-      )
-      .sort((left, right) => left.distance - right.distance)
-      .slice(0, SIMULATION_CONFIG.pathfinding.maxFacilityCandidates)
-    if (candidates.length === 0) return null
-    const route = this.findPath(
-      start,
-      candidates.flatMap((candidate) => candidate.goals),
-      true,
-    )
-    if (!route) return null
-    const end = route.at(-1) ?? start
-    const match =
-      candidates.find((candidate) =>
-        candidate.goals.some(
-          (goal) =>
-            goal.x === end.x &&
-            goal.z === end.z &&
-            Math.abs(goal.elevation - end.elevation) < 0.01,
-        ),
-      ) ?? candidates[0]
-    return match ? { building: match.building, route } : null
-  }
-
-  private findReachableCoaster(
-    visitor: Visitor,
-  ): { coaster: Coaster; route: Cell[] } | null {
-    const start = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    const candidates = this.state.coasters
-      .filter(
-        (coaster) =>
-          coaster.closed &&
-          this.isOfferCurrentlyActive('rides') &&
-          coaster.operationMode === 'open' &&
-          coaster.entrance &&
-          coaster.exit &&
-          coaster.id !== visitor.avoidedCoasterId &&
-          this.getCoasterQueueCapacity(coaster.id) > coaster.queue.length &&
-          this.getAccessPathNeighbors(coaster.exit).some(
-            (cell) =>
-              this.getPathAt(cell.x, cell.z, cell.elevation)?.pathType !== 'queue',
-          ),
-      )
-      .map((coaster) => {
-        const queueEntrance = this.getCoasterQueueCells(coaster).at(-1)
-        return queueEntrance
-          ? {
-              coaster,
-              queueEntrance,
-              distance:
-                Math.abs(queueEntrance.x - start.x) +
-                Math.abs(queueEntrance.z - start.z),
-            }
-          : null
-      })
-      .filter((candidate): candidate is NonNullable<typeof candidate> =>
-        Boolean(candidate),
-      )
-      .sort((left, right) => left.distance - right.distance)
-      .slice(0, SIMULATION_CONFIG.pathfinding.maxFacilityCandidates)
-    if (candidates.length === 0) return null
-    const route = this.findPath(
-      start,
-      candidates.map((candidate) => candidate.queueEntrance),
-      true,
-    )
-    if (!route) return null
-    const end = route.at(-1) ?? start
-    const match =
-      candidates.find(
-        (candidate) =>
-          candidate.queueEntrance.x === end.x &&
-          candidate.queueEntrance.z === end.z &&
-          Math.abs(candidate.queueEntrance.elevation - end.elevation) < 0.01,
-      ) ?? candidates[0]
-    return match ? { coaster: match.coaster, route } : null
-  }
 
   private findPath(
     start: Cell,
@@ -15109,599 +6249,20 @@ export class GameState {
     allowStaff = false,
     allowBackstage = false,
   ): Cell[] | null {
-    if (goals.length === 0) return null
-    this.ensurePedestrianNav(this.lastNavRevision !== this.worldRevision)
-    const startOnCamping = Boolean(this.getCampingCellAt(start.x, start.z))
-    const startOnMedical = Boolean(this.getMedicalCellAt(start.x, start.z))
-    const startOnFestival = Boolean(this.getStageForecourtCellAt(start.x, start.z))
-    const startOnBackstageOverlay =
-      this.activeBackstagePacked.has(this.packXZ(start.x, start.z)) &&
-      !this.getPathAt(start.x, start.z, start.elevation)
-    const campingAllowed = allowCamping || startOnCamping
-    const medicalAllowed = allowMedical || startOnMedical
-    const festivalAllowed = allowFestival || startOnFestival
-    const backstageAllowed = allowBackstage || allowStaff || startOnBackstageOverlay
-    const cacheKey = this.getPedestrianPathCacheKey(start, goals, {
+    const revalidate = this.lastNavRevision !== this.worldRevision
+    const result = this.pedestrianNavigation.findPath(start, goals, {
+      revalidate,
       allowQueue,
-      allowCamping: campingAllowed,
-      allowMedical: medicalAllowed,
-      allowFestival: festivalAllowed,
+      allowCamping,
+      allowMedical,
       ignoreDirectionalRestrictions,
+      allowFestival,
+      maxVisited,
+      allowStaff,
+      allowBackstage,
     })
-    const accessCacheKey = `${cacheKey}:${allowStaff ? 'staff' : 'guest'}:${backstageAllowed ? 'back' : 'noback'}`
-    const cached = this.pedestrianPathCache.get(accessCacheKey)
-    if (cached && cached.expires > this.state.simTick) return this.clonePedestrianPath(cached.path)
-    if (cached) this.pedestrianPathCache.delete(accessCacheKey)
-    const goalKeys = new Set(goals.map((cell) => this.packCell(cell)))
-    // A forbidden destination cannot be reached from any predecessor. Avoid
-    // traversing the whole map (twice) to prove this for e.g. staff-only bins.
-    // Keep all original goals in the heuristic so valid routes retain tie order.
-    const canEnterGoal = (campingAccess: boolean) =>
-      goalKeys.has(this.packCell(start)) || goals.some(goal => {
-      const node = this.pedestrianNav.get(this.packCell(goal))
-      if (!node || (node.flags & NAV_SOLID) !== 0) return false
-      if (
-        node.path?.staffOnly &&
-        !allowStaff &&
-        normalizeStaffGateDirection(node.path.staffGateDirection) === undefined
-      ) {
-        return false
-      }
-      if ((node.flags & NAV_WATER) !== 0 && (node.flags & NAV_PATH) === 0 && allowStaff) return false
-      if (!campingAccess && (node.flags & NAV_CAMPING) !== 0) return false
-      if (!medicalAllowed && (node.flags & NAV_MEDICAL) !== 0) return false
-      if (!festivalAllowed && (node.flags & NAV_FORECOURT) !== 0 && (node.flags & NAV_PATH) === 0) return false
-      if (
-        !backstageAllowed &&
-        (node.flags & NAV_BACKSTAGE) !== 0 &&
-        (node.flags & NAV_PATH) === 0
-      ) {
-        return false
-      }
-      return true
-    })
-    const movementCost = (_from: Cell, to: Cell): number => {
-      const key = this.packCell(to)
-      const surface = this.pedestrianNav.get(key)?.cost ?? this.getPedestrianSurfaceCost(to)
-      return surface * (1 + (this.pedestrianCongestionCosts.get(key) ?? 0)) + Math.min(1, (this.crowdingCostPacked.get(key) ?? 0) / 100) *
-        SIMULATION_CONFIG.pathfinding.crowdingCostWeight
-    }
-    const heuristic =
-      goals.length === 1
-        ? (cell: Cell) =>
-            Math.abs(goals[0]!.x - cell.x) + Math.abs(goals[0]!.z - cell.z)
-        : (cell: Cell) => {
-            let minimum = Number.POSITIVE_INFINITY
-            for (const goal of goals) {
-              const distance =
-                Math.abs(goal.x - cell.x) + Math.abs(goal.z - cell.z)
-              if (distance < minimum) minimum = distance
-            }
-            return minimum
-          }
-    let nearestGoal = Number.POSITIVE_INFINITY
-    for (const goal of goals) {
-      const distance =
-        Math.abs(goal.x - start.x) + Math.abs(goal.z - start.z)
-      if (distance < nearestGoal) nearestGoal = distance
-    }
-    const search = (
-      allowGrass: boolean,
-      campingAccess: boolean,
-      maxCost?: number,
-    ) =>
-      findWeightedPath(
-        {
-          start,
-          key: (cell) => this.packCell(cell),
-          isGoal: (cell) => goalKeys.has(this.packCell(cell)),
-          neighbors: (cell) =>
-            this.getPedestrianNeighbors(cell, {
-              allowQueue,
-              allowCamping: campingAccess,
-              allowMedical: medicalAllowed,
-              allowFestival: festivalAllowed,
-              ignoreDirectionalRestrictions,
-              allowGrass,
-              allowStaff,
-              allowBackstage: backstageAllowed,
-            }),
-          movementCost,
-          maxVisited,
-          heuristic,
-          maxCost,
-        },
-        this.pedestrianPathScratch,
-      )
-    let result = canEnterGoal(campingAllowed)
-      ? search(false, campingAllowed)
-      : null
-    if (maxVisited === undefined && !result && !campingAllowed) {
-      // A camping designation is ground, not a wall. Keep the normal
-      // path-only pass first, then permit camping as a deterministic fallback
-      // for visitors enclosed by designated cells.
-      result = canEnterGoal(true) ? search(false, true) : null
-    }
-    if (maxVisited === undefined && !result && canEnterGoal(true)) {
-      result = search(
-        true,
-        true,
-        nearestGoal * SIMULATION_CONFIG.pathfinding.grassCostMultiplier * 1.6 +
-          24,
-      )
-    }
-    if (
-      this.pedestrianPathCache.size >=
-      SIMULATION_CONFIG.pathfinding.pathCacheLimit
-    ) {
-      // Evict one entry, not every route used by the crowd.
-      this.pedestrianPathCache.delete(this.pedestrianPathCache.keys().next().value!)
-    }
-    // A budget-limited miss says nothing about reachability; never cache it.
-    if (maxVisited === undefined || result) this.pedestrianPathCache.set(
-      accessCacheKey,
-      {
-        path: result ? result.map((cell) => ({ ...cell })) : null,
-        expires: this.state.simTick + SIMULATION_CONFIG.pathfinding.pathCacheLifetimeTicks +
-          (this.packCell(start) % SIMULATION_CONFIG.pathfinding.pathCacheLifetimeTicks),
-      },
-    )
-    return this.clonePedestrianPath(result)
-  }
-
-  private getPedestrianPathCacheKey(
-    start: Cell,
-    goals: readonly Cell[],
-    flags: {
-      allowQueue: boolean
-      allowCamping: boolean
-      allowMedical: boolean
-      allowFestival: boolean
-      ignoreDirectionalRestrictions: boolean
-    },
-  ): string {
-    const packedGoals = goals
-      .map((cell) => this.packCell(cell))
-      .sort((left, right) => left - right)
-    const flagBits =
-      (flags.allowQueue ? 1 : 0) |
-      (flags.allowCamping ? 2 : 0) |
-      (flags.allowMedical ? 4 : 0) |
-      (flags.allowFestival ? 8 : 0) |
-      (flags.ignoreDirectionalRestrictions ? 16 : 0)
-    return `${this.packCell(start)}:${packedGoals.join(',')}:${flagBits}:${this.accessSignalRevision}`
-  }
-
-  private clonePedestrianPath(path: readonly Cell[] | null): Cell[] | null {
-    return path ? path.map((cell) => ({ ...cell })) : null
-  }
-
-  private visitorDecisionRng(visitor: Visitor): () => number {
-    return createSeededRng(
-      (visitor.pathSeed + visitor.wanderNonce * 0x9e3779b9) >>> 0,
-    )
-  }
-
-  private assignDeterministicWander(
-    visitor: Visitor,
-    rng = this.visitorDecisionRng(visitor),
-  ): void {
-    const config = SIMULATION_CONFIG.pathfinding
-    const span = config.wanderMaxSteps - config.wanderMinSteps + 1
-    const steps = config.wanderMinSteps + Math.floor(rng() * span)
-    const wanderFrom = {
-      x: visitor.cellX,
-      z: visitor.cellZ,
-      elevation: visitor.cellElevation,
-    }
-    const wanderOptions = {
-      allowCamping: Boolean(this.getCampingCellAt(visitor.cellX, visitor.cellZ)),
-      allowMedical: Boolean(this.getMedicalCellAt(visitor.cellX, visitor.cellZ)),
-      allowFestival: Boolean(
-        this.getStageForecourtCellAt(visitor.cellX, visitor.cellZ),
-      ),
-      allowQueue:
-        this.getPathAt(visitor.cellX, visitor.cellZ, visitor.cellElevation)?.pathType ===
-        'queue',
-    }
-    visitor.route = this.pickSeededWalk(wanderFrom, steps, rng, wanderOptions)
-    if (visitor.route.length === 0) {
-      visitor.route = this.pickSeededWalk(wanderFrom, steps, rng, {
-        ...wanderOptions,
-        allowQueue: true,
-      })
-    }
-    visitor.state = 'exploring'
-    visitor.targetId = null
-    visitor.wanderNonce += 1
-  }
-
-  private pickSeededWalk(
-    start: Cell,
-    steps: number,
-    rng: () => number,
-    options: {
-      allowCamping?: boolean
-      allowMedical?: boolean
-      allowFestival?: boolean
-      allowQueue?: boolean
-    },
-    previous: Cell | null = null,
-  ): Cell[] {
-    const route: Cell[] = []
-    let current: Cell = { ...start }
-    let last = previous ? { ...previous } : null
-    for (let step = 0; step < steps; step += 1) {
-      const neighbors = this.getPedestrianNeighbors(current, {
-        allowCamping:
-          options.allowCamping ??
-          Boolean(this.getCampingCellAt(current.x, current.z)),
-        allowMedical: options.allowMedical ?? false,
-        allowFestival:
-          options.allowFestival ??
-          Boolean(this.getStageForecourtCellAt(current.x, current.z)),
-        allowQueue: options.allowQueue ?? false,
-      })
-      if (neighbors.length === 0) break
-      const forward = last
-        ? neighbors.filter(
-            (cell) => cell.x !== last!.x || cell.z !== last!.z,
-          )
-        : neighbors
-      const choices = forward.length > 0 ? forward : neighbors
-      const next = choices[Math.floor(rng() * choices.length)]
-      if (!next) break
-      const copied = {
-        x: next.x,
-        z: next.z,
-        elevation: next.elevation,
-      }
-      route.push(copied)
-      last = current
-      current = copied
-    }
-    return route
-  }
-
-  private finishInteraction(visitor: Visitor): void {
-    const target = this.state.buildings.find((building) => building.id === visitor.targetId)
-    if (target && isShopServiceKind(target.kind) && !this.isVisitorAtShopCounter(visitor, target)) {
-      this.leaveQueueOnFoot(visitor, 'Ich gehe zur Vorderseite des Ladens.')
-      return
-    }
-    const rideExitPath = target?.kind === 'ride' && target.rideExit
-      ? this.getAccessPathNeighbors(target.rideExit).find(c=>this.getPathAt(c.x,c.z,c.elevation)?.pathType !== 'queue') : undefined
-    if (target?.kind === 'ride' && !rideExitPath) {
-      visitor.thought = 'Ich warte, bis der Ausgang wieder mit einem Gehweg verbunden ist.'
-      return
-    }
-    const supply = target ? shopSupplyKind(target.kind) : null
-    const shopSupply = supply && supply !== 'water' ? supply : null
-    const available = !shopSupply || !!target && localStock(this.state, target.id, shopSupply) >= 1
-    if (!available) this.state.festival.metrics.stockouts++
-    const paid =
-      target && available &&
-      this.chargeVisitor(visitor, target.price, {
-        x: target.x + 0.5,
-        y: target.elevation + BUILDINGS[target.kind].height,
-        z: target.z + 0.5,
-      })
-    if (paid && shopSupply && target) consumeLocal(this.state, target.id, shopSupply)
-    if (target?.kind === 'food' && paid) {
-      addItem(visitor.inventory, 'food')
-      visitor.thought = 'Ich habe Essen gekauft und suche einen Platz zum Essen.'
-    } else if (target?.kind === 'toilet' && paid) {
-      visitor.needs.toilet = SIMULATION_CONFIG.needs.toilet.toilet
-      visitor.thought = 'Das war dringend nötig.'
-    } else if (target?.kind === 'ride' && paid) {
-      visitor.needs.fun = SIMULATION_CONFIG.needs.ride.fun
-      visitor.needs.energy = Math.max(
-        0,
-        visitor.needs.energy - SIMULATION_CONFIG.needs.ride.energyCost,
-      )
-      this.incidents.addRideNausea(
-        visitor,
-        SIMULATION_CONFIG.nausea.carouselIntensity,
-      )
-      visitor.thought = target.rideType === 'bungee' ? 'Was für ein Bungeesprung!' : 'Das Karussell war großartig!'
-      visitor.bungeeNude = false
-      delete target.bungeeVisitorId
-    } else if (target?.kind === 'alcohol' && paid) {
-      addItem(visitor.inventory, 'alcohol')
-      visitor.thought = 'Ich habe ein Getränk gekauft und trinke es gleich in Ruhe.'
-    } else if (target?.kind === 'mascot' && paid) {
-      visitor.ownedMascot = true
-      visitor.heldMascot = this.rng.next() < SIMULATION_CONFIG.souvenirs.holdMascotChance
-      visitor.needs.fun = Math.min(100, visitor.needs.fun + SIMULATION_CONFIG.souvenirs.funGain)
-      visitor.thought = souvenirPurchaseThought('mascot', Boolean(visitor.heldMascot))
-    } else if (target?.kind === 'shirt' && paid) {
-      const shirt = defaultShirtSettings()
-      visitor.wornShirt = {
-        color: normalizeShirtColor(target.shirtColor ?? shirt.color),
-        style: normalizeShirtStyle(target.shirtStyle ?? shirt.style),
-      }
-      visitor.needs.fun = Math.min(100, visitor.needs.fun + SIMULATION_CONFIG.souvenirs.funGain)
-      visitor.thought = souvenirPurchaseThought('shirt', false)
-    } else if (target && !paid) {
-      visitor.thought = available ? 'Dafür reicht mein Budget nicht.' : 'Ausverkauft! Hier fehlt Nachschub.'
-      visitor.emotion = 'sad'
-      visitor.emotionMinutes = 45
-    }
-
-    const purchasedConsumable =
-      Boolean(paid) &&
-      (target?.kind === 'food' || target?.kind === 'alcohol')
-    visitor.targetId = null
-    if (target?.kind === 'ride' && target.rideExit && rideExitPath) {
-      visitor.x=target.rideExit.x+.5; visitor.y=target.rideExit.y; visitor.z=target.rideExit.z+.5
-      visitor.cellX=target.rideExit.x; visitor.cellZ=target.rideExit.z; visitor.cellElevation=target.rideExit.y
-      visitor.state='exiting'; visitor.route=[rideExitPath]; visitor.interactionRemaining=0
-      delete target.bungeeVisitorId
-      return
-    }
-    const queueExit =
-      target && isStallQueueKind(target.kind)
-        ? this.buildQueueExitRoute(
-            { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation },
-            this.getBuildingQueueCells(target),
-          )
-        : []
-    if (queueExit.length > 0) {
-      this.clearVisitorActivity(visitor)
-      visitor.state = 'exploring'
-      visitor.route = queueExit
-      visitor.interactionRemaining = 0
-      this.beginStallQueueReturn(visitor, queueExit[0])
-      if (purchasedConsumable) {
-        visitor.thought = 'Ich gehe die Schlange zurück und suche einen Platz zum Essen oder Trinken.'
-      }
-      return
-    }
-    if (purchasedConsumable) {
-      // Clear the counter before eating or drinking; avoid occupying the service tile.
-      const route: Cell[] = []
-      let cell = { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation }
-      const visited = new Set([this.packCell(cell)])
-      for (let step = 0; step < 4; step++) {
-        const candidates = [...this.getPedestrianNeighbors(cell, { allowGrass: false })]
-          .filter(next => !visited.has(this.packCell(next)))
-          .sort((a, b) => (this.movementOccupancy.get(this.packCell(a)) ?? 0) - (this.movementOccupancy.get(this.packCell(b)) ?? 0))
-        if (!candidates.length) break
-        cell = { ...candidates[0]! }; route.push(cell); visited.add(this.packCell(cell))
-      }
-      if (route.length) {
-        this.clearVisitorActivity(visitor)
-        visitor.state = 'exploring'; visitor.route = route
-        visitor.thought = 'Ich mache den Stand frei und suche einen Platz zum Essen oder Trinken.'
-      } else this.beginStationaryBreak(visitor, visitor.thought)
-      return
-    }
-    visitor.state = 'exploring'
-    visitor.interactionRemaining = 0
-    if (target?.kind === 'ride' && paid) {
-      this.queueVisitorDecision(visitor)
-      return
-    }
-    this.decideNextAction(visitor)
-  }
-
-  private decayNeeds(visitor: Visitor, minutes: number): void {
-    const config = SIMULATION_CONFIG.needs
-    visitor.needs.hunger = Math.max(
-      0,
-      visitor.needs.hunger - minutes * config.hungerDecayPerMinute,
-    )
-    visitor.needs.toilet = Math.max(
-      0,
-      visitor.needs.toilet - minutes * config.toiletDecayPerMinute,
-    )
-    visitor.needs.fun = Math.max(
-      0,
-      visitor.needs.fun - minutes * config.funDecayPerMinute,
-    )
-    const alcoholEnergyDrain =
-      (visitor.alcoholLevel / 100) * config.alcoholEnergyDecayPerMinute
-    const circadian = circadianEnergyDecayMultiplier(
-      this.state.minute,
-      visitor.preferredBedtime,
-      visitor.preferredWakeTime,
-      SIMULATION_CONFIG.camping.sleepSchedule,
-    )
-    visitor.needs.energy = Math.max(
-      0,
-      visitor.needs.energy -
-        minutes *
-          (config.baseEnergyDecayPerMinute * circadian + alcoholEnergyDrain),
-    )
-  }
-
-  private canBeginStreaking(visitor: Visitor): boolean {
-    const config = SIMULATION_CONFIG.alcohol.streaking
-    if (visitor.streakingMinutes > 0 || visitor.streakingCooldownMinutes > 0) {
-      return false
-    }
-    if (visitor.concertId) return false
-    if (
-      visitor.alcoholLevel < config.minimumAlcohol ||
-      visitor.alcoholLevel > config.maximumAlcohol ||
-      visitor.needs.energy < config.minimumEnergy
-    ) {
-      return false
-    }
-    if (visitor.hasHandcart) return false
-    return (
-      visitor.state === 'exploring' ||
-      visitor.state === 'seeking' ||
-      visitor.state === 'partying' ||
-      visitor.state === 'socializing' ||
-      visitor.state === 'relaxing' ||
-      visitor.state === 'bench-resting' ||
-      visitor.state === 'entering'
-    )
-  }
-
-  private updateStreaking(visitor: Visitor, minutes: number): void {
-    const config = SIMULATION_CONFIG.alcohol.streaking
-    visitor.streakingCooldownMinutes = Math.max(
-      0,
-      visitor.streakingCooldownMinutes - minutes,
-    )
-    if (visitor.streakingMinutes > 0) {
-      visitor.streakingMinutes = Math.max(0, visitor.streakingMinutes - minutes)
-      visitor.emotion = 'excited'
-      visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 6)
-      visitor.needs.fun = Math.min(
-        100,
-        visitor.needs.fun + minutes * config.selfFunPerMinute,
-      )
-      visitor.thought = 'Nackt durchs Festival! Wer macht mit?'
-      this.spreadStreakingFun(visitor, minutes)
-      if (visitor.streakingMinutes <= 0) {
-        visitor.streakingCooldownMinutes = config.cooldownMinutes
-        visitor.emotion = 'happy'
-        visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 18)
-        visitor.thought = 'Okay, das war vielleicht etwas zu viel.'
-      }
-      return
-    }
-    if (!this.canBeginStreaking(visitor)) return
-    if (this.rng.next() >= Math.min(1, minutes * config.chancePerMinute)) return
-    this.beginStreaking(visitor)
-  }
-
-  private beginStreaking(visitor: Visitor): void {
-    const config = SIMULATION_CONFIG.alcohol.streaking
-    this.removeVisitorFromCoasterQueues(visitor.id)
-    this.clearVisitorActivity(visitor)
-    visitor.state = 'exploring'
-    visitor.targetId = null
-    visitor.isConversing = false
-    visitor.streakingMinutes =
-      config.durationMinimum + this.rng.next() * config.durationRandomRange
-    visitor.emotion = 'excited'
-    visitor.emotionMinutes = visitor.streakingMinutes + 8
-    visitor.thought = 'Nackt durchs Festival! Wer macht mit?'
-    this.continueStreakingRun(visitor)
-  }
-
-  private continueStreakingRun(visitor: Visitor): void {
-    visitor.state = 'exploring'
-    visitor.targetId = null
-    visitor.isDancing = false
-    visitor.route = this.pickStreakingRoute(visitor)
-  }
-
-  private pickStreakingRoute(visitor: Visitor): Cell[] {
-    const rng = this.visitorDecisionRng(visitor)
-    visitor.wanderNonce += 1
-    return this.pickSeededWalk(
-      {
-        x: visitor.cellX,
-        z: visitor.cellZ,
-        elevation: visitor.cellElevation,
-      },
-      6 + Math.floor(rng() * 5),
-      rng,
-      {
-        allowCamping: Boolean(this.getCampingCellAt(visitor.cellX, visitor.cellZ)),
-        allowMedical: false,
-        allowFestival: true,
-      },
-      visitor.route[0] ?? null,
-    )
-  }
-
-  private spreadStreakingFun(source: Visitor, minutes: number): void {
-    const config = SIMULATION_CONFIG.alcohol.streaking
-    this.state.visitors.forEach((other) => {
-      if (other.id === source.id) return
-      if (
-        other.state === 'sleeping' ||
-        other.state === 'riding' ||
-        other.state === 'medical' ||
-        other.state === 'injured' ||
-        other.state === 'vehicle-arrival' ||
-        other.state === 'bus-riding'
-      ) {
-        return
-      }
-      const distance =
-        Math.abs(other.cellX - source.cellX) +
-        Math.abs(other.cellZ - source.cellZ)
-      if (distance > config.auraRadius) return
-      other.needs.fun = Math.min(
-        100,
-        other.needs.fun + minutes * config.nearbyFunPerMinute,
-      )
-      if (other.emotion !== 'angry' && other.emotion !== 'sad') {
-        other.emotion = distance <= 1 ? 'excited' : 'happy'
-        other.emotionMinutes = Math.max(other.emotionMinutes, 8)
-      }
-    })
-  }
-
-  private updateAlcoholBehavior(visitor: Visitor): boolean {
-    const config = SIMULATION_CONFIG.alcohol
-    if (
-      visitor.alcoholLevel >= config.passOutThreshold &&
-      visitor.needs.energy <= config.passOutEnergyThreshold &&
-      !visitor.campsite &&
-      visitor.state !== 'riding' &&
-      visitor.state !== 'camping'
-    ) {
-      this.removeVisitorFromCoasterQueues(visitor.id)
-      visitor.streakingMinutes = 0
-      visitor.toplessMinutes = 0
-      visitor.state = 'sleeping'
-      visitor.route = []
-      visitor.targetId = null
-      visitor.thought = 'Ich muss mich kurz hinlegen …'
-      visitor.emotion = 'sad'
-      visitor.emotionMinutes = 60
-      return true
-    }
-    if (
-      visitor.alcoholLevel < config.drunkBehaviorThreshold ||
-      visitor.state === 'riding'
-    ) {
-      return false
-    }
-    if (visitor.alcoholDisposition === 'aggressive') {
-      visitor.emotion = 'angry'
-      visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 12)
-      if (visitor.alcoholLevel >= config.veryDrunkBehaviorThreshold) {
-        visitor.thought = 'Lasst mich durch!'
-      }
-    } else {
-      visitor.emotion =
-        visitor.alcoholLevel >= config.veryDrunkBehaviorThreshold
-          ? 'excited'
-          : 'happy'
-      visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 12)
-      if (visitor.alcoholLevel >= config.veryDrunkBehaviorThreshold) {
-        visitor.thought = 'Was für ein großartiges Festival!'
-      }
-    }
-    return false
-  }
-
-  private updateVisitorEmotion(visitor: Visitor, minutes: number): void {
-    if (visitor.emotionMinutes > 0) {
-      visitor.emotionMinutes = Math.max(0, visitor.emotionMinutes - minutes)
-      return
-    }
-    const values = Object.values(visitor.needs)
-    const minimum = Math.min(...values)
-    const average = values.reduce((total, value) => total + value, 0) / values.length
-    const emotions = SIMULATION_CONFIG.visitors.emotions
-    visitor.emotion =
-      minimum < emotions.angryNeedBelow
-        ? 'angry'
-        : average < emotions.sadAverageBelow
-          ? 'sad'
-          : average > emotions.happyAverageAbove
-            ? 'happy'
-            : 'neutral'
+    if (revalidate) this.lastNavRevision = this.worldRevision
+    return result
   }
 
   /**
@@ -15710,6 +6271,82 @@ export class GameState {
    * tick charges this, and the forecast column multiplies it out to a day, so both
    * read from the same calculation.
    */
+
+  /** Compatibility facade for deterministic visitor-decision tests. */
+  decideNextAction(visitor: Visitor): void {
+    this.visitorBehavior.decideNextAction(visitor)
+  }
+
+  /** Compatibility facade for detailed visitor-action tests. */
+  chooseNextVisitorAction(visitor: Visitor): void {
+    this.visitorBehavior.chooseNextVisitorAction(visitor)
+  }
+
+  /** Compatibility facade for interaction regression tests. */
+  finishInteraction(visitor: Visitor): void {
+    this.visitorBehavior.finishInteraction(visitor)
+  }
+
+  /** Compatibility facade for need-decay regression tests. */
+  decayNeeds(visitor: Visitor, minutes: number): void {
+    this.visitorBehavior.decayNeeds(visitor, minutes)
+  }
+
+  updateVisitors(minutes: number): void {
+    this.visitorBehavior.updateVisitors(minutes)
+  }
+
+  walkVisitors(minutes: number): void {
+    this.visitorBehavior.walkVisitors(minutes)
+  }
+
+  moveVisitor(visitor: Visitor, distance: number, decideOnArrival = true): void {
+    this.visitorBehavior.moveVisitor(visitor, distance, decideOnArrival)
+  }
+
+  arriveOrDecide(visitor: Visitor): void {
+    this.visitorBehavior.arriveOrDecide(visitor)
+  }
+
+  giveWaste(visitor: Visitor, amount: number): void {
+    this.visitorBehavior.giveWaste(visitor, amount)
+  }
+
+  findReachableFacility(
+    visitor: Visitor,
+    kind: BuildingKind,
+  ): { building: PlacedBuilding; route: Cell[] } | null {
+    return this.visitorBehavior.findReachableFacility(visitor, kind)
+  }
+
+  visitorTravelSpeed(visitor: Visitor): number {
+    return this.visitorBehavior.visitorTravelSpeed(visitor)
+  }
+
+  get movementOccupancy(): Map<number, number> {
+    return this.visitorBehavior.movementOccupancy
+  }
+
+  reviewVisitorRoutes(): void {
+    this.visitorBehavior.reviewVisitorRoutes()
+  }
+
+  tryVisitConcert(visitor: Visitor): boolean {
+    return this.visitorBehavior.tryVisitConcert(visitor)
+  }
+
+  avoidsConcertAt(visitor: Visitor, cell: { x: number; z: number }): boolean {
+    return this.visitorBehavior.avoidsConcertAt(visitor, cell)
+  }
+
+  updateConcertTopless(
+    visitor: Visitor,
+    minutes: number,
+    concert: { booking: Booking },
+  ): void {
+    this.visitorBehavior.updateConcertTopless(visitor, minutes, concert)
+  }
+
   private hourlyRunningCosts(): { upkeep: number; staff: number } {
     const upkeep = this.state.buildings.reduce(
       (total, item) => total + BUILDINGS[item.kind].upkeep + (item.stageDesign ? stageStats(item.stageDesign).upkeep : 0),
@@ -15776,320 +6413,19 @@ export class GameState {
 
   private getPedestrianNeighbors(
     cell: Cell,
-    options: {
-      allowQueue?: boolean
-      allowCamping?: boolean
-      allowMedical?: boolean
-      allowFestival?: boolean
-      ignoreDirectionalRestrictions?: boolean
-      allowGrass?: boolean
-      allowStaff?: boolean
-      allowBackstage?: boolean
-    } = {},
+    options: PedestrianNeighborOptions = {},
   ): Cell[] {
-    const node = this.getPedestrianNavNode(cell)
-    const neighbors = this.neighborScratch
-    neighbors.length = 0
-    if (!node) return neighbors
-    const allowQueue = options.allowQueue ?? false
-    const allowCamping = Boolean(options.allowCamping)
-    const allowMedical = Boolean(options.allowMedical)
-    const allowFestival = Boolean(options.allowFestival)
-    const allowBackstage = Boolean(options.allowBackstage || options.allowStaff)
-    const allowGrass = options.allowGrass ?? true
-    const ignoreDirectional = options.ignoreDirectionalRestrictions ?? false
-    const campingHere = (node.flags & NAV_CAMPING) !== 0
-    const seen = this.neighborSeen
-    seen.clear()
-    for (let index = 0; index < node.links.length; index += 1) {
-      const link = node.links[index]!
-      const dest = link.node
-      if (!options.allowStaff) {
-        const travel = this.getDirectionIndex(
-          dest.cell.x - node.cell.x,
-          dest.cell.z - node.cell.z,
-        )
-        if (
-          travel >= 0 &&
-          staffGateBlocksVisitor(node.path, dest.path, travel as Direction)
-        ) {
-          continue
-        }
-      }
-      if ((dest.flags & NAV_SOLID) !== 0) continue
-      if (
-        (dest.flags & NAV_PARKING) !== 0 &&
-        (dest.flags & NAV_PATH) === 0
-      ) {
-        continue
-      }
-      if ((dest.flags & NAV_WATER) !== 0 && (dest.flags & NAV_PATH) === 0 && options.allowStaff) continue
-      if (!allowCamping && (dest.flags & NAV_CAMPING) !== 0) continue
-      if (!allowMedical && (dest.flags & NAV_MEDICAL) !== 0) continue
-      if (
-        !allowFestival &&
-        (dest.flags & NAV_FORECOURT) !== 0 &&
-        (dest.flags & NAV_PATH) === 0
-      ) {
-        continue
-      }
-      if (
-        !allowBackstage &&
-        (dest.flags & NAV_BACKSTAGE) !== 0 &&
-        (dest.flags & NAV_PATH) === 0
-      ) {
-        continue
-      }
-      if (!allowGrass && (dest.flags & NAV_PAVED) === 0) continue
-      if (campingHere && Math.abs(dest.cell.elevation - node.cell.elevation) >= 0.01) {
-        continue
-      }
-      const toPath = link.toPath ?? dest.path
-      if (toPath) {
-        if (
-          !this.canTraversePath(
-            node.path,
-            toPath,
-            node.cell.x,
-            node.cell.z,
-            allowQueue,
-            ignoreDirectional,
-            node.cell.elevation,
-          )
-        ) {
-          continue
-        }
-      } else if (node.path?.pathType === 'queue') {
-        const leaveDirection = this.getDirectionIndex(
-          dest.cell.x - node.cell.x,
-          dest.cell.z - node.cell.z,
-        )
-        if (node.path.queueEntryDirection !== (leaveDirection + 2) % 4) continue
-      }
-      if (
-        !ignoreDirectional &&
-        this.closedPathEdges.has(
-          accessEdgeKey(
-            node.cell.x,
-            node.cell.z,
-            this.getDirectionIndex(dest.cell.x - node.cell.x, dest.cell.z - node.cell.z) as Direction,
-          ),
-        )
-      ) {
-        continue
-      }
-      if (this.isCachedEdgeBlocked(node, dest)) continue
-      if (seen.has(dest.packed)) continue
-      seen.add(dest.packed)
-      neighbors.push(dest.cell)
-    }
-    return neighbors
-  }
-
-  private isCachedEdgeBlocked(
-    from: PedestrianNavNode,
-    to: PedestrianNavNode,
-  ): boolean {
-    const direction = this.getDirectionIndex(
-      to.cell.x - from.cell.x,
-      to.cell.z - from.cell.z,
-    )
-    if (direction < 0) return false
-    const bit = directionBit(direction as Direction)
-    const opposite = directionBit(oppositeDirection(direction as Direction))
-    if ((from.flags & NAV_GROUND) !== 0 && (from.roadBlocked & bit) !== 0) {
-      return true
-    }
-    if ((to.flags & NAV_GROUND) !== 0 && (to.roadBlocked & opposite) !== 0) {
-      return true
-    }
-    return (from.fenceMask & bit) !== 0 || (to.fenceMask & opposite) !== 0
-  }
-
-  private getPedestrianNavNode(cell: Cell): PedestrianNavNode | undefined {
-    this.ensurePedestrianNav(false)
-    return this.pedestrianNav.get(this.packCell(cell))
-  }
-
-  private getPedestrianNavKey(): string {
-    let structure = 0
-    for (const building of this.state.buildings) {
-      if (
-        building.kind !== 'path' &&
-        !isPedestrianBarrierKind(building.kind) &&
-        !isWallDoor(building.kind) &&
-        !PEDESTRIAN_SOLID_KINDS.has(building.kind)
-      ) {
-        continue
-      }
-      structure =
-        (structure +
-          this.packXZ(building.x, building.z) +
-          building.rotation +
-          (building.decorationSlot ?? 8) +
-          Math.round(building.elevation * 8) +
-          (building.pathType === 'queue' ? 5 : 1) +
-          (building.pathSlope ?? 0) * 11) |
-        0
-    }
-    for (const road of this.state.logistics.roadCells) {
-      structure =
-        (structure +
-          road.x * 13 +
-          road.z * 17 +
-          road.blockedEdges +
-          Math.round((road.elevation ?? 0) * 2) +
-          Math.round((road.roadSlope ?? 0) * 2) * 7 +
-          (road.roadSlopeDirection ?? 0)) |
-        0
-    }
-    return [
-      this.state.buildings.length,
-      this.state.logistics.roadCells.length,
-      this.state.logistics.parkingCells.length,
-      this.state.campingCells.length,
-      this.state.medicalCells.length,
-      this.state.stageForecourtCells.length,
-      this.cachedWorldSize,
-      this.terrainHeights?.byteLength ?? 0,
-      structure,
-    ].join(':')
+    return this.pedestrianNavigation.neighbors(cell, options)
   }
 
   private ensurePedestrianNav(revalidate: boolean): void {
-    if (revalidate) {
-      const key = `${this.worldRevision}:${this.getPedestrianNavKey()}`
-      if (key === this.pedestrianNavKey && this.pedestrianNav.size > 0) return
-      this.pedestrianNavKey = key
-      this.rebuildPedestrianNav()
-      this.lastNavRevision = this.worldRevision
-      return
-    }
-    if (this.pedestrianNav.size === 0) this.rebuildPedestrianNav()
+    this.pedestrianNavigation.ensure(revalidate)
+    if (revalidate) this.lastNavRevision = this.worldRevision
   }
 
-  private rebuildPedestrianNav(): void {
-    this.refreshBandSupplyGraph()
-    this.ensureSpatialIndexes()
-    this.pedestrianNav.clear()
-    this.pedestrianPathCache.clear()
-    const size = this.getWorldSize()
-    const half = size / 2
-    const addNode = (x: number, z: number, elevation: number): void => {
-      const packed = this.packCell({ x, z, elevation })
-      if (this.pedestrianNav.has(packed)) return
-      const path = this.getPathAt(x, z, elevation)
-      const height = this.getTerrainHeight(x, z)
-      const ground = Math.abs(elevation - height) < WAY_LEVEL_MATCH
-      const road = ground ? this.getRoadCellAt(x, z) : undefined
-      const camping = this.getCampingCellAt(x, z)
-      const medical = this.getMedicalCellAt(x, z)
-      const forecourt = this.getStageForecourtCellAt(x, z)
-      const parking = this.hasParkingAt(x, z)
-      const backstage = this.activeBackstagePacked.has(this.packXZ(x, z))
-      const water = isWaterHeight(height, this.getWaterLevel()) && !path
-      let flags = 0
-      if (path) flags |= NAV_PATH
-      if (road) flags |= NAV_ROAD
-      if (camping) flags |= NAV_CAMPING
-      if (medical) flags |= NAV_MEDICAL
-      if (forecourt) flags |= NAV_FORECOURT
-      if (parking) flags |= NAV_PARKING
-      if (backstage) flags |= NAV_BACKSTAGE
-      if (water) flags |= NAV_WATER
-      if (ground) flags |= NAV_GROUND
-      if (this.isPedestrianSolidAt(x, z, elevation)) flags |= NAV_SOLID
-      if (path || road || camping || medical || forecourt || parking || backstage) flags |= NAV_PAVED
-      let fenceMask = 0
-      for (const building of this.getBuildingsAtCell(x, z)) {
-        if (Math.abs(building.elevation - elevation) >= WAY_LEVEL_MATCH) continue
-        const occupancy = pedestrianBarrierOccupancy(building)
-        if (occupancy === undefined || occupancy === 'solid') continue
-        fenceMask |= directionBit(occupancy)
-      }
-      this.pedestrianNav.set(packed, {
-        cell: { x, z, elevation },
-        packed,
-        flags,
-        cost: this.getPedestrianSurfaceCost({ x, z, elevation }),
-        fenceMask,
-        roadBlocked: road ? road.blockedEdges : 0,
-        path,
-        links: [],
-      })
-    }
-    for (let z = -half; z < half; z += 1) {
-      for (let x = -half; x < half; x += 1) {
-        addNode(x, z, this.getTerrainHeight(x, z))
-      }
-    }
-    this.state.buildings.forEach((building) => {
-      if (building.kind === 'path') addNode(building.x, building.z, building.elevation)
-    })
-    this.pedestrianNav.forEach((node) => {
-      for (const [dx, dz] of PEDESTRIAN_OFFSETS) {
-        const nx = node.cell.x + dx
-        const nz = node.cell.z + dz
-        const direction = this.getDirectionIndex(dx, dz)
-        for (const building of this.getBuildingsAtCell(nx, nz)) {
-          if (building.kind !== 'path') continue
-          const dest = this.pedestrianNav.get(
-            this.packCell({
-              x: building.x,
-              z: building.z,
-              elevation: building.elevation,
-            }),
-          )
-          if (!dest) continue
-          if (!this.pedestrianWalkEdgesConnect(node, dest, direction)) continue
-          node.links.push({ node: dest, toPath: building })
-        }
-        if ((node.flags & NAV_GROUND) === 0) continue
-        const neighborGround = this.getTerrainHeight(nx, nz)
-        const dest = this.pedestrianNav.get(
-          this.packCell({ x: nx, z: nz, elevation: neighborGround }),
-        )
-        if (!dest) continue
-        if (!this.pedestrianWalkEdgesConnect(node, dest, direction)) continue
-        node.links.push({ node: dest })
-      }
-    })
-  }
-
-  private pedestrianWalkEdgesConnect(
-    from: PedestrianNavNode,
-    to: PedestrianNavNode,
-    direction: number,
-  ): boolean {
-    if (direction < 0) return false
-    const opposite = (direction + 2) % 4
-    return pedestrianEdgesMeet(
-      this.pedestrianWalkEdgeHeights(from, direction),
-      this.pedestrianWalkEdgeHeights(to, opposite),
-    )
-  }
-
-  private pedestrianWalkEdgeHeights(
-    node: PedestrianNavNode,
-    direction: number,
-  ): [number, number] {
-    const path = node.path
-    if (path) {
-      return wayEdgeHeights(
-        path.elevation,
-        path.pathSlope ?? 0,
-        path.pathSlopeDirection ?? 0,
-        direction,
-      )
-    }
-    return terrainWalkEdgeHeights(
-      this.state.terrain,
-      node.cell.x,
-      node.cell.z,
-      direction,
-      this.getWaterLevel(),
-      (x, z) => this.isInWorld(x, z),
-    )
+  rebuildPedestrianNav(): void {
+    this.pedestrianNavigation.rebuildNow()
+    this.lastNavRevision = this.worldRevision
   }
 
   private isPedestrianSolidAt(x: number, z: number, elevation: number): boolean {
@@ -16097,7 +6433,7 @@ export class GameState {
     if (this.state.festival.infrastructure.depots.some(d => d.x === x && d.z === z) && elevation < this.getTerrainHeight(x, z) + 1) return true
     for (const building of this.getBuildingsAtCell(x, z)) {
       const catalogSolid =
-        PEDESTRIAN_SOLID_KINDS.has(building.kind) &&
+        isPedestrianSolidKind(building.kind) &&
         (building.decorationSlot === undefined || building.decorationSlot === 4)
       if (
         (catalogSolid || pedestrianBarrierOccupancy(building) === 'solid') &&
@@ -16701,8 +7037,8 @@ export class GameState {
     ) {
       return
     }
-    this.visitorsAwaitingDecision.delete(visitor.id)
-    this.chooseNextVisitorAction(visitor)
+    this.visitorSimulation.clearAwaiting(visitor.id)
+    this.visitorBehavior.chooseNextVisitorAction(visitor)
   }
 
   private applyQueueLaneOffset(

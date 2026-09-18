@@ -9,7 +9,12 @@ interpoliert nur. Entscheidungen und Zustandsänderungen dürfen nicht an FPS,
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Tick-Orchestrierung | `src/game/GameState.ts` | `advanceOne`, `stepFixed`, `simulateFixedStep` |
+| Tick-Orchestrierung | `src/game/GameState.ts`, `src/game/visitorSimulation.ts`, `src/game/visitorBehavior.ts` | `advanceOne`, `stepFixed`, `simulateFixedStep`; geordnete Phase in `VisitorSimulation`, Details in `VisitorBehaviorService` |
+| Besucher-Spawn / Crowd-Pass | `src/game/visitorSpawning.ts`, `src/game/visitorCrowdingSimulation.ts` | Intervall-Ankünfte; Gedränge, Motivation und Panik |
+| Achterbahn-Tick | `src/game/coasterSimulation.ts` | Queue, Dispatch, feste Physik-Substeps und Telemetrie |
+| Browser-Zeitgeber | `src/app/gameLoop.ts` | `startGameLoop`; RAF-Delta und 100-ms-Hidden-Tab-Hostheartbeat |
+| Fußgänger-Navigation | `src/game/pedestrianNavigation.ts` | `PedestrianNavigation` (Graph, Cache, A*) |
+| Logistik-Phase | `src/game/logisticsSimulation.ts`, `src/game/roadVehicleSimulation.ts` | `updateLogisticsSimulation`; feste Fahrzeugphase in `RoadVehicleSimulation.processLogisticsVehicles` |
 | Tick-/Speed-Werte | `src/game/simulationConfig.ts` | `time`, `pathfinding.decisionsPerTick` |
 | Deterministischer Zufall | `src/game/rng.ts` | `DeterministicRng`, `hashStringSeed` |
 | Tagesplan durchsetzen | `src/game/dayPlan.ts` | Angebote, Öffnungszeiten |
@@ -18,11 +23,26 @@ interpoliert nur. Entscheidungen und Zustandsänderungen dürfen nicht an FPS,
 | Host-Turns / Hash | `src/game/GameState.ts` | `hashSim`, `receiveTurn`, `onTurnCommit` |
 
 `simulateFixedStep` bewegt Besucher, zählt Spielminuten, spawned Gäste, aktualisiert
-Festival, Logistik, Personal und Needs. `decisionBudget` wird **pro Tick** aus
+Festival und Logistik. Die unveränderte Folge Besucher → Fan-Intrusion →
+Band-Akteure → Einrichtungen → Besucherfeuerwerk → Achterbahnen liegt in
+`VisitorSimulation.runTickPhase`. `decisionBudget` wird **pro Tick** aus
 `SIMULATION_CONFIG.pathfinding.decisionsPerTick` gesetzt.
+Spawn- und Crowd-Akkumulatoren bleiben laufzeitlokal in ihren Services; beide
+werden an denselben Stellen der festen Phase aufgerufen. `CoasterSimulation`
+erhält weiterhin exakt Spielminuten und bewegungsskalierte Sekunden pro Tick.
+Der Browser-Zeitgeber ist aus `main.ts` nach `app/gameLoop.ts` verschoben.
+Er reicht weiterhin höchstens 100 ms Frame-Delta an `GameState.tick`; feste
+Ticks, Reihenfolge und Multiplayer-Autorität bleiben vollständig in `GameState`.
+
+Die Extraktion der Fußgängernavigation und Logistik ändert diese Reihenfolge
+nicht. `GameState` bleibt Tick-Fassade; Fachmodule erhalten ausschließlich
+deterministische Snapshot-Daten und Callback-Kontexte.
+Auch `VisitorBehaviorService` wird nur aus dieser festen Phase aufgerufen.
+Bewegung, Zielwahl und Needs verwenden weiterhin `simTick`, denselben RNG und
+das gemeinsame Entscheidungsbudget; seine Caches sind reiner Laufzeitzustand.
 
 Abreise-, Ausgangs- und Müllrouten aus direkten Callbacks teilen ebenfalls dieses
-Budget. `pendingVisitorRouting` ergänzt die FIFO-Besucherqueue um den Auftragstyp;
+Budget. Die Laufzeitqueues in `VisitorSimulation` ergänzen die FIFO-Besucherqueue um den Auftragstyp;
 eine Abreise hat innerhalb desselben Besucherauftrags Vorrang. Verschachtelte
 Suchschritte derselben Entscheidung zählen als ein Auftrag. Aktivitäts-/Medizin-
 Freigaben und der Abreisestatus werden sofort gesetzt, nur das Ziel wird verzögert

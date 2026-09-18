@@ -8,43 +8,12 @@ import {
   type Blueprint,
   type BlueprintLibraryEntry,
 } from './blueprints'
-import { isQuotaError } from './saveText'
+import { createBrowserObjectStore, isQuotaError } from './browserPersistence'
 const DB_NAME = 'headliner-tycoon-blueprints'
 const DB_VERSION = 1
 const STORE = 'library'
 const IDB_LIST_KEY = 'index'
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      reject(new Error('IndexedDB nicht verfügbar'))
-      return
-    }
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB nicht verfügbar'))
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE)
-    }
-    request.onsuccess = () => resolve(request.result)
-  })
-}
-
-function idbRequest<T>(run: (store: IDBObjectStore) => IDBRequest<T>, mode: IDBTransactionMode): Promise<T> {
-  return openDb().then(
-    (db) =>
-      new Promise<T>((resolve, reject) => {
-        const tx = db.transaction(STORE, mode)
-        const request = run(tx.objectStore(STORE))
-        request.onerror = () => reject(request.error ?? new Error('IndexedDB-Zugriff fehlgeschlagen'))
-        request.onsuccess = () => resolve(request.result)
-        tx.oncomplete = () => db.close()
-        tx.onabort = () => {
-          db.close()
-          reject(tx.error ?? new Error('IndexedDB-Transaktion abgebrochen'))
-        }
-      }),
-  )
-}
+const libraryStore = createBrowserObjectStore(DB_NAME, DB_VERSION, STORE)
 
 function normalizeEntry(raw: unknown): BlueprintLibraryEntry | null {
   if (!raw || typeof raw !== 'object') return null
@@ -82,7 +51,7 @@ export function listBlueprintLibrarySync(): BlueprintLibraryEntry[] {
 export async function listBlueprintLibrary(): Promise<BlueprintLibraryEntry[]> {
   const local = listBlueprintLibrarySync()
   try {
-    const stored = await idbRequest<BlueprintLibraryEntry[] | undefined>((store) => store.get(IDB_LIST_KEY), 'readonly')
+    const stored = await libraryStore.get<BlueprintLibraryEntry[]>(IDB_LIST_KEY)
     if (!Array.isArray(stored) || stored.length === 0) return local
     const merged = new Map<string, BlueprintLibraryEntry>()
     for (const entry of [...stored, ...local].map(normalizeEntry)) {
@@ -113,7 +82,7 @@ export async function saveBlueprintLibraryEntry(
     if (!isQuotaError(error)) throw error
   }
   try {
-    await idbRequest((store) => store.put(next, IDB_LIST_KEY), 'readwrite')
+    await libraryStore.put(IDB_LIST_KEY, next)
   } catch {
     /* localStorage is enough when IDB is missing */
   }
@@ -128,7 +97,7 @@ export async function deleteBlueprintLibraryEntry(id: string): Promise<void> {
     /* still try IDB */
   }
   try {
-    await idbRequest((store) => store.put(next, IDB_LIST_KEY), 'readwrite')
+    await libraryStore.put(IDB_LIST_KEY, next)
   } catch {
     /* ignore */
   }

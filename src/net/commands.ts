@@ -226,5 +226,11 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.placeSceneryLine(command.kind, command.cells, command.slot, command.rotation)
     case 'removeVisitorCars':
       return game.removeVisitorCarsForDebug()
+    default:
+      return assertUnhandledCommand(command)
   }
+}
+
+function assertUnhandledCommand(command: never): never {
+  throw new Error(`Unbekannter Spielbefehl: ${JSON.stringify(command)}`)
 }

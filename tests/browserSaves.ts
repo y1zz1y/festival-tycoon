@@ -3,6 +3,7 @@ import { SAVE_KEY, SAVE_SLOTS_KEY } from '../src/game/catalog'
 import { GameState } from '../src/game/GameState'
 import { listServerSaves, saveServerSave } from '../src/game/serverSaves'
 import { serializeSnapshot } from '../src/game/saveText'
+import { isQuotaError } from '../src/game/browserPersistence'
 
 type MemoryStorage = {
   getItem: (key: string) => string | null
@@ -40,6 +41,10 @@ function withStorage<T>(storage: MemoryStorage, run: () => T): T {
 }
 
 export function testBrowserSaves(fixture: (count?: number) => GameState): void {
+  const quotaError = new Error('storage quota exceeded')
+  assert.equal(isQuotaError(quotaError), true)
+  assert.equal(isQuotaError(new Error('network failed')), false)
+
   const { storage } = memoryStorage()
   withStorage(storage, () => {
     const game = fixture(4)

@@ -1,11 +1,18 @@
 # Entwickler- und Agenten-Doku
 
-Diese Dateien beschreiben **wo** Systeme liegen, **welche Invarianten** gelten und
-**was bei neuen Funktionen aktualisiert werden muss**. Spieleranleitungen stehen
-im Root-`README.md`. Messwerte und Render-/Tick-Architektur: `docs/performance.md`.
-Verbindliche Agent-Regeln: Root-`AGENTS.md`.
+Dies ist der verbindliche Aufgaben-Router für Entwickler und Agents. Zuerst die
+passende Zeile der Themenkarte öffnen; dort stehen vollständige Dateipfade,
+Symbole, Invarianten und Tests. Spieleranleitungen stehen im Root-`README.md`,
+harte globale Regeln in `AGENTS.md`, Messwerte in `docs/performance.md`.
 
-Beim Arbeiten zuerst diese Index-Tabelle lesen, dann nur die passenden Themen-MDs.
+## Kanonische Zuständigkeit
+
+- `AGENTS.md` enthält nur globale, harte Invarianten und verweist hierher.
+- Jedes Fachthema besitzt genau ein kanonisches Topic-MD; andere Topics verlinken
+  dorthin, statt Regeln oder Feature-Historie zu duplizieren.
+- Ein Topic pflegt aktuelle Architektur und Verhalten. Nützliche historische
+  Begründungen bleiben erhalten, werden in Phase 1 aber nicht massenhaft verschoben.
+- Für neue Topics dient [topic-template.md](topic-template.md) als Strukturhilfe.
 
 ## Pflicht: Doku bei Codeänderungen mitziehen
 
@@ -45,6 +52,8 @@ Neue oder geänderte Funktionen sind erst fertig, wenn die Doku stimmt:
 | Personal, Zonen, Sanität, Security | [staff.md](staff.md) | Rollen, Arbeitsbereiche, Tore |
 | Müll, Vorfälle, Feuerwerk, Panik | [incidents.md](incidents.md) | Incidents, Waste-Dumps, Ticker, Bubbles |
 | Festivalwochenende, Bands, Tickets | [festival.md](festival.md) | Buchungen, Wetter, Ruf, Tagesplan |
+| Finanzen, Buchungen, Darlehen | [finance.md](finance.md) | Ledger, Prognose, Kreditrahmen |
+| Konten, Sessions, Authentifizierung | [accounts.md](accounts.md) | Konto-API, Cookies, Rate-Limit |
 | Bühnenwerkstatt, Show, Publikum | [stages.md](stages.md) | Designs, Vorlagen, Zuschauerflächen |
 | Achterbahn, Karussell, Bungee | [attractions.md](attractions.md) | Queues, Ride-Zugang, Betrieb |
 | Achterbahn-Editor, Schienenstücke | [coaster.md](coaster.md) | Anschluss-State-Machine, Stückkatalog, Bau-UI, Typ-Matrix |
@@ -62,11 +71,18 @@ Neue oder geänderte Funktionen sind erst fertig, wenn die Doku stimmt:
 | Bereich | Start |
 | --- | --- |
 | Spielzustand und Tick | `src/game/GameState.ts` |
+| Snapshot-Typen | `src/game/types/entities.ts` (`Cell`, `PlacedBuilding`, `Visitor`), `src/game/types/snapshot.ts` (`GameSnapshot`, `SimTurn`) |
+| Snapshot-Erzeugung, Migration, Reparatur | `src/game/snapshotBootstrap.ts`, `src/game/snapshotMigration.ts`, `src/game/snapshotRepair.ts` |
 | Balancing | `src/game/simulationConfig.ts` |
 | Gebäudetypen und Tools | `src/game/catalog.ts` |
 | Bau-Menü-Kategorien | `src/game/buildMenu.ts` |
-| UI-Orchestrierung | `src/main.ts` |
+| UI-Bootstrap / Orchestrierung | `src/main.ts`, `src/app/gameLoop.ts`, `src/input/toolRouter.ts`, `src/ui/*.ts` |
 | 3D-Szene | `src/view/WorldView.ts` |
+| Fassaden, Dächer, Themen-Eimer | `src/game/decorationWalls.ts` (`WALL_KINDS`, `wallSpec`, `ROOF_KINDS`, `roofSpec`) |
+| Wegmöbel-Ausrichtung | `src/game/pathFurniture.ts` (`pathFurnitureRotation`) |
+| Brücken- und Wegdetails | `src/view/wayStructures.ts` (`indexWayStructures`, `wayStructurePlan`, `createWayStructure`) |
+| Bühnen-Orientierungsgizmo | `src/view/orientationGizmo.ts` (`createOrientationGizmo`, `OrientationGizmo`) |
+| Titelbild-Publikum | `src/titleCrowd.ts` (`mountTitleCrowd`, `TitleCrowd`) |
 | Festival-SFX | `src/game/audio.ts`, `src/view/FestivalAudio.ts` |
 | Netzwerk-Protokoll | `src/net/protocol.ts` |
 | Command-Anwendung | `src/net/commands.ts` |

@@ -1,5 +1,48 @@
 # Simulation and rendering performance
 
+## Final GameState decomposition (0.1.176, 2026-09-19)
+
+The cumulative extraction keeps the fixed-tick schedule, shared deterministic
+decision budget, navigation invalidation and static batching rules unchanged.
+`GameState.ts` is 8,247 lines (phase baseline 10,218; cumulative baseline
+17,252) and `main.ts` is 4,497 (cumulative baseline 7,985). Full regression,
+documentation consistency and production build checks pass. These measurements
+used the unchanged `rtest3` fixture and did not write any personal save.
+
+Current 120-tick CPU validation (median/p95/max ms, final visitors):
+- 1×: 10.39 / 25.52 / 84.79; 1,107.
+- 3×: 22.01 / 40.84 / 71.13; 1,132.
+- 8×: 27.64 / 46.14 / 93.23; 1,205.
+
+Current 1,200-tick CPU validation (median/p95/max ms, final visitors):
+- 1×: 19.55 / 34.15 / 91.80; 1,174.
+- 3×: 23.70 / 39.43 / 74.82; 675.
+- 8×: 19.68 / 35.25 / 68.71; 40.
+
+The long 8× endpoint is nearly empty after festival closure and is not a
+steady crowded-load result.
+
+Hashes stayed `7c89f04e…`, `b0ab1784…`, and `ba35ce05…`, matching the earlier
+visitor-orchestration extraction smoke. This phase is an architectural
+decomposition, not an optimization or browser-FPS claim.
+
+## Visitor orchestration extraction (0.1.167, 2026-09-18)
+
+`VisitorSimulation` now owns the ordered visitor-facing tick phase and the
+insertion-ordered destination/routing queues behind a callback context. The
+shared deterministic budget remains in `GameState`, because band actors consume
+the same per-tick allowance. Tick order, route algorithms, movement and balancing
+did not change.
+
+`npm run test:performance -- rtest3 120` smoke (median/p95/max CPU ms):
+- 1×: 9.70 / 21.74 / 89.20; 1107 visitors.
+- 3×: 20.26 / 33.61 / 67.23; 1132 visitors.
+- 8×: 23.63 / 35.22 / 64.79; 1205 visitors.
+
+Final hashes were `7c89f04e…`, `b0ab1784…`, and `ba35ce05…` respectively.
+This was an extraction smoke, not a before/after optimization comparison;
+browser FPS was not measured.
+
 ## Local parking lookup (0.1.124, 2026-09-16)
 
 The supplied Base64 save was decoded to the ignored, private fixture

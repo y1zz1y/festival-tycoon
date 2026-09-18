@@ -8,6 +8,7 @@ import type { GroundWork } from './game/ground'
 import { SUPPLIES } from './game/festivalManagement'
 import type { FestivalAction } from './game/festivalManagement'
 import { makeDraggable, makeResizable } from './dragPanel'
+import { createAreaDesignationHandler } from './ui/areaDesignation'
 import './logistics.css'
 
 export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toast: (text: string, error?: boolean) => void) {
@@ -31,20 +32,27 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
   const execute = (action: FestivalAction) => { const result = getGame().manageFestival(action); if (result.message !== 'Befehl eingeplant') toast(result.message, !result.ok); return result }
   const choose = (next: string) => {
     mode = next
-    view.setGroundAreaTool(next === 'path' || next === 'road' ? (from, to, preview) => {
-      const kind = next === 'path' ? footType : roadType
-      if (preview) qG('[data-hint]').textContent = `${groundRectangle(getGame().snapshot, from, to).length} Felder · bis zu ${groundRectangle(getGame().snapshot, from, to).length * WAY_TYPES[kind].cost} € zzgl. Rodung. Loslassen zum Bauen / Ersetzen.`
-      else execute({ type: 'wayArea', from, to, kind })
-      document.querySelectorAll('[data-way-estimate]').forEach(el => el.textContent = qG('[data-hint]').textContent)
-    } : groundOpen && next in GROUND_WORK ? (from, to, preview) => {
-      if (preview) {
+    view.setGroundAreaTool(next === 'path' || next === 'road' ? createAreaDesignationHandler({
+      preview: ({ from, to }) => {
+        const kind = next === 'path' ? footType : roadType
+        const count = groundRectangle(getGame().snapshot, from, to).length
+        qG('[data-hint]').textContent = `${count} Felder · bis zu ${count * WAY_TYPES[kind].cost} € zzgl. Rodung. Loslassen zum Bauen / Ersetzen.`
+        document.querySelectorAll('[data-way-estimate]').forEach(el => el.textContent = qG('[data-hint]').textContent)
+      },
+      execute: ({ from, to }) => {
+        execute({ type: 'wayArea', from, to, kind: next === 'path' ? footType : roadType })
+        document.querySelectorAll('[data-way-estimate]').forEach(el => el.textContent = qG('[data-hint]').textContent)
+      },
+    }) : groundOpen && next in GROUND_WORK ? createAreaDesignationHandler({
+      preview: ({ from, to }) => {
         const estimate = prepareGroundArea(getGame().snapshot as GameSnapshot, from, to, next as GroundWork, true)
         qG('[data-hint]').textContent = `Loslassen zum Anwenden: ${estimate.message}`
-      } else {
+      },
+      execute: ({ from, to }) => {
         const result = execute({ type: 'groundArea', from, to, kind: next as GroundWork })
         qG('[data-hint]').textContent = result.message
-      }
-    } : null)
+      },
+    }) : null)
     getGame().setTool(next === 'path' ? 'path' : next === 'road' ? 'road' : next === 'wasteDump' ? 'wasteDump' : 'inspect')
     groundPanel.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.tool === mode)))
     qG('[data-hint]').textContent = mode === 'inspect' ? 'Feld anklicken: Tragfähigkeit, Nässe und Bestand.' : `${mode === 'path' ? WAY_TYPES[footType].name : mode === 'road' ? WAY_TYPES[roadType].name : groundPanel.querySelector(`[data-tool="${mode}"]`)?.textContent}: Feld anklicken oder mit gedrückter linker Maustaste eine Fläche ziehen.`
