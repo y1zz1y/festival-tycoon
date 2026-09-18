@@ -1,5 +1,5 @@
 import { transportMotionFactor } from './transportMotion'
-import { BoxGeometry, Group, Line, BufferGeometry, LineBasicMaterial, Mesh, MeshStandardMaterial, Color, Vector3 } from 'three'
+import { BoxGeometry, Group, Line, BufferGeometry, LineBasicMaterial, Mesh, MeshStandardMaterial, Color, Quaternion, Vector3 } from 'three'
 import { TerrainShape } from './terrainShape'
 import { createTerrainSurface } from './terrainSurface'
 import type { GameSnapshot } from '../game/GameState'
@@ -161,6 +161,15 @@ export class SupplyChainView {
       actor(`push-${v.id}`, false, v.cell.x, getTerrainHeight(s.terrain, v.cell.x, v.cell.z), v.cell.z, false, true)
     }
     for (const [id, model] of this.actors) if (!active.has(id)) { disposeChildren(model); this.group.remove(model); this.actors.delete(id) }
+  }
+  /**
+   * The fill bars are flat plates: seen from behind they are a dark edge, from the
+   * side nothing at all. Turning them with the camera is the whole point of them —
+   * a stand's stock has to be readable from wherever the player happens to look.
+   * Runs every frame, including while the game is paused, since the camera turns then too.
+   */
+  faceCamera(orientation: Quaternion): void {
+    for (const model of this.stockModels.values()) model.quaternion.copy(orientation)
   }
   animate(paused: boolean, time = performance.now(), terrainHeight?: (x: number, z: number, y: number) => number): void {
     const seconds = this.lastAnimationTime === null ? 0 : Math.min(.25, Math.max(0, (time-this.lastAnimationTime)/1000))

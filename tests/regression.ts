@@ -26,7 +26,7 @@ import { testSealedWasteContainer } from './sealedWasteContainer'
 import { testStaffZonePaint } from './staffZones'
 import { testAccessControl } from './accessControl'
 import { CampingView } from '../src/view/CampingView'
-import { Color } from 'three'
+import { Color, Quaternion, Vector3 } from 'three'
 import { readFileSync } from 'node:fs'
 import { encodeSaveText, decodeSaveText } from '../src/game/saveText'
 import { testEnvironments } from './environments'
@@ -240,6 +240,12 @@ test('transport rendering moves between cells smoothly and respects pause', () =
   const bars=(view as any).stockModels.get('fill-depot')
   assert.equal(bars.children.length,8,'depots and receiving bays show four fill planks')
   assert.ok(bars.children[1].scale.x>bars.children[3].scale.x,'fuller supplies read as longer planks')
+  // The planks are flat: edge-on they vanish, so they follow the camera instead of the world.
+  const facing=new Quaternion().setFromAxisAngle(new Vector3(0,1,0),Math.PI/3)
+  view.faceCamera(facing)
+  for(const model of (view as any).stockModels.values() as Iterable<any>) {
+    assert.ok(model.quaternion.angleTo(facing)<1e-9,'every fill bar turns to face the camera')
+  }
   let at60=0,at144=0
   for(let n=0;n<60;n++)at60+=(1-at60)*transportMotionFactor(1/60)
   for(let n=0;n<144;n++)at144+=(1-at144)*transportMotionFactor(1/144)

@@ -2997,6 +2997,22 @@ export class GameState {
     }
   }
 
+  /**
+   * Takes a one-way street back to both directions. Unlike setRoadDirection, which
+   * toggles the arrow it is handed, this clears whichever arrow is there — so a road
+   * can be freed without first working out which way it points.
+   */
+  clearRoadDirection(x: number, z: number): ActionResult {
+    const road = this.getRoadCellAt(x, z)
+    if (!road) return { ok: false, message: 'Hier liegt keine Straße' }
+    if (road.allowedDirections === null) return { ok: false, message: 'Diese Straße ist bereits in beide Richtungen frei' }
+    road.allowedDirections = null
+    this.invalidateRoadGraph()
+    this.realignVehiclesOnRoad(x, z, null, roadLayerElevation(road))
+    this.emit()
+    return { ok: true, message: 'Straße wieder in beide Richtungen freigegeben' }
+  }
+
   toggleRoadSeparator(
     x: number,
     z: number,

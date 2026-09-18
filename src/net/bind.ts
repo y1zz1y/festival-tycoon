@@ -160,6 +160,11 @@ export function enableMultiplayerCommands(game: GameState): void {
     z,
     direction,
   }))
+  game.clearRoadDirection = wrap(game, game.clearRoadDirection, (x, z) => ({
+    type: 'clearRoadDirection',
+    x,
+    z,
+  }))
   game.placeTrafficLight = wrap(game, game.placeTrafficLight, (x, z, direction) => ({
     type: 'placeTrafficLight',
     x,

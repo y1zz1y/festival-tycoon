@@ -83,6 +83,9 @@ export function applyDirectCellTool(
       ),
     }
   }
+  if (tool === 'roadDirectionClear') {
+    return { handled: true, result: game.clearRoadDirection(cell.x, cell.z) }
+  }
   if (tool === 'trafficLight') {
     const result = game.placeTrafficLight(
       cell.x,

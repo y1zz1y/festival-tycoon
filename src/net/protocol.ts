@@ -88,6 +88,7 @@ export type GameCommandAction =
   | { type: 'designatePowerCable'; x: number; z: number; enabled: boolean }
   | { type: 'designatePowerCableArea'; cells: CellRef[] }
   | { type: 'setRoadDirection'; x: number; z: number; direction: Direction }
+  | { type: 'clearRoadDirection'; x: number; z: number }
   | { type: 'placeTrafficLight'; x: number; z: number; direction: Direction }
   | {
       type: 'placePathBarrier'

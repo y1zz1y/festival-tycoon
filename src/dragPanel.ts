@@ -53,6 +53,17 @@ export function makeResizable(panel: HTMLElement): void {
   grip.className = 'panel-resize-grip'
   grip.setAttribute('aria-hidden', 'true')
   panel.append(grip)
+  // The grip belongs to the window's corner, not to its contents: a panel that
+  // scrolls is its own scroll container, and an absolutely positioned child of one
+  // rides along with the content. Offsetting it by the scroll position parks it back
+  // in the corner, whatever is scrolled past underneath.
+  const pinGrip = (): void => {
+    grip.style.transform = panel.scrollLeft || panel.scrollTop
+      ? `translate(${panel.scrollLeft}px, ${panel.scrollTop}px)`
+      : ''
+  }
+  panel.addEventListener('scroll', pinGrip, { passive: true })
+  pinGrip()
   grip.addEventListener('pointerdown', (event) => {
     event.preventDefault()
     event.stopPropagation()
@@ -79,6 +90,7 @@ export function makeResizable(panel: HTMLElement): void {
       const height = Math.min(Math.max(startHeight + (moveEvent.clientY - startY), minHeight), maxHeight)
       panel.style.width = `${width}px`
       panel.style.height = `${height}px`
+      pinGrip()
     }
     const onUp = (): void => {
       grip.removeEventListener('pointermove', onMove)

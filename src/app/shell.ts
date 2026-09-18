@@ -270,7 +270,7 @@ export function mountAppShell(app: HTMLDivElement): void {
       <div id="path-tools"></div>
       <section id="road-editor-tools" class="rct-editor-section" hidden>
         <label>Straßen & Verkehr</label>
-        <div class="piece-palette">${buildCategoryById('roads').groups.flatMap(group => group.items).map(item => `<button type="button" data-road-editor-tool="${item.tool}" title="${item.detail}">${item.icon}<small>${item.name}</small></button>`).join('')}</div>
+        <div class="piece-palette">${buildCategoryById('roads').groups.flatMap(group => group.items).map(item => `<button type="button" data-road-editor-tool="${item.tool}" title="${item.detail}" aria-pressed="false">${item.icon}<small>${item.name}</small></button>`).join('')}</div>
       </section>
       <section class="rct-editor-section rct-path-art">
         <label>Art</label>

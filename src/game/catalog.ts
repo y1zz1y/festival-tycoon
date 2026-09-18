@@ -72,6 +72,7 @@ export type Tool =
   | 'road'
   | 'parkingArea'
   | 'roadDirection'
+  | 'roadDirectionClear'
   | 'trafficLight'
   | 'pathBarrier'
   | 'roadSeparator'
@@ -100,6 +101,7 @@ export const ROAD_BUILD_TOOLS = [
   'road',
   'parkingArea',
   'roadDirection',
+  'roadDirectionClear',
   'trafficLight',
   'pathBarrier',
   'roadSeparator',

@@ -49,6 +49,7 @@ export const COMMAND_METADATA = {
   designatePowerCable: { optimistic: true },
   designatePowerCableArea: { optimistic: true },
   setRoadDirection: { optimistic: true },
+  clearRoadDirection: { optimistic: true },
   placeTrafficLight: { optimistic: true },
   placePathBarrier: { optimistic: true },
   configureAccessControl: { optimistic: true },

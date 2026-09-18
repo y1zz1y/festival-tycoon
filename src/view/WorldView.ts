@@ -963,6 +963,7 @@ export class WorldView {
     }
     if (dataChanged) this.supplyChainView.update(snapshot, this.logisticsMode, this.terrainShape ?? undefined)
     this.supplyChainView.animate(snapshot.speed === 0, undefined, this.actorTerrainHeight)
+    this.supplyChainView.faceCamera(this.camera.quaternion)
     this.visitors.visible = !this.logisticsMode
     this.staffView.group.visible = !this.logisticsMode
     this.coasterTrains.visible = !this.logisticsMode
