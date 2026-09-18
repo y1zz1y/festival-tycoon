@@ -23,6 +23,12 @@
 .festival-grid article, .festival-booking, .festival-result { padding: 14px; border: 1px solid #577364; background: #263e35; }
 .festival-grid article { display: flex; flex-direction: column; }
 .festival-grid article button { margin-top: auto; }
+/* A forecast slot: hours left, weather right, the sign a little larger than the text
+   it stands in front of. */
+.festival-forecast-slot { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.festival-forecast-slot strong { white-space: nowrap; }
+.weather-icon { margin-right: 6px; font-size: 1.2em; line-height: 1; }
+.forecast-degrees { margin-left: 8px; font-variant-numeric: tabular-nums; color: #f4d887; }
 .festival-meter { display: grid; grid-template-columns: 1fr auto; gap: 5px; margin-bottom: 12px; }
 .festival-meter progress { width: 100%; grid-column: 1 / -1; height: 7px; accent-color: #dbbc70; }
 .festival-number { font-size: 30px; font-variant-numeric: tabular-nums; color: #f4d887; }

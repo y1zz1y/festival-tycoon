@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { FEMALE_VISITOR_NAMES, GameState, MALE_VISITOR_NAMES } from '../src/game/GameState'
 import type { GameSnapshot } from '../src/game/GameState'
-import { activeBookings, assignAudience, audienceMix, festivalTime, forecast, weatherAt, showIssue, updateFestival, watchableBookings } from '../src/game/festivalManagement'
+import { activeBookings, assignAudience, audienceMix, festivalTime, forecast, weatherAt, temperatureAt, TEMPERATURE_RANGE, showIssue, updateFestival, watchableBookings } from '../src/game/festivalManagement'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { visitorLooksFemale } from '../src/game/rng'
 import { CONCERT_TOPLESS_CROWD_THOUGHT, CONCERT_TOPLESS_THOUGHT, groupVisitorsByThought } from '../src/game/visitorThoughts'
@@ -128,6 +128,28 @@ export function testFestival(fixture: (count?: number) => GameState): void {
   assert.equal(game.manageFestival({ type: 'cancel', id: f.bookings[0]!.id }).ok, false, 'no refund after show starts')
 
   assert.equal(forecast(f, 5, 12), forecast(new GameState(s).snapshot.festival, 5, 12))
+
+  // Temperatures: seeded like the weather, never outside the range the site has, and
+  // both ends of it actually happen over a season of festivals.
+  let coldest = Infinity, warmest = -Infinity
+  for (let seed = 0; seed < 40; seed++) {
+    const sky = { ...f, seed }
+    for (let day = 1; day <= 6; day++) {
+      for (let hour = 0; hour < 24; hour++) {
+        const weather = weatherAt(sky, day, hour)
+        const celsius = temperatureAt(sky, day, hour, weather)
+        assert.ok(Number.isInteger(celsius), 'a temperature is a whole number of degrees')
+        assert.ok(celsius >= TEMPERATURE_RANGE.min && celsius <= TEMPERATURE_RANGE.max, `${celsius} °C stays between ${TEMPERATURE_RANGE.min} and ${TEMPERATURE_RANGE.max}`)
+        assert.equal(celsius, temperatureAt({ ...f, seed }, day, hour, weather), 'the same hour always reads the same')
+        coldest = Math.min(coldest, celsius); warmest = Math.max(warmest, celsius)
+      }
+    }
+  }
+  assert.equal(coldest, TEMPERATURE_RANGE.min, 'the cold end is reached')
+  assert.equal(warmest, TEMPERATURE_RANGE.max, 'and so is the warm one')
+  const midday = temperatureAt(f, 3, 15, 'sun'), night = temperatureAt(f, 3, 3, 'sun')
+  assert.ok(midday > night, 'afternoons are warmer than the small hours')
+  assert.ok(temperatureAt(f, 3, 15, 'heat') > temperatureAt(f, 3, 15, 'rain'), 'and heat is warmer than rain')
 
   const weather = create(1), ws = weather.snapshot as GameSnapshot
   for (let seed = 0; ; seed++) { ws.festival.seed = seed; if (weatherAt(ws.festival, ws.day, 12) === 'rain') break }

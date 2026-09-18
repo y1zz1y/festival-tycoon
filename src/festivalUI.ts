@@ -2,7 +2,7 @@ import { mountMusicPlanner, musicOverview } from './musicPlanner'
 import type { GameState, GameSnapshot } from './game/GameState'
 import { makeDraggable, makeResizable } from './dragPanel'
 import './festival.css'
-import { AUDIENCES, AUDIENCE_NAMES, SUPPLIES, UPGRADES, WEATHER_NAMES, audienceMix, forecast, festivalTime } from './game/festivalManagement'
+import { AUDIENCES, AUDIENCE_NAMES, SUPPLIES, UPGRADES, WEATHER_ICONS, WEATHER_NAMES, audienceMix, forecast, formatTemperature, temperatureAt, festivalTime } from './game/festivalManagement'
 import type { FestivalAction, Supply, Upgrade } from './game/festivalManagement'
 import { mountHeadlineMagazine } from './headlineMagazineUI'
 
@@ -107,7 +107,9 @@ export function mountFestivalUI(
     if (f.reports.length > reportCount) { reportCount = f.reports.length; toast('Neue Festival-Tagesabrechnung verfügbar') }
     else reportCount = f.reports.length
     // Icon-only, like every other button in the toolbar — the state goes into the tooltip.
-    const openLabel = f.enabled ? (f.finished ? 'Festival · Ergebnis' : `Festival · ${WEATHER_NAMES[f.weather]}`) : 'Festival planen'
+    const openLabel = f.enabled
+      ? (f.finished ? 'Festival · Ergebnis' : `Festival · ${WEATHER_NAMES[f.weather]} · ${formatTemperature(temperatureAt(f, s.day, s.minute / 60, f.weather))}`)
+      : 'Festival planen'
     open.title = openLabel
     open.setAttribute('aria-label', openLabel)
     if (panel.hidden) return
@@ -135,10 +137,17 @@ export function mountFestivalUI(
     put('[data-lineup-mix]',musicOverview(s))
     musicPlanner.render(s)
     const mix = audienceMix(f)
-    put('[data-summary]', `<div class="festival-grid"><article><h3>Ziele dieses Wochenendes</h3><p>${f.admissions} / ${f.goals.guests} Anreisen</p><p>Zufriedenheit ≥ ${f.goals.satisfaction}% · Gesamtbilanz ≥ ${money(f.goals.profit)}</p><p>Vorbereitung: Tag ${f.startDay}<br>Festival: Tag ${f.startDay + s.dayPlan.leadDays} bis ${f.startDay + s.dayPlan.leadDays + s.dayPlan.festivalDays - 1}</p></article><article><h3>Erwartetes Publikum</h3>${AUDIENCES.map(key => meter(AUDIENCE_NAMES[key], mix[key] * 100)).join('')}</article><article><h3>Worauf ihr achten solltet</h3><p>${!s.buildings.some(b => b.kind === 'stage') ? 'Baut eine Bühne mit Stromversorgung und Bühnenvorplatz.' : !f.bookings.length ? 'Noch kein Programm gebucht: Ohne Bands bleibt die Nachfrage gering.' : `${f.bookings.length} Auftritte gebucht. Technische Anforderungen und Tagesplan prüfen.`}</p><p>Aktuell: ${WEATHER_NAMES[f.weather]} · Bodennässe ${Math.round(f.wetness)}%</p><p>${f.supplies.food < 100 || f.supplies.drinks < 100 ? 'Vorräte werden knapp – Nachschub bestellen.' : 'Lieferungen frühzeitig vor großen Auftritten einplanen.'}</p></article></div>`)
+    put('[data-summary]', `<div class="festival-grid"><article><h3>Ziele dieses Wochenendes</h3><p>${f.admissions} / ${f.goals.guests} Anreisen</p><p>Zufriedenheit ≥ ${f.goals.satisfaction}% · Gesamtbilanz ≥ ${money(f.goals.profit)}</p><p>Vorbereitung: Tag ${f.startDay}<br>Festival: Tag ${f.startDay + s.dayPlan.leadDays} bis ${f.startDay + s.dayPlan.leadDays + s.dayPlan.festivalDays - 1}</p></article><article><h3>Erwartetes Publikum</h3>${AUDIENCES.map(key => meter(AUDIENCE_NAMES[key], mix[key] * 100)).join('')}</article><article><h3>Worauf ihr achten solltet</h3><p>${!s.buildings.some(b => b.kind === 'stage') ? 'Baut eine Bühne mit Stromversorgung und Bühnenvorplatz.' : !f.bookings.length ? 'Noch kein Programm gebucht: Ohne Bands bleibt die Nachfrage gering.' : `${f.bookings.length} Auftritte gebucht. Technische Anforderungen und Tagesplan prüfen.`}</p><p>Aktuell: <span class="weather-icon" aria-hidden="true">${WEATHER_ICONS[f.weather]}</span>${WEATHER_NAMES[f.weather]} · ${formatTemperature(temperatureAt(f, s.day, s.minute / 60, f.weather))} · Bodennässe ${Math.round(f.wetness)}%</p><p>${f.supplies.food < 100 || f.supplies.drinks < 100 ? 'Vorräte werden knapp – Nachschub bestellen.' : 'Lieferungen frühzeitig vor großen Auftritten einplanen.'}</p></article></div>`)
     put('[data-stock]', Object.entries(SUPPLIES).map(([key, item]) => `<article><h3>${item.name}</h3><strong class="festival-number">${Math.floor(f.infrastructure.depots.reduce((n, d) => n + d.stock[key as Supply], 0))}</strong><small>Einheiten in Depots</small></article>`).join(''))
     put('[data-deliveries]', `<p>${f.infrastructure.depots.length} Depots · ${f.infrastructure.trucks.length} Lastwagen · ${f.infrastructure.routes.length} Träger. Bestellungen hier gehen an das erste Depot.</p>${f.deliveries.map(d => `<article class="festival-booking"><strong>${d.quantity} × ${SUPPLIES[d.kind].name}</strong><span>${festivalTime(s) < d.due ? `Versand ab Tag ${Math.floor(d.due / 1440)} · ${clock(d.due % 1440)}` : f.infrastructure.trucks.some(t => t.deliveryId === d.id && t.z < -s.scenario.worldSize / 2) ? 'Wartet auf freie Einfahrt am Kartenrand' : f.infrastructure.trucks.some(t => t.deliveryId === d.id) ? 'Lastwagen fährt zum Depot' : d.remaining > 0 ? `Anfahrt zum Kartenrand · ${Math.ceil(d.remaining)} Minuten` : 'Wartet auf freie Zufahrt zum Depot'}</span></article>`).join('') || '<p>Keine Lieferungen unterwegs.</p>'}`)
-    put('[data-forecast]', [0, 1, 2].map(offset => `<article><h3>Tag ${s.day + offset}</h3>${[0, 6, 12, 18].map(hour => `<p>${String(hour).padStart(2, '0')}:00–${hour + 6}:00 · <strong>${WEATHER_NAMES[forecast(f, s.day + offset, hour)]}</strong></p>`).join('')}</article>`).join(''))
+    // Each six-hour slot reads as a row: the hours on the left, the weather on the right
+    // with its own sign in front of the name, so a day can be skimmed without reading it.
+    put('[data-forecast]', [0, 1, 2].map(offset => `<article><h3>Tag ${s.day + offset}</h3>${[0, 6, 12, 18].map(hour => {
+      const weather = forecast(f, s.day + offset, hour)
+      // The window's middle hour stands for the whole six of them.
+      const celsius = temperatureAt(f, s.day + offset, hour + 3, weather)
+      return `<p class="festival-forecast-slot"><span>${String(hour).padStart(2, '0')}:00–${hour + 6}:00</span><strong><span class="weather-icon" aria-hidden="true">${WEATHER_ICONS[weather]}</span>${WEATHER_NAMES[weather]}<span class="forecast-degrees">${formatTemperature(celsius)}</span></strong></p>`
+    }).join('')}</article>`).join(''))
     put('[data-upgrades]', Object.entries(UPGRADES).map(([key, upgrade]) => `<article><h3>${upgrade.name}</h3><p>${upgrade.detail}</p><button data-upgrade="${key}" ${f.upgrades[key as Upgrade] ? 'disabled' : ''}>${f.upgrades[key as Upgrade] ? 'Vorhanden' : `Einrichten · ${money(upgrade.cost)}`}</button></article>`).join(''))
     put('[data-reputation]', Object.entries(f.reputation).map(([key, value]) => `<article>${meter(({ music: 'Musik', atmosphere: 'Atmosphäre', comfort: 'Komfort', organization: 'Organisation' })[key]!, value)}</article>`).join(''))
     const festivalReports = f.reports.filter(r => r.day >= f.startDay + s.dayPlan.leadDays)

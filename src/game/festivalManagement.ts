@@ -62,6 +62,8 @@ export type Upgrade = keyof typeof UPGRADES
 export type Booking = { id: string; bandId: string; stageId: string; day: number; start: number; duration: number; fee: number }
 export type Weather = 'sun' | 'rain' | 'heat' | 'wind'
 export const WEATHER_NAMES: Record<Weather, string> = { sun: 'Heiter', rain: 'Regen', heat: 'Hitze', wind: 'Starker Wind' }
+/** The same four kinds of weather at a glance, for the forecast and wherever it is reported. */
+export const WEATHER_ICONS: Record<Weather, string> = { sun: '☀️', rain: '🌧️', heat: '🌡️', wind: '💨' }
 type Reputation = { music: number; atmosphere: number; comfort: number; organization: number }
 export type DayReport = { day: number; balance: number; guests: number; satisfaction: number; concerts: number; stockouts: number; weatherImpact: number; reputation: Reputation }
 export type FestivalManagement = {
@@ -113,6 +115,24 @@ export function weatherAt(f: FestivalManagement, day: number, hour: number): Wea
   }
   return outlook
 }
+/** How cold and how warm it ever gets on this site, in °C. */
+export const TEMPERATURE_RANGE = { min: 15, max: 35 } as const
+/**
+ * The temperature of one hour. Three things decide it, and all three are seeded, so
+ * the same hour always reads the same: how warm the day is as a whole, where the hour
+ * sits on the day's curve — coldest before dawn, warmest mid-afternoon — and what the
+ * sky is doing, since heat bakes and rain and wind take the edge off.
+ */
+export function temperatureAt(f: FestivalManagement, day: number, hour: number, weather: Weather): number {
+  const dayWarmth = hashStringSeed(`${f.seed}:temp:${day}`) % 100 / 100
+  const mean = 20 + dayWarmth * 6
+  const daily = 5 * Math.cos((hour - 15) / 24 * Math.PI * 2)
+  const sky = { sun: 2, heat: 7, rain: -3, wind: -2 }[weather]
+  const value = Math.round(mean + daily + sky)
+  return Math.max(TEMPERATURE_RANGE.min, Math.min(TEMPERATURE_RANGE.max, value))
+}
+/** The temperature as it is written: a whole number with its unit. */
+export const formatTemperature = (celsius: number): string => `${celsius} °C`
 export function audienceMix(f: FestivalManagement): Record<Audience, number> {
   const weights = { music: 20 + f.reputation.music / 5, party: 20 + f.reputation.atmosphere / 5,
     family: 15 + f.reputation.organization / 5, comfort: 15 + f.reputation.comfort / 5, camping: 25 }

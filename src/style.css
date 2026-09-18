@@ -292,22 +292,23 @@ button {
   bottom: 12px;
   left: 12px;
   z-index: 24;
-  max-width: min(460px, calc(100vw - 340px));
+  max-width: min(480px, calc(100vw - 340px));
   padding: 8px 12px;
   border-radius: 13px;
 }
 
-/* Three readings per line, two lines — a grid rather than a wrapping row, so the
+/* Four readings per line, two lines — a grid rather than a wrapping row, so the
    number of lines stays at two however long the date or the money gets. */
 .status-overlay .stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, max-content));
+  grid-template-columns: repeat(4, minmax(0, max-content));
   gap: 4px 14px;
 }
 
-/* The only reading long enough to run out of room; it wraps inside its own cell
-   instead of pushing past the panel's edge on a narrow window. */
+/* The only reading long enough to run out of room: it takes the last two columns
+   of the lower line and wraps inside them instead of pushing past the panel's edge. */
 .status-overlay .stats span:last-child {
+  grid-column: span 2;
   white-space: normal;
 }
 

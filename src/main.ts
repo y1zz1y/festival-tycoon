@@ -24,7 +24,7 @@ import { mountLogisticsUI } from './logisticsUI'
 import './style.css'
 import { mountFestivalUI } from './festivalUI'
 import { mountTickerUI } from './tickerUI'
-import { AUDIENCE_NAMES, SUPPLIES } from './game/festivalManagement'
+import { AUDIENCE_NAMES, SUPPLIES, WEATHER_ICONS, WEATHER_NAMES, formatTemperature, temperatureAt } from './game/festivalManagement'
 import type { Supply } from './game/festivalManagement'
 import {
   SHIRT_COLORS,
@@ -296,6 +296,7 @@ app.innerHTML = `
         <span>★ <strong id="reputation">0%</strong></span>
         <span>⚡ <strong id="power">0/0 kW</strong></span>
         <span>🗑️ <strong id="waste">0</strong></span>
+        <span id="weather-stat"><span id="weather-icon" aria-hidden="true">☀️</span> <strong id="weather">Heiter</strong> <strong id="temperature">20 °C</strong></span>
         <span>📅 <strong id="date">Tag 1 · 08:00</strong></span>
       </div>
     </aside>
@@ -1228,6 +1229,10 @@ const reputation = requireElement<HTMLElement>('#reputation')
 const power = requireElement<HTMLElement>('#power')
 const waste = requireElement<HTMLElement>('#waste')
 const date = requireElement<HTMLElement>('#date')
+const weatherStat = requireElement<HTMLElement>('#weather-stat')
+const weatherIcon = requireElement<HTMLElement>('#weather-icon')
+const weatherName = requireElement<HTMLElement>('#weather')
+const temperature = requireElement<HTMLElement>('#temperature')
 const toggleParkButton = requireElement<HTMLButtonElement>('#toggle-park')
 const logisticsOverlayButton =
   requireElement<HTMLButtonElement>('#toggle-logistics-overlay')
@@ -1821,6 +1826,14 @@ function bindGameState(nextGame: GameState): void {
     }[festivalPhase.phase]
     date.textContent = snapshot.festival.planning ? 'Planung · Festival noch nicht gestartet' :
       `${dayPhaseIcon} Tag ${snapshot.day} · ${festivalPhaseLabel} ${festivalPhase.phaseDay}/${festivalPhase.phaseLength} · ${formatTime(snapshot.minute)}`
+    // The weather runs whether a festival does or not, so the bar always has something
+    // to report; how soft the ground is goes into the tooltip, where there is room for it.
+    const weather = snapshot.festival.weather
+    const celsius = temperatureAt(snapshot.festival, snapshot.day, snapshot.minute / 60, weather)
+    weatherIcon.textContent = WEATHER_ICONS[weather]
+    weatherName.textContent = WEATHER_NAMES[weather]
+    temperature.textContent = formatTemperature(celsius)
+    weatherStat.title = `Wetter: ${WEATHER_NAMES[weather]} · ${formatTemperature(celsius)} · Bodennässe ${Math.round(snapshot.festival.wetness)} %`
     toggleParkButton.textContent = snapshot.parkOpen ? '🔓' : '🔒'
     toggleParkButton.disabled = Boolean(snapshot.festival.planning || snapshot.festival.finished)
     toggleParkButton.title = toggleParkButton.disabled
