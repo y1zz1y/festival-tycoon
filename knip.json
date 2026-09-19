@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "tests/regression.ts",
+    "tests/performance.ts",
+    "scripts/*.mjs"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "server/**/*.ts",
+    "tests/**/*.ts",
+    "tests/**/*.mjs",
+    "scripts/**/*.mjs"
+  ],
+  "ignoreExportsUsedInFile": true
+}

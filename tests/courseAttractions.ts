@@ -20,6 +20,7 @@ import { collectBuiltAtmosphereCells } from '../src/game/atmosphere'
 import { BUILDINGS } from '../src/game/catalog'
 import { listedBuildTools } from '../src/game/buildMenu'
 import { BANDS, bandStarRating, isFiveStarBand } from '../src/game/festivalManagement'
+import { defaultStageDesign } from '../src/game/stageDesign'
 import type { Visitor } from '../src/game/types/entities'
 
 function fakeVisitor(id: string): Visitor {
@@ -260,6 +261,50 @@ export function testCourseAttractions(): void {
   })
   assert.equal(course.riders.length, 1)
   assert.equal(visitor.state, 'riding')
+  assert.equal(visitor.needs.fun, 10, 'legacy course admission grants no fun before completion')
+
+  for (const kind of ['mudmasters', 'pool', 'treeToTree'] as const) {
+    const completedCourse = createSeededCourse(`completed-${kind}`, kind, 24, 24)
+    const completedVisitor = fakeVisitor(`completed-${kind}`)
+    completedVisitor.state = 'riding'
+    completedVisitor.targetId = completedCourse.id
+    const exitPiece = completedCourse.pieces.find((piece) => piece.kind === 'exit')!
+    completedCourse.riders = [{
+      visitorId: completedVisitor.id,
+      pieceId: exitPiece.id,
+      progress: 0.99,
+      airborne: false,
+    }]
+    stepCourses(
+      { courses: [completedCourse], visitors: [completedVisitor], simTick: 2 },
+      { next: () => 0.2 },
+      { minutes: 0.1, charge: () => true, injure: () => undefined },
+    )
+    assert.equal(
+      completedVisitor.needs.fun,
+      10 + SIMULATION_CONFIG.courses.funGain,
+      `${kind} awards fun only at the completed exit`,
+    )
+  }
+
+  const completedPaintball = createSeededCourse('completed-paintball', 'paintball', 28, 28)
+  completedPaintball.teamSize = 1
+  completedPaintball.match = { remainingTicks: 1, scoreA: 0, scoreB: 0 }
+  const paintA = fakeVisitor('paint-a')
+  const paintB = fakeVisitor('paint-b')
+  paintA.state = 'riding'
+  paintB.state = 'riding'
+  completedPaintball.riders = [
+    { visitorId: paintA.id, pieceId: '', progress: 0, airborne: false, team: 'a' },
+    { visitorId: paintB.id, pieceId: '', progress: 0, airborne: false, team: 'b' },
+  ]
+  stepCourses(
+    { courses: [completedPaintball], visitors: [paintA, paintB], simTick: 3 },
+    { next: () => 0.2 },
+    { minutes: 0.1, charge: () => true, injure: () => undefined },
+  )
+  assert.equal(paintA.needs.fun, 10 + SIMULATION_CONFIG.courses.funGain)
+  assert.equal(paintB.needs.fun, 10 + SIMULATION_CONFIG.courses.funGain)
 
   const unsafe = createSeededCourse('unsafe-slide', 'pool', 20, 20)
   const slide = unsafe.pieces.find((piece) => piece.kind === 'waterSlide')
@@ -315,6 +360,23 @@ export function testPostRefactorBacklog(): void {
   const liveStage = buildingHourlyUpkeep(stage, { festivalLive: true, onBreak: false })
   const idleStage = buildingHourlyUpkeep(stage, { festivalLive: false, onBreak: false })
   assert.ok(idleStage < liveStage, 'inactive festival stages pay less upkeep')
+  const equippedDesign = defaultStageDesign()
+  equippedDesign.parts.push({
+    id: 'upkeep-truss',
+    kind: 'truss',
+    brand: 'premium',
+    x: 0,
+    y: 0,
+    z: 0,
+    rotation: 0,
+    attachedTo: null,
+    color: '#ffffff',
+  })
+  const equippedStage = { kind: 'stage' as const, stageDesign: equippedDesign }
+  const equippedLive = buildingHourlyUpkeep(equippedStage, { festivalLive: true, onBreak: false })
+  const equippedIdle = buildingHourlyUpkeep(equippedStage, { festivalLive: false, onBreak: false })
+  assert.ok(equippedLive > liveStage, 'stage equipment adds technical upkeep while live')
+  assert.equal(equippedIdle, idleStage, 'inactive festival stages pay no technical upkeep')
 
   const empty = collectBuiltAtmosphereCells({})
   const decorated = collectBuiltAtmosphereCells({ buildings: [{ x: 2, z: 2 }] })

@@ -93,6 +93,10 @@ sind abgeleitete Darstellung desselben Zustands.
   Die Reservierung trägt den Gast bereits in `course.queue` ein, der Einlass
   darf ihn aber erst mit Zustand `queuing` am Ende seines Hinwegs auf die
   Strecke setzen; `seeking`-Gäste dürfen nicht aus der Ferne teleportiert werden.
+  Spaß entsteht erst nach der tatsächlichen Fahrt/Teilnahme und ihrem
+  regulären Abschluss; Reservierung, Anstehen oder Vorbeilaufen verändern
+  `needs.fun` nicht. Die additiven, bei 100 gedeckelten Werte liegen zentral
+  in `simulationConfig.ts`.
   Leere Stände: nur
   `needs.interactionMinutes.stockout` warten, dann denselben Rückweg.
   Die Wartezeit zählt als negativer `interactionRemaining` unabhängig vom
@@ -122,6 +126,9 @@ sind abgeleitete Darstellung desselben Zustands.
   solange der Gast `partying` mit passender `concertId` am laufenden Slot
   steht. Warten vor dem ersten Song, Vorbeigehen und dunkle/pausierende
   Bühnen füllen sie nicht. Balancing und Show-Bedingungen: `docs/stages.md`.
+  Alle Konzertgäste eines Ticks verwenden dabei denselben zuvor von
+  `syncBandSupply` erzeugten Qualitäts-Snapshot; kein Backstage-/Gebäude-/
+  Besucher-Vollscan pro Zuschauer.
   Fans können budgetiert ins aktive Backstage eindringen
   (`backstageIntrusion`); das ist kein zweites Need.
 - Baden (`swimming`) ist Freizeit wie `relaxing`: bei niedrigem Spaß und

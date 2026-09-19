@@ -23,6 +23,7 @@ Achterbahnen bleiben in [`coaster.md`](coaster.md) / [`attractions.md`](attracti
 | Typen, Katalog, Validierung, Tick | `src/game/courseAttractions.ts` | `appendCourseAreaCell`, `appendCoursePiece`, `courseTrackEnd`, `validateCourse`, `stepCourses` |
 | Platzieren / Betrieb / Preis / Team | `src/game/GameState.ts` | `startCourseArea`, `addCourseAreaCells`, `removeCourseAreaCells`, `startCourse`, `addCoursePiece`, `undoCoursePiece`, `setCourseOperating`, `setCoursePrice`, `setCourseTeamSize`, `removeCourse` |
 | Balancing | `src/game/simulationConfig.ts` | `courses` (`paintballTeamSize*`, `slideLaunchSpeed`, `slideGravity`) |
+| Abschlussbelohnung | `src/game/attractionFun.ts`, `src/game/attractions/runtime.ts`, `src/game/courseAttractions.ts` | `courses.funGain`, gemeinsame Runtime und Legacy-Projektion |
 | Unterhalt | `src/game/upkeep.ts` | `courseHourlyUpkeep` |
 | Commands | `src/net/protocol.ts`, `src/net/commands.ts`, `src/net/bind.ts` | atomare `startCourseArea`/`addCourseAreaCells`/`removeCourseAreaCells`; außerdem `startCourse`, `addCoursePiece`, `undoCoursePiece`, Betrieb/Preis/Team/Abriss |
 | Bau-UI | `src/ui/courseBuilderPanel.ts`, `src/app/shell.ts` | `#course-builder`, Palette, Ebene, Teamgröße |
@@ -116,6 +117,10 @@ nicht der Spieler-Baupfad.
   unregelmäßigen Rasen, Netzgrenzen, Bunker, Fässer und Teamunterstände.
 - Unterhalt nutzt denselben Pausen-Faktor wie Buden (`pauseUpkeepMultiplier`).
 - Queue/Einlass teilen das Ride-Angebot (`isOfferCurrentlyActive('rides')`).
+- `needs.fun` steigt um `SIMULATION_CONFIG.courses.funGain` erst nach einem
+  erfolgreich beendeten Lauf, einer beendeten Schwimmbadnutzung oder einer
+  abgeschlossenen Paintballrunde. Reservierung, Anstehen und Einlass allein
+  geben keinen Spaß; die Gutschrift ist bei 100 gedeckelt.
 - Streckenkosten skalieren mit der Spannweitenlänge; Undo erstattet dieselbe
   Länge. Flächen kosten pro Feld.
 - Flächenrechtecke sind ein einzelner host-autoritärer Befehl, nicht ein
@@ -132,7 +137,8 @@ nicht der Spieler-Baupfad.
 `tests/courseAttractions.ts`: Legacy-Beispielgraph gültig, echte Mudmaster-
 und Tree-Spannweiten, Besucherbewegung zwischen Endpunkten, Flächenzwang,
 Betrieb erst nach Validierung, Paintball-Teamgröße, Becken als Schwimmzelle,
-Verletzung ohne Wasserlandung.
+Verletzung ohne Wasserlandung sowie Abschluss-Spaß für Mudmasters,
+Schwimmbad/Wasserrutsche, Tree-to-Tree und Paintball.
 
 ## Bei Änderungen dieses Dokuments
 

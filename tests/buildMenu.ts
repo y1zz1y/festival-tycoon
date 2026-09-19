@@ -95,6 +95,15 @@ export function testBuildMenu(): void {
     assert.equal(coasterCatalogIcon(typeId), COASTER_TYPES[typeId].trainStyle)
     assert.equal(item.icon.includes('🎢'), false)
   }
+  const bungee = BUILD_CATEGORIES.find((category) => category.id === 'attractions')
+    ?.groups.find((group) => group.id === 'rides')
+    ?.items.find((item) => item.bungee)
+  assert.equal(bungee?.icon, '🪂')
+  assert.equal(
+    bungee?.previewKind,
+    undefined,
+    'the bungee icon must not be replaced by the carousel ride thumbnail',
+  )
 
   const game = new GameState()
   game.setTool('food')

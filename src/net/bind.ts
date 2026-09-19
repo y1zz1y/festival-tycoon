@@ -482,6 +482,10 @@ export function enableMultiplayerCommands(game: GameState): void {
     type: 'updateCampingTicketPrice',
     price,
   }))
+  game.updateDemandTuning = wrap(game, game.updateDemandTuning, (tuning) => ({
+    type: 'updateDemandTuning',
+    tuning,
+  }))
   game.updateSecurityGate = wrap(game, game.updateSecurityGate, (id, config) => ({
     type: 'updateSecurityGate',
     id,

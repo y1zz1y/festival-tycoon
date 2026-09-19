@@ -71,6 +71,7 @@ import type { GroundIncident, GroundIncidentKind } from './incidents';
 import { DEFAULT_SECURITY_CONFIG, SecuritySystem } from './security';
 import type { SecurityGateConfig } from './security';
 import { SIMULATION_CONFIG } from './simulationConfig';
+import { normalizeTicketDemandTuning, type TicketDemandTuning } from './demandTuning';
 import { blueprintCatalogCost, blueprintStampCharge, preserveLegacyScenerySlot, transformBlueprintItems, type BlueprintItem } from './blueprints';
 import type { GameCommand, SimSnapshot, WorldSnapshot } from '../net/protocol';
 import { applySim, applyWorld } from '../net/codec';
@@ -1869,7 +1870,11 @@ export class GameState {
   }
 
   showQualityForStage(stageId: string): number {
-    this.refreshBandSupplyGraph()
+    // syncBandSupply refreshes this once before the visitor phase. Concert
+    // attendees query the same stage quality many times per tick; rebuilding
+    // the complete backstage graph for every attendee made live shows scale
+    // with visitors × backstage/building scans.
+    if (!this.processingSimulationStep) this.refreshBandSupplyGraph()
     return showQualityForStage(this.state.bandSupply, stageId)
   }
 
@@ -2901,6 +2906,11 @@ export class GameState {
 
   updateCampingTicketPrice(price: number): void {
     this.state.campingTicketPrice = this.normalizePrice(price)
+    this.emit()
+  }
+
+  updateDemandTuning(tuning: TicketDemandTuning): void {
+    this.state.festival.demandTuning = normalizeTicketDemandTuning(tuning)
     this.emit()
   }
 

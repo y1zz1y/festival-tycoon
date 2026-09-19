@@ -26,6 +26,8 @@ erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
 | Pixel-Personen | `src/view/pixelPeople.ts` | 6 Visitor-Batches + Accessoires |
 | Souvenir-Props | `src/view/souvenirMeshes.ts` | 1 Maskottchen- + 4 Shirt-Schnitt-Batches, Instanzfarbe |
 | Gebäude-Instancing | `src/view/retroBuildings.ts` | ein gemergtes Vertex-Color-Mesh je `DETAILED_BUILDINGS`-Art inkl. aller `SCENERY_KINDS`; Themen-Deko über `buildThemedScenery` (Familien + Vertexfarben); Instanz-`buildingIds` für Picking |
+| Festivaltechnik | `src/view/retroBuildings.ts`, `src/view/FestivalEquipmentView.ts` | Bühne, PA, Generatoren, FOH, Delay-Tower, LED-Wand, Laser und Feuerwerk als gemergte statische Modelle; LED-Leuchtflächen in einem dynamischen Instanz-Batch |
+| Show-Effekte | `src/view/LaserView.ts`, `src/view/FireworksView.ts` | Laser teilen Geometrie/Material je Farbe; Feuerwerk nutzt geteilte Raketen-/Partikelgeometrie und einen Burst-Instanzbatch je Effekt |
 | Camping-Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts` | 14 Camping-Batches |
 | Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call, zwei Dreiecke je Kachel; Parkfelder als Atlas-`parking` |
 | Objektstützen | `src/game/supportOccupancy.ts`, `src/view/supports.ts` | geteilter Zylinder; nur bei Luft unter dem Objekt |

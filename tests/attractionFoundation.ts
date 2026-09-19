@@ -5,6 +5,7 @@ import {
   validateAttractionCompletion,
 } from '../src/game/attractions/construction'
 import { createAttraction } from '../src/game/attractions/factory'
+import { stepAttractions } from '../src/game/attractions/runtime'
 import {
   addTrackEdge,
   emptyTrackGraph,
@@ -14,7 +15,6 @@ import {
   validateTrackGraph,
 } from '../src/game/attractions/trackGraph'
 import type {
-  Attraction,
   TrackEdge,
   TrackGraph,
   TrackNode,
@@ -26,14 +26,103 @@ import {
 } from '../src/ui/attractionBuilderPanel'
 import { GameState } from '../src/game/GameState'
 import { applyGameCommand } from '../src/net/commands'
+import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
+import type { Visitor } from '../src/game/types/entities'
 
 export function testAttractionFoundation(): void {
   testTrackDeleteAndReconnect()
   testTopologies()
   testConstructionParity()
   testAreaRulesAndWaterLanding()
+  testRuntimeFunRewards()
   testUnifiedBuilder()
   testAttractionCommands()
+}
+
+function testRuntimeFunRewards(): void {
+  const queued = runtimeVisitor('queued')
+  queued.state = 'queuing'
+  queued.route = [{ x: 1, z: 0, elevation: 0 }]
+  const mud = createAttraction('mud-fun', 'course:mudmasters', 0, 0, 0, 0)!
+  if (mud.layout.kind !== 'track' || mud.runtime.kind !== 'course') throw new Error('mud runtime expected')
+  mud.operationMode = 'open'
+  mud.layout.graph = linearGraph()
+  mud.queue.push(queued.id)
+
+  const runner = runtimeVisitor('runner')
+  runner.state = 'riding'
+  mud.runtime.riders.push({
+    visitorId: runner.id,
+    pieceId: mud.layout.graph.edges.at(-1)!.id,
+    progress: 0.99,
+    airborne: false,
+  })
+
+  const slider = runtimeVisitor('slider')
+  slider.state = 'riding'
+  const waterSlide = createAttraction('slide-fun', 'waterSlide', 0, 0, 0, 0)!
+  if (waterSlide.layout.kind !== 'track' || waterSlide.runtime.kind !== 'course') {
+    throw new Error('water slide runtime expected')
+  }
+  waterSlide.operationMode = 'open'
+  waterSlide.layout.graph = linearGraph()
+  waterSlide.runtime.riders.push({
+    visitorId: slider.id,
+    pieceId: waterSlide.layout.graph.edges.at(-1)!.id,
+    progress: 0.99,
+    airborne: false,
+  })
+
+  const swimmer = runtimeVisitor('swimmer')
+  swimmer.state = 'riding'
+  const pool = createAttraction('pool-fun', 'swimArea', 0, 0, 0, 0)!
+  if (pool.layout.kind !== 'area' || pool.runtime.kind !== 'course') throw new Error('pool runtime expected')
+  pool.operationMode = 'open'
+  pool.layout.cells = [{ x: 0, z: 0, elevation: 0 }]
+  pool.runtime.riders.push({ visitorId: swimmer.id, pieceId: '', progress: 0.99, airborne: false })
+
+  const fighter = runtimeVisitor('fighter')
+  fighter.state = 'riding'
+  const paintball = createAttraction('paint-fun', 'paintball', 0, 0, 0, 0)!
+  if (paintball.layout.kind !== 'area' || paintball.runtime.kind !== 'course') throw new Error('paintball runtime expected')
+  paintball.operationMode = 'open'
+  paintball.layout.cells = [{ x: 0, z: 0, elevation: 0 }]
+  paintball.runtime.riders.push({ visitorId: fighter.id, pieceId: '', progress: 0, airborne: false, team: 'a' })
+  paintball.runtime.match = { remainingTicks: 1, scoreA: 0, scoreB: 0 }
+
+  const coasterGuest = runtimeVisitor('coaster-guest')
+  coasterGuest.state = 'riding'
+  const coaster = createAttraction('coaster-fun', 'coaster:classicSteel', 0, 0, 0, 0)!
+  if (coaster.runtime.kind !== 'coaster') throw new Error('coaster runtime expected')
+  coaster.operationMode = 'open'
+  coaster.runtime.train.state = 'unloading'
+  coaster.runtime.train.passengerIds = [coasterGuest.id]
+  coaster.runtime.train.passengers = 1
+
+  const carouselGuest = runtimeVisitor('carousel-guest')
+  carouselGuest.state = 'riding'
+  const carousel = createAttraction('carousel-fun', 'carousel', 0, 0, 0, 0)!
+  if (carousel.runtime.kind !== 'scriptedRide') throw new Error('scripted runtime expected')
+  carousel.operationMode = 'open'
+  carousel.runtime.occupantIds = [carouselGuest.id]
+  carousel.runtime.remainingMinutes = 1.19
+
+  const visitors = [queued, runner, slider, swimmer, fighter, coasterGuest, carouselGuest]
+  stepAttractions([mud, waterSlide, pool, paintball, coaster, carousel], {
+    visitors,
+    simTick: 1,
+    minutes: 0.1,
+    charge: () => true,
+    injure: () => undefined,
+    isWater: () => true,
+  })
+
+  assert.equal(queued.needs.fun, 10, 'waiting in an attraction queue grants no fun')
+  for (const visitor of [runner, slider, swimmer, fighter]) {
+    assert.equal(visitor.needs.fun, 10 + SIMULATION_CONFIG.courses.funGain)
+  }
+  assert.equal(coasterGuest.needs.fun, 10 + SIMULATION_CONFIG.coasters.funGain)
+  assert.equal(carouselGuest.needs.fun, 10 + SIMULATION_CONFIG.needs.ride.funGain)
 }
 
 function testAttractionCommands(): void {
@@ -198,6 +287,23 @@ function linearGraph(): TrackGraph {
   graph = addTrackEdge(graph, edge('bc', b, c), b, c)
   graph.terminalNodeId = c.id
   return graph
+}
+
+function runtimeVisitor(id: string): Visitor {
+  return {
+    id,
+    name: id,
+    x: 0.5,
+    y: 0,
+    z: 0.5,
+    cellX: 0,
+    cellZ: 0,
+    cellElevation: 0,
+    state: 'exploring',
+    targetId: null,
+    route: [],
+    needs: { fun: 10, hunger: 70, thirst: 70, toilet: 70, energy: 70 },
+  } as Visitor
 }
 
 function node(id: string, x: number): TrackNode {

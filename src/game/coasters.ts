@@ -804,8 +804,6 @@ export function createTrackPiece(
   )
   const samples = 16
   const points: TrackPoint[] = []
-  let elevation = normalizedStart.elevation
-  let previousT = 0
   for (let index = 0; index <= samples; index += 1) {
     const t = index / samples
     const eased = transition ? smoothStep(t) : t
@@ -817,15 +815,6 @@ export function createTrackPiece(
       transition === 'bank'
         ? lerp(normalizedStart.bank, targetBank, eased)
         : targetBank
-    if (index > 0) {
-      const middleT = (previousT + t) / 2
-      const middleEased = transition ? smoothStep(middleT) : middleT
-      const middlePitch =
-        transition === 'pitch'
-          ? lerp(normalizedStart.pitch, targetPitch, middleEased)
-          : targetPitch
-      elevation += (t - previousT) * Math.tan(middlePitch)
-    }
     // 1-tile pitch changes stay linear so they climb immediately instead of
     // sagging into the ground. Wide flat↔steep clothoids keep the hermite.
     const startSlope = length * Math.tan(transition === 'pitch' ? normalizedStart.pitch : targetPitch)
@@ -844,7 +833,6 @@ export function createTrackPiece(
       pitch,
       bank,
     })
-    previousT = t
   }
   const end: TrackAnchor = {
     x: normalizedStart.x + forward.x * length,

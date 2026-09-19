@@ -200,6 +200,33 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
   assert.ok(physicalSpeed('brakes') < normalSpeed)
   assert.ok(physicalSpeed('splash') < normalSpeed)
   physicalSpeed('photo')
+  const legacyRide = fixture(2)
+  const legacyStart = legacyRide.startCoaster('classicSteel', 10, -10)
+  const legacyCoaster = legacyRide.getCoaster(legacyStart.id!)!
+  const completedGuest = legacyRide.snapshot.visitors[0]!
+  const recalledGuest = legacyRide.snapshot.visitors[1]!
+  completedGuest.needs.fun = 10
+  recalledGuest.needs.fun = 10
+  legacyRide.snapshot.attractions = []
+  legacyCoaster.closed = true
+  legacyCoaster.operationMode = 'open'
+  legacyCoaster.entrance = { x: 10, y: 0, z: -11 }
+  legacyCoaster.exit = { x: 11, y: 0, z: -10 }
+  legacyCoaster.train.state = 'unloading'
+  legacyCoaster.train.boardingProgress = 0
+  legacyCoaster.train.passengerIds = [completedGuest.id]
+  legacyCoaster.train.passengers = 1
+  ;(legacyRide as any).updateCoasters(1, 0)
+  assert.equal(
+    completedGuest.needs.fun,
+    10 + SIMULATION_CONFIG.coasters.funGain,
+    'legacy coaster projection awards fun after completed unloading',
+  )
+  legacyCoaster.train.state = 'running'
+  legacyCoaster.train.passengerIds = [recalledGuest.id]
+  legacyCoaster.train.passengers = 1
+  ;(legacyRide as any).coasterSimulation.recall(legacyCoaster)
+  assert.equal(recalledGuest.needs.fun, 10, 'recalling an interrupted ride grants no completion fun')
   assert.ok(SIMULATION_CONFIG.coasters.classicSteel.physics.chainSpeed >= 10)
   assert.ok(SIMULATION_CONFIG.coasters.classicSteel.physics.stationLaunchSpeed >= 20)
   assert.ok(SIMULATION_CONFIG.coasters.classicSteel.physics.stationDriveSpeed >= 6)
@@ -255,12 +282,14 @@ export function testFestivalAdditions(fixture: (n?: number) => GameState): void 
   assert.equal(game.setBungeeHeight(tower.id, Infinity).ok, false)
   const [v, w] = s.visitors
   v!.targetId = tower.id; w!.targetId = tower.id
+  const bungeeFunBefore = v!.needs.fun
   ;(game as any).startFacilityInteraction(v, tower)
   ;(game as any).startFacilityInteraction(w, tower)
   assert.equal(v!.state, 'using'); assert.equal(w!.state, 'queuing')
+  assert.equal(v!.needs.fun, bungeeFunBefore, 'starting or waiting for bungee grants no fun')
   assert.equal(game.setBungeeHeight(tower.id, 50).ok, false)
   ;(game as any).finishInteraction(v)
-  assert.equal(v!.needs.fun, 100)
+  assert.equal(v!.needs.fun, Math.min(100, bungeeFunBefore + SIMULATION_CONFIG.needs.ride.funGain))
   assert.equal(v!.bungeeNude, false)
   ;(game as any).startFacilityInteraction(w, tower)
   assert.equal(w!.state, 'using')

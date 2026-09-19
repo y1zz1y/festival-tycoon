@@ -1,7 +1,8 @@
 # Tests und Prüfkommandos
 
-Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
-`npm run build`. Performance-Arbeit zusätzlich wie in `docs/performance.md`.
+Vor Abschluss jeder Änderung: `npm run validate`. Das Gesamtskript führt
+statische Qualitätsprüfungen, Regressionen, Build und Dokuprüfung aus.
+Performance-Arbeit zusätzlich wie in `docs/performance.md`.
 
 ## Attraktionsgrundlage
 
@@ -10,19 +11,39 @@ Wiederverbindung und erneute Start→End-Reihenfolge, Loop-/Shuttle-/
 Start-End-/Open-Exit-Validierung, Preview/Command-Parität, Area-Konnektivität,
 Referenz-Allowlisten, Wasserlandung und die gemeinsame Builder-Palette.
 `tests/snapshotModules.ts` deckt v30→v31 einschließlich Pool-Aufteilung und
-gemeldeter Entfernung eines nicht konvertierbaren Kurses ab.
+gemeldeter Entfernung eines nicht konvertierbaren Kurses sowie v31→v32 mit
+Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 
 ## Kommandos
 
 | Kommando | Zweck |
 | --- | --- |
+| `npm run validate` | vollständiger Abschlusscheck: ESLint, Knip, jscpd, Regressionen, Build und Doku |
+| `npm run lint` | ESLint für TypeScript; Fehlerregeln plus SonarJS-Komplexitätswarnungen |
+| `npm run quality:dead-code` | Knip: verwaiste Dateien, unbenutzte/fehlende Abhängigkeiten und nicht auflösbare Imports |
+| `npm run quality:duplicates` | jscpd: Duplikate in `src`, `server` und `scripts`; maximal 15 % |
 | `npm test` | gesamte Suite über `scripts/test.mjs` / `tests/regression.ts` |
 | `npm run test:docs` | dokumentierte Pfade, Regression-Suite, Snapshot-Version und kritische Modulzuordnung |
 | `npm run build` | `tsc` + Vite-Produktion |
 | `npm run test:performance -- rtest3 120` | CPU-Ticks, 1×/3×/8× |
 | `npm run test:performance -- rtest3 1200` | langer Lauf (Festival kann enden) |
+| `npm run test:performance:fixtures` | alle in `tests/fixtures/performance/manifest.json` registrierten Referenz-Saves |
 | `npm run test:install` | PWA/Homescreen-Artefakte |
 | `$env:PROFILE_METHODS='1'` | inklusive Methodenzeiten (PowerShell) |
+
+## Qualitätsgrenzen
+
+- `eslint.config.js` prüft alle TypeScript-Dateien. SonarJS meldet kognitive
+  Komplexität über 50 und identische Funktionen als Warnung; echte
+  Korrektheits-/Unused-Verstöße schlagen fehl. Der bestehende Warnungs-Budget
+  ist 42 (`--max-warnings 42`): senken ist erwünscht, erhöhen nicht.
+- `knip.json` kennt Browser-, Server-, Test- und Script-Einstiege. Der
+  Abschlusscheck beschränkt Knip bewusst auf Dateien und Abhängigkeiten;
+  öffentliche Fach-Exports werden nicht als Fehler behandelt.
+- `.jscpd.json` prüft Produktionscode ab acht Zeilen bzw. 70 Tokens je Klon.
+  Die globale Duplikationsquote darf 15 % nicht überschreiten.
+- Neue Warnungen nicht blind ausblenden. Grenzwerte nur mit dokumentierter
+  Begründung ändern.
 
 ## Welche Datei prüft was
 
@@ -34,21 +55,22 @@ gemeldeter Entfernung eines nicht konvertierbaren Kurses ab.
 | `tests/finance.ts` | Bücher, Kredite, vorbereitete Szenarien und Ziele |
 | `tests/courseAttractions.ts` | Kurs-Konstruktion, Validierung, Einlass, Rutschverletzung, Pause-Unterhalt, Ticketnachfrage, Sterne-Bands |
 | `tests/snapshotModules.ts` | Deterministischer Snapshot-Bootstrap, sichere Migration, delegierendes `GameState.fromJSON` |
+| `tests/ticketDemandTuning.ts` | Nachfrageformeln, Normalisierung, Live-Zustand und host-autoritativer Command |
 | `tests/simulationModules.ts` | Extraktionsgrenzen: Logistik/Visitor-Phasen, `RoadVehicleSimulation`, `VisitorBehaviorService`, `VisitorSpawning`, `VisitorCrowdingSimulation`, `CoasterSimulation`, `PlacementService` und `snapshotRepair`; faire Routingqueue und direkte Aufrufe außerhalb des Ticks |
 | `tests/uiModules.ts` | Extraktionsgrenzen: Command-Registry/Optimistic-Policy, Flächen-Preview/Execute, Weglinien-/Rechteckbildung, autoritative Kontexthilfe, differentielle Update-Gates, Archiv-Merge/Escaping, gemeinsame Geld-/Zeit-/HTML-Formatierung, Katalog-HTML und Kartenwerkzeuge weiterhin durch Multiplayer-Gate |
 | `tests/browserSaves.ts` | Gemeinsame Quota-Erkennung, lokaler Slot- und Schnellspeichern-Roundtrip (Besucher/Gebäude bleiben), Liste ohne `fromJSON`, gemockter Server-Client (HTML/401) |
-| `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, Lights, Achterbahnwagen, Logistik-Modelle |
+| `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, endliche Festivalmodell-Bounds/Picking, Lights, Achterbahnwagen, Logistik-Modelle |
 | `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust |
 | `tests/headlineMagazine.ts` | HEADLINE Magazin nur nach Festivalende, ≥1 Pro/Kontra, deterministisch, nicht mitten im Wochenende |
 | `tests/headline-magazine-preview.html` | visuelles HEADLINE-Heft nach einem beendeten Wochenende |
 | `tests/visitorSleep.ts` | Festival-Schlafzeiten, Legacy-Remap, zirkadiane Energie, Zelt- und Abreiseziele |
 | `tests/festivalAdditions.ts` | spätere Festival-Systeme, Eimer-Karton-Batches, zusammenhängende Müllablage-Füllstände, Müllwagen-Ladungsanzeige, 1-Feld-Steigungen, Wagen-Mesh, gerundete Schienenjoins, Achterbahn-Komplettabriss, SI-Geschwindigkeitsuntergrenzen (`chainSpeed` / Launch / Drag / `maximumSpeed`) |
 | `tests/coasterTypes.ts` | Achterbahn-Typkatalog (alle Typen spielbar), Zug-Thumbnail-Spec je Typ, live vs diskrete Anschlussregeln, Helix/LIM/Junior/Maus/Mine/Bobbahn-Filter, fehlender typeId → classicSteel, Palette: Typ-Ausschluss vs aktuell ausgegraut, Hard-Switch inkl. Richtung (erster Klick ändert das Fenster), Ghost unverändert bei gesperrtem Klick, **Palette zweimal listen remountet keine IDs**, **`updateCoasterConstruction` bleibt über spielende Ticks unverändert**, Testbetrieb auf geschlossenem classicSteel-Rechteck während `festival.planning`, SI-Physik-Untergrenzen |
-| `tests/bandSupply.ts` | Bare vs versorgt, geteilter Pool, Tourbus-Quote 2/3 vs 3/3, Fans senken Attraktivität, Ankunft 08:00 mit Bus auf dem Parkplatz / Abreise abends, Idle-Akteure auf aktivem Backstage, gleiche `costumeId` Bühne/Backstage, Ausweisen neben der Bühne, Tourbus nur auf Backstage an der Straße (nicht auf Gras), Gebäude/Deko auf dem Overlay, inaktive Fläche bleibt markierbar zählt aber nicht, Junior/ohne Slot → Personaleingang; siehe [`band-supply.md`](band-supply.md) |
+| `tests/bandSupply.ts` | Bare vs versorgt, geteilter Pool, Konzertgäste ohne Supply-Graph-Neuaufbau pro Person, Tourbus-Quote 2/3 vs 3/3, Fans senken Attraktivität, Ankunft 08:00 mit Bus auf dem Parkplatz / Abreise abends, Idle-Akteure auf aktivem Backstage, gleiche `costumeId` Bühne/Backstage, Ausweisen neben der Bühne, Tourbus nur auf Backstage an der Straße (nicht auf Gras), Gebäude/Deko auf dem Overlay, inaktive Fläche bleibt markierbar zählt aber nicht, Junior/ohne Slot → Personaleingang; siehe [`band-supply.md`](band-supply.md) |
 | `tests/ticker.ts` | Müllwagen 90, Ablage 180, kein Overflow, Ticker >90 % / Feuer / Panik, keine Verletztenmeldung für Insassen |
 | `tests/musicPlanning.ts` | Spielplan, Genres |
 | `tests/stageTickets.ts` | Tickets, Bühnenfläche |
-| `tests/stageInteraction.ts` | Werkstatt / Interaktion |
+| `tests/stageInteraction.ts` | Werkstatt / Interaktion einschließlich frei skalierbarer Vorplatztiefe und Legacy-Default |
 | `tests/supplyChain.ts` | Waren, Umwege, Ground, Mindestbestand in 20er-Schritten |
 | `tests/busPlanner.ts` | Buslinien-Planer: keine doppelten IDs links+rechts, DnD/Reorder-Helfer, Auto-Sort kürzer oder gleich einer gemischten Reihenfolge, Overlay-Nummern = Fahrreihenfolge |
 | `tests/operations.ts` | Betrieb, Personal, Alltag, Saugroboter durch Personaleingang, Einsatzgebiete, Reinigung leert volle Eimer zuerst und idle auch halbvolle, Verletzte an den nächsten freien Sanitäter / Krankenwagen (ohne Insassen im Auto), idle Krankenwagen zurück zur Garage, Verkauf sofort oder nach Rückfahrt, Buslinie behält Stoppfolge, späterer zweiter Bus, Overlay in Stoppfolge, leerer Bus holt lang wartende Gäste während der Standzeit (`busCapacity` 40),

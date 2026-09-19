@@ -1,4 +1,5 @@
 import { SIMULATION_CONFIG } from './simulationConfig'
+import { grantAttractionFun } from './attractionFun'
 import type { Visitor } from './types/entities'
 import type { GameSnapshot } from './types/snapshot'
 
@@ -1067,7 +1068,7 @@ function stepPaintball(
       winner === rider.team ? 'Wir haben das Paintball-Match gewonnen!' : 'Das Paintball-Match ist vorbei.'
     visitor.state = 'exploring'
     visitor.targetId = null
-    visitor.needs.fun = Math.min(100, visitor.needs.fun + SIMULATION_CONFIG.courses.funGain)
+    grantAttractionFun(visitor, SIMULATION_CONFIG.courses.funGain)
     if (exit) {
       visitor.x = exit.x + 0.5
       visitor.z = exit.z + 0.5
@@ -1313,7 +1314,7 @@ function advanceCourseRiders(
     if (exit && piece.id === exit.id) {
       visitor.state = 'exploring'
       visitor.targetId = null
-      visitor.needs.fun = Math.min(100, visitor.needs.fun + SIMULATION_CONFIG.courses.funGain)
+      grantAttractionFun(visitor, SIMULATION_CONFIG.courses.funGain)
       visitor.thought = `${course.name} war großartig!`
       continue
     }

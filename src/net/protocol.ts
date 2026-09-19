@@ -22,6 +22,7 @@ import type { CashEffect, GameSnapshot, Visitor } from '../game/GameState'
 import type { StaffMember } from '../game/staff'
 import type { RoadVehicle } from '../game/logistics'
 import type { GroundIncident } from '../game/incidents'
+import type { TicketDemandTuning } from '../game/demandTuning'
 import type { FireworkEffect } from '../game/fireworks'
 import type { FestivalAction } from '../game/festivalManagement'
 import type { ShirtStyle } from '../game/shopGoods'
@@ -199,6 +200,7 @@ export type GameCommandAction =
   | { type: 'configureShirtStall'; buildingId: string; color?: number; style?: ShirtStyle }
   | { type: 'updateEntryPrice'; price: number }
   | { type: 'updateCampingTicketPrice'; price: number }
+  | { type: 'updateDemandTuning'; tuning: TicketDemandTuning }
   | { type: 'updateSecurityGate'; id: string; config: Partial<SecurityGateConfig> }
   | { type: 'setDayPlanHour'; offer: DayPlanOffer; hour: number; active: boolean }
   | { type: 'updateDayVisitorWindow'; entryHour: number; exitHour: number }

@@ -16,6 +16,13 @@ import {
 } from '../src/game/wayElevation'
 import { terrainWalkEdgeHeights } from '../src/game/terrain'
 
+type PrivatePathfinder = {
+  findPath: (
+    start: { x: number; z: number; elevation: number },
+    goals: Array<{ x: number; z: number; elevation: number }>,
+  ) => unknown[] | null
+}
+
 function blankGame(): GameState {
   const initial = structuredClone(new GameState().snapshot)
   initial.terrain = { heights: {} }
@@ -39,7 +46,7 @@ export function testWayElevation(): void {
   assert.ok(paths.placePathSegment(4, -7, 0.5, 'normal', 0, 0.5).ok, 'half-step footpath ramp')
   assert.ok(paths.placePathSegment(4, -6, 1, 'normal', 0, 0.5).ok, 'second half-step')
   assert.ok(paths.placePathSegment(4, -5, 1.5, 'normal', 0, 0.5).ok, 'footpaths may exceed the car cap')
-  const walk = (paths as unknown as { findPath: Function }).findPath(
+  const walk = (paths as unknown as PrivatePathfinder).findPath(
     { x: 4, z: -8, elevation: 0 },
     [{ x: 4, z: -5, elevation: 1.5 }],
   )
@@ -99,7 +106,7 @@ export function testWayElevation(): void {
     assert.equal(road.elevation, loaded.getTerrainHeight(road.x, road.z), 'old roads sit on terrain')
     assert.equal(road.roadSlope ?? 0, 0)
   }
-  const legacyWalk = (loaded as unknown as { findPath: Function }).findPath(
+  const legacyWalk = (loaded as unknown as PrivatePathfinder).findPath(
     { x: 8, z: -6, elevation: 0 },
     [{ x: 8, z: -5, elevation: 1 }],
   )

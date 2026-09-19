@@ -16,6 +16,7 @@ Tageslicht und Öffnungszeiten kommen aus `dayPlan` / `dayNight`, nicht aus der 
 | Strom-View | `src/view/PowerView.ts` | |
 | Tagesplan / Angebote | `src/game/dayPlan.ts` | Öffnung, Lampen, Stände |
 | Feste Lichter | `src/view/FestivalLightsView.ts` | fester Pool: acht PointLights, vier SpotLights |
+| Festivaltechnik-Effekte | `src/view/FestivalEquipmentView.ts`, `src/view/LaserView.ts`, `src/view/FireworksView.ts` | strom-/showabhängige LED-Flächen, Laserfächer und deterministische Pyro-Bursts |
 | Deko-Lampen | `src/game/decorationLights.ts` | Farbe/Höhe/Kegel je `Deko → Licht`-Art |
 | Balancing | `src/game/simulationConfig.ts` | `atmosphere`, `power`, `dayNight`; Live-Show-Festivallust: `atmosphere.concertMotivationPerMinute` (`docs/visitors.md`, `docs/stages.md`) |
 
@@ -66,6 +67,9 @@ Details der Gewichte stehen in `SIMULATION_CONFIG.atmosphere.sources`
   `lightBalloon` (Demand 3, Priorität 42): weißes Licht, Atmosphäre `range` 8,
   PointLight-Distance 9 statt 3.5. Derselbe Pool, Instanzfarben für Glow/Birne.
 - Render-Entscheidungen nicht im `GameSnapshot` speichern.
+- LED-, Laser- und Pyroanimationen lesen nur autoritative Tick-/Showdaten.
+  Animation und Ressourcen-Pooling bleiben Renderzustand; Strom und laufende
+  Shows bestimmen weiterhin, ob die Effekte sichtbar sind.
 
 ## Tests
 

@@ -35,7 +35,7 @@ export type SimTurn = {
 
 export type GameSnapshot = {
   festival: FestivalManagement
-  version: 31
+  version: 33
   waterLevel: number
   simTick: number
   rngState: number

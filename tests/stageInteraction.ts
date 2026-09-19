@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { Vector3, LineSegments, SpotLight, Box3, Quaternion, Mesh, OrthographicCamera, type Group } from 'three'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { stagePlacement } from '../src/game/stagePlacement'
-import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, stageApronCells, stageApronDepth, fohDeskRole, lineArrayIndex, migrateStageDesign, stageStats, stageDetailSize, COMPONENTS, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, STAGE_TILE_DETAIL, type StagePart } from '../src/game/stageDesign'
+import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, stageApronCells, stageApronDepth, stageForecourtDepth, fohDeskRole, lineArrayIndex, migrateStageDesign, stageStats, stageDetailSize, COMPONENTS, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, STAGE_TILE_DETAIL, type StagePart } from '../src/game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel, updateStageLightPool } from '../src/view/stageModel'
 import { lightViewOf } from '../src/view/lightSelection'
 import { showIssue } from '../src/game/festivalManagement'
@@ -309,7 +309,7 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
 
   // The configured grid height is the only limit on how tall a tower can grow.
   const tallDesign=roomy()
-  let cursor=stagePlacement(tallDesign,trussSettings,{x:2,z:2});cursor.id='t0';tallDesign.parts.push(cursor);let chainId='t0'
+  const cursor=stagePlacement(tallDesign,trussSettings,{x:2,z:2});cursor.id='t0';tallDesign.parts.push(cursor);let chainId='t0'
   for(let lvl=1;lvl<tallDesign.height;lvl++){const seg=stagePlacement(tallDesign,trussSettings,{x:0,z:0},{id:chainId,step:{x:0,y:1,z:0}});seg.id=`t${lvl}`;tallDesign.parts.push(seg);chainId=seg.id}
   assert.equal(stageDesignIssue(tallDesign),null,'a tower can fill the entire configured height')
   const tooTall=stagePlacement(tallDesign,trussSettings,{x:0,z:0},{id:chainId,step:{x:0,y:1,z:0}})
@@ -318,7 +318,7 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   Object.assign(shorter,stageDetailSize(shorter.tileWidth,shorter.tileDepth,4))
   assert.equal(stageDesignIssue(shorter),null,'a shorter stage simply has a lower ceiling')
 
-  const audience=defaultStageDesign();Object.assign(audience,{tileWidth:3,tileDepth:3},stageDetailSize(3,3,audience.tileHeight));audience.audience=[{x:0,z:1},{x:1,z:1}]
+  const audience=defaultStageDesign();Object.assign(audience,{tileWidth:3,tileDepth:3,forecourtDepth:6},stageDetailSize(3,3,audience.tileHeight));audience.audience=[{x:0,z:1},{x:1,z:1}]
   assert.equal(stageDesignIssue(audience),null)
   assert.ok(stageDesignIssue({...audience,audience:[{x:1,z:1}]}),'sealed audience courtyards need an entrance')
   assert.ok(stageDesignIssue({...audience,parts:[{id:'blocked',kind:'deck',brand:'budget',x:1,y:0,z:1,rotation:0,attachedTo:null,color:'#ffffff'}]}),'floor equipment cannot obstruct spectator tiles')
@@ -357,6 +357,13 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const crowd=stageApronCells({x:6,z:-20,rotation:1,stageDesign:audience})
   const gapped=stageApronCells({x:6,z:-20,rotation:1,stageDesign:{...audience,parts:[towerOnApron]}})
   assert.equal(gapped.length,crowd.length-1,'a delay tower out in the crowd clears the field it stands on')
+  const compactApron=stageApronCells({x:6,z:-20,rotation:1,stageDesign:{...audience,forecourtDepth:2}})
+  const expandedApron=stageApronCells({x:6,z:-20,rotation:1,stageDesign:{...audience,forecourtDepth:9}})
+  assert.equal(compactApron.length,3*2,'the workshop can shrink the forecourt independently of stage width')
+  assert.equal(expandedApron.length,3*9,'the workshop can enlarge the forecourt independently of stage width')
+  const legacyApron={...audience,forecourtDepth:undefined}
+  assert.equal(stageForecourtDepth(legacyApron),6,'legacy designs retain the former two-stage-width forecourt')
+  assert.equal(migrateStageDesign(legacyApron).forecourtDepth,6,'loading persists the legacy-compatible forecourt depth')
   const game=fixture(0),s=game.snapshot as GameSnapshot;game.addDebugMoney()
   for(let x=6;x<9;x++)for(let z=-20;z<-17;z++){game.manageFestival({type:'ground',x,z,kind:'drain'});game.manageFestival({type:'ground',x,z,kind:'compact'})}
   assert.ok(game.placePathSegment(5,-19,0).ok)

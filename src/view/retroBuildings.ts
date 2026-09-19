@@ -60,7 +60,13 @@ const ice = 0xc8e8f4, aurora = 0x5ee0b0, auroraP = 0x7b6cff
 const material = new MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: .05 })
 material.userData.shared = true
 const geometries = new Map<BuildingKind, BufferGeometry>()
-export const DETAILED_BUILDINGS: readonly BuildingKind[] = ['food', 'alcohol', 'mascot', 'shirt', 'toilet', 'bench', 'wasteBin', 'sealedWasteContainer', ...THEMED_BIN_KINDS, 'generator', 'backupGenerator', 'foh', 'delayTower', 'securityGate', 'ride', ...SCENERY_KINDS]
+export const DETAILED_BUILDINGS: readonly BuildingKind[] = [
+  'food', 'alcohol', 'mascot', 'shirt', 'toilet', 'bench', 'wasteBin',
+  'sealedWasteContainer', ...THEMED_BIN_KINDS, 'stage', 'directionalSpeaker',
+  'omniSpeaker', 'generator', 'backupGenerator', 'foh', 'delayTower',
+  'videoWall', 'laserShow', 'fireworkBattery', 'securityGate', 'ride',
+  ...SCENERY_KINDS,
+]
 
 /** Shared families: same primitives, theme via vertex colors. One merged mesh per kind. */
 function pine(k: ModelKit, trunk: number, layers: number[], cap?: number): void {
@@ -974,6 +980,60 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
     k.box(0, .465, -.02, .19, .025, .13, 0x142828)
     k.box(0, .29, .173, .1, .12, .018, cream)
     k.box(0, .29, .187, .045, .06, .01, 0x3d6657)
+  } else if (kind === 'stage') {
+    // Compact festival stage: raised deck, four-point truss, roof skin and flown PA.
+    k.box(0, .1, 0, .94, .2, .84, 0x20282d)
+    k.box(0, .22, .04, .9, .06, .76, 0x657278)
+    for (const x of [-.36, -.12, .12, .36]) k.box(x, .25, .43, .18, .08, .14, 0x404a4f)
+    const posts: ReadonlyArray<readonly [number, number]> = [[-.4, -.31], [.4, -.31], [.4, .31], [-.4, .31]]
+    for (const [x, z] of posts) {
+      k.box(x, 1.02, z, .045, 1.58, .045, steel)
+      k.box(x, .09, z, .16, .08, .16, 0x252b2e)
+    }
+    for (const y of [.48, .82, 1.16, 1.5]) {
+      k.beam([-.4, y, -.31], [.4, y, -.31], .025, steel)
+      k.beam([-.4, y, .31], [.4, y, .31], .025, steel)
+      if (y < 1.5) {
+        k.beam([-.4, y, -.31], [.4, y + .34, -.31], .018, steel)
+        k.beam([.4, y, .31], [-.4, y + .34, .31], .018, steel)
+      }
+    }
+    k.box(0, 1.66, 0, .96, .08, .8, 0x33434b)
+    k.box(0, 1.7, .03, .88, .035, .72, 0x7b365d)
+    k.box(0, 1.24, -.326, .72, .68, .035, 0x171d22)
+    for (let row = 0; row < 3; row++) for (let col = 0; col < 5; col++) {
+      k.box(-.28 + col * .14, 1.02 + row * .2, -.35, .115, .15, .014,
+        [0x6f2f72, 0x225c75, 0xb84b67][(row + col) % 3]!)
+    }
+    for (const x of [-.48, .48]) for (let cabinet = 0; cabinet < 3; cabinet++) {
+      const y = 1.37 - cabinet * .17
+      k.box(x, y, .28, .16, .14, .22, 0x171b1e)
+      k.box(x, y, .397, .12, .09, .014, 0x4b5559)
+    }
+  } else if (kind === 'directionalSpeaker' || kind === 'omniSpeaker') {
+    const omni = kind === 'omniSpeaker'
+    k.box(0, .045, 0, .58, .09, .58, 0x252b2e)
+    for (const angle of [0, Math.PI * 2 / 3, Math.PI * 4 / 3]) {
+      k.beam([0, .16, 0], [Math.sin(angle) * .31, .03, Math.cos(angle) * .31], .035, steel)
+    }
+    k.cylinder(0, .55, 0, .035, .9, steel, .05, 7)
+    const angles = omni ? [0, Math.PI / 2, Math.PI, -Math.PI / 2] : [0]
+    for (const angle of angles) {
+      const turn = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), angle)
+      const x = Math.sin(angle) * (omni ? .13 : 0), z = Math.cos(angle) * (omni ? .13 : 0)
+      k.box(x, .98, z, omni ? .26 : .4, .5, .24, 0x171b1e, turn)
+      k.box(x + Math.sin(angle) * .126, 1.04, z + Math.cos(angle) * .126,
+        omni ? .2 : .33, .31, .018, 0x4b5559, turn)
+      k.box(x + Math.sin(angle) * .138, 1.14, z + Math.cos(angle) * .138,
+        omni ? .08 : .12, .08, .012, ink, turn)
+      k.box(x + Math.sin(angle) * .138, .92, z + Math.cos(angle) * .138,
+        omni ? .14 : .21, .14, .012, 0x252c30, turn)
+    }
+    if (!omni) {
+      k.box(-.23, .99, -.04, .035, .38, .16, steel)
+      k.box(.23, .99, -.04, .035, .38, .16, steel)
+      k.box(0, .73, 0, .15, .05, .15, ink)
+    }
   } else if (kind === 'generator' || kind === 'backupGenerator') {
     const tint = kind === 'generator' ? 0xe2ab39 : 0x74958a
     k.box(0, .07, 0, .83, .1, .65, ink)
@@ -1064,6 +1124,63 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
       put(.23, 0, -.12, .035, pitch, .035, steel) // rod segment, spanning the full pitch so the joints meet exactly
       cursor.addScaledVector(dir, pitch)
     }
+  } else if (kind === 'videoWall') {
+    // Touring LED wall on a ballasted rear truss. The bright front remains part of
+    // the shared vertex-color batch; WorldView adds one shared emissive overlay.
+    for (const x of [-.43, .43]) {
+      k.box(x, .12, -.08, .2, .18, .28, 0x22292d)
+      k.box(x, 1.08, -.08, .045, 1.82, .045, steel)
+    }
+    for (const y of [.38, .72, 1.06, 1.4, 1.74]) {
+      k.beam([-.43, y, -.08], [.43, y, -.08], .026, steel)
+      if (y < 1.7) k.beam([-.43, y, -.08], [.43, y + .34, -.08], .018, steel)
+    }
+    k.box(0, 1.08, .02, .84, 1.48, .1, 0x151b20)
+    for (let row = 0; row < 6; row++) for (let col = 0; col < 4; col++) {
+      const palette = [0x256f9f, 0x4d3d9c, 0x9e3f83, 0x1b8f87]
+      k.box(-.3 + col * .2, .48 + row * .24, .079, .18, .215, .018,
+        palette[(row + col * 2) % palette.length]!)
+    }
+    for (const x of [-.41, .41]) k.box(x, 1.08, .085, .025, 1.48, .025, 0x56656b)
+    for (const y of [.34, 1.82]) k.box(0, y, .085, .84, .025, .025, 0x56656b)
+    k.box(.32, .23, -.19, .2, .16, .22, 0x283238)
+    k.box(.32, .23, -.305, .14, .08, .014, 0x62a4a1)
+  } else if (kind === 'laserShow') {
+    // Weatherproof scanner in a touring flight case with yoke, aperture and fan.
+    k.box(0, .08, 0, .72, .16, .58, 0x22292d)
+    for (const x of [-.31, .31]) for (const z of [-.24, .24]) {
+      k.cylinder(x, .04, z, .045, .08, ink, .045, 6)
+    }
+    k.box(0, .27, 0, .64, .3, .5, 0x3a464c)
+    for (const x of [-.29, .29]) k.box(x, .27, 0, .035, .28, .48, steel)
+    for (let slot = 0; slot < 5; slot++) k.box(-.2 + slot * .1, .28, -.257, .055, .13, .014, 0x171d20)
+    for (const x of [-.22, .22]) k.box(x, .55, 0, .055, .48, .31, steel)
+    k.box(0, .67, 0, .42, .32, .34, 0x171b1e)
+    k.box(0, .68, .177, .2, .18, .018, 0x2ee6a6)
+    k.box(0, .68, .189, .095, .085, .01, 0xb7fff0)
+    k.box(.15, .42, .258, .13, .06, .014, 0xe6c44d)
+    k.box(.15, .42, .27, .055, .025, .01, ink)
+  } else if (kind === 'fireworkBattery') {
+    // A secured mortar rack rather than three loose tubes.
+    k.box(0, .06, 0, .86, .12, .68, 0x20272b)
+    for (const x of [-.36, .36]) for (const z of [-.27, .27]) {
+      k.box(x, .11, z, .14, .16, .14, 0x3a4245)
+    }
+    k.box(0, .25, 0, .78, .3, .58, 0x6f3f35)
+    for (const z of [-.24, .24]) k.box(0, .28, z, .82, .045, .045, steel)
+    for (const x of [-.28, -.14, 0, .14, .28]) {
+      const lean = x * .45
+      const direction = new Vector3(lean, 1, 0).normalize()
+      const turn = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), direction)
+      k.box(x, .48, 0, .105, .48, .105, 0x171b1e, turn)
+      k.box(x + lean * .12, .72, 0, .13, .055, .13, 0x424b4f, turn)
+    }
+    for (let stripe = 0; stripe < 6; stripe++) {
+      k.box(-.31 + stripe * .125, .27, .298, .065, .12, .014,
+        stripe % 2 ? 0x1e2427 : 0xe0b33e)
+    }
+    k.box(.28, .26, -.31, .18, .14, .055, 0x29343a)
+    k.box(.28, .28, -.341, .1, .045, .014, 0xd9534f)
   } else if (kind === 'securityGate') {
     for (const x of [-.38, .38]) {
       k.box(x, .53, 0, .12, 1.06, .21, 0x497e8b)

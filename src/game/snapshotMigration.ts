@@ -24,6 +24,7 @@ import type { BackstageCell } from './bandSupply'
 import type { BandActor } from './bandActors'
 import type { GameSnapshot } from './types/snapshot'
 import type { WasteDumpCell } from './waste'
+import { normalizeTicketDemandTuning } from './demandTuning'
 
 export function migrateSnapshot(
   input: unknown,
@@ -42,13 +43,18 @@ export function migrateSnapshot(
     buildings: data.buildings,
   })
   const canonicalAttractions = normalizeAttractions(data.attractions)
-  const useCanonical = data.version === 31 && canonicalAttractions.length > 0
+  const useCanonical = (data.version ?? 0) >= 31 && canonicalAttractions.length > 0
   const attractions = useCanonical ? canonicalAttractions : legacy.attractions
   const camping = projectCamping(attractions)
   const migrated: GameSnapshot = {
     ...createBlankSnapshot(),
     ...data,
-    version: 31,
+    version: 33,
+    festival: {
+      ...createBlankSnapshot().festival,
+      ...data.festival,
+      demandTuning: normalizeTicketDemandTuning(data.festival?.demandTuning),
+    },
     waterLevel: normalizeWaterLevel(data.waterLevel),
     terrain: normalizeTerrain(data.terrain),
     buildings: data.buildings.map((building) =>

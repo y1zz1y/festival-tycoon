@@ -62,7 +62,14 @@ Do not leave new modules, commands or kinds undocumented.
 - Keep terrain, crowding, staff/load penalties and alternate routes functional. Do not improve benchmarks by freezing visitors, skipping admissions, disabling effects or slowing game time.
 - Static model details use shared, merged geometry/vertex colors and instancing. Never add a material/draw call per plank, bottle, bolt or visitor. Keep animated stages, lighting, picking and overlays outside static batches.
 - Scenery uses optional `decorationSlot` (four quarters or edges). Missing slots are legacy full-tile objects; never silently shrink old saves. Placement, previews, collision checks and multiplayer must use the shared `scenery.ts` rules. Instanced scenery carries building IDs for picking.
-- Before completing simulation/render changes run `npm test` and `npm run build`. Frame-partition determinism, camp multi-goal search, decision queues, cache refresh and asset draw-call bounds are covered by tests.
+- Before completing any change run `npm run validate`. It checks ESLint/complexity,
+  unused files and dependencies, duplication, regressions, TypeScript/Vite build
+  and documentation consistency. Frame-partition determinism, camp multi-goal
+  search, decision queues, cache refresh and asset draw-call bounds are covered
+  by tests.
 - For performance work run `npm run test:performance -- rtest3 120` before/after and a longer 1200-tick run. Use `PROFILE_METHODS=1` for inclusive method timing (PowerShell: `$env:PROFILE_METHODS='1'`). Never commit/overwrite personal saves. The script accepts a save name or snapshot/slot JSON path.
+- Run `npm run test:performance:fixtures` as well when versioned fixtures are
+  registered in `tests/fixtures/performance/manifest.json`. Add only
+  anonymized, purpose-built reference saves; never copy personal `saves/`.
 - Compare identical fixtures and distinguish CPU tick timing from actual browser FPS. Inspect 1×, 3× and 8× and report median/p95/max plus visitor counts; a long run can end the festival and empty the park.
 - See `docs/performance.md` for measured baseline, limits and reproduction. Update it when changing the scheduling or rendering architecture. Update `docs/simulation.md` / `docs/rendering.md` when those architectures change.

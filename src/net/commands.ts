@@ -247,6 +247,9 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
     case 'updateCampingTicketPrice':
       game.updateCampingTicketPrice(command.price)
       return { ok: true, message: 'Campingticketpreis geändert' }
+    case 'updateDemandTuning':
+      game.updateDemandTuning(command.tuning)
+      return { ok: true, message: 'Nachfrage-Tuning geändert' }
     case 'updateSecurityGate':
       return game.updateSecurityGate(command.id, command.config)
     case 'setDayPlanHour':

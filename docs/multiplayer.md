@@ -44,6 +44,10 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   Einstellungen werden vom Host bestätigt. `commandRegistry.ts`,
   `commands.ts` und `bind.ts` behandeln alle Varianten exhaustiv.
 - Neue persistente Weltfelder: Codec / `worldUpdates` und Join-Vollsync.
+  Bühnenvorlagen und platzierte Bühnen übertragen ab v33 optional
+  `StageDesign.forecourtDepth` (1–24). Der vorhandene
+  `manageFestival.stageDesign`-Command transportiert das gesamte Design;
+  ältere Designs ohne Wert bleiben bei zwei Bühnenbreiten.
   Fahrzeugpositionen und Routen behalten das bestehende optionale
   `RoadPosition.elevation` auch beim Laden/Normalisieren. Der Host berechnet
   Straßenbelegung und Vorfahrt pro Ebene; keine zusätzlichen Commands oder
@@ -57,6 +61,9 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   `scheduleOffer` und `schedulePhases` mitsenden.
   Ticketpreise: `entryPrice` (Tag) und `campingTicketPrice` (Camping);
   Commands `updateEntryPrice` und `updateCampingTicketPrice`.
+  Nachfrage-Debug: `updateDemandTuning` sendet alle Koeffizienten atomar,
+  ist nicht-optimistisch und wird vom Host normalisiert; Snapshot-Feld
+  `festival.demandTuning`.
   Feuerwehrwagen: `buyFireTruck` (`stationId`).
   Die älteren Kurs-Projektionspfade nutzen noch `startCourseArea`, `addCourseAreaCells` und
   `removeCourseAreaCells` übertragen eine komplette Flächenauswahl atomar;

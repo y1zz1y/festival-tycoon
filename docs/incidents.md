@@ -86,6 +86,9 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
   `truckReachable` allein reicht nicht zum Überspringen: ohne Wagen
   (oder wenn der Wagen die Kiste nicht erreichen kann) muss per Hand
   geleert werden. Platzierung auf der Straße ist optional.
+  Besucher verwenden einen nicht vollen versiegelten Container ebenfalls,
+  wenn er höchstens drei Felder horizontal und vertikal entfernt liegt
+  (`sealedVisitorChebyshevRange` 3, also ein 7×7-Umfeld).
 - Neue Verletzte bekommen den nächsten freien Sanitäter oder Krankenwagen
   (Manhattan, dann eine Wegsuche). Details und Tests: `docs/staff.md`.
   Insassen in `passengerIds` (noch nicht ausgestiegen) sind keine

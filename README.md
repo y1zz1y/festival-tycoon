@@ -173,7 +173,8 @@ Fußgänger zum Umlaufen.
    Kapazität), nicht Insassen. Ein Klick auf eine Müllablage zeigt, wie voll
    die gesamte zusammenhängende Fläche ist und wie viel Platz noch frei ist.
    Unter **Logistik → Müll** steht der **versiegelte Müllcontainer** (80 Beutel):
-   Reinigung bringt Müll dorthin, wenn er näher als die Ablage ist. Er senkt
+   Besucher nutzen ihn innerhalb eines 7×7-Umfelds; Reinigung bringt Müll
+   dorthin, wenn er näher als die Ablage ist. Er senkt
    die Attraktivität deutlich weniger als offene Ablagen.    Müllwagen halten auf der Nachbarstraße und leeren ihn nur, wenn er
    auf einer Straße steht und ein Wagen wirklich anfährt; sonst tragen
    Reinigungskräfte den Inhalt zur Ablage, sobald sie keine andere
@@ -376,6 +377,9 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - schrittweises Bauen und Rückgängig-Funktion für die aktuelle Wegkonstruktion
 - drehbare Gebäude mit sichtbarer, funktionaler Zugangsrichtung
 - Baukosten, stündlicher Unterhalt und einfache Einnahmen
+- In Tagesplan-Pausen sinkt der Unterhalt von Buden und Attraktionen auf
+  15 %. Festivalbühnen zahlen außerhalb laufender Festivaltage ebenfalls
+  nur 15 % Gebäudeunterhalt und keine Technikkosten.
 - Gästezahl, Attraktivität und Reputation
 - pausierbare Simulation mit drei Geschwindigkeiten
 - Bauvorschau, Belegungsprüfung, Abriss- und Info-Werkzeug (Abriss trifft das Mesh unter dem Zeiger)
@@ -457,6 +461,9 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - echte Besucher laufen zum Eingang, warten und steigen nacheinander ein
 - Fahrgäste bleiben während der Fahrt als dieselben Besucher ihren Sitzen zugeordnet
 - sequenzielles Aussteigen am Ausgang und anschließende Rückkehr ins Wegnetz
+- Fahrgeschäfte, Achterbahnen und Kursattraktionen erhöhen den Spaß erst nach
+  der tatsächlich abgeschlossenen Fahrt, Parcoursnutzung, Schwimmbadzeit oder
+  Paintballrunde; Anstehen und Vorbeilaufen zählen nicht
 - gerichtete Warteschlangenwege mit seitlichen Begrenzungen
 - kleinere Besucher mit individuellen Gehgeschwindigkeiten und Laufanimation
 - sichtbare Emotionssymbole und emotionale Laufstile
@@ -594,7 +601,7 @@ In der Festivalübersicht lassen sich Tagestickets **je Festivaltag** und Campin
 
 Die **Bühnenwerkstatt** öffnet über das Theater-Icon in der Leiste oder **Bühne gestalten** im Infofenster einer Bühne. Das Detailraster (4–12 breit/tief) ist unabhängig von der Kartengrundfläche (1–8 Felder je Achse). Neue Entwürfe starten auf 2 × 2 Feldern; bisherige Entwürfe ohne Flächenangabe behalten 1 × 1 Feld. Die vollständige gedrehte Fläche muss frei, eben und tragfähig sein. Größere Flächen kosten zusätzlich Fundament und Unterhalt. Vergrößerungen werden vor dem Bezahlen geprüft; Wegfindung, Abriss und Kollisionen berücksichtigen jedes belegte Feld. Ein Klick auf ein Bauteil aktiviert die Platzierung und öffnet dessen Qualitätsmenü. Die Vorschau am Mauszeiger zeigt gültige Plätze grün und ungültige rot. R bzw. Rechtsklick dreht das Bauteil, Umschalt+R dreht zurück; alternativ gibt es Drehpfeile über der Vorschau. Bauteile rasten beim Zeigen auf Traversen automatisch ein; Alt erzwingt Bodenmontage. Lautsprecher lassen sich durch Zeigen auf einen vorhandenen Stapel bis zu vierfach stapeln. Das Entfernen eines Trägers entfernt auch abhängige Teile. Rückgängig stellt die vorige Konstruktion wieder her.
 
-Mit **Zuschauerfläche** werden einzelne Kartenfelder innerhalb der Bühne zu begehbaren Bereichen, etwa für U-förmige Bühnen und Innenhöfe. Jede Fläche benötigt eine Verbindung zum Bühnenrand und anschließend einen Zugang vom Gelände. Bodenbauteile und Traversenstützen dürfen diese Flächen nicht blockieren. Zuschauerflächen werden mit der Bühne gedreht und gespeichert.
+Mit **Zuschauerfläche** werden einzelne Kartenfelder innerhalb der Bühne zu begehbaren Bereichen, etwa für U-förmige Bühnen und Innenhöfe. Jede Fläche benötigt eine Verbindung zum Bühnenrand und anschließend einen Zugang vom Gelände. Bodenbauteile und Traversenstützen dürfen diese Flächen nicht blockieren. Zuschauerflächen werden mit der Bühne gedreht und gespeichert. Die **Vorplatztiefe** lässt sich in der Werkstatt zwischen 1 und 24 Feldern einstellen; die Werkstatt und die Bauvorschau auf der Karte zeigen die resultierende Fläche vor der gedrehten Bühne.
 
 Warm-up (erste 20 %), Main (20–80 %) und Finale (letzte 20 %) haben eigene Licht-, Tempo-, Nebel-, Lautstärke- und Farbregler; alternativ gelten die Warm-up-Regler für alle Phasen. Nebelmaschinen verteilen breite, bodennahe Nebelschichten. Moving Heads werfen sichtbare Lichtkegel und beleuchten Oberflächen: aufgehängt nach unten, am Boden nach oben. Laser erzeugen animierte Strahlenfächer. Für die Beleuchtung teilen sich Bühnen auf der Karte sechs aktive Spots, um die Renderkosten zu begrenzen. Die Vorschau läuft unabhängig von der Festivalzeit. Auf der Karte richten sich die Effekte nach aktivem Auftritt und Stromstatus. Lautstärke beeinflusst den zusätzlichen Konzertspaß und nächtliche Schlafstörungen; Technik und Dekoration verbessern die Atmosphärenwerte. Integrierte Lautsprecher zählen für die Anforderungen der Bands.
 
@@ -683,3 +690,16 @@ Einblick beim Durchklicken stabil bleibt.
 
 Mülleimer drehst du mit **R** an die gewünschte freie Kante. Bänke richten
 sich automatisch aus und können auch an einer freien Kante von Straßen stehen.
+
+## Festivaltechnik und Nachfrage-Debug
+
+Die Festival-Bauobjekte Bühne, Lautsprecher, Generatoren, FOH, Delay-Tower,
+LED-Wand, Laser und Feuerwerk besitzen detaillierte, gebatchte Tournee-Modelle.
+LED-Flächen, Laserfächer und Feuerwerk reagieren weiterhin auf Strom und
+laufende Shows.
+
+Bei aktivierten Debug-Werkzeugen öffnet **🐞 → Nachfrage-Tuning** alle
+Koeffizienten für Ticket-Zahlungsbereitschaft und Teilnahme. Die Live-Vorschau
+zeigt faire Preise, Akzeptanz, Gäste und Erlös; erst **Übernehmen** speichert
+die Werte host-autoritativ. **Standardwerte** stellt die Balancing-Vorgaben
+wieder her.

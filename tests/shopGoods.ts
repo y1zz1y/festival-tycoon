@@ -3,7 +3,6 @@ import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { applyGameCommand } from '../src/net/commands'
 import { emptyStock, normalizeStock } from '../src/game/supplyChain'
 import { SUPPLIES } from '../src/game/festivalManagement'
-import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import {
   SHIRT_STYLES,
   defaultShirtSettings,

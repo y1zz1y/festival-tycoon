@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { Group, InstancedMesh, Mesh, Vector3 } from 'three'
+import { Group, InstancedMesh, Mesh } from 'three'
 import { GameState } from '../src/game/GameState'
 import { createRetroBuilding, batchRetroBuildings } from '../src/view/retroBuildings'
 import {

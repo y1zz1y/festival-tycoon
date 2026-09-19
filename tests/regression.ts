@@ -63,6 +63,7 @@ import { testSnapshotModules } from './snapshotModules'
 import { testSimulationModules } from './simulationModules'
 import { testUiModules } from './uiModules'
 import { testAttractionFoundation } from './attractionFoundation'
+import { testTicketDemandTuning } from './ticketDemandTuning'
 
 function test(name: string, run: () => void) {
   run()
@@ -71,6 +72,7 @@ function test(name: string, run: () => void) {
 
 testFacadeReveal()
 testSnapshotModules()
+testTicketDemandTuning()
 testSimulationModules()
 testUiModules()
 test('canonical attraction graph, area and construction foundations', () => {

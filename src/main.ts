@@ -6,6 +6,7 @@ import { mountStageEditor } from './stageEditor'
 import { stageStats } from './game/stageDesign'
 import { mountStaffDetails } from './staffDetailsUI'
 import { mountLogisticsUI } from './logisticsUI'
+import { setupDemandDebugUI } from './ui/demandDebugUI'
 import './style.css'
 import { mountFestivalUI } from './festivalUI'
 import { mountTickerUI } from './tickerUI'
@@ -3362,7 +3363,7 @@ const buildCatalogName = requireElement<HTMLElement>('#build-catalog-name')
 const buildCatalogDetail = requireElement<HTMLElement>('#build-catalog-detail')
 const buildCatalogCost = requireElement<HTMLElement>('#build-catalog-cost')
 let lastBuildCategory: BuildCategoryId = 'paths'
-let lastBuildGroup = new Map<BuildCategoryId, string>()
+const lastBuildGroup = new Map<BuildCategoryId, string>()
 let lastDecorationTheme: DecorationThemeId = DEFAULT_DECORATION_THEME
 const buildCatalog = createBuildCatalog(
   {
@@ -3778,6 +3779,22 @@ const closeDebugMenu = (): void => {
   debugMenuPanel.classList.remove('open')
   debugMenuToggle.setAttribute('aria-expanded', 'false')
 }
+const demandDebugPanel =
+  requireElement<HTMLElement>('#demand-debug-panel')
+const demandDebugUI = setupDemandDebugUI({
+  panel: demandDebugPanel,
+  getGame: () => game,
+  showToast,
+})
+makeDraggable(
+  demandDebugPanel.querySelector<HTMLElement>('.panel-header')!,
+  demandDebugPanel,
+)
+makeResizable(demandDebugPanel)
+requireElement<HTMLButtonElement>('#debug-demand-tuning').addEventListener('click', () => {
+  closeDebugMenu()
+  demandDebugUI.open()
+})
 const closeStaffMenu = (): void => {
   staffMenuPanel.classList.remove('open')
   staffMenuToggle.setAttribute('aria-expanded', 'false')
@@ -5213,7 +5230,10 @@ const debugToolsToggle = requireElement<HTMLInputElement>('#setting-debug-tools'
 const applyDebugTools = (shown: boolean): void => {
   performanceIndicator.hidden = !shown
   debugMenuToggle.hidden = !shown
-  if (!shown) closeDebugMenu()
+  if (!shown) {
+    closeDebugMenu()
+    demandDebugUI.close()
+  }
   syncDebugViewGap()
 }
 try {

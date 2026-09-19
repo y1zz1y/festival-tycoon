@@ -11,6 +11,7 @@ import { hashStringSeed } from './rng'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import { applyFamilyFestivalBedtime } from './visitorSleep'
 import { CONCERT_TOPLESS_CROWD_THOUGHT, CONCERT_TOPLESS_THOUGHT } from './visitorThoughts'
+import { createTicketDemandTuning, type TicketDemandTuning } from './demandTuning'
 
 export const AUDIENCES = ['music', 'party', 'family', 'comfort', 'camping'] as const
 export type Audience = typeof AUDIENCES[number]
@@ -170,6 +171,7 @@ export type FestivalManagement = {
   metrics: { guests: number; samples: number; satisfaction: number; concertMinutes: number; stockouts: number; weatherImpact: number };
   lastUpdate: number; admissions: number; goals: { guests: number; satisfaction: number; profit: number };
   headlinerPool?: string[];
+  demandTuning: TicketDemandTuning;
 }
 export type FestivalAction = InfrastructureAction
   | { type: 'wayArea'; from: { x: number; z: number }; to: { x: number; z: number }; kind: WayType }
@@ -196,7 +198,8 @@ export function createFestivalManagement(): FestivalManagement {
     upgrades: { drainage: false, shelter: false, rigging: false, water: false, quiet: false, warehouse: false, staffSpeed: false },
     deliveries: [], reputation: { music: 40, atmosphere: 50, comfort: 50, organization: 50 }, reports: [],
     weather: 'sun', wetness: 0, seed: 1, nextId: 1, metrics: metrics(), lastUpdate: 0,
-    admissions: 0, goals: { guests: 150, satisfaction: 65, profit: 0 }, headlinerPool: [] }
+    admissions: 0, goals: { guests: 150, satisfaction: 65, profit: 0 }, headlinerPool: [],
+    demandTuning: createTicketDemandTuning() }
 }
 export function forecast(f: FestivalManagement, day: number, hour: number): Weather {
   const value = hashStringSeed(`${f.seed}:${day}:${Math.floor(hour / 6)}`) % 10

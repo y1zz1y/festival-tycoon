@@ -242,7 +242,7 @@ export function sampleTrackPoint(
     total += Math.hypot(to.x - from.x, to.z - from.z, to.elevation - from.elevation)
     lengths.push(total)
   }
-  let target = Math.max(0, Math.min(1, progress)) * total
+  const target = Math.max(0, Math.min(1, progress)) * total
   for (let index = 0; index < lengths.length; index += 1) {
     const previous = index === 0 ? 0 : lengths[index - 1]
     if (target > lengths[index]) continue
