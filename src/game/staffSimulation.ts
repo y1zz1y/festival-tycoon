@@ -332,6 +332,7 @@ export class StaffSimulation {
               distance: this.incidentDistance(incident, member),
               cell: { x: incident.x, z: incident.z, elevation: incident.elevation },
               kind: incident.kind,
+              priority: 1,
             }
           : null,
         leftover
@@ -341,27 +342,40 @@ export class StaffSimulation {
                 Math.abs(leftover.x - member.cellX) + Math.abs(leftover.z - member.cellZ),
               cell: { x: leftover.x, z: leftover.z, elevation: leftover.elevation },
               kind: 'camp',
+              priority: 1,
             }
           : null,
       ]
         .filter((job): job is NonNullable<typeof job> => Boolean(job))
         .sort((left, right) => left.distance - right.distance)
       const job = jobs[0]
-      if (bin && (!job || bin.stored >= binCapacity)) {
-        return {
-          id: bin.id,
-          cell: { x: bin.x, z: bin.z, elevation: bin.elevation },
-          allowMedical: true,
-          kind: 'bin',
+      const localTiles = SIMULATION_CONFIG.staff.cleanerLocalWorkTiles
+      const longTravel = SIMULATION_CONFIG.staff.cleanerLongTravelTiles
+      const pick = (
+        candidate: { id: string; cell: { x: number; z: number; elevation: number }; kind: string } | null,
+      ) =>
+        candidate
+          ? { id: candidate.id, cell: candidate.cell, allowMedical: true, kind: candidate.kind }
+          : null
+      const binJob = bin
+        ? {
+            id: bin.id,
+            cell: { x: bin.x, z: bin.z, elevation: bin.elevation },
+            kind: 'bin',
+            distance: binDistance(bin),
+            priority: bin.stored >= binCapacity ? 0 : 2,
+          }
+        : null
+      const ranked = [binJob, job]
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+        .sort((left, right) => left.priority - right.priority || left.distance - right.distance)
+      const best = ranked[0]
+      if (best) {
+        const nearby = ranked.find((entry) => entry.distance <= localTiles)
+        if (best.distance > longTravel && nearby && nearby.id !== best.id) {
+          return pick(nearby)
         }
-      }
-      if (job) {
-        return {
-          id: job.id,
-          cell: job.cell,
-          allowMedical: true,
-          kind: job.kind,
-        }
+        return pick(best)
       }
       // Lowest priority after bags, litter/vomit/camps and idle bin emptying:
       // haul sealed containers that are not currently being emptied by a truck.

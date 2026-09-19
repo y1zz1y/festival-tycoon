@@ -5,6 +5,18 @@ Picking und Overlays bleiben außerhalb der statischen Batches. Kein
 Draw-Call oder Material pro Detailstück oder Besucher. Festival-SFX hängen
 am Kamera-Listener und nicht an Unique-Materials ([audio.md](audio.md)).
 
+## Kanonische Attraktionen (v31)
+
+`src/view/AttractionView.ts` rendert neue kanonische Track-, Area- und
+Scripted-Layouts mit je einer instanzierten Familie für Streckenspannen,
+Flächenkacheln, Referenzen und Scripted-Segmente. `buildingIds` pro Instanz
+halten Picking ohne Material oder Draw-Call pro Teil möglich.
+`WorldView.pickPlacedObject` akzeptiert Attraktions-IDs zusätzlich zu
+Gebäude-IDs. Während der schrittweisen Fachsystem-Umstellung werden
+vorhandene Coaster-/Course-Projektionen weiterhin von ihren detailreichen
+Views gezeichnet; `AttractionView` filtert deren IDs, damit nichts doppelt
+erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
+
 ## Wo finden
 
 | Aufgabe | Datei | Einstieg |
@@ -31,10 +43,26 @@ am Kamera-Listener und nicht an Unique-Materials ([audio.md](audio.md)).
 | Personaleingang | `src/view/SupplyChainView.ts` | Goldene Pfosten auf derselben Kante via `staffGateWorldPosition`; fehlendes `staffGateDirection` bleibt Legacy-Mitte |
 | Müllablagen / Eimer-Füllstand | `src/view/WasteView.ts` | Instanced Tiles, Ablage-Säcke und Kartons um Eimer; Füllstand nur über Kartonzahl |
 | Backstage-Overlay | `src/view/BackstageView.ts` | ein `InstancedMesh` (aktiv teal / getrennt amber); außerhalb der Gebäude-Batches |
-| Band-Akteure | `src/view/BandActorView.ts`, `src/view/bandMemberMesh.ts` | dieselbe gemergte Musiker-Geometrie wie `stageBand.ts`; geteiltes Vertex-Color-Material; ausgeblendet bei `vehicleId` oder `performing` |
+| Band-Akteure | `src/view/BandActorView.ts`, `src/view/bandMemberMesh.ts` | dieselbe gemergte Musiker-Geometrie wie `stageBand.ts`; mindestens Publikum-Auflösung; Backstage nicht klobiger als die Bühne |
+| Kurs-Attraktionen | `src/view/CourseView.ts` | explizite Flächen instanziert; verbundene Strecken, Hindernisse und Außenränder als ein gecachtes Vertex-Color-Mesh; Punktobjekte je Stückart instanziert |
 | Achterbahnwagen | `src/view/coasterCars.ts` | ein gemergtes Mesh pro Wagen plus Sitzgruppen; Geometrie je **Zugstil + Lackfarbe** geteilt (`sitDownSteel`, `wooden`, `bmSitdown`, `invertV`, `flying`, `standUp`, `junior`, `mouse`, `bobsled`, `mine`, `swinging`, `launched`, `giga`). Derselbe Wagen wird als 96-px-Katalogkachel gerendert (`WorldView.coasterTrainThumbnail`) |
 | Achterbahnschienen | `src/view/coasterTrack.ts` via `WorldView.rebuildCoasters` | ein vertex-color Mesh je Stück. Schienen sind **Segmentboxen entlang der diskreten Sample-Polylinie** (Heading/Pitch/Bank, ein Basisvektor pro Segment, leichter Überlapp, kein jedes-zweite-Sample mit fester 0,14-Länge). Schwellen, Stützen, optional Spine/Trog im selben Mesh. Geteiltes Material. Animierte Züge, Specials (Foto/Splash) und Picking bleiben außerhalb des statischen Batches. Stil-Tabelle: `steelLattice`, `wooden`, `boxSpine`, `invertedBox`, `flyingSpine`, `juniorTubular`, `wildMouse`, `woodenMouse`, `bobsledTrough`, `suspendedSpine`, `gigaLattice`, `launchedSteel` |
 | Stand-Queue-Spuren | `src/view/WorldView.ts` `addQueueBarriers` | Mittelschiene und zwei Pfeile am Queue-Mesh; bleibt im Gebäude-Batch |
+
+Kursgäste besitzen während der Nutzung ebenfalls `state === 'riding'`, dürfen
+aber nicht wie Fahrgäste in Achterbahnwagen ausgeblendet werden.
+`WorldView.updateVisitorInstances` hält die IDs aus `course.riders` sichtbar
+und animiert sie anhand ihrer autoritativen, pro Tick aktualisierten Position
+auf Hindernissen, Brücken, Rutschen und Paintballfeldern.
+Paintballmarker und fliegende Kugeln sind vier feste, begrenzte
+`InstancedMesh`-Batches (Blau/Orange jeweils Marker/Projektil), keine Meshes
+oder Materialien pro Spieler und Schuss. Marker folgen der autoritativen
+Besucherposition und zielen auf ein Mitglied des gegnerischen Teams;
+Projektilpositionen werden deterministisch aus `simTick` interpoliert.
+Die Kursgeometrie verschmilzt außerdem deduplizierte Übergangsplattformen,
+Geländer, Seile, Rutschenstützen und Hindernisdetails in dasselbe statische
+Vertex-Color-Mesh. Varianten hängen von Kurs- und Stückart ab, nicht von einem
+Material oder Draw-Call pro Latte, Griff, Brückenplanke oder Zaunsegment.
 
 Weitere Views (`*View.ts`) sind in den Fach-MDs genannt und dürfen den
 Snapshot nicht autoritativ schreiben.

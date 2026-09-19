@@ -42,7 +42,68 @@ export const BANDS = [
   { id: 'thunder', name: 'Thunder Meadow', genre: 'Metal', audience: 'music', fee: 1700, draw: 70, speakers: 3, reputation: 45 },
   { id: 'confetti', name: 'Confetti Club', genre: 'Pop', audience: 'party', fee: 500, draw: 22, speakers: 0, reputation: 0 },
   { id: 'aurora', name: 'Aurora Avenue', genre: 'Indie · Headliner', audience: 'music', fee: 2800, draw: 100, speakers: 3, reputation: 65 },
+  { id: 'meadow2', name: 'Pollen Notes', genre: 'Indie', audience: 'music', fee: 420, draw: 19, speakers: 0, reputation: 0 },
+  { id: 'lantern2', name: 'Glass Picnic', genre: 'Indie', audience: 'music', fee: 640, draw: 31, speakers: 1, reputation: 10 },
+  { id: 'brass2', name: 'Tin Parade', genre: 'Brass & Pop', audience: 'family', fee: 520, draw: 24, speakers: 0, reputation: 0 },
+  { id: 'sugar2', name: 'Candy Relay', genre: 'Pop', audience: 'party', fee: 780, draw: 36, speakers: 1, reputation: 15 },
+  { id: 'campfire2', name: 'Ember Atlas', genre: 'Folk', audience: 'camping', fee: 380, draw: 17, speakers: 0, reputation: 0 },
+  { id: 'cedar2', name: 'Pine Letters', genre: 'Folk', audience: 'camping', fee: 690, draw: 30, speakers: 1, reputation: 10 },
+  { id: 'velvet2', name: 'Sunday Velvet', genre: 'Soul', audience: 'comfort', fee: 680, draw: 29, speakers: 1, reputation: 0 },
+  { id: 'neon2', name: 'Orchard Voltage', genre: 'Electro', audience: 'party', fee: 900, draw: 39, speakers: 1, reputation: 0 },
+  { id: 'rivet2', name: 'Radio Rivet', genre: 'Rock', audience: 'music', fee: 740, draw: 34, speakers: 1, reputation: 10 },
+  { id: 'iron2', name: 'Daisy Iron', genre: 'Metal', audience: 'music', fee: 620, draw: 27, speakers: 0, reputation: 0 },
+  { id: 'paper2', name: 'Orbit Paper', genre: 'Indie', audience: 'music', fee: 1080, draw: 50, speakers: 2, reputation: 30 },
+  { id: 'firefly2', name: 'Formula Firefly', genre: 'Pop', audience: 'family', fee: 1180, draw: 56, speakers: 2, reputation: 35 },
+  { id: 'harbor2', name: 'Hearth Harbor', genre: 'Folk', audience: 'comfort', fee: 1100, draw: 48, speakers: 2, reputation: 30 },
+  { id: 'amber2', name: 'Afterglow Amber', genre: 'Soul', audience: 'comfort', fee: 1020, draw: 44, speakers: 1, reputation: 20 },
+  { id: 'voltage2', name: 'Picnic Voltage', genre: 'Electro', audience: 'party', fee: 1280, draw: 60, speakers: 2, reputation: 35 },
+  { id: 'glitter2', name: 'Transit Glitter', genre: 'Dance', audience: 'party', fee: 1200, draw: 52, speakers: 2, reputation: 25 },
+  { id: 'anvil2', name: 'Arcade Anvil', genre: 'Metal', audience: 'music', fee: 1040, draw: 46, speakers: 2, reputation: 20 },
+  { id: 'static2', name: 'Parade Static', genre: 'Rock', audience: 'music', fee: 1360, draw: 58, speakers: 2, reputation: 40 },
+  { id: 'lowtide2', name: 'Lounge Tide', genre: 'Soul', audience: 'comfort', fee: 1500, draw: 66, speakers: 2, reputation: 45 },
+  { id: 'thunder2', name: 'Meadow Thunder', genre: 'Metal', audience: 'music', fee: 1660, draw: 68, speakers: 3, reputation: 45 },
+  { id: 'discoball2', name: 'Ballistics Disco', genre: 'Dance', audience: 'party', fee: 1800, draw: 72, speakers: 3, reputation: 50 },
+  { id: 'synth2', name: 'Safari Synth', genre: 'Electro', audience: 'party', fee: 1900, draw: 78, speakers: 3, reputation: 55 },
+  { id: 'orbit2', name: 'Orbit Midnight', genre: 'Dance · Headliner', audience: 'party', fee: 2150, draw: 84, speakers: 2, reputation: 55 },
+  { id: 'wildcard2', name: 'Weekend Wildcard', genre: 'Rock', audience: 'music', fee: 2050, draw: 82, speakers: 3, reputation: 60 },
+  { id: 'nova', name: 'Nova Canopy', genre: 'Indie · Headliner', audience: 'music', fee: 3000, draw: 98, speakers: 3, reputation: 65 },
+  { id: 'eclipse', name: 'Eclipse Circuit', genre: 'Electro · Headliner', audience: 'party', fee: 3100, draw: 99, speakers: 3, reputation: 65 },
 ] as const
+
+export type BandStar = 1 | 2 | 3 | 4 | 5
+
+export function bandStarRating(band: { reputation: number }): BandStar {
+  if (band.reputation >= 60) return 5
+  if (band.reputation >= 45) return 4
+  if (band.reputation >= 30) return 3
+  if (band.reputation >= 15) return 2
+  return 1
+}
+
+export function bandVisitorDraw(band: { draw: number }): number {
+  return band.draw
+}
+
+export function bandPriceWillingness(band: { draw: number; reputation: number }): number {
+  return Math.max(0.12, Math.min(1, band.draw / 110 + band.reputation / 220))
+}
+
+export function isFiveStarBand(band: { reputation: number }): boolean {
+  return bandStarRating(band) === 5
+}
+
+export function rollFiveStarOffers(
+  musicReputation: number,
+  rng: { next(): number },
+  alreadyBooked: ReadonlySet<string>,
+): string[] {
+  if (musicReputation < 55) return []
+  const pool = BANDS.filter((band) => isFiveStarBand(band) && !alreadyBooked.has(band.id))
+  if (pool.length === 0 || rng.next() > 0.28) return []
+  const pick = pool[Math.floor(rng.next() * pool.length)]
+  return pick ? [pick.id] : []
+}
+
 export type Supply = 'food' | 'drinks' | 'water' | 'goods'
 export const SUPPLIES: Record<Supply, { name: string; price: number }> = {
   food: { name: 'Essen', price: 2 },
@@ -76,6 +137,7 @@ export type FestivalManagement = {
   reputation: Reputation; reports: DayReport[]; weather: Weather; wetness: number; seed: number; nextId: number;
   metrics: { guests: number; samples: number; satisfaction: number; concertMinutes: number; stockouts: number; weatherImpact: number };
   lastUpdate: number; admissions: number; goals: { guests: number; satisfaction: number; profit: number };
+  headlinerPool?: string[];
 }
 export type FestivalAction = InfrastructureAction
   | { type: 'wayArea'; from: { x: number; z: number }; to: { x: number; z: number }; kind: WayType }
@@ -86,7 +148,7 @@ export type FestivalAction = InfrastructureAction
   | { type: 'prepare' }
   | { type: 'moveBooking'; id:string; stageId:string; day:number; start:number; duration:number }
   | { type: 'book'; bandId: string; stageId: string; day: number; start: number; duration: number }
-  | { type: 'autoLineup'; duration: number }
+  | { type: 'autoLineup'; duration: number; minStars?: number; maxStars?: number }
   | { type: 'cancel'; id: string }
   | { type: 'order'; kind: Supply; quantity: number; delay: number; depotId?: string }
   | { type: 'upgrade'; kind: Upgrade }
@@ -101,7 +163,7 @@ export function createFestivalManagement(): FestivalManagement {
     upgrades: { drainage: false, shelter: false, rigging: false, water: false, quiet: false, warehouse: false },
     deliveries: [], reputation: { music: 40, atmosphere: 50, comfort: 50, organization: 50 }, reports: [],
     weather: 'sun', wetness: 0, seed: 1, nextId: 1, metrics: metrics(), lastUpdate: 0,
-    admissions: 0, goals: { guests: 150, satisfaction: 65, profit: 0 } }
+    admissions: 0, goals: { guests: 150, satisfaction: 65, profit: 0 }, headlinerPool: [] }
 }
 export function forecast(f: FestivalManagement, day: number, hour: number): Weather {
   const value = hashStringSeed(`${f.seed}:${day}:${Math.floor(hour / 6)}`) % 10
@@ -226,6 +288,12 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
     if(f.enabled&&!f.finished)return fail('Das laufende Festival zuerst abschließen')
     if(f.planning&&!f.finished)return {ok:true,message:'Die Festivalplanung ist bereits geöffnet'}
     f.enabled=false;f.finished=false;f.planning=true;f.bookings=[];f.startDay=s.day;s.parkOpen=false;s.speed=0
+    let offerSeed = hashStringSeed(`headliners:${f.seed}:${f.edition}`)
+    const offerRng = { next: () => {
+      offerSeed = (Math.imul(offerSeed, 1664525) + 1013904223) >>> 0
+      return offerSeed / 0x100000000
+    } }
+    f.headlinerPool = rollFiveStarOffers(f.reputation.music, offerRng, new Set())
     return {ok:true,message:'Nächste Ausgabe planen – die Besucherbasis bleibt erhalten'}
   }
   if (action.type === 'start') {
@@ -255,6 +323,9 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
         action.day * 1440 + action.start <= now) return fail('Freie Zeit an einem geplanten Festivaltag wählen (08–24 Uhr)')
     if(!bookingHoursOpen(s,action.start,action.duration))return fail('Bühnen sind in diesem Zeitfenster laut Tagesplanung geschlossen')
     if (f.reputation.music < band.reputation) return fail(`Diese Band verlangt mindestens ${band.reputation} Musikruf`)
+    if (isFiveStarBand(band) && !(f.headlinerPool ?? []).includes(band.id)) {
+      return fail('Diese 5-Sterne-Band steht in dieser Planung nicht zur Verfügung')
+    }
     if (f.bookings.some(b => b.id!==previous?.id && b.day === action.day && (b.bandId === band.id || (b.stageId === action.stageId &&
         action.start < b.start + b.duration + 30 && action.start + action.duration + 30 > b.start)))) return fail('Band bereits gebucht oder Bühne belegt (30 Minuten Umbauzeit)')
     if(previous){Object.assign(previous,{stageId:action.stageId,day:action.day,start:action.start,duration:action.duration});return {ok:true,message:'Auftritt verschoben – keine zusätzliche Gage'}}
@@ -266,7 +337,10 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
   if (action.type === 'autoLineup') {
     if (!s.buildings.some(building => building.kind === 'stage')) return fail('Zuerst eine Bühne bauen')
     const duration = autoLineupDuration(action.duration)
-    const plan = planAutoLineup(s, duration)
+    const plan = planAutoLineup(s, duration, {
+      minStars: action.minStars,
+      maxStars: action.maxStars,
+    })
     if (!plan.length) return fail('Keine freien Slots, passenden Bands oder genug Budget für eine automatische Füllung')
     let booked = 0
     let spent = 0

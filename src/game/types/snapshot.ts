@@ -1,9 +1,11 @@
 import type { AccessControlSnapshot } from '../accessControl'
+import type { Attraction } from '../attractions/types'
 import type { AtmosphereSnapshot } from '../atmosphere'
 import type { BandActor } from '../bandActors'
 import type { BackstageCell, BandSupplySnapshot } from '../bandSupply'
 import type { CampingCell, CampInstallation } from '../camping'
 import type { Coaster } from '../coasters'
+import type { CourseAttraction } from '../courseAttractions'
 import type { ComplaintSnapshot } from '../complaints'
 import type { CrowdingSnapshot } from '../crowding'
 import type { DayPlan } from '../dayPlan'
@@ -33,7 +35,7 @@ export type SimTurn = {
 
 export type GameSnapshot = {
   festival: FestivalManagement
-  version: 30
+  version: 31
   waterLevel: number
   simTick: number
   rngState: number
@@ -53,7 +55,14 @@ export type GameSnapshot = {
   campingCells: CampingCell[]
   campInstallations: CampInstallation[]
   visitors: Visitor[]
+  attractions: Attraction[]
+  migrationReport?: {
+    removedAttractionIds: string[]
+  }
+  /** @deprecated v31 runtime projection; removed after attraction-system cutover. */
   coasters: Coaster[]
+  /** @deprecated v31 runtime projection; removed after attraction-system cutover. */
+  courses: CourseAttraction[]
   cashEffects: CashEffect[]
   fireworkEffects: FireworkEffect[]
   crowding: CrowdingSnapshot

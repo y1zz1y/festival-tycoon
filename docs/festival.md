@@ -12,7 +12,8 @@ hält die Simulationsuhr an, bis **Festival starten**.
 | Command-Einstieg | `src/game/GameState.ts` | `manageFestival` |
 | Tages-/Campingzyklus | `src/game/dayPlan.ts` | `getFestivalCycleStatus`, `FestivalPhase` (`lead` Vorbereitung, `festival`, `break` Pause), Angebote |
 | Musikgeschmack, Basis-Evolution | `src/game/musicTaste.ts` | `evolveMusicAudience`, `GENRES` |
-| Automatischer Spielplan | `src/game/autoLineup.ts` | `planAutoLineup` |
+| Automatischer Spielplan | `src/game/autoLineup.ts` | `planAutoLineup` (min/max Sterne, bestehende Slots bleiben) |
+| Ticketnachfrage | `src/game/ticketDemand.ts` | `estimateTicketDemand`, `arrivalPriceMultiplier` |
 | Waren im Festivalkontext | `src/game/supplyChain.ts`, `src/game/festivalManagement.ts` | `Supply` inkl. `goods` (Allgemeine Waren) |
 | Spielplan-UI | `src/musicPlanner.ts` | Band ziehen, Raster |
 | Festival-Fenster | `src/festivalUI.ts` | Tickets, Preise, Tagesplan, Auswertung, Ausbauten |
@@ -27,6 +28,11 @@ hält die Simulationsuhr an, bis **Festival starten**.
 - Ticketkontingente nach Start sperren. Anreisen verbrauchen Tickets dauerhaft.
   `entryPrice` ist der Tagesticketpreis, `campingTicketPrice` der
   Campingpreis (fehlende Saves übernehmen den bisherigen Eintritt).
+  Standard **120 € / 260 €**, damit 600 Camper plus 600 Tagestickets je
+  Festivaltag über fünf Tage ein Wochenende von 400–500 k€ Kosten mit
+  kleinem Plus tragen (600×260 + 5×600×120 = 516 k€). Slider 20–250 /
+  40–500. Gäste bekommen `visitors.budget` plus Camper
+  `campingTicketReserve`, damit der Eintritt zahlbar bleibt.
   Tagesplan, Zyklus und Preise stellt ihr im Fenster **Festival planen**.
   Ampeln und Personentore können dieselben Angebote (`DayPlanOffer`, inkl.
   `shops` für Souvenirläden) sowie die Zyklusphasen als Zeitsteuerung nutzen.
@@ -36,7 +42,11 @@ hält die Simulationsuhr an, bis **Festival starten**.
 - Musikbasis entwickelt sich einmalig nach der Ausgabe; ausgefallene Slots
   zählen nicht.
 - Neue Bands: `BANDS` plus Geschmack in `musicTaste.ts`. Keine geschützten
-  RCT-/Echtband-Inhalte.
+  RCT-/Echtband-Inhalte. Sterne aus Reputation (`bandStarRating`); 5-Sterne
+  nur aus `festival.headlinerPool` (Sim-RNG beim Vorbereiten). Planner-Tabs
+  und Auto-Plan filtern nach Sternen und überschreiben keine bestehenden Slots.
+  Ticket-Slider färben die erwartete Kaufbereitschaft; Spawn skaliert mit
+  `arrivalPriceMultiplier`. Gästebudget ist `visitors.budget` (80), nicht 1e6.
 - Nach dem letzten Festivaltag (`festival.finished`) öffnet einmal pro Ausgabe
   das **HEADLINE Magazin** (`buildHeadlineMagazine`). Es rechnet nur aus
   vorhandenen Snapshot-Feldern (Tagesberichte, Ruf, Anreisen, Bilanz,

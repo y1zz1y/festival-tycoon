@@ -141,7 +141,25 @@ import {
 } from './ui/entityPanel'
 import { contextHelpText } from './ui/contextHelp'
 import { updateCoasterBuilderPanel } from './ui/coasterBuilderPanel'
+import {
+  defaultCoursePiece,
+  orderedCourseLineTargets,
+  renderCourseBuilderPanel,
+  type CourseBuilderTool,
+} from './ui/courseBuilderPanel'
+import {
+  renderAttractionBuilderPanel,
+  type AttractionBuilderState,
+} from './ui/attractionBuilderPanel'
+import { createAttraction } from './game/attractions/factory'
+import { getAttractionDefinition } from './game/attractions/definitions'
+import { openTrackNodeIds } from './game/attractions/trackGraph'
 import { mountVisitorPanel } from './ui/visitorPanel'
+import {
+  COURSE_PIECE_ELEVATION,
+  coursePaintMode,
+  type CourseKind,
+} from './game/courseAttractions'
 
 function requireElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector)
@@ -258,6 +276,7 @@ const coasterExitButton = requireElement<HTMLButtonElement>('#place-coaster-exit
 const demolishCoasterConstructionButton = requireElement<HTMLButtonElement>(
   '#demolish-coaster-construction',
 )
+const courseBuilder = requireElement<HTMLElement>('#course-builder')
 const chainLiftInput = requireElement<HTMLInputElement>('#chain-lift')
 const trackPreviousButton = requireElement<HTMLButtonElement>('#track-previous')
 const trackNextButton = requireElement<HTMLButtonElement>('#track-next')
@@ -469,6 +488,12 @@ let coasterTargetBank = 0
 let pendingCoasterTypeId: CoasterTypeId = 'classicSteel'
 let coasterSelectedKind: TrackPieceKind = 'station'
 let lastCoasterConstructionKey: string | null = null
+let courseBuilderActive = false
+let activeCourseId: string | null = null
+let activeAttractionId: string | null = null
+let attractionBuilderState: AttractionBuilderState | null = null
+let selectedCoursePiece: CourseBuilderTool = 'entrance'
+let courseBuildElevation = 0
 let selectedEntity: EntitySelection | null = null
 let logisticsOverlayVisible = false
 let accessAreaDrawing = false
@@ -553,6 +578,21 @@ pathToolController = createPathToolController({
   applyCopySelection,
   demolish: demolishPathAt,
   showToast,
+  coursePaintMode: () => {
+    if (!courseBuilderActive || game.snapshot.selectedTool !== 'course') return null
+    if (attractionBuilderState) {
+      if (attractionBuilderState.mode === 'areaAdd' || attractionBuilderState.mode === 'areaErase') {
+        return 'area'
+      }
+      return attractionBuilderState.mode === 'track' ? 'line' : null
+    }
+    const mode =
+      selectedCoursePiece === 'area' || selectedCoursePiece === 'areaErase'
+        ? 'area'
+        : coursePaintMode(selectedCoursePiece)
+    return mode === 'single' ? null : mode
+  },
+  placeCourseCells: (cells) => placeCourseCells(cells),
 }, view)
 view.setConstructionHandlers((height, cell) => {
   game.setBuildElevation(height)
@@ -1487,6 +1527,7 @@ function updateVisitorOverview(force = false): void {
 }
 
 let bungeeBuildMode = false
+let pendingCourseKind: CourseKind | undefined
 requireElement<HTMLInputElement>('#bungee-height').addEventListener('input', e => {
   if (bungeeBuildMode) view.bungeePreviewHeight = Math.max(4, Math.min(200, Number((e.target as HTMLInputElement).value) || 20))
 })
@@ -1503,6 +1544,7 @@ function handleCellClick(cell: CellPosition): void {
     showToast(result.message,!result.ok); return
   }
   if (supplyPlanner.handleCell(cell)) return
+  if (handleCourseCell(cell)) return
   if (handleCoasterCell(game, cell, { active: coasterBuilderActive, coasterId: activeCoasterId, accessMode: coasterAccessMode }, {
     setAccessMode: () => { coasterAccessMode = null },
     continueCoaster: (coaster) => { activeCoasterId = coaster.id; coasterStartCandidate = null; coasterEditIndex = coaster.pieces.length - 1 },
@@ -1553,7 +1595,10 @@ function handleCellClick(cell: CellPosition): void {
     openSweeper: openSweeperStaff, openVehicle: openEntityInfoForVehicle,
     openCoasterBuilder, openCoaster: openEntityInfoForCoaster, openAccess: openEntityInfoForAccess,
     openRide: openRideBuilder, openBuilding: openEntityInfoForBuilding, openDepot: openEntityInfoForDepot,
-    openWasteDump: openEntityInfoForWasteDump, openBackstage: openEntityInfoForBackstage, toast: showToast,
+    openWasteDump: openEntityInfoForWasteDump, openBackstage: openEntityInfoForBackstage,
+    openCourseBuilder: (id) => openCourseBuilder(id),
+    openAttractionBuilder: (id) => openAttractionBuilder(id),
+    toast: showToast,
   })) return
 
   const routed = applyDirectCellTool(game, cell, {
@@ -1564,6 +1609,7 @@ function handleCellClick(cell: CellPosition): void {
     backstageEraseMode,
     bungeeBuildMode,
     bungeeHeight: Number(requireElement<HTMLInputElement>('#bungee-height').value),
+    courseKind: pendingCourseKind,
   })
   if (!routed.handled || !routed.result) return
   showToast(routed.result.message, !routed.result.ok)
@@ -2035,7 +2081,18 @@ function updatePathEditor(): void {
 }
 
 function openCoasterBuilder(coasterId: string | null = null, typeId?: CoasterTypeId): void {
+  if (!coasterId) {
+    const selectedType = getCoasterType(typeId ?? pendingCoasterTypeId).id
+    pendingCoasterTypeId = selectedType
+    openAttractionDefinition(`coaster:${selectedType}`)
+    return
+  }
+  if (game.getAttraction(coasterId)) {
+    openAttractionBuilder(coasterId)
+    return
+  }
   closeRideBuilder(false)
+  if (courseBuilderActive) closeCourseBuilder()
   buildMenuPanel.hidden = true
   buildMenuToggle.setAttribute('aria-expanded', 'false')
   closeBuildSubmenus()
@@ -2077,6 +2134,509 @@ function closeCoasterBuilder(): void {
   coasterBuilder.classList.remove('visible')
   view.setCoasterConstructionPreview([])
   view.setCoasterTrackSelection([])
+}
+
+function openAttractionBuilder(attractionId: string): void {
+  const attraction = game.getAttraction(attractionId)
+  if (!attraction) return
+  closeRideBuilder(false)
+  if (coasterBuilderActive) closeCoasterBuilder()
+  if (pathWindowOpen) closePathEditor()
+  closeEntityPanel()
+  closeBuildMenu()
+  supplyPlanner.releaseTool()
+  hideVisitorPanel()
+  const definition = getAttractionDefinition(attraction.definitionId)
+  pendingCourseKind =
+    attraction.runtime.kind === 'course'
+      ? attraction.runtime.courseKind
+      : 'mudmasters'
+  courseBuilderActive = true
+  activeCourseId = null
+  activeAttractionId = attraction.id
+  attractionBuilderState = {
+    attraction,
+    mode: attraction.layout.kind === 'area'
+      ? 'areaAdd'
+      : attraction.layout.kind === 'scripted'
+        ? 'scripted'
+        : attraction.access.entrance
+          ? 'track'
+          : 'entrance',
+    selectedKind: definition?.pieceKinds.find((kind) => kind !== 'station') ??
+      definition?.allowedReferences?.[0] ??
+      'path',
+    direction: game.snapshot.buildRotation as 0 | 1 | 2 | 3,
+    elevationDelta: 0,
+    banking: 0,
+  }
+  game.setTool('course')
+  updateCourseBuilder()
+}
+
+function openAttractionDefinition(definitionId: string): void {
+  const attraction = createAttraction(
+    'preview-attraction',
+    definitionId,
+    0,
+    0,
+    0,
+    game.snapshot.buildRotation as 0 | 1 | 2 | 3,
+  )
+  const definition = getAttractionDefinition(definitionId)
+  if (!attraction || !definition) return
+  closeRideBuilder(false)
+  if (coasterBuilderActive) closeCoasterBuilder()
+  if (pathWindowOpen) closePathEditor()
+  closeEntityPanel()
+  closeBuildMenu()
+  supplyPlanner.releaseTool()
+  hideVisitorPanel()
+  pendingCourseKind = 'mudmasters'
+  courseBuilderActive = true
+  activeCourseId = null
+  activeAttractionId = null
+  attractionBuilderState = {
+    attraction,
+    mode: attraction.layout.kind === 'track'
+      ? definitionId.startsWith('coaster:') ? 'track' : 'entrance'
+      : attraction.layout.kind === 'area'
+        ? 'areaAdd'
+        : 'scripted',
+    selectedKind: definitionId.startsWith('coaster:')
+      ? 'station'
+      : definition.pieceKinds[0] ?? definition.allowedReferences?.[0] ?? 'path',
+    direction: game.snapshot.buildRotation as 0 | 1 | 2 | 3,
+    elevationDelta: 0,
+    banking: 0,
+  }
+  game.setTool('course')
+  updateCourseBuilder()
+}
+
+function openCourseBuilder(courseId: string | null = null, kind?: CourseKind): void {
+  closeRideBuilder(false)
+  if (coasterBuilderActive) closeCoasterBuilder()
+  if (pathWindowOpen) closePathEditor()
+  closeEntityPanel()
+  closeBuildMenu()
+  supplyPlanner.releaseTool()
+  hideVisitorPanel()
+  const existing = courseId ? game.getCourse(courseId) : undefined
+  const canonical = courseId
+    ? game.snapshot.attractions.find((attraction) => attraction.id === courseId)
+    : undefined
+  pendingCourseKind = existing?.kind ?? kind ?? pendingCourseKind
+  if (!pendingCourseKind) return
+  courseBuilderActive = true
+  activeCourseId = canonical ? null : existing?.id ?? null
+  activeAttractionId = canonical?.id ?? null
+  const definitionId =
+    pendingCourseKind === 'mudmasters' || pendingCourseKind === 'treeToTree'
+      ? `course:${pendingCourseKind}`
+      : pendingCourseKind === 'paintball'
+        ? 'paintball'
+        : 'swimArea'
+  const attraction = canonical ?? createAttraction(
+    'preview-attraction',
+    definitionId,
+    0,
+    0,
+    0,
+    game.snapshot.buildRotation as 0 | 1 | 2 | 3,
+  )
+  attractionBuilderState = attraction
+    ? {
+        attraction,
+        mode: attraction.layout.kind === 'area'
+          ? 'areaAdd'
+          : attraction.access.entrance
+            ? 'track'
+            : 'entrance',
+        selectedKind: attraction.layout.kind === 'track' ? 'path' : 'areaAdd',
+        direction: game.snapshot.buildRotation as 0 | 1 | 2 | 3,
+        elevationDelta: 0,
+        banking: 0,
+      }
+    : null
+  selectedCoursePiece = existing
+    ? existing.kind === 'paintball' || existing.kind === 'pool'
+      ? 'area'
+      : existing.kind === 'treeToTree'
+        ? 'tree'
+        : 'path'
+    : defaultCoursePiece(pendingCourseKind)
+  courseBuildElevation =
+    selectedCoursePiece === 'area' || selectedCoursePiece === 'areaErase'
+      ? 0
+      : COURSE_PIECE_ELEVATION[selectedCoursePiece]
+  game.setTool('course')
+  updateCourseBuilder()
+}
+
+function closeCourseBuilder(): void {
+  courseBuilderActive = false
+  activeAttractionId = null
+  attractionBuilderState = null
+  courseBuilder.classList.remove('visible')
+}
+
+function updateCourseBuilder(): void {
+  if (!courseBuilderActive || !pendingCourseKind) {
+    courseBuilder.classList.remove('visible')
+    return
+  }
+  if (attractionBuilderState) {
+    const current = activeAttractionId
+      ? game.snapshot.attractions.find((attraction) => attraction.id === activeAttractionId)
+      : undefined
+    if (current) attractionBuilderState = { ...attractionBuilderState, attraction: current }
+    renderAttractionBuilderPanel(courseBuilder, attractionBuilderState)
+    return
+  }
+  const course = activeCourseId ? game.getCourse(activeCourseId) ?? null : null
+  if (activeCourseId && !course) activeCourseId = null
+  renderCourseBuilderPanel(courseBuilder, {
+    kind: pendingCourseKind,
+    course,
+    selectedKind: selectedCoursePiece,
+    elevation: courseBuildElevation,
+  })
+}
+
+function ensureActiveAttraction(cell: CellPosition): string | null {
+  if (activeAttractionId) return activeAttractionId
+  if (!attractionBuilderState) return null
+  const result = game.startAttraction(
+    attractionBuilderState.attraction.definitionId,
+    cell.x,
+    cell.z,
+    attractionBuilderState.direction,
+  )
+  if (!result.ok || !result.placedId) {
+    showToast(result.message, true)
+    return null
+  }
+  activeAttractionId = result.placedId
+  const current = game.snapshot.attractions.find((attraction) => attraction.id === result.placedId)
+  if (current) attractionBuilderState = { ...attractionBuilderState, attraction: current }
+  return activeAttractionId
+}
+
+function placeAttractionAt(cell: CellPosition): void {
+  if (!attractionBuilderState) return
+  const attractionId = ensureActiveAttraction(cell)
+  if (!attractionId) return
+  const point = {
+    x: cell.x,
+    z: cell.z,
+    elevation: game.getTerrainHeight(cell.x, cell.z),
+    heading: attractionBuilderState.direction * Math.PI / 2,
+  }
+  let request
+  if (attractionBuilderState.mode === 'entrance') {
+    request = { kind: 'setEntrance' as const, attractionId, point }
+  } else if (attractionBuilderState.mode === 'exit') {
+    request = { kind: 'setExit' as const, attractionId, point }
+  } else if (attractionBuilderState.mode === 'reference') {
+    request = {
+      kind: 'placeReference' as const,
+      attractionId,
+      reference: {
+        id: `${attractionId}-reference-${game.snapshot.simTick}-${cell.x}-${cell.z}`,
+        kind: attractionBuilderState.selectedKind,
+        x: cell.x,
+        z: cell.z,
+        elevation: point.elevation,
+        rotation: attractionBuilderState.direction,
+      },
+    }
+  } else if (attractionBuilderState.mode === 'scripted') {
+    request = {
+      kind: 'addScriptedSegment' as const,
+      attractionId,
+      segmentKind: attractionBuilderState.selectedKind,
+    }
+  } else if (attractionBuilderState.mode === 'trackDelete') {
+    const attraction = game.getAttraction(attractionId)
+    const edge = attraction?.layout.kind === 'track'
+      ? attraction.layout.graph.edges.find((candidate) =>
+          candidate.points.some((candidatePoint) =>
+            Math.floor(candidatePoint.x) === cell.x &&
+            Math.floor(candidatePoint.z) === cell.z
+          ),
+        )
+      : undefined
+    if (!edge) {
+      showToast('Kein Streckenteil auf diesem Feld.', true)
+      return
+    }
+    request = {
+      kind: 'removeTrackEdge' as const,
+      attractionId,
+      edgeId: edge.id,
+    }
+  } else {
+    placeAttractionCells([cell])
+    return
+  }
+  const result = game.constructAttraction(request)
+  if (result.ok && attractionBuilderState.mode === 'entrance') {
+    attractionBuilderState.mode =
+      attractionBuilderState.attraction.layout.kind === 'track' ? 'track' : 'areaAdd'
+  }
+  showToast(result.message, !result.ok)
+  updateCourseBuilder()
+}
+
+function placeAttractionCells(cells: ReadonlyArray<CellPosition>): void {
+  if (!attractionBuilderState || cells.length === 0) return
+  const attractionId = ensureActiveAttraction(cells[0]!)
+  if (!attractionId) return
+  const state = attractionBuilderState
+  if (state.mode === 'areaAdd' || state.mode === 'areaErase') {
+    const request = {
+      kind: state.mode === 'areaAdd' ? 'addAreaCells' as const : 'removeAreaCells' as const,
+      attractionId,
+      cells: cells.map((cell) => ({
+        x: cell.x,
+        z: cell.z,
+        elevation: game.getTerrainHeight(cell.x, cell.z),
+      })),
+    }
+    const result = game.constructAttraction(request)
+    showToast(result.message, !result.ok)
+    updateCourseBuilder()
+    return
+  }
+  if (state.mode !== 'track') {
+    placeAttractionAt(cells[0]!)
+    return
+  }
+  const currentTrack = game.snapshot.attractions.find((candidate) => candidate.id === attractionId)
+  if (cells.length === 1 && currentTrack?.layout.kind === 'track') {
+    const cell = cells[0]!
+    const openIds = new Set(openTrackNodeIds(currentTrack.layout.graph))
+    const selected = currentTrack.layout.graph.nodes.find((node) =>
+      openIds.has(node.id) &&
+      Math.floor(node.anchor.x) === cell.x &&
+      Math.floor(node.anchor.z) === cell.z
+    )
+    if (selected && selected.id !== currentTrack.layout.selectedOpenNodeId) {
+      const result = game.constructAttraction({
+        kind: 'selectOpenNode',
+        attractionId,
+        nodeId: selected.id,
+      })
+      showToast(result.ok ? 'Offenes Streckenende ausgewählt.' : result.message, !result.ok)
+      updateCourseBuilder()
+      return
+    }
+  }
+  for (const cell of cells) {
+    const attraction = game.snapshot.attractions.find((candidate) => candidate.id === attractionId)
+    if (!attraction || attraction.layout.kind !== 'track') break
+    const layout = attraction.layout
+    const selectedNode = layout.graph.nodes.find((node) =>
+      node.id === layout.selectedOpenNodeId
+    )
+    const from = selectedNode ?? {
+      id: `${attractionId}-start`,
+      anchor: {
+        x: attraction.access.entrance?.x ?? cell.x,
+        z: attraction.access.entrance?.z ?? cell.z,
+        elevation: attraction.access.entrance?.elevation ?? game.getTerrainHeight(cell.x, cell.z),
+        heading: state.direction * Math.PI / 2,
+        pitch: 0,
+        bank: state.banking * Math.PI / 6,
+      },
+    }
+    let targetX = cell.x
+    let targetZ = cell.z
+    if (
+      layout.graph.edges.length === 0 &&
+      targetX === from.anchor.x &&
+      targetZ === from.anchor.z
+    ) {
+      const forward = [
+        { x: 0, z: -1 },
+        { x: 1, z: 0 },
+        { x: 0, z: 1 },
+        { x: -1, z: 0 },
+      ][state.direction]
+      targetX += forward.x
+      targetZ += forward.z
+    }
+    if (targetX === from.anchor.x && targetZ === from.anchor.z) continue
+    const deltaX = targetX - from.anchor.x
+    const deltaZ = targetZ - from.anchor.z
+    if (Math.abs(deltaX) + Math.abs(deltaZ) !== 1) {
+      showToast('Die Strecke muss Feld für Feld am offenen Ende weitergebaut werden.', true)
+      break
+    }
+    const elevation = from.anchor.elevation + state.elevationDelta
+    const heading = Math.atan2(deltaX, -deltaZ)
+    const reconnectNode = layout.graph.nodes.find((node) =>
+      node.id !== from.id &&
+      Math.abs(node.anchor.x - targetX) < 0.01 &&
+      Math.abs(node.anchor.z - targetZ) < 0.01 &&
+      Math.abs(node.anchor.elevation - elevation) < 0.01
+    )
+    const to = reconnectNode ?? {
+      id: `${attractionId}-node-${game.snapshot.simTick}-${layout.graph.nodes.length}-${targetX}-${targetZ}`,
+      anchor: {
+        x: targetX,
+        z: targetZ,
+        elevation,
+        heading,
+        pitch: Math.atan2(state.elevationDelta, 1),
+        bank: state.banking * Math.PI / 6,
+      },
+    }
+    const edge = {
+      id: `${attractionId}-edge-${game.snapshot.simTick}-${layout.graph.edges.length}`,
+      kind: state.selectedKind,
+      fromNodeId: from.id,
+      toNodeId: to.id,
+      points: [
+        { x: from.anchor.x, z: from.anchor.z, elevation: from.anchor.elevation, heading: from.anchor.heading },
+        { x: to.anchor.x, z: to.anchor.z, elevation: to.anchor.elevation, heading },
+      ],
+      cost: 0,
+      metadata: { banking: state.banking, elevationDelta: state.elevationDelta },
+    }
+    const result = game.constructAttraction({
+      kind: 'addTrackEdge',
+      attractionId,
+      edge,
+      from,
+      to,
+    })
+    if (!result.ok) {
+      showToast(result.message, true)
+      break
+    }
+  }
+  updateCourseBuilder()
+}
+
+function handleCourseCell(cell: CellPosition): boolean {
+  if (!courseBuilderActive && game.snapshot.selectedTool !== 'course') return false
+  if (attractionBuilderState) {
+    const drag =
+      attractionBuilderState.mode === 'areaAdd' ||
+      attractionBuilderState.mode === 'areaErase' ||
+      attractionBuilderState.mode === 'track'
+    if (drag) placeCourseCells([cell])
+    else placeAttractionAt(cell)
+    return true
+  }
+  const dragTool =
+    selectedCoursePiece === 'area' ||
+    selectedCoursePiece === 'areaErase' ||
+    coursePaintMode(selectedCoursePiece) !== 'single'
+  if (dragTool) {
+    placeCourseCells([cell])
+    return true
+  }
+  placeCourseAt(cell)
+  return true
+}
+
+function placeCourseCells(cells: ReadonlyArray<CellPosition>): void {
+  if (attractionBuilderState) {
+    placeAttractionCells(cells)
+    return
+  }
+  if (!pendingCourseKind) {
+    showToast('Kein Kurstyp gewählt.', true)
+    return
+  }
+  if (selectedCoursePiece === 'area') {
+    const result = activeCourseId
+      ? game.addCourseAreaCells(activeCourseId, cells)
+      : game.startCourseArea(pendingCourseKind, cells)
+    const startedId = 'id' in result && typeof result.id === 'string' ? result.id : null
+    if (result.ok && startedId) activeCourseId = startedId
+    showToast(result.message, !result.ok)
+    updateCourseBuilder()
+    return
+  }
+  if (selectedCoursePiece === 'areaErase') {
+    if (!activeCourseId) {
+      showToast('Es gibt noch keine Anlagenfläche.', true)
+      return
+    }
+    const result = game.removeCourseAreaCells(activeCourseId, cells)
+    showToast(result.message, !result.ok)
+    updateCourseBuilder()
+    return
+  }
+  if (coursePaintMode(selectedCoursePiece) === 'line') {
+    if (!activeCourseId) {
+      const first = cells[0]
+      if (!first) return
+      const started = placeCourseAt(first, true)
+      if (!started.ok) {
+        showToast(started.message, true)
+        return
+      }
+    }
+    const course = activeCourseId ? game.getCourse(activeCourseId) : undefined
+    if (!course) {
+      showToast('Kurs nicht gefunden.', true)
+      return
+    }
+    const targets = orderedCourseLineTargets(course, cells)
+    if (typeof targets === 'string') {
+      showToast(targets, true)
+      return
+    }
+    let last: { ok: boolean; message: string } | undefined
+    for (const cell of targets) {
+      last = placeCourseAt(cell, true)
+      if (!last.ok) break
+    }
+    showToast(last?.message ?? 'Die Strecke endet bereits auf diesem Feld.', Boolean(last && !last.ok))
+    updateCourseBuilder()
+    return
+  }
+  let last: { ok: boolean; message: string } | undefined
+  for (const cell of cells) last = placeCourseAt(cell, true)
+  if (last) showToast(last.message, !last.ok)
+  updateCourseBuilder()
+}
+
+function placeCourseAt(cell: CellPosition, quiet = false): { ok: boolean; message: string } {
+  if (!pendingCourseKind) return { ok: false, message: 'Kein Kurstyp gewählt.' }
+  if (!activeCourseId) {
+    const started = game.startCourse(pendingCourseKind, cell.x, cell.z)
+    if (!started.ok || !started.id) {
+      if (!quiet) showToast(started.message, true)
+      return started
+    }
+    activeCourseId = started.id
+    if (pendingCourseKind === 'mudmasters' || pendingCourseKind === 'treeToTree') {
+      selectedCoursePiece = 'path'
+      courseBuildElevation = COURSE_PIECE_ELEVATION.path
+    }
+    if (!quiet) showToast(started.message)
+    updateCourseBuilder()
+    return started
+  }
+  if (selectedCoursePiece === 'area' || selectedCoursePiece === 'areaErase') {
+    return { ok: false, message: 'Flächen werden durch Ziehen bearbeitet.' }
+  }
+  const result = game.addCoursePiece(
+    activeCourseId,
+    selectedCoursePiece,
+    cell.x,
+    cell.z,
+    courseBuildElevation,
+  )
+  if (!quiet) showToast(result.message, !result.ok)
+  updateCourseBuilder()
+  return result
 }
 
 function selectedCoasterTypeId(): CoasterTypeId {
@@ -2323,6 +2883,7 @@ function updateContextHelp(): void {
     game, hoveredCell, placementPreview,
     modes: {
       coaster: { active: coasterBuilderActive, coasterId: activeCoasterId, startCandidate: coasterStartCandidate, accessMode: coasterAccessMode },
+      course: { active: courseBuilderActive, kind: pendingCourseKind, piece: selectedCoursePiece },
       path: { open: pathWindowOpen, constructing: pathEditorActive, demolishing: pathDemolishActive, road: roadEditorOpen, anchor: pathAnchor, constructionType: pathConstructionType },
       rideAccess: rideAccessPlacement, backstageEraseMode, copyClipboard,
     },
@@ -2347,6 +2908,7 @@ function openRideBuilder(id: string): void {
   if (!ride) return
   closeRideBuilder(false)
   if (coasterBuilderActive) closeCoasterBuilder()
+  if (courseBuilderActive) closeCourseBuilder()
   if (pathWindowOpen) closePathEditor()
   closeEntityPanel(); closeBuildMenu(); supplyPlanner.releaseTool()
   hideVisitorPanel()
@@ -2913,6 +3475,7 @@ function openBuildCategory(categoryId: BuildCategoryId, groupId?: string): void 
 function activateBuildTool(button: HTMLButtonElement): void {
   const tool = button.dataset.tool as Tool
   closeRideBuilder(false)
+  pendingCourseKind = button.dataset.courseKind as CourseKind | undefined
   bungeeBuildMode = button.dataset.bungee === 'true'
   view.bungeePreviewHeight = bungeeBuildMode
     ? Math.max(4, Math.min(200, Number(requireElement<HTMLInputElement>('#bungee-height').value) || 20))
@@ -2920,6 +3483,11 @@ function activateBuildTool(button: HTMLButtonElement): void {
   if (tool === 'coaster') {
     lastBuildGroup.set('attractions', 'coasters')
     openCoasterBuilder(null, button.dataset.coasterType as CoasterTypeId | undefined)
+    return
+  }
+  if (tool === 'course') {
+    lastBuildGroup.set('attractions', 'courses')
+    openCourseBuilder(null, pendingCourseKind)
     return
   }
   if (pathWindowOpen && tool !== 'path') closePathEditor()
@@ -4001,6 +4569,175 @@ undoPathButton.addEventListener('click', () => undoLastPathSegment())
 document.querySelector<HTMLButtonElement>('#close-coaster-builder')?.addEventListener('click', () => {
   closeCoasterBuilder()
   game.setTool('inspect')
+})
+
+document.querySelector<HTMLButtonElement>('#close-course-builder')?.addEventListener('click', () => {
+  closeCourseBuilder()
+  game.setTool('inspect')
+})
+document.querySelector<HTMLButtonElement>('#finish-course-builder')?.addEventListener('click', () => {
+  if (activeAttractionId) {
+    const result = game.setAttractionOperation(activeAttractionId, 'open')
+    showToast(result.message, !result.ok)
+    if (!result.ok) {
+      updateCourseBuilder()
+      return
+    }
+  }
+  if (activeCourseId) {
+    const result = game.setCourseOperating(activeCourseId, true)
+    showToast(result.message, !result.ok)
+    if (!result.ok) {
+      updateCourseBuilder()
+      return
+    }
+  }
+  closeCourseBuilder()
+  game.setTool('inspect')
+})
+document.querySelector<HTMLButtonElement>('#course-undo')?.addEventListener('click', () => {
+  if (activeAttractionId && attractionBuilderState) {
+    const attraction = game.snapshot.attractions.find((candidate) => candidate.id === activeAttractionId)
+    if (!attraction) return
+    const request = attraction.layout.kind === 'track'
+      ? {
+          kind: 'removeTrackEdge' as const,
+          attractionId: attraction.id,
+          edgeId: attraction.layout.graph.edges.at(-1)?.id ?? '',
+        }
+      : attraction.layout.kind === 'area' && attraction.layout.references.length > 0
+        ? {
+            kind: 'removeReference' as const,
+            attractionId: attraction.id,
+            referenceId: attraction.layout.references.at(-1)!.id,
+          }
+        : null
+    if (!request) return
+    const result = game.constructAttraction(request)
+    showToast(result.message, !result.ok)
+    updateCourseBuilder()
+    return
+  }
+  if (!activeCourseId) return
+  const result = game.undoCoursePiece(activeCourseId)
+  if (!game.getCourse(activeCourseId)) activeCourseId = null
+  showToast(result.message, !result.ok)
+  updateCourseBuilder()
+})
+document.querySelector<HTMLButtonElement>('#course-toggle-operating')?.addEventListener('click', () => {
+  if (activeAttractionId) {
+    const attraction = game.snapshot.attractions.find((candidate) => candidate.id === activeAttractionId)
+    if (!attraction) return
+    const result = game.setAttractionOperation(
+      activeAttractionId,
+      attraction.operationMode === 'open' ? 'closed' : 'open',
+    )
+    showToast(result.message, !result.ok)
+    updateCourseBuilder()
+    return
+  }
+  if (!activeCourseId) return
+  const course = game.getCourse(activeCourseId)
+  if (!course) return
+  const result = game.setCourseOperating(activeCourseId, !course.operating)
+  showToast(result.message, !result.ok)
+  updateCourseBuilder()
+})
+document.querySelector<HTMLButtonElement>('#demolish-course')?.addEventListener('click', () => {
+  if (activeAttractionId) {
+    const result = game.removeAttraction(activeAttractionId)
+    showToast(result.message, !result.ok)
+    activeAttractionId = null
+    closeCourseBuilder()
+    game.setTool('inspect')
+    return
+  }
+  if (!activeCourseId) return
+  const result = game.removeCourse(activeCourseId)
+  showToast(result.message, !result.ok)
+  activeCourseId = null
+  updateCourseBuilder()
+})
+document.querySelector<HTMLButtonElement>('#course-elevation-up')?.addEventListener('click', () => {
+  if (attractionBuilderState) {
+    attractionBuilderState.elevationDelta = Math.min(
+      1,
+      attractionBuilderState.elevationDelta + 0.5,
+    ) as AttractionBuilderState['elevationDelta']
+    updateCourseBuilder()
+    return
+  }
+  courseBuildElevation = Math.min(6, courseBuildElevation + 1)
+  updateCourseBuilder()
+})
+document.querySelector<HTMLButtonElement>('#course-elevation-down')?.addEventListener('click', () => {
+  if (attractionBuilderState) {
+    attractionBuilderState.elevationDelta = Math.max(
+      -1,
+      attractionBuilderState.elevationDelta - 0.5,
+    ) as AttractionBuilderState['elevationDelta']
+    updateCourseBuilder()
+    return
+  }
+  courseBuildElevation = Math.max(0, courseBuildElevation - 1)
+  updateCourseBuilder()
+})
+requireElement<HTMLInputElement>('#course-team-size').addEventListener('change', (event) => {
+  if (activeAttractionId) {
+    const result = game.configureAttraction(activeAttractionId, {
+      teamSize: Number((event.target as HTMLInputElement).value),
+    })
+    showToast(result.message, !result.ok)
+    updateCourseBuilder()
+    return
+  }
+  if (!activeCourseId) return
+  const result = game.setCourseTeamSize(activeCourseId, Number((event.target as HTMLInputElement).value))
+  showToast(result.message, !result.ok)
+  updateCourseBuilder()
+})
+requireElement<HTMLElement>('#course-piece-palette').addEventListener('click', (event) => {
+  const attractionButton = (event.target as Element).closest<HTMLButtonElement>('[data-attraction-piece]')
+  if (attractionButton && attractionBuilderState) {
+    const value = attractionButton.dataset.attractionPiece!
+    if (value === 'rotateDirection') {
+      attractionBuilderState.direction = ((attractionBuilderState.direction + 1) % 4) as 0 | 1 | 2 | 3
+      updateCourseBuilder()
+      return
+    }
+    if (value === 'bankLeft' || value === 'bankFlat' || value === 'bankRight') {
+      attractionBuilderState.banking =
+        value === 'bankLeft' ? -1 : value === 'bankRight' ? 1 : 0
+      updateCourseBuilder()
+      return
+    }
+    if (
+      value === 'areaAdd' ||
+      value === 'areaErase' ||
+      value === 'entrance' ||
+      value === 'exit' ||
+      value === 'trackDelete'
+    ) {
+      attractionBuilderState.mode = value
+    } else if (attractionBuilderState.attraction.layout.kind === 'area') {
+      attractionBuilderState.mode = 'reference'
+      attractionBuilderState.selectedKind = value
+    } else {
+      attractionBuilderState.mode =
+        attractionBuilderState.attraction.layout.kind === 'scripted' ? 'scripted' : 'track'
+      attractionBuilderState.selectedKind = value
+    }
+    updateCourseBuilder()
+    return
+  }
+  const button = (event.target as Element).closest<HTMLButtonElement>('[data-course-piece]')
+  if (!button) return
+  selectedCoursePiece = button.dataset.coursePiece as CourseBuilderTool
+  courseBuildElevation =
+    selectedCoursePiece === 'area' || selectedCoursePiece === 'areaErase'
+      ? 0
+      : COURSE_PIECE_ELEVATION[selectedCoursePiece]
+  updateCourseBuilder()
 })
 
 coasterRotateButton.addEventListener('click', () => {

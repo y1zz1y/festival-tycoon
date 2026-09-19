@@ -106,6 +106,50 @@ export function wasteBinManhattan(
   return Math.abs(bin.x - from.x) + Math.abs(bin.z - from.z)
 }
 
+export function wasteBinChebyshev(
+  from: { x: number; z: number },
+  bin: { x: number; z: number },
+): number {
+  return Math.max(Math.abs(bin.x - from.x), Math.abs(bin.z - from.z))
+}
+
+export type VisitorWasteKind = 'bin' | 'sealed'
+
+export type VisitorWasteTarget = WasteBinInfo & {
+  kind: VisitorWasteKind
+  capacity: number
+}
+
+export function visitorWasteInRange(
+  from: { x: number; z: number },
+  target: Pick<VisitorWasteTarget, 'x' | 'z' | 'kind'>,
+  binRange = SIMULATION_CONFIG.waste.binRange,
+  sealedRange = SIMULATION_CONFIG.waste.sealedVisitorChebyshevRange,
+): boolean {
+  return target.kind === 'sealed'
+    ? wasteBinChebyshev(from, target) <= sealedRange
+    : wasteBinManhattan(from, target) <= binRange
+}
+
+export function findNearestVisitorWasteTarget(
+  from: { x: number; z: number },
+  targets: readonly VisitorWasteTarget[],
+  requireRoom = true,
+): VisitorWasteTarget | null {
+  return (
+    targets
+      .filter(
+        (target) =>
+          visitorWasteInRange(from, target) &&
+          (!requireRoom || wasteBinHasRoom(target, target.capacity)),
+      )
+      .sort(
+        (left, right) =>
+          wasteBinManhattan(from, left) - wasteBinManhattan(from, right),
+      )[0] ?? null
+  )
+}
+
 export function wasteBinHasRoom(
   bin: Pick<WasteBinInfo, 'stored'>,
   capacity: number,

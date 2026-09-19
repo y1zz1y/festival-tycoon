@@ -5,6 +5,7 @@ import './festival.css'
 import { AUDIENCES, AUDIENCE_NAMES, SUPPLIES, UPGRADES, WEATHER_ICONS, WEATHER_NAMES, audienceMix, forecast, formatTemperature, temperatureAt, festivalTime } from './game/festivalManagement'
 import type { FestivalAction, Supply, Upgrade } from './game/festivalManagement'
 import { mountHeadlineMagazine } from './headlineMagazineUI'
+import { estimateTicketDemand } from './game/ticketDemand'
 
 const money = (n: number) => `${Math.round(n).toLocaleString('de-DE')} €`
 const clock = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(Math.floor(n % 60)).padStart(2, '0')}`
@@ -30,7 +31,7 @@ export function mountFestivalUI(
   panel.innerHTML = `<div class="festival-chrome"><header class="festival-heading panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 id="festival-title" class="panel-header-title">Das Festivalwochenende</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Festivalverwaltung schließen">×</button></header>
     <div class="festival-status" aria-live="polite"></div>
     <nav class="festival-tabs" aria-label="Festivalbereiche">${[['overview', 'Übersicht'], ['dayplan', 'Tagesplan'], ['lineup', 'Bands & Spielplan'], ['supply', 'Lager & Lieferungen'], ['prepare', 'Wetter & Vorsorge'], ['reports', 'Abrechnung & Ruf']].map(([id, label]) => `<button data-tab="${id}" aria-pressed="${id === 'overview'}">${label}</button>`).join('')}</nav></div>
-    <section data-pane="overview"><div class="festival-intro"><h3>Ein Gelände. Ein Wochenende. Euer Publikum.</h3><p>Vorlauf und Festivaltage legt ihr im Reiter Tagesplan fest. Erst mit dem Start läuft die Festivalzeit. Bucht ein Programm, versorgt eure Gäste und entscheidet, welche Reserven ihr euch leisten könnt. Das vorhandene Gelände und Budget werden übernommen.</p><button data-action="start">Festival starten</button><button data-action="sandbox">Freies Spiel fortsetzen</button></div><form data-ticket-prices class="festival-form"><label>Preis Tagesticket<input name="dayTicketPrice" type="number" min="0" max="1000000" step="1" value="10" required></label><label>Preis Campingticket<input name="campTicketPrice" type="number" min="0" max="1000000" step="1" value="25" required></label><button>Preise übernehmen</button></form><form data-tickets class="festival-form"><label>Tagestickets je Festivaltag<input name="dayTickets" type="number" min="0" max="100000" value="150" required></label><label>Campingtickets für die gesamte Ausgabe<input name="campTickets" type="number" min="0" max="100000" value="0" required></label><button>Kontingente übernehmen</button></form><p data-camping-summary></p><div data-music-overview></div><div data-summary></div></section>
+    <section data-pane="overview"><div class="festival-intro"><h3>Ein Gelände. Ein Wochenende. Euer Publikum.</h3><p>Vorlauf und Festivaltage legt ihr im Reiter Tagesplan fest. Erst mit dem Start läuft die Festivalzeit. Bucht ein Programm, versorgt eure Gäste und entscheidet, welche Reserven ihr euch leisten könnt. Das vorhandene Gelände und Budget werden übernommen.</p><button data-action="start">Festival starten</button><button data-action="sandbox">Freies Spiel fortsetzen</button></div><form data-ticket-prices class="festival-form festival-price-sliders"><label>Preis Tagesticket<input name="dayTicketPrice" type="range" min="20" max="250" step="5" value="120"><output data-day-price>120 €</output></label><label>Preis Campingticket<input name="campTicketPrice" type="range" min="40" max="500" step="5" value="260"><output data-camp-price>260 €</output></label><p data-ticket-estimate></p><button>Preise übernehmen</button></form><form data-tickets class="festival-form"><label>Tagestickets je Festivaltag<input name="dayTickets" type="number" min="0" max="100000" value="150" required></label><label>Campingtickets für die gesamte Ausgabe<input name="campTickets" type="number" min="0" max="100000" value="0" required></label><button>Kontingente übernehmen</button></form><p data-camping-summary></p><div data-music-overview></div><div data-summary></div></section>
     <section data-pane="dayplan" hidden>
       <p>Vorlauf, Festivaltage und Angebotszeiten gelten für das ganze Gelände. Tagesgäste dürfen nur im eingestellten Fenster bleiben.</p>
       <div class="festival-cycle-controls">
@@ -87,7 +88,22 @@ export function mountFestivalUI(
     event.preventDefault(); const data = new FormData(event.currentTarget as HTMLFormElement)
     execute({type:'tickets',day:Number(data.get('dayTickets')),camping:Number(data.get('campTickets'))})
   })
-  panel.querySelector<HTMLFormElement>('[data-ticket-prices]')!.addEventListener('submit', event => {
+  const priceFormEl = panel.querySelector<HTMLFormElement>('[data-ticket-prices]')!
+  const refreshTicketEstimate = () => {
+    const day = Number(priceFormEl.querySelector<HTMLInputElement>('[name=dayTicketPrice]')!.value)
+    const camping = Number(priceFormEl.querySelector<HTMLInputElement>('[name=campTicketPrice]')!.value)
+    const estimate = estimateTicketDemand(getGame().snapshot, { day, camping })
+    priceFormEl.querySelector<HTMLElement>('[data-day-price]')!.textContent = `${day} €`
+    priceFormEl.querySelector<HTMLElement>('[data-camp-price]')!.textContent = `${camping} €`
+    const dayInput = priceFormEl.querySelector<HTMLInputElement>('[name=dayTicketPrice]')!
+    const campInput = priceFormEl.querySelector<HTMLInputElement>('[name=campTicketPrice]')!
+    dayInput.style.accentColor = estimate.dayColor
+    campInput.style.accentColor = estimate.campingColor
+    panel.querySelector<HTMLElement>('[data-ticket-estimate]')!.innerHTML =
+      `Erwartet: <strong>${estimate.expectedDayGuests}</strong> Tagesgäste (${money(estimate.expectedDayRevenue)}) · <strong>${estimate.expectedCampers}</strong> Camper (${money(estimate.expectedCampingRevenue)}). Farbe = Kaufbereitschaft.`
+  }
+  priceFormEl.addEventListener('input', refreshTicketEstimate)
+  priceFormEl.addEventListener('submit', event => {
     event.preventDefault()
     const data = new FormData(event.currentTarget as HTMLFormElement)
     getGame().updateEntryPrice(Number(data.get('dayTicketPrice')))
@@ -132,6 +148,7 @@ export function mountFestivalUI(
       priceForm.querySelector<HTMLInputElement>('[name=dayTicketPrice]')!.value = String(s.entryPrice)
       priceForm.querySelector<HTMLInputElement>('[name=campTicketPrice]')!.value = String(s.campingTicketPrice)
     }
+    refreshTicketEstimate()
     put('[data-camping-summary]', `${s.campingCells.length} Campingfelder · ${capacity} buchbar nach ${s.dayPlan.campingCapacityBufferPercent}% Reserve · ${occupied} belegt · ${Math.max(0,capacity-occupied)} frei.<br>${f.tickets ? `Geplant: ${f.tickets.camping}/${capacity} Campingplätze (${capacity ? Math.round(f.tickets.camping/capacity*100) : 0}%). Angereist: ${f.tickets.usedCamping} Camper · ${f.tickets.usedDay[s.day]??0}/${f.tickets.day} Tagesgäste heute.` : 'Noch kein Kontingent festgelegt: bisheriger Besucherzulauf. Übernehmt eure Ticketzahlen vor dem Start.'} Die Kontingente begrenzen die Anreisen; Einlasszeiten und Nachfrage gelten weiterhin. Bezahlung erfolgt bei Anreise.`)
     put('[data-music-overview]',musicOverview(s))
     put('[data-lineup-mix]',musicOverview(s))

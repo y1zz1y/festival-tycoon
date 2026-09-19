@@ -51,7 +51,7 @@ Implemented. Concerts stay legal on a bare stage; supply scales show quality.
 | Commands | `src/net/protocol.ts`, `commands.ts`, `bind.ts` | `designateBackstageArea`; `place` / `bulldoze` for parking |
 | Snapshot | `GameSnapshot` v29 | `backstageCells`, `bandActors`, `bandSupply` |
 | Logistics UI | `src/main.ts` `#logistics-panel` | Tab `data-logistics-tab="band-supply"` |
-| Overlay | `src/view/BackstageView.ts` | One `InstancedMesh` (active teal / inactive amber) |
+| Overlay | `src/view/BackstageView.ts` | One `InstancedMesh` (active teal / inactive amber); rectangle drag like camping (`backstageArea` in `WorldView` / `pathToolController`) |
 | Band people | `src/view/BandActorView.ts`, `src/view/bandMemberMesh.ts` | Same merged musician mesh as the stage; hide while `vehicleId` is set or `state === 'performing'` |
 | Parking mesh | `src/view/logisticsModels.ts` | `tourBusParking` pad; distinct dark `tourBus` coach (not the yellow shuttle) |
 | Tests | `tests/bandSupply.ts` | Wired from `tests/regression.ts` |

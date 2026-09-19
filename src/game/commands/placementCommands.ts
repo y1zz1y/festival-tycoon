@@ -152,7 +152,7 @@ export function placeBuildingCommand(
     -(BUILDINGS[kind].cost + (design ? stageStats(design).cost : 0)),
   )
   const rotation =
-    kind === 'bench'
+    kind === 'bench' || kind === 'table'
       ? (context.findFurnitureRotation(x, z) ?? context.state.buildRotation)
       : isWasteBin(kind)
         ? (context.findFurnitureRotation(x, z, context.state.buildRotation) ??

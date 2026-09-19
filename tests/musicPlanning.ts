@@ -46,7 +46,7 @@ export function testMusicPlanning(fixture:(count?:number)=>GameState){
   const base=structuredClone(f.musicBase);  assert.ok(game.manageFestival({type:'prepare'}).ok);assert.equal(f.enabled,false);assert.equal(s.parkOpen,false);assert.equal(f.bookings.length,0);assert.deepEqual(f.musicBase,base)
   assert.ok(game.manageFestival({...book,day:f.startDay+1}).ok);assert.ok(game.manageFestival({type:'prepare'}).ok);assert.equal(f.bookings.length,1,'reopening planning preserves paid bookings')
   const keptManual=f.bookings[0]!,autoBudget=s.money
-  assert.ok(game.manageFestival({type:'autoLineup',duration:90}).ok)
+  assert.ok(game.manageFestival({type:'autoLineup',duration:90,minStars:1,maxStars:3}).ok)
   assert.ok(f.bookings.length>=2,'auto lineup fills more than one empty slot')
   assert.ok(s.money<autoBudget)
   assert.equal(new Set(f.bookings.map(b=>b.bandId)).size,f.bookings.length,'auto lineup never books a band twice')

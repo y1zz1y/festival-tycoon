@@ -3,6 +3,18 @@ import type { GameCommand } from './protocol'
 
 export function applyGameCommand(game: GameState, command: GameCommand): ActionResult {
   switch (command.type) {
+    case 'startAttraction':
+      return game.startAttraction(command.definitionId, command.x, command.z, command.rotation)
+    case 'constructAttraction':
+      return game.constructAttraction(command.request)
+    case 'removeAttraction':
+      return game.removeAttraction(command.attractionId)
+    case 'setAttractionOperation':
+      return game.setAttractionOperation(command.attractionId, command.mode)
+    case 'setAttractionPrice':
+      return game.setAttractionPrice(command.attractionId, command.price)
+    case 'configureAttraction':
+      return game.configureAttraction(command.attractionId, command)
     case 'setRideAccess': return game.setRideAccess(command.buildingId, command.accessType, command.x, command.z)
     case 'placeBungee': return game.placeBungee(command.x, command.z, command.height)
     case 'setBungeeHeight': return game.setBungeeHeight(command.id, command.height)
@@ -118,6 +130,8 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.setStaffZone(command.staffId, command.key, command.active)
     case 'buyAmbulance':
       return game.buyAmbulance(command.garageId)
+    case 'buyFireTruck':
+      return game.buyFireTruck(command.stationId)
     case 'sellAmbulance':
       return game.sellAmbulance(command.garageId)
     case 'sellAmbulanceVehicle':
@@ -148,6 +162,34 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.setBusLineStops(command.lineId, command.stopIds)
     case 'deleteBusLine':
       return game.deleteBusLine(command.lineId)
+    case 'startCourse':
+      return game.startCourse(command.kind, command.x, command.z)
+    case 'startCourseArea':
+      return game.startCourseArea(command.kind, command.cells)
+    case 'addCourseAreaCell':
+      return game.addCourseAreaCell(command.courseId, command.x, command.z)
+    case 'addCourseAreaCells':
+      return game.addCourseAreaCells(command.courseId, command.cells)
+    case 'removeCourseAreaCells':
+      return game.removeCourseAreaCells(command.courseId, command.cells)
+    case 'addCoursePiece':
+      return game.addCoursePiece(
+        command.courseId,
+        command.kind,
+        command.x,
+        command.z,
+        command.elevation,
+      )
+    case 'undoCoursePiece':
+      return game.undoCoursePiece(command.courseId)
+    case 'setCourseOperating':
+      return game.setCourseOperating(command.courseId, command.operating)
+    case 'setCoursePrice':
+      return game.setCoursePrice(command.courseId, command.price)
+    case 'setCourseTeamSize':
+      return game.setCourseTeamSize(command.courseId, command.teamSize)
+    case 'removeCourse':
+      return game.removeCourse(command.courseId)
     case 'startCoaster':
       return game.startCoaster(command.typeId, command.x, command.z)
     case 'appendCoasterPiece':

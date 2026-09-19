@@ -3,11 +3,26 @@
 `main.ts` verdrahtet Tools, Fenster und Commands. Fach-UIs liegen daneben,
 nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 
+## Einheitlicher Attraktionseditor (v31)
+
+`src/ui/attractionBuilderPanel.ts` rendert die gemeinsame RCT2-artige Palette
+für `track`, `area` und `scripted`. `src/main.ts` hält nur den lokalen
+Editorzustand (Werkzeug, Richtung, Höhenänderung, Banking und ausgewähltes
+offenes Ende). Linien-/Flächenzüge laufen weiter über
+`PathToolController`; die autoritative Änderung geht als
+`constructAttraction` an `GameState`.
+
+Track-Klicks auf ein anderes offenes Ende wählen dieses als Bauanker.
+„Streckenteil löschen“ darf eine mittlere Kante entfernen; beide Komponenten
+bleiben erhalten und können neu verbunden werden. Fläche, Flächenlöscher,
+Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
+
 ## Wo finden
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Bootstrap / Verdrahtung | `src/main.ts` | RCT-Iconleiste `.rct-toolbar`, erzeugt Controller und verbindet Callbacks |
+| Festival-Preise / Bandplaner | `src/festivalUI.ts`, `src/musicPlanner.ts` | Ticket-Slider + Schätzung; Sterne-Tabs und Auto-Plan-Filter |
 | Stabile App-Shell / DOM-Vertrag | `src/app/shell.ts` | `mountAppShell`; vollständiges statisches Markup und Autosave-Konstanten |
 | Titel, Szenario und Saves | `src/ui/titleScreen.ts`, `src/ui/scenarioScreen.ts`, `src/ui/saveController.ts` | Controller mit injiziertem `GameState`-/Multiplayer-/Lade-Kontext |
 | Objekt- und Besucheranzeige | `src/ui/entityPanel.ts`, `src/ui/visitorPanel.ts` | Vollständige Objektpanel-Orchestrierung, Achterbahn-Telemetrie sowie zustandsbehaftete Besucher-Inspektion |
@@ -16,6 +31,7 @@ nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 | Kartenklick-Werkzeugrouting | `src/input/toolRouter.ts`, `src/input/cellToolHandlers.ts` | Direkte Commands sowie typisierte Achterbahn-, Wegeditor- und Inspect-Routen |
 | Weg-/Straßen-Ziehcontroller | `src/input/pathToolController.ts` | `createPathToolController`; besitzt Ziehzustand, Linien-/Rechteckbildung und Ausführung |
 | Achterbahn-Baufenster | `src/ui/coasterBuilderPanel.ts` | `updateCoasterBuilderPanel`; stabile Palette und Ghost-/Auswahlvorschau |
+| Kurs-Baufenster | `src/ui/courseBuilderPanel.ts` | `renderCourseBuilderPanel`; atomare Werkzeuge **Anlagenfläche** und **Fläche entfernen** für Pool/Paintball, Endpunkt-Palette und Ebene für Mudmasters/Tree-to-Tree/Rutschen, Paintball-Teamgröße |
 | Kontexthilfe | `src/ui/contextHelp.ts` | `contextHelpText`; verwendet das autoritative `PlacementPreviewResult` |
 | Baukatalog / stabile Statusanzeige | `src/ui/buildCatalog.ts` | `createBuildCatalog`, `catalogTileHtml` |
 | Spielstand-Archivdarstellung | `src/ui/saveArchive.ts` | Zusammenführen Server/Browser, sichere Zeilen, Speicherhinweis |

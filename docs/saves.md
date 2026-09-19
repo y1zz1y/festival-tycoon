@@ -1,7 +1,7 @@
 # Spielstände und Versionierung
 
 `GameSnapshot.version` in `src/game/types/snapshot.ts` ist die kanonische
-Schema-Version. Aktuelle Snapshot-Version: **30**. `npm run test:docs` gleicht
+Schema-Version. Aktuelle Snapshot-Version: **31**. `npm run test:docs` gleicht
 diesen dokumentierten Wert mit Typ, Bootstrap und Migration ab. Die sichtbare
 Spielversion kommt aus `package.json`. Feature-/Fix-Batches erhöhen den
 Patch (`npm version patch --no-git-tag-version`) und halten das Lockfile synchron.
@@ -63,6 +63,25 @@ Camp und Müll rekonstruiert.
 
 - Neue Snapshot-Felder: Default im Blank-Snapshot, Normalize beim Laden,
   Save-Kompatibilität für alte Stände, Multiplayer-Sync.
+  v31 führt `attractions: Attraction[]` und optional
+  `migrationReport.removedAttractionIds` ein. `track`, `area` und `scripted`
+  sind die kanonischen Layouts. Der v30→v31-Lader konvertiert Achterbahnen,
+  Kurse, Camping-/Partyflächen und Rides einmalig. Pool wird in `swimArea`
+  plus eigenständige Wasserrutschen aufgeteilt; nicht sicher konvertierbare
+  Anlagen werden gemeldet und entfernt.
+  `coasters`, `courses`, `campingCells`, `campInstallations` und
+  `stageForecourtCells` werden beim Laden aus `attractions` als
+  Laufzeitprojektionen erzeugt und nicht unabhängig migriert.
+  `courses` (Kurs-Attraktionen): fehlend = `[]` via `normalizeCourses`.
+  `CourseAttraction.areaCells` speichert die explizite Schwimmbad-/
+  Paintball-Fläche; fehlt sie, werden alte `poolBasin`-/`paintballField`-
+  Kacheln übernommen. Neue Streckenstücke speichern optional
+  `endX`/`endZ`/`endElevation`; fehlen diese Werte, bleibt das alte
+  kachelbasierte Routing aktiv.
+  Optionales `teamSize` nur bei Paintball (Default aus Config).
+  `festival.headlinerPool` (5-Sterne-Angebot der Planung): fehlend = `[]`.
+  `logistics.fireStations` und `RoadVehicle.kind === 'fireTruck'`; optionales
+  `RoadVehicle.housed` / `headOnReplanTick`. Alte Stände ohne Felder bleiben gültig.
   `RoadVehicle.kind` kann `deliveryTruck` sein; optionales `deliveryId`
   zeigt auf `festival.infrastructure.trucks`.
   `accessControls` (`trafficLights`, `pathBarriers`) liegt auf dem

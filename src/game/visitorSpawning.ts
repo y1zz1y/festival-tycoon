@@ -1,4 +1,5 @@
-import { assignAudience, BANDS } from './festivalManagement'
+import { assignAudience, BANDS, bandVisitorDraw } from './festivalManagement'
+import { arrivalPriceMultiplier } from './ticketDemand'
 import { getFestivalCycleStatus, isDayVisitorAdmissionOpen } from './dayPlan'
 import { addItem, createFestivalInventory, getItemQuantity } from './inventory'
 import type { ArrivalGroup, RoadPosition, RoadVehicle } from './logistics'
@@ -80,7 +81,7 @@ export class VisitorSpawning {
               .filter((booking) => booking.day === state.day)
               .reduce(
                 (sum, booking) =>
-                  sum + (BANDS.find((band) => band.id === booking.bandId)?.draw ?? 0),
+                  sum + bandVisitorDraw(BANDS.find((band) => band.id === booking.bandId) ?? { draw: 0 }),
                 0,
               ) /
               100,
@@ -91,18 +92,20 @@ export class VisitorSpawning {
     const tuning = SIMULATION_CONFIG.visitors.festivalArrivals
     if (phase.phase === 'lead') {
       const campers = this.context.samplePoisson(
-        baseArrivals * tuning.leadDayCamperMultiplier,
+        baseArrivals * tuning.leadDayCamperMultiplier * arrivalPriceMultiplier(state, 'camping'),
       )
       for (let index = 0; index < campers; index += 1) this.trySpawn('camping')
     } else if (phase.phase === 'festival') {
       const dayGuests = this.context.samplePoisson(
-        baseArrivals * tuning.festivalDayGuestMultiplier,
+        baseArrivals * tuning.festivalDayGuestMultiplier * arrivalPriceMultiplier(state, 'day'),
       )
       for (let index = 0; index < dayGuests; index += 1) this.trySpawn('day')
       const camperMultiplier = phase.firstFestivalDay
         ? tuning.firstFestivalDayCamperMultiplier
         : tuning.laterFestivalDayCamperMultiplier
-      const campers = this.context.samplePoisson(baseArrivals * camperMultiplier)
+      const campers = this.context.samplePoisson(
+        baseArrivals * camperMultiplier * arrivalPriceMultiplier(state, 'camping'),
+      )
       for (let index = 0; index < campers; index += 1) this.trySpawn('camping')
     }
   }
@@ -319,6 +322,9 @@ export class VisitorSpawning {
       wanderNonce: 0,
     }
     if (state.festival.enabled) assignAudience(visitor, state.festival)
+    if (ticketType === 'camping') {
+      visitor.budget += SIMULATION_CONFIG.visitors.campingTicketReserve
+    }
     const admissionPrice = context.ticketPriceFor(ticketType)
     const paidEntry = context.chargeVisitor(
       visitor,

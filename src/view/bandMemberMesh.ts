@@ -124,8 +124,8 @@ function buildBodyGeometry(
     list.push(geometry)
     buckets.set(color, list)
   }
-  box(0, 0.55, 0, 0.32, 0.4, 0.19, shirt)
-  box(0, 0.91, 0, 0.26, 0.27, 0.24, skin)
+  box(0, 0.55, 0, 0.22, 0.38, 0.14, shirt)
+  box(0, 0.88, 0, 0.18, 0.22, 0.16, skin)
   for (const part of accessoryBoxes(look.accessory, hair, accent)) {
     box(...part)
   }

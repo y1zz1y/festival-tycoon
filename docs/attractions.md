@@ -1,8 +1,17 @@
-# Attraktionen: Achterbahn, Karussell, Bungee
+# Einheitliche Attraktionsgrundlage
 
-Achterbahnen sind eigene Snapshot-Objekte (`coasters`). Karussell (`ride`) und
-Bungee sind Gebäude mit optionalem `rideEntrance` / `rideExit`. Warteschlangen
-sind gerichtete Wege (`pathType: 'queue'`).
+Snapshot v31 speichert Attraktionen kanonisch in `attractions`. Die Registry
+parametrisiert drei Layouts:
+
+- `track`: Achterbahn-Loop, Shuttle, Mudmasters/Tree-to-Tree Start→Ende und
+  offene Wasserrutsche;
+- `area`: Paintball, Schwimm-, Camping- und Partyfläche;
+- `scripted`: Karussell und stapelbarer Bungee-Turm.
+
+`coasters`, `courses`, Camping- und Vorplatzarrays sind abgeleitete
+Laufzeitprojektionen für noch nicht umgestellte Fachsysteme. Baucommands
+ändern die kanonische Attraktion und erzeugen die Projektion danach neu.
+Kursdetails: [`course-attractions.md`](course-attractions.md).
 
 **Schienen-Editor / RCT2-Anschlussregeln:** [`coaster.md`](coaster.md).
 Gameplay, Queues und Fahrgeschäfte bleiben hier; der Track-Editor, die
@@ -12,6 +21,15 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
+| Kanonisches Modell / Registry | `src/game/attractions/types.ts`, `src/game/attractions/definitions.ts` | `Attraction`, `ATTRACTION_DEFINITIONS` |
+| Graph, Neuverbindung, Sampling | `src/game/attractions/trackGraph.ts` | `removeTrackEdge`, `orderTrackFromStart`, `validateTrackGraph`, `sampleTrackCenterline` |
+| Flächen / Referenzen | `src/game/attractions/areaLayout.ts` | `addAreaCells`, `placeAreaReference`, `validateAreaAttraction` |
+| Gemeinsamer Resolver / Abschluss | `src/game/attractions/construction.ts` | `resolveAttractionConstruction`, `validateAttractionCompletion` |
+| Betriebsstrategien | `src/game/attractions/runtime.ts` | Loop/Shuttle, Fußgänger, Slider, Scripted |
+| v30→v31 / Projektionen | `src/game/attractions/migration.ts`, `src/game/attractions/projections.ts` | `migrateLegacyAttractions`, `refreshAttractionProjections` |
+| Gemeinsamer Editor | `src/ui/attractionBuilderPanel.ts`, `src/main.ts` | Palette, offene Enden, Banking/Höhe, Fläche, Zugänge |
+| Autoritative Commands | `src/game/commands/attractionCommands.ts` | Start, Konstruktion, Betrieb, Preis, Konfiguration, Abriss |
+| Gemeinsames Rendering / Picking | `src/view/AttractionView.ts`, `src/view/WorldView.ts` | gebatchte Track-/Area-/Scripted-Instanzen |
 | Schienen-Editor, Typen, Anschlussregeln | [`coaster.md`](coaster.md), `src/game/coasterTypes.ts`, `src/game/coasterConnections.ts` | Katalog, `describeTrackAppendIssue` |
 | Schienen, Physik, Betrieb | `src/game/coasters.ts` | `TRACK_PIECE_KINDS`, Zug, Dispatch, `getSmoothedCoasterPiecePoints` |
 | Bauen, Recall, Preis, Abriss | `src/game/GameState.ts` | `startCoaster`, `recallCoasterTrain`, `setRideAccess`, `removeCoaster` |
@@ -26,6 +44,21 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
 | Baumenü | `src/game/buildMenu.ts`, `src/main.ts`, `src/style.css` | Attraktionen: Fahrgeschäfte, Stände, Camping, Festival; RCT2-artiges sequenzielles Konstruktionsfenster |
 
 ## Wichtige Regeln
+
+- Preview und Command rufen denselben puren
+  `resolveAttractionConstruction` auf. UI und Rendering mutieren keinen
+  Spielzustand.
+- Mittleres Löschen erhält beide Graphkomponenten. Der Spieler wählt ein
+  offenes Ende und verbindet feldweise neu; die Reihenfolge wird immer vom
+  Startknoten abgeleitet, nie aus Arraypositionen.
+- Abschlussvalidierung prüft Topologie, eindeutige Reihenfolge, Zugänge und
+  definitionsspezifische Regeln. Open-Exit-Wasserrutschen müssen in einer
+  `swimArea` landen.
+- Area-Referenzen sind Bestandteil der Attraktion und keine unabhängigen
+  `PlacedBuilding`s. Registry-Allowlisten entscheiden, welche Referenz oder
+  Besucherinstallation innerhalb einer Fläche stehen darf.
+- Alle Zugangsmodi teilen Queue-Richtung, Multi-Goal-Routing und den
+  host-autoritativen Einlass.
 
 - Segmentlängen und Frames **pro Bahn cachen**, invalidieren über
   Piece-ID/Chain-Signatur. Nicht alle Sample-Punkte pro Wagen/Substep neu

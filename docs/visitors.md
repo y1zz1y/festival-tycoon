@@ -9,7 +9,7 @@ sind abgeleitete Darstellung desselben Zustands.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Tick-Phase, Entscheidungsqueue | `src/game/visitorSimulation.ts` | `VisitorSimulation`, `VisitorSimulationContext`, `runTickPhase`, `flushDecisions` |
-| Detailverhalten, Bewegung, Ziele | `src/game/visitorBehavior.ts` | `VisitorBehaviorService`, `VisitorBehaviorContext`; Bewegung/Ankunft, Needs, Konzert, Shop, Camping, Baden, Müll und Laufzeit-Caches |
+| Detailverhalten, Bewegung, Ziele | `src/game/visitorBehavior.ts` | `VisitorBehaviorService`, `VisitorBehaviorContext`; Bewegung/Ankunft, Needs, Konzert, Shop, Camping, Baden (auch Schwimmbad-Becken), Müll und Laufzeit-Caches |
 | Typen, Spawn, Fassade | `src/game/types/entities.ts`, `src/game/visitorSpawning.ts`, `src/game/GameState.ts` | `Visitor`, `VisitorState`; Admission, Ankunftsgruppen und stabile Kompatibilitäts-Einstiege |
 | Stand-Queue-Spuren | `src/game/queueLanes.ts` | `queueStandOffset`, `stallQueueTileOffset` |
 | Need-/Alkohol-/Übelkeitswerte | `src/game/simulationConfig.ts` | `visitors`, `needs` (`interactionMinutes.stockout`), `alcohol`, `nausea` |
@@ -87,6 +87,12 @@ sind abgeleitete Darstellung desselben Zustands.
   **Anstehschlange** (Blick zur Theke). Der Rückweg läuft mit normaler
   Gehgeschwindigkeit, ohne Queue-Gedränge; am Ausgang wählen sie sofort
   das nächste Ziel. Attraktionsqueues bleiben ungeteilt.
+- Konstruierte Kursattraktionen werden nur gewählt, wenn ihr Eingang eine
+  gerichtete Warteschlangenkette besitzt. Die Zielsuche läuft wie bei
+  Achterbahnen zum äußeren Ende dieser Kette und darf Queue-Felder benutzen.
+  Die Reservierung trägt den Gast bereits in `course.queue` ein, der Einlass
+  darf ihn aber erst mit Zustand `queuing` am Ende seines Hinwegs auf die
+  Strecke setzen; `seeking`-Gäste dürfen nicht aus der Ferne teleportiert werden.
   Leere Stände: nur
   `needs.interactionMinutes.stockout` warten, dann denselben Rückweg.
   Die Wartezeit zählt als negativer `interactionRemaining` unabhängig vom
@@ -146,7 +152,12 @@ sind abgeleitete Darstellung desselben Zustands.
   `afterBedtimeEnergyDecayMultiplier` ihn. Kein neues Quartier für
   Tagesgäste.
 - Getragener Müll (`pendingWaste`) geht in den **nächsten** Eimer in
-  `waste.binRange`, wenn dort Platz ist. Ist dieser Eimer voll, unbenutzbar
+  `waste.binRange`, wenn dort Platz ist. Versiegelte Container zählen im
+  **7×7-Umfeld** (Chebyshev ≤ `waste.sealedVisitorChebyshevRange` 3).
+  Tische (`table`) sind Wegmöbel wie Bänke, Kapazität 4; Gäste essen/trinken
+  dort aus dem Inventar. Camper konsumieren auch am eigenen Platz und
+  bevorzugen die Heimatparzelle in `findRouteToGathering`.
+  Anreisen skalieren mit `arrivalPriceMultiplier` (Preis × Willingness). Ist dieser Eimer voll, unbenutzbar
   oder fehlt ein begehbarer Eimer mit Platz, lassen die Gäste den Müll
   sofort als `litter` auf der aktuellen (sonst benachbarten begehbaren)
   Kachel fallen und wählen das nächste Bedürfnis. Sie bleiben nicht in

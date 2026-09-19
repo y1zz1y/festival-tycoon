@@ -1,5 +1,5 @@
 import type { GameSnapshot } from './GameState'
-import { BANDS, bookingHoursOpen, festivalTime, type Booking } from './festivalManagement'
+import { BANDS, bandStarRating, bookingHoursOpen, festivalTime, isFiveStarBand, type Booking } from './festivalManagement'
 import { bandGenre, expectedMusicMix, genreAffinity } from './musicTaste'
 
 const CHANGEOVER = 30
@@ -56,7 +56,11 @@ function bandScore(
   return appeal * 80 + band.draw * 0.35 + evening * band.draw * 0.25 - band.fee / 80 - clash * 28
 }
 
-export function planAutoLineup(s: Readonly<GameSnapshot>, duration: 60 | 90 | 120): AutoLineupPlan[] {
+export function planAutoLineup(
+  s: Readonly<GameSnapshot>,
+  duration: 60 | 90 | 120,
+  stars?: { minStars?: number; maxStars?: number },
+): AutoLineupPlan[] {
   const stages = s.buildings.filter(building => building.kind === 'stage')
   if (!stages.length || s.festival.finished) return []
   const firstDay = s.festival.startDay + s.dayPlan.leadDays
@@ -73,10 +77,15 @@ export function planAutoLineup(s: Readonly<GameSnapshot>, duration: 60 | 90 | 12
       for (const stage of stages) {
         const bookings = [...s.festival.bookings, ...planned]
         if (!slotFree(s, bookings, stage.id, day, start, duration)) continue
+        const minStars = stars?.minStars ?? 1
+        const maxStars = stars?.maxStars ?? 5
         const candidates = BANDS.filter(band =>
           !used.has(band.id) &&
           s.festival.reputation.music >= band.reputation &&
           money >= band.fee &&
+          bandStarRating(band) >= minStars &&
+          bandStarRating(band) <= maxStars &&
+          (!isFiveStarBand(band) || (s.festival.headlinerPool ?? []).includes(band.id)) &&
           !bookings.some(booking => booking.day === day && booking.bandId === band.id),
         )
         if (!candidates.length) continue

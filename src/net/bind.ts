@@ -24,6 +24,36 @@ const boundGames = new WeakSet<GameState>()
 export function enableMultiplayerCommands(game: GameState): void {
   if (boundGames.has(game)) return
   boundGames.add(game)
+  game.startAttraction = wrap(game, game.startAttraction, (definitionId, x, z, rotation = game.snapshot.buildRotation) => ({
+    type: 'startAttraction',
+    definitionId,
+    x,
+    z,
+    rotation,
+  }))
+  game.constructAttraction = wrap(game, game.constructAttraction, (request) => ({
+    type: 'constructAttraction',
+    request: structuredClone(request),
+  }))
+  game.removeAttraction = wrap(game, game.removeAttraction, (attractionId) => ({
+    type: 'removeAttraction',
+    attractionId,
+  }))
+  game.setAttractionOperation = wrap(game, game.setAttractionOperation, (attractionId, mode) => ({
+    type: 'setAttractionOperation',
+    attractionId,
+    mode,
+  }))
+  game.setAttractionPrice = wrap(game, game.setAttractionPrice, (attractionId, price) => ({
+    type: 'setAttractionPrice',
+    attractionId,
+    price,
+  }))
+  game.configureAttraction = wrap(game, game.configureAttraction, (attractionId, settings) => ({
+    type: 'configureAttraction',
+    attractionId,
+    ...settings,
+  }))
   game.setRideAccess = wrap(game, game.setRideAccess, (buildingId, accessType, x, z) => ({type:'setRideAccess',buildingId,accessType,x,z}))
   game.placeBungee = wrap(game, game.placeBungee, (x, z, height) => ({ type: 'placeBungee', x, z, height }))
   game.setBungeeHeight = wrap(game, game.setBungeeHeight, (id, height) => ({ type: 'setBungeeHeight', id, height }))
@@ -240,6 +270,10 @@ export function enableMultiplayerCommands(game: GameState): void {
     type: 'buyAmbulance',
     garageId,
   }))
+  game.buyFireTruck = wrap(game, game.buyFireTruck, (stationId) => ({
+    type: 'buyFireTruck',
+    stationId,
+  }))
   game.sellAmbulance = wrap(game, game.sellAmbulance, (garageId) => ({
     type: 'sellAmbulance',
     garageId,
@@ -290,6 +324,64 @@ export function enableMultiplayerCommands(game: GameState): void {
   game.deleteBusLine = wrap(game, game.deleteBusLine, (lineId) => ({
     type: 'deleteBusLine',
     lineId,
+  }))
+  game.startCourse = wrap(game, game.startCourse, (kind, x, z) => ({
+    type: 'startCourse',
+    kind,
+    x,
+    z,
+  }))
+  game.startCourseArea = wrap(game, game.startCourseArea, (kind, cells) => ({
+    type: 'startCourseArea',
+    kind,
+    cells: [...cells],
+  }))
+  game.addCourseAreaCell = wrap(game, game.addCourseAreaCell, (courseId, x, z) => ({
+    type: 'addCourseAreaCell',
+    courseId,
+    x,
+    z,
+  }))
+  game.addCourseAreaCells = wrap(game, game.addCourseAreaCells, (courseId, cells) => ({
+    type: 'addCourseAreaCells',
+    courseId,
+    cells: [...cells],
+  }))
+  game.removeCourseAreaCells = wrap(game, game.removeCourseAreaCells, (courseId, cells) => ({
+    type: 'removeCourseAreaCells',
+    courseId,
+    cells: [...cells],
+  }))
+  game.addCoursePiece = wrap(game, game.addCoursePiece, (courseId, kind, x, z, elevation) => ({
+    type: 'addCoursePiece',
+    courseId,
+    kind,
+    x,
+    z,
+    elevation,
+  }))
+  game.undoCoursePiece = wrap(game, game.undoCoursePiece, (courseId) => ({
+    type: 'undoCoursePiece',
+    courseId,
+  }))
+  game.setCourseOperating = wrap(game, game.setCourseOperating, (courseId, operating) => ({
+    type: 'setCourseOperating',
+    courseId,
+    operating,
+  }))
+  game.setCoursePrice = wrap(game, game.setCoursePrice, (courseId, price) => ({
+    type: 'setCoursePrice',
+    courseId,
+    price,
+  }))
+  game.setCourseTeamSize = wrap(game, game.setCourseTeamSize, (courseId, teamSize) => ({
+    type: 'setCourseTeamSize',
+    courseId,
+    teamSize,
+  }))
+  game.removeCourse = wrap(game, game.removeCourse, (courseId) => ({
+    type: 'removeCourse',
+    courseId,
   }))
   game.startCoaster = wrap(game, game.startCoaster, (typeId, x, z) => ({
     type: 'startCoaster',

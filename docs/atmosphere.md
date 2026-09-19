@@ -40,6 +40,9 @@ Details der Gewichte stehen in `SIMULATION_CONFIG.atmosphere.sources`
 
 - Hörbare Atmosphäre (Bühne, Gedränge, Camp, Wald) ist kein Overlay-Feld,
   sondern kamera-orientiertes SFX mit Voice-Budget — siehe [audio.md](audio.md).
+- `attractiveness.average` mittelt nur **bebaute** Zellen
+  (`collectBuiltAtmosphereCells`: Gebäude, Wege, ausgewiesene Flächen,
+  Kabel, Straßen, Parkplätze, Kurse). Leeres Gelände mit Rest-Aura zählt nicht.
 - Overlay-Berechnung im Tick / auf gedrosselten UI-Intervallen, nicht pro Frame
   für die ganze Karte neu erfinden. Logistik/Untergrund ist ein eigenes
   Karten-Overlay (`WorldView.setLogisticsMode`), kein Atmosphäre-Feld.

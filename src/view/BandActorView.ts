@@ -79,7 +79,7 @@ export class BandActorView {
   private createModel(actor: BandActor): Group {
     const role = (actor.role ?? 'singer') as BandRole
     const model = createBandMemberModel(actor.bandId, role, actor.memberIndex ?? 0)
-    model.scale.setScalar(0.82)
+    model.scale.setScalar(0.48)
     return model
   }
 

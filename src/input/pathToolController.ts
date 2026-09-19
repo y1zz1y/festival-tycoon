@@ -21,6 +21,8 @@ export interface PathDragServices {
   applyCopySelection(cells: ReadonlyArray<CellPosition>): void
   demolish(cell: CellPosition, quiet: boolean): boolean
   showToast(message: string, error?: boolean): void
+  coursePaintMode?(): 'area' | 'line' | null
+  placeCourseCells?(cells: ReadonlyArray<CellPosition>): void
 }
 
 export interface PathDragView {
@@ -91,7 +93,10 @@ export function createPathToolController(services: PathDragServices, view: PathD
     view.setPathDragPreview([], 0)
   }
   const areaMode = (tool: string): boolean =>
-    AREA_TOOLS.has(tool) || isCopyTool(tool as never) || isTerrainEditTool(tool as never)
+    AREA_TOOLS.has(tool) ||
+    isCopyTool(tool as never) ||
+    isTerrainEditTool(tool as never) ||
+    (tool === 'course' && services.coursePaintMode?.() === 'area')
   const cells = (tool: string): CellPosition[] =>
     areaMode(tool) ? rectangleCells(start!, end!) : connectedPathLine(start!, end!)
 
@@ -100,6 +105,10 @@ export function createPathToolController(services: PathDragServices, view: PathD
     clear,
     start(cell) {
       const game = services.getGame()
+      if (game.snapshot.selectedTool === 'course' && !services.coursePaintMode?.()) {
+        start = null
+        return
+      }
       if (services.getModes().editorActive && !services.getModes().demolishActive) {
         start = null
         return
@@ -187,6 +196,8 @@ export function createPathToolController(services: PathDragServices, view: PathD
           const result = game.editTerrainArea(selectedCells, mode, terrainOriginHeight)
           services.showToast(result.message, !result.ok)
         }
+      } else if (tool === 'course' && services.placeCourseCells) {
+        services.placeCourseCells(selectedCells)
       } else if (tool === 'fence') {
         for (const cell of selectedCells) if (game.place('fence', cell.x, cell.z).ok) changed += 1
         services.showToast(changed ? `${changed} Bauzaun${changed === 1 ? '' : 'e'} gesetzt` : 'Hier konnte kein Bauzaun gesetzt werden', changed === 0)

@@ -359,6 +359,9 @@ export class LogisticsView {
     logistics.ambulanceGarages.forEach((garage) => {
       this.staticGroup.add(this.placeFacility(garage, 'ambulanceGarage'))
     })
+    ;(logistics.fireStations ?? []).forEach((station) => {
+      this.staticGroup.add(this.placeFacility(station, 'fireStation'))
+    })
     logistics.busDepots.forEach((depot) => {
       this.staticGroup.add(this.placeFacility(depot, 'busDepot'))
     })
@@ -587,6 +590,11 @@ export class LogisticsView {
       this.vehicleModels.delete(id)
     })
     vehicles.forEach((vehicle) => {
+      if (vehicle.housed) {
+        const parked = this.vehicleModels.get(vehicle.id)
+        if (parked) parked.visible = false
+        return
+      }
       const kind = vehicle.kind
       const targetX = vehicle.position.x + 0.5
       const targetZ = vehicle.position.z + 0.5
@@ -636,6 +644,7 @@ export class LogisticsView {
           ) * this.facingFactor
         }
       }
+      model.visible = true
     })
   }
 

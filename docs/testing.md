@@ -3,6 +3,15 @@
 Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 `npm run build`. Performance-Arbeit zusätzlich wie in `docs/performance.md`.
 
+## Attraktionsgrundlage
+
+`tests/attractionFoundation.ts` prüft Mittellöschung, getrennte Komponenten,
+Wiederverbindung und erneute Start→End-Reihenfolge, Loop-/Shuttle-/
+Start-End-/Open-Exit-Validierung, Preview/Command-Parität, Area-Konnektivität,
+Referenz-Allowlisten, Wasserlandung und die gemeinsame Builder-Palette.
+`tests/snapshotModules.ts` deckt v30→v31 einschließlich Pool-Aufteilung und
+gemeldeter Entfernung eines nicht konvertierbaren Kurses ab.
+
 ## Kommandos
 
 | Kommando | Zweck |
@@ -23,6 +32,7 @@ Vor Abschluss von Simulations- oder Render-Änderungen: `npm test` und
 | `tests/accounts.ts` | Registrierung, Sessions, Passwort-Hashes und Rate-Limit |
 | `tests/saves.ts` | kontoabhängige und öffentliche Server-Spielstände |
 | `tests/finance.ts` | Bücher, Kredite, vorbereitete Szenarien und Ziele |
+| `tests/courseAttractions.ts` | Kurs-Konstruktion, Validierung, Einlass, Rutschverletzung, Pause-Unterhalt, Ticketnachfrage, Sterne-Bands |
 | `tests/snapshotModules.ts` | Deterministischer Snapshot-Bootstrap, sichere Migration, delegierendes `GameState.fromJSON` |
 | `tests/simulationModules.ts` | Extraktionsgrenzen: Logistik/Visitor-Phasen, `RoadVehicleSimulation`, `VisitorBehaviorService`, `VisitorSpawning`, `VisitorCrowdingSimulation`, `CoasterSimulation`, `PlacementService` und `snapshotRepair`; faire Routingqueue und direkte Aufrufe außerhalb des Ticks |
 | `tests/uiModules.ts` | Extraktionsgrenzen: Command-Registry/Optimistic-Policy, Flächen-Preview/Execute, Weglinien-/Rechteckbildung, autoritative Kontexthilfe, differentielle Update-Gates, Archiv-Merge/Escaping, gemeinsame Geld-/Zeit-/HTML-Formatierung, Katalog-HTML und Kartenwerkzeuge weiterhin durch Multiplayer-Gate |

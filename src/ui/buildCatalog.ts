@@ -96,7 +96,7 @@ export function catalogTileHtml(
     ? ` data-catalog-name="${name}" data-catalog-detail="${escapeHtml(extraDetail)}" data-catalog-cost="${escapeHtml(cost)}" aria-label="${escapeHtml(label)}"`
     : ''
   const caption = catalog ? '' : `<em>${name}<small>${item.tool === 'stage' ? cost : item.detail}</small></em>`
-  return `<button class="tool${speedClass}" data-tool="${item.tool}"${item.bungee ? ' data-bungee="true"' : ''}${item.coasterTypeId ? ` data-coaster-type="${item.coasterTypeId}"` : ''}${catalogAttrs} type="button">${preview}${caption}</button>`
+  return `<button class="tool${speedClass}" data-tool="${item.tool}"${item.bungee ? ' data-bungee="true"' : ''}${item.coasterTypeId ? ` data-coaster-type="${item.coasterTypeId}"` : ''}${item.courseKind ? ` data-course-kind="${item.courseKind}"` : ''}${catalogAttrs} type="button">${preview}${caption}</button>`
 }
 
 export function createBuildCatalog(

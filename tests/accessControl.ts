@@ -678,7 +678,7 @@ export function testAccessControl(fixture: (count?: number) => GameState): void 
   assert.equal(grown.length, 5)
 
   const loaded = new GameState(structuredClone(lightState))
-  assert.equal(loaded.snapshot.version, 30)
+  assert.equal(loaded.snapshot.version, 31)
   assert.equal(loaded.snapshot.accessControls.trafficLights.length, 1)
   assert.equal(loaded.snapshot.accessControls.trafficLights[0]!.x, 5)
   assert.equal(currentAccessSlot(12 * 60), 0)

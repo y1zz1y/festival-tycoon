@@ -33,7 +33,9 @@ export function testBuildMenu(): void {
           ? `${item.tool}:bungee`
           : item.coasterTypeId
             ? `${item.tool}:${item.coasterTypeId}`
-            : item.tool
+            : item.courseKind
+              ? `${item.tool}:${item.courseKind}`
+              : item.tool
         assert.equal(seen.has(key), false, `Doppelter Menüeintrag ${key}`)
         seen.add(key)
       }

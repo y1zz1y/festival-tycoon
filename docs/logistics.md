@@ -10,7 +10,7 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | --- | --- | --- |
 | Straßengraph, Fahrzeuge, Ankunft | `src/game/logistics.ts` | `LogisticsSnapshot`, `findRoadRoute`, `RoadVehicle` (`tourBus` + `tourBusParking` target); `RoadCell.elevation` / `roadSlope` |
 | Logistik-Tick und Fahrzeug-Indizes | `src/game/logisticsSimulation.ts`, `src/game/roadVehicleSimulation.ts`, `src/game/GameState.ts` | `updateLogisticsSimulation`, `buildLogisticsTickState`; `RoadVehicleSimulation.processLogisticsVehicles`; `GameState` verdrahtet die schmalen Fach-Callbacks |
-| Straßenfahrzeug-State-Machines | `src/game/roadVehicleSimulation.ts` | Gemeinsame Bewegung, Blockade/Umplanung sowie Dispatch, Rückkehr und Leg-Abschluss für Besucherautos, Krankenwagen, Busse, Müll- und Lieferwagen |
+| Straßenfahrzeug-State-Machines | `src/game/roadVehicleSimulation.ts` | Gemeinsame Bewegung, Blockade/Umplanung sowie Dispatch, Rückkehr und Leg-Abschluss für Besucherautos, Krankenwagen, Feuerwehrwagen, Busse, Müll- und Lieferwagen; Head-on-Umplanung mit Sim-RNG-Delay; keine Route über ganztägig rote Ampeln |
 | Aussteigen am Parkplatz | `src/game/logistics.ts`, `src/game/GameState.ts` | `chooseParkingDisembarkPath`, `finishVehicleParking`, `collectSeatedPassengerIds`, `tryBoardDepartureCar`, `canParkedCarDepart` |
 | Debug: Autos entfernen | `src/game/GameState.ts`, `src/main.ts` | `removeVisitorCarsForDebug` — alle `visitorCar`, Belegung, Insassen zu Fuß; nicht Abriss |
 | Straßenrampen | `src/game/GameState.ts`, `src/game/wayElevation.ts` | `placeRoadSegment`, Autodach `MAX_ROAD_RAISE` 1, Shift-Ausgang `planLockedOriginRamp` |
@@ -52,6 +52,19 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   ersetzen den Graphen und verwerfen sofort alle Ergebnisse. Belegungsabhängige
   Umwege suchen weiter mit den aktuellen Sperrzellen; Ausparkreservierungen und
   Bewegungsprüfungen bleiben aktuell. Routen werden als unabhängige Kopien geliefert.
+
+- Gegenüber-Stau: plant der Blockierer genau die Zelle des Wartenden, wird
+  mit Sim-RNG-Delay (`headOnReplanDelayTicksMin`–`Max`) umgeplant
+  (`blockedCells`, U-Turn erlaubt). Beide Fahrzeuge dürfen nicht dieselbe
+  Tick-Deadline erhalten.
+- Ampeln, die **heute** laut Plan nie grün werden (`accessScheduleOpensToday`
+  / `closedAllDayAccessEdges`), sind keine Fallback-Kante. Ohne Umweg fällt
+  das Fahrzeug auf den nächsten niedrigeren Auftrag zurück.
+- Einsatzfahrzeuge (Krankenwagen, Müllwagen, Feuerwehrwagen) kehren ohne
+  Auftrag heim und stehen **im Gebäude** (`housed`). Ein- und Ausfahrt nur
+  über die Torseite; `unhouseServiceVehicle` zieht nur aus der Bucht auf die
+  Torstraße, nicht von einer bereits befahrenen Zelle. Neue Feuerwache analog
+  Garage, `RoadVehicleKind: 'fireTruck'`, Dispatch zu `fire`-Incidents.
 
 - Trägerwege über `findPath` (Fußgänger), Fahrzeuge über `findRoadRoute`.
   Nicht mischen.   Straßen und Fußwege können Rampen in **halben** Höhenstufen

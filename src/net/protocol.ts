@@ -1,4 +1,6 @@
 import type { WayType } from '../game/wayTypes'
+import type { AttractionConstructionRequest } from '../game/attractions/construction'
+import type { AttractionOperationMode } from '../game/attractions/types'
 import type { BuildingKind, Tool } from '../game/catalog'
 import type { ActionResult, PlacedBuilding } from '../game/GameState'
 import type { TerrainEditMode } from '../game/terrain'
@@ -12,6 +14,7 @@ import type {
   TrafficSensorKind,
 } from '../game/accessControl'
 import type { CoasterOperationMode, CoasterTypeId, DispatchMode, TrackBuildOptions, TrackPieceKind } from '../game/coasters'
+import type { CourseAreaCell, CourseKind, CoursePieceKind } from '../game/courseAttractions'
 import type { StaffRole } from '../game/staff'
 import type { DayPlanOffer, FestivalPhase } from '../game/dayPlan'
 import type { SecurityGateConfig } from '../game/security'
@@ -33,6 +36,18 @@ export type GameCommand = GameCommandAction & {
 }
 
 export type GameCommandAction =
+  | { type: 'startAttraction'; definitionId: string; x: number; z: number; rotation: number }
+  | { type: 'constructAttraction'; request: AttractionConstructionRequest }
+  | { type: 'removeAttraction'; attractionId: string }
+  | { type: 'setAttractionOperation'; attractionId: string; mode: AttractionOperationMode }
+  | { type: 'setAttractionPrice'; attractionId: string; price: number }
+  | {
+      type: 'configureAttraction'
+      attractionId: string
+      teamSize?: number
+      dispatchMode?: DispatchMode
+      dispatchIntervalMinutes?: number
+    }
   | { type: 'setRideAccess'; buildingId: string; accessType: 'entrance' | 'exit'; x: number; z: number }
   | { type: 'placeBungee'; x: number; z: number; height: number }
   | { type: 'setBungeeHeight'; id: string; height: number }
@@ -125,6 +140,18 @@ export type GameCommandAction =
   | { type: 'toggleStaffZone'; staffId: string; key: string }
   | { type: 'setStaffZone'; staffId: string; key: string; active: boolean }
   | { type: 'buyAmbulance'; garageId: string }
+  | { type: 'buyFireTruck'; stationId: string }
+  | { type: 'startCourse'; kind: CourseKind; x: number; z: number }
+  | { type: 'startCourseArea'; kind: CourseKind; cells: CourseAreaCell[] }
+  | { type: 'addCourseAreaCell'; courseId: string; x: number; z: number }
+  | { type: 'addCourseAreaCells'; courseId: string; cells: CourseAreaCell[] }
+  | { type: 'removeCourseAreaCells'; courseId: string; cells: CourseAreaCell[] }
+  | { type: 'addCoursePiece'; courseId: string; kind: CoursePieceKind; x: number; z: number; elevation?: number }
+  | { type: 'undoCoursePiece'; courseId: string }
+  | { type: 'setCourseOperating'; courseId: string; operating: boolean }
+  | { type: 'setCoursePrice'; courseId: string; price: number }
+  | { type: 'setCourseTeamSize'; courseId: string; teamSize: number }
+  | { type: 'removeCourse'; courseId: string }
   | { type: 'sellAmbulance'; garageId: string }
   | { type: 'sellAmbulanceVehicle'; vehicleId: string }
   | { type: 'buyBus'; depotId: string }

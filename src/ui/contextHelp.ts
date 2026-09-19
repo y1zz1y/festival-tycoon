@@ -10,6 +10,8 @@ import { isSwimmableHeight, isWaterHeight, terrainToolMode } from '../game/terra
 import { connectedWasteDumpStats, formatWasteDumpAreaHover, isSealedWasteContainer } from '../game/waste'
 import type { Blueprint } from '../game/blueprints'
 import type { CellPosition, PathAnchor } from '../view/WorldView'
+import { COURSE_PIECE_LABELS, COURSE_SPECS, type CourseKind } from '../game/courseAttractions'
+import type { CourseBuilderTool } from './courseBuilderPanel'
 
 export interface ContextHelpModes {
   coaster: {
@@ -27,6 +29,7 @@ export interface ContextHelpModes {
     constructionType: 'normal' | 'queue'
   }
   rideAccess: { id: string; type: 'entrance' | 'exit' } | null
+  course: { active: boolean; kind?: CourseKind; piece?: CourseBuilderTool }
   backstageEraseMode: boolean
   copyClipboard: Blueprint | null
 }
@@ -39,6 +42,19 @@ export interface ContextHelpRequest {
 }
 
 export function contextHelpText({ game, hoveredCell, placementPreview, modes }: ContextHelpRequest): string {
+  if (modes.course.active && modes.course.kind) {
+    const piece = modes.course.piece
+    const name = COURSE_SPECS[modes.course.kind].name
+    return piece
+      ? `${name}: ${
+          piece === 'area'
+            ? 'Anlagenfläche ziehen'
+            : piece === 'areaErase'
+              ? 'Anlagenfläche zum Entfernen aufziehen'
+              : `${COURSE_PIECE_LABELS[piece]} setzen`
+        }.`
+      : `${name}: erstes Stück auf das Gelände setzen.`
+  }
   if (modes.coaster.active) {
     if (!modes.coaster.coasterId) return modes.coaster.startCandidate
       ? 'Startpunkt gesetzt: drehen oder Höhe ändern, dann „Startplattform bauen“.'

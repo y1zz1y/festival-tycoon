@@ -20,6 +20,7 @@ import type { WasteDumpCell } from './waste'
 export type RoadVehicleSimulationContext = {
   state: GameSnapshot
   closedTrafficEdges(): ReadonlySet<string>
+  closedAllDayTrafficEdges(): ReadonlySet<string>
   lastNavRevision(): number
   worldRevision(): number
   nextRandom(): number
@@ -141,7 +142,12 @@ export class RoadVehicleSimulation {
           vehicle.waitMinutes = 0
         }
       }
-      if (vehicle.cell && vehicle.state !== 'parked' && vehicle.kind !== 'sweeper') {
+      if (
+        vehicle.cell &&
+        !vehicle.housed &&
+        vehicle.state !== 'parked' &&
+        vehicle.kind !== 'sweeper'
+      ) {
         occupied.set(
           this.context.roadPositionKey(vehicle.cell),
           vehicle.id,
@@ -151,12 +157,27 @@ export class RoadVehicleSimulation {
 
     this.dispatchIdleAmbulances()
     this.returnIdleAmbulancesToGarage()
+    this.dispatchIdleFireTrucks()
+    this.returnIdleFireTrucks()
     this.context.dispatchTourBuses()
     logistics.roadVehicles.forEach((vehicle) => {
       if (removedVehicles.has(vehicle.id)) return
       if (vehicle.kind === 'bus') {
         this.updateBusAtStop(vehicle, minutes, busWaitersByCell)
         if (vehicle.state === 'idle') this.dispatchBus(vehicle)
+      }
+      if (vehicle.kind === 'fireTruck') {
+        if (this.isFireTruckAtHome(vehicle) && vehicle.state === 'idle') return
+        if (vehicle.state === 'responding' && vehicle.route.length === 0) {
+          const fire = this.context.state.incidents.find(
+            (incident) =>
+              incident.kind === 'fire' &&
+              incident.x === (vehicle.cell?.x ?? vehicle.position.x) &&
+              incident.z === (vehicle.cell?.z ?? vehicle.position.z),
+          )
+          if (!fire) this.sendFireTruckHome(vehicle)
+          return
+        }
       }
       if (vehicle.kind === 'garbageTruck') {
         if (vehicle.state === 'idle') {
@@ -280,6 +301,9 @@ export class RoadVehicleSimulation {
           this.context.finishTourBusLeg(vehicle, removedVehicles)
         } else if (vehicle.kind === 'ambulance') {
           this.finishAmbulanceLeg(vehicle)
+        } else if (vehicle.kind === 'fireTruck') {
+          if (vehicle.state === 'returning') this.sendFireTruckHome(vehicle)
+          else vehicle.state = 'responding'
         } else if (vehicle.kind === 'garbageTruck') {
           this.finishGarbageTruckLeg(vehicle)
         } else if (vehicle.kind === 'deliveryTruck') {
@@ -338,6 +362,7 @@ export class RoadVehicleSimulation {
       )
       const blocker = occupied.get(nextKey)
       if (truckBlocks || (blocker && blocker !== vehicle.id)) {
+        if (this.maybeReplanHeadOn(vehicle, occupied, vehiclesById)) return
         if (this.replanOffMapDelivery(vehicle, occupied)) return
         if (this.replanBlockedReverse(vehicle, occupied)) return
         if (this.replanBlockedTurn(vehicle, occupied)) return
@@ -713,7 +738,11 @@ export class RoadVehicleSimulation {
       findRoadRoute({
         ...options,
         blockedEdges: this.context.closedTrafficEdges(),
-      }) ?? findRoadRoute({ ...options, blockedEdges: undefined })
+      }) ??
+      findRoadRoute({
+        ...options,
+        blockedEdges: this.context.closedAllDayTrafficEdges(),
+      })
     )
   }
 
@@ -1066,6 +1095,94 @@ export class RoadVehicleSimulation {
     if (vehicle.state === 'waiting') vehicle.state = 'driving'
     vehicle.waitMinutes = 0
     return true
+  }
+
+  isHeadOnBlocker(vehicle: RoadVehicle, blocker: RoadVehicle): boolean {
+    const here = vehicle.cell
+    const theirNext = blocker.route[0]
+    if (!here || !theirNext) return false
+    return (
+      theirNext.x === here.x &&
+      theirNext.z === here.z &&
+      this.context.roadPositionKey(theirNext) === this.context.roadPositionKey(here)
+    )
+  }
+
+  maybeReplanHeadOn(
+    vehicle: RoadVehicle,
+    occupied: ReadonlyMap<string, string>,
+    vehiclesById: ReadonlyMap<string, RoadVehicle>,
+  ): boolean {
+    const next = vehicle.route[0]
+    const here = vehicle.cell
+    if (!next || !here) return false
+    const blockerId = occupied.get(this.context.roadPositionKey(next))
+    if (!blockerId || blockerId === vehicle.id) {
+      vehicle.headOnReplanTick = undefined
+      return false
+    }
+    const blocker = vehiclesById.get(blockerId)
+    if (!blocker || !this.isHeadOnBlocker(vehicle, blocker)) {
+      vehicle.headOnReplanTick = undefined
+      return false
+    }
+    if (vehicle.headOnReplanTick == null) {
+      const min = SIMULATION_CONFIG.logistics.headOnReplanDelayTicksMin
+      const max = SIMULATION_CONFIG.logistics.headOnReplanDelayTicksMax
+      const span = Math.max(0, max - min)
+      vehicle.headOnReplanTick = min + Math.floor(this.context.nextRandom() * (span + 1))
+      return false
+    }
+    vehicle.headOnReplanTick -= 1
+    if (vehicle.headOnReplanTick > 0) return false
+    vehicle.headOnReplanTick = undefined
+    return this.replanHeadOnConflict(vehicle, occupied)
+  }
+
+  replanHeadOnConflict(
+    vehicle: RoadVehicle,
+    occupied: ReadonlyMap<string, string>,
+  ): boolean {
+    const here = vehicle.cell
+    const next = vehicle.route[0]
+    if (!here || !next) return false
+    const blocked = this.collectRouteBlockedCells(vehicle, occupied)
+    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning') {
+      const plan =
+        this.findRouteTowardParking(vehicle, blocked) ??
+        this.findVisitorCarCirculation(vehicle, blocked)
+      if (plan && this.adoptVehicleRoute(vehicle, plan.route, next)) {
+        vehicle.target = plan.target
+        return true
+      }
+    }
+    const targets = this.collectVehicleRouteTargets(vehicle)
+    const destination = vehicle.route.at(-1)
+    const searchTargets = [
+      ...targets,
+      ...(destination &&
+      !targets.some((cell) => cell.x === destination.x && cell.z === destination.z)
+        ? [destination]
+        : []),
+    ]
+    if (searchTargets.length) {
+      const rebuilt = findRoadRoute({
+        roadCells: this.context.state.logistics.roadCells,
+        graph: this.context.getRoadGraph(),
+        start: here,
+        targets: searchTargets,
+        initialDirection: this.getVehicleDirection(vehicle),
+        blockedCells: blocked,
+        allowUTurn: true,
+      })
+      if (
+        rebuilt &&
+        this.adoptVehicleRoute(vehicle, rebuilt.map(toRoadPosition), next)
+      ) {
+        return true
+      }
+    }
+    return false
   }
 
   replanBlockedTurn(
@@ -1832,6 +1949,8 @@ export class RoadVehicleSimulation {
       dumps.reduce((sum, cell) => sum + cell.stored, 0) +
       containers.reduce((sum, building) => sum + (building.wasteFill ?? 0), 0)
     if (totalStored < SIMULATION_CONFIG.waste.truckDispatchThreshold) return
+    this.unhouseServiceVehicle(vehicle)
+    if (!vehicle.cell) return
     const containerAccesses = this.getSealedContainerRoadAccesses(containers)
     const dumpAccesses = this.getWasteDumpRoadAccesses(dumps)
     // A dump pad beside the depot (or the truck's current cell) used to win
@@ -2402,6 +2521,16 @@ export class RoadVehicleSimulation {
       }
       return
     }
+    const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
+      candidate.truckIds.includes(vehicle.id),
+    )
+    const access = depot ? this.context.getLogisticsBuildingAccess(depot, 2) : null
+    const here = vehicle.cell ?? vehicle.position
+    if (depot && access && access.x === here.x && access.z === here.z) {
+      this.houseServiceVehicle(vehicle, depot)
+      vehicle.target = { kind: 'depot', depotId: depot.id }
+      return
+    }
     vehicle.state = 'idle'
     vehicle.target = null
     vehicle.route = []
@@ -2462,10 +2591,8 @@ export class RoadVehicleSimulation {
       return
     }
     if (access.x === vehicle.cell.x && access.z === vehicle.cell.z) {
-      vehicle.state = 'idle'
+      this.houseServiceVehicle(vehicle, depot)
       vehicle.target = { kind: 'depot', depotId: depot.id }
-      vehicle.route = []
-      vehicle.resumeState = null
       return
     }
     const route = this.findGarbageTruckRoute(vehicle, [access])
@@ -2490,12 +2617,11 @@ export class RoadVehicleSimulation {
     for (const depot of this.context.state.logistics.wasteDepots) {
       for (const id of depot.truckIds) {
         if (existing.has(id)) continue
-        const access =
-          this.context.getLogisticsBuildingAccess(depot, 2) ??
-          this.context.findAvailableRoadEntry() ??
-          this.context.getRoadEntry()
+        const home = this.context.getLogisticsBuildingAccess(depot, 2)
+          ? { x: depot.x, z: depot.z }
+          : this.context.findAvailableRoadEntry() ?? this.context.getRoadEntry()
         this.context.state.logistics.roadVehicles.push(
-          this.context.createRoadVehicle(id, 'garbageTruck', access),
+          this.context.createRoadVehicle(id, 'garbageTruck', home),
         )
         existing.add(id)
       }
@@ -2516,7 +2642,8 @@ export class RoadVehicleSimulation {
     vehicle.waitMinutes = 0
     vehicle.resumeState = null
     vehicle.target = depot ? { kind: 'depot', depotId: depot.id } : null
-    vehicle.state = 'idle'
+    if (depot) this.houseServiceVehicle(vehicle, depot)
+    else vehicle.state = 'idle'
   }
 
   isGarbageTruckAtHome(vehicle: RoadVehicle): boolean {
@@ -2525,7 +2652,14 @@ export class RoadVehicleSimulation {
     const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
       candidate.truckIds.includes(vehicle.id),
     )
-    const access = depot ? this.context.getLogisticsBuildingAccess(depot, 2) : null
+    if (!depot) return false
+    const inBay =
+      here.x >= depot.x &&
+      here.x < depot.x + 2 &&
+      here.z >= depot.z &&
+      here.z < depot.z + 2
+    if (vehicle.housed && inBay) return true
+    const access = this.context.getLogisticsBuildingAccess(depot, 2)
     return Boolean(access && access.x === here.x && access.z === here.z)
   }
 
@@ -2643,7 +2777,10 @@ export class RoadVehicleSimulation {
       this.dispatchSweeper(vehicle)
       return
     }
-    if (this.visitorsOnCellsThisTick?.has(roadCellKey(next.x, next.z))) {
+    if (
+      this.visitorsOnCellsThisTick?.has(roadCellKey(next.x, next.z)) &&
+      vehicle.cargo < SIMULATION_CONFIG.logistics.sweeperCapacity
+    ) {
       vehicle.speed = 0
       return
     }
@@ -3101,6 +3238,7 @@ export class RoadVehicleSimulation {
   }
 
   sendAmbulanceToVictim(vehicle: RoadVehicle, victim: Visitor): boolean {
+    this.unhouseServiceVehicle(vehicle)
     if (!vehicle.cell) return false
     const target = { x: victim.cellX, z: victim.cellZ }
     const route = this.routePreferringOpenLights({
@@ -3187,7 +3325,11 @@ export class RoadVehicleSimulation {
         this.completeAmbulanceSale(vehicle)
         return
       }
-      vehicle.state = 'idle'
+      const garage = this.context.state.logistics.ambulanceGarages.find((candidate) =>
+        candidate.bays.includes(vehicle.id),
+      )
+      if (garage) this.houseServiceVehicle(vehicle, garage)
+      else vehicle.state = 'idle'
     }
   }
 
@@ -3212,7 +3354,14 @@ export class RoadVehicleSimulation {
     const garage = this.context.state.logistics.ambulanceGarages.find((candidate) =>
       candidate.bays.includes(vehicle.id),
     )
-    const access = garage ? this.context.getLogisticsBuildingAccess(garage, 2) : null
+    if (!garage) return false
+    const inBay =
+      here.x >= garage.x &&
+      here.x < garage.x + 2 &&
+      here.z >= garage.z &&
+      here.z < garage.z + 2
+    if (vehicle.housed && inBay) return true
+    const access = this.context.getLogisticsBuildingAccess(garage, 2)
     return Boolean(access && access.x === here.x && access.z === here.z)
   }
 
@@ -3228,8 +3377,7 @@ export class RoadVehicleSimulation {
       return
     }
     if (access.x === start.x && access.z === start.z) {
-      vehicle.state = 'idle'
-      vehicle.route = []
+      this.houseServiceVehicle(vehicle, garage)
       vehicle.target = { kind: 'garage', garageId: garage.id }
       if (vehicle.pendingSale) this.completeAmbulanceSale(vehicle)
       return
@@ -3248,6 +3396,7 @@ export class RoadVehicleSimulation {
       vehicle.target = { kind: 'garage', garageId: garage.id }
       return
     }
+    vehicle.housed = false
     vehicle.route = route.map(toRoadPosition)
     vehicle.state = 'returning'
     vehicle.target = { kind: 'garage', garageId: garage.id }
@@ -3507,5 +3656,198 @@ export class RoadVehicleSimulation {
     vehicle.state = route.length > 0 ? 'driving' : 'at-stop'
     vehicle.waitMinutes = 0
     return true
+  }
+
+  houseServiceVehicle(
+    vehicle: RoadVehicle,
+    home: { x: number; z: number; elevation?: number },
+  ): void {
+    vehicle.housed = true
+    vehicle.state = 'idle'
+    vehicle.route = []
+    vehicle.cell = { x: home.x, z: home.z, elevation: home.elevation }
+    vehicle.position = { ...vehicle.cell }
+    vehicle.waitMinutes = 0
+  }
+
+  isServiceVehicleInBay(vehicle: RoadVehicle): boolean {
+    const here = vehicle.cell ?? vehicle.position
+    if (vehicle.kind === 'ambulance') {
+      const garage = this.context.state.logistics.ambulanceGarages.find((candidate) =>
+        candidate.bays.includes(vehicle.id),
+      )
+      return Boolean(
+        garage &&
+          here.x >= garage.x &&
+          here.x < garage.x + 2 &&
+          here.z >= garage.z &&
+          here.z < garage.z + 2,
+      )
+    }
+    if (vehicle.kind === 'fireTruck') {
+      const station = this.context.state.logistics.fireStations.find((candidate) =>
+        candidate.bays.includes(vehicle.id),
+      )
+      return Boolean(
+        station &&
+          here.x >= station.x &&
+          here.x < station.x + 2 &&
+          here.z >= station.z &&
+          here.z < station.z + 2,
+      )
+    }
+    if (vehicle.kind === 'garbageTruck') {
+      const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
+        candidate.truckIds.includes(vehicle.id),
+      )
+      return Boolean(
+        depot &&
+          here.x >= depot.x &&
+          here.x < depot.x + 2 &&
+          here.z >= depot.z &&
+          here.z < depot.z + 2,
+      )
+    }
+    return false
+  }
+
+  unhouseServiceVehicle(vehicle: RoadVehicle): void {
+    if (!vehicle.housed) return
+    const pullOut = this.isServiceVehicleInBay(vehicle)
+    vehicle.housed = false
+    if (!pullOut) return
+    const access =
+      vehicle.kind === 'ambulance'
+        ? this.ambulanceHomeAccess(vehicle)
+        : vehicle.kind === 'fireTruck'
+          ? this.fireTruckHomeAccess(vehicle)
+          : vehicle.kind === 'garbageTruck'
+            ? this.garbageHomeAccess(vehicle)
+            : null
+    if (access) {
+      vehicle.cell = { ...access }
+      vehicle.position = { ...access }
+    }
+  }
+
+  ambulanceHomeAccess(vehicle: RoadVehicle): RoadPosition | null {
+    const garage = this.context.state.logistics.ambulanceGarages.find((candidate) =>
+      candidate.bays.includes(vehicle.id),
+    )
+    return garage ? this.context.getLogisticsBuildingAccess(garage, 2) : null
+  }
+
+  fireTruckHomeAccess(vehicle: RoadVehicle): RoadPosition | null {
+    const station = this.context.state.logistics.fireStations.find((candidate) =>
+      candidate.bays.includes(vehicle.id),
+    )
+    return station ? this.context.getLogisticsBuildingAccess(station, 2) : null
+  }
+
+  garbageHomeAccess(vehicle: RoadVehicle): RoadPosition | null {
+    const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
+      candidate.truckIds.includes(vehicle.id),
+    )
+    return depot ? this.context.getLogisticsBuildingAccess(depot, 2) : null
+  }
+
+  dispatchIdleFireTrucks(): void {
+    const idle = this.context.state.logistics.roadVehicles.filter(
+      (vehicle) => vehicle.kind === 'fireTruck' && vehicle.state === 'idle',
+    )
+    if (idle.length === 0) return
+    const claimed = new Set(
+      this.context.state.logistics.roadVehicles
+        .filter((vehicle) => vehicle.kind === 'fireTruck' && vehicle.target?.kind === 'cell')
+        .map((vehicle) => `${vehicle.target && vehicle.target.kind === 'cell' ? `${vehicle.target.x}:${vehicle.target.z}` : ''}`),
+    )
+    const fires = this.context.state.incidents
+      .filter((incident) => incident.kind === 'fire' && !claimed.has(`${incident.x}:${incident.z}`))
+      .sort((left, right) => left.id.localeCompare(right.id))
+    for (const vehicle of idle) {
+      const fire = fires.find((incident) => !claimed.has(`${incident.x}:${incident.z}`))
+      if (!fire) break
+      if (this.sendFireTruckToFire(vehicle, fire)) claimed.add(`${fire.x}:${fire.z}`)
+    }
+  }
+
+  sendFireTruckToFire(
+    vehicle: RoadVehicle,
+    fire: { x: number; z: number },
+  ): boolean {
+    this.unhouseServiceVehicle(vehicle)
+    if (!vehicle.cell) return false
+    const route = this.routePreferringOpenLights({
+      roadCells: this.context.state.logistics.roadCells,
+      graph: this.context.getRoadGraph(),
+      start: vehicle.cell,
+      target: fire,
+      initialDirection: this.getVehicleDirection(vehicle),
+      allowUTurn: true,
+    })
+    if (!route) return false
+    vehicle.target = { kind: 'cell', ...fire }
+    vehicle.route = route.map(toRoadPosition)
+    vehicle.state = 'responding'
+    return true
+  }
+
+  returnIdleFireTrucks(): void {
+    for (const vehicle of this.context.state.logistics.roadVehicles) {
+      if (vehicle.kind !== 'fireTruck' || vehicle.state !== 'idle') continue
+      if (this.isFireTruckAtHome(vehicle)) continue
+      this.sendFireTruckHome(vehicle)
+    }
+  }
+
+  isFireTruckAtHome(vehicle: RoadVehicle): boolean {
+    const here = vehicle.cell ?? vehicle.position
+    const station = this.context.state.logistics.fireStations.find((candidate) =>
+      candidate.bays.includes(vehicle.id),
+    )
+    if (!station) return false
+    const inBay =
+      here.x >= station.x &&
+      here.x < station.x + 2 &&
+      here.z >= station.z &&
+      here.z < station.z + 2
+    if (vehicle.housed && inBay) return true
+    const access = this.fireTruckHomeAccess(vehicle)
+    return Boolean(access && access.x === here.x && access.z === here.z)
+  }
+
+  sendFireTruckHome(vehicle: RoadVehicle): void {
+    const station = this.context.state.logistics.fireStations.find((candidate) =>
+      candidate.bays.includes(vehicle.id),
+    )
+    const access = this.fireTruckHomeAccess(vehicle)
+    const start = vehicle.cell ?? vehicle.position
+    if (!station || !access) {
+      vehicle.state = 'idle'
+      vehicle.route = []
+      return
+    }
+    if (access.x === start.x && access.z === start.z) {
+      this.houseServiceVehicle(vehicle, station)
+      vehicle.target = { kind: 'fireStation', stationId: station.id }
+      return
+    }
+    const route = this.routePreferringOpenLights({
+      roadCells: this.context.state.logistics.roadCells,
+      graph: this.context.getRoadGraph(),
+      start,
+      target: access,
+      initialDirection: this.getVehicleDirection(vehicle),
+      allowUTurn: true,
+    })
+    if (!route) {
+      vehicle.state = 'idle'
+      return
+    }
+    vehicle.housed = false
+    vehicle.route = route.map(toRoadPosition)
+    vehicle.state = 'returning'
+    vehicle.target = { kind: 'fireStation', stationId: station.id }
+    vehicle.waitMinutes = 0
   }
 }

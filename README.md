@@ -408,7 +408,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - sortier- und durchsuchbare Besucherübersicht mit Seitenansicht für große Besuchermengen
 - vollständiger Tag-Nacht-Zyklus mit zehn realen Minuten pro Spieltag, Sonnenstand, Dämmerung und Nachtbeleuchtung
 - 24-Stunden-Tagesplan unter **Festival planen** für Bühnen, Buden, Toiletten, Fahrgeschäfte und Lampen
-- getrennte Preise für Tages- und Campingticket unter **Festival planen**
+- getrennte Preise für Tages- und Campingticket unter **Festival planen** (Standard 120 € / 260 €, Slider mit Farbcodierung der Kaufbereitschaft und Live-Schätzung)
 - getrennte Tages- und Campingtickets mit festgelegtem Einlass- und Räumungsfenster für Tagesgäste
 - individuelle Festival-Schlafrhythmen (oft bis 03:00–06:00 wach, Schlaf am Vormittag); Camper gehen gestaffelt ins Zelt, das Gelände bleibt nachts belebt
 - auf Tageslängen abgestimmte Hunger-, Toiletten-, Spaß- und Energieraten
@@ -419,6 +419,10 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Maskottchen-Stand und T-Shirt-Stand handeln mit Allgemeinen Waren; ein Teil der Käufer trägt das Maskottchen sichtbar, Shirts erscheinen in der am Stand eingestellten Farbe und im Schnitt
 - gedrängebewusste A*-Wegsuche, die freie Alternativen ohne große Umwege bevorzugt
 - Personalverwaltung für Reinigung, Sicherheit, Feuerwehr und Sanitäter mit laufenden Lohnkosten
+- Feuerwache mit Feuerwehrwagen, der ohne Auftrag in der Wache steht
+- Tische am Weg zum Essen und Trinken; Camper bleiben häufiger am eigenen Platz
+- Kurs-Attraktionen unter Attraktionen → Kurse: Mudmasters und Tree-to-Tree wechseln nach dem Eingang direkt in den Wegbau. Vom aktuellen Streckenende wird wie beim Straßenbau Feld für Feld eine richtungsfeste Linie gezogen; automatisch erzeugte Übergangsplattformen und Stützen verbinden realistisch aufeinanderfolgende Wege, Hindernisse und Höhenwechsel. Mudmasters nutzt Holz-/Erdhindernisse, Tree-to-Tree Bäume, Kronenpodeste, Planken und Seile. Ein angrenzender Warteschlangenweg verbindet sich gerichtet mit dem Kurseingang; **Fertig** validiert und öffnet die Anlage. Schwimmbad und Paintball beginnen mit einer klar markierten, nachträglich erweiter- und löschbaren Anlagenfläche; verfugte Beckenumgänge, Wasserflächen, gestützte Rutschen sowie Rasen, Netzgrenzen, Bunker und Teamunterstände geben beiden Anlagen einen eigenen Stil. Gäste bleiben während aller Kursinteraktionen sichtbar. Paintballteams warten an ihren Startpunkten und führen anschließend ein langsameres, sichtbares Match mit Markierern und fliegenden Farbkugeln aus. Der Rutschen-Editor zeigt den physikalischen Landepunkt grün/rot an.
+- Bandplaner in 1–5-Sterne-Tabs; 5-Sterne-Headliner nur selten im Lostopf
 - Sanitäter wählen für Transporte stets das über die Wegstrecke nächstgelegene freie Krankenbett
 - Bei Verletzten rückt immer der nächste freie Sanitäter oder Krankenwagen aus; wer schon einen Patienten hat, bleibt bei ihm
 - Idle-Krankenwagen fahren zur Garage zurück statt auf der Straße zu warten; **RTW verkaufen** in der Logistikübersicht oder im Infofenster (sofort an der Garage, sonst nach der Rückfahrt)
@@ -472,6 +476,21 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - responsive Benutzeroberfläche
 - zentrale Balancing-Werte in `src/game/simulationConfig.ts`
 - gedrosselte UI-/Gedrängeupdates und indizierte Weg-/Besuchersuche für große Besuchermengen
+
+### Gemeinsamer Attraktionseditor
+
+Weggeführte Attraktionen verwenden dieselbe RCT2-artige Baugrundlage:
+Achterbahnen, Mudmasters, Tree-to-Tree und Wasserrutschen werden ab einem
+offenen Ende Feld für Feld gebaut. Richtung, Höhenänderung und – bei
+Fahrzeugbahnen – Banking liegen in derselben Palette. „Streckenteil löschen“
+entfernt auch ein mittleres Teil, ohne die beiden übrigen Streckenteile zu
+löschen; ein offenes Ende anklicken und die Lücke neu verbinden.
+
+Paintball und Schwimmflächen werden als zusammenhängende Fläche gezogen.
+Danach erscheinen nur die dort erlaubten Referenzen in der Palette.
+Wasserrutschen sind eigene offene Strecken und können nur geöffnet werden,
+wenn ihr Auslauf in einer Schwimmfläche landet. Eingang, Ausgang, Test/Fertig,
+Preis und Abriss verwenden für alle Attraktionsarten dieselben Prüfungen.
 
 ## Steuerung
 

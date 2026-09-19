@@ -28,7 +28,7 @@ export function createBlankSnapshot(
   const entrance = createScenarioEntrance(settings.worldSize)
   return {
     festival: createFestivalManagement(),
-    version: 30,
+    version: 31,
     waterLevel: DEFAULT_WATER_LEVEL,
     simTick: 0,
     rngState: hashStringSeed(
@@ -65,7 +65,9 @@ export function createBlankSnapshot(
     campingCells: [],
     campInstallations: [],
     visitors: [],
+    attractions: [],
     coasters: [],
+    courses: [],
     cashEffects: [],
     fireworkEffects: [],
     crowding: { average: 0, maximum: 0, cells: [] },

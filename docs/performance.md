@@ -525,3 +525,25 @@ The later run therefore is NOT an isolated before/after measure of this patch:
 less reliable. The previous 67 ms maximum must not be presented as a guarantee
 for the combined tree. No effects, graphics settings or admission limits were
 reduced to produce any of these results. The source save hash remains unchanged.
+
+## Einheitliche Attraktionsgrundlage (0.1.188)
+
+Nach der v30→v31-Attraktionsmigration und dem gemeinsamen Track-/Area-Runtime
+wurde `rtest3` erneut unverändert gemessen (ohne Methodeninstrumentierung).
+120 Ticks, Median/p95/Max und Endpopulation:
+
+- 1×: 10.61 / 25.99 / 91.33 ms, 1103 Besucher.
+- 3×: 20.92 / 38.46 / 65.85 ms, 1114 Besucher.
+- 8×: 24.10 / 39.76 / 58.39 ms, 1164 Besucher.
+
+1200 Ticks:
+
+- 1×: 20.37 / 41.93 / 88.35 ms, 1077 Besucher.
+- 3×: 21.73 / 42.82 / 64.15 ms, 644 Besucher.
+- 8×: 18.22 / 32.42 / 64.28 ms, 2 Besucher.
+
+Die v31-Migration ändert Attraktionsziele und damit Entscheidungen,
+Populationen und State-Hashes; die Werte sind deshalb keine isolierte
+CPU-Prozentmessung gegen v30. Alle p95-Werte bleiben unter dem festen
+100-ms-Tick. Der lange 8×-Lauf erreicht erneut das Festivalende und ist wegen
+der fast leeren Welt nicht als bevölkerter Parkvergleich geeignet.

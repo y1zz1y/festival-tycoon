@@ -333,7 +333,7 @@ export function updateEntityPanel(
     if (!building) return services.close()
     editStage.hidden = building.kind !== 'stage'
     const definition = BUILDINGS[building.kind]
-    icon.textContent = definition.icon; typeLabel.textContent = 'Gebäude'
+    icon.textContent = building.rideType === 'bungee' ? '🪂' : definition.icon; typeLabel.textContent = 'Gebäude'
     name.textContent = building.rideType === 'bungee' ? `Bungee-Turm · ${building.bungeeHeight ?? 20} m` : definition.name
     element<HTMLElement>('#open-ride-construction').hidden = building.kind !== 'ride'
     const active = game.isBuildingCurrentlyActive(building)

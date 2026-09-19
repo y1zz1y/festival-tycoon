@@ -115,7 +115,7 @@ export function updateStageBand(stage:Group,bandId:string|undefined,time:number,
   if(!band||band.userData.bandId!==key){
     if(band){stage.remove(band);disposeObject3D(band)}
     band=new Group();band.userData.bandId=key
-    const floor=design?.54:.28,scale=design?.tileWidth? .78:design?.width? .95:.34
+    const floor=design?.54:.28,scale=design?.tileWidth? .72:design?.width? .78:.55
     const place=(member:Group,x:number,z:number)=>{member.position.set(x,floor,z);member.scale.setScalar(scale);member.userData.baseY=floor;band!.add(member)}
     // An electro act plays a booth rather than a line-up: one DJ behind a console, no band.
     band.userData.costumeId=bandCostumeId(key)

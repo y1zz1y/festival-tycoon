@@ -1,4 +1,5 @@
 import { isWasteBin } from './decorationWalls';
+import { isSealedWasteContainer } from './waste';
 import { musicTaste, musicAppeal } from './musicTaste';
 import { stageDistance, stageSize, type StageDesign } from './stageDesign';
 import { wayInfo } from './wayTypes';
@@ -13,6 +14,8 @@ import { watchableBookings, showIssue, BANDS } from './festivalManagement';
 import type { Booking } from './festivalManagement';
 import type { BuildingKind } from './catalog';
 import type { Coaster } from './coasters';
+import type { Attraction } from './attractions/types';
+import { courseCapacityFor, courseEntrance, isCourseSwimCell, validateCourse, type CourseAttraction } from './courseAttractions';
 import { CampingSystem } from './camping';
 import type { CampingCell } from './camping';
 import { addItem, consumeItem, getItemQuantity, INVENTORY_ITEMS } from './inventory';
@@ -28,8 +31,8 @@ import { DEFAULT_SECURITY_CONFIG, SecuritySystem } from './security';
 import { SIMULATION_CONFIG } from './simulationConfig';
 import { circadianEnergyDecayMultiplier, isMinuteInSleepWindow, remapLegacySleepRhythm, sampleFestivalSleepRhythm, sleepRhythmFromVisitorId } from './visitorSleep';
 import type { StageForecourtCell } from './festivalAreas';
-import { findNearestWasteBin, findNearestWasteBinInRange, wasteBinHasRoom, wasteBinManhattan } from './waste';
-import type { WasteBinInfo, WasteDumpCell } from './waste';
+import { findNearestVisitorWasteTarget, wasteBinHasRoom, wasteBinManhattan } from './waste';
+import type { VisitorWasteTarget, WasteDumpCell } from './waste';
 import { getFestivalCycleStatus, isDayVisitorAdmissionOpen } from './dayPlan';
 import type { DayPlanOffer } from './dayPlan';
 import type { ComplaintTopic } from './complaints';
@@ -101,6 +104,8 @@ export type VisitorBehaviorContext = {
   runVisitorRouting(visitor: Visitor, kind: 'departure' | 'exit' | 'waste', action: () => void): boolean;
   flushVisitorDecisions(limit?: number): void;
   getCoasterQueueCells(coaster: Coaster): Cell[];
+  getCourseQueueCells(course: CourseAttraction): Cell[];
+  getAttractionQueueCells(attraction: Attraction): Cell[];
   getBuildingQueueCells(building: PlacedBuilding): Cell[];
   getFacilityQueue(buildingId: string): string[];
   startFacilityInteraction(visitor: Visitor, target: PlacedBuilding): void;
@@ -458,6 +463,7 @@ export class VisitorBehaviorService {
           return
         }
         if (visitor.campingPhase === 'resting') {
+          this.consumeWhileStationary(visitor, minutes)
           visitor.needs.energy = Math.min(
             100,
             visitor.needs.energy +
@@ -737,7 +743,8 @@ export class VisitorBehaviorService {
             : visitor.alcoholLevel >= movement.moderatelyDrunkThreshold
               ? movement.moderatelyDrunkMultiplier
               : 1)) *
-      (this.context.isWaterTerrain(visitor.cellX, visitor.cellZ) &&
+      ((this.context.isWaterTerrain(visitor.cellX, visitor.cellZ) ||
+        isCourseSwimCell(this.context.state.courses, visitor.cellX, visitor.cellZ)) &&
       !this.context.getPathAt(visitor.cellX, visitor.cellZ, visitor.cellElevation)
         ? SIMULATION_CONFIG.terrain.swimMoveMultiplier
         : this.context.isMudTerrain(visitor.cellX, visitor.cellZ)
@@ -1059,7 +1066,7 @@ export class VisitorBehaviorService {
 
     if (visitor.targetId) {
       const target = this.context.state.buildings.find((building) => building.id === visitor.targetId)
-      if (target && isWasteBin(target.kind)) {
+      if (target && (isWasteBin(target.kind) || isSealedWasteContainer(target.kind))) {
         this.depositPendingWaste(visitor, target.id)
         visitor.targetId = null
         if (visitor.campingPhase === 'none' && visitor.hasHandcart) {
@@ -1119,6 +1126,13 @@ export class VisitorBehaviorService {
         if (!hasReservation) coaster.queue.push(visitor.id)
         visitor.state = 'queuing'
         visitor.thought = `Ich warte bei ${coaster.name}.`
+        return
+      }
+      const course = (this.context.state.courses ?? []).find((entry) => entry.id === visitor.targetId)
+      if (course?.operating) {
+        if (!course.queue.includes(visitor.id)) course.queue.push(visitor.id)
+        visitor.state = 'queuing'
+        visitor.thought = `Ich warte bei ${course.name}.`
         return
       }
     }
@@ -1345,6 +1359,17 @@ export class VisitorBehaviorService {
 
     for (const kind of desiredKinds) {
       if (kind === 'ride') {
+        const attractionDestination = this.findReachableAttraction(visitor)
+        if (attractionDestination) {
+          if (!attractionDestination.attraction.queue.includes(visitor.id)) {
+            attractionDestination.attraction.queue.push(visitor.id)
+          }
+          visitor.state = 'seeking'
+          visitor.targetId = attractionDestination.attraction.id
+          visitor.route = attractionDestination.route
+          visitor.thought = `Ich möchte ${attractionDestination.attraction.name} ausprobieren!`
+          return
+        }
         const coasterDestination = this.findReachableCoaster(visitor)
         if (coasterDestination) {
           if (!coasterDestination.coaster.queue.includes(visitor.id)) {
@@ -1354,6 +1379,17 @@ export class VisitorBehaviorService {
           visitor.targetId = coasterDestination.coaster.id
           visitor.route = coasterDestination.route
           visitor.thought = `Ich möchte ${coasterDestination.coaster.name} fahren!`
+          return
+        }
+        const courseDestination = this.findReachableCourse(visitor)
+        if (courseDestination) {
+          if (!courseDestination.course.queue.includes(visitor.id)) {
+            courseDestination.course.queue.push(visitor.id)
+          }
+          visitor.state = 'seeking'
+          visitor.targetId = courseDestination.course.id
+          visitor.route = courseDestination.route
+          visitor.thought = `Ich möchte ${courseDestination.course.name} ausprobieren!`
           return
         }
         const fullCoaster = this.context.state.coasters.find((coaster) => {
@@ -2013,20 +2049,28 @@ export class VisitorBehaviorService {
     this.tryDisposeWaste(visitor)
   }
 
-  listVisitorWasteBins(): WasteBinInfo[] {
+  listVisitorWasteBins(): VisitorWasteTarget[] {
     if (this.visitorWasteBinTick !== this.context.state.simTick) {
       this.visitorWasteBinTick = this.context.state.simTick
       this.visitorWasteBinBuildings = this.context.state.buildings.filter(
-        (building) => isWasteBin(building.kind),
+        (building) =>
+          isWasteBin(building.kind) || isSealedWasteContainer(building.kind),
       )
     }
-    return this.visitorWasteBinBuildings.map((building) => ({
-      id: building.id,
-      x: building.x,
-      z: building.z,
-      elevation: building.elevation,
-      stored: building.wasteFill ?? 0,
-    }))
+    return this.visitorWasteBinBuildings.map((building) => {
+      const sealed = isSealedWasteContainer(building.kind)
+      return {
+        id: building.id,
+        x: building.x,
+        z: building.z,
+        elevation: building.elevation,
+        stored: building.wasteFill ?? 0,
+        kind: sealed ? 'sealed' as const : 'bin' as const,
+        capacity: sealed
+          ? SIMULATION_CONFIG.waste.sealedContainerCapacity
+          : SIMULATION_CONFIG.waste.binCapacity,
+      }
+    })
   }
 
   discardWasteIfCannotUseBin(visitor: Visitor): boolean {
@@ -2046,14 +2090,14 @@ export class VisitorBehaviorService {
     const config = SIMULATION_CONFIG.waste
     const from = { x: visitor.cellX, z: visitor.cellZ }
     const bins = this.listVisitorWasteBins()
-    const nearest = findNearestWasteBinInRange(from, bins, config.binRange)
+    const nearest = findNearestVisitorWasteTarget(from, bins, false)
     const target = visitor.targetId
       ? bins.find((bin) => bin.id === visitor.targetId)
       : undefined
     const nearestFull =
-      Boolean(nearest) && !wasteBinHasRoom(nearest!, config.binCapacity)
+      Boolean(nearest) && !wasteBinHasRoom(nearest!, nearest!.capacity)
     const targetFull =
-      Boolean(target) && !wasteBinHasRoom(target!, config.binCapacity)
+      Boolean(target) && !wasteBinHasRoom(target!, target!.capacity)
     if (!nearest || (config.visitorDropIfBinFull && (nearestFull || targetFull))) {
       this.dropPendingWaste(visitor)
       return true
@@ -2064,14 +2108,8 @@ export class VisitorBehaviorService {
   tryDisposeWaste(visitor: Visitor): void {
     if (this.discardWasteIfCannotUseBin(visitor)) return
     if ((visitor.pendingWaste ?? 0) <= 0) return
-    const config = SIMULATION_CONFIG.waste
     const from = { x: visitor.cellX, z: visitor.cellZ }
-    const bin = findNearestWasteBin(
-      from,
-      this.listVisitorWasteBins(),
-      config.binRange,
-      config.binCapacity,
-    )
+    const bin = findNearestVisitorWasteTarget(from, this.listVisitorWasteBins())
     if (!bin) {
       this.dropPendingWaste(visitor)
       return
@@ -2113,21 +2151,26 @@ export class VisitorBehaviorService {
     visitor.targetId = bin.id
     visitor.state = 'seeking'
     visitor.route = route
-    visitor.thought = 'Ich gehe zum Mülleimer.'
+    visitor.thought =
+      this.listVisitorWasteBins().find((entry) => entry.id === bin.id)?.kind === 'sealed'
+        ? 'Ich gehe zum verschlossenen Mülleimer.'
+        : 'Ich gehe zum Mülleimer.'
   }
 
   depositPendingWaste(visitor: Visitor, binId: string): void {
     const bin = this.context.state.buildings.find(
-      (building) => building.id === binId && isWasteBin(building.kind),
+      (building) =>
+        building.id === binId &&
+        (isWasteBin(building.kind) || isSealedWasteContainer(building.kind)),
     )
     if (!bin) {
       this.dropPendingWaste(visitor)
       return
     }
-    const room = Math.max(
-      0,
-      SIMULATION_CONFIG.waste.binCapacity - (bin.wasteFill ?? 0),
-    )
+    const capacity = isSealedWasteContainer(bin.kind)
+      ? SIMULATION_CONFIG.waste.sealedContainerCapacity
+      : SIMULATION_CONFIG.waste.binCapacity
+    const room = Math.max(0, capacity - (bin.wasteFill ?? 0))
     const stored = Math.min(visitor.pendingWaste, room)
     bin.wasteFill = (bin.wasteFill ?? 0) + stored
     visitor.pendingWaste -= stored
@@ -2594,6 +2637,12 @@ export class VisitorBehaviorService {
         cells.push({ x, z, elevation: height })
       }
     }
+    for (const course of this.context.state.courses ?? []) {
+      for (const piece of course.pieces) {
+        if (piece.kind !== 'poolBasin') continue
+        cells.push({ x: piece.x, z: piece.z, elevation: this.context.getTerrainHeight(piece.x, piece.z) })
+      }
+    }
     this.swimGoalCells = cells
     return cells
   }
@@ -2749,7 +2798,7 @@ export class VisitorBehaviorService {
       elevation: visitor.cellElevation,
     }
     const candidates = this.context.state.buildings
-      .filter((building) => building.kind === 'bench')
+      .filter((building) => building.kind === 'bench' || building.kind === 'table')
       .map((building) => {
         this.ensureVisitorOccupancy()
         let occupantCount = this.benchHeadcount.get(building.id) ?? 0
@@ -2758,12 +2807,16 @@ export class VisitorBehaviorService {
           occupantCount -= 1
           usedBits &= ~(1 << (visitor.activitySlot & 31))
         }
-        if (occupantCount >= SIMULATION_CONFIG.atmosphere.benchCapacity) {
+        const capacity =
+          building.kind === 'table'
+            ? BUILDINGS.table.capacity
+            : SIMULATION_CONFIG.atmosphere.benchCapacity
+        if (occupantCount >= capacity) {
           return null
         }
         const slot =
           Array.from(
-            { length: SIMULATION_CONFIG.atmosphere.benchCapacity },
+            { length: capacity },
             (_, index) => index,
           ).find((index) => (usedBits & (1 << index)) === 0) ?? 0
         return {
@@ -3007,6 +3060,53 @@ export class VisitorBehaviorService {
     return match ? { building: match.building, route } : null
   }
 
+  findReachableAttraction(
+    visitor: Visitor,
+  ): { attraction: Attraction; route: Cell[] } | null {
+    const start = {
+      x: visitor.cellX,
+      z: visitor.cellZ,
+      elevation: visitor.cellElevation,
+    }
+    const candidates = this.context.state.attractions
+      .filter((attraction) =>
+        attraction.operationMode === 'open' &&
+        attraction.access.mode === 'queuedEntrance' &&
+        Boolean(attraction.access.entrance) &&
+        this.context.isOfferCurrentlyActive('rides') &&
+        attraction.queue.length < attractionCapacity(attraction),
+      )
+      .map((attraction) => {
+        const queueEntrance = this.context.getAttractionQueueCells(attraction).at(-1)
+        return queueEntrance
+          ? {
+              attraction,
+              queueEntrance,
+              distance:
+                Math.abs(queueEntrance.x - start.x) +
+                Math.abs(queueEntrance.z - start.z),
+            }
+          : null
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))
+      .sort((left, right) => left.distance - right.distance)
+      .slice(0, SIMULATION_CONFIG.pathfinding.maxFacilityCandidates)
+    if (candidates.length === 0) return null
+    const route = this.context.findPath(
+      start,
+      candidates.map((candidate) => candidate.queueEntrance),
+      true,
+    )
+    if (!route) return null
+    const end = route.at(-1) ?? start
+    const match = candidates.find((candidate) =>
+      candidate.queueEntrance.x === end.x &&
+      candidate.queueEntrance.z === end.z &&
+      Math.abs(candidate.queueEntrance.elevation - end.elevation) < 0.01
+    ) ?? candidates[0]
+    return match ? { attraction: match.attraction, route } : null
+  }
+
   findReachableCoaster(
     visitor: Visitor,
   ): { coaster: Coaster; route: Cell[] } | null {
@@ -3063,6 +3163,58 @@ export class VisitorBehaviorService {
           Math.abs(candidate.queueEntrance.elevation - end.elevation) < 0.01,
       ) ?? candidates[0]
     return match ? { coaster: match.coaster, route } : null
+  }
+
+  findReachableCourse(
+    visitor: Visitor,
+  ): { course: CourseAttraction; route: Cell[] } | null {
+    const start = {
+      x: visitor.cellX,
+      z: visitor.cellZ,
+      elevation: visitor.cellElevation,
+    }
+    const candidates = (this.context.state.courses ?? [])
+      .filter((course) => {
+        const entrance = courseEntrance(course)
+        return (
+          course.operating &&
+          !validateCourse(course) &&
+          this.context.isOfferCurrentlyActive('rides') &&
+          entrance &&
+          course.queue.length < courseCapacityFor(course)
+        )
+      })
+      .map((course) => {
+        const queueEntrance = this.context.getCourseQueueCells(course).at(-1)
+        return queueEntrance
+          ? {
+              course,
+              queueEntrance,
+              distance:
+                Math.abs(queueEntrance.x - start.x) +
+                Math.abs(queueEntrance.z - start.z),
+            }
+          : null
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))
+      .sort((left, right) => left.distance - right.distance)
+      .slice(0, SIMULATION_CONFIG.pathfinding.maxFacilityCandidates)
+    if (candidates.length === 0) return null
+    const route = this.context.findPath(
+      start,
+      candidates.map((candidate) => candidate.queueEntrance),
+      true,
+    )
+    if (!route) return null
+    const end = route.at(-1) ?? start
+    const match =
+      candidates.find(
+        (candidate) =>
+          candidate.queueEntrance.x === end.x &&
+          candidate.queueEntrance.z === end.z &&
+          Math.abs(candidate.queueEntrance.elevation - end.elevation) < 0.01,
+      ) ?? candidates[0]
+    return match ? { course: match.course, route } : null
   }
 
   visitorDecisionRng(visitor: Visitor): () => number {
@@ -3492,4 +3644,18 @@ export class VisitorBehaviorService {
             ? 'happy'
             : 'neutral'
   }
+}
+
+function attractionCapacity(attraction: Attraction): number {
+  if (attraction.runtime.kind === 'coaster') return attraction.runtime.train.capacity
+  if (attraction.runtime.kind === 'scriptedRide') {
+    return attraction.runtime.rideKind === 'bungee' ? 1 : 8
+  }
+  if (attraction.runtime.kind === 'course') {
+    if (attraction.runtime.courseKind === 'paintball') {
+      return Math.max(2, (attraction.runtime.teamSize ?? 4) * 2)
+    }
+    return SIMULATION_CONFIG.courses.capacity[attraction.runtime.courseKind]
+  }
+  return 0
 }

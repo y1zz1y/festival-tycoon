@@ -4,6 +4,7 @@ import { normalizeBandActor, type BandActor } from './bandActors'
 import type { CampSetupKind } from './camping'
 import { BUILDING_KINDS, BUILDINGS } from './catalog'
 import { createCoasterTelemetry, getCoasterType, migrateTrackPiece, resolveCoasterTypeId, sampleCoasterTrack, type Coaster } from './coasters'
+import { normalizeCourses } from './courseAttractions'
 import { normalizeComplaintSnapshot } from './complaints'
 import { normalizeDayPlan } from './dayPlan'
 import { createFinanceState } from './finance'
@@ -80,7 +81,7 @@ export function normalizeSnapshotForRuntime(context: SnapshotRepairContext): voi
     .map(normalizeBandActor)
     .filter((actor): actor is BandActor => actor !== null)
   state.bandSupply ??= emptyBandSupplySnapshot()
-  state.version = 30
+  state.version = 31
   state.waterLevel = normalizeWaterLevel(state.waterLevel)
   syncStageAudience(state)
   state.attractiveness ??= { average: 0, maximum: 0, minimum: 0, cells: [] }
@@ -105,6 +106,8 @@ export function repairSnapshotEntities(context: SnapshotRepairContext): number {
   state.power = normalizePower(state.power)
   context.rebuildTerrainCache()
   state.coasters ??= []
+  state.courses = normalizeCourses(state.courses)
+  state.attractions ??= []
   state.cashEffects = []
   state.fireworkEffects = []
   state.crowding = { average: 0, maximum: 0, cells: [] }

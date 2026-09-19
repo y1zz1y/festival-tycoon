@@ -64,6 +64,9 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
   (Kotze/verlassene Camps, vorher 10), `cleanerLitterWorkMinutes` 3.5
   (Bodenmüll, vorher 4), `cleanerBinWorkMinutes` 5.5 (Eimer und
   versiegelte Container, vorher 6).
+- Priorität bleibt, aber ein höherer Job jenseits
+  `staff.cleanerLocalWorkTiles` weicht lokaler Arbeit im nahen Umfeld.
+  Feuerwehrwagen fahren große Brände an; Fuß-Feuerwehr löscht vor Ort.
 - Reinigungskräfte leeren Eimer in dieser Reihenfolge: volle Eimer
   (Füllstand ≥ `waste.binCapacity`) vor Bodenmüll, Kotze und verlassenen
   Camps; erst wenn nichts davon anliegt, leeren sie teilweise gefüllte

@@ -126,7 +126,7 @@ export const DECORATION_CATEGORY_LABELS: Record<DecorationCategoryId, string> = 
 export const DEFAULT_DECORATION_THEME: DecorationThemeId = 'klassik'
 
 /** Full-tile catalog pieces that stay in Klassik and are not scenery slots. */
-export const FULL_TILE_DECORATION_KINDS = ['bench', 'fence', 'lighting', 'lightBalloon'] as const
+export const FULL_TILE_DECORATION_KINDS = ['bench', 'table', 'fence', 'lighting', 'lightBalloon'] as const
 
 type DecorationEntry = {
   kind: BuildingKind
@@ -145,6 +145,7 @@ const DECORATION_ENTRIES: readonly DecorationEntry[] = [
   { kind: 'flowerbed', theme: 'klassik', category: 'plants' },
   { kind: 'planter', theme: 'klassik', category: 'plants' },
   { kind: 'bench', theme: 'klassik', category: 'furniture' },
+  { kind: 'table', theme: 'klassik', category: 'furniture' },
   { kind: 'picnicTable', theme: 'klassik', category: 'furniture' },
   { kind: 'lighting', theme: 'klassik', category: 'lights' },
   { kind: 'lightBalloon', theme: 'klassik', category: 'lights' },

@@ -1,6 +1,7 @@
 import { BUILDING_KINDS, BUILDINGS } from './catalog'
 import type { BuildingKind, Tool } from './catalog'
 import { TRACK_PIECES, type CoasterTypeId } from './coasters'
+import { COURSE_KINDS, COURSE_SPECS, type CourseKind } from './courseAttractions'
 import { listPlayableCoasterCatalogTypes } from './coasterTypes'
 import {
   DECORATION_CATEGORY_IDS,
@@ -40,6 +41,7 @@ export type BuildMenuItem = {
   previewSupply?: 'delivery' | 'supply'
   bungee?: boolean
   coasterTypeId?: CoasterTypeId
+  courseKind?: CourseKind
 }
 
 export type BuildSubgroup = {
@@ -73,7 +75,7 @@ function toolItem(
   name: string,
   icon: string,
   detail: string,
-  extra?: Pick<BuildMenuItem, 'bungee' | 'previewKind' | 'previewSupply' | 'coasterTypeId'>,
+  extra?: Pick<BuildMenuItem, 'bungee' | 'previewKind' | 'previewSupply' | 'coasterTypeId' | 'courseKind'>,
 ): BuildMenuItem {
   return { tool, name, icon, detail, ...extra }
 }
@@ -212,6 +214,27 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         items: coasterTypeItems(),
       },
       {
+        id: 'courses',
+        label: 'Kurse',
+        items: COURSE_KINDS.map((kind) =>
+          toolItem(
+            'course',
+            COURSE_SPECS[kind].name,
+            COURSE_SPECS[kind].icon,
+            `${COURSE_SPECS[kind].startCost.toLocaleString('de-DE')} € · ${
+              kind === 'mudmasters'
+                ? 'Hindernisparcours'
+                : kind === 'pool'
+                  ? 'Becken und Rutschen'
+                  : kind === 'treeToTree'
+                    ? 'Bäume und Seilbahnen'
+                    : 'Spielfeld mit Teams'
+            }`,
+            { courseKind: kind },
+          ),
+        ),
+      },
+      {
         id: 'stalls',
         label: 'Stände',
         items: [
@@ -331,6 +354,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         label: 'Krankenhaus',
         items: [
           buildingMenuItem('ambulanceGarage'),
+          buildingMenuItem('fireStation'),
           toolItem('medicalArea', 'Krankenbereich', '🏥', '3 Liegen je Feld'),
         ],
       },
@@ -422,6 +446,7 @@ export function placeableTools(): Tool[] {
     'supplyDepot',
     'staffGate',
     'coaster',
+    'course',
     'terrainRaise',
     'terrainLower',
     'terrainSmooth',

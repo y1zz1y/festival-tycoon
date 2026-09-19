@@ -490,6 +490,19 @@ export class CampingSystem {
     capacity: number
   } | null {
     const installations = this.context.getInstallations()
+    const home = visitor.campsite
+    if (home && this.context.rng().next() < 0.62) {
+      const homeRoute = this.findRouteToCampsite(visitor, home)
+      if (homeRoute) {
+        return {
+          route: homeRoute,
+          target: { ...home },
+          kind: 'chairs',
+          slot: 0,
+          capacity: 6,
+        }
+      }
+    }
     if (installations.length === 0) return null
     // One occupancy pass and one multi-goal route search. Searching once per
     // installation made a single social decision run hundreds of A* searches.

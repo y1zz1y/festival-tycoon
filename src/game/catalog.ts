@@ -39,12 +39,14 @@ export const BUILDING_KINDS = [
   'copperPlanter', 'gearBench', 'gasLamp', 'pipeTotem', 'gearStack', 'pipeRail',
   'fence',
   'bench',
+  'table',
   'lighting',
   'lightBalloon',
   'stage',
   'directionalSpeaker',
   'omniSpeaker',
   'ambulanceGarage',
+  'fireStation',
   'busStop',
   'busDepot',
   'wasteDepot',
@@ -83,6 +85,7 @@ export type Tool =
   | 'supplyDepot'
   | 'staffGate'
   | 'coaster'
+  | 'course'
   | 'terrainRaise'
   | 'terrainLower'
   | 'terrainFlatten'
@@ -250,6 +253,14 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
     color: 0x98643c,
     icon: '🪑',
   },
+  table: {
+    kind: 'table',
+    name: 'Tisch',
+    ...SIMULATION_CONFIG.economy.buildings.table,
+    height: 0.72,
+    color: 0xb07a48,
+    icon: '🪵',
+  },
   lighting: {
     kind: 'lighting',
     name: 'Beleuchtung',
@@ -297,6 +308,14 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
     height: 1.7,
     color: 0xe8ecef,
     icon: '🚑',
+  },
+  fireStation: {
+    kind: 'fireStation',
+    name: 'Feuerwache',
+    ...SIMULATION_CONFIG.economy.buildings.fireStation,
+    height: 1.7,
+    color: 0xc94135,
+    icon: '🚒',
   },
   busStop: {
     kind: 'busStop',

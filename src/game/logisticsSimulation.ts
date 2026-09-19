@@ -57,6 +57,7 @@ export function buildLogisticsTickState(
   const logistics = context.state.logistics
   const occupied = new Map<string, string>()
   for (const vehicle of logistics.roadVehicles) {
+    if (vehicle.housed) continue
     if (vehicle.cell && vehicle.state !== 'parked' && vehicle.kind !== 'sweeper') {
       occupied.set(context.roadPositionKey(vehicle.cell), vehicle.id)
       if (

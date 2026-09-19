@@ -30,6 +30,7 @@ export const LOGISTICS_FACILITY_KINDS = [
   'wasteDepot',
   'specialDepot',
   'ambulanceGarage',
+  'fireStation',
   'tourBusParking',
 ] as const satisfies readonly BuildingKind[]
 
@@ -220,11 +221,12 @@ function buildAmbulanceGarage(): ReturnType<ModelKit['finish']> {
   k.box(0, 0.65, -0.1, 1.55, 1.15, 1.4, 0x6a7e90)
   k.box(0, 1.28, -0.08, 1.7, 0.12, 1.55, 0xf4f4ee)
   k.box(0, 1.38, -0.08, 1.5, 0.08, 1.35, 0xe0e4e8)
-  // Open bay
   k.box(-0.7, 0.65, 0.62, 0.12, 1.15, 0.12, ink)
+  k.box(0, 0.65, 0.62, 0.08, 1.15, 0.1, ink)
   k.box(0.7, 0.65, 0.62, 0.12, 1.15, 0.12, ink)
   k.box(0, 1.25, 0.62, 1.52, 0.1, 0.12, ink)
-  k.box(0, 0.1, 0.45, 1.2, 0.03, 0.9, 0xf4f4ee)
+  k.box(-0.35, 0.1, 0.45, 0.55, 0.03, 0.9, 0xf4f4ee)
+  k.box(0.35, 0.1, 0.45, 0.55, 0.03, 0.9, 0xf4f4ee)
   // Medical cross
   k.box(0, 0.95, -0.82, 0.12, 0.45, 0.04, 0xd73832)
   k.box(0, 0.95, -0.82, 0.45, 0.12, 0.04, 0xd73832)
@@ -316,6 +318,36 @@ function buildVisitorCar(color: number): ReturnType<ModelKit['finish']> {
   // Roof rails / antenna
   k.box(0, 0.49, -0.05, 0.28, 0.02, 0.3, ink)
   k.cylinder(0.12, 0.56, -0.18, 0.012, 0.12, ink)
+  return k.finish()
+}
+
+function buildFireStation(): ReturnType<ModelKit['finish']> {
+  const k = new ModelKit()
+  buildPad(k, 2, 0x4a3a38)
+  k.box(0, 0.08, 0, 1.8, 0.04, 1.8, 0x6a4a44)
+  k.box(0, 0.65, -0.1, 1.55, 1.15, 1.4, 0xc94135)
+  k.box(0, 1.28, -0.08, 1.7, 0.12, 1.55, 0xf4f4ee)
+  k.box(-0.7, 0.65, 0.62, 0.12, 1.15, 0.12, ink)
+  k.box(0, 0.65, 0.62, 0.08, 1.15, 0.1, ink)
+  k.box(0.7, 0.65, 0.62, 0.12, 1.15, 0.12, ink)
+  k.box(0, 1.25, 0.62, 1.52, 0.1, 0.12, ink)
+  k.box(-0.35, 0.1, 0.45, 0.55, 0.03, 0.9, 0xf4e4c8)
+  k.box(0.35, 0.1, 0.45, 0.55, 0.03, 0.9, 0xf4e4c8)
+  return k.finish()
+}
+
+function buildFireTruck(): ReturnType<ModelKit['finish']> {
+  const k = new ModelKit()
+  k.box(0, 0.1, 0, 0.52, 0.06, 0.88, ink)
+  k.box(0, 0.26, 0, 0.5, 0.24, 0.84, 0xc94135)
+  k.box(0, 0.46, -0.12, 0.46, 0.22, 0.42, 0xc94135)
+  k.box(0, 0.44, 0.28, 0.4, 0.14, 0.22, 0xf4f4ee)
+  k.box(0, 0.56, -0.12, 0.18, 0.08, 0.28, 0xe0a832)
+  for (const x of [-0.24, 0.24]) {
+    for (const z of [-0.26, 0.28]) {
+      k.box(x, 0.1, z, 0.06, 0.16, 0.16, 0x1a1c1e)
+    }
+  }
   return k.finish()
 }
 
@@ -489,6 +521,7 @@ export function createLogisticsFacility(kind: LogisticsFacilityKind): Group {
     wasteDepot: buildWasteDepot,
     specialDepot: buildSpecialDepot,
     ambulanceGarage: buildAmbulanceGarage,
+    fireStation: buildFireStation,
     tourBusParking: buildTourBusParking,
   }
   return meshFrom(kind, facilityGeometries, builders[kind], facilityMaterial)
@@ -518,6 +551,7 @@ export function createRoadVehicleModel(
   }
   const builders: Record<Exclude<RoadVehicleKind, 'visitorCar'>, () => ReturnType<ModelKit['finish']>> = {
     ambulance: buildAmbulance,
+    fireTruck: buildFireTruck,
     bus: buildBus,
     garbageTruck: buildGarbageTruck,
     deliveryTruck: buildDeliveryTruck,

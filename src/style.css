@@ -2460,6 +2460,22 @@ body.title-open #app-install-hint {
   pointer-events: auto;
 }
 
+.course-builder { z-index: 36; }
+.course-builder #course-piece-palette {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.course-builder #course-piece-palette button {
+  display: grid;
+  gap: 2px;
+  min-height: 64px;
+  padding: 8px;
+}
+.course-builder #course-piece-palette button.active {
+  background: #775b31;
+  border-color: #e2c57e;
+}
 .ride-builder { left: 12px; z-index: 35; }
 .ride-builder .coaster-access-actions button { display: grid; gap: 5px; min-height: 88px; padding: 10px; }
 .ride-builder .coaster-access-actions button > span { font-size: 25px; }

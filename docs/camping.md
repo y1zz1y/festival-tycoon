@@ -25,6 +25,7 @@ Multi-Goal-Suche, kein A* pro Objekt.
 - `findRouteToGathering` bleibt eine Suche für alle Treffpunkte
   (Regression: 335 Installationen in rtest3). Belegte Sitze ausschließen,
   entfernte Alternativen einbeziehen, wenn nahe Plätze voll oder blockiert sind.
+  Heimatparzellen werden stärker gewichtet; Camper essen/reden häufiger am Platz.
 - Verlassene Zelte können `appearanceId` / `fabricColor` tragen; das muss
   durch Abreise, Speichern und Multiplayer erhalten bleiben.
 - Legacy-Zelte ohne Appearance behalten den braunen Fallback.

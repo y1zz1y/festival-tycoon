@@ -75,6 +75,39 @@ const EMPTY: AtmosphereSnapshot = {
   cells: [],
 }
 
+export function atmosphereCellKey(x: number, z: number): string {
+  return `${x},${z}`
+}
+
+export function collectBuiltAtmosphereCells(input: {
+  buildings?: ReadonlyArray<{ x: number; z: number }>
+  campingCells?: ReadonlyArray<{ x: number; z: number }>
+  medicalCells?: ReadonlyArray<{ x: number; z: number }>
+  wasteDumpCells?: ReadonlyArray<{ x: number; z: number }>
+  backstageCells?: ReadonlyArray<{ x: number; z: number }>
+  stageForecourtCells?: ReadonlyArray<{ x: number; z: number }>
+  powerCables?: ReadonlyArray<{ x: number; z: number }>
+  roadCells?: ReadonlyArray<{ x: number; z: number }>
+  parkingCells?: ReadonlyArray<{ x: number; z: number }>
+  courseCells?: ReadonlyArray<{ x: number; z: number }>
+}): Set<string> {
+  const built = new Set<string>()
+  const add = (cells?: ReadonlyArray<{ x: number; z: number }>) => {
+    cells?.forEach((cell) => built.add(atmosphereCellKey(cell.x, cell.z)))
+  }
+  add(input.buildings)
+  add(input.campingCells)
+  add(input.medicalCells)
+  add(input.wasteDumpCells)
+  add(input.backstageCells)
+  add(input.stageForecourtCells)
+  add(input.powerCables)
+  add(input.roadCells)
+  add(input.parkingCells)
+  add(input.courseCells)
+  return built
+}
+
 const DIRECTIONS = [
   { x: 0, z: 1 },
   { x: 1, z: 0 },
@@ -95,6 +128,7 @@ export class AtmosphereSystem {
     wasteDumps: readonly WasteDumpCell[] = [],
     worldSize = WORLD_SIZE,
     mobileSources: readonly AtmosphereMobileSource[] = [],
+    builtCells?: ReadonlySet<string>,
   ): AtmosphereResult {
     const sources = this.createSources(
       buildings,
@@ -133,8 +167,8 @@ export class AtmosphereSystem {
       }
     })
     return {
-      attractiveness: this.toSnapshot(beautyRaw, true),
-      partyMood: this.toSnapshot(partyRaw, false),
+      attractiveness: this.toSnapshot(beautyRaw, true, builtCells),
+      partyMood: this.toSnapshot(partyRaw, false, builtCells),
       attractivenessValues: this.toValues(beautyRaw, true),
       partyMoodValues: this.toValues(partyRaw, false),
     }
@@ -323,6 +357,7 @@ export class AtmosphereSystem {
   private toSnapshot(
     raw: Map<string, { x: number; z: number; elevation: number; positive: number; negative: number }>,
     signed: boolean,
+    builtCells?: ReadonlySet<string>,
   ): AtmosphereSnapshot {
     const cells = [...raw.values()]
       .map((cell) => ({ ...cell, value: this.combined(cell, signed) }))
@@ -332,9 +367,13 @@ export class AtmosphereSystem {
       )
       .map(({ x, z, elevation, value }) => ({ x, z, elevation, value }))
     if (cells.length === 0) return { ...EMPTY, cells: [] }
+    const scored = builtCells
+      ? cells.filter((cell) => builtCells.has(atmosphereCellKey(cell.x, cell.z)))
+      : cells
+    const averageSource = scored.length > 0 ? scored : cells
     return {
       average:
-        cells.reduce((total, cell) => total + cell.value, 0) / cells.length,
+        averageSource.reduce((total, cell) => total + cell.value, 0) / averageSource.length,
       maximum: Math.max(...cells.map((cell) => cell.value)),
       minimum: Math.min(...cells.map((cell) => cell.value)),
       cells,

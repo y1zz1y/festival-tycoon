@@ -51,6 +51,7 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
   Besucherbudget. Bis zur Bearbeitung bleibt `pendingWaste` erhalten; bereits
   laufende Wege zum Eimer werden nicht bei jeder Abreiseprüfung neu gesucht.
   Ist der nächste Eimer in `waste.binRange` voll (`visitorDropIfBinFull`)
+  oder ein versiegelter Container im 7×7-Umfeld voll,
   oder gibt es keinen begehbaren Eimer mit Platz, wird der Müll lokal als
   `litter` fallen gelassen; Gäste warten nicht auf einen vollen Eimer und
   suchen keinen weiter entfernten. Eimer mit Platz werden weiter benutzt.

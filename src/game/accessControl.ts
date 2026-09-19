@@ -315,6 +315,41 @@ export function isAccessScheduleOpen(
   return isScheduleOpen(control.openSlots, minute)
 }
 
+export function accessScheduleOpensToday(
+  control: AccessControlBase,
+  minute: number,
+  context?: AccessScheduleContext,
+): boolean {
+  if (isAccessScheduleOpen(control, minute, context)) return true
+  const until = minutesUntilAccessScheduleOpen(control, minute, context)
+  if (!Number.isFinite(until)) return false
+  const minuteOfDay =
+    ((Math.floor(minute) % ACCESS_MINUTES_PER_DAY) + ACCESS_MINUTES_PER_DAY) %
+    ACCESS_MINUTES_PER_DAY
+  return minuteOfDay + until < ACCESS_MINUTES_PER_DAY
+}
+
+export function accessControlCanOpenToday(
+  control: AccessControl,
+  minute: number,
+  context?: AccessScheduleContext,
+): boolean {
+  if (control.mode === 'always') return true
+  if (control.mode === 'locked') return false
+  if (control.mode === 'schedule') return accessScheduleOpensToday(control, minute, context)
+  return true
+}
+
+export function closedAllDayAccessEdges(
+  controls: readonly AccessControl[],
+  minute: number,
+  context?: AccessScheduleContext,
+): Set<string> {
+  return closedAccessEdges(
+    controls.filter((control) => !accessControlCanOpenToday(control, minute, context)),
+  )
+}
+
 export function minutesUntilAccessScheduleOpen(
   control: AccessControlBase,
   minute: number,

@@ -6,7 +6,9 @@ import { applyDirectCellTool } from '../src/input/toolRouter'
 import { connectedPathLine, rectangleCells } from '../src/input/pathToolController'
 import { contextHelpText } from '../src/ui/contextHelp'
 import { catalogTileHtml } from '../src/ui/buildCatalog'
+import { orderedCourseLineTargets } from '../src/ui/courseBuilderPanel'
 import { DifferentialUpdates, listFingerprint } from '../src/ui/differentialUpdates'
+import { appendCoursePiece, createEmptyCourse } from '../src/game/courseAttractions'
 import {
   areaSelection,
   createAreaDesignationHandler,
@@ -76,6 +78,21 @@ export function testUiModules(): void {
     { x: 0, z: 0 }, { x: 1, z: 0 }, { x: 1, z: 1 },
     { x: 2, z: 1 }, { x: 2, z: 2 },
   ])
+  const course = createEmptyCourse('line-course', 'mudmasters')
+  assert.notEqual(appendCoursePiece(course, 'entrance', 2, 2, 0), 'string')
+  assert.deepEqual(
+    orderedCourseLineTargets(course, [{ x: 2, z: 2 }, { x: 3, z: 2 }, { x: 4, z: 2 }]),
+    [{ x: 3, z: 2 }, { x: 4, z: 2 }],
+  )
+  assert.deepEqual(
+    orderedCourseLineTargets(course, [{ x: 4, z: 2 }, { x: 3, z: 2 }, { x: 2, z: 2 }]),
+    [{ x: 3, z: 2 }, { x: 4, z: 2 }],
+    'dragging toward the current endpoint still produces one ordered route',
+  )
+  assert.match(
+    String(orderedCourseLineTargets(course, [{ x: 7, z: 7 }, { x: 8, z: 7 }])),
+    /Streckenende/,
+  )
 
   const local: SaveSlotView[] = [{
     id: 'local',
@@ -129,6 +146,7 @@ export function testUiModules(): void {
     placementPreview: { valid: false, message: 'Autoritative Vorschau' },
     modes: {
       coaster: { active: false, coasterId: null, startCandidate: null, accessMode: null },
+      course: { active: false },
       path: { open: false, constructing: false, demolishing: false, road: false, anchor: null, constructionType: 'normal' },
       rideAccess: null,
       backstageEraseMode: false,

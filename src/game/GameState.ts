@@ -1,4 +1,4 @@
-import { pathFurnitureRotation } from './pathFurniture';
+import { isPathSeat, pathFurnitureRotation } from './pathFurniture';
 import { isWasteBin } from './decorationWalls';
 import { wallSpec } from './decorationWalls';
 import { isScenery, isLargeScenery, isEdgeScenery, sceneryOverlaps, sceneryTransform, pedestrianBarrierOccupancy } from './scenery';
@@ -16,6 +16,7 @@ import { groundInfo, groundKey, roadGroundLimit } from './ground';
 import { BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY, saveSlotDataKey } from './catalog';
 import { serializeSnapshot, storageErrorMessage } from './saveText';
 import { bookFinance, financeEdition, financeForecast, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance';
+import { snapshotHourlyBuildingUpkeep } from './upkeep';
 import { updateScenarioProgress } from './scenarioGoals';
 import { createFestivalManagement, festivalAction, updateFestival, activeBookings, showIssue } from './festivalManagement';
 import type { Booking, FestivalAction } from './festivalManagement';
@@ -24,6 +25,30 @@ import type { ScenarioSettings } from './scenario';
 import type { BuildingKind, Tool } from './catalog';
 import { TRACK_PIECES, computeTrackFrame, isCoasterCircuitClosed, snapTrackPieceToAnchor, trackAnchorsAlign } from './coasters';
 import type { Coaster, CoasterOperationMode, CoasterTypeId, DispatchMode, TrackBuildOptions, TrackPiece, TrackPieceKind } from './coasters';
+import {
+  appendCourseAreaCell,
+  appendCourseAreaCells,
+  appendCoursePiece,
+  COURSE_PIECE_COST,
+  COURSE_PIECE_ELEVATION,
+  courseStartCost,
+  courseAreaContains,
+  courseEntrance,
+  courseSpanCells,
+  courseTrackEnd,
+  courseOccupiesCell,
+  courseUsesArea,
+  createEmptyCourse,
+  defaultFirstCoursePiece,
+  removeLastCoursePiece,
+  removeCourseAreaCells as removeCourseAreaCellsFromCourse,
+  stepCourses,
+  validateCourse,
+  type CourseAttraction,
+  type CourseKind,
+  type CourseAreaCell,
+  type CoursePieceKind,
+} from './courseAttractions';
 import { abandonVisitorCamp, CampingSystem, decayUnclaimedInstallations, isCollectibleCamp } from './camping';
 import type { CampingCell } from './camping';
 import { getItemQuantity } from './inventory';
@@ -49,7 +74,7 @@ import { SIMULATION_CONFIG } from './simulationConfig';
 import { blueprintCatalogCost, blueprintStampCharge, preserveLegacyScenerySlot, transformBlueprintItems, type BlueprintItem } from './blueprints';
 import type { GameCommand, SimSnapshot, WorldSnapshot } from '../net/protocol';
 import { applySim, applyWorld } from '../net/codec';
-import { AtmosphereSystem } from './atmosphere';
+import { AtmosphereSystem, collectBuiltAtmosphereCells } from './atmosphere';
 import { FestivalAreaSystem } from './festivalAreas';
 import type { StageForecourtCell } from './festivalAreas';
 import { acceptWasteAtDump, acceptWasteAtSealedContainer, designateWasteDumps, emptySealedContainerStored, isSealedWasteContainer } from './waste';
@@ -75,11 +100,24 @@ import { PlacementService } from './placementService';
 import { normalizeSnapshotForRuntime, repairSnapshotEntities, type SnapshotRepairContext } from './snapshotRepair';
 export { FEMALE_VISITOR_NAMES, MALE_VISITOR_NAMES, visitorGivenName } from './visitorSpawning';
 import { appendCoasterPieceCommand, deleteCoasterPieceCommand, startCoasterCommand, undoCoasterPieceCommand, type CoasterCommandContext } from './commands/coasterCommands';
+import {
+  configureAttractionCommand,
+  constructAttractionCommand,
+  removeAttractionCommand,
+  setAttractionOperationCommand,
+  setAttractionPriceCommand,
+  startAttractionCommand,
+  type AttractionCommandContext,
+} from './commands/attractionCommands';
+import type { AttractionConstructionRequest } from './attractions/construction';
+import type { Attraction, AttractionOperationMode } from './attractions/types';
+import { stepAttractions } from './attractions/runtime';
+import { refreshAttractionProjections } from './attractions/projections';
 import { placeBuildingCommand, previewPlacementCommand } from './commands/placementCommands';
 import { bulldozeAreaCommand, bulldozeCommand } from './commands/bulldozeCommands';
 import type { ArrivalGroup, Direction, FindRoadRouteOptions, ParkingCell, ParkingDisembarkCandidate, RoadCell, RoadPosition, RoadGraph, RoadVehicle, SpeedLimit } from './logistics';
 import { previewBusLineMarkers as buildBusLineMarkers, sortBusLineStops as orderBusLineStops, type BusPlannerStopMarker } from './busPlanner';
-import { accessCellKey, accessEdgeKey, closedAccessEdges, createPathBarrier, createTrafficLight, evaluateAccessSignal, statsForArea, stepUsesClosedEdge, toggleAreaCells, normalizeScheduleHours, normalizeScheduleOffer, normalizeSchedulePhases, normalizeScheduleTime, type AccessAreaCell, type AccessAreaIndexes, type AccessAreaStats, type AccessControl, type AccessControlKind, type AccessControlPatch, type AccessScheduleContext } from './accessControl';
+import { accessCellKey, accessEdgeKey, closedAccessEdges, closedAllDayAccessEdges, createPathBarrier, createTrafficLight, evaluateAccessSignal, statsForArea, stepUsesClosedEdge, toggleAreaCells, normalizeScheduleHours, normalizeScheduleOffer, normalizeSchedulePhases, normalizeScheduleTime, type AccessAreaCell, type AccessAreaIndexes, type AccessAreaStats, type AccessControl, type AccessControlKind, type AccessControlPatch, type AccessScheduleContext } from './accessControl';
 import { applyTerrainChanges, getTerrainHeight as readTerrainHeight, getWaterLevel, isMudHeight, isSwimmableHeight, isWaterHeight, planTerrainAreaEdit, planTerrainEdit, sampleTerrainSurface, terrainWalkEdgeHeights } from './terrain';
 import type { TerrainEditMode } from './terrain';
 import { createInitialSnapshot, ENTRANCE_PATH_ID } from './snapshotBootstrap';
@@ -211,6 +249,7 @@ export class GameState {
   private accessSignalRevision = 0
   private accessEmergency = false
   private closedTrafficEdges = new Set<string>()
+  private closedAllDayTrafficEdges = new Set<string>()
   private closedPathEdges = new Set<string>()
   private visitorIndex = new Map<string, Visitor>()
   private facilityQueues = new Map<string, string[]>()
@@ -384,6 +423,8 @@ export class GameState {
       runVisitorRouting: (visitor, kind, action) => this.runVisitorRouting(visitor, kind, action),
       flushVisitorDecisions: (limit) => this.flushVisitorDecisions(limit),
       getCoasterQueueCells: (coaster) => this.getCoasterQueueCells(coaster),
+      getCourseQueueCells: (course) => this.getCourseQueueCells(course),
+      getAttractionQueueCells: (attraction) => this.getAttractionQueueCells(attraction),
       getBuildingQueueCells: (building) => this.getBuildingQueueCells(building),
       getFacilityQueue: (buildingId) => this.getFacilityQueue(buildingId),
       startFacilityInteraction: (visitor, target) => this.startFacilityInteraction(visitor, target),
@@ -437,6 +478,7 @@ export class GameState {
     this.roadVehicleSimulation = new RoadVehicleSimulation({
       state: this.state,
       closedTrafficEdges: () => this.closedTrafficEdges,
+      closedAllDayTrafficEdges: () => this.closedAllDayTrafficEdges,
       lastNavRevision: () => this.lastNavRevision,
       worldRevision: () => this.worldRevision,
       nextRandom: () => this.rng.next(),
@@ -894,6 +936,7 @@ export class GameState {
     removed: string[] = [],
   ): void {
     Object.assign(this.state, world)
+    if (world.attractions) refreshAttractionProjections(this.state)
     const byId = new Map(this.state.visitors.map(visitor => [visitor.id, visitor]))
     for (const id of removed) byId.delete(id)
     for (const patch of visitors) {
@@ -905,6 +948,7 @@ export class GameState {
     this.tickAccumulator = 0
     this.indexedVisitorCount = -1
     if (world.buildings || world.terrain || world.scenario || world.logistics ||
+        world.attractions || world.coasters || world.courses ||
         world.campingCells || world.medicalCells || world.stageForecourtCells ||
         world.backstageCells || world.bandActors) {
       this.refreshAfterNetworkApply()
@@ -944,7 +988,15 @@ export class GameState {
   }
 
   isSwimmableTerrain(x: number, z: number): boolean {
-    return isSwimmableHeight(this.getTerrainHeight(x, z), this.getWaterLevel())
+    return (
+      isSwimmableHeight(this.getTerrainHeight(x, z), this.getWaterLevel()) || this.isCourseSwimCell(x, z)
+    )
+  }
+
+  isCourseSwimCell(x: number, z: number): boolean {
+    return (this.state.courses ?? []).some((course) =>
+      course.pieces.some((piece) => piece.x === x && piece.z === z && piece.kind === 'poolBasin'),
+    )
   }
 
   isMudTerrain(x: number, z: number): boolean {
@@ -1104,7 +1156,7 @@ export class GameState {
   private beginVisitorDeparture(visitor: Visitor): void {
     if (this.isVisitorInDepartureVehicle(visitor)) return
     if (visitor.pendingWaste > 0 && visitor.state === 'seeking' && visitor.route.length > 0 &&
-        visitor.targetId && this.state.buildings.some(building => building.id === visitor.targetId && isWasteBin(building.kind))) return
+        visitor.targetId && this.state.buildings.some(building => building.id === visitor.targetId && (isWasteBin(building.kind) || isSealedWasteContainer(building.kind)))) return
     if (!this.runVisitorRouting(visitor, 'departure', () => this.planVisitorDeparture(visitor))) {
       this.deferVisitorDeparture(visitor)
     }
@@ -2134,6 +2186,11 @@ export class GameState {
     this.state.accessControls.trafficLights.forEach(update)
     this.state.accessControls.pathBarriers.forEach(update)
     this.closedTrafficEdges = closedAccessEdges(this.state.accessControls.trafficLights)
+    this.closedAllDayTrafficEdges = closedAllDayAccessEdges(
+      this.state.accessControls.trafficLights,
+      this.state.minute,
+      this.accessScheduleContext(),
+    )
     this.closedPathEdges = closedAccessEdges(
       this.state.accessControls.pathBarriers,
       false,
@@ -2309,6 +2366,73 @@ export class GameState {
     )
   }
 
+  private attractionCommandContext(): AttractionCommandContext {
+    return {
+      state: this.state,
+      nextId: (prefix) => this.nextId(prefix),
+      getPlaceElevation: (x, z) => this.getPlaceElevation(x, z),
+      recalculateQueues: () => this.recalculateQueueDirections(),
+      emit: () => this.emit(),
+    }
+  }
+
+  startAttraction(
+    definitionId: string,
+    x: number,
+    z: number,
+    rotation = this.state.buildRotation,
+  ): ActionResult {
+    return startAttractionCommand(
+      this.attractionCommandContext(),
+      definitionId,
+      x,
+      z,
+      rotation,
+    )
+  }
+
+  constructAttraction(request: AttractionConstructionRequest): ActionResult {
+    return constructAttractionCommand(this.attractionCommandContext(), request)
+  }
+
+  removeAttraction(attractionId: string): ActionResult {
+    return removeAttractionCommand(this.attractionCommandContext(), attractionId)
+  }
+
+  setAttractionOperation(
+    attractionId: string,
+    mode: AttractionOperationMode,
+  ): ActionResult {
+    return setAttractionOperationCommand(
+      this.attractionCommandContext(),
+      attractionId,
+      mode,
+    )
+  }
+
+  setAttractionPrice(attractionId: string, price: number): ActionResult {
+    return setAttractionPriceCommand(
+      this.attractionCommandContext(),
+      attractionId,
+      price,
+    )
+  }
+
+  configureAttraction(
+    attractionId: string,
+    settings: {
+      teamSize?: number
+      dispatchMode?: DispatchMode
+      dispatchIntervalMinutes?: number
+    },
+  ): ActionResult {
+    return configureAttractionCommand(
+      this.attractionCommandContext(),
+      attractionId,
+      settings,
+    )
+  }
+
   private coasterCommandContext(): CoasterCommandContext {
     return {
       state: this.state,
@@ -2324,6 +2448,277 @@ export class GameState {
 
   startCoaster(typeId: CoasterTypeId, x: number, z: number): ActionResult & { id?: string } {
     return startCoasterCommand(this.coasterCommandContext(), typeId, x, z)
+  }
+
+  getCourse(id: string) {
+    return (this.state.courses ?? []).find((course) => course.id === id)
+  }
+
+  getAttraction(id: string): Attraction | undefined {
+    return this.state.attractions.find((attraction) => attraction.id === id)
+  }
+
+  getAttractionAt(x: number, z: number, id?: string): Attraction | undefined {
+    return this.state.attractions.find((attraction) => {
+      if (id && attraction.id === id) return true
+      if (
+        attraction.access.entrance &&
+        Math.floor(attraction.access.entrance.x) === x &&
+        Math.floor(attraction.access.entrance.z) === z
+      ) return true
+      if (attraction.layout.kind === 'area') {
+        return attraction.layout.cells.some((cell) => cell.x === x && cell.z === z)
+      }
+      if (attraction.layout.kind === 'scripted') {
+        return Math.floor(attraction.layout.anchor.x) === x &&
+          Math.floor(attraction.layout.anchor.z) === z
+      }
+      return attraction.layout.graph.edges.some((edge) =>
+        edge.points.some((point) => Math.floor(point.x) === x && Math.floor(point.z) === z),
+      )
+    })
+  }
+
+  getCourseAt(x: number, z: number) {
+    return (this.state.courses ?? []).find((course) =>
+      courseOccupiesCell(course, x, z),
+    )
+  }
+
+  startCourse(kind: CourseKind, x: number, z: number): ActionResult & { id?: string } {
+    this.state.courses ??= []
+    if (this.getAt(x, z) || this.getCourseAt(x, z)) {
+      return { ok: false, message: 'Dieses Feld ist belegt.' }
+    }
+    const cost = courseStartCost(kind)
+    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld für den Kurs.' }
+    const id = `course-${this.state.simTick}-${this.state.courses.length + 1}`
+    const course = createEmptyCourse(id, kind)
+    const first = courseUsesArea(kind)
+      ? appendCourseAreaCell(course, x, z)
+      : appendCoursePiece(
+          course,
+          defaultFirstCoursePiece(kind),
+          x,
+          z,
+          this.state.buildRotation as 0 | 1 | 2 | 3,
+        )
+    if (typeof first === 'string') return { ok: false, message: first }
+    bookFinance(this.state, 'construction', -cost)
+    this.state.courses.push(course)
+    this.recalculateQueueDirections()
+    this.worldRevision += 1
+    this.emit()
+    return { ok: true, message: `${course.name} angelegt. Jetzt den Kurs bauen.`, id }
+  }
+
+  startCourseArea(
+    kind: CourseKind,
+    cells: readonly CourseAreaCell[],
+  ): ActionResult & { id?: string } {
+    if (!courseUsesArea(kind)) return { ok: false, message: 'Dieser Kurstyp besitzt keine Anlagenfläche.' }
+    const unique = [...new Map(cells.map((cell) => [`${cell.x}:${cell.z}`, cell])).values()]
+    if (unique.length === 0) return { ok: false, message: 'Ziehe zuerst eine Anlagenfläche auf.' }
+    for (const cell of unique) {
+      if (this.getAt(cell.x, cell.z) || this.getCourseAt(cell.x, cell.z)) {
+        return { ok: false, message: 'Die Anlagenfläche überdeckt ein anderes Objekt.' }
+      }
+    }
+    const areaKind = kind === 'pool' ? 'poolBasin' : 'paintballField'
+    const cost = courseStartCost(kind) + Math.max(0, unique.length - 1) * COURSE_PIECE_COST[areaKind]
+    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld für diese Anlagenfläche.' }
+    this.state.courses ??= []
+    const id = `course-${this.state.simTick}-${this.state.courses.length + 1}`
+    const course = createEmptyCourse(id, kind)
+    const added = appendCourseAreaCells(course, unique)
+    if (typeof added === 'string') return { ok: false, message: added }
+    bookFinance(this.state, 'construction', -cost)
+    this.state.courses.push(course)
+    this.worldRevision += 1
+    this.emit()
+    return { ok: true, message: `${course.name} mit ${added} Flächenfeldern angelegt.`, id }
+  }
+
+  addCourseAreaCell(courseId: string, x: number, z: number): ActionResult {
+    const course = this.getCourse(courseId)
+    if (!course) return { ok: false, message: 'Anlage nicht gefunden.' }
+    const occupying = this.getCourseAt(x, z)
+    if (this.getAt(x, z) || (occupying && occupying.id !== courseId)) {
+      return { ok: false, message: 'Dieses Feld ist belegt.' }
+    }
+    const cost = COURSE_PIECE_COST[course.kind === 'pool' ? 'poolBasin' : 'paintballField']
+    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld für die Fläche.' }
+    const added = appendCourseAreaCell(course, x, z)
+    if (typeof added === 'string') return { ok: false, message: added }
+    bookFinance(this.state, 'construction', -cost)
+    this.worldRevision += 1
+    this.emit()
+    return { ok: true, message: 'Anlagenfläche erweitert.' }
+  }
+
+  addCourseAreaCells(courseId: string, cells: readonly CourseAreaCell[]): ActionResult {
+    const course = this.getCourse(courseId)
+    if (!course) return { ok: false, message: 'Anlage nicht gefunden.' }
+    const additions = [...new Map(
+      cells
+        .filter((cell) => !courseAreaContains(course, cell.x, cell.z))
+        .map((cell) => [`${cell.x}:${cell.z}`, cell]),
+    ).values()]
+    if (additions.length === 0) return { ok: false, message: 'Diese Fläche gehört bereits zur Anlage.' }
+    for (const cell of additions) {
+      const occupying = this.getCourseAt(cell.x, cell.z)
+      if (this.getAt(cell.x, cell.z) || (occupying && occupying.id !== courseId)) {
+        return { ok: false, message: 'Die Anlagenfläche überdeckt ein anderes Objekt.' }
+      }
+    }
+    const areaKind = course.kind === 'pool' ? 'poolBasin' : 'paintballField'
+    const cost = additions.length * COURSE_PIECE_COST[areaKind]
+    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld für diese Anlagenfläche.' }
+    const added = appendCourseAreaCells(course, additions)
+    if (typeof added === 'string') return { ok: false, message: added }
+    bookFinance(this.state, 'construction', -cost)
+    this.worldRevision += 1
+    this.emit()
+    return { ok: true, message: `${added} Flächenfelder ergänzt.` }
+  }
+
+  removeCourseAreaCells(courseId: string, cells: readonly CourseAreaCell[]): ActionResult {
+    const course = this.getCourse(courseId)
+    if (!course) return { ok: false, message: 'Anlage nicht gefunden.' }
+    const removed = removeCourseAreaCellsFromCourse(course, cells)
+    if (typeof removed === 'string') return { ok: false, message: removed }
+    if (removed === 0) return { ok: false, message: 'Auf der Auswahl liegt keine Anlagenfläche.' }
+    const areaKind = course.kind === 'pool' ? 'poolBasin' : 'paintballField'
+    bookFinance(this.state, 'construction', removed * COURSE_PIECE_COST[areaKind])
+    this.worldRevision += 1
+    this.emit()
+    return { ok: true, message: `${removed} Flächenfelder entfernt.` }
+  }
+
+  addCoursePiece(
+    courseId: string,
+    kind: CoursePieceKind,
+    x: number,
+    z: number,
+    elevation?: number,
+  ): ActionResult {
+    const course = this.getCourse(courseId)
+    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    const occupying = this.getCourseAt(x, z)
+    if (this.getAt(x, z) || (occupying && occupying.id !== courseId)) {
+      return { ok: false, message: 'Dieses Feld ist belegt.' }
+    }
+    const start = courseTrackEnd(course)
+    if (start) {
+      for (const cell of courseSpanCells(start, { x, z })) {
+        const crossedCourse = this.getCourseAt(cell.x, cell.z)
+        if (this.getAt(cell.x, cell.z) || (crossedCourse && crossedCourse.id !== courseId)) {
+          return { ok: false, message: 'Die Strecke würde ein anderes Objekt durchqueren.' }
+        }
+      }
+    }
+    const length = start
+      ? Math.max(1, Math.ceil(Math.hypot(x - start.x, z - start.z, (elevation ?? COURSE_PIECE_ELEVATION[kind]) - start.elevation)))
+      : 1
+    const cost = COURSE_PIECE_COST[kind] * length
+    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld für dieses Streckenelement.' }
+    const added = appendCoursePiece(
+      course,
+      kind,
+      x,
+      z,
+      this.state.buildRotation as 0 | 1 | 2 | 3,
+      elevation ?? COURSE_PIECE_ELEVATION[kind],
+    )
+    if (typeof added === 'string') return { ok: false, message: added }
+    bookFinance(this.state, 'construction', -cost)
+    if (kind === 'entrance') this.recalculateQueueDirections()
+    this.worldRevision += 1
+    this.emit()
+    return { ok: true, message: 'Kursstück gesetzt.' }
+  }
+
+  undoCoursePiece(courseId: string): ActionResult {
+    const course = this.getCourse(courseId)
+    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    if (course.pieces.length === 0 && course.areaCells.length > 0) {
+      course.areaCells.pop()
+      const areaKind = course.kind === 'pool' ? 'poolBasin' : 'paintballField'
+      bookFinance(this.state, 'construction', COURSE_PIECE_COST[areaKind])
+      if (course.areaCells.length === 0) {
+        this.state.courses = (this.state.courses ?? []).filter((entry) => entry.id !== courseId)
+      }
+      this.worldRevision += 1
+      this.emit()
+      return { ok: true, message: 'Letztes Flächenfeld entfernt.' }
+    }
+    const removed = removeLastCoursePiece(course)
+    if (typeof removed === 'string') return { ok: false, message: removed }
+    const length = Math.max(
+      1,
+      Math.ceil(
+        Math.hypot(
+          (removed.endX ?? removed.x) - removed.x,
+          (removed.endZ ?? removed.z) - removed.z,
+          (removed.endElevation ?? removed.elevation) - removed.elevation,
+        ),
+      ),
+    )
+    bookFinance(this.state, 'construction', COURSE_PIECE_COST[removed.kind] * length)
+    if (removed.kind === 'entrance') this.recalculateQueueDirections()
+    if (course.pieces.length === 0 && course.areaCells.length === 0) {
+      this.state.courses = (this.state.courses ?? []).filter((entry) => entry.id !== courseId)
+    }
+    this.worldRevision += 1
+    this.emit()
+    return { ok: true, message: 'Letztes Kursstück entfernt.' }
+  }
+
+  setCourseTeamSize(courseId: string, teamSize: number): ActionResult {
+    const course = this.getCourse(courseId)
+    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    if (course.kind !== 'paintball') return { ok: false, message: 'Nur Paintball hat Teams.' }
+    course.teamSize = Math.max(1, Math.min(8, Math.round(teamSize)))
+    this.emit()
+    return { ok: true, message: `${course.teamSize} Personen pro Team.` }
+  }
+
+  setCourseOperating(courseId: string, operating: boolean): ActionResult {
+    const course = this.getCourse(courseId)
+    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    if (operating) {
+      const issue = validateCourse(course)
+      if (issue) return { ok: false, message: issue }
+    }
+    course.operating = operating
+    this.emit()
+    return { ok: true, message: operating ? 'Kurs geöffnet.' : 'Kurs geschlossen.' }
+  }
+
+  setCoursePrice(courseId: string, price: number): ActionResult {
+    const course = this.getCourse(courseId)
+    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    course.price = Math.max(0, Math.round(price))
+    this.emit()
+    return { ok: true, message: 'Kurspreis übernommen.' }
+  }
+
+  removeCourse(courseId: string): ActionResult {
+    const course = this.getCourse(courseId)
+    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    for (const rider of course.riders) {
+      const visitor = this.getVisitor(rider.visitorId)
+      if (visitor && visitor.state === 'riding') {
+        visitor.state = 'exploring'
+        visitor.targetId = null
+        visitor.thought = 'Die Attraktion wurde geschlossen.'
+      }
+    }
+    this.state.courses = this.state.courses.filter((entry) => entry.id !== courseId)
+    this.recalculateQueueDirections()
+    this.worldRevision += 1
+    this.emit()
+    return { ok: true, message: `${course.name} abgerissen.` }
   }
 
   appendCoasterPiece(
@@ -3498,6 +3893,9 @@ export class GameState {
     if (kind === 'ambulanceGarage') {
       return this.canPlaceLogisticsFootprint(this.createFootprint(x, z, 2), BUILDINGS.ambulanceGarage.cost)
     }
+    if (kind === 'fireStation') {
+      return this.canPlaceLogisticsFootprint(this.createFootprint(x, z, 2), BUILDINGS.fireStation.cost)
+    }
     if (kind === 'busDepot') {
       return this.canPlaceLogisticsFootprint(this.createFootprint(x, z, 3), BUILDINGS.busDepot.cost)
     }
@@ -3518,7 +3916,7 @@ export class GameState {
     if (
       (this.getRoadCellAt(x, z) &&
         kind !== 'path' &&
-        kind !== 'bench' &&
+        !isPathSeat(kind) &&
         !isSealedWasteContainer(kind)) ||
       this.isLogisticsBuildingCell(x, z)
     ) {
@@ -3559,7 +3957,7 @@ export class GameState {
     }
     const collision = this.findCollision(kind, x, z, placeElevation, decorationSlot)
     if (
-      (kind === 'securityGate' || kind === 'bench' || isWasteBin(kind)) &&
+      (kind === 'securityGate' || isPathSeat(kind) || isWasteBin(kind)) &&
       this.state.buildings.some(
         (building) => (isWasteBin(kind) ? isWasteBin(building.kind) : building.kind === kind) && building.x === x && building.z === z && Math.abs(building.elevation - placeElevation) < .1,
       )
@@ -3569,8 +3967,10 @@ export class GameState {
         message:
           isWasteBin(kind)
             ? 'Hier steht bereits ein Mülleimer'
-            : kind === 'bench'
-              ? 'Hier steht bereits eine Bank'
+            : isPathSeat(kind)
+              ? kind === 'table'
+                ? 'Hier steht bereits ein Tisch'
+                : 'Hier steht bereits eine Bank'
               : 'Hier steht bereits eine Sicherheitsschleuse',
       }
     }
@@ -3588,26 +3988,30 @@ export class GameState {
       return { ok: false, message: 'Auf dieser Seite steht bereits ein Bauzaun' }
     }
     const furnitureRoad =
-      (kind === 'bench' || isSealedWasteContainer(kind)) &&
+      (isPathSeat(kind) || isSealedWasteContainer(kind)) &&
       Boolean(this.getRoadCellAt(x, z, placeElevation))
-    if ((kind === 'securityGate' || kind === 'bench') && collision?.kind !== 'path' && !furnitureRoad) {
+    if ((kind === 'securityGate' || isPathSeat(kind)) && collision?.kind !== 'path' && !furnitureRoad) {
       return {
         ok: false,
         message:
-          kind === 'bench'
-            ? 'Eine Bank muss an einem Weg oder einer Straße aufgestellt werden'
+          isPathSeat(kind)
+            ? kind === 'table'
+              ? 'Ein Tisch muss an einem Weg oder einer Straße aufgestellt werden'
+              : 'Eine Bank muss an einem Weg oder einer Straße aufgestellt werden'
             : 'Eine Sicherheitsschleuse muss auf einem Weg stehen',
       }
     }
-    if (kind === 'bench' && this.findBenchRotation(x, z) === null) {
+    if (isPathSeat(kind) && this.findBenchRotation(x, z) === null) {
       return {
         ok: false,
-        message: 'An diesem Weg oder dieser Straße ist keine freie Außenkante für eine Bank',
+        message: kind === 'table'
+          ? 'An diesem Weg oder dieser Straße ist keine freie Außenkante für einen Tisch'
+          : 'An diesem Weg oder dieser Straße ist keine freie Außenkante für eine Bank',
       }
     }
     const allowedOverlap =
       ((kind === 'securityGate' ||
-        kind === 'bench' ||
+        isPathSeat(kind) ||
         kind === 'fence' ||
         isWasteBin(kind) ||
         isSealedWasteContainer(kind)) &&
@@ -3649,6 +4053,7 @@ export class GameState {
         this.canPlace(buildingKind, cellX, cellZ, slot, legacy),
       placeSpecial: (buildingKind, cellX, cellZ) => {
         if (buildingKind === 'ambulanceGarage') return this.placeAmbulanceGarage(cellX, cellZ)
+        if (buildingKind === 'fireStation') return this.placeFireStation(cellX, cellZ)
         if (buildingKind === 'busDepot') return this.placeBusDepot(cellX, cellZ)
         if (buildingKind === 'wasteDepot') return this.placeWasteDepot(cellX, cellZ)
         if (buildingKind === 'specialDepot') return this.placeSpecialDepot(cellX, cellZ)
@@ -3823,6 +4228,7 @@ export class GameState {
       x,
       z,
       bays: [null, null],
+      gateDirection: this.state.buildRotation as Direction,
     })
     this.state.buildings.push({
       id,
@@ -3835,6 +4241,36 @@ export class GameState {
     })
     this.emit()
     return { ok: true, message: '2×2-Krankenwagengarage gebaut' }
+  }
+
+  private placeFireStation(x: number, z: number): ActionResult {
+    const footprint = this.createFootprint(x, z, 2)
+    const result = this.canPlaceLogisticsFootprint(footprint, BUILDINGS.fireStation.cost)
+    if (!result.ok) return result
+    footprint.forEach((cell) => {
+      this.clearDesignatedOccupancyAt(cell.x, cell.z, false, { preserveMedical: true })
+      this.clearTreesAt(cell.x, cell.z, 0, 1)
+    })
+    const id = this.nextId('fire-station')
+    bookFinance(this.state, 'construction', -BUILDINGS.fireStation.cost)
+    this.state.logistics.fireStations.push({
+      id,
+      x,
+      z,
+      bays: [null, null],
+      gateDirection: this.state.buildRotation as Direction,
+    })
+    this.state.buildings.push({
+      id,
+      kind: 'fireStation',
+      x,
+      z,
+      rotation: this.state.buildRotation,
+      elevation: 0,
+      price: 0,
+    })
+    this.emit()
+    return { ok: true, message: '2×2-Feuerwache gebaut' }
   }
 
   private placeBusDepot(x: number, z: number): ActionResult {
@@ -3877,7 +4313,13 @@ export class GameState {
     })
     const id = this.nextId('waste-depot')
     bookFinance(this.state, 'construction', -BUILDINGS.wasteDepot.cost)
-    this.state.logistics.wasteDepots.push({ id, x, z, truckIds: [] })
+    this.state.logistics.wasteDepots.push({
+      id,
+      x,
+      z,
+      truckIds: [],
+      gateDirection: this.state.buildRotation as Direction,
+    })
     this.state.buildings.push({
       id,
       kind: 'wasteDepot',
@@ -4093,10 +4535,30 @@ export class GameState {
     bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.ambulanceCost)
     garage.bays[bay] = id
     this.state.logistics.roadVehicles.push(
-      this.createRoadVehicle(id, 'ambulance', access),
+      this.createRoadVehicle(id, 'ambulance', { x: garage.x, z: garage.z }),
     )
     this.emit()
     return { ok: true, message: `Krankenwagen ${bay + 1} gekauft` }
+  }
+
+  buyFireTruck(stationId: string): ActionResult {
+    const station = this.state.logistics.fireStations.find((candidate) => candidate.id === stationId)
+    if (!station) return { ok: false, message: 'Feuerwache nicht gefunden' }
+    const bay = station.bays.findIndex((vehicleId) => vehicleId === null)
+    if (bay < 0) return { ok: false, message: 'In dieser Wache stehen bereits zwei Feuerwehrwagen' }
+    if (this.state.money < SIMULATION_CONFIG.logistics.fireTruckCost) {
+      return { ok: false, message: 'Nicht genug Geld' }
+    }
+    const access = this.getLogisticsBuildingAccess(station, 2)
+    if (!access) return { ok: false, message: 'Die Wache hat keinen befahrbaren Anschluss' }
+    const id = this.nextId('firetruck')
+    bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.fireTruckCost)
+    station.bays[bay] = id
+    this.state.logistics.roadVehicles.push(
+      this.createRoadVehicle(id, 'fireTruck', { x: station.x, z: station.z }),
+    )
+    this.emit()
+    return { ok: true, message: `Feuerwehrwagen ${bay + 1} gekauft` }
   }
 
   sellAmbulance(garageId: string): ActionResult {
@@ -4153,7 +4615,7 @@ export class GameState {
     bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.garbageTruckCost)
     depot.truckIds.push(id)
     this.state.logistics.roadVehicles.push(
-      this.createRoadVehicle(id, 'garbageTruck', access),
+      this.createRoadVehicle(id, 'garbageTruck', { x: depot.x, z: depot.z }),
     )
     this.emit()
     return { ok: true, message: `Müllfahrzeug ${depot.truckIds.length} gekauft` }
@@ -4516,15 +4978,26 @@ export class GameState {
       resumeState: null,
       cargo: 0,
       deliveryId: null,
+      housed:
+        kind === 'ambulance' ||
+        kind === 'garbageTruck' ||
+        kind === 'fireTruck',
     }
   }
 
   private getLogisticsBuildingAccess(
-    building: RoadPosition,
+    building: RoadPosition & { gateDirection?: Direction },
     size: number,
   ): RoadPosition | null {
-    return this.createFootprint(building.x, building.z, size)
-      .flatMap((cell) => this.getAdjacentRoadPositions(cell))[0] ?? null
+    const footprint = this.createFootprint(building.x, building.z, size)
+    const roads = footprint.flatMap((cell) => this.getAdjacentRoadPositions(cell))
+    const gate = building.gateDirection
+    if (gate === undefined) return roads[0] ?? null
+    const offset = { 0: { x: 0, z: 1 }, 1: { x: 1, z: 0 }, 2: { x: 0, z: -1 }, 3: { x: -1, z: 0 } }[gate]
+    const gated = roads.filter((road) =>
+      footprint.some((cell) => road.x === cell.x + offset.x && road.z === cell.z + offset.z),
+    )
+    return gated[0] ?? roads[0] ?? null
   }
 
   private getLogisticsPathAccess(
@@ -4856,6 +5329,7 @@ export class GameState {
       this.crowdingMinutes = 0
     }
     this.visitorSimulation.runTickPhase(minutes)
+    this.stepCourses(minutes)
 
     if (this.simulatedMinutes >= SIMULATION_CONFIG.time.economyIntervalMinutes) {
       const hours = Math.floor(
@@ -5387,6 +5861,18 @@ export class GameState {
 
   private updateAtmosphere(): void {
     this.updateVisitorConversations()
+    const builtCells = collectBuiltAtmosphereCells({
+      buildings: this.state.buildings,
+      campingCells: this.state.campingCells,
+      medicalCells: this.state.medicalCells,
+      wasteDumpCells: this.state.wasteDumpCells,
+      backstageCells: this.state.backstageCells,
+      stageForecourtCells: this.state.stageForecourtCells,
+      powerCables: this.state.power.cableCells,
+      roadCells: this.state.logistics.roadCells,
+      parkingCells: this.state.logistics.parkingCells,
+      courseCells: (this.state.courses ?? []).flatMap((course) => course.pieces),
+    })
     const result = this.atmosphere.calculate(
       this.state.buildings
         .filter((building) => this.isBuildingCurrentlyActive(building))
@@ -5419,6 +5905,7 @@ export class GameState {
             this.getPathAt(x, z)
           return { x, z, elevation: path?.elevation ?? 0 }
         }),
+      builtCells,
     )
     this.state.attractiveness = result.attractiveness
     this.state.partyMood = result.partyMood
@@ -5850,6 +6337,9 @@ export class GameState {
   }
 
   private updateCoasters(minutes: number, physicsSeconds: number): void {
+    if (this.state.attractions.some((attraction) => attraction.runtime.kind === 'coaster')) {
+      return
+    }
     this.coasterSimulation.update(minutes, physicsSeconds)
   }
 
@@ -5859,6 +6349,24 @@ export class GameState {
 
   private getCoasterQueueCells(coaster: Coaster): Cell[] {
     return this.getAccessQueueCells(coaster.entrance)
+  }
+
+  private getCourseQueueCells(course: CourseAttraction): Cell[] {
+    const entrance = courseEntrance(course)
+    return entrance
+      ? this.getAccessQueueCells({ x: entrance.x, y: entrance.elevation, z: entrance.z })
+      : []
+  }
+
+  private getAttractionQueueCells(attraction: Attraction): Cell[] {
+    const entrance = attraction.access.entrance
+    return entrance
+      ? this.getAccessQueueCells({
+          x: entrance.x,
+          y: entrance.elevation,
+          z: entrance.z,
+        })
+      : []
   }
 
   private getAccessQueueCells(entrance: {x:number;y:number;z:number} | null | undefined): Cell[] {
@@ -6296,6 +6804,50 @@ export class GameState {
     this.visitorBehavior.updateVisitors(minutes)
   }
 
+  private stepCourses(minutes: number): void {
+    this.state.courses ??= []
+    if (!this.state.attractions.some((attraction) => attraction.runtime.kind === 'course')) {
+      stepCourses(this.state, this.rng, {
+        minutes,
+        isWater: (x, z) => this.isWaterTerrain(x, z) || this.isCourseSwimCell(x, z),
+        charge: (visitor, price) =>
+          this.chargeVisitor(visitor, price, { x: visitor.x, y: visitor.y, z: visitor.z }),
+        injure: (injury) => {
+          const visitor = this.getVisitor(injury.visitorId)
+          if (!visitor) return
+          visitor.state = 'injured'
+          visitor.targetId = null
+          visitor.route = []
+          visitor.thought = 'Ich bin neben dem Becken aufgeschlagen!'
+        },
+      })
+    }
+    stepAttractions(this.state.attractions, {
+      visitors: this.state.visitors,
+      simTick: this.state.simTick,
+      minutes,
+      isWater: (x, z, elevation) =>
+        this.isWaterTerrain(Math.floor(x), Math.floor(z)) ||
+        this.state.attractions.some((attraction) =>
+          attraction.definitionId === 'swimArea' &&
+          attraction.layout.kind === 'area' &&
+          attraction.layout.cells.some((cell) =>
+            cell.x === Math.floor(x) &&
+            cell.z === Math.floor(z) &&
+            Math.abs(cell.elevation - elevation) <= 2
+          ),
+        ),
+      charge: (visitor, price) =>
+        this.chargeVisitor(visitor, price, { x: visitor.x, y: visitor.y, z: visitor.z }),
+      injure: (visitor) => {
+        visitor.state = 'injured'
+        visitor.targetId = null
+        visitor.route = []
+        visitor.thought = 'Ich bin neben dem Becken aufgeschlagen!'
+      },
+    })
+  }
+
   walkVisitors(minutes: number): void {
     this.visitorBehavior.walkVisitors(minutes)
   }
@@ -6348,10 +6900,7 @@ export class GameState {
   }
 
   private hourlyRunningCosts(): { upkeep: number; staff: number } {
-    const upkeep = this.state.buildings.reduce(
-      (total, item) => total + BUILDINGS[item.kind].upkeep + (item.stageDesign ? stageStats(item.stageDesign).upkeep : 0),
-      0,
-    )
+    const upkeep = snapshotHourlyBuildingUpkeep(this.state)
     const staff = this.state.staff.reduce(
       (total, member) => total + STAFF_DEFINITIONS[member.role].hourlyWage,
       0,
@@ -6646,6 +7195,24 @@ export class GameState {
       }
     }
 
+    this.state.attractions.forEach((attraction) => {
+      const entrance = attraction.access.entrance
+      if (!entrance || attraction.access.mode !== 'queuedEntrance') return
+      const access = { x: entrance.x, y: entrance.elevation, z: entrance.z }
+      claimQueue(
+        this.getAccessPathNeighbors(access)
+          .map((cell) => this.getPathAt(cell.x, cell.z, cell.elevation))
+          .filter(
+            (path): path is PlacedBuilding =>
+              Boolean(path && path.pathType === 'queue' && !claimed.has(path.id)),
+          )
+          .map((path) => ({
+            path,
+            target: { x: entrance.x, z: entrance.z },
+          })),
+      )
+    })
+
     this.state.coasters.forEach((coaster) => {
       if (!coaster.entrance) return
       claimQueue(
@@ -6658,6 +7225,24 @@ export class GameState {
           .map((path) => ({
             path,
             target: { x: coaster.entrance!.x, z: coaster.entrance!.z },
+          })),
+      )
+    })
+
+    ;(this.state.courses ?? []).forEach((course) => {
+      const entrance = courseEntrance(course)
+      if (!entrance) return
+      const access = { x: entrance.x, y: entrance.elevation, z: entrance.z }
+      claimQueue(
+        this.getAccessPathNeighbors(access)
+          .map((cell) => this.getPathAt(cell.x, cell.z, cell.elevation))
+          .filter(
+            (path): path is PlacedBuilding =>
+              Boolean(path && path.pathType === 'queue' && !claimed.has(path.id)),
+          )
+          .map((path) => ({
+            path,
+            target: { x: entrance.x, z: entrance.z },
           })),
       )
     })
@@ -6832,6 +7417,12 @@ export class GameState {
   private removeVisitorFromCoasterQueues(visitorId: string): void {
     this.state.coasters.forEach((coaster) => {
       coaster.queue = coaster.queue.filter((queuedId) => queuedId !== visitorId)
+    })
+    this.state.courses.forEach((course) => {
+      course.queue = course.queue.filter((queuedId) => queuedId !== visitorId)
+    })
+    this.state.attractions.forEach((attraction) => {
+      attraction.queue = attraction.queue.filter((queuedId) => queuedId !== visitorId)
     })
     this.facilityQueues.forEach((queue) => {
       const index = queue.indexOf(visitorId)

@@ -1,4 +1,13 @@
 import { normalizeBandActor } from './bandActors'
+import { isAttractionDefinitionId } from './attractions/definitions'
+import { migrateLegacyAttractions } from './attractions/migration'
+import {
+  projectCamping,
+  projectCoasters,
+  projectCourses,
+  projectPartyAreas,
+} from './attractions/projections'
+import type { Attraction } from './attractions/types'
 import { emptyBandSupplySnapshot, normalizeBackstageCell } from './bandSupply'
 import { createFinanceState } from './finance'
 import { normalizeLogisticsSnapshot } from './logistics'
@@ -6,6 +15,7 @@ import { normalizePower } from './power'
 import { normalizeScenarioSettings } from './scenario'
 import { createScenarioProgress } from './scenarioGoals'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import { normalizeCourses } from './courseAttractions'
 import { createBlankSnapshot } from './snapshotBootstrap'
 import { migrateStageDesign } from './stageDesign'
 import { normalizeTerrain, normalizeWaterLevel } from './terrain'
@@ -23,10 +33,22 @@ export function migrateSnapshot(
   if (!Array.isArray(data.buildings)) return null
 
   const scenario = normalizeScenarioSettings(data.scenario)
+  const legacy = migrateLegacyAttractions({
+    coasters: Array.isArray(data.coasters) ? data.coasters : [],
+    courses: normalizeCourses(data.courses),
+    campingCells: Array.isArray(data.campingCells) ? data.campingCells : [],
+    campInstallations: Array.isArray(data.campInstallations) ? data.campInstallations : [],
+    stageForecourtCells: Array.isArray(data.stageForecourtCells) ? data.stageForecourtCells : [],
+    buildings: data.buildings,
+  })
+  const canonicalAttractions = normalizeAttractions(data.attractions)
+  const useCanonical = data.version === 31 && canonicalAttractions.length > 0
+  const attractions = useCanonical ? canonicalAttractions : legacy.attractions
+  const camping = projectCamping(attractions)
   const migrated: GameSnapshot = {
     ...createBlankSnapshot(),
     ...data,
-    version: 30,
+    version: 31,
     waterLevel: normalizeWaterLevel(data.waterLevel),
     terrain: normalizeTerrain(data.terrain),
     buildings: data.buildings.map((building) =>
@@ -34,10 +56,8 @@ export function migrateSnapshot(
         ? { ...building, stageDesign: migrateStageDesign(building.stageDesign) }
         : building,
     ),
-    campingCells: Array.isArray(data.campingCells) ? data.campingCells : [],
-    campInstallations: Array.isArray(data.campInstallations)
-      ? data.campInstallations
-      : [],
+    campingCells: camping.cells,
+    campInstallations: camping.installations,
     staff: Array.isArray(data.staff) ? data.staff : [],
     medicalCells: Array.isArray(data.medicalCells) ? data.medicalCells : [],
     wasteDumpCells: Array.isArray(data.wasteDumpCells)
@@ -61,9 +81,7 @@ export function migrateSnapshot(
       data.scenarioProgress && Array.isArray(data.scenarioProgress.status)
         ? data.scenarioProgress
         : createScenarioProgress(scenario.goals),
-    stageForecourtCells: Array.isArray(data.stageForecourtCells)
-      ? data.stageForecourtCells
-      : [],
+    stageForecourtCells: projectPartyAreas(attractions),
     backstageCells: Array.isArray(data.backstageCells)
       ? data.backstageCells
           .map(normalizeBackstageCell)
@@ -76,7 +94,12 @@ export function migrateSnapshot(
       : [],
     bandSupply: emptyBandSupplySnapshot(),
     visitors: Array.isArray(data.visitors) ? data.visitors : [],
-    coasters: Array.isArray(data.coasters) ? data.coasters : [],
+    attractions,
+    migrationReport: {
+      removedAttractionIds: useCanonical ? [] : legacy.removedIds,
+    },
+    coasters: projectCoasters(attractions),
+    courses: projectCourses(attractions),
     power: normalizePower(data.power),
     campingTicketPrice:
       data.campingTicketPrice ??
@@ -88,4 +111,18 @@ export function migrateSnapshot(
       migrated.festival.stageTemplates.map(migrateStageDesign)
   }
   return migrated
+}
+
+function normalizeAttractions(input: unknown): Attraction[] {
+  if (!Array.isArray(input)) return []
+  return input.filter((candidate): candidate is Attraction => {
+    if (!candidate || typeof candidate !== 'object') return false
+    const attraction = candidate as Partial<Attraction>
+    return typeof attraction.id === 'string' &&
+      typeof attraction.definitionId === 'string' &&
+      isAttractionDefinitionId(attraction.definitionId) &&
+      Boolean(attraction.layout) &&
+      Boolean(attraction.access) &&
+      Array.isArray(attraction.queue)
+  })
 }

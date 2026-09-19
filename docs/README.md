@@ -56,6 +56,7 @@ Neue oder geänderte Funktionen sind erst fertig, wenn die Doku stimmt:
 | Konten, Sessions, Authentifizierung | [accounts.md](accounts.md) | Konto-API, Cookies, Rate-Limit |
 | Bühnenwerkstatt, Show, Publikum | [stages.md](stages.md) | Designs, Vorlagen, Zuschauerflächen |
 | Achterbahn, Karussell, Bungee | [attractions.md](attractions.md) | Queues, Ride-Zugang, Betrieb |
+| Kurs-Attraktionen | [course-attractions.md](course-attractions.md) | Mudmasters, Bad, Tree-to-Tree, Paintball |
 | Achterbahn-Editor, Schienenstücke | [coaster.md](coaster.md) | Anschluss-State-Machine, Stückkatalog, Bau-UI, Typ-Matrix |
 | Atmosphäre, Strom, Tageslicht | [atmosphere.md](atmosphere.md) | Overlays, Power-Netz, Day/Night |
 | Festival-SFX, Kamera-Listener | [audio.md](audio.md) | Pools, Distanz, Cluster, Mute |

@@ -1211,7 +1211,8 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.ok(ambulanceHome.buyAmbulance(garage.id).ok)
   const rtw=ambulanceHomeState.logistics.roadVehicles.find(vehicle=>vehicle.kind==='ambulance')
   assert.ok(rtw)
-  const garageAccess={...rtw.cell!}
+  const garageAccess=(ambulanceHome as any).getLogisticsBuildingAccess(garage, 2)
+  assert.ok(garageAccess)
   rtw.cell={x:0,z:-16}
   rtw.position={x:0,z:-16}
   rtw.state='idle'
@@ -2676,9 +2677,18 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
       reenterWhenFree.depot,
       2,
     )
+    const depot = reenterWhenFree.depot
+    const cell = reenterWhenFree.truck.cell
+    const inBay =
+      cell.x >= depot.x &&
+      cell.x < depot.x + 2 &&
+      cell.z >= depot.z &&
+      cell.z < depot.z + 2
     assert.ok(home)
-    assert.equal(reenterWhenFree.truck.cell.x, home.x)
-    assert.equal(reenterWhenFree.truck.cell.z, home.z)
+    assert.ok(
+      inBay || (cell.x === home.x && cell.z === home.z),
+      'an idle truck after re-entry is at the depot door or inside the building',
+    )
   }
 
   const idleAtExit = wasteFleet()

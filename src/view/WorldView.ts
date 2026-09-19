@@ -32,6 +32,8 @@ import { createEarthTexture, createTerrainBase, createTerrainMaterial, createTer
 import { TerrainShape, terrainPads } from './terrainShape'
 import { FestivalLightsView } from './FestivalLightsView'
 import { AccessControlView } from './AccessControlView'
+import { CourseView } from './CourseView'
+import { AttractionView } from './AttractionView'
 import { createRoadDirectionArrowGeometry } from './roadDirectionArrow'
 import { wayTexture } from './wayTextures'
 import type { WayType } from '../game/wayTypes'
@@ -433,6 +435,8 @@ export class WorldView {
   private backstageView = new BackstageView()
   private bandActorView = new BandActorView()
   private logisticsView = new LogisticsView()
+  private courseView = new CourseView()
+  private attractionView = new AttractionView()
   private accessControlView = new AccessControlView()
   private supplyChainView = new SupplyChainView()
   private logisticsMode = false
@@ -815,6 +819,8 @@ export class WorldView {
       this.attractivenessView.group,
       this.partyMoodView.group,
       this.logisticsView.group,
+      this.courseView.group,
+      this.attractionView.group,
       this.accessControlView.group,
       this.supplyChainView.group,
       this.powerView.group,
@@ -918,6 +924,17 @@ export class WorldView {
     if (dataChanged) this.attractivenessView.update(snapshot.attractiveness)
     if (dataChanged) this.partyMoodView.update(snapshot.partyMood)
     if (dataChanged) this.logisticsView.setStructurePaths(snapshot.buildings.filter(b => b.kind === 'path').map(b => ({ x:b.x, z:b.z, elevation:b.elevation, slope:b.pathSlope ?? 0, direction:b.pathSlopeDirection ?? 0, road:false })))
+    if (dataChanged) this.courseView.update(snapshot.courses ?? [], snapshot.visitors, snapshot.simTick)
+    if (dataChanged) {
+      this.attractionView.update(
+        snapshot.attractions,
+        new Set([
+          ...snapshot.coasters.map((coaster) => coaster.id),
+          ...snapshot.courses.map((course) => course.id),
+          ...snapshot.buildings.filter((building) => building.kind === 'ride').map((building) => building.id),
+        ]),
+      )
+    }
     this.logisticsView.update(snapshot.logistics, (x, z) =>
       getTerrainHeight(snapshot.terrain, x, z),
       (x, z) => { const g = groundInfo(snapshot, x, z); if (g.roadway) return wayInfo(snapshot, x, z, 'road').color; return !this.logisticsMode ? 0x50555a : g.surface === 'paved' ? 0x50555a : g.surface === 'gravel' ? 0x8f948b : 0x8b7551 },
@@ -2173,6 +2190,15 @@ export class WorldView {
       bench.position.z = 0.34
       bench.add(seat, back, legs)
       group.add(bench)
+    } else if (kind === 'table') {
+      const table = new Group()
+      const wood = new MeshStandardMaterial({ color: 0xb07a48, roughness: 0.8 })
+      const top = new Mesh(new BoxGeometry(0.7, 0.06, 0.7), wood)
+      const pedestal = new Mesh(new BoxGeometry(0.12, 0.38, 0.12), darkMaterial)
+      top.position.y = 0.48
+      pedestal.position.y = 0.22
+      table.add(top, pedestal)
+      group.add(table)
     } else if (kind === 'lighting') {
       const pole = new Mesh(new CylinderGeometry(0.035, 0.055, 1.45, 8), darkMaterial)
       const lampMaterial = new MeshStandardMaterial({
@@ -2935,6 +2961,20 @@ export class WorldView {
     for (const vehicle of this.currentSnapshot?.logistics.roadVehicles ?? []) {
       for (const passengerId of vehicle.passengerIds) hiddenPassengers.add(passengerId)
     }
+    const courseRiders = new Set(
+      [
+        ...(this.currentSnapshot?.courses ?? []).flatMap((course) =>
+          course.riders.map((rider) => rider.visitorId),
+        ),
+        ...(this.currentSnapshot?.attractions ?? []).flatMap((attraction) =>
+          attraction.runtime.kind === 'course'
+            ? attraction.runtime.riders.map((rider) => rider.visitorId)
+            : attraction.runtime.kind === 'scriptedRide'
+              ? attraction.runtime.occupantIds
+              : [],
+        ),
+      ],
+    )
 
     visitors.forEach((visitor, index) => {
       const previous = this.previousVisitorPositions.get(visitor.id)
@@ -2944,7 +2984,7 @@ export class WorldView {
       const z = interpolate ? previous.z + (visitor.z - previous.z) * this.renderAlpha : visitor.z
       const visible =
         !this.bungeeRiders.has(visitor.id) &&
-        visitor.state !== 'riding' &&
+        (visitor.state !== 'riding' || courseRiders.has(visitor.id)) &&
         visitor.state !== 'vehicle-arrival' &&
         visitor.state !== 'bus-riding' &&
         visitor.state !== 'medical' &&
@@ -2966,7 +3006,8 @@ export class WorldView {
       const swimming =
         visitor.state === 'swimming' && visitor.route.length === 0
       const moving =
-        visitor.state !== 'sleeping' && visitor.route.length > 0
+        visitor.state !== 'sleeping' &&
+        (visitor.route.length > 0 || courseRiders.has(visitor.id))
       const dx = visitor.x - this.cameraTarget.x
       const dz = visitor.z - this.cameraTarget.z
       const distance = Math.hypot(dx, dz)
@@ -3603,6 +3644,7 @@ export class WorldView {
           this.currentSnapshot?.selectedTool === 'medicalArea' ||
           this.currentSnapshot?.selectedTool === 'wasteDump' ||
           this.currentSnapshot?.selectedTool === 'stageForecourt' ||
+          this.currentSnapshot?.selectedTool === 'backstageArea' ||
           this.currentSnapshot?.selectedTool === 'road' ||
           this.currentSnapshot?.selectedTool === 'parkingArea' ||
           this.currentSnapshot?.selectedTool === 'roadDirection' ||
@@ -3612,6 +3654,7 @@ export class WorldView {
           this.currentSnapshot?.selectedTool === 'roadSpeed10' ||
           this.currentSnapshot?.selectedTool === 'roadSpeed30' ||
           this.currentSnapshot?.selectedTool === 'roadSpeed50' ||
+          this.currentSnapshot?.selectedTool === 'course' ||
           isTerrainEditTool(this.currentSnapshot?.selectedTool) ||
           this.currentSnapshot?.selectedTool === 'bulldoze' ||
           this.currentSnapshot?.selectedTool === 'powerCable' ||
@@ -3769,6 +3812,8 @@ export class WorldView {
         this.rideGates,
         this.accessControlView.getPickRoot(),
         this.logisticsView.getStaticPickRoot(),
+        this.courseView.pickRoot(),
+        this.attractionView.pickRoot(),
       ],
       true,
     )
@@ -3779,6 +3824,9 @@ export class WorldView {
       if (buildingId) {
         const picked = resolvePickedBuilding(snapshot.buildings, buildingId, hit.point.x, hit.point.z)
         if (picked) return picked
+        if (snapshot.attractions.some((attraction) => attraction.id === buildingId)) {
+          return { ...cellFromWorldPoint(hit.point.x, hit.point.z), buildingId }
+        }
       }
       return cellFromWorldPoint(hit.point.x, hit.point.z)
     }
@@ -3927,7 +3975,7 @@ export class WorldView {
       this.preview.visible = this.previewArrow.visible = false
       return
     }
-    if (tool === 'bench' || isWasteBin(tool)) {
+    if (tool === 'bench' || tool === 'table' || isWasteBin(tool)) {
       const cell = this.hoveredCell
       if (tool !== this.sceneryPreviewKind) {
         disposeChildren(this.sceneryPreview)

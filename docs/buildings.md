@@ -8,7 +8,7 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Arten, Tools, Anzeige | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` (`trafficLight`, `pathBarrier`, `deliveryYard`, `supplyDepot`, `staffGate`, `tourBusParking`, `backstageArea`, `sealedWasteContainer`) |
+| Arten, Tools, Anzeige | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` (`trafficLight`, `pathBarrier`, `deliveryYard`, `supplyDepot`, `staffGate`, `tourBusParking`, `backstageArea`, `sealedWasteContainer`, `fireStation`, `table`, `course`) |
 | Bau-Menü / Kategorien | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` (keine stillen Fallbacks). Abriss bleibt als Kategorie für die Toolbar, öffnet aber kein Raster. Wege öffnen `#path-construction` mit Schnellzugriff auf `pathBarrier`, `staffGate`, `securityGate`. `isCatalogBuildCategory`: Deko, Attraktionen und Logistik als Bildraster mit Hover-Fußzeile. Camping unter Attraktionen; Krankenhaus (`ambulanceGarage`, `medicalArea`); Bandversorgung (`backstageArea`, `tourBusParking`) unter Logistik. |
 | Bauhöhe / autoritative Vorschau | `src/game/GameState.ts`, `src/game/placementPreview.ts`, `src/game/commands/placementCommands.ts` | Fassadenmethode `previewPlacement`; Dispatch `previewPlacementCommand`; `PlacementPreviewRequest` / `PlacementPreviewResult`, `GhostRenderMode`; `adjustBuildElevation`, `setBuildElevation` (0–6, **Halbstufen 0.5**, wie Wege). |
 | Kosten / Upkeep / Appeal | `src/game/simulationConfig.ts` | `economy.buildings` |

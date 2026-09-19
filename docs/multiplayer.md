@@ -35,6 +35,14 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
 
 - Neue spielerseitige Aktion: `GameCommand` in `protocol.ts`, Zweig in
   `commands.ts`, autoritative Methode in `GameState`, ggf. Optimistic-Flags.
+  Gemeinsame Attraktionen verwenden `startAttraction`,
+  `constructAttraction` (derselbe Resolver wie die Vorschau),
+  `removeAttraction`, `setAttractionOperation`, `setAttractionPrice` und
+  `configureAttraction`. `constructAttraction` trägt die diskriminierte
+  Änderung für Kante, offenes Ende, Fläche, Referenz, Zugang oder
+  Scripted-Segment. Bau/Abriss/Zugang sind optimistic; Betrieb, Preis und
+  Einstellungen werden vom Host bestätigt. `commandRegistry.ts`,
+  `commands.ts` und `bind.ts` behandeln alle Varianten exhaustiv.
 - Neue persistente Weltfelder: Codec / `worldUpdates` und Join-Vollsync.
   Fahrzeugpositionen und Routen behalten das bestehende optionale
   `RoadPosition.elevation` auch beim Laden/Normalisieren. Der Host berechnet
@@ -49,6 +57,14 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   `scheduleOffer` und `schedulePhases` mitsenden.
   Ticketpreise: `entryPrice` (Tag) und `campingTicketPrice` (Camping);
   Commands `updateEntryPrice` und `updateCampingTicketPrice`.
+  Feuerwehrwagen: `buyFireTruck` (`stationId`).
+  Die älteren Kurs-Projektionspfade nutzen noch `startCourseArea`, `addCourseAreaCells` und
+  `removeCourseAreaCells` übertragen eine komplette Flächenauswahl atomar;
+  außerdem `startCourse`, das kompatible `addCourseAreaCell`,
+  `addCoursePiece` (optional `elevation`), `undoCoursePiece`,
+  `setCourseOperating`, `setCoursePrice`,
+  `setCourseTeamSize`, `removeCourse`; Snapshot-Feld `courses`.
+  Festival-Action `autoLineup` darf `minStars` / `maxStars` mitsenden.
   T-Shirt-Stand: `configureShirtStall` (`color`, `style`). Gäste-Felder
   `ownedMascot`, `heldMascot`, `wornShirt` liegen im PackedVisitor.
   Personalzonen: `toggleStaffZone`, `setStaffZone` (`active` an/aus für

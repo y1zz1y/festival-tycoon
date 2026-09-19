@@ -402,6 +402,35 @@ export function mountAppShell(app: HTMLDivElement): void {
       </div>
       <button id="demolish-coaster-construction" class="demolish-coaster" type="button" hidden>💣 Achterbahn abreißen</button>
     </aside>
+    <aside id="course-builder" class="coaster-builder course-builder panel" aria-label="Kurs-Konstruktion">
+      <div class="construction-title">
+        <div><small>Konstruktion</small><strong id="course-builder-name">Kurs bauen</strong></div>
+        <button id="close-course-builder" aria-label="Kurs-Editor schließen">×</button>
+      </div>
+      <p id="course-builder-status" role="status">Klicke auf das Gelände, um den Eingang zu setzen.</p>
+      <p id="course-builder-hint" class="ride-placement-help"></p>
+      <section class="rct-editor-section">
+        <label>Bauteile</label>
+        <div id="course-piece-palette" class="piece-palette track-piece-palette"></div>
+      </section>
+      <section class="rct-editor-section" id="course-elevation-section">
+        <label>Ebene <b id="course-elevation-label">0</b></label>
+        <div class="ride-height-controls">
+          <button id="course-elevation-down" type="button" aria-label="Ebene senken">−</button>
+          <button id="course-elevation-up" type="button" aria-label="Ebene anheben">+</button>
+        </div>
+      </section>
+      <section class="rct-editor-section" id="course-team-section" hidden>
+        <label for="course-team-size">Personen pro Team</label>
+        <input id="course-team-size" type="number" min="1" max="8" value="2" />
+      </section>
+      <div class="construction-actions">
+        <button id="course-undo" type="button" disabled>↶ Letztes Stück</button>
+        <button id="course-toggle-operating" type="button" disabled>Öffnen</button>
+        <button id="demolish-course" class="demolish" type="button">💣 Abriss</button>
+        <button id="finish-course-builder" class="primary" type="button">✓ Fertig</button>
+      </div>
+    </aside>
     <section class="time-controls panel" aria-label="Zeitsteuerung">
       <button data-speed="0" title="Pause">❚❚</button>
       <button data-speed="1" title="Normal">▶</button>

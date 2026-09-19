@@ -49,6 +49,7 @@ import { testHeadlineMagazine } from './headlineMagazine'
 import { testBuildMenu } from './buildMenu'
 import { testPlacementPreview } from './placementPreview'
 import { testFinance } from './finance'
+import { testCourseAttractions, testPostRefactorBacklog } from './courseAttractions'
 import { testVisitorSleep } from './visitorSleep'
 import { testQueueLanes } from './queueLanes'
 import { testShopGoods } from './shopGoods'
@@ -61,6 +62,7 @@ import { testFestivalAudio } from './audio'
 import { testSnapshotModules } from './snapshotModules'
 import { testSimulationModules } from './simulationModules'
 import { testUiModules } from './uiModules'
+import { testAttractionFoundation } from './attractionFoundation'
 
 function test(name: string, run: () => void) {
   run()
@@ -71,6 +73,9 @@ testFacadeReveal()
 testSnapshotModules()
 testSimulationModules()
 testUiModules()
+test('canonical attraction graph, area and construction foundations', () => {
+  testAttractionFoundation()
+})
 testFestivalAudio()
 testWayStructures()
 testMobileTouch()
@@ -89,6 +94,10 @@ test('placement height snaps to half-steps and reports the ground cell', () => {
 })
 test('books, loans, prepared scenarios and their goals', () => {
   testFinance()
+})
+test('course attractions and post-refactor backlog checks', () => {
+  testCourseAttractions()
+  testPostRefactorBacklog()
 })
 await testAccounts()
 console.log('PASS accounts: registration, sessions, hashed passwords and throttled guessing')

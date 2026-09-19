@@ -25,6 +25,7 @@ feature you touch. Keep detailed file maps and feature history in topic docs.
 | Accounts, sessions, authentication | `docs/accounts.md` |
 | Stage workshop / shows | `docs/stages.md` |
 | Coasters, rides, queues | `docs/attractions.md` |
+| Course attractions | `docs/course-attractions.md` |
 | Coasters / track editor | `docs/coaster.md` |
 | Atmosphere, power, lights | `docs/atmosphere.md` |
 | Festival SFX / camera listener | `docs/audio.md` |

@@ -26,14 +26,20 @@ export const SIMULATION_CONFIG = {
   economy: {
     decorationWalls: { cost: 30, upkeep: 0, capacity: 0, appeal: 2, defaultPrice: 0 },
     startingMoney: 10_000,
-    defaultEntryPrice: 10,
-    defaultCampingTicketPrice: 25,
+    defaultEntryPrice: 120,
+    defaultCampingTicketPrice: 260,
     startingReputation: 50,
     maximumPrice: 1_000_000,
     demolitionRefundRate: 0.25,
     /** Stamp copies charge this share of catalog / way costs (1 = full price). */
     blueprintCopyCostFactor: 0.8,
     treeClearCost: 45,
+    /** Booths and attractions during day-plan break. */
+    pauseUpkeepMultiplier: 0.15,
+    /** Stage building upkeep while the festival is not in the live phase. */
+    inactiveFestivalStageMultiplier: 0.15,
+    /** Hourly upkeep per placed coaster track piece while the park clock runs. */
+    coasterUpkeepPerPiece: 2.5,
     emptyParkBaseReputation: 45,
     coasterAppeal: 20,
     coasterAccessCost: 100,
@@ -57,6 +63,8 @@ export const SIMULATION_CONFIG = {
       directionalSpeaker: { cost: 420, upkeep: 12, capacity: 0, appeal: 1, defaultPrice: 0 },
       omniSpeaker: { cost: 620, upkeep: 18, capacity: 0, appeal: 1, defaultPrice: 0 },
       ambulanceGarage: { cost: 5200, upkeep: 120, capacity: 2, appeal: 0, defaultPrice: 0 },
+      fireStation: { cost: 5600, upkeep: 130, capacity: 2, appeal: 0, defaultPrice: 0 },
+      table: { cost: 140, upkeep: 2, capacity: 4, appeal: 4, defaultPrice: 0 },
       busStop: { cost: 180, upkeep: 3, capacity: 20, appeal: 0, defaultPrice: 0 },
       busDepot: { cost: 8500, upkeep: 180, capacity: 3, appeal: 0, defaultPrice: 0 },
       wasteDepot: { cost: 3800, upkeep: 80, capacity: 2, appeal: 0, defaultPrice: 0 },
@@ -96,6 +104,7 @@ export const SIMULATION_CONFIG = {
       laserShow: 10,
       fireworkBattery: 2,
       ambulanceGarage: 2,
+      fireStation: 3,
       busDepot: 3,
       wasteDepot: 2,
       specialDepot: 8,
@@ -119,7 +128,9 @@ export const SIMULATION_CONFIG = {
       laterFestivalDayCamperMultiplier: 0.12,
       festivalDayGuestMultiplier: 1,
     },
-    budget: 1_000_000,
+    budget: 220,
+    /** Extra pocket money so campers can pay the weekend ticket and still buy food. */
+    campingTicketReserve: 180,
     walkSpeedMinimum: 0.175,
     walkSpeedRandomRange: 0.335,
     aggressiveProbability: 0.28,
@@ -265,6 +276,9 @@ export const SIMULATION_CONFIG = {
     parkingRetryMinutes: 2,
     parkingRouteCandidateLimit: 8,
     vehicleUnstickMinutes: 6,
+    /** Head-on deadlock: wait this many sim ticks (inclusive random range) before one vehicle replans. */
+    headOnReplanDelayTicksMin: 1,
+    headOnReplanDelayTicksMax: 7,
     vehicleAbandonMinutes: 22,
     vehicleMoveIntervalMinutes: 0.18,
     pedestrianRoadCostMultiplier: 2,
@@ -272,6 +286,7 @@ export const SIMULATION_CONFIG = {
     brakingChanceBySpeed: { 10: 0.98, 30: 0.78, 50: 0.38 },
     ambulanceCost: 2400,
     ambulanceCapacity: 5,
+    fireTruckCost: 2800,
     garbageTruckCost: 3200,
     garbageTruckCapacity: 90,
     sweeperCost: 9800,
@@ -438,6 +453,10 @@ export const SIMULATION_CONFIG = {
     cleanerLitterWorkMinutes: 3.5,
     cleanerBinWorkMinutes: 5.5,
     firefighterWorkMinutes: 16,
+    /** Cleaners take a nearby job if the higher-priority target is farther than this (Manhattan). */
+    cleanerLongTravelTiles: 14,
+    /** Local work radius around the cleaner when skipping a distant priority job. */
+    cleanerLocalWorkTiles: 4,
     medicNauseaThreshold: 85,
   },
   medical: {
@@ -783,6 +802,8 @@ export const SIMULATION_CONFIG = {
     sealedContainerStoredBeautyPerBag: -0.22,
     tentPackLitterChance: 0.62,
     binRange: 7,
+    /** Chebyshev radius for a 7×7 neighborhood (3 tiles from the guest, including the center). */
+    sealedVisitorChebyshevRange: 3,
     binCapacity: 12,
     // Nearest bin in binRange is full or unusable: drop litter here, do not hunt farther.
     visitorDropIfBinFull: true,
@@ -835,6 +856,25 @@ export const SIMULATION_CONFIG = {
       wasteTruck: 15,
       incident: 10,
       uiClick: 2,
+    },
+  },
+  courses: {
+    pieceUpkeep: 1.6,
+    progressPerMinute: 0.55,
+    funGain: 28,
+    paintballTeamSize: 2,
+    paintballTeamSizeMin: 1,
+    paintballTeamSizeMax: 8,
+    paintballMatchTicks: 240,
+    paintballMoveIntervalTicks: 24,
+    paintballShotCycleTicks: 12,
+    slideLaunchSpeed: 0.55,
+    slideGravity: 0.22,
+    capacity: {
+      mudmasters: 8,
+      pool: 12,
+      treeToTree: 6,
+      paintball: 10,
     },
   },
 } as const

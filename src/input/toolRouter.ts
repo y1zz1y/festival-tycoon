@@ -1,4 +1,5 @@
 import { isTerrainEditTool, type BuildingKind, type Tool } from '../game/catalog'
+import type { CourseKind } from '../game/courseAttractions'
 import { terrainCornerIndex, terrainToolMode } from '../game/terrain'
 import { scenerySlot } from '../game/scenery'
 import type { GameState } from '../game/GameState'
@@ -21,6 +22,7 @@ export type DirectToolContext = {
   backstageEraseMode: boolean
   bungeeBuildMode: boolean
   bungeeHeight: number
+  courseKind?: CourseKind
 }
 
 export type DirectToolResult = {
@@ -176,7 +178,7 @@ export function applyDirectCellTool(
       ),
     }
   }
-  if (tool === 'inspect' || tool === 'copy' || tool === 'coaster') return unhandled
+  if (tool === 'inspect' || tool === 'copy' || tool === 'coaster' || tool === 'course') return unhandled
 
   const result =
     tool === 'camping'

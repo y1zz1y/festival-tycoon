@@ -53,7 +53,7 @@ export type ArrivalGroup = {
   entryFeesPaid: boolean
 }
 
-export type RoadVehicleKind = 'visitorCar' | 'ambulance' | 'bus' | 'garbageTruck' | 'sweeper' | 'deliveryTruck' | 'tourBus'
+export type RoadVehicleKind = 'visitorCar' | 'ambulance' | 'bus' | 'garbageTruck' | 'sweeper' | 'deliveryTruck' | 'tourBus' | 'fireTruck'
 export type RoadVehicleState =
   | 'idle'
   | 'driving'
@@ -71,6 +71,7 @@ export type RoadVehicleTarget =
   | { kind: 'cruise' }
   | { kind: 'busStop'; stopId: string }
   | { kind: 'garage'; garageId: string }
+  | { kind: 'fireStation'; stationId: string }
   | { kind: 'depot'; depotId: string }
   | { kind: 'wasteDump'; x: number; z: number }
   | { kind: 'sealedWasteContainer'; buildingId: string; x: number; z: number }
@@ -102,6 +103,10 @@ export type RoadVehicle = {
   reservedParkingId?: string | null
   /** Fleet sale after the vehicle reaches its depot/garage. */
   pendingSale?: boolean
+  /** Sim tick when a head-on deadlock may replan. Staggered so both vehicles do not turn at once. */
+  headOnReplanTick?: number
+  /** True while a service vehicle is stored inside its home building. */
+  housed?: boolean
 }
 
 export const ROAD_VEHICLE_KIND_LABELS: Record<
@@ -115,6 +120,7 @@ export const ROAD_VEHICLE_KIND_LABELS: Record<
   sweeper: { icon: '🧹', name: 'Saugreiniger' },
   deliveryTruck: { icon: '🚚', name: 'Lieferfahrzeug' },
   tourBus: { icon: '🚌', name: 'Tourbus' },
+  fireTruck: { icon: '🚒', name: 'Feuerwehrwagen' },
 }
 
 export function isPlayerOwnedFleetVehicle(vehicle: Pick<RoadVehicle, 'kind'>): boolean {
@@ -122,7 +128,8 @@ export function isPlayerOwnedFleetVehicle(vehicle: Pick<RoadVehicle, 'kind'>): b
     vehicle.kind === 'ambulance' ||
     vehicle.kind === 'bus' ||
     vehicle.kind === 'garbageTruck' ||
-    vehicle.kind === 'sweeper'
+    vehicle.kind === 'sweeper' ||
+    vehicle.kind === 'fireTruck'
   )
 }
 
@@ -424,10 +431,14 @@ export function describeRoadVehicleDestination(vehicle: RoadVehicle): string | n
   return last ? `Feld ${last.x}, ${last.z}` : null
 }
 
-export type AmbulanceGarage = RoadPosition & {
+export type ServiceGarage = RoadPosition & {
   id: string
   bays: [string | null, string | null]
+  /** Door side (0=+Z). Vehicles enter and leave through this face. */
+  gateDirection?: Direction
 }
+export type AmbulanceGarage = ServiceGarage
+export type FireStation = ServiceGarage
 
 export type BusStop = RoadPosition & {
   id: string
@@ -443,6 +454,7 @@ export type BusDepot = RoadPosition & {
 export type WasteDepot = RoadPosition & {
   id: string
   truckIds: string[]
+  gateDirection?: Direction
 }
 
 export type SpecialDepot = RoadPosition & {
@@ -467,6 +479,7 @@ export type LogisticsSnapshot = {
   arrivalGroups: ArrivalGroup[]
   roadVehicles: RoadVehicle[]
   ambulanceGarages: AmbulanceGarage[]
+  fireStations: FireStation[]
   busStops: BusStop[]
   busDepots: BusDepot[]
   busLines: BusLine[]
@@ -522,6 +535,7 @@ const VEHICLE_KINDS: readonly RoadVehicleKind[] = [
   'sweeper',
   'deliveryTruck',
   'tourBus',
+  'fireTruck',
 ]
 const VEHICLE_STATES: readonly RoadVehicleState[] = [
   'idle',
@@ -542,6 +556,7 @@ export function createDefaultLogisticsSnapshot(): LogisticsSnapshot {
     arrivalGroups: [],
     roadVehicles: [],
     ambulanceGarages: [],
+    fireStations: [],
     busStops: [],
     busDepots: [],
     busLines: [],
@@ -862,6 +877,9 @@ export function normalizeLogisticsSnapshot(value: unknown): LogisticsSnapshot {
     ambulanceGarages: asArray(source?.ambulanceGarages)
       .map(normalizeAmbulanceGarage)
       .filter(isDefined),
+    fireStations: asArray(source?.fireStations)
+      .map(normalizeAmbulanceGarage)
+      .filter(isDefined),
     busStops: asArray(source?.busStops)
       .map(normalizeBusStop)
       .filter(isDefined),
@@ -964,6 +982,10 @@ function normalizeRoadVehicle(value: unknown): RoadVehicle | null {
     workZones: Array.isArray(source.workZones) ? stringArray(source.workZones) : undefined,
     reservedParkingId: nullableString(source.reservedParkingId),
     ...(source.pendingSale === true ? { pendingSale: true } : {}),
+    ...(Number.isFinite(source.headOnReplanTick)
+      ? { headOnReplanTick: Math.floor(Number(source.headOnReplanTick)) }
+      : {}),
+    ...(source.housed === true ? { housed: true } : {}),
   }
 }
 
@@ -972,6 +994,7 @@ function normalizeAmbulanceGarage(value: unknown): AmbulanceGarage | null {
   const position = normalizePosition(source)
   if (!source || !position || typeof source.id !== 'string') return null
   const bays = asArray(source.bays)
+  const gate = Number(source.gateDirection)
   return {
     ...position,
     id: source.id,
@@ -979,6 +1002,9 @@ function normalizeAmbulanceGarage(value: unknown): AmbulanceGarage | null {
       nullableString(bays[0]),
       nullableString(bays[1]),
     ],
+    ...(gate === 0 || gate === 1 || gate === 2 || gate === 3
+      ? { gateDirection: gate as Direction }
+      : {}),
   }
 }
 
@@ -1005,7 +1031,15 @@ function normalizeWasteDepot(value: unknown): WasteDepot | null {
   const source = asRecord(value)
   const position = normalizePosition(source)
   if (!source || !position || typeof source.id !== 'string') return null
-  return { ...position, id: source.id, truckIds: stringArray(source.truckIds) }
+  const gate = Number(source.gateDirection)
+  return {
+    ...position,
+    id: source.id,
+    truckIds: stringArray(source.truckIds),
+    ...(gate === 0 || gate === 1 || gate === 2 || gate === 3
+      ? { gateDirection: gate as Direction }
+      : {}),
+  }
 }
 
 function normalizeSpecialDepot(value: unknown): SpecialDepot | null {
@@ -1051,6 +1085,9 @@ function normalizeVehicleTarget(value: unknown): RoadVehicleTarget | null {
   }
   if (source.kind === 'garage' && typeof source.garageId === 'string') {
     return { kind: 'garage', garageId: source.garageId }
+  }
+  if (source.kind === 'fireStation' && typeof source.stationId === 'string') {
+    return { kind: 'fireStation', stationId: source.stationId }
   }
   if (source.kind === 'depot' && typeof source.depotId === 'string') {
     return { kind: 'depot', depotId: source.depotId }

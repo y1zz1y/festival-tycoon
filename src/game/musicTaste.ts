@@ -10,13 +10,21 @@ export type MusicGenre=typeof GENRES[number]['id']
 export type MusicMix=Record<MusicGenre,number>
 const bandGenres:Record<string,MusicGenre>={
   meadow:'indie',lantern:'indie',paper:'indie',aurora:'indie',
+  meadow2:'indie',lantern2:'indie',paper2:'indie',nova:'indie',
   brass:'pop',sugar:'pop',firefly:'pop',confetti:'pop',
+  brass2:'pop',sugar2:'pop',firefly2:'pop',
   campfire:'folk',cedar:'folk',harbor:'folk',
+  campfire2:'folk',cedar2:'folk',harbor2:'folk',
   velvet:'soul',amber:'soul',lowtide:'soul',
+  velvet2:'soul',amber2:'soul',lowtide2:'soul',
   neon:'electro',voltage:'electro',synth:'electro',
+  neon2:'electro',voltage2:'electro',synth2:'electro',eclipse:'electro',
   static:'rock',rivet:'rock',wildcard:'rock',
+  static2:'rock',rivet2:'rock',wildcard2:'rock',
   orbit:'dance',glitter:'dance',discoball:'dance',
+  orbit2:'dance',glitter2:'dance',discoball2:'dance',
   iron:'metal',anvil:'metal',thunder:'metal',
+  iron2:'metal',anvil2:'metal',thunder2:'metal',
 }
 export function bandGenre(id:string):MusicGenre{return bandGenres[id]??'indie'}
 export function normalizeMusic(values?:Partial<MusicMix>):MusicMix{
