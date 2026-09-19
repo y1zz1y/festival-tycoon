@@ -123,6 +123,7 @@ export function mountAppShell(app: HTMLDivElement): void {
       <h3 class="scenario-heading">Einstellungen</h3>
       <label class="scenario-check"><input id="setting-debug-tools" type="checkbox" /><span>Debug</span></label>
       <label class="scenario-check"><input id="setting-mute-audio" type="checkbox" /><span>Ton stumm</span></label>
+      <label class="scenario-check"><input id="setting-stock-bars" type="checkbox" /><span>Füllstände über Ständen</span></label>
       <label class="scenario-field"><span>Autospeichern</span><select id="setting-autosave">${AUTOSAVE_INTERVALS.map((option) => `<option value="${option.minutes}">${option.label}</option>`).join('')}</select></label>
       <button id="open-title-screen" type="button">🏠 Titelbildschirm</button>
       <h3 class="scenario-heading">Dieses Festival</h3>

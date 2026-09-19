@@ -287,6 +287,12 @@ export class GameState {
   onCommandResult: ((command: GameCommand, result: ActionResult) => void) | null = null
   applyingCommand = false
   worldRevision = 0
+  /**
+   * Counts the changes the player made: what a save captures and an unsaved close
+   * would throw away. Unlike worldRevision it ignores what the simulation does on
+   * its own, such as the ground drying out, so an untouched game stays "unchanged".
+   */
+  editRevision = 0
   lockstepReady = true
   readonly rng: DeterministicRng = new DeterministicRng(1)
   private tickAccumulator = 0
@@ -894,7 +900,7 @@ export class GameState {
     this.wayBatch = action.type === 'wayArea'
     try { result = action.type === 'wayArea' ? this.buildWayArea(action.from, action.to, action.kind) : festivalAction(this.state, action) } finally { this.wayBatch = false }
     if (result.ok && action.type === 'stageDesign') { syncStageAudience(this.state); this.indexedBuildingCount=-1; this.refreshPower() }
-    if (result.ok) { this.atmosphereMinutes = 999; this.worldRevision++; this.emit() }
+    if (result.ok) { this.atmosphereMinutes = 999; this.worldRevision++; this.editRevision++; this.emit() }
     return result
   }
 
@@ -1065,6 +1071,7 @@ export class GameState {
     for (const c of planned.changes) delete this.state.festival.infrastructure.ground[groundKey(c.x, c.z)]
     this.terrainHeights = null
     this.worldRevision += 1
+    this.editRevision += 1
     planned.changes.forEach((change) => {
       this.state.buildings.forEach((building) => {
         if (building.kind !== 'tree') return
@@ -2531,6 +2538,7 @@ export class GameState {
     this.state.courses.push(course)
     this.recalculateQueueDirections()
     this.worldRevision += 1
+    this.editRevision += 1
     this.emit()
     return { ok: true, message: `${course.name} angelegt. Jetzt den Kurs bauen.`, id }
   }
@@ -2558,6 +2566,7 @@ export class GameState {
     bookFinance(this.state, 'construction', -cost)
     this.state.courses.push(course)
     this.worldRevision += 1
+    this.editRevision += 1
     this.emit()
     return { ok: true, message: `${course.name} mit ${added} Flächenfeldern angelegt.`, id }
   }
@@ -2575,6 +2584,7 @@ export class GameState {
     if (typeof added === 'string') return { ok: false, message: added }
     bookFinance(this.state, 'construction', -cost)
     this.worldRevision += 1
+    this.editRevision += 1
     this.emit()
     return { ok: true, message: 'Anlagenfläche erweitert.' }
   }
@@ -2601,6 +2611,7 @@ export class GameState {
     if (typeof added === 'string') return { ok: false, message: added }
     bookFinance(this.state, 'construction', -cost)
     this.worldRevision += 1
+    this.editRevision += 1
     this.emit()
     return { ok: true, message: `${added} Flächenfelder ergänzt.` }
   }
@@ -2614,6 +2625,7 @@ export class GameState {
     const areaKind = course.kind === 'pool' ? 'poolBasin' : 'paintballField'
     bookFinance(this.state, 'construction', removed * COURSE_PIECE_COST[areaKind])
     this.worldRevision += 1
+    this.editRevision += 1
     this.emit()
     return { ok: true, message: `${removed} Flächenfelder entfernt.` }
   }
@@ -2657,6 +2669,7 @@ export class GameState {
     bookFinance(this.state, 'construction', -cost)
     if (kind === 'entrance') this.recalculateQueueDirections()
     this.worldRevision += 1
+    this.editRevision += 1
     this.emit()
     return { ok: true, message: 'Kursstück gesetzt.' }
   }
@@ -2672,6 +2685,7 @@ export class GameState {
         this.state.courses = (this.state.courses ?? []).filter((entry) => entry.id !== courseId)
       }
       this.worldRevision += 1
+    this.editRevision += 1
       this.emit()
       return { ok: true, message: 'Letztes Flächenfeld entfernt.' }
     }
@@ -2693,6 +2707,7 @@ export class GameState {
       this.state.courses = (this.state.courses ?? []).filter((entry) => entry.id !== courseId)
     }
     this.worldRevision += 1
+    this.editRevision += 1
     this.emit()
     return { ok: true, message: 'Letztes Kursstück entfernt.' }
   }
@@ -2740,6 +2755,7 @@ export class GameState {
     this.state.courses = this.state.courses.filter((entry) => entry.id !== courseId)
     this.recalculateQueueDirections()
     this.worldRevision += 1
+    this.editRevision += 1
     this.emit()
     return { ok: true, message: `${course.name} abgerissen.` }
   }
@@ -9196,6 +9212,7 @@ export class GameState {
   private emit(reason: 'mutate' | 'tick' | 'local' = 'mutate'): void {
     if (reason === 'mutate' && this.networkMode !== 'client') {
       this.worldRevision += 1
+    this.editRevision += 1
     }
     if (!this.wayBatch) this.listeners.forEach((listener) => listener(this.state))
   }

@@ -7,6 +7,7 @@ import { AUTOSAVE_DEFAULT_MINUTES, AUTOSAVE_INTERVALS, AUTOSAVE_KEY, AUTOSAVE_NA
 import { EMPTY_SAVE_ARCHIVE, composeSaveArchive, findSaveSlot as findArchiveSlot, offlineSaveArchive, saveArchiveHtml, saveAsArchiveHtml, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
 import { formatSaveTime } from './format'
 import { loadWithOverlay } from './loadingOverlay'
+import { confirmDiscardingWork, markWorkSaved } from './unsavedWork'
 
 export interface SaveControllerContext {
   getGame(): GameState
@@ -76,10 +77,13 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
   const findSaveSlot = (id: string): SaveSlotView | undefined =>
     findArchiveSlot(saveArchive, id)
   function bindLoadedGame(loaded: GameState, message: string): void {
+    if (!confirmDiscardingWork('Einen anderen Spielstand laden?')) return
     loadWithOverlay('Spielstand wird geladen …', () => {
       if (isPathWindowOpen()) closePathEditor()
       bindGameState(loaded)
       fillScenarioForm(loaded.snapshot.scenario)
+      // What was just read off the disk is by definition saved.
+      markWorkSaved()
       showToast(message)
     })
   }
@@ -87,6 +91,7 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     try {
       const json = serializeSnapshot(getGame().snapshot)
       await writeQuicksaveJson(json)
+      markWorkSaved()
       showToast('Spiel gespeichert')
     } catch (error) {
       showToast(storageErrorMessage(error, 'Schnellspeichern ist fehlgeschlagen'), true)
@@ -174,6 +179,9 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
   
   async function persistNamedSave(name: string, id?: string, source: 'server' | 'browser' = saveArchive.onServer ? 'server' : 'browser'): Promise<string> {
     const json = serializeSnapshot(getGame().snapshot)
+    // The snapshot is taken now, so this is the state that ends up on disk whichever
+    // archive takes it — a later change during the write still counts as unsaved.
+    markWorkSaved()
     if (source === 'server') {
       try {
         const saved = await saveServerSave(name, json, id)

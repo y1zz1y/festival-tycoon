@@ -128,6 +128,27 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
     updateStageLightPool([far,near],pool,lightViewOf(camera,new Vector3(0,0,0)))
     assert.ok(pool.every(light=>light.intensity>0&&Math.abs(light.position.x)<10),'both real lights serve heads on the stage in view, though the far stage is listed first')
   }
+  // Nothing on stage may move while nobody is playing: the yokes hold their rest pose
+  // however far the clock runs on, and pick the sweep back up once a show is on.
+  {
+    const idleHeads = spots.map((spot: any) => spot.userData.armGroup as Group)
+    const aim = (arm: Group) => [arm.quaternion.x, arm.quaternion.y, arm.quaternion.z, arm.quaternion.w]
+    animateStageModel(model, { ...phase, movement: 100 } as any, 3, false)
+    const resting = idleHeads.map(aim)
+    animateStageModel(model, { ...phase, movement: 100 } as any, 9, false)
+    idleHeads.forEach((arm, index) => {
+      assert.ok(
+        aim(arm).every((value, axis) => Math.abs(value - resting[index]![axis]!) < 1e-9),
+        'a moving head stands still while no act is on',
+      )
+    })
+    animateStageModel(model, { ...phase, movement: 100 } as any, 9, true)
+    assert.ok(
+      idleHeads.some((arm, index) => aim(arm).some((value, axis) => Math.abs(value - resting[index]![axis]!) > 1e-6)),
+      'and sweeps again once the show runs',
+    )
+  }
+
   // A beam has to carry across the crowd, so it throws four map tiles — the same distance
   // over the ground however many build cells a tile is divided into. The cone the player
   // sees, the throw the mirror balls are tested against and the spot light's own angle

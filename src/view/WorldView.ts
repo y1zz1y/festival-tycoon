@@ -1182,6 +1182,11 @@ export class WorldView {
     await step()
   }
 
+  /** Show or hide the fill plates over stands and depots. */
+  setStockBarsVisible(visible: boolean): void {
+    this.supplyChainView.setStockVisible(visible)
+  }
+
   invalidate(): void {
     this.terrainFingerprint = ''
     this.buildingFingerprint = ''

@@ -1080,7 +1080,9 @@ export function animateStageModel(root:Group,phase:ShowPhase,time:number,active:
       // nods the head (nested inside the yoke) further around the arm's local X. Both simply
       // continue from the rest pose the aim was already resolved into (see 'spot' above). The
       // beam is a child of the head, so it always fires straight out of the lens as both animate.
-      const armGroup=rig.userData.armGroup as Group,sweep=(phase.movement??0)/100
+      // With nobody on stage the head holds its rest pose: a yoke panning to itself in
+      // an empty venue reads as the rig running a show that is not happening.
+      const armGroup=rig.userData.armGroup as Group,sweep=active?(phase.movement??0)/100:0
       const armRest=armGroup.userData.armRestQuat as Quaternion
       const panWobble=new Quaternion().setFromAxisAngle(unitZ,sweep*.5*Math.sin(t*.9))
       armGroup.quaternion.multiplyQuaternions(armRest,panWobble)

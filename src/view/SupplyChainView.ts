@@ -9,6 +9,7 @@ import { disposeChildren } from './disposeObject3D'
 import { createCarrierDriver, createCarrierFigure, createPorterModel } from './carrierModels'
 import { createRoadVehicleModel, createSupplyStructure } from './logisticsModels'
 import { staffGateWorldPosition, staffGateYaw } from '../game/supplyChain'
+import { buildingSize } from '../game/stageDesign'
 
 export class SupplyChainView {
   group = new Group()
@@ -24,7 +25,9 @@ export class SupplyChainView {
   private gates = new Group()
   private gateStamp = ''
   private stockModels = new Map<string, Group>()
-  constructor() { this.group.add(this.ground, this.structures, this.lines, this.gates) }
+  /** The fill plates, together, so they can be switched off as one. */
+  private stock = new Group()
+  constructor() { this.group.add(this.ground, this.structures, this.lines, this.gates, this.stock) }
   private box(group: Group, size: [number, number, number], position: [number, number, number], color: number) {
     const mesh = new Mesh(new BoxGeometry(...size), new MeshStandardMaterial({ color, roughness: 1 }))
     mesh.position.set(...position); group.add(mesh)
@@ -55,8 +58,11 @@ export class SupplyChainView {
       if(!kind) continue
       stockIds.add(b.id)
       let model=this.stockModels.get(b.id)
-      if(!model) {model=new Group();this.box(model,[.68,.09,.05],[0,0,0],0x292d29);this.box(model,[.64,.065,.065],[0,0,.01],0x70c481);this.group.add(model);this.stockModels.set(b.id,model)}
-      model.position.set(b.x+.5,b.elevation+1.1,b.z+.06)
+      if(!model) {model=new Group();this.box(model,[.68,.09,.05],[0,0,0],0x292d29);this.box(model,[.64,.065,.065],[0,0,.01],0x70c481);this.stock.add(model);this.stockModels.set(b.id,model)}
+      // Over the middle of whatever it belongs to, not its front edge: the plate turns
+      // with the camera, and a pivot off to one side swings it away from its own stand.
+      const footprint=buildingSize(b)
+      model.position.set(b.x+footprint.width/2,b.elevation+1.1,b.z+footprint.depth/2)
       paintBar(model,1,Math.min(1,(i.shops[b.id]?.[kind]??0)/40),0)
     }
     const supplies=['food','drinks','water','goods'] as const
@@ -70,16 +76,16 @@ export class SupplyChainView {
           this.box(created,[.68,.09,.05],[0,y,0],0x292d29)
           this.box(created,[.64,.065,.065],[0,y,.01],0x70c481)
         })
-        this.group.add(created);this.stockModels.set(depot.id,created)
+        this.stock.add(created);this.stockModels.set(depot.id,created)
         model=created
       }
-      model.position.set(depot.x+.5,getTerrainHeight(s.terrain,depot.x,depot.z)+1.25,depot.z+.06)
+      model.position.set(depot.x+.5,getTerrainHeight(s.terrain,depot.x,depot.z)+1.25,depot.z+.5)
       supplies.forEach((kind,index)=>{
         const capacity=Math.max(depot.minimum[kind],200)
         paintBar(model,index*2+1,Math.min(1,depot.stock[kind]/capacity),(1-index)*.12)
       })
     }
-    for(const [id,model] of this.stockModels) if(!stockIds.has(id)){disposeChildren(model);this.group.remove(model);this.stockModels.delete(id)}
+    for(const [id,model] of this.stockModels) if(!stockIds.has(id)){disposeChildren(model);this.stock.remove(model);this.stockModels.delete(id)}
     const stamp = `${planning}:${s.scenario.environment}:${s.scenario.worldSize}:${JSON.stringify(i.ground)}:${JSON.stringify(s.terrain.heights)}`
     if (stamp !== this.groundStamp || this.groundShape !== shape) {
       this.groundShape = shape
@@ -169,7 +175,13 @@ export class SupplyChainView {
    * Runs every frame, including while the game is paused, since the camera turns then too.
    */
   faceCamera(orientation: Quaternion): void {
+    if (!this.stock.visible) return
     for (const model of this.stockModels.values()) model.quaternion.copy(orientation)
+  }
+
+  /** Whether the fill plates are drawn at all; the player decides in the settings. */
+  setStockVisible(visible: boolean): void {
+    this.stock.visible = visible
   }
   animate(paused: boolean, time = performance.now(), terrainHeight?: (x: number, z: number, y: number) => number): void {
     const seconds = this.lastAnimationTime === null ? 0 : Math.min(.25, Math.max(0, (time-this.lastAnimationTime)/1000))

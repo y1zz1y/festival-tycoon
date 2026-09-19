@@ -1,4 +1,5 @@
 import { currentAccount, registerAccount, signIn, signOut } from '../accounts'
+import { confirmDiscardingWork, markWorkSaved } from './unsavedWork'
 import { GameState } from '../game/GameState'
 import { normalizeScenarioSettings } from '../game/scenario'
 import type { ScenarioSettings } from '../game/scenario'
@@ -367,12 +368,14 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     if (isPathWindowOpen()) closePathEditor()
     hideVisitorPanel()
     bindGameState(GameState.startNew(settings))
+    markWorkSaved()
     setScenarioPanelOpen(false)
     setSaveSlotsPanelOpen(false)
     setTitleScreenOpen(false)
     showToast(message)
   }
   requireElement<HTMLButtonElement>('#open-title-screen').addEventListener('click', () => {
+    if (!confirmDiscardingWork('Zum Titelbildschirm zurückkehren?')) return
     setScenarioPanelOpen(false)
     setTitleScreenOpen(true)
   })

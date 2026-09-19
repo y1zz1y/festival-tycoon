@@ -31,6 +31,7 @@ import { readFileSync } from 'node:fs'
 import { encodeSaveText, decodeSaveText } from '../src/game/saveText'
 import { testEnvironments } from './environments'
 import { testSupplyChain } from './supplyChain'
+import { testUnsavedWork } from './unsavedWork'
 import { testWayElevation } from './wayElevation'
 import assert from 'node:assert/strict'
 import { performance } from 'node:perf_hooks'
@@ -107,6 +108,8 @@ await testSaves()
 console.log('PASS saves belong to their account, public ones are readable by all and writable by none')
 testBrowserSaves(fixture)
 console.log('PASS local slots and quicksave keep visitors and buildings; listing ignores corrupt worlds')
+testUnsavedWork(fixture)
+console.log('PASS unsaved work is noticed on edits and after five quiet minutes')
 await testBlueprintLibraryRoundtrip()
 console.log('PASS blueprint library roundtrip stays out of SAVE_KEY')
 await testServerSaveClient()
@@ -257,6 +260,23 @@ test('transport rendering moves between cells smoothly and respects pause', () =
   for(const model of (view as any).stockModels.values() as Iterable<any>) {
     assert.ok(model.quaternion.angleTo(facing)<1e-9,'every fill bar turns to face the camera')
   }
+  // A plank belongs over the middle of what it reports on, not its front edge: it
+  // turns with the camera, and an off-centre pivot swings it off its own stand.
+  const barStand=snapshot.buildings.find(b=>b.kind==='food')
+  if(barStand){
+    const standBars=(view as any).stockModels.get(barStand.id)
+    assert.ok(standBars,'a stand carries a fill plank')
+    assert.equal(standBars.position.x,barStand.x+.5,'centred across the stand')
+    assert.equal(standBars.position.z,barStand.z+.5,'and over its middle, not its front')
+  }
+  // The planks can be switched off in the settings; then they are neither drawn nor turned.
+  view.setStockVisible(false)
+  assert.equal((view as any).stock.visible,false,'switching the fill display off hides every plank')
+  const parked=new Quaternion().copy(bars.quaternion)
+  view.faceCamera(new Quaternion().setFromAxisAngle(new Vector3(0,1,0),Math.PI/2))
+  assert.ok(bars.quaternion.angleTo(parked)<1e-9,'hidden planks are not turned either')
+  view.setStockVisible(true)
+  assert.equal((view as any).stock.visible,true)
   let at60=0,at144=0
   for(let n=0;n<60;n++)at60+=(1-at60)*transportMotionFactor(1/60)
   for(let n=0;n<144;n++)at144+=(1-at144)*transportMotionFactor(1/144)

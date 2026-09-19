@@ -30,6 +30,7 @@ import {
 import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financePeriodTotal } from './game/finance'
 import { goalName, goalProgressText } from './game/scenarioGoals'
 import { refreshAccount } from './accounts'
+import { installUnsavedWorkGuard, trackUnsavedWork } from './ui/unsavedWork'
 import type { BuildingKind, Tool } from './game/catalog'
 import type { PlacementPreviewResult } from './game/placementPreview'
 import {
@@ -5238,6 +5239,28 @@ new ResizeObserver(syncDebugViewGap).observe(statusOverlay)
 // Developer readouts: FPS/build line bottom-left and the bug button in the toolbar.
 // On by default; only hides after the player turns Debug off in Einstellungen.
 // Kept in the browser rather than the save — it is about this machine, not the park.
+// Closing the tab, loading another save or walking back to the title screen must not
+// quietly throw a session away: the game counts the changes the player made, and any
+// of those routes asks first once there is something to lose.
+trackUnsavedWork({
+  editRevision: () => game.editRevision,
+  running: () => !titleScreenController.isOpen(),
+})
+installUnsavedWorkGuard()
+
+const STOCK_BARS_KEY = 'festival-stock-bars'
+const stockBarsToggle = requireElement<HTMLInputElement>('#setting-stock-bars')
+try {
+  stockBarsToggle.checked = window.localStorage.getItem(STOCK_BARS_KEY) !== 'off'
+} catch { /* private mode or blocked storage: fall back to showing them */ }
+view.setStockBarsVisible(stockBarsToggle.checked)
+stockBarsToggle.addEventListener('change', () => {
+  view.setStockBarsVisible(stockBarsToggle.checked)
+  try {
+    window.localStorage.setItem(STOCK_BARS_KEY, stockBarsToggle.checked ? 'on' : 'off')
+  } catch { /* the setting simply does not survive a reload then */ }
+})
+
 const DEBUG_TOOLS_KEY = 'festival-debug-tools'
 const debugToolsToggle = requireElement<HTMLInputElement>('#setting-debug-tools')
 const applyDebugTools = (shown: boolean): void => {
