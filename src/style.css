@@ -4991,3 +4991,51 @@ input[type='range']:disabled {
   opacity: 0.45;
   cursor: default;
 }
+
+/* Transient overlay shown while a save is being loaded (loadingOverlay.ts). Same
+   palette as the boot loader in index.html, but dismissible and reusable in-session. */
+.load-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(23, 36, 31, 0.82);
+  backdrop-filter: blur(4px);
+  color: #edf7f1;
+  opacity: 1;
+  transition: opacity .25s ease;
+}
+
+.load-overlay.load-overlay-hide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.load-overlay-ring {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 5px solid #344d48;
+  border-top-color: #efcf86;
+  border-right-color: #efcf86;
+  animation: load-overlay-spin 0.9s linear infinite;
+}
+
+.load-overlay-caption {
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #efcf86;
+}
+
+@keyframes load-overlay-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .load-overlay-ring { animation: none; }
+}

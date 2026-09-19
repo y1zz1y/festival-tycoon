@@ -5245,6 +5245,16 @@ startGameLoop({
 // reach — the scenario form, the save management — has been built by the time it shows.
 titleScreenController.setOpen(true)
 
+// index.html's boot loader has done its job now that the title screen is up. Wait for
+// this frame to actually paint (a bare requestAnimationFrame fires before that paint,
+// so this chains two) before fading it out, then drop it from the DOM.
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  const bootLoader = document.getElementById('boot-loader')
+  if (!bootLoader) return
+  bootLoader.addEventListener('transitionend', () => bootLoader.remove(), { once: true })
+  bootLoader.classList.add('boot-loader-hide')
+}))
+
 // Who the session cookie belongs to. Asked once, after everything is wired, and the
 // account bar redraws itself when the answer arrives.
 void refreshAccount().then(() => titleScreenController.syncAccountBar())

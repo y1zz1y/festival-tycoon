@@ -4580,7 +4580,10 @@ export class GameState {
             this.getPathAt(x, z)
           return Boolean(path && path.pathType === 'normal')
         }
-        return Boolean(this.getRoadCellAt(x, z))
+        // Match the footprint cell's own ground level, not just any road stacked
+        // above or below it — otherwise a terrace edge counts as "next to the
+        // road" even though the two sit at completely different heights.
+        return Boolean(this.getRoadCellAt(x, z, this.getTerrainHeight(cell.x, cell.z)))
       }),
     )
     return adjacentAccess
@@ -5515,7 +5518,10 @@ export class GameState {
         case 3: return Array.from({ length: size }, (_, i) => ({ x: x - 1, z: z + i }))
       }
     }
-    const hasRoad = (direction: Direction) => edge(direction).some((cell) => Boolean(this.getRoadCellAt(cell.x, cell.z)))
+    // Same ground level as the footprint itself — a road stacked above or below on
+    // the same column doesn't make that side a real, walkable connection.
+    const elevation = this.getTerrainHeight(x, z)
+    const hasRoad = (direction: Direction) => edge(direction).some((cell) => Boolean(this.getRoadCellAt(cell.x, cell.z, elevation)))
     const clockwise: Direction[] = [0, 3, 2, 1]
     return clockwise.filter(hasRoad)
   }
