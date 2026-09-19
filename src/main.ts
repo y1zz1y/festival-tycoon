@@ -1353,13 +1353,13 @@ function updateLogisticsPanel(force = false): void {
       ${(logistics.wasteDepots ?? [])
         .map(
           (depot) =>
-            `<span>Mülldepot ${depot.id.slice(-4)} · ${depot.truckIds.length}/2 LKW <button data-buy-garbage="${depot.id}">Müllfahrzeug kaufen</button>${depot.truckIds.length > 0 ? ` <button data-sell-garbage="${depot.id}">LKW verkaufen</button>` : ''}</span>`,
+            `<span>Mülldepot ${depot.id.slice(-4)} · ${depot.truckIds.length}/${SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot} Müllautos · ${Math.round(depot.stored ?? 0)} Müll <button data-buy-garbage="${depot.id}">Müllauto kaufen</button>${depot.truckIds.length > 0 ? ` <button data-sell-garbage="${depot.id}">Müllauto verkaufen</button>` : ''}</span>`,
         )
         .join('')}
       ${(logistics.specialDepots ?? [])
         .map(
           (depot) =>
-            `<span>Betriebshof ${depot.id.slice(-4)} · ${depot.vehicleIds.length}/4 <button data-buy-sweeper="${depot.id}">Saugreiniger kaufen</button>${depot.vehicleIds.length > 0 ? ` <button data-sell-sweeper="${depot.id}">Saugreiniger verkaufen</button>` : ''}</span>`,
+            `<span>Betriebshof ${depot.id.slice(-4)} · ${depot.vehicleIds.length}/4 Saugreiniger · ${(depot.truckIds ?? []).length}/${SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot} Müllautos · ${Math.round(depot.stored ?? 0)} Müll <button data-buy-sweeper="${depot.id}">Saugreiniger kaufen</button>${depot.vehicleIds.length > 0 ? ` <button data-sell-sweeper="${depot.id}">Saugreiniger verkaufen</button>` : ''} <button data-buy-garbage="${depot.id}">Müllauto kaufen</button>${(depot.truckIds ?? []).length > 0 ? ` <button data-sell-garbage="${depot.id}">Müllauto verkaufen</button>` : ''}</span>`,
         )
         .join('')}
     </div>`
@@ -4881,12 +4881,20 @@ document.querySelector<HTMLButtonElement>('#close-entity')?.addEventListener('cl
 })
 entityStats.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
-    '[data-sell-ambulance-vehicle]',
+    '[data-sell-ambulance-vehicle],[data-buy-garbage],[data-sell-garbage]',
   )
-  if (!button?.dataset.sellAmbulanceVehicle) return
-  const result = game.sellAmbulanceVehicle(button.dataset.sellAmbulanceVehicle)
+  if (!button) return
+  const result = button.dataset.sellAmbulanceVehicle
+    ? game.sellAmbulanceVehicle(button.dataset.sellAmbulanceVehicle)
+    : button.dataset.buyGarbage
+      ? game.buyGarbageTruck(button.dataset.buyGarbage)
+      : button.dataset.sellGarbage
+        ? game.sellGarbageTruck(button.dataset.sellGarbage)
+        : null
+  if (!result) return
   showToast(result.message, !result.ok)
-  if (result.ok) updateEntityPanel()
+  updateEntityPanel()
+  updateLogisticsPanel(true)
 })
 
 function patchSelectedAccess(

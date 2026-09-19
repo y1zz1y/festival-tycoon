@@ -8,7 +8,7 @@ import { describeRoadVehicleActivity, describeRoadVehicleDestination, formatRoad
 import { isPricedShopKind, SHIRT_COLORS, shopSupplyKind } from '../game/shopGoods'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { stageStats } from '../game/stageDesign'
-import { isSealedWasteContainer, connectedWasteDumpStats, formatSealedContainerInspect, formatWasteDumpAreaInspect, parseWasteDumpId } from '../game/waste'
+import { isSealedWasteContainer, connectedWasteDumpStats, formatSealedContainerInspect, formatWasteDumpAreaInspect, parseWasteDumpId, wasteTipCapacity, wasteTipProcessingPerSecond, type WasteTipKind } from '../game/waste'
 import type { AccessControl, AccessControlMode } from '../game/accessControl'
 import type { Supply } from '../game/festivalManagement'
 import { SUPPLIES } from '../game/festivalManagement'
@@ -19,6 +19,41 @@ import { escapeHtml, formatMoney } from './format'
 function depotStockBar(label: string, stock: number, minimum: number): string {
   const percent = minimum > 0 ? Math.min(100, Math.round((stock / minimum) * 100)) : stock > 0 ? 100 : 0
   return `<div class="entity-stat-bar"><span class="entity-stat-label">${escapeHtml(label)}</span><span class="stock-bar" title="${Math.floor(stock)} / ${minimum}"><span class="stock-bar-fill" style="width:${percent}%"></span><b>${Math.floor(stock)} / ${minimum}</b></span></div>`
+}
+
+/** How full a tip is, as a bar in the same style as a depot's stock. */
+function wasteTipBar(stored: number, capacity: number): string {
+  const percent = capacity > 0 ? Math.min(100, Math.round((stored / capacity) * 100)) : 0
+  return `<div class="entity-stat-bar"><span class="entity-stat-label">Müll im Lager</span><span class="stock-bar" title="${Math.floor(stored)} / ${capacity}"><span class="stock-bar-fill" style="width:${percent}%"></span><b>${Math.floor(stored)} / ${capacity}</b></span></div>`
+}
+
+/**
+ * Fleet and shredder lines for a waste depot or works yard: how many trucks it
+ * keeps, what they cost per hour, how full the tip is and how fast it is worked off.
+ */
+function wasteTipStats(game: GameState, building: { id: string; kind: string }): string {
+  const kind: WasteTipKind | null =
+    building.kind === 'wasteDepot' ? 'wasteDepot' : building.kind === 'specialDepot' ? 'specialDepot' : null
+  if (!kind) return ''
+  const tip =
+    kind === 'wasteDepot'
+      ? game.snapshot.logistics.wasteDepots.find((entry) => entry.id === building.id)
+      : game.snapshot.logistics.specialDepots.find((entry) => entry.id === building.id)
+  if (!tip) return ''
+  const trucks = tip.truckIds?.length ?? 0
+  const limit = SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot
+  const perHour = trucks * SIMULATION_CONFIG.logistics.garbageTruckUpkeepPerHour
+  return (
+    `<span>Müllautos <b>${trucks} / ${limit}</b></span>` +
+    `<span>Laufende Kosten <b>${formatMoney(perHour)}/h</b></span>` +
+    `<span>Ladekapazität je Auto <b>${SIMULATION_CONFIG.logistics.garbageTruckCapacity} Müll</b></span>` +
+    wasteTipBar(tip.stored ?? 0, wasteTipCapacity(kind)) +
+    `<span>Abbaurate <b>${wasteTipProcessingPerSecond(kind)} Müll/s</b></span>` +
+    `<div class="entity-stat-actions">` +
+    `<button type="button" data-buy-garbage="${escapeHtml(tip.id)}" ${trucks >= limit ? 'disabled' : ''}>Müllauto kaufen · ${formatMoney(SIMULATION_CONFIG.logistics.garbageTruckCost)}</button>` +
+    `${trucks > 0 ? `<button type="button" data-sell-garbage="${escapeHtml(tip.id)}">Müllauto verkaufen</button>` : ''}` +
+    `</div>`
+  )
 }
 
 export interface EntityDynamicsElements {
@@ -357,7 +392,7 @@ export function updateEntityPanel(
                 : isWasteBin(building.kind) ? `Füllstand ${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity} · Gäste im Umkreis von 7 Feldern nutzen ihn`
                   : isSealedWasteContainer(building.kind) ? formatSealedContainerInspect({ stored: building.wasteFill ?? 0, onRoad: Boolean(game.getRoadCellAt(building.x, building.z, building.elevation)), truckReachable: Boolean(game.getRoadCellAt(building.x, building.z, building.elevation)) }).status
                     : `Zugang ${isoDirection(building.rotation, state.cameraQuarter)} · Ebene ${building.elevation}`)
-    stats.innerHTML = `<span>Baukosten <b>${formatMoney(definition.cost + (building.stageDesign ? stageStats(building.stageDesign).cost : 0))}</b></span>${building.stageDesign ? `<span>Eigene Bühne <b>${escapeHtml(building.stageDesign.name)}</b></span><span>Party / Umgebung <b>${stageStats(building.stageDesign).party} / ${stageStats(building.stageDesign).beauty}</b></span><span>Technik zusätzlich <b>${stageStats(building.stageDesign).power} kW · ${stageStats(building.stageDesign).upkeep} €/h</b></span>` : ''}<span>Unterhalt <b>${formatMoney(definition.upkeep)}/h</b></span><span>Kapazität <b>${building.rideType === 'bungee' ? '1 Springer' : definition.capacity}</b></span>${shopSupplyKind(building.kind) ? `<span>Warenbestand <b>${Math.floor(game.snapshot.festival.infrastructure.shops[building.id]?.[shopSupplyKind(building.kind)!] ?? 0)} / Ziel 40</b></span>` : ''}${isWasteBin(building.kind) ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity}</b></span>` : isSealedWasteContainer(building.kind) ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.sealedContainerCapacity}</b></span>` : ''}${output > 0 ? `<span>Leistung <b>${output} kW</b></span>` : demand > 0 ? `<span>Strom <b>${demand} kW ${powered ? 'versorgt' : 'ohne Netz'}</b></span>` : ''}`
+    stats.innerHTML = `<span>Baukosten <b>${formatMoney(definition.cost + (building.stageDesign ? stageStats(building.stageDesign).cost : 0))}</b></span>${building.stageDesign ? `<span>Eigene Bühne <b>${escapeHtml(building.stageDesign.name)}</b></span><span>Party / Umgebung <b>${stageStats(building.stageDesign).party} / ${stageStats(building.stageDesign).beauty}</b></span><span>Technik zusätzlich <b>${stageStats(building.stageDesign).power} kW · ${stageStats(building.stageDesign).upkeep} €/h</b></span>` : ''}<span>Unterhalt <b>${formatMoney(definition.upkeep)}/h</b></span><span>Kapazität <b>${building.rideType === 'bungee' ? '1 Springer' : definition.capacity}</b></span>${shopSupplyKind(building.kind) ? `<span>Warenbestand <b>${Math.floor(game.snapshot.festival.infrastructure.shops[building.id]?.[shopSupplyKind(building.kind)!] ?? 0)} / Ziel 40</b></span>` : ''}${isWasteBin(building.kind) ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity}</b></span>` : isSealedWasteContainer(building.kind) ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.sealedContainerCapacity}</b></span>` : ''}${output > 0 ? `<span>Leistung <b>${output} kW</b></span>` : demand > 0 ? `<span>Strom <b>${demand} kW ${powered ? 'versorgt' : 'ohne Netz'}</b></span>` : ''}${wasteTipStats(game, building)}`
     resetCommon()
     const hasPrice = isPricedShopKind(building.kind)
     const shirt = building.kind === 'shirt'

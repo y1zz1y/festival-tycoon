@@ -119,11 +119,16 @@ export const UPGRADES = {
   quiet: { name: 'Ruhecamp mit Schallschutz', cost: 850, detail: 'Reduziert den Schlafverlust durch nahe Nachtkonzerte.' },
   warehouse: { name: 'Lagererweiterung', cost: 750, detail: 'Erhöht die Kapazität je Depot von 3.000 auf 5.000 Einheiten.' },
   staffSpeed: { name: 'E-Roller fürs Personal', cost: 1500, detail: 'Reinigungskräfte, Sicherheit, Sanitäter und Feuerwehr sind doppelt so schnell unterwegs.' },
+  truckHydraulics: { name: 'Schnellkipper für Müllautos', cost: 1000, detail: 'Halbiert die Be- und Entladezeit jedes Müllautos an Container, Müllablage, Mülldepot und Bauhof.' },
 } as const
 /** How much faster the crew moves once it has wheels. */
 export const STAFF_SPEED_UPGRADE_FACTOR = 2
 export function staffSpeedFactor(f: FestivalManagement): number {
   return f.upgrades.staffSpeed ? STAFF_SPEED_UPGRADE_FACTOR : 1
+}
+/** True once the quick-tipper is paid for; saves from before it simply have no flag. */
+export function hasTruckHydraulics(f: FestivalManagement): boolean {
+  return Boolean(f.upgrades?.truckHydraulics)
 }
 export type Upgrade = keyof typeof UPGRADES
 /**
@@ -193,7 +198,7 @@ export const festivalTime = (s: Readonly<GameSnapshot>) => s.day * 1440 + s.minu
 export function createFestivalManagement(): FestivalManagement {
   return { infrastructure: createInfrastructure(), enabled: false, finished: false, edition: 0, startDay: 1, reportDay: 1, openingMoney: 0,
     bookings: [], supplies: { food: 0, drinks: 0, water: 0, goods: 0 },
-    upgrades: { drainage: false, shelter: false, rigging: false, water: false, quiet: false, warehouse: false, staffSpeed: false },
+    upgrades: { drainage: false, shelter: false, rigging: false, water: false, quiet: false, warehouse: false, staffSpeed: false, truckHydraulics: false },
     deliveries: [], reputation: { music: 40, atmosphere: 50, comfort: 50, organization: 50 }, reports: [],
     weather: 'sun', wetness: 0, seed: 1, nextId: 1, metrics: metrics(), lastUpdate: 0,
     admissions: 0, goals: { guests: 150, satisfaction: 65, profit: 0 }, headlinerPool: [] }

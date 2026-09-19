@@ -4,7 +4,7 @@ import { wallSpec } from './decorationWalls';
 import { isScenery, isLargeScenery, isEdgeScenery, sceneryOverlaps, sceneryTransform, pedestrianBarrierOccupancy } from './scenery';
 import { syncStageAudience } from './stageAudience';
 import { stageSiteIssue } from './stageSite';
-import { isStageAudienceCell, buildingFootprint, occupiesBuildingCell, stageDesignIssue, stageStats, type StageDesign } from './stageDesign';
+import { isStageAudienceCell, buildingFootprint, buildingSize, occupiesBuildingCell, stageDesignIssue, stageStats, type StageDesign } from './stageDesign';
 import { WAY_TYPES, wayInfo, wayIssue } from './wayTypes';
 import type { WayType } from './wayTypes';
 import { groundRectangle } from './ground';
@@ -77,7 +77,7 @@ import { applySim, applyWorld } from '../net/codec';
 import { AtmosphereSystem, collectBuiltAtmosphereCells } from './atmosphere';
 import { FestivalAreaSystem } from './festivalAreas';
 import type { StageForecourtCell } from './festivalAreas';
-import { acceptWasteAtDump, acceptWasteAtSealedContainer, designateWasteDumps, emptySealedContainerStored, isSealedWasteContainer } from './waste';
+import { acceptWasteAtDump, acceptWasteAtSealedContainer, designateWasteDumps, emptySealedContainerStored, isSealedWasteContainer, wasteTipCapacity, wasteTipProcessingPerMinute } from './waste';
 import type { SealedWasteContainerInfo, WasteDumpCell } from './waste';
 import { bandSupplyAt, bandSupplyForStage, buildBandSupplyGraph, collectBandSupplySnapshot, designateBackstageAreas, isBandSupplyKind, isFanIntrusionEligible, showQualityForStage, type BackstageCell, type BandSupplyComponent, type BandSupplyStats } from './bandSupply';
 import { bandActorShouldPerform, createBandActor, createTourBusVehicle, idleWanderReady, isBandOnSiteMinute, nextWanderDelay, placeActorOnCell, planBandPresence, stepBandActor, type BandActor, type PlannedBandPresence } from './bandActors';
@@ -4356,6 +4356,7 @@ export class GameState {
       x,
       z,
       truckIds: [],
+      stored: 0,
       gateDirection: rotation,
       rotation,
     })
@@ -4387,7 +4388,7 @@ export class GameState {
     })
     const id = this.nextId('special-depot')
     bookFinance(this.state, 'construction', -BUILDINGS.specialDepot.cost)
-    this.state.logistics.specialDepots.push({ id, x, z, vehicleIds: [] })
+    this.state.logistics.specialDepots.push({ id, x, z, vehicleIds: [], truckIds: [], stored: 0 })
     this.state.buildings.push({
       id,
       kind: 'specialDepot',
@@ -4676,36 +4677,50 @@ export class GameState {
     return { ok: true, message: `Bus ${depot.busIds.length} gekauft` }
   }
 
+  /** A depot or a works yard: both keep garbage trucks and take their loads. */
+  private findGarbageTruckHost(depotId: string):
+    | { host: { id: string; x: number; z: number; truckIds?: string[]; gateDirection?: Direction }; size: number; name: string }
+    | null {
+    const depot = this.state.logistics.wasteDepots.find((candidate) => candidate.id === depotId)
+    if (depot) return { host: depot, size: 2, name: 'Mülldepot' }
+    const yard = this.state.logistics.specialDepots.find((candidate) => candidate.id === depotId)
+    if (yard) return { host: yard, size: 3, name: 'Betriebshof' }
+    return null
+  }
+
   buyGarbageTruck(depotId: string): ActionResult {
-    const depot = this.state.logistics.wasteDepots.find(
-      (candidate) => candidate.id === depotId,
-    )
-    if (!depot) return { ok: false, message: 'Mülldepot nicht gefunden' }
-    if (depot.truckIds.length >= 2) {
-      return { ok: false, message: 'Dieses Depot besitzt bereits zwei Müllfahrzeuge' }
+    const found = this.findGarbageTruckHost(depotId)
+    if (!found) return { ok: false, message: 'Mülldepot nicht gefunden' }
+    const { host, size, name } = found
+    host.truckIds ??= []
+    if (host.truckIds.length >= SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot) {
+      return {
+        ok: false,
+        message: `Hier stehen bereits ${SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot} Müllautos`,
+      }
     }
     if (this.state.money < SIMULATION_CONFIG.logistics.garbageTruckCost) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
-    const access = this.getLogisticsBuildingAccess(depot, 2)
-    if (!access) return { ok: false, message: 'Das Depot hat keinen befahrbaren Anschluss' }
+    const access = this.getLogisticsBuildingAccess(host, size)
+    if (!access) return { ok: false, message: `Der ${name} hat keinen befahrbaren Anschluss` }
     const id = this.nextId('garbage')
     bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.garbageTruckCost)
-    depot.truckIds.push(id)
+    host.truckIds.push(id)
     this.state.logistics.roadVehicles.push(
-      this.createRoadVehicle(id, 'garbageTruck', { x: depot.x, z: depot.z }),
+      this.createRoadVehicle(id, 'garbageTruck', { x: host.x, z: host.z }),
     )
     this.emit()
-    return { ok: true, message: `Müllfahrzeug ${depot.truckIds.length} gekauft` }
+    return { ok: true, message: `Müllauto ${host.truckIds.length} gekauft` }
   }
 
   sellGarbageTruck(depotId: string): ActionResult {
-    const depot = this.state.logistics.wasteDepots.find(
-      (candidate) => candidate.id === depotId,
-    )
-    if (!depot) return { ok: false, message: 'Mülldepot nicht gefunden' }
+    const found = this.findGarbageTruckHost(depotId)
+    if (!found) return { ok: false, message: 'Mülldepot nicht gefunden' }
+    const depot = found.host
+    depot.truckIds ??= []
     const truckId = depot.truckIds.at(-1)
-    if (!truckId) return { ok: false, message: 'In diesem Depot gibt es kein Müllfahrzeug' }
+    if (!truckId) return { ok: false, message: 'Hier steht kein Müllauto' }
     const truck = this.state.logistics.roadVehicles.find(
       (vehicle) => vehicle.id === truckId && vehicle.kind === 'garbageTruck',
     )
@@ -4713,7 +4728,7 @@ export class GameState {
       truck && this.isOffMapRoadExit(truck.cell ?? truck.position),
     )
     if (truck && !offMap && (truck.state !== 'idle' || truck.cargo > 0)) {
-      return { ok: false, message: 'Das Müllfahrzeug ist unterwegs oder noch beladen' }
+      return { ok: false, message: 'Das Müllauto ist unterwegs oder noch beladen' }
     }
     depot.truckIds = depot.truckIds.filter((id) => id !== truckId)
     this.state.logistics.roadVehicles =
@@ -4726,8 +4741,8 @@ export class GameState {
     return {
       ok: true,
       message: truck
-        ? 'Müllfahrzeug verkauft'
-        : 'Müllfahrzeug war nicht mehr vorhanden und wurde verkauft',
+        ? 'Müllauto verkauft'
+        : 'Müllauto war nicht mehr vorhanden und wurde verkauft',
     }
   }
 
@@ -5441,7 +5456,21 @@ export class GameState {
     }
   }
 
+  /**
+   * A depot and a works yard shred what the trucks tip there, a few bags at a
+   * time, which is what frees the room the next load needs.
+   */
+  private processWasteTips(minutes: number): void {
+    const shred = (tip: { stored?: number }, kind: 'wasteDepot' | 'specialDepot'): void => {
+      const stored = Math.min(Math.max(0, tip.stored ?? 0), wasteTipCapacity(kind))
+      tip.stored = Math.max(0, stored - wasteTipProcessingPerMinute(kind) * minutes)
+    }
+    for (const depot of this.state.logistics.wasteDepots) shred(depot, 'wasteDepot')
+    for (const yard of this.state.logistics.specialDepots) shred(yard, 'specialDepot')
+  }
+
   private updateLogistics(minutes: number): void {
+    this.processWasteTips(minutes)
     updateLogisticsSimulation({
       state: this.state,
       roadPositionKey: (position) => this.roadPositionKey(position),
@@ -8686,6 +8715,26 @@ export class GameState {
     this.state.bandActors.push(...actors)
   }
 
+  /**
+   * Where a tour bus stands once parked: squarely in the middle of the pad's two
+   * tiles and pointing the way the pad was laid out, rather than sitting on the
+   * corner tile at whatever angle it happened to arrive from.
+   */
+  private tourBusParkingPose(parking: PlacedBuilding): {
+    x: number
+    z: number
+    elevation: number
+    facing: number
+  } {
+    const size = buildingSize(parking)
+    return {
+      x: parking.x + (size.width - 1) / 2,
+      z: parking.z + (size.depth - 1) / 2,
+      elevation: parking.elevation,
+      facing: (parking.rotation & 3) * (Math.PI / 2),
+    }
+  }
+
   private tourBusParkingBuilding(vehicle: RoadVehicle): PlacedBuilding | undefined {
     const parkingId =
       vehicle.target?.kind === 'tourBusParking'
@@ -8715,7 +8764,9 @@ export class GameState {
             graph: this.getRoadGraph(),
             start,
             target: { x: entry.x, z: entry.z },
-            initialDirection: this.getVehicleDirection(vehicle),
+            // Pulling out of the bay, the bus can leave either way down the road;
+            // the direction it stood parked in must not rule a turn out.
+            initialDirection: onPad && approach ? undefined : this.getVehicleDirection(vehicle),
           })
           if (route) {
             vehicle.route = [
@@ -8795,9 +8846,11 @@ export class GameState {
     vehicle.state = 'parked'
     vehicle.waitMinutes = 0
     if (parking) {
-      vehicle.position = { x: parking.x, z: parking.z, elevation: parking.elevation }
+      const pose = this.tourBusParkingPose(parking)
+      vehicle.position = { x: pose.x, z: pose.z, elevation: pose.elevation }
       vehicle.cell = { x: parking.x, z: parking.z, elevation: parking.elevation }
       vehicle.parkingCell = { x: parking.x, z: parking.z, elevation: parking.elevation }
+      vehicle.facing = pose.facing
     }
     const componentId =
       this.bandSupplyComponents.find((component) =>

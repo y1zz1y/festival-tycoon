@@ -4290,6 +4290,18 @@ body.title-open #app-install-hint {
   color: #edf7f1;
 }
 
+/* Buy/sell buttons that belong to the stat list, side by side on their own row. */
+.entity-stat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.entity-stat-actions button {
+  flex: 1 1 auto;
+}
+
 /* A depot's stock, in the same stat list but as a bar rather than a bare number: half the
    row's width by default, giving way only when its own label needs more room. */
 .entity-stat-bar {

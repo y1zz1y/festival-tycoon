@@ -9,6 +9,7 @@ import { createStaffMember } from '../src/game/staff'
 import { StaffSimulation } from '../src/game/staffSimulation'
 import { DeterministicRng } from '../src/game/rng'
 import { cleanerCarryFactor, staffSpeedFactor } from '../src/game/festivalManagement'
+import { garbageTruckHandlingMinutes } from '../src/game/waste'
 import { zoneKey } from '../src/game/staffZones'
 import {
   abandonVisitorCamp,
@@ -2745,7 +2746,7 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   offMap.truck.cargo = 0
   offMap.truck.route = []
   offMap.truck.waitMinutes =
-    SIMULATION_CONFIG.waste.truckUnloadMinutes +
+    garbageTruckHandlingMinutes(SIMULATION_CONFIG.waste.truckUnloadSeconds, false) +
     SIMULATION_CONFIG.logistics.vehicleUnstickMinutes
   offMap.truck.resumeState = 'returning'
   offMap.state.logistics.roadCells
@@ -2773,7 +2774,7 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   reenterWhenFree.truck.state = 'waiting'
   reenterWhenFree.truck.cargo = 0
   reenterWhenFree.truck.route = []
-  reenterWhenFree.truck.waitMinutes = SIMULATION_CONFIG.waste.truckUnloadMinutes
+  reenterWhenFree.truck.waitMinutes = garbageTruckHandlingMinutes(SIMULATION_CONFIG.waste.truckUnloadSeconds, false)
   reenterWhenFree.truck.resumeState = 'returning'
   reenterWhenFree.truck.facing = Math.PI
   reenterWhenFree.state.logistics.roadCells

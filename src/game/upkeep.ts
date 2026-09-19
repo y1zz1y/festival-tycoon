@@ -59,5 +59,18 @@ export function snapshotHourlyBuildingUpkeep(state: GameSnapshot): number {
     (total, course) => total + courseHourlyUpkeep(course, onBreak),
     0,
   )
-  return buildings + coasters + courses
+  return buildings + coasters + courses + garbageTruckHourlyUpkeep(state)
+}
+
+/** Every truck on the payroll costs the same whether it is out on a round or parked. */
+export function garbageTruckHourlyUpkeep(state: Pick<GameSnapshot, 'logistics'>): number {
+  return (
+    garbageTruckCount(state) * SIMULATION_CONFIG.logistics.garbageTruckUpkeepPerHour
+  )
+}
+
+export function garbageTruckCount(state: Pick<GameSnapshot, 'logistics'>): number {
+  return (state.logistics?.roadVehicles ?? []).filter(
+    (vehicle) => vehicle.kind === 'garbageTruck',
+  ).length
 }

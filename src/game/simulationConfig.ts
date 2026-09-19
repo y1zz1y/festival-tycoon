@@ -288,7 +288,11 @@ export const SIMULATION_CONFIG = {
     ambulanceCapacity: 5,
     fireTruckCost: 2800,
     garbageTruckCost: 3200,
-    garbageTruckCapacity: 90,
+    garbageTruckCapacity: 100,
+    /** Every truck on the payroll, whether it is out on a round or parked. */
+    garbageTruckUpkeepPerHour: 100,
+    /** Trucks per depot or yard. */
+    garbageTruckLimitPerDepot: 4,
     sweeperCost: 9800,
     sweeperCapacity: 70,
     sweeperCleanDepth: 2,
@@ -815,8 +819,14 @@ export const SIMULATION_CONFIG = {
     // Idle cleaners empty bins at/above this fill (25% of capacity). Full bins stay urgent.
     cleanerIdleEmptyFill: 3,
     truckDispatchThreshold: 1,
-    truckLoadMinutes: 6,
-    truckUnloadMinutes: 4,
+    /** Seconds of real time at normal speed, the way the player sees them tick by. */
+    truckLoadSeconds: 10,
+    truckUnloadSeconds: 10,
+    /** A depot or yard shreds what the trucks bring in, again in real seconds. */
+    depotProcessingPerSecond: 5,
+    depotCapacity: 1000,
+    yardProcessingPerSecond: 10,
+    yardCapacity: 3000,
   },
   ticker: {
     dumpFullRepeatMinutes: 45,

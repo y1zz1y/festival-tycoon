@@ -37,7 +37,7 @@ export function testTickerAndWasteCaps(): void {
   const dumpCap = SIMULATION_CONFIG.waste.dumpCapacity
   const truckCap = SIMULATION_CONFIG.logistics.garbageTruckCapacity
   assert.equal(dumpCap, 180, 'dump tiles hold 180 units')
-  assert.equal(truckCap, 90, 'garbage trucks hold 90 units')
+  assert.equal(truckCap, 100, 'garbage trucks hold 100 units')
   assert.equal(SIMULATION_CONFIG.waste.dumpFullRatio, 0.9)
 
   const dump = dumpCell(0, 0, dumpCap - 5)

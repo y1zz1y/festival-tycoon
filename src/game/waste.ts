@@ -467,3 +467,47 @@ export function isParkWasteDumpOverFull(
   if (!fill || fill.capacity <= 0) return false
   return fill.stored / fill.capacity > ratio
 }
+
+/**
+ * Game minutes in one real second at normal speed — the scale the waste yard's
+ * "per second" figures are quoted in, so what the player is told matches what
+ * they watch happen on the clock.
+ */
+export const GAME_MINUTES_PER_REAL_SECOND =
+  SIMULATION_CONFIG.time.minutesPerDay / SIMULATION_CONFIG.time.normalDayDurationSeconds
+
+/** Where a truck can tip its load: the waste depot, or the works yard. */
+export type WasteTipKind = 'wasteDepot' | 'specialDepot'
+
+export function wasteTipCapacity(kind: WasteTipKind): number {
+  return kind === 'wasteDepot'
+    ? SIMULATION_CONFIG.waste.depotCapacity
+    : SIMULATION_CONFIG.waste.yardCapacity
+}
+
+/** Bags shredded per real second, as quoted to the player. */
+export function wasteTipProcessingPerSecond(kind: WasteTipKind): number {
+  return kind === 'wasteDepot'
+    ? SIMULATION_CONFIG.waste.depotProcessingPerSecond
+    : SIMULATION_CONFIG.waste.yardProcessingPerSecond
+}
+
+export function wasteTipProcessingPerMinute(kind: WasteTipKind): number {
+  return wasteTipProcessingPerSecond(kind) / GAME_MINUTES_PER_REAL_SECOND
+}
+
+/** Room left before a tip has to turn trucks away. */
+export function wasteTipRemaining(
+  tip: { stored?: number },
+  kind: WasteTipKind,
+): number {
+  return Math.max(0, wasteTipCapacity(kind) - Math.max(0, tip.stored ?? 0))
+}
+
+/** Loading at a container and tipping at a depot, in game minutes. */
+export function garbageTruckHandlingMinutes(
+  seconds: number,
+  halved: boolean,
+): number {
+  return seconds * GAME_MINUTES_PER_REAL_SECOND * (halved ? 0.5 : 1)
+}

@@ -7,6 +7,7 @@ import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { bandLeaveMinute } from '../src/game/bandSupply'
 import { bandCostumeId, bandRoles } from '../src/game/bandLooks'
 import { updateStageBand } from '../src/view/stageBand'
+import { buildingSize } from '../src/game/stageDesign'
 
 const CONFIG = SIMULATION_CONFIG.bandSupply
 
@@ -222,20 +223,25 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
   const backstageKeys = new Set(
     clock.snapshot.backstageCells.map((cell) => `${cell.x},${cell.z}`),
   )
+  // The bus stands in the middle of the pad's two tiles, pointing the way it was laid out.
+  const padSize = buildingSize(pad)
+  const padCenterX = pad.x + (padSize.width - 1) / 2
+  const padCenterZ = pad.z + (padSize.depth - 1) / 2
   for (let i = 0; i < 200; i++) {
     const bus = clock.snapshot.logistics.roadVehicles.find((vehicle) => vehicle.kind === 'tourBus')
     const parkedOnPad =
       bus?.state === 'parked' &&
-      Math.abs(bus.position.x - pad.x) <= 0 &&
-      Math.abs(bus.position.z - pad.z) <= 0
+      Math.abs(bus.position.x - padCenterX) <= 0 &&
+      Math.abs(bus.position.z - padCenterZ) <= 0
     if (parkedOnPad) break
     clock.tick(0.1)
   }
   const parked = clock.snapshot.logistics.roadVehicles.find((vehicle) => vehicle.kind === 'tourBus')
   assert.ok(parked, 'the tour bus stays after arrival instead of despawning')
   assert.equal(parked!.state, 'parked')
-  assert.equal(parked!.position.x, pad.x)
-  assert.equal(parked!.position.z, pad.z)
+  assert.equal(parked!.position.x, padCenterX)
+  assert.equal(parked!.position.z, padCenterZ)
+  assert.equal(parked!.facing, (pad.rotation & 3) * (Math.PI / 2), 'the bus lines up with the pad')
   assert.ok(
     clock.snapshot.bandActors.some(
       (actor) =>

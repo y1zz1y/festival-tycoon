@@ -454,6 +454,8 @@ export type BusDepot = RoadPosition & {
 export type WasteDepot = RoadPosition & {
   id: string
   truckIds: string[]
+  /** Bags tipped here and not yet shredded. */
+  stored?: number
   /** Road-facing vehicle gate used by routing and model orientation. */
   gateDirection?: Direction
   /** Visual orientation of the open loading face; kept equal to `gateDirection`. */
@@ -463,6 +465,10 @@ export type WasteDepot = RoadPosition & {
 export type SpecialDepot = RoadPosition & {
   id: string
   vehicleIds: string[]
+  /** Garbage trucks stationed here; the yard takes tipped loads like a depot does. */
+  truckIds?: string[]
+  /** Bags tipped here and not yet shredded. */
+  stored?: number
 }
 
 export type BusLine = {
@@ -1040,6 +1046,7 @@ function normalizeWasteDepot(value: unknown): WasteDepot | null {
     ...position,
     id: source.id,
     truckIds: stringArray(source.truckIds),
+    stored: nonNegativeNumber(source.stored, 0),
     ...(gate === 0 || gate === 1 || gate === 2 || gate === 3
       ? { gateDirection: gate as Direction }
       : rotation === 0 || rotation === 1 || rotation === 2 || rotation === 3
@@ -1057,7 +1064,13 @@ function normalizeSpecialDepot(value: unknown): SpecialDepot | null {
   const source = asRecord(value)
   const position = normalizePosition(source)
   if (!source || !position || typeof source.id !== 'string') return null
-  return { ...position, id: source.id, vehicleIds: stringArray(source.vehicleIds) }
+  return {
+    ...position,
+    id: source.id,
+    vehicleIds: stringArray(source.vehicleIds),
+    truckIds: stringArray(source.truckIds),
+    stored: nonNegativeNumber(source.stored, 0),
+  }
 }
 
 function normalizeBusLine(value: unknown): BusLine | null {

@@ -7,7 +7,8 @@ import { SIMULATION_CONFIG } from './simulationConfig'
 import { isInAnyZone } from './staffZones'
 import { stepUsesClosedEdge } from './accessControl'
 import { wayInfo } from './wayTypes'
-import { emptySealedContainerStored, isSealedWasteContainer, wasteDumpRemaining, acceptWasteAtDump } from './waste'
+import { emptySealedContainerStored, isSealedWasteContainer, wasteDumpRemaining, acceptWasteAtDump, garbageTruckHandlingMinutes, wasteTipRemaining, type WasteTipKind } from './waste'
+import { hasTruckHydraulics } from './festivalManagement'
 import { elevationsMatch } from './wayElevation'
 import { cellKey as roadCellKey, collectEligibleBusWaiters, collectSeatedPassengerIds, DIRECTION_OFFSETS, DIRECTIONS, directionFromDelta, findRoadRoute, isPlayerOwnedFleetVehicle, isRoadDirectionAllowed, isVehicleReversing, oppositeDirection, roadLayerElevation, roadLayerKey, toRoadPosition } from './logistics'
 import type { ArrivalGroup, Direction, FindRoadRouteOptions, ParkingCell, RoadCell, RoadGraph, RoadPosition, RoadVehicle } from './logistics'
@@ -193,13 +194,13 @@ export class RoadVehicleSimulation {
             vehicle.cargo <= 0
           ) {
             vehicle.waitMinutes += minutes
-            if (vehicle.waitMinutes < SIMULATION_CONFIG.waste.truckUnloadMinutes) {
+            if (vehicle.waitMinutes < this.garbageTruckUnloadMinutes()) {
               return
             }
             if (this.reenterGarbageTruck(vehicle)) return
             if (
               vehicle.waitMinutes >=
-              SIMULATION_CONFIG.waste.truckUnloadMinutes +
+              this.garbageTruckUnloadMinutes() +
                 SIMULATION_CONFIG.logistics.vehicleUnstickMinutes
             ) {
               this.returnGarbageTruckToDepot(vehicle)
@@ -1305,19 +1306,20 @@ export class RoadVehicleSimulation {
 
   collectGarbageTruckTargets(vehicle: RoadVehicle): RoadPosition[] {
     const target = vehicle.target
-    if (vehicle.cargo > 0) return this.collectMapExitTargets()
+    if (target?.kind === 'depot') {
+      const tip = this.listGarbageTips().find((entry) => entry.tip.id === target.depotId)
+      return tip ? [tip.access] : []
+    }
+    if (vehicle.cargo > 0) {
+      // A loaded truck is headed for a tip; the map exit is the last resort.
+      const tip = this.findGarbageTipWithRoom(vehicle)
+      return tip ? [tip.access] : this.collectMapExitTargets()
+    }
     if (target?.kind === 'wasteDump') {
       return this.collectRoadOrAccessTargets({ x: target.x, z: target.z })
     }
     if (target?.kind === 'sealedWasteContainer') {
       return this.sealedContainerPullUpRoads(target)
-    }
-    if (target?.kind === 'depot') {
-      const depot = this.context.state.logistics.wasteDepots.find(
-        (candidate) => candidate.id === target.depotId,
-      )
-      const access = depot ? this.context.getLogisticsBuildingAccess(depot, 2) : null
-      return access ? [access] : []
     }
     if (target?.kind === 'cell') {
       if (this.isRoadExitCell(target) || this.isOffMapRoadExit(target)) {
@@ -1380,13 +1382,11 @@ export class RoadVehicleSimulation {
       return access ? [access] : []
     }
     if (target.kind === 'depot') {
-      const depot =
-        this.context.state.logistics.wasteDepots.find(
-          (candidate) => candidate.id === target.depotId,
-        ) ??
-        this.context.state.logistics.busDepots.find(
-          (candidate) => candidate.id === target.depotId,
-        )
+      const tip = this.listGarbageTips().find((entry) => entry.tip.id === target.depotId)
+      if (tip) return [tip.access]
+      const depot = this.context.state.logistics.busDepots.find(
+        (candidate) => candidate.id === target.depotId,
+      )
       const access = depot
         ? this.context.getLogisticsBuildingAccess(depot, 2)
         : null
@@ -2501,13 +2501,41 @@ export class RoadVehicleSimulation {
         room -= taken
       })
       vehicle.state = 'waiting'
-      vehicle.waitMinutes = SIMULATION_CONFIG.waste.truckLoadMinutes
+      vehicle.waitMinutes = this.garbageTruckLoadMinutes()
       vehicle.resumeState = 'returning'
       return
     }
     if (vehicle.state === 'returning' && vehicle.cargo > 0) {
-      if (!this.isOffMapRoadExit(vehicle.cell ?? vehicle.position)) {
-        const offMap = this.getOffMapRoadExit(vehicle.cell ?? vehicle.position)
+      // A full truck tips its load at the nearest depot or works yard that still
+      // has room, and only leaves the site when none of them can take it.
+      const spot = vehicle.cell ?? vehicle.position
+      const standingOn = this.listGarbageTips().find(
+        (entry) => entry.access.x === spot.x && entry.access.z === spot.z,
+      )
+      if (standingOn && this.tipGarbageLoad(vehicle, standingOn) > 0) {
+        vehicle.state = 'waiting'
+        vehicle.waitMinutes = this.garbageTruckUnloadMinutes()
+        vehicle.resumeState = 'returning'
+        vehicle.target = { kind: 'depot', depotId: standingOn.tip.id }
+        return
+      }
+      const tip = this.findGarbageTipWithRoom(vehicle)
+      const tipRoute = tip ? this.findGarbageTruckRoute(vehicle, [tip.access]) : null
+      if (tip && tipRoute?.length) {
+        vehicle.route = tipRoute.map(toRoadPosition)
+        vehicle.target = { kind: 'depot', depotId: tip.tip.id }
+        return
+      }
+      if (!this.isOffMapRoadExit(spot)) {
+        if (tip) {
+          // Every tip is full or unreachable for the moment: wait rather than
+          // haul the load off the site, the shredders free room again shortly.
+          vehicle.state = 'waiting'
+          vehicle.waitMinutes = this.garbageTruckUnloadMinutes()
+          vehicle.resumeState = 'returning'
+          return
+        }
+        const offMap = this.getOffMapRoadExit(spot)
         vehicle.route = [offMap]
         vehicle.target = { kind: 'cell', ...offMap }
         vehicle.facing = Math.PI
@@ -2525,10 +2553,9 @@ export class RoadVehicleSimulation {
       }
       return
     }
-    const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
-      candidate.truckIds.includes(vehicle.id),
-    )
-    const access = depot ? this.context.getLogisticsBuildingAccess(depot, 2) : null
+    const home = this.garbageTruckHome(vehicle)
+    const depot = home?.tip ?? null
+    const access = home?.access ?? null
     const here = vehicle.cell ?? vehicle.position
     if (depot && access && access.x === here.x && access.z === here.z) {
       this.houseServiceVehicle(vehicle, depot)
@@ -2547,6 +2574,26 @@ export class RoadVehicleSimulation {
       return
     }
     if (vehicle.cargo > 0) {
+      // Head for a tip first; the road exit is only for a site with nowhere to unload.
+      const tip = this.findGarbageTipWithRoom(vehicle)
+      if (tip) {
+        if (tip.access.x === vehicle.cell.x && tip.access.z === vehicle.cell.z) {
+          vehicle.route = []
+          vehicle.state = 'returning'
+          vehicle.resumeState = null
+          vehicle.target = { kind: 'depot', depotId: tip.tip.id }
+          this.finishGarbageTruckLeg(vehicle)
+          return
+        }
+        const route = this.findGarbageTruckRoute(vehicle, [tip.access])
+        if (route?.length) {
+          vehicle.route = route.map(toRoadPosition)
+          vehicle.target = { kind: 'depot', depotId: tip.tip.id }
+          vehicle.state = 'returning'
+          vehicle.resumeState = null
+          return
+        }
+      }
       if (
         this.isRoadExitCell(vehicle.cell) ||
         this.isOffMapRoadExit(vehicle.cell)
@@ -2586,10 +2633,9 @@ export class RoadVehicleSimulation {
       }
       return
     }
-    const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
-      candidate.truckIds.includes(vehicle.id),
-    )
-    const access = depot ? this.context.getLogisticsBuildingAccess(depot, 2) : null
+    const home = this.garbageTruckHome(vehicle)
+    const depot = home?.tip ?? null
+    const access = home?.access ?? null
     if (!depot || !access) {
       vehicle.state = 'idle'
       return
@@ -2614,15 +2660,111 @@ export class RoadVehicleSimulation {
     vehicle.resumeState = null
   }
 
+  /**
+   * Everywhere a truck can tip a load: waste depots and works yards alike, each
+   * with the road cell it is served from. A yard built on a footpath alone has no
+   * road access and simply never appears here.
+   */
+  listGarbageTips(): Array<{
+    tip: { id: string; x: number; z: number; stored?: number; gateDirection?: Direction }
+    kind: WasteTipKind
+    size: number
+    access: RoadPosition
+  }> {
+    const tips: Array<{
+      tip: { id: string; x: number; z: number; stored?: number; gateDirection?: Direction }
+      kind: WasteTipKind
+      size: number
+      access: RoadPosition
+    }> = []
+    for (const depot of this.context.state.logistics.wasteDepots) {
+      const access = this.context.getLogisticsBuildingAccess(depot, 2)
+      if (access) tips.push({ tip: depot, kind: 'wasteDepot', size: 2, access })
+    }
+    for (const yard of this.context.state.logistics.specialDepots) {
+      const access = this.context.getLogisticsBuildingAccess(yard, 3)
+      if (access) tips.push({ tip: yard, kind: 'specialDepot', size: 3, access })
+    }
+    return tips
+  }
+
+  /** The depot or yard a truck was bought at. */
+  garbageTruckHome(vehicle: RoadVehicle) {
+    return (
+      this.listGarbageTips().find((entry) =>
+        (entry.tip as { truckIds?: string[] }).truckIds?.includes(vehicle.id),
+      ) ?? null
+    )
+  }
+
+  /**
+   * Nearest tip that is free: room left for the load, and — all else equal — not
+   * already being driven to by another truck, so two of them don't queue up at one
+   * gate while a second depot stands empty.
+   */
+  findGarbageTipWithRoom(vehicle: RoadVehicle) {
+    const here = vehicle.cell ?? vehicle.position
+    const taken = new Set(
+      this.context.state.logistics.roadVehicles
+        .filter(
+          (candidate) =>
+            candidate.kind === 'garbageTruck' &&
+            candidate.id !== vehicle.id &&
+            candidate.cargo > 0 &&
+            candidate.target?.kind === 'depot',
+        )
+        .map((candidate) => (candidate.target as { depotId: string }).depotId),
+    )
+    const distance = (entry: { access: RoadPosition }): number =>
+      Math.abs(entry.access.x - here.x) + Math.abs(entry.access.z - here.z)
+    return this.listGarbageTips()
+      .filter((entry) => wasteTipRemaining(entry.tip, entry.kind) > 0)
+      .sort(
+        (left, right) =>
+          Number(taken.has(left.tip.id)) - Number(taken.has(right.tip.id)) ||
+          distance(left) - distance(right),
+      )[0] ?? null
+  }
+
+  garbageTruckLoadMinutes(): number {
+    return garbageTruckHandlingMinutes(
+      SIMULATION_CONFIG.waste.truckLoadSeconds,
+      hasTruckHydraulics(this.context.state.festival),
+    )
+  }
+
+  garbageTruckUnloadMinutes(): number {
+    return garbageTruckHandlingMinutes(
+      SIMULATION_CONFIG.waste.truckUnloadSeconds,
+      hasTruckHydraulics(this.context.state.festival),
+    )
+  }
+
+  /** Tips as much of the load as the depot still has room for. */
+  tipGarbageLoad(
+    vehicle: RoadVehicle,
+    entry: { tip: { stored?: number }; kind: WasteTipKind },
+  ): number {
+    const room = wasteTipRemaining(entry.tip, entry.kind)
+    const tipped = Math.min(vehicle.cargo, room)
+    if (tipped <= 0) return 0
+    entry.tip.stored = Math.max(0, entry.tip.stored ?? 0) + tipped
+    vehicle.cargo -= tipped
+    return tipped
+  }
+
   restoreMissingGarbageTrucks(): void {
     const existing = new Set(
       this.context.state.logistics.roadVehicles.map((vehicle) => vehicle.id),
     )
-    for (const depot of this.context.state.logistics.wasteDepots) {
-      for (const id of depot.truckIds) {
+    for (const entry of [
+      ...this.context.state.logistics.wasteDepots.map((depot) => ({ depot, size: 2 })),
+      ...this.context.state.logistics.specialDepots.map((depot) => ({ depot, size: 3 })),
+    ]) {
+      for (const id of (entry.depot as { truckIds?: string[] }).truckIds ?? []) {
         if (existing.has(id)) continue
-        const home = this.context.getLogisticsBuildingAccess(depot, 2)
-          ? { x: depot.x, z: depot.z }
+        const home = this.context.getLogisticsBuildingAccess(entry.depot, entry.size)
+          ? { x: entry.depot.x, z: entry.depot.z }
           : this.context.findAvailableRoadEntry() ?? this.context.getRoadEntry()
         this.context.state.logistics.roadVehicles.push(
           this.context.createRoadVehicle(id, 'garbageTruck', home),
@@ -2633,10 +2775,9 @@ export class RoadVehicleSimulation {
   }
 
   returnGarbageTruckToDepot(vehicle: RoadVehicle): void {
-    const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
-      candidate.truckIds.includes(vehicle.id),
-    )
-    const access = depot ? this.context.getLogisticsBuildingAccess(depot, 2) : null
+    const home = this.garbageTruckHome(vehicle)
+    const depot = home?.tip ?? null
+    const access = home?.access ?? null
     const here = access ?? this.context.findAvailableRoadEntry() ?? this.context.getRoadEntry()
     vehicle.cell = { ...here }
     vehicle.position = { ...here }
@@ -2653,18 +2794,16 @@ export class RoadVehicleSimulation {
   isGarbageTruckAtHome(vehicle: RoadVehicle): boolean {
     const here = vehicle.cell ?? vehicle.position
     if (this.isOffMapRoadExit(here)) return false
-    const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
-      candidate.truckIds.includes(vehicle.id),
-    )
-    if (!depot) return false
+    const home = this.garbageTruckHome(vehicle)
+    if (!home) return false
+    const { tip: depot, size, access } = home
     const inBay =
       here.x >= depot.x &&
-      here.x < depot.x + 2 &&
+      here.x < depot.x + size &&
       here.z >= depot.z &&
-      here.z < depot.z + 2
+      here.z < depot.z + size
     if (vehicle.housed && inBay) return true
-    const access = this.context.getLogisticsBuildingAccess(depot, 2)
-    return Boolean(access && access.x === here.x && access.z === here.z)
+    return access.x === here.x && access.z === here.z
   }
 
   holdGarbageTruckOffMap(vehicle: RoadVehicle): void {
@@ -2679,10 +2818,9 @@ export class RoadVehicleSimulation {
   }
 
   reenterGarbageTruck(vehicle: RoadVehicle): boolean {
-    const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
-      candidate.truckIds.includes(vehicle.id),
-    )
-    const access = depot ? this.context.getLogisticsBuildingAccess(depot, 2) : null
+    const home = this.garbageTruckHome(vehicle)
+    const depot = home?.tip ?? null
+    const access = home?.access ?? null
     const entries = this.context.listFreeRoadEntries(vehicle.id, false)
     if (entries.length === 0) {
       this.holdGarbageTruckOffMap(vehicle)
@@ -2980,7 +3118,7 @@ export class RoadVehicleSimulation {
     if (vehicle.state === 'returning' && vehicle.cargo > 0) {
       this.depositSweeperCargo(vehicle)
       vehicle.state = 'waiting'
-      vehicle.waitMinutes = SIMULATION_CONFIG.waste.truckUnloadMinutes
+      vehicle.waitMinutes = this.garbageTruckUnloadMinutes()
       vehicle.resumeState = 'idle'
       return
     }
@@ -3701,9 +3839,7 @@ export class RoadVehicleSimulation {
       )
     }
     if (vehicle.kind === 'garbageTruck') {
-      const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
-        candidate.truckIds.includes(vehicle.id),
-      )
+      const depot = this.garbageTruckHome(vehicle)?.tip ?? null
       return Boolean(
         depot &&
           here.x >= depot.x &&
@@ -3749,10 +3885,7 @@ export class RoadVehicleSimulation {
   }
 
   garbageHomeAccess(vehicle: RoadVehicle): RoadPosition | null {
-    const depot = this.context.state.logistics.wasteDepots.find((candidate) =>
-      candidate.truckIds.includes(vehicle.id),
-    )
-    return depot ? this.context.getLogisticsBuildingAccess(depot, 2) : null
+    return this.garbageTruckHome(vehicle)?.access ?? null
   }
 
   dispatchIdleFireTrucks(): void {
