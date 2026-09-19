@@ -15,6 +15,14 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=8080
+# The one writable place in the image: the volume the entrypoint chowns. The
+# database used to default to /app/data, which nothing creates and the node
+# user may not create either, so the first save request killed the server.
+ENV HEADLINER_DATA_DIR=/app/saves
+# The address players are given in an invite, when the host plays on this very
+# machine. Behind a proxy set it to the public one, e.g.
+# PUBLIC_HOST=https://headliner-tycoon.com
+ENV PUBLIC_HOST=
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist

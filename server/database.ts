@@ -18,6 +18,21 @@ const dataDirectory = (): string =>
     ? resolve(process.env.HEADLINER_DATA_DIR)
     : resolve(fileURLToPath(new URL('../data', import.meta.url)))
 
+/**
+ * Whether the database can be opened where it is pointed, as a message or null.
+ * Called at boot so an unwritable directory is said once, plainly, instead of
+ * surfacing as a failed request much later.
+ */
+export function storageProblem(): string | null {
+  const directory = dataDirectory()
+  try {
+    mkdirSync(directory, { recursive: true })
+    return null
+  } catch (error) {
+    return `${directory}: ${(error as Error).message}`
+  }
+}
+
 export type Schema = { name: string; ddl: string }
 
 let database: DatabaseSync | null = null

@@ -5,6 +5,7 @@ import { extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 import { attachMultiplayer, localJoinHost } from './rooms.ts'
+import { storageProblem } from './database.ts'
 import { handleSaveRequest } from './saveSlots.ts'
 import { handleAccountRequest } from './accounts.ts'
 
@@ -50,7 +51,23 @@ async function existingFile(path: string): Promise<string | null> {
   }
 }
 
-const server = createServer(async (request, response) => {
+const server = createServer((request, response) => {
+  // A failing request must not take the process with it. It used to: an
+  // unwritable data directory threw out of this handler, the rejection went
+  // unhandled, and node exited — ending everybody's multiplayer session over a
+  // save that could not be written.
+  void serve(request, response).catch((error) => {
+    console.error(error)
+    if (response.headersSent) {
+      response.end()
+      return
+    }
+    response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
+    response.end(JSON.stringify({ error: 'Spielserver-Fehler' }))
+  })
+})
+
+async function serve(request: Parameters<typeof handleSaveRequest>[0], response: Parameters<typeof handleSaveRequest>[1]): Promise<void> {
   if (await handleAccountRequest(request, response)) return
   if (await handleSaveRequest(request, response)) return
   const requested = safeFile(request.url ?? '/')
@@ -67,7 +84,7 @@ const server = createServer(async (request, response) => {
     'Cache-Control': hashedAsset ? 'public, max-age=31536000, immutable' : 'no-cache',
   })
   createReadStream(fallback).pipe(response)
-})
+}
 
 const wss = new WebSocketServer({
   noServer: true,
@@ -84,6 +101,18 @@ server.on('upgrade', (request, socket, head) => {
     wss.emit('connection', websocket, request)
   })
 })
+
+// Said once, at the start, rather than as a failed request an hour later.
+const storage = storageProblem()
+if (storage) {
+  console.error(
+    `Konten und Server-Spielstände sind abgeschaltet: ${storage}
+` +
+    'HEADLINER_DATA_DIR auf ein beschreibbares Verzeichnis setzen — im Container ' +
+    'das Volume, also HEADLINER_DATA_DIR=/app/saves. Das Spiel selbst und der ' +
+    'Mehrspieler laufen auch ohne.',
+  )
+}
 
 server.listen(PORT, HOST, () => {
   // PUBLIC_HOST is what the invite falls back to when the host plays on the

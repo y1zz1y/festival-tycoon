@@ -7,6 +7,10 @@ services:
     environment:
       PORT: "8080"
       HOST: "0.0.0.0"
+      # Database and saves belong on the volume below, not in the image.
+      HEADLINER_DATA_DIR: "/app/saves"
+      # The public address of this server, used for invite links.
+      PUBLIC_HOST: "https://headliner-tycoon.com"
     volumes:
       - festival-saves:/app/saves
     restart: unless-stopped

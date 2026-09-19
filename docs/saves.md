@@ -26,6 +26,19 @@ Patch (`npm version patch --no-git-tag-version`) und halten das Lockfile synchro
 | Logistics-Normalize | `src/game/logistics.ts` | `normalizeLogisticsSnapshot` |
 | Ampeln / Schranken | `src/game/accessControl.ts` | `normalizeAccessControls`, `accessControls` |
 
+Wo `accounts.db` liegt, bestimmt `HEADLINER_DATA_DIR`; ohne die Variable
+`data/` neben dem Server. **Im Container muss sie gesetzt sein** — das Image
+legt genau ein beschreibbares Verzeichnis an, das Volume `/app/saves`, und
+`/app` selbst gehört root. Der Standardpfad `/app/data` ließ sich deshalb nicht
+anlegen: Die erste Speicher- oder Konto-Anfrage warf `EACCES`, die Ausnahme
+fiel aus dem Request-Handler, und Node beendete sich — ein Crash-Loop, der mit
+jedem Neustart auch alle laufenden Mehrspieler-Sitzungen mitnahm.
+
+Beides ist jetzt abgefangen: `serve.ts` fängt jeden Request-Fehler ab und
+antwortet mit 500, statt den Prozess mitzunehmen, und `storageProblem()` sagt
+beim Start einmal deutlich, wenn das Verzeichnis nicht nutzbar ist. Spiel und
+Mehrspieler laufen dann weiter, nur Konten und Server-Spielstände nicht.
+
 Lokale benannte Slots: Metadaten in `SAVE_SLOTS_KEY`, die Welt je Slot
 unter `saveSlotDataKey(id)`. Listing liest nur Namen/Zeiten, nie
 `GameState.fromJSON` — sonst leert ein schwerer oder neuer Snapshot das
