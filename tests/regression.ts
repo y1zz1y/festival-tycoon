@@ -33,6 +33,7 @@ import { testEnvironments } from './environments'
 import { testSupplyChain } from './supplyChain'
 import { testUnsavedWork } from './unsavedWork'
 import { testHotkeys } from './hotkeys'
+import { testWakeLock } from './wakeLock'
 import { testWayElevation } from './wayElevation'
 import assert from 'node:assert/strict'
 import { performance } from 'node:perf_hooks'
@@ -114,6 +115,8 @@ testUnsavedWork(fixture)
 console.log('PASS unsaved work is noticed on edits and after five quiet minutes')
 testHotkeys()
 console.log('PASS hotkeys rebind, keep one key per action and survive broken storage')
+await testWakeLock()
+console.log('PASS the screen lock follows the session, the page and a browser that drops it')
 await testBlueprintLibraryRoundtrip()
 console.log('PASS blueprint library roundtrip stays out of SAVE_KEY')
 await testServerSaveClient()

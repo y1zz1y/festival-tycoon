@@ -32,6 +32,18 @@ sondern ein Aussetzer.
   es eine Session gibt. `src/net/lobbies.ts` öffnet dafür eine eigene kurze
   Verbindung und gibt bei Fehlern eine leere Liste zurück, damit das Codefeld
   weiter nutzbar bleibt.
+- **Wachbleiben:** Solange eine Sitzung steht, hält der sichtbare Tab einen
+  Screen Wake Lock (`src/ui/wakeLock.ts`, Einstellung „Im Mehrspieler
+  Bildschirm wachhalten"). Grund ist der Host: Sein Rechner rechnet die Welt,
+  Bildschirm aus heißt meist kurz darauf Suspend, und ein schlafender Host ist
+  ein Raum, der auf jemanden wartet. Der Browser gibt den Lock beim Verbergen
+  der Seite selbst wieder frei — das schützt also den Tab, der auf dem Schirm
+  ist, und sonst nichts. Ein verborgener Tab braucht es auch kaum: Ping und
+  Pong beantwortet der Netzwerk-Stack des Browsers, nicht JavaScript, eine
+  gedrosselte Seite hält die Verbindung also von allein. Fehlt die API
+  (Firefox) oder wird sie verweigert, passiert nichts weiter.
+- **Rückkehr zum Tab:** `MultiplayerSession.retryNow` wählt beim Sichtbarwerden
+  sofort nach, statt den Backoff von bis zu 15 s abzuwarten.
 - **Keepalive:** Der Server pingt alle 25 s und trennt Sockets, die die vorige
   Runde nicht beantwortet haben. Browser antworten selbst, der Client braucht
   dafür nichts. Ohne das schlief eine Verbindung ein, sobald ein Host allein im

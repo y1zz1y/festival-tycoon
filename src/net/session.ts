@@ -56,6 +56,26 @@ export class MultiplayerSession {
 
   constructor(game: GameState) {
     this.game = game
+    // Coming back to the tab is the moment to find out whether the connection
+    // survived being away. Waiting out the backoff first would leave the player
+    // looking at a dead world for up to fifteen seconds.
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return
+        this.retryNow()
+      })
+    }
+  }
+
+  /**
+   * Dials back at once instead of on the next scheduled attempt. Does nothing
+   * when there is no session, or when one is already up.
+   */
+  retryNow(): void {
+    if (!this.hello || this.leaving || this.canSend()) return
+    this.cancelReconnect()
+    this.reconnectAttempt = 0
+    this.scheduleReconnect(0)
   }
 
   attach(game: GameState): void {
@@ -214,9 +234,9 @@ export class MultiplayerSession {
    * a server that is down is not hammered. Hosting has no attempt limit: the
    * room is still on the server waiting for its host.
    */
-  private scheduleReconnect(): void {
+  private scheduleReconnect(immediate = -1): void {
     if (this.reconnectTimer || !this.hello) return
-    const delay = Math.min(15000, 1000 * 2 ** Math.min(4, this.reconnectAttempt))
+    const delay = immediate >= 0 ? immediate : Math.min(15000, 1000 * 2 ** Math.min(4, this.reconnectAttempt))
     this.reconnectAttempt += 1
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = 0

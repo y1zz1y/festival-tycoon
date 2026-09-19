@@ -126,6 +126,7 @@ export function mountAppShell(app: HTMLDivElement): void {
       <label class="scenario-check"><input id="setting-mute-audio" type="checkbox" /><span>Ton stumm</span></label>
       <label class="scenario-check"><input id="setting-stock-bars" type="checkbox" /><span>Füllstände über Ständen</span></label>
       <label class="scenario-check"><input id="setting-unsaved-warning" type="checkbox" /><span>Vor ungespeichertem Verlassen warnen</span></label>
+      <label class="scenario-check" id="setting-keep-awake-field"><input id="setting-keep-awake" type="checkbox" /><span>Im Mehrspieler Bildschirm wachhalten</span></label>
       <label class="scenario-field"><span>Autospeichern</span><select id="setting-autosave">${AUTOSAVE_INTERVALS.map((option) => `<option value="${option.minutes}">${option.label}</option>`).join('')}</select></label>
       <h3 class="scenario-heading">Tastenbelegung</h3>
       <p class="scenario-hint">Auf eine Taste klicken und die neue drücken. Eine Taste gehört immer nur einer Aktion.</p>

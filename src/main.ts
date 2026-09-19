@@ -32,6 +32,7 @@ import { goalName, goalProgressText } from './game/scenarioGoals'
 import { refreshAccount } from './accounts'
 import { installUnsavedWorkGuard, setUnsavedWarnings, trackUnsavedWork } from './ui/unsavedWork'
 import { inviteLink } from './net/lobbies'
+import { isWakeLockSupported, keepScreenAwake } from './ui/wakeLock'
 import { actionForEvent, HOTKEYS, hotkeyBindings, hotkeyLabel, isBindableCode, loadHotkeys, resetHotkeys, setHotkey, type HotkeyAction } from './ui/hotkeys'
 import type { BuildingKind, Tool } from './game/catalog'
 import type { PlacementPreviewResult } from './game/placementPreview'
@@ -3946,8 +3947,34 @@ function renderMultiplayerStatus(status: MultiplayerStatus): void {
  */
 let joinErrorSink: ((message: string) => void) | null = null
 
+/**
+ * A host's machine is the one running the world. Screen off means suspend a few
+ * minutes later, and a suspended host is a room waiting for someone who is
+ * asleep — so while a session is up, the screen is asked to stay on.
+ */
+const KEEP_AWAKE_KEY = 'festival-keep-awake'
+const keepAwakeToggle = requireElement<HTMLInputElement>('#setting-keep-awake')
+try {
+  keepAwakeToggle.checked = window.localStorage.getItem(KEEP_AWAKE_KEY) !== 'off'
+} catch { /* blocked storage: keep the screen on, which is the useful default */ }
+if (!isWakeLockSupported()) {
+  // Firefox and older Safari have no screen lock. Saying so beats a switch that
+  // silently does nothing.
+  keepAwakeToggle.disabled = true
+  requireElement<HTMLElement>('#setting-keep-awake-field').title =
+    'Dieser Browser kennt keine Bildschirmsperre für Webseiten'
+}
+const keepAwake = keepScreenAwake(() => keepAwakeToggle.checked && multiplayer.status.connected)
+keepAwakeToggle.addEventListener('change', () => {
+  keepAwake.refresh()
+  try {
+    window.localStorage.setItem(KEEP_AWAKE_KEY, keepAwakeToggle.checked ? 'on' : 'off')
+  } catch { /* the setting simply does not survive a reload then */ }
+})
+
 multiplayer.onStatus = (status) => {
   renderMultiplayerStatus(status)
+  keepAwake.refresh()
   if (status.connected) joinErrorSink = null
   // Joining from the title screen only leaves it once the room has answered, so a
   // code that goes nowhere keeps the player where they can try the next one.
