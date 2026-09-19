@@ -6,6 +6,32 @@ export function multiplayerSocketUrl(): string {
   return `${protocol}//${location.host}/ws`
 }
 
+const LOOPBACK = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|::1|0\.0\.0\.0)$/i
+
+/**
+ * The link to hand to the other players.
+ *
+ * The address the host's own browser used is the one to share: over the
+ * internet that is the public name and scheme the server really answers on,
+ * behind a reverse proxy it is the proxy's, and on a LAN it is the machine's
+ * address — none of which the server can work out for itself from behind a
+ * proxy. The exception is a host playing on the very machine that serves the
+ * game: "localhost" means nothing to anyone else, so the server's own
+ * suggestion (PUBLIC_HOST, or its address on the network) is used instead.
+ */
+export function inviteLink(code: string, serverHint: string, origin = location.origin): string {
+  let base = origin
+  try {
+    if (LOOPBACK.test(new URL(origin).hostname) && serverHint) {
+      base = /^https?:\/\//i.test(serverHint) ? serverHint : `http://${serverHint}`
+    }
+  } catch {
+    // A page from a file:// URL or anything else without a proper origin.
+    if (serverHint) base = /^https?:\/\//i.test(serverHint) ? serverHint : `http://${serverHint}`
+  }
+  return `${base.replace(/\/+$/, '')}/?join=${encodeURIComponent(code)}`
+}
+
 /**
  * The open rooms, read without joining anything. The title screen needs the list
  * before there is a session at all, so this opens a socket of its own, asks, and

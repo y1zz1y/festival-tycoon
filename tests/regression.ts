@@ -41,6 +41,7 @@ import { findWeightedPath, createPathScratch } from '../src/game/pathfinding'
 import { packWorld, roundForWire, WIRE_DIGITS, WIRE_DIGITS_NESTED } from '../src/net/codec'
 import { WorldUpdates } from '../src/net/worldUpdates'
 import { MultiplayerSession } from '../src/net/session'
+import { inviteLink } from '../src/net/lobbies'
 import { enableMultiplayerCommands } from '../src/net/bind'
 import { WebSocket, WebSocketServer } from 'ws'
 import { attachMultiplayer, roomsForTest } from '../server/rooms'
@@ -828,6 +829,47 @@ try {
   await until(() => (roomsForTest.rooms.get(openCode)?.hostAwaySince ?? null) !== null)
   assert.equal((await ask())[0]!.hostAway, true, 'a waiting room says its host is away')
   console.log('PASS public rooms are listed with host, players and whether the host is away')
+
+  // What a host passes around. The address the host's own browser used is the
+  // one that works for everyone else too — the server cannot know it from
+  // behind a proxy — except when the host is sitting on the server itself.
+  assert.equal(
+    inviteLink('B8S2', '10.0.0.5:8080', 'https://headliner-tycoon.com'),
+    'https://headliner-tycoon.com/?join=B8S2',
+    'the public address the host reached the server on is what gets shared',
+  )
+  assert.equal(
+    inviteLink('B8S2', '10.0.0.5:8080', 'https://headliner-tycoon.com/spiel/'),
+    'https://headliner-tycoon.com/spiel/?join=B8S2',
+  )
+  assert.equal(
+    inviteLink('B8S2', 'https://headliner-tycoon.com', 'http://localhost:5180'),
+    'https://headliner-tycoon.com/?join=B8S2',
+    'a host on the serving machine falls back to what the server says it is',
+  )
+  assert.equal(
+    inviteLink('B8S2', '10.0.0.5:8080', 'http://127.0.0.1:8080'),
+    'http://10.0.0.5:8080/?join=B8S2',
+    'a bare host:port from the server is given a scheme',
+  )
+  assert.equal(
+    inviteLink('B8S2', '', 'http://localhost:5180'),
+    'http://localhost:5180/?join=B8S2',
+    'with nothing to fall back to the page address is still better than nothing',
+  )
+
+  // Names travel from strangers into other players' windows once the server is
+  // reachable from outside, so the server is the one that bounds them.
+  const rude = new GameState()
+  enableMultiplayerCommands(rude)
+  const rudeSession = new MultiplayerSession(rude)
+  sessions.push(rudeSession)
+  rudeSession.host(`   ${'N'.repeat(80)}   `, true)
+  await until(() => rudeSession.status.connected)
+  const named = roomsForTest.rooms.get(rudeSession.status.code)!
+  assert.equal(named.hostName.length, 24, 'a long name is cut to the limit')
+  assert.equal(named.hostName.trim(), named.hostName, 'and comes back trimmed')
+  console.log('PASS invite links use the address the host reached the server on, and names are bounded')
 } finally {
   sessions.forEach(session => session.disconnect())
   wss.clients.forEach(socket => socket.terminate())

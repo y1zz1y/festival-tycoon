@@ -31,6 +31,7 @@ import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financ
 import { goalName, goalProgressText } from './game/scenarioGoals'
 import { refreshAccount } from './accounts'
 import { installUnsavedWorkGuard, setUnsavedWarnings, trackUnsavedWork } from './ui/unsavedWork'
+import { inviteLink } from './net/lobbies'
 import { actionForEvent, HOTKEYS, hotkeyBindings, hotkeyLabel, isBindableCode, loadHotkeys, resetHotkeys, setHotkey, type HotkeyAction } from './ui/hotkeys'
 import type { BuildingKind, Tool } from './game/catalog'
 import type { PlacementPreviewResult } from './game/placementPreview'
@@ -3926,11 +3927,14 @@ function renderMultiplayerStatus(status: MultiplayerStatus): void {
   multiplayerJoinActions.hidden = connected
   multiplayerRoom.hidden = !connected
   multiplayerCodeDisplay.textContent = status.code
-  multiplayerJoinUrl.textContent = status.joinUrl
+  // The address to pass around, not the one the server happens to know itself.
+  multiplayerJoinUrl.textContent = status.code ? inviteLink(status.code, status.joinUrl) : ''
+  // Names come from whoever joined. On a server anyone can reach, that is a
+  // stranger's text going into the page, so it is escaped like any other.
   multiplayerPlayers.innerHTML = status.players
     .map(
       (player) =>
-        `<li>${player.name}${player.role === 'host' ? ' · Host' : ''}</li>`,
+        `<li>${escapeHtml(player.name)}${player.role === 'host' ? ' · Host' : ''}</li>`,
     )
     .join('')
 }
@@ -4004,7 +4008,7 @@ multiplayerLeaveButton.addEventListener('click', () => {
 multiplayerCopyButton.addEventListener('click', async () => {
   const code = multiplayer.status.code
   if (!code) return
-  const text = `${window.location.origin}?join=${code}`
+  const text = inviteLink(code, multiplayer.status.joinUrl)
   try {
     await navigator.clipboard.writeText(text)
     showToast('Einladungslink kopiert')

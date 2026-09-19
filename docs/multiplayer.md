@@ -48,6 +48,45 @@ sondern ein Aussetzer.
   30 Minuten weg ist, wird verworfen. Das ist ein Sicherheitsnetz gegen
   liegengebliebene Codes, keine Sitzungsdauer.
 
+## Übers Internet spielen
+
+Der Spielzustand läuft ausschließlich über eine WebSocket auf `/ws`. Der Client
+wählt das Schema aus der Seite: HTTPS-Seite → `wss:`, sonst `ws:`. Es gibt
+keinen Polling-Fallback, und es soll auch keinen geben.
+
+Der Produktionsserver (`server/serve.ts`) lauscht auf `HOST`/`PORT`
+(Standard `0.0.0.0:8080`). Vor ihm steht in der Regel ein Reverse Proxy mit
+TLS — und genau dort scheitert es, wenn der Upgrade nicht durchgereicht wird:
+
+```nginx
+location /ws {
+  proxy_pass http://127.0.0.1:8080;
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_set_header Host $host;
+  proxy_read_timeout 120s;   # der Server pingt alle 25 s, das reicht darunter
+}
+```
+
+Unter IIS braucht es das Feature „WebSocket Protocol“ **und** in der ARR-Regel
+`<webSocket enabled="true" />`; ohne beides bricht der Upgrade mit 400 ab.
+
+`PUBLIC_HOST` setzen, z. B. `PUBLIC_HOST=https://headliner-tycoon.com`. Der
+Wert ist nur der Rückfall für den Einladungslink, wenn der Host auf derselben
+Maschine spielt, die das Spiel ausliefert — sonst nimmt der Client die Adresse,
+über die sein eigener Browser den Server erreicht hat (`inviteLink` in
+`src/net/lobbies.ts`). Die kennt der Server hinter einem Proxy nicht.
+
+Was auf einem offen erreichbaren Server sonst noch gilt:
+
+- Spielernamen sind fremder Text in fremden Fenstern. Der Server kürzt sie auf
+  24 Zeichen und wirft Steuerzeichen raus; die Anzeige escaped sie.
+- `MAX_ROOMS` (Standard 200) deckelt die Räume. Ist es voll, wird erst
+  aufgeräumt und dann abgelehnt.
+- Wer den Code hat, kommt rein und darf bauen. Das ist das ganze Rechtemodell —
+  ein privater Raum ist so privat wie sein Code.
+
 ## Wo finden
 
 | Aufgabe | Datei | Einstieg |

@@ -14,7 +14,7 @@ function bindWebSocket(
     noServer: true,
     perMessageDeflate: { threshold: 1024, zlibDeflateOptions: { level: 1 } },
   })
-  attachMultiplayer(wss, () => localJoinHost(port))
+  attachMultiplayer(wss, () => process.env.PUBLIC_HOST?.trim() || localJoinHost(port))
   httpServer.on('upgrade', (request, socket, head) => {
     const path = request.url?.split('?')[0]
     if (path !== '/ws') return

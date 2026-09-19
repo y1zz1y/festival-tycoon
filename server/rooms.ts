@@ -41,6 +41,22 @@ const rooms = new Map<string, Room>()
 const PING_SECONDS = 25
 const ABANDONED_MINUTES = 30
 
+/**
+ * Limits that only matter once the server is somewhere anyone can reach it.
+ * A name is a stranger's text that ends up in other players' windows, and a
+ * room is state the server keeps for free, so neither is unbounded.
+ */
+const NAME_LIMIT = 24
+const ROOM_LIMIT = Number(process.env.MAX_ROOMS || 200)
+
+/** Trimmed, length-capped, and never empty, whatever arrived on the wire. */
+function cleanName(name: unknown, fallback: string): string {
+  if (typeof name !== 'string') return fallback
+  // Control characters would break the line the name is printed on.
+  const clean = name.replace(/\p{Cc}/gu, ' ').trim().slice(0, NAME_LIMIT).trim()
+  return clean || fallback
+}
+
 function send(socket: WebSocket, message: ServerMessage): void {
   if (socket.readyState === socket.OPEN) {
     socket.send(JSON.stringify(message))
@@ -179,6 +195,15 @@ export function attachMultiplayer(
 
       if (message.t === 'host') {
         if (joined) return
+        // A public server should not be turned into a room factory. Rooms that
+        // nobody came back to are swept first, so a full map is really full.
+        if (rooms.size >= ROOM_LIMIT) {
+          sweepAbandonedRooms()
+          if (rooms.size >= ROOM_LIMIT) {
+            send(socket, { t: 'error', message: 'Der Server ist gerade voll. Bitte später noch einmal.' })
+            return
+          }
+        }
         // The room this save opened last time is still standing but has no host
         // in it — a reloaded page, a closed laptop. That is this save coming
         // back, so it takes its own room over instead of being handed a new
@@ -188,7 +213,7 @@ export function attachMultiplayer(
           const id = `player-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`
           returning.clients.delete(returning.hostId)
           returning.hostId = id
-          returning.hostName = message.name || 'Host'
+          returning.hostName = cleanName(message.name, 'Host')
           returning.hostAwaySince = null
           returning.public = message.public === true
           returning.clients.set(id, { id, name: returning.hostName, role: 'host', socket })
@@ -197,7 +222,7 @@ export function attachMultiplayer(
             t: 'hosted',
             code: returning.code,
             playerId: id,
-            joinUrl: `${getJoinHost()}  ·  Code ${returning.code}`,
+            joinUrl: getJoinHost(),
             players: playersOf(returning),
           })
           broadcast(returning, { t: 'players', players: playersOf(returning) }, id)
@@ -208,14 +233,14 @@ export function attachMultiplayer(
         const room: Room = {
           code,
           hostId: id,
-          hostName: message.name || 'Host',
+          hostName: cleanName(message.name, 'Host'),
           clients: new Map(),
           hostAwaySince: null,
           public: message.public === true,
         }
         const client: RoomClient = {
           id,
-          name: message.name || 'Host',
+          name: cleanName(message.name, 'Host'),
           role: 'host',
           socket,
         }
@@ -226,7 +251,7 @@ export function attachMultiplayer(
           t: 'hosted',
           code,
           playerId: id,
-          joinUrl: `${getJoinHost()}  ·  Code ${code}`,
+          joinUrl: getJoinHost(),
           players: playersOf(room),
         })
         return
@@ -242,7 +267,7 @@ export function attachMultiplayer(
         const id = `player-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`
         const client: RoomClient = {
           id,
-          name: message.name || 'Gast',
+          name: cleanName(message.name, 'Gast'),
           role: 'client',
           socket,
         }
@@ -270,7 +295,7 @@ export function attachMultiplayer(
         }
         if (message.playerId === room.hostId) {
           room.clients.get(room.hostId)?.socket.close()
-          room.hostName = message.name || room.hostName
+          room.hostName = cleanName(message.name, room.hostName)
           room.hostAwaySince = null
           room.clients.set(room.hostId, {
             id: room.hostId,
@@ -283,14 +308,14 @@ export function attachMultiplayer(
             t: 'hosted',
             code: room.code,
             playerId: room.hostId,
-            joinUrl: `${getJoinHost()}  ·  Code ${room.code}`,
+            joinUrl: getJoinHost(),
             players: playersOf(room),
           })
           broadcast(room, { t: 'players', players: playersOf(room) }, room.hostId)
           return
         }
         const id = `player-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`
-        room.clients.set(id, { id, name: message.name || 'Gast', role: 'client', socket })
+        room.clients.set(id, { id, name: cleanName(message.name, 'Gast'), role: 'client', socket })
         joined = { room, id }
         send(socket, {
           t: 'joined',

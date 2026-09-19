@@ -86,5 +86,9 @@ server.on('upgrade', (request, socket, head) => {
 })
 
 server.listen(PORT, HOST, () => {
-  console.log(`Headliner Tycoon: http://${HOST}:${PORT}`)
+  // PUBLIC_HOST is what the invite falls back to when the host plays on the
+  // very machine that serves the game; behind a proxy set it to the public
+  // address, e.g. PUBLIC_HOST=https://headliner-tycoon.com
+  const reachable = process.env.PUBLIC_HOST?.trim() || `http://${localJoinHost(PORT)}`
+  console.log(`Headliner Tycoon: http://${HOST}:${PORT}  ·  öffentlich: ${reachable}`)
 })
