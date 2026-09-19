@@ -4687,6 +4687,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .save-slots-list { display: grid; gap: 7px; max-height: min(48vh, 420px); overflow: auto; }
 .save-slots-list article { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px; background: #203a31; border: 1px solid #577364; }
 .save-slots-list strong, .save-slots-list small { display: block; }
+.save-slots-list .save-slot-progress { margin-top: 3px; color: #f4d887; }
 .save-slots-list small { margin-top: 4px; color: #b7c9bb; font-variant-numeric: tabular-nums; }
 .save-slots-list article > div:last-child { display: flex; gap: 5px; flex-wrap: wrap; justify-content: end; }
 @media (max-width: 520px) { .save-as-form, .save-slots-list article { align-items: stretch; flex-direction: column; } .save-slots-list article > div:last-child { justify-content: stretch; } }

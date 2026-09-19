@@ -3,7 +3,10 @@
    .supply-planner button folded into the shared button rules in style.css)
    so this overlay looks like every other standardized window. */
 .supply-planner { position: absolute; z-index: 24; top: auto; bottom: 64px; right: 6px; left: auto; width: 320px; max-height: min(620px, calc(100dvh - 170px)); padding: 12px; overflow-y: auto; }
-.terrain-planner { right: auto; left: 6px; }
+/* The ground works sit inside the build menu's Gelände tab. */
+.terrain-planner { display: grid; gap: 7px; margin-top: 8px; }
+.terrain-planner-intro { margin: 0; font-size: 11px; line-height: 1.4; color: #b8c9b7; }
+.terrain-planner .supply-tools button[aria-pressed='true'] { background: #456550; border-color: #f0cf7d; }
 .road-editor .path-type-palette, .road-editor .path-access-links { display: none; }
 .road-editor #road-editor-tools .piece-palette { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .road-editor #road-editor-tools button { min-width: 0; }

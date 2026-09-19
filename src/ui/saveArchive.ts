@@ -64,6 +64,19 @@ export function saveStorageNote(archive: SaveArchiveView): string {
   return `${archive.serverError || 'Der Spielserver ist nicht erreichbar.'} ${local}`
 }
 
+/**
+ * Where the festival stood when the save was written: the edition, the day and the
+ * clock. Saves from before this was recorded say nothing rather than guessing.
+ */
+export function saveProgressText(slot: Pick<ServerSaveSlot, 'edition' | 'day' | 'minute'>): string {
+  if (slot.day === undefined || slot.minute === undefined) return ''
+  const hours = Math.floor(slot.minute / 60) % 24
+  const minutes = Math.floor(slot.minute % 60)
+  const clock = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  const edition = slot.edition === undefined ? '' : slot.edition > 0 ? `${slot.edition}. Ausgabe · ` : 'Vor dem ersten Festival · '
+  return `${edition}Tag ${slot.day} · ${clock}`
+}
+
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (character) => ({
     '&': '&amp;',
@@ -73,6 +86,12 @@ const escapeHtml = (value: string): string =>
     "'": '&#39;',
   })[character]!)
 
+/** The line under a save's name, or nothing for a save that never recorded where it stood. */
+const progressLine = (slot: SaveSlotView): string => {
+  const text = saveProgressText(slot)
+  return text ? `<small class="save-slot-progress">${text}</small>` : ''
+}
+
 export function saveArchiveHtml(
   archive: SaveArchiveView,
   formatTime: (value: number) => string,
@@ -81,7 +100,7 @@ export function saveArchiveHtml(
     const share = slot.source === 'server'
       ? `<button data-share-slot="${slot.id}">${slot.public ? 'Nicht mehr teilen' : 'Teilen'}</button>`
       : ''
-    return `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}${slot.source === 'browser' && archive.onServer ? ' · dieser Browser' : ''}</small></div><div><button data-load-slot="${slot.id}">Laden</button><button data-overwrite-slot="${slot.id}">Überschreiben</button>${share}<button data-delete-slot="${slot.id}" aria-label="${escapeHtml(slot.name)} löschen">×</button></div></article>`
+    return `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong>${progressLine(slot)}<small>${formatTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}${slot.source === 'browser' && archive.onServer ? ' · dieser Browser' : ''}</small></div><div><button data-load-slot="${slot.id}">Laden</button><button data-overwrite-slot="${slot.id}">Überschreiben</button>${share}<button data-delete-slot="${slot.id}" aria-label="${escapeHtml(slot.name)} löschen">×</button></div></article>`
   }
   const serverOwn = archive.own.filter((slot) => slot.source === 'server')
   const localOwn = archive.own.filter((slot) => slot.source === 'browser')
@@ -99,7 +118,7 @@ export function saveArchiveHtml(
     : '<p class="save-slots-empty">Noch keine benannten Spielstände in diesem Browser. „Schnell speichern“ bleibt der einzelne Schnellstand.</p>'
   const shared = archive.shared.length
     ? `<h3 class="save-slots-heading">Öffentliche Spielstände</h3><p class="save-slots-empty">Laden ja, überschreiben nein — gespeichert wird immer unter deinem eigenen Konto.</p>${archive.shared.map((slot) =>
-        `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>von ${escapeHtml(slot.owner)} · ${formatTime(slot.savedAt)}</small></div><div><button data-load-slot="${slot.id}">Laden</button></div></article>`,
+        `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong>${progressLine(slot)}<small>von ${escapeHtml(slot.owner)} · ${formatTime(slot.savedAt)}</small></div><div><button data-load-slot="${slot.id}">Laden</button></div></article>`,
       ).join('')}`
     : ''
   return serverBlock + localBlock + shared
@@ -113,6 +132,6 @@ export function saveAsArchiveHtml(
     return `<p class="save-slots-empty">Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto oder' : ''} in diesem Browser.</p>`
   }
   return archive.own.map((slot) =>
-    `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong><small>${formatTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}${slot.source === 'browser' && archive.onServer ? ' · dieser Browser' : ''}</small></div><div><button data-overwrite-slot="${slot.id}">Überschreiben</button></div></article>`,
+    `<article data-slot="${slot.id}"><div><strong>${escapeHtml(slot.name)}</strong>${progressLine(slot)}<small>${formatTime(slot.savedAt)}${slot.public ? ' · öffentlich' : ''}${slot.source === 'browser' && archive.onServer ? ' · dieser Browser' : ''}</small></div><div><button data-overwrite-slot="${slot.id}">Überschreiben</button></div></article>`,
   ).join('')
 }

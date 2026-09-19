@@ -141,9 +141,9 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         id: 'shape',
         label: 'Form',
         items: [
-          toolItem('terrainRaise', 'Feld anheben', '▲', '0,5 Höhe · Fläche'),
-          toolItem('terrainLower', 'Feld senken', '▼', '0,5 Höhe · Fläche'),
-          toolItem('terrainSmooth', 'Glätten', '∼', 'auf Startfeldhöhe'),
+          toolItem('terrainRaise', 'Anheben', '🔼', '+0,5'),
+          toolItem('terrainLower', 'Absenken', '🔽', '−0,5'),
+          toolItem('terrainSmooth', 'Glätten', '〰️', 'Einebnen'),
         ],
       },
     ],

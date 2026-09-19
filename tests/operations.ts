@@ -8,7 +8,7 @@ import { updateDepotCarriers } from '../src/game/depotCarriers'
 import { createStaffMember } from '../src/game/staff'
 import { StaffSimulation } from '../src/game/staffSimulation'
 import { DeterministicRng } from '../src/game/rng'
-import { cleanerCarryFactor } from '../src/game/festivalManagement'
+import { cleanerCarryFactor, staffSpeedFactor } from '../src/game/festivalManagement'
 import { zoneKey } from '../src/game/staffZones'
 import {
   abandonVisitorCamp,
@@ -2312,6 +2312,45 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     false,
     'tearing up the path takes the rubbish with it',
   )
+
+  // On patrol the crew keeps to the paths: a guard set down on the path strip never
+  // wanders off it onto the grass around, however long it idles.
+  const patrolGame=fixture(0)
+  patrolGame.addDebugMoney()
+  const patrol=patrolGame.snapshot as GameSnapshot
+  assert.ok(patrolGame.hireStaff('security').ok)
+  const guard=patrol.staff.find(member=>member.role==='security')!
+  const onPath=(x:number,z:number)=>patrol.buildings.some(b=>b.kind==='path'&&b.x===x&&b.z===z)
+  assert.ok(onPath(guard.cellX,guard.cellZ),'the guard starts on a path')
+  let offPath=0
+  for (let n=0;n<600;n+=1) { patrolGame.tick(0.25); if (!onPath(guard.cellX,guard.cellZ)) offPath+=1 }
+  assert.equal(offPath,0,'a patrolling guard never steps onto the grass beside the path')
+
+  // Wheels for the crew: the upgrade doubles how far anyone gets in the same time.
+  const wheelsGame=fixture(0)
+  wheelsGame.addDebugMoney()
+  const wheels=wheelsGame.snapshot as GameSnapshot
+  assert.equal(staffSpeedFactor(wheels.festival),1)
+  assert.ok(wheelsGame.manageFestival({type:'upgrade',kind:'staffSpeed'}).ok)
+  assert.equal(staffSpeedFactor(wheels.festival),2,'the upgrade doubles the crew speed')
+  assert.equal(wheelsGame.manageFestival({type:'upgrade',kind:'staffSpeed'}).ok,false,'it is bought once')
+  const stride=(game:GameState)=>{
+    const s=game.snapshot as GameSnapshot
+    assert.ok(game.hireStaff('security').ok)
+    const member=s.staff.find(m=>m.role==='security')!
+    const startX=member.x
+    // A long straight walk down the path strip, the same for both.
+    member.state='patrolling'; member.targetId=null
+    member.route=Array.from({length:12},(_,i)=>({x:member.cellX,z:member.cellZ+i+1,elevation:member.cellElevation}))
+    game.tick(0.25)
+    return Math.hypot(member.x-startX, member.z-(member.z-0))
+  }
+  const slowGame=fixture(0); slowGame.addDebugMoney()
+  const slow=(()=>{const s=slowGame.snapshot as GameSnapshot; assert.ok(slowGame.hireStaff('security').ok); const m=s.staff.find(x=>x.role==='security')!; const z0=m.z; m.state='patrolling'; m.targetId=null; m.route=Array.from({length:12},(_,i)=>({x:m.cellX,z:m.cellZ+i+1,elevation:m.cellElevation})); slowGame.tick(0.25); return m.z-z0})()
+  const fast=(()=>{const s=wheels; assert.ok(wheelsGame.hireStaff('security').ok); const m=s.staff.find(x=>x.role==='security')!; const z0=m.z; m.state='patrolling'; m.targetId=null; m.route=Array.from({length:12},(_,i)=>({x:m.cellX,z:m.cellZ+i+1,elevation:m.cellElevation})); wheelsGame.tick(0.25); return m.z-z0})()
+  void stride
+  assert.ok(slow>0,'a guard with a route moves')
+  assert.ok(Math.abs(fast/slow-2)<0.05,`with wheels the same tick carries twice as far (${slow.toFixed(3)} vs ${fast.toFixed(3)})`)
 
   // A cleaner fills the cart before walking anywhere: small piles are collected one
   // after the other, and the load only leaves once it is full.

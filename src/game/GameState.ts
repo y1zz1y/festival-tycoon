@@ -17,7 +17,7 @@ import { BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY, saveSlotDataKey } from './catalog'
 import { serializeSnapshot, storageErrorMessage } from './saveText';
 import { bookFinance, financeEdition, financeForecast, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance';
 import { updateScenarioProgress } from './scenarioGoals';
-import { createFestivalManagement, festivalAction, updateFestival, activeBookings, cleanerCarryFactor, showIssue } from './festivalManagement';
+import { createFestivalManagement, festivalAction, updateFestival, activeBookings, cleanerCarryFactor, staffSpeedFactor, showIssue } from './festivalManagement';
 import type { Booking, FestivalAction } from './festivalManagement';
 import { createScenarioEntrance, createScenarioRoadEntry, normalizeScenarioSettings } from './scenario';
 import type { ScenarioSettings } from './scenario';
@@ -5537,6 +5537,7 @@ export class GameState {
         cleanerCarry: {
           capacity: SIMULATION_CONFIG.waste.cleanerMaxCarry * cleanerCarryFactor(this.state.festival),
         },
+        speedFactor: staffSpeedFactor(this.state.festival),
         wasteBins: this.state.buildings
           .filter((building) => isWasteBin(building.kind))
           .map((building) => ({
@@ -5557,12 +5558,13 @@ export class GameState {
           })),
         findPath: (start, goals, allowGround) =>
           this.findPath(start, goals, false, true, allowGround, false, true, undefined, true),
-        pathNeighbors: (cell) =>
+        pathNeighbors: (cell, allowGrass = true) =>
           this.getPedestrianNeighbors(cell, {
             allowStaff: true,
             allowCamping: true,
             allowMedical: true,
             allowFestival: true,
+            allowGrass,
           }),
         rng: this.rng,
         reserveBed: (visitorId, preferredCell) =>
@@ -5730,6 +5732,9 @@ export class GameState {
         id: target?.id ?? `slot-${savedAt}-${Math.random().toString(36).slice(2, 8)}`,
         name: trimmed,
         savedAt,
+        edition: this.state.festival.edition,
+        day: this.state.day,
+        minute: this.state.minute,
       }
       const updated = target
         ? slots.map(slot => slot.id === target.id ? next : slot)
@@ -5778,7 +5783,12 @@ export class GameState {
       let migrated = false
       for (const slot of parsed) {
         if (!slot || typeof slot.id !== 'string' || typeof slot.name !== 'string' || typeof slot.savedAt !== 'number') continue
-        slots.push({ id: slot.id, name: slot.name, savedAt: slot.savedAt })
+        slots.push({
+          id: slot.id, name: slot.name, savedAt: slot.savedAt,
+          ...(typeof slot.edition === 'number' ? { edition: slot.edition } : {}),
+          ...(typeof slot.day === 'number' ? { day: slot.day } : {}),
+          ...(typeof slot.minute === 'number' ? { minute: slot.minute } : {}),
+        })
         if (typeof slot.snapshot === 'string') {
           try {
             if (localStorage.getItem(saveSlotDataKey(slot.id)) == null) {
