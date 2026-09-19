@@ -2,6 +2,8 @@
 
 Spielbare technische Basis für ein isometrisches Aufbau- und Wirtschaftsspiel mit Node.js, TypeScript und Three.js.
 
+![Titelbildschirm von Headliner Tycoon](docs/images/title-screen.png)
+
 ## Start
 
 Unten links werden die Spielversion aus `package.json` und die beim Build erzeugte
