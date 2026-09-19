@@ -337,6 +337,21 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   const lit = originalLights.filter(light => light.intensity > 0)
   assert.equal(lit.length, FESTIVAL_LIGHT_BUDGET, 'every real light is in use where there is plenty to light')
   assert.ok(lit.every(light => Math.abs(light.position.x - 39) <= 4 && Math.abs(light.position.z - 11) <= 4), 'and every one of them lights a source inside the view')
+  // Zooming brings other lamps on screen without moving the point the camera looks
+  // at, so the selection has to follow the zoom as well as the vantage point.
+  const sentinel = originalLights[0]!
+  sentinel.intensity = -1
+  festivalLights.setView(lightViewOf(corner, new Vector3(39, 0, 11)))
+  assert.equal(sentinel.intensity, -1, 'an unchanged view does not redo the work')
+  const zoomedOut = new OrthographicCamera(-30, 30, 30, -30, 0.1, 100)
+  zoomedOut.position.set(39, 20, 11); zoomedOut.lookAt(39, 0, 11); zoomedOut.updateMatrixWorld()
+  festivalLights.setView(lightViewOf(zoomedOut, new Vector3(39, 0, 11)))
+  assert.notEqual(sentinel.intensity, -1, 'zooming re-serves the lights even from the same spot')
+  assert.equal(
+    originalLights.filter(light => light.intensity > 0).length,
+    FESTIVAL_LIGHT_BUDGET,
+    'and the whole pool stays in use',
+  )
   const balloonLights = new FestivalLightsView()
   lightSnapshot.buildings = [{
     id: 'moon-balloon',

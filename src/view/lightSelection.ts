@@ -12,17 +12,37 @@ export type LightView = {
   frustum: Frustum
   /** The point the camera looks at: ties inside the view are broken by nearness to it. */
   focus: Vector3
+  /**
+   * The projection this frustum came from. Zooming changes what is on screen without
+   * moving the point the camera looks at, so the selection has to watch this too —
+   * otherwise a zoomed-out view keeps the lights it picked while zoomed in.
+   */
+  projection: Matrix4
 }
 
 const projection = new Matrix4()
 
+export function emptyLightView(): LightView {
+  return { frustum: new Frustum(), focus: new Vector3(), projection: new Matrix4() }
+}
+
 /** The view for this frame, from a camera whose matrices are current. */
-export function lightViewOf(camera: Camera, focus: Vector3, into: LightView = { frustum: new Frustum(), focus: new Vector3() }): LightView {
+export function lightViewOf(camera: Camera, focus: Vector3, into: LightView = emptyLightView()): LightView {
   camera.updateMatrixWorld()
   projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
   into.frustum.setFromProjectionMatrix(projection)
   into.focus.copy(focus)
+  into.projection ??= new Matrix4()
+  into.projection.copy(projection)
   return into
+}
+
+/** Whether two views would pick different lights: a different vantage point, or a different zoom. */
+export function lightViewsDiffer(a: Matrix4, b: Matrix4, epsilon = 1e-4): boolean {
+  for (let i = 0; i < 16; i++) {
+    if (Math.abs(a.elements[i]! - b.elements[i]!) > epsilon) return true
+  }
+  return false
 }
 
 /**

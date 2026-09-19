@@ -5273,15 +5273,29 @@ startGameLoop({
 // reach — the scenario form, the save management — has been built by the time it shows.
 titleScreenController.setOpen(true)
 
-// index.html's boot loader has done its job now that the title screen is up. Wait for
-// this frame to actually paint (a bare requestAnimationFrame fires before that paint,
-// so this chains two) before fading it out, then drop it from the DOM.
-requestAnimationFrame(() => requestAnimationFrame(() => {
+// Every catalog model is built and its shaders compiled while the boot loader is
+// still up: doing it later means the first drag of a freshly picked object into the
+// world pays for the compile, which lands as a visible hitch. The loader's bar shows
+// how far along it is, and only then does it fade out.
+void (async () => {
   const bootLoader = document.getElementById('boot-loader')
+  const caption = bootLoader?.querySelector<HTMLElement>('.boot-caption')
+  const bar = bootLoader?.querySelector<HTMLElement>('.boot-bar-fill')
+  try {
+    if (caption) caption.textContent = 'Modelle werden vorbereitet …'
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    await view.warmUpModels((done, total) => {
+      if (bar) bar.style.width = `${Math.round((done / Math.max(1, total)) * 100)}%`
+    })
+  } catch {
+    // A model that refuses to build must not keep the player on the loading screen.
+  }
   if (!bootLoader) return
+  if (bar) bar.style.width = '100%'
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
   bootLoader.addEventListener('transitionend', () => bootLoader.remove(), { once: true })
   bootLoader.classList.add('boot-loader-hide')
-}))
+})()
 
 // Who the session cookie belongs to. Asked once, after everything is wired, and the
 // account bar redraws itself when the answer arrives.

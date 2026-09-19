@@ -1,4 +1,4 @@
-import { rankByView, type LightView } from './lightSelection'
+import { lightViewsDiffer, rankByView, type LightView } from './lightSelection'
 import { AdditiveBlending, Color, DataTexture, Group, InstancedMesh, LinearFilter, MeshBasicMaterial, PlaneGeometry, SphereGeometry, Matrix4, PointLight, SpotLight, Vector3 } from 'three'
 import type { GameSnapshot } from '../game/GameState'
 import { isFestivalOfferActive } from '../game/dayPlan'
@@ -11,8 +11,14 @@ export function nightStrength(minute: number): number {
   return hour < 5 || hour >= 22 ? 1 : hour < 8 ? (8 - hour) / 3 : hour >= 19 ? (hour - 19) / 3 : 0
 }
 
-export const FESTIVAL_LIGHT_BUDGET = 12
-export const FESTIVAL_SPOT_LIGHT_BUDGET = 6
+/**
+ * Real lights are a fixed pool: three's forward renderer pays for each one on every
+ * pixel and changing their number recompiles every shader, so the pool is allocated
+ * once and only ever reassigned. It is sized to cover what a zoomed-out view puts on
+ * screen, which is what the lamps are ranked for.
+ */
+export const FESTIVAL_LIGHT_BUDGET = 24
+export const FESTIVAL_SPOT_LIGHT_BUDGET = 10
 export const WARM_LIGHT_COLOR = 0xffca82
 export const DAYLIGHT_LIGHT_COLOR = 0xf4f8ff
 export const WARM_LIGHT_DISTANCE = 3.5
@@ -74,6 +80,8 @@ export class FestivalLightsView {
   private glowMaterial = new MeshBasicMaterial({ color: 0xffffff, map: glowTexture(), transparent: true, blending: AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
   private sources: LightSource[] = []
   private focus = new Vector3()
+  /** The projection the current light assignment was made for. */
+  private appliedProjection = new Matrix4()
   private view: LightView | null = null
   private viewApplied = false
   private geometry = new SphereGeometry(1, 6, 4)
@@ -196,10 +204,17 @@ export class FestivalLightsView {
   }
   /** The camera's view for this frame; the real lights go to the sources inside it. */
   setView(view: LightView): void {
-    const moved = this.focus.distanceToSquared(view.focus) >= .25
+    // Zooming changes what is on screen without moving the point the camera looks
+    // at, so watching the focus alone left a zoomed-out view lighting the handful
+    // of lamps it had picked while zoomed in. Watch the whole projection.
+    const changed =
+      this.focus.distanceToSquared(view.focus) >= .25 ||
+      lightViewsDiffer(this.appliedProjection, view.projection)
     this.view = view
     this.focus.copy(view.focus)
-    if (moved || !this.viewApplied) this.updateLocalLights()
+    if (!changed && this.viewApplied) return
+    this.appliedProjection.copy(view.projection)
+    this.updateLocalLights()
   }
   private updateLocalLights(): void {
     this.viewApplied = true

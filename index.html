@@ -75,6 +75,19 @@
         text-transform: uppercase;
         color: #efcf86;
       }
+      .boot-bar {
+        width: 220px;
+        height: 8px;
+        background: #22352e;
+        border: 1px solid #3f5a4f;
+        box-shadow: inset 1px 1px #17241f;
+      }
+      .boot-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #c4a45a, #efcf86);
+        transition: width .12s linear;
+      }
       @keyframes boot-spin {
         to { transform: rotate(360deg); }
       }
@@ -88,6 +101,7 @@
       <div class="boot-ring"><div class="boot-mark">H</div></div>
       <div class="boot-title">Headliner Tycoon</div>
       <div class="boot-caption">Wird geladen …</div>
+      <div class="boot-bar"><div class="boot-bar-fill"></div></div>
     </div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>

@@ -84,12 +84,11 @@ import {
   SpriteMaterial,
   TubeGeometry,
   Vector2,
-  Frustum,
   Vector3,
   WebGLRenderer,
   WebGLRenderTarget,
 } from 'three'
-import { BUILDINGS, WORLD_SIZE, isCopyTool, isRoadBuildTool, isTerrainEditTool } from '../game/catalog'
+import { BUILDINGS, BUILDING_KINDS, WORLD_SIZE, isCopyTool, isRoadBuildTool, isTerrainEditTool } from '../game/catalog'
 import type { BlueprintGhost } from '../game/blueprints'
 import type { BuildingKind } from '../game/catalog'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
@@ -147,7 +146,7 @@ import {
   tileShowsWater,
 } from '../game/terrain'
 import { supportGap, tileSupportSolids, isSupportlessKind } from '../game/supportOccupancy'
-import { lightViewOf, type LightView } from './lightSelection'
+import { emptyLightView, lightViewOf, type LightView } from './lightSelection'
 import { attachSupportPosts, DEFAULT_SUPPORT_OFFSETS } from './supports'
 import { wayOverlapsRoadGrade } from '../game/wayElevation'
 import {
@@ -448,7 +447,7 @@ export class WorldView {
   private nightLightBuildingIds: string[] = []
   private readonly stageLightPool: SpotLight[] = []
   /** Where the camera looks this frame — what decides which sources get the real lights. */
-  private readonly lightView: LightView = { frustum: new Frustum(), focus: new Vector3() }
+  private readonly lightView: LightView = emptyLightView()
   private powerView = new PowerView()
   private laserView = new LaserView()
   private festivalEquipmentView = new FestivalEquipmentView()
@@ -1122,6 +1121,65 @@ export class WorldView {
       return current
     }
     return previous + (current - previous) * this.renderAlpha
+  }
+
+  /**
+   * Builds every catalog model once and compiles the shader variants they are drawn
+   * with, including the see-through one the build ghost uses. Without this the first
+   * drag of a newly picked object into the world pays for a shader compile — measured
+   * at some 70 ms, which is exactly the hitch the player feels. Runs in slices so the
+   * loading bar keeps moving.
+   */
+  async warmUpModels(onProgress?: (done: number, total: number) => void): Promise<void> {
+    const kinds = BUILDING_KINDS.filter((kind) => !(LOGISTICS_FACILITY_KINDS as readonly string[]).includes(kind))
+    const facilities = LOGISTICS_FACILITY_KINDS
+    const total = kinds.length + facilities.length + 1
+    const warm = new Group()
+    // Inside the scene so renderer.compile sees it, far below the ground so it is
+    // never drawn into a frame the player sees.
+    warm.position.set(0, -5000, 0)
+    this.scene.add(warm)
+    let done = 0
+    const step = async (): Promise<void> => {
+      done += 1
+      onProgress?.(done, total)
+      if (done % 16 === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    const ghostOf = (model: Group): Group => {
+      model.traverse((object) => {
+        if (!(object instanceof Mesh)) return
+        const material = (object.material as MeshStandardMaterial).clone()
+        material.userData = {}
+        material.transparent = true
+        material.opacity = 0.72
+        material.depthWrite = false
+        object.material = material
+        object.castShadow = false
+      })
+      return model
+    }
+    let retroSample: Group | null = null
+    for (const kind of kinds) {
+      const model = createRetroBuilding(kind)
+      if (model && !retroSample) {
+        retroSample = model
+        warm.add(model, ghostOf(createRetroBuilding(kind)!))
+      }
+      await step()
+    }
+    let facilitySample: Group | null = null
+    for (const kind of facilities) {
+      const model = createLogisticsFacility(kind as LogisticsFacilityKind)
+      if (!facilitySample) {
+        facilitySample = model
+        warm.add(model, ghostOf(createLogisticsFacility(kind as LogisticsFacilityKind)))
+      }
+      await step()
+    }
+    this.renderer.compile(this.scene, this.camera)
+    this.shadersWarmed = true
+    this.scene.remove(warm)
+    await step()
   }
 
   invalidate(): void {
