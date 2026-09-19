@@ -88,6 +88,7 @@ import { BUILDINGS, WORLD_SIZE, isCopyTool, isRoadBuildTool, isTerrainEditTool }
 import type { BlueprintGhost } from '../game/blueprints'
 import type { BuildingKind } from '../game/catalog'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
+import type { RoadCell } from '../game/logistics'
 import { isFestivalOfferActive } from '../game/dayPlan'
 import {
   computeTrackFrame,
@@ -304,9 +305,16 @@ const WALK_BLOCKED_KINDS = new Set<string>([
   'videoWall', 'laserShow', 'fireworkBattery', 'tourBusParking',
 ])
 export type PersonPreviewMode = 'map' | 'front'
+/**
+ * The little window on one person in the info panels. It is drawn by the game's own
+ * renderer — a corner of the main canvas is rendered from the preview camera and
+ * copied over — rather than by a renderer of its own: a second WebGL context would
+ * have to compile every shader and upload every geometry of the scene again, which
+ * on a full site is a stall of seconds the moment someone is clicked.
+ */
 type PersonPreviewSlot = {
   canvas: HTMLCanvasElement
-  renderer: WebGLRenderer
+  context: CanvasRenderingContext2D
   mapCamera: OrthographicCamera
   frontCamera: PerspectiveCamera
   targetId: string | null
@@ -317,6 +325,18 @@ type PersonPreviewSlot = {
 }
 
 export class WorldView {
+  private readonly previewBufferSize = new Vector2()
+  /**
+   * One model per building, kept between rebuilds. A change to the site only
+   * replaces the models it touches — the changed building and whatever stands next
+   * to it, since paths, rails, supports and merged desks are shaped by their
+   * neighbours — instead of throwing every model on the map away and building it
+   * again, which on a full site was a stall of a good fraction of a second.
+   */
+  private buildingModels = new Map<string, { model: Group; key: string }>()
+  /** Set when the ground itself changed: then every model has to be placed afresh. */
+  private buildingModelsStale = true
+  private shadersWarmed = false
   private rideGates = new Group()
   private rideGatePreview = Object.assign(new Group(), {visible:false})
 
@@ -374,6 +394,8 @@ export class WorldView {
   private terrainSurface: Mesh | null = null
   private terrainSurfaceMaterial = createTerrainMaterial()
   private terrainShape: TerrainShape | null = null
+  /** The flattened foundations under the site's structures, as of the last terrain build. */
+  private terrainPadKeys = new Set<string>()
   private actorTerrainHeight = (x: number, z: number, y: number): number => this.terrainShape?.actorHeight(x, z, y) ?? y
   private buildings = new Group()
   private facadeReveal: FacadeReveal | null = null
@@ -874,6 +896,16 @@ export class WorldView {
     if (fingerprint !== this.buildingFingerprint) {
       this.buildingFingerprint = fingerprint
       this.rebuildBuildings(snapshot.buildings)
+      // Shaders compile the first time something is drawn. Whatever the main camera
+      // has never had in view is still uncompiled when a preview camera looks at it,
+      // and that compile used to land as a stall on the click that opened the panel.
+      // Compiling the scene once, while the site is still loading, moves it to a
+      // moment nobody is waiting for; anything built later is drawn by the main
+      // camera as it is placed, and compiles then.
+      if (!this.shadersWarmed) {
+        this.shadersWarmed = true
+        this.renderer.compile(this.scene, this.camera)
+      }
       this.wasteBins = snapshot.buildings.filter(
         (building) => isWasteBin(building.kind),
       )
@@ -1037,6 +1069,7 @@ export class WorldView {
   invalidate(): void {
     this.terrainFingerprint = ''
     this.buildingFingerprint = ''
+    this.buildingModelsStale = true
     this.coasterFingerprint = ''
     this.lastGroundRevision = -1
     this.cachedFootwayFingerprint = ''
@@ -1388,13 +1421,12 @@ export class WorldView {
     this.zoomPersonPreview(this.visitorPreview, factor)
   }
 
-  private createPersonPreview(canvas: HTMLCanvasElement, kind: PersonPreviewSlot['kind']): PersonPreviewSlot {
-    const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true })
-    renderer.shadowMap.enabled = false
-    renderer.debug.checkShaderErrors = false
+  private createPersonPreview(canvas: HTMLCanvasElement, kind: PersonPreviewSlot['kind']): PersonPreviewSlot | null {
+    const context = canvas.getContext('2d')
+    if (!context) return null
     return {
       canvas,
-      renderer,
+      context,
       mapCamera: new OrthographicCamera(),
       frontCamera: new PerspectiveCamera(36, 1, 0.08, 48),
       targetId: null,
@@ -1406,7 +1438,7 @@ export class WorldView {
   }
 
   private disposePersonPreview(slot: PersonPreviewSlot | null): void {
-    slot?.renderer.dispose()
+    if (slot) slot.context.clearRect(0, 0, slot.canvas.width, slot.canvas.height)
   }
 
   private zoomPersonPreview(slot: PersonPreviewSlot | null, factor: number): void {
@@ -1451,20 +1483,16 @@ export class WorldView {
   }
 
   private renderPersonPreview(slot: PersonPreviewSlot | null, snapshot: Readonly<GameSnapshot>): void {
-    if (!slot?.targetId) return
+    const targetId = slot?.targetId
+    if (!slot || !targetId) return
     const pose = slot.kind === 'visitor'
-      ? this.resolveVisitorPreviewPose(slot.targetId, snapshot)
-      : this.resolveStaffPreviewPose(slot.targetId, snapshot)
+      ? this.resolveVisitorPreviewPose(targetId, snapshot)
+      : this.resolveStaffPreviewPose(targetId, snapshot)
     if (!pose) return
-    const { canvas, renderer } = slot
+    const { canvas } = slot
     const width = canvas.clientWidth
     const height = canvas.clientHeight
     if (width === 0 || height === 0) return
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
-    if (canvas.width !== Math.round(width * pixelRatio) || canvas.height !== Math.round(height * pixelRatio)) {
-      renderer.setPixelRatio(pixelRatio)
-      renderer.setSize(width, height, false)
-    }
     const aspect = width / height
     if (slot.mode === 'front') {
       const camera = slot.frontCamera
@@ -1481,7 +1509,7 @@ export class WorldView {
       )
       camera.lookAt(pose.x, bodyY - 0.04, pose.z)
       camera.updateProjectionMatrix()
-      renderer.render(this.scene, camera)
+      this.blitPreview(slot, camera)
       return
     }
     const camera = slot.mapCamera
@@ -1500,7 +1528,37 @@ export class WorldView {
     )
     camera.lookAt(pose.x, 0, pose.z)
     camera.updateProjectionMatrix()
+    this.blitPreview(slot, camera)
+  }
+
+  /**
+   * Renders the preview camera into the bottom-left corner of the main canvas and
+   * copies that corner into the preview's own canvas. It runs before the frame
+   * proper, which then paints over the corner, so nothing of it is ever seen on the
+   * map. Shadow maps are not redrawn for it — the frame's own are good enough.
+   */
+  private blitPreview(slot: PersonPreviewSlot, camera: OrthographicCamera | PerspectiveCamera): void {
+    const renderer = this.renderer
+    const ratio = renderer.getPixelRatio()
+    const buffer = renderer.getDrawingBufferSize(this.previewBufferSize)
+    const width = Math.min(Math.round(slot.canvas.clientWidth * ratio), buffer.x)
+    const height = Math.min(Math.round(slot.canvas.clientHeight * ratio), buffer.y)
+    if (width <= 0 || height <= 0) return
+    if (slot.canvas.width !== width || slot.canvas.height !== height) {
+      slot.canvas.width = width
+      slot.canvas.height = height
+    }
+    const shadowAutoUpdate = renderer.shadowMap.autoUpdate
+    renderer.shadowMap.autoUpdate = false
+    renderer.setScissorTest(true)
+    renderer.setScissor(0, 0, width / ratio, height / ratio)
+    renderer.setViewport(0, 0, width / ratio, height / ratio)
     renderer.render(this.scene, camera)
+    renderer.setScissorTest(false)
+    renderer.setViewport(0, 0, buffer.x / ratio, buffer.y / ratio)
+    renderer.shadowMap.autoUpdate = shadowAutoUpdate
+    // GL's corner is the bottom-left; the copy reads it in image coordinates.
+    slot.context.drawImage(renderer.domElement, 0, buffer.y - height, width, height, 0, 0, width, height)
   }
 
   followVisitor(visitorId: string | null): void {
@@ -1828,7 +1886,10 @@ export class WorldView {
     }
     this.terrainFingerprint = fingerprint
     this.terrainShape = new TerrainShape(snapshot, pads)
-    this.buildingFingerprint = '' // Scenery on neighboring slopes follows the rebuilt surface.
+    this.terrainPadKeys = pads
+    // Scenery and supports follow the rebuilt surface. The models read the ground
+    // under and around them into their keys, so only those near the change rebuild.
+    this.buildingFingerprint = ''
     this.rebuildTerrain(snapshot)
   }
 
@@ -1912,7 +1973,14 @@ export class WorldView {
 
   private buildingFingerprintOf(items: readonly PlacedBuilding[]): string {
     let hash = items.length + 1
-    for (const item of items) {
+    for (const item of items) hash = this.hashBuilding(hash, item)
+    return `${items.length}:${hash}`
+  }
+
+  /** Everything about one building that its model is built from, folded into a hash. */
+  private hashBuilding(seed: number, item: PlacedBuilding): number {
+    let hash = seed
+    {
       hash = Math.imul(hash, 33) + item.x + item.z * 4096
       hash = Math.imul(hash, 33) + Math.round(item.elevation * 8)
       hash = Math.imul(hash, 33) + item.rotation
@@ -1931,8 +1999,52 @@ export class WorldView {
       hash = Math.imul(hash, 33) + (item.wayType ? [...item.wayType].reduce((n, c) => n + c.charCodeAt(0), 0) : 0)
       if (item.stageDesign) for (const c of JSON.stringify(item.stageDesign)) hash = Math.imul(hash,33) + c.charCodeAt(0)
       hash = Math.imul(hash, 33) + item.kind.length + item.kind.charCodeAt(0)
+      hash = Math.imul(hash, 33) + (item.rideType ? item.rideType.length : 0)
     }
-    return `${items.length}:${hash}`
+    return hash
+  }
+
+  /**
+   * What a building's model depends on besides the building itself: the neighbours
+   * whose presence shapes it, the roads on and beside its tiles, and the ground its
+   * tile was given. Any of it changing means the model is built again.
+   */
+  private buildingContextKey(
+    item: PlacedBuilding,
+    byTile: ReadonlyMap<string, readonly PlacedBuilding[]>,
+    roadsByTile: ReadonlyMap<string, readonly RoadCell[]>,
+  ): number {
+    const footprint = stageSize(item.stageDesign, item.rotation)
+    let hash = 7
+    for (let x = item.x - 1; x <= item.x + Math.ceil(footprint.width); x++) {
+      for (let z = item.z - 1; z <= item.z + Math.ceil(footprint.depth); z++) {
+        const tile = `${x},${z}`
+        for (const other of byTile.get(tile) ?? []) {
+          if (other.id === item.id) continue
+          hash = this.hashBuilding(hash, other)
+        }
+        for (const road of roadsByTile.get(tile) ?? []) {
+          hash = Math.imul(hash, 33) + road.x + road.z * 4096
+          hash = Math.imul(hash, 33) + Math.round((road.elevation ?? -1) * 8) + Math.round((road.roadSlope ?? 0) * 8) * 64 + (road.roadSlopeDirection ?? 0)
+        }
+      }
+    }
+    // The ground under and around it: heights and flattened foundations decide where
+    // supports reach and how scenery sits, and both move when a neighbour is built.
+    if (this.currentSnapshot) {
+      for (let x = item.x - 1; x <= item.x + Math.ceil(footprint.width); x++) {
+        for (let z = item.z - 1; z <= item.z + Math.ceil(footprint.depth); z++) {
+          hash = Math.imul(hash, 33) + Math.round(getTerrainHeight(this.currentSnapshot.terrain, x, z) * 8)
+          hash = Math.imul(hash, 33) + (this.terrainPadKeys.has(`${x},${z}`) ? 5 : 2)
+        }
+      }
+    }
+    const ground = this.currentSnapshot?.festival.infrastructure.ground[`${item.x},${item.z}`]
+    if (ground) {
+      hash = Math.imul(hash, 33) + (ground.compacted ? 3 : 1)
+      for (const c of `${ground.footway ?? ''}|${ground.surface ?? ''}|${ground.roadway ?? ''}`) hash = Math.imul(hash, 33) + c.charCodeAt(0)
+    }
+    return hash
   }
 
   /** Zwei direkt benachbarte FOH-Pulte bilden einen grossen FOH-Stand: Sound- und Lichtpult nebeneinander. */
@@ -1958,13 +2070,37 @@ export class WorldView {
       this.rideGates.add(gate)
     }
     this.rideGates.add(batchRetroBuildings(this.rideGates))
-    disposeChildren(this.buildings)
-    this.soundWaveGroups = []
-    this.nightLightMaterials = []
-    this.nightLightBuildingIds = []
+    if (this.buildingModelsStale) {
+      disposeChildren(this.buildings)
+      this.buildingModels.clear()
+      this.buildingModelsStale = false
+    } else if (this.staticBuildingBatches) {
+      // The instanced batches copy the models' static meshes; they are rebuilt below.
+      // Their geometries and material belong to the models, so only the instance
+      // buffers go.
+      for (const batch of this.staticBuildingBatches.children) if (batch instanceof InstancedMesh) batch.dispose()
+      this.buildings.remove(this.staticBuildingBatches)
+    }
     const paths = new Map(items.filter(b => b.kind === 'path').map(b => [b.id, { x: b.x, z: b.z, elevation: b.elevation, slope: b.pathSlope ?? 0, direction: b.pathSlopeDirection ?? 0, road: false } satisfies WayStructureCell]))
-    const wayIndex = indexWayStructures([...paths.values(), ...(this.currentSnapshot?.logistics.roadCells ?? []).map(r => ({ x:r.x, z:r.z, elevation:r.elevation ?? getTerrainHeight(this.currentSnapshot!.terrain,r.x,r.z), slope:r.roadSlope ?? 0, direction:r.roadSlopeDirection ?? 0, road:true }))])
+    const roadCells = this.currentSnapshot?.logistics.roadCells ?? []
+    const wayIndex = indexWayStructures([...paths.values(), ...roadCells.map(r => ({ x:r.x, z:r.z, elevation:r.elevation ?? getTerrainHeight(this.currentSnapshot!.terrain,r.x,r.z), slope:r.roadSlope ?? 0, direction:r.roadSlopeDirection ?? 0, road:true }))])
     const fohVariants = this.fohVariants(items)
+    const byTile = new Map<string, PlacedBuilding[]>()
+    for (const item of items) {
+      const footprint = stageSize(item.stageDesign, item.rotation)
+      for (let x = item.x; x < item.x + Math.ceil(footprint.width); x++) for (let z = item.z; z < item.z + Math.ceil(footprint.depth); z++) {
+        const tile = `${x},${z}`
+        const list = byTile.get(tile)
+        if (list) list.push(item); else byTile.set(tile, [item])
+      }
+    }
+    const roadsByTile = new Map<string, RoadCell[]>()
+    for (const road of roadCells) {
+      const tile = `${road.x},${road.z}`
+      const list = roadsByTile.get(tile)
+      if (list) list.push(road); else roadsByTile.set(tile, [road])
+    }
+    const seen = new Set<string>()
     items.forEach((item) => {
       if (
         item.kind === 'ambulanceGarage' ||
@@ -1974,6 +2110,14 @@ export class WorldView {
         item.kind === 'busStop'
       ) {
         return
+      }
+      seen.add(item.id)
+      const key = `${this.hashBuilding(1, item)}:${this.buildingContextKey(item, byTile, roadsByTile)}`
+      const existing = this.buildingModels.get(item.id)
+      if (existing?.key === key) return
+      if (existing) {
+        this.buildings.remove(existing.model)
+        disposeObject3D(existing.model)
       }
       const model = item.rideType === 'bungee' ? createBungeeModel(item.bungeeHeight ?? 20) : item.stageDesign
         ? createStageModel(item.stageDesign)
@@ -2031,16 +2175,31 @@ export class WorldView {
       this.attachOccupancySupports(model, item)
       model.userData.isStage = item.kind === 'stage'
       model.userData.buildingId = item.id
+      this.buildingModels.set(item.id, { model, key })
+      this.buildings.add(model)
+    })
+    for (const [id, entry] of this.buildingModels) {
+      if (seen.has(id)) continue
+      this.buildings.remove(entry.model)
+      disposeObject3D(entry.model)
+      this.buildingModels.delete(id)
+    }
+    // The lists the frame reads every tick are drawn from the models that are there
+    // now, in the order the site lists them.
+    this.soundWaveGroups = []
+    this.nightLightMaterials = []
+    this.nightLightBuildingIds = []
+    for (const item of items) {
+      const model = this.buildingModels.get(item.id)?.model
+      if (!model) continue
       const soundWaves = model.userData.soundWaves as Group | undefined
       if (soundWaves) this.soundWaveGroups.push(soundWaves)
-      const nightLightMaterial = model.userData
-        .nightLightMaterial as MeshStandardMaterial | undefined
+      const nightLightMaterial = model.userData.nightLightMaterial as MeshStandardMaterial | undefined
       if (nightLightMaterial) {
         this.nightLightMaterials.push(nightLightMaterial)
         this.nightLightBuildingIds.push(item.id)
       }
-      this.buildings.add(model)
-    })
+    }
     this.staticBuildingBatches = batchRetroBuildings(this.buildings)
     this.buildings.add(this.staticBuildingBatches)
     for (const batch of this.staticBuildingBatches.children) {
