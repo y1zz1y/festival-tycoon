@@ -8,6 +8,8 @@ export const WARN_AFTER_MS = 5 * 60 * 1000
 let warningsOn = true
 let editRevisionOf: () => number = () => 0
 let gameIsRunning: () => boolean = () => false
+/** A joined guest holds no save of their own; the host owns the world. */
+let isGuest: () => boolean = () => false
 let clock: () => number = () => Date.now()
 let savedRevision = 0
 let savedAt = clock()
@@ -17,11 +19,14 @@ export function trackUnsavedWork(sources: {
   editRevision: () => number
   /** False while only the title screen is up and there is nothing to lose. */
   running: () => boolean
+  /** True for a multiplayer guest: their optimistic builds are not theirs to save. */
+  guest?: () => boolean
   /** Overridable so the rule can be tested without waiting five real minutes. */
   now?: () => number
 }): void {
   editRevisionOf = sources.editRevision
   gameIsRunning = sources.running
+  isGuest = sources.guest ?? (() => false)
   clock = sources.now ?? (() => Date.now())
   markWorkSaved()
 }
@@ -34,7 +39,7 @@ export function markWorkSaved(): void {
 
 /** Changes since the last save, or a session that has simply been running unsaved for a while. */
 export function hasUnsavedWork(): boolean {
-  if (!gameIsRunning()) return false
+  if (!gameIsRunning() || isGuest()) return false
   if (editRevisionOf() !== savedRevision) return true
   return clock() - savedAt > WARN_AFTER_MS
 }

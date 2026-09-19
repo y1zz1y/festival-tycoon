@@ -4,6 +4,28 @@ Der **Host** simuliert. Clients schicken `GameCommand`s (inkl. Bauhöhe und
 Drehung) und empfangen periodische Weltdeltas. Alle Teilnehmer brauchen
 dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
 
+## Raumleben
+
+Hosten hat kein Zeitlimit. Ein Raum lebt, bis der Host ihn beendet — das heißt:
+bis eine `leave`-Nachricht kommt. Ein geschlossener Socket ist kein Ende,
+sondern ein Aussetzer.
+
+- **Keepalive:** Der Server pingt alle 25 s und trennt Sockets, die die vorige
+  Runde nicht beantwortet haben. Browser antworten selbst, der Client braucht
+  dafür nichts. Ohne das schlief eine Verbindung ein, sobald ein Host allein im
+  Raum wartete und gar nichts sendete — Router und Proxys warfen sie als untätig
+  weg, und der Raum starb mit ihr.
+- **Host weg:** Der Raum bleibt, `hostAwaySince` wird gesetzt, Gäste behalten
+  ihre Welt und bekommen `players` mit `hostAway: true`. Bauen geht erst wieder,
+  wenn der Host zurück ist.
+- **Zurückkommen:** `resume` (`code`, `playerId`, `name`) holt den Host auf
+  seinen alten Sitz, sodass Gäste weiter über ihn laufen. Jeder andere wird wie
+  ein neuer Beitritt behandelt. Der Client wählt selbst nach, mit Backoff bis
+  15 s und ohne Versuchsgrenze.
+- **Aufräumen:** Nur ein Raum, in dem niemand mehr sitzt und dessen Host seit
+  30 Minuten weg ist, wird verworfen. Das ist ein Sicherheitsnetz gegen
+  liegengebliebene Codes, keine Sitzungsdauer.
+
 ## Wo finden
 
 | Aufgabe | Datei | Einstieg |
@@ -129,13 +151,23 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
 - Clients dürfen Construction optimistic zeigen, aber der Host bleibt
   maßgeblich (`resolveOptimisticCommand`, Reconciliation).
 - Besucher feldweise updaten; unveränderte Bereiche nicht erneut senden.
+  Fließkommafelder gehen gerundet über die Leitung (`WIRE_DIGITS` und
+  `WIRE_DIGITS_NESTED` in `codec.ts`): Position auf drei, weiche Werte wie
+  `needs` und `alcoholDesire` auf zwei Stellen. Ungerundet wackelte jeder Wert
+  in der letzten Stelle, sodass jeder Besucher in jedem Update als geändert
+  galt — `needs` und `alcoholDesire` allein waren 95 % eines Deltas. Nur der
+  Host simuliert, Clients zeigen diese Werte bloß an, und der Desync-Hash hängt
+  an den ganzzahligen Zellkoordinaten. Ein neues Fließkommafeld gehört in die
+  Tabelle, sonst fällt es auf volle Genauigkeit zurück.
 - Determinismus: gleicher Tick + gleiche Commands → gleicher `hashSim`.
-- Host muss geöffnet bleiben.
+- Host muss geöffnet bleiben, überlebt aber einen Verbindungsabriss (siehe
+  „Raumleben").
 
 ## Tests
 
 `tests/regression.ts` (echte WebSockets, zwei Clients, später Join,
-Pause/Resume, Deltas). Ride-Reconciliation: `tests/rideAccess.ts`.
+Pause/Resume, Deltas, Host-Abriss mit Wiederaufnahme auf demselben Sitz, Sweep
+verwaister Räume). Ride-Reconciliation: `tests/rideAccess.ts`.
 
 ## Bei Änderungen dieses Dokument
 

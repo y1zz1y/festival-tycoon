@@ -32,17 +32,18 @@ import { encodeSaveText, decodeSaveText } from '../src/game/saveText'
 import { testEnvironments } from './environments'
 import { testSupplyChain } from './supplyChain'
 import { testUnsavedWork } from './unsavedWork'
+import { testHotkeys } from './hotkeys'
 import { testWayElevation } from './wayElevation'
 import assert from 'node:assert/strict'
 import { performance } from 'node:perf_hooks'
 import { GameState } from '../src/game/GameState'
 import { findWeightedPath, createPathScratch } from '../src/game/pathfinding'
-import { packWorld } from '../src/net/codec'
+import { packWorld, roundForWire, WIRE_DIGITS, WIRE_DIGITS_NESTED } from '../src/net/codec'
 import { WorldUpdates } from '../src/net/worldUpdates'
 import { MultiplayerSession } from '../src/net/session'
 import { enableMultiplayerCommands } from '../src/net/bind'
 import { WebSocket, WebSocketServer } from 'ws'
-import { attachMultiplayer } from '../server/rooms'
+import { attachMultiplayer, roomsForTest } from '../server/rooms'
 import type { GameCommand } from '../src/net/protocol'
 import { scenePixelRatio } from '../src/view/renderResolution'
 import { testFestival } from './festival'
@@ -110,6 +111,8 @@ testBrowserSaves(fixture)
 console.log('PASS local slots and quicksave keep visitors and buildings; listing ignores corrupt worlds')
 testUnsavedWork(fixture)
 console.log('PASS unsaved work is noticed on edits and after five quiet minutes')
+testHotkeys()
+console.log('PASS hotkeys rebind, keep one key per action and survive broken storage')
 await testBlueprintLibraryRoundtrip()
 console.log('PASS blueprint library roundtrip stays out of SAVE_KEY')
 await testServerSaveClient()
@@ -431,6 +434,35 @@ test('simulation is independent of render frame partition at all speeds', () => 
   }
 })
 
+/**
+ * The host's world as the wire carries it. Visitor floats travel at protocol
+ * precision, so a client cannot be byte-identical to the host any more — it is
+ * identical to what the protocol promised to send, which is what these tests
+ * check. Structure, arrivals, departures and every patched field still have to
+ * line up exactly.
+ */
+function asWire(game: GameState): unknown {
+  const world = JSON.parse(JSON.stringify(packWorld(game.snapshot)))
+  for (const visitor of world.visitors as Record<string, unknown>[]) {
+    for (const key of Object.keys(visitor)) {
+      const digits = WIRE_DIGITS.get(key)
+      const value = visitor[key]
+      if (digits !== undefined && typeof value === 'number') {
+        visitor[key] = roundForWire(value, digits)
+        continue
+      }
+      const nested = WIRE_DIGITS_NESTED.get(key)
+      if (nested === undefined || value === null || typeof value !== 'object') continue
+      const members = value as Record<string, unknown>
+      for (const name of Object.keys(members)) {
+        const member = members[name]
+        if (typeof member === 'number') members[name] = roundForWire(member, nested)
+      }
+    }
+  }
+  return world
+}
+
 test('authoritative deltas preserve nested state, arrivals, departures and client tools', () => {
   const host = fixture(), client = new GameState()
   client.networkMode = 'client'
@@ -447,7 +479,7 @@ test('authoritative deltas preserve nested state, arrivals, departures and clien
     const before = JSON.stringify(packWorld(client.snapshot))
     client.tick(0.3)
     assert.equal(JSON.stringify(packWorld(client.snapshot)), before)
-    assert.deepEqual(JSON.parse(JSON.stringify(packWorld(client.snapshot))), JSON.parse(JSON.stringify(packWorld(host.snapshot))))
+    assert.deepEqual(JSON.parse(JSON.stringify(packWorld(client.snapshot))), asWire(host))
   }
   const idle = JSON.parse(updates.encode(packWorld(host.snapshot)))
   assert.deepEqual(idle.world, {})
@@ -663,9 +695,36 @@ try {
   host.tick(0.1); host.tick(0.1); hs.tick(0.2)
   await until(() => client.snapshot.simTick === host.snapshot.simTick && late.snapshot.simTick === host.snapshot.simTick)
   for (const game of [client, late]) {
-    assert.deepEqual(JSON.parse(JSON.stringify(packWorld(game.snapshot))), JSON.parse(JSON.stringify(packWorld(host.snapshot))))
+    assert.deepEqual(JSON.parse(JSON.stringify(packWorld(game.snapshot))), asWire(host))
   }
   console.log('PASS real WebSocket host, commands, two clients, late join and shared delta baseline')
+
+  // Hosting used to end on the first hiccup: the room was deleted the moment the
+  // host's socket closed, and nothing ever dialled back.
+  const guestsBefore = client.snapshot.visitors.length
+  const code = hs.status.code
+  const seat = hs.status.playerId
+  ;(hs as any).socket.close()
+  await until(() => !hs.status.connected)
+  assert.ok(roomsForTest.rooms.has(code), 'the room outlives the host connection')
+  assert.equal(cs.status.connected, true, 'a guest keeps its seat while the host is away')
+  assert.equal(client.snapshot.visitors.length, guestsBefore, 'and keeps the world it was given')
+  await until(() => hs.status.connected)
+  assert.equal(hs.status.code, code, 'the host comes back into the same room')
+  assert.equal(hs.status.playerId, seat, 'on the same seat, so guests still route through it')
+  assert.equal(host.networkMode, 'host')
+  client.updateEntryPrice(33)
+  await until(() => host.snapshot.entryPrice === 33)
+  console.log('PASS a dropped host keeps its room and reconnects into the same seat')
+
+  // Only saying so ends it. The sweep is what stops a room nobody came back to
+  // from keeping its code for good.
+  const abandoned = roomsForTest.rooms.get(code)!
+  abandoned.clients.clear()
+  abandoned.hostAwaySince = Date.now() - (roomsForTest.ABANDONED_MINUTES + 1) * 60_000
+  assert.deepEqual(roomsForTest.sweepAbandonedRooms(), [code])
+  assert.equal(roomsForTest.rooms.has(code), false)
+  console.log('PASS an empty room whose host never returned is swept')
 } finally {
   sessions.forEach(session => session.disconnect())
   wss.clients.forEach(socket => socket.terminate())

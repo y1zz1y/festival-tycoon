@@ -31,6 +31,7 @@ import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financ
 import { goalName, goalProgressText } from './game/scenarioGoals'
 import { refreshAccount } from './accounts'
 import { installUnsavedWorkGuard, setUnsavedWarnings, trackUnsavedWork } from './ui/unsavedWork'
+import { actionForEvent, HOTKEYS, hotkeyBindings, hotkeyLabel, isBindableCode, loadHotkeys, resetHotkeys, setHotkey, type HotkeyAction } from './ui/hotkeys'
 import type { BuildingKind, Tool } from './game/catalog'
 import type { PlacementPreviewResult } from './game/placementPreview'
 import {
@@ -5119,33 +5120,48 @@ window.addEventListener('keydown', (event) => {
     setFestivalWalk(false)
     return
   }
-  if (view.isWalkMode() && event.code !== 'Space') return
-  if ((event.key >= '1' && event.key <= '9') || event.key === '0') {
-    const allTools: Tool[] = [
-      'path',
-      'food',
-      'toilet',
-      'ride',
-      'alcohol',
-      'securityGate',
-      'camping',
-      'bulldoze',
-      'inspect',
-    ]
-    const tool = event.key === '0' ? 'coaster' : allTools[Number(event.key) - 1]
-    if (tool === 'coaster') openCoasterBuilder()
-    else if (tool) game.setTool(tool)
-  } else if (event.key.toLowerCase() === 'q') {
+  const action = actionForEvent(event)
+  if (view.isWalkMode() && action !== 'togglePause') return
+  // Path editing keeps its own arrow and enter keys: they belong to the segment
+  // being drawn, not to the world, and are not part of the rebindable set.
+  if (event.key === 'ArrowLeft' && pathEditorActive) {
+    rotatePathDirection(-1)
+    return
+  }
+  if (event.key === 'ArrowRight' && pathEditorActive) {
+    rotatePathDirection(1)
+    return
+  }
+  if (event.key === 'Enter' && pathEditorActive) {
+    buildNextPathSegment()
+    return
+  }
+  if (event.key === 'Backspace' && pathEditorActive) {
+    event.preventDefault()
+    undoLastPathSegment()
+    return
+  }
+  const toolFor: Partial<Record<HotkeyAction, Tool>> = {
+    toolPath: 'path', toolFood: 'food', toolToilet: 'toilet', toolRide: 'ride',
+    toolAlcohol: 'alcohol', toolSecurityGate: 'securityGate', toolCamping: 'camping',
+    toolBulldoze: 'bulldoze', toolInspect: 'inspect',
+  }
+  const tool = action ? toolFor[action] : undefined
+  if (tool) {
+    game.setTool(tool)
+  } else if (action === 'toolCoaster') {
+    openCoasterBuilder()
+  } else if (action === 'cameraLeft') {
     view.rotate(-1)
     cameraQuarter = (cameraQuarter + 3) % 4
     updatePathEditor()
     updateCoasterBuilder()
-  } else if (event.key.toLowerCase() === 'e') {
+  } else if (action === 'cameraRight') {
     view.rotate(1)
     cameraQuarter = (cameraQuarter + 1) % 4
     updatePathEditor()
     updateCoasterBuilder()
-  } else if (event.key.toLowerCase() === 'r') {
+  } else if (action === 'rotateBuild') {
     if (pathEditorActive) rotatePathDirection(1)
     else if (game.snapshot.selectedTool === 'wasteDepot' && hoveredCell) {
       // Several roads can border the same field; R steps clockwise through only the ones
@@ -5156,20 +5172,11 @@ window.addEventListener('keydown', (event) => {
       game.rotateBuild()
       updateCopyPreview(hoveredCell)
     }
-  } else if (event.key === 'ArrowLeft' && pathEditorActive) {
-    rotatePathDirection(-1)
-  } else if (event.key === 'ArrowRight' && pathEditorActive) {
-    rotatePathDirection(1)
-  } else if (event.key === 'Enter' && pathEditorActive) {
-    buildNextPathSegment()
-  } else if (event.key === 'Backspace' && pathEditorActive) {
-    event.preventDefault()
-    undoLastPathSegment()
-  } else if (event.key === 'PageUp') {
+  } else if (action === 'elevationUp') {
     game.adjustBuildElevation(1)
-  } else if (event.key === 'PageDown') {
+  } else if (action === 'elevationDown') {
     game.adjustBuildElevation(-1)
-  } else if (event.code === 'Space') {
+  } else if (action === 'togglePause') {
     event.preventDefault()
     game.setSpeed(game.snapshot.speed === 0 ? 1 : 0)
   }
@@ -5245,8 +5252,69 @@ new ResizeObserver(syncDebugViewGap).observe(statusOverlay)
 trackUnsavedWork({
   editRevision: () => game.editRevision,
   running: () => !titleScreenController.isOpen(),
+  guest: () => multiplayer.status.mode === 'client',
 })
 installUnsavedWorkGuard()
+
+// Rebindable keys. The list is rebuilt rather than patched: it is sixteen rows,
+// and a binding can clear another one, so redrawing is simpler than tracking it.
+const hotkeyList = requireElement<HTMLDivElement>('#hotkey-list')
+let listeningFor: HotkeyAction | null = null
+const renderHotkeys = (): void => {
+  const bindings = hotkeyBindings()
+  let group = ''
+  hotkeyList.replaceChildren(...HOTKEYS.flatMap((key) => {
+    const rows: HTMLElement[] = []
+    if (key.group !== group) {
+      group = key.group
+      const heading = document.createElement('div')
+      heading.className = 'hotkey-group'
+      heading.textContent = group
+      rows.push(heading)
+    }
+    const row = document.createElement('div')
+    row.className = 'hotkey-row'
+    row.title = key.hint
+    const label = document.createElement('span')
+    label.textContent = key.label
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'hotkey-key'
+    const code = bindings.get(key.action) ?? ''
+    button.textContent = listeningFor === key.action
+      ? 'Taste drücken …'
+      : code ? hotkeyLabel(code) : 'Nicht belegt'
+    button.classList.toggle('listening', listeningFor === key.action)
+    button.classList.toggle('unbound', !code && listeningFor !== key.action)
+    button.addEventListener('click', () => {
+      listeningFor = listeningFor === key.action ? null : key.action
+      renderHotkeys()
+    })
+    row.append(label, button)
+    rows.push(row)
+    return rows
+  }))
+}
+loadHotkeys()
+renderHotkeys()
+requireElement<HTMLButtonElement>('#reset-hotkeys').addEventListener('click', () => {
+  listeningFor = null
+  resetHotkeys()
+  renderHotkeys()
+})
+// Capture, so the key being bound does not also fire whatever it is bound to.
+window.addEventListener('keydown', (event) => {
+  if (!listeningFor) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  if (event.code === 'Escape') {
+    listeningFor = null
+  } else if (isBindableCode(event.code)) {
+    setHotkey(listeningFor, event.code)
+    listeningFor = null
+  }
+  renderHotkeys()
+}, true)
 
 const UNSAVED_WARNING_KEY = 'festival-unsaved-warning'
 const unsavedWarningToggle = requireElement<HTMLInputElement>('#setting-unsaved-warning')

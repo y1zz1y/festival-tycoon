@@ -5123,3 +5123,48 @@ input[type='range']:disabled {
 @media (prefers-reduced-motion: reduce) {
   .load-overlay-ring { animation: none; }
 }
+
+/* Rebindable keys in the settings window. The list can run to sixteen rows, so it
+   scrolls on its own rather than pushing the rest of the panel out of reach. */
+.hotkey-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 228px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.hotkey-group {
+  margin-top: 6px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  opacity: 0.7;
+}
+
+.hotkey-group:first-child { margin-top: 0; }
+
+.hotkey-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.hotkey-key {
+  min-width: 92px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  text-align: center;
+}
+
+/* Waiting for the next key press, so the row says what it wants. */
+.hotkey-key.listening {
+  background: #efcf86;
+  color: #1c2b24;
+}
+
+.hotkey-key.unbound { opacity: 0.55; }

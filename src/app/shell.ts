@@ -91,6 +91,7 @@ export function mountAppShell(app: HTMLDivElement): void {
         <button id="save-slots" title="Gespeicherte Spielstände öffnen und verwalten">📂 Spielstand laden</button>
         <button id="copy-save" title="Spielstand als Base64 kopieren">⧉ Als Text kopieren</button>
         <button id="paste-save" title="Base64-Spielstand einfügen">📋 Text einfügen</button>
+        <button id="open-title-screen" title="Die Partie verlassen und zum Startbildschirm gehen">🏠 Zum Startbildschirm zurück</button>
       </div>
     </nav>
     <aside id="demand-debug-panel" class="demand-debug-panel panel" hidden>
@@ -126,7 +127,10 @@ export function mountAppShell(app: HTMLDivElement): void {
       <label class="scenario-check"><input id="setting-stock-bars" type="checkbox" /><span>Füllstände über Ständen</span></label>
       <label class="scenario-check"><input id="setting-unsaved-warning" type="checkbox" /><span>Vor ungespeichertem Verlassen warnen</span></label>
       <label class="scenario-field"><span>Autospeichern</span><select id="setting-autosave">${AUTOSAVE_INTERVALS.map((option) => `<option value="${option.minutes}">${option.label}</option>`).join('')}</select></label>
-      <button id="open-title-screen" type="button">🏠 Titelbildschirm</button>
+      <h3 class="scenario-heading">Tastenbelegung</h3>
+      <p class="scenario-hint">Auf eine Taste klicken und die neue drücken. Eine Taste gehört immer nur einer Aktion.</p>
+      <div id="hotkey-list" class="hotkey-list"></div>
+      <button id="reset-hotkeys" type="button">↺ Standardbelegung</button>
       <h3 class="scenario-heading">Dieses Festival</h3>
       <p class="scenario-hint">Gelände und Publikum werden beim Start festgelegt und stehen für die ganze Partie fest. Ein neues Festival startest du über den Titelbildschirm.</p>
       <dl id="scenario-summary" class="scenario-summary"></dl>

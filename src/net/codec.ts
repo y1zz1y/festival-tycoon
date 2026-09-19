@@ -2,6 +2,69 @@ import type { GameSnapshot, Visitor } from '../game/GameState'
 import { hashStringSeed } from '../game/pathfinding'
 import type { PackedVisitor, SimSnapshot, WorldSnapshot } from './protocol'
 
+/**
+ * How exact a visitor field has to be on the wire. These drift by a fraction of
+ * a fraction every tick, and at full double precision that made every visitor
+ * look changed on every update: needs and alcoholDesire alone were 95% of a
+ * delta. Rounded, most of them stop changing at all and drop out of the patch.
+ *
+ * Only the host simulates — GameState.tick returns straight away for a client —
+ * so these values are read for display and nothing else, and a hundredth is
+ * finer than any bar or bubble shows. The desync hash is built from the integer
+ * cell coordinates, which are not rounded here.
+ */
+export const WIRE_DIGITS: ReadonlyMap<string, number> = new Map(Object.entries({
+  x: 3, y: 3, z: 3, facing: 3, tileOffsetX: 3, tileOffsetZ: 3,
+  netX: 3, netY: 3, netZ: 3, netFacing: 3,
+  alcoholDesire: 2, alcoholLevel: 2, nausea: 2, motivation: 2,
+  crowding: 2, localAttractiveness: 2, localPartyMood: 2,
+  interactionRemaining: 2, consumptionCooldown: 2,
+  streakingMinutes: 2, toplessMinutes: 2,
+}))
+
+/** Objects whose own numbers get the same treatment, member by member. */
+export const WIRE_DIGITS_NESTED: ReadonlyMap<string, number> = new Map([['needs', 2]])
+
+export function roundForWire(value: number, digits: number): number {
+  if (!Number.isFinite(value)) return value
+  const scale = 10 ** digits
+  const rounded = Math.round(value * scale) / scale
+  // JSON writes -0 as 0, so hand back the same zero the client will read.
+  return rounded === 0 ? 0 : rounded
+}
+
+/**
+ * Quoted field names, built once. The protocol writes the same handful of keys
+ * on every visitor of every update, and quoting them again each time was
+ * measurable on a full park.
+ */
+const quotedKeys = new Map<string, string>()
+export function quotedKey(key: string): string {
+  let cached = quotedKeys.get(key)
+  if (cached === undefined) quotedKeys.set(key, (cached = JSON.stringify(key)))
+  return cached
+}
+
+/**
+ * JSON for a flat object of numbers, each rounded to the same precision.
+ * Negative digits mean "as it is", so a caller can run everything through here.
+ */
+export function stringifyRounded(value: unknown, digits: number): string {
+  if (digits < 0 || value === null || typeof value !== 'object' || Array.isArray(value)) return JSON.stringify(value)
+  const source = value as Record<string, unknown>
+  const scale = 10 ** digits
+  let out = ''
+  for (const key in source) {
+    const member = source[key]
+    if (member === undefined) continue
+    const encoded = typeof member === 'number' && Number.isFinite(member)
+      ? String(Math.round(member * scale) / scale || 0)
+      : JSON.stringify(member)
+    out += (out ? ',' : '') + quotedKey(key) + ':' + encoded
+  }
+  return '{' + out + '}'
+}
+
 export function packWorld(snapshot: Readonly<GameSnapshot>): WorldSnapshot {
   const {
     selectedTool: _selectedTool,

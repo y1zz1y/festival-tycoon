@@ -302,6 +302,7 @@ export type ClientMessage =
   | WorldUpdate
   | { t: 'host'; name: string }
   | { t: 'join'; code: string; name: string }
+  | { t: 'resume'; code: string; playerId: string; name: string }
   | { t: 'command'; cmd: GameCommand }
   | { t: 'commandResult'; to: string; commandId: string; result: ActionResult }
   | { t: 'leave' }
@@ -323,7 +324,7 @@ export type ServerMessage =
   | WorldUpdate
   | { t: 'hosted'; code: string; playerId: string; joinUrl: string; players: NetPlayer[] }
   | { t: 'joined'; code: string; playerId: string; role: 'host' | 'client'; players: NetPlayer[] }
-  | { t: 'players'; players: NetPlayer[] }
+  | { t: 'players'; players: NetPlayer[]; hostAway?: boolean }
   | { t: 'command'; cmd: GameCommand; from: string }
   | { t: 'commandResult'; commandId: string; result: ActionResult }
   | { t: 'result'; ok: boolean; message: string; extra?: ActionResult }

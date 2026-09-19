@@ -43,6 +43,13 @@ export class MultiplayerSession {
   private lastResyncAt = 0
   private syncRequested = false
   private needsResync = false
+  /** The hello of the session we are in, so a dropped socket can dial back. */
+  private hello: ClientMessage | null = null
+  private playerName = ''
+  private reconnectTimer = 0
+  private reconnectAttempt = 0
+  /** True only while the player themselves is ending the session. */
+  private leaving = false
 
   constructor(game: GameState) {
     this.game = game
@@ -61,24 +68,33 @@ export class MultiplayerSession {
   }
 
   host(name: string): void {
-    this.connect({ t: 'host', name: name.trim() || 'Host' })
+    this.playerName = name.trim() || 'Host'
+    this.connect({ t: 'host', name: this.playerName })
   }
 
   join(code: string, name: string): void {
+    this.playerName = name.trim() || 'Gast'
     this.connect({
       t: 'join',
       code: code.trim().toUpperCase(),
-      name: name.trim() || 'Gast',
+      name: this.playerName,
     })
   }
 
   disconnect(): void {
+    // Saying so is what ends a room. A socket that merely dropped is a hiccup,
+    // and the session dials back instead of giving the game up.
+    this.leaving = true
+    this.send({ t: 'leave' })
+    this.cancelReconnect()
+    this.hello = null
     this.unbindGame()
     this.socket?.close()
     this.socket = null
     this.game.networkMode = 'solo'
     this.status = { ...EMPTY_STATUS, message: 'Getrennt' }
     this.onStatus(this.status)
+    this.leaving = false
   }
 
   tick(deltaSeconds: number): void {
@@ -130,6 +146,12 @@ export class MultiplayerSession {
   }
 
   private connect(hello: ClientMessage): void {
+    this.cancelReconnect()
+    this.hello = hello
+    this.open(hello)
+  }
+
+  private open(hello: ClientMessage): void {
     this.disconnectQuiet()
     const socket = new WebSocket(this.socketUrl)
     this.socket = socket
@@ -146,15 +168,49 @@ export class MultiplayerSession {
       }
     })
     socket.addEventListener('close', () => {
-      if (this.socket === socket) {
-        this.unbindGame()
+      if (this.socket !== socket) return
+      this.unbindGame()
+      if (this.leaving || !this.hello) {
         this.status = { ...EMPTY_STATUS, message: 'Verbindung beendet' }
         this.onStatus(this.status)
+        return
       }
+      // The game keeps its world and its mode in the status line; only the
+      // connection flag drops, so the UI can say what is going on.
+      this.status = { ...this.status, connected: false, message: 'Verbindung unterbrochen – neu verbinden …' }
+      this.onStatus(this.status)
+      this.scheduleReconnect()
     })
     socket.addEventListener('error', () => {
-      this.onToast('Mehrspieler-Server nicht erreichbar', true)
+      if (this.reconnectAttempt === 0) this.onToast('Mehrspieler-Server nicht erreichbar', true)
     })
+  }
+
+  /**
+   * Dials back for as long as it takes, slowing down to every fifteen seconds so
+   * a server that is down is not hammered. Hosting has no attempt limit: the
+   * room is still on the server waiting for its host.
+   */
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || !this.hello) return
+    const delay = Math.min(15000, 1000 * 2 ** Math.min(4, this.reconnectAttempt))
+    this.reconnectAttempt += 1
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = 0
+      if (!this.hello) return
+      // Back into the room that is still standing, by code and seat. The
+      // original hello stays put, so a room that really is gone can be opened
+      // from scratch on the next try.
+      this.open(this.status.code && this.status.playerId
+        ? { t: 'resume', code: this.status.code, playerId: this.status.playerId, name: this.playerName }
+        : this.hello)
+    }, delay) as unknown as number
+  }
+
+  private cancelReconnect(): void {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = 0
+    this.reconnectAttempt = 0
   }
 
   private disconnectQuiet(): void {
@@ -207,6 +263,7 @@ export class MultiplayerSession {
   }
 
   private becomeHost(status: MultiplayerStatus): void {
+    this.cancelReconnect()
     this.status = status
     this.bindGame()
     this.pushSync()
@@ -227,6 +284,7 @@ export class MultiplayerSession {
       return
     }
     if (message.t === 'joined') {
+      this.cancelReconnect()
       this.status = {
         mode: message.role,
         code: message.code,
@@ -246,7 +304,15 @@ export class MultiplayerSession {
     }
     if (message.t === 'players') {
       const previousCount = this.status.players.length
-      this.status = { ...this.status, players: message.players }
+      this.status = {
+        ...this.status,
+        players: message.players,
+        // A guest whose host dropped out keeps its world and waits; saying so
+        // beats a silent room where nothing can be built any more.
+        message: message.hostAway && this.status.mode === 'client'
+          ? 'Host ist weg – warte auf Rückkehr'
+          : this.status.message,
+      }
       if (this.status.mode === 'host' && message.players.length > previousCount) {
         this.pushSync()
       }
@@ -297,6 +363,13 @@ export class MultiplayerSession {
       return
     }
     if (message.t === 'error') {
+      // The room we tried to resume into is gone. Open a fresh one rather than
+      // knocking on a door that is not there any more.
+      if (!this.status.connected && this.hello?.t === 'host') {
+        this.status = { ...EMPTY_STATUS, message: 'Raum neu öffnen …' }
+        this.open(this.hello)
+        return
+      }
       this.onToast(message.message, true)
       return
     }
