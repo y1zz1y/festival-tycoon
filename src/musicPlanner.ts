@@ -33,6 +33,11 @@ export function mountMusicPlanner(root:HTMLElement,getSnapshot:()=>Readonly<Game
   root.addEventListener('change',e=>{const input=e.target as HTMLSelectElement;if(input.matches('[data-plan-day]'))day=Number(input.value);if(input.matches('[data-plan-duration]'))duration=Number(input.value);if(input.matches('[data-auto-min-stars]'))minAutoStars=Number(input.value);if(input.matches('[data-auto-max-stars]'))maxAutoStars=Number(input.value);selectChanged=true;fingerprint='';render(getSnapshot())})
   // Use pointer capture rather than native HTML dragging: consistent mouse/touch slot targeting.
   root.addEventListener('dragstart',e=>e.preventDefault())
+  // The timeline is wider than its window on purpose (a day of half-hour slots across every
+  // stage), so it needs a horizontal scroll — but an ordinary mouse only turns a vertical
+  // wheel. Feed that into the timeline's own scroll instead of leaving it to a trackpad
+  // swipe or hunting for the thin scrollbar underneath it.
+  root.addEventListener('wheel',e=>{const track=(e.target as Element).closest<HTMLElement>('.show-scroll');if(!track||track.scrollWidth<=track.clientWidth)return;track.scrollLeft+=e.deltaY;e.preventDefault()},{passive:false})
   function render(s:Readonly<GameSnapshot>){if(dragging)return;if(!selectChanged&&root.contains(document.activeElement)&&document.activeElement instanceof HTMLSelectElement)return;selectChanged=false;const f=s.festival,start=f.startDay+s.dayPlan.leadDays;if(day<start||day>=start+s.dayPlan.festivalDays)day=start
     const stages=s.buildings.filter(b=>b.kind==='stage'),key=JSON.stringify([f.bookings,f.finished,f.reputation.music,s.money,Math.floor(s.minute/30),s.day,s.dayPlan,stages.map(b=>[b.id,b.stageDesign?.name]),day,duration,selected,moving,f.musicBase,starTab,minAutoStars,maxAutoStars,f.headlinerPool]);if(key===fingerprint)return;fingerprint=key
     const mix=expectedMusicMix(f),chosen=f.bookings.find(b=>b.id===moving),booked=new Set(f.bookings.map(b=>b.bandId)),available=BANDS.filter(b=>!booked.has(b.id)&&(starTab===0||bandStarRating(b)===starTab))
