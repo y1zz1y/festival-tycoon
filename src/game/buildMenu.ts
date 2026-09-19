@@ -344,7 +344,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           toolItem('wasteDump', 'Müllablage', '🗑️', 'sehr unattraktiv'),
           buildingMenuItem(
             'sealedWasteContainer',
-            `${Math.floor(BUILDINGS.sealedWasteContainer.cost).toLocaleString('de-DE')} € · 80 Beutel, versiegelt · braucht Straßenanschluss`,
+            `${Math.floor(BUILDINGS.sealedWasteContainer.cost).toLocaleString('de-DE')} € · 80 Beutel · braucht Straßenanschluss`,
           ),
           buildingMenuItem(
             'wasteDepot',

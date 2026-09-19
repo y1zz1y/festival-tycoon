@@ -348,6 +348,16 @@ export function testSealedWasteContainer(fixture: (count?: number) => GameState)
     'a container built beside a road, not on it, still counts as truck-reachable',
   )
   assert.equal(besideRoad.rotation, 1, 'it turns to face the road on its east side')
+  besideRoad.wasteFill = 40
+  const besideRoadFill = besideRoad.wasteFill
+  for (let step = 0; step < 400; step += 1) {
+    roadside.tick(0.1)
+    if ((besideRoad.wasteFill ?? 0) < besideRoadFill) break
+  }
+  assert.ok(
+    (besideRoad.wasteFill ?? 0) < besideRoadFill,
+    'a truck actually drives out and empties a container that only stands beside the road, not on it',
+  )
 
   const grass = fixture(0)
   grass.addDebugMoney()

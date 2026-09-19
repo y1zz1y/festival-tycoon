@@ -2094,14 +2094,18 @@ export class RoadVehicleSimulation {
     return accesses.sort((left, right) => right.container.stored - left.container.stored)
   }
 
+  /**
+   * Where a truck can pull up to empty this container: the road beside it, the ordinary
+   * case, since a container almost always stands next to a road rather than on it (the
+   * road itself is off limits to buildings, sealed containers excepted). Only when none of
+   * its neighbours is a road does its own cell matter, for the rare placement directly on
+   * one.
+   */
   sealedContainerPullUpRoads(container: {
     x: number
     z: number
     elevation?: number
   }): RoadPosition[] {
-    if (!this.context.getRoadCellAt(container.x, container.z, container.elevation)) {
-      return []
-    }
     const adjacent = this.context.getAdjacentRoadPositions(container)
     if (adjacent.length > 0) return adjacent
     const here = this.context.getRoadCellAt(container.x, container.z, container.elevation)

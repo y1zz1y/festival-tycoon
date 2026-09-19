@@ -596,9 +596,10 @@ export class StaffSimulation {
       const targetBin = context.wasteBins.find(
         (candidate) => candidate.id === member.targetId,
       )
+      const room = Math.max(0, carryCapacity(context) - member.carryingWaste)
       const emptied = context.emptyBin(
         member.targetId,
-        targetBin?.stored ?? SIMULATION_CONFIG.waste.binCapacity,
+        Math.min(room, targetBin?.stored ?? SIMULATION_CONFIG.waste.binCapacity),
       )
       member.carryingWaste += emptied
       member.wasteFromBin = true

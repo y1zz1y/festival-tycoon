@@ -411,7 +411,7 @@ export function formatSealedContainerInspect(container: {
         ? 'Straße ohne Zufahrt · Reinigung trägt zur Ablage'
         : 'Nicht an der Straße · Reinigung trägt zur Ablage'
   return {
-    status: `Versiegelt · ${truck}`,
+    status: truck,
     lines: [
       { label: 'Gelagert', value: `${container.stored} / ${capacity}` },
       { label: 'Frei', value: String(remaining) },
