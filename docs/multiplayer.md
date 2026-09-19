@@ -10,6 +10,17 @@ Hosten hat kein Zeitlimit. Ein Raum lebt, bis der Host ihn beendet — das heiß
 bis eine `leave`-Nachricht kommt. Ein geschlossener Socket ist kein Ende,
 sondern ein Aussetzer.
 
+- **Der Code gehört dem Spielstand.** `multiplayerCode` liegt im Snapshot; beim
+  Hosten schickt der Client ihn mit (`host.code`) und der Server nimmt ihn, wenn
+  er frei ist. Belegt oder unbrauchbar → neuer Code, und der Client stempelt
+  zurück, was er bekommen hat. Ein Spielstand, der in einen laufenden Raum
+  geladen wird, übernimmt dessen Code, nicht umgekehrt — mitten in der Sitzung
+  lässt sich der Code nicht wechseln.
+- **Eigenen Raum zurückholen:** Steht unter dem gewünschten Code noch ein Raum
+  *ohne* Host, übernimmt der Hostende ihn samt wartender Gäste, statt einen
+  neuen Code zu bekommen. Ohne das schlagen sich die beiden Zusagen: Der Raum
+  überlebt den Abriss, also fände derselbe Spielstand beim erneuten Hosten
+  seinen eigenen Code belegt. Ein Raum mit anwesendem Host wird nie übernommen.
 - **Keepalive:** Der Server pingt alle 25 s und trennt Sockets, die die vorige
   Runde nicht beantwortet haben. Browser antworten selbst, der Client braucht
   dafür nichts. Ohne das schlief eine Verbindung ein, sobald ein Host allein im
@@ -167,7 +178,7 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
 
 `tests/regression.ts` (echte WebSockets, zwei Clients, später Join,
 Pause/Resume, Deltas, Host-Abriss mit Wiederaufnahme auf demselben Sitz, Sweep
-verwaister Räume). Ride-Reconciliation: `tests/rideAccess.ts`.
+verwaister Räume, Raumcode am Spielstand inkl. Rückholen des eigenen Raums). Ride-Reconciliation: `tests/rideAccess.ts`.
 
 ## Bei Änderungen dieses Dokument
 

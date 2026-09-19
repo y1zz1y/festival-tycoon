@@ -60,12 +60,27 @@ function broadcast(room: Room, message: ServerMessage, except?: string): void {
   })
 }
 
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
 function createCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code = ''
   for (let index = 0; index < 4; index += 1) {
-    code += alphabet[Math.floor(Math.random() * alphabet.length)]
+    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]
   }
+  return rooms.has(code) ? createCode() : code
+}
+
+/**
+ * The code a save has hosted under before, if it is still to be had. Keeping it
+ * means an invite someone was given a week ago still works, instead of every
+ * session handing out a fresh one. A code that is taken right now — by another
+ * copy of the same save, or by chance — falls back to a new one.
+ */
+function codeFor(wanted: string | undefined): string {
+  if (typeof wanted !== 'string') return createCode()
+  const code = wanted.trim().toUpperCase()
+  if (code.length !== 4) return createCode()
+  if ([...code].some(letter => !CODE_ALPHABET.includes(letter))) return createCode()
   return rooms.has(code) ? createCode() : code
 }
 
@@ -150,7 +165,30 @@ export function attachMultiplayer(
 
       if (message.t === 'host') {
         if (joined) return
-        const code = createCode()
+        // The room this save opened last time is still standing but has no host
+        // in it — a reloaded page, a closed laptop. That is this save coming
+        // back, so it takes its own room over instead of being handed a new
+        // code, and the guests still sitting in it keep playing.
+        const returning = message.code ? rooms.get(message.code.trim().toUpperCase()) : undefined
+        if (returning && returning.hostAwaySince !== null) {
+          const id = `player-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`
+          returning.clients.delete(returning.hostId)
+          returning.hostId = id
+          returning.hostName = message.name || 'Host'
+          returning.hostAwaySince = null
+          returning.clients.set(id, { id, name: returning.hostName, role: 'host', socket })
+          joined = { room: returning, id }
+          send(socket, {
+            t: 'hosted',
+            code: returning.code,
+            playerId: id,
+            joinUrl: `${getJoinHost()}  ·  Code ${returning.code}`,
+            players: playersOf(returning),
+          })
+          broadcast(returning, { t: 'players', players: playersOf(returning) }, id)
+          return
+        }
+        const code = codeFor(message.code)
         const id = `player-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`
         const room: Room = {
           code,

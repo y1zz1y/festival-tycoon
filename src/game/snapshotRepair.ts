@@ -83,6 +83,9 @@ export function normalizeSnapshotForRuntime(context: SnapshotRepairContext): voi
     .filter((actor): actor is BandActor => actor !== null)
   state.bandSupply ??= emptyBandSupplySnapshot()
   state.version = 33
+  // Saves from before the code belonged to the world simply get one the first
+  // time they are hosted.
+  state.multiplayerCode = typeof state.multiplayerCode === 'string' ? state.multiplayerCode : ''
   state.festival.demandTuning = normalizeTicketDemandTuning(
     state.festival.demandTuning,
   )

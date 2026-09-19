@@ -965,6 +965,17 @@ export class GameState {
     }
   }
 
+  /**
+   * The room code this world hosts under, kept in the save so the same game
+   * always has the same code. Deliberately not an edit: being handed a code by
+   * the server is not work the player did, and it must not make an untouched
+   * session look unsaved.
+   */
+  rememberMultiplayerCode(code: string): void {
+    if (this.state.multiplayerCode === code) return
+    this.state.multiplayerCode = code
+  }
+
   setTool(tool: Tool): void {
     if (this.state.selectedTool !== tool) this.state.buildElevation = 0
     this.state.selectedTool = tool

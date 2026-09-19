@@ -288,7 +288,7 @@ export type SimSnapshot = {
 
 export type WorldSnapshot = Omit<
   GameSnapshot,
-  'selectedTool' | 'buildElevation' | 'buildRotation'
+  'selectedTool' | 'buildElevation' | 'buildRotation' | 'multiplayerCode'
 >
 
 export type WorldUpdate = {
@@ -300,7 +300,7 @@ export type WorldUpdate = {
 
 export type ClientMessage =
   | WorldUpdate
-  | { t: 'host'; name: string }
+  | { t: 'host'; name: string; code?: string }
   | { t: 'join'; code: string; name: string }
   | { t: 'resume'; code: string; playerId: string; name: string }
   | { t: 'command'; cmd: GameCommand }

@@ -70,6 +70,9 @@ export function packWorld(snapshot: Readonly<GameSnapshot>): WorldSnapshot {
     selectedTool: _selectedTool,
     buildElevation: _buildElevation,
     buildRotation: _buildRotation,
+    // Whose room this is, not what the world looks like: a guest keeps its own,
+    // so hosting a game of its own later does not ask for somebody else's code.
+    multiplayerCode: _multiplayerCode,
     ...world
   } = snapshot
   return world
@@ -151,10 +154,12 @@ export function applyWorld(snapshot: GameSnapshot, world: WorldSnapshot): void {
   const tool = snapshot.selectedTool
   const elevation = snapshot.buildElevation
   const rotation = snapshot.buildRotation
+  const code = snapshot.multiplayerCode
   Object.assign(snapshot, world)
   snapshot.selectedTool = tool
   snapshot.buildElevation = elevation
   snapshot.buildRotation = rotation
+  snapshot.multiplayerCode = code
 }
 
 export function applySim(snapshot: GameSnapshot, sim: SimSnapshot): void {

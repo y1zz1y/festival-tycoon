@@ -725,6 +725,66 @@ try {
   assert.deepEqual(roomsForTest.sweepAbandonedRooms(), [code])
   assert.equal(roomsForTest.rooms.has(code), false)
   console.log('PASS an empty room whose host never returned is swept')
+
+  // The code belongs to the save, so the invite a player was given keeps working
+  // instead of every session handing out a new one.
+  const kept = fixture(0)
+  enableMultiplayerCommands(kept)
+  const keptSession = new MultiplayerSession(kept)
+  sessions.push(keptSession)
+  keptSession.host('Keeper')
+  await until(() => keptSession.status.connected)
+  const firstCode = keptSession.status.code
+  assert.equal(kept.snapshot.multiplayerCode, firstCode, 'the world is stamped with the code it got')
+  const saved = JSON.parse(JSON.stringify(kept.snapshot))
+  keptSession.disconnect()
+  await until(() => !roomsForTest.rooms.has(firstCode))
+
+  const reloaded = GameState.fromJSON(JSON.stringify(saved))!
+  enableMultiplayerCommands(reloaded)
+  const reloadedSession = new MultiplayerSession(reloaded)
+  sessions.push(reloadedSession)
+  reloadedSession.host('Keeper')
+  await until(() => reloadedSession.status.connected)
+  assert.equal(reloadedSession.status.code, firstCode, 'the same save hosts under the same code')
+
+  // A room that outlived its host is that save's own room to come back to. Without
+  // this the two guarantees fight: the room survives the drop, so re-hosting the
+  // same save would find its own code taken and be given a new one.
+  const guest = new GameState()
+  enableMultiplayerCommands(guest)
+  const guestSession = new MultiplayerSession(guest)
+  sessions.push(guestSession)
+  guestSession.join(firstCode, 'Bleibt da')
+  await until(() => guestSession.status.connected)
+  ;(reloadedSession as any).hello = null
+  ;(reloadedSession as any).socket.close()
+  await until(() => roomsForTest.rooms.get(firstCode)?.hostAwaySince !== null)
+
+  const afterReload = GameState.fromJSON(JSON.stringify(saved))!
+  enableMultiplayerCommands(afterReload)
+  const afterReloadSession = new MultiplayerSession(afterReload)
+  sessions.push(afterReloadSession)
+  afterReloadSession.host('Keeper')
+  await until(() => afterReloadSession.status.connected)
+  assert.equal(afterReloadSession.status.code, firstCode, 'a reloaded host takes its own room back')
+  assert.equal(roomsForTest.rooms.get(firstCode)?.hostId, afterReloadSession.status.playerId)
+  assert.equal(guestSession.status.connected, true, 'and the guest who waited is still in it')
+
+  // Unless somebody is already sitting on it, in which case a second copy of the
+  // same world gets its own rather than walking into a stranger's room.
+  const twin = GameState.fromJSON(JSON.stringify(saved))!
+  enableMultiplayerCommands(twin)
+  const twinSession = new MultiplayerSession(twin)
+  sessions.push(twinSession)
+  twinSession.host('Twin')
+  await until(() => twinSession.status.connected)
+  assert.notEqual(twinSession.status.code, firstCode, 'a code in use is not handed out twice')
+  assert.equal(twin.snapshot.multiplayerCode, twinSession.status.code, 'and the twin keeps what it was given')
+
+  // A guest never picks up the host's code: its own world stays its own to host.
+  assert.equal(Object.hasOwn(packWorld(kept.snapshot), 'multiplayerCode'), false, 'the code stays off the wire')
+  console.log('PASS a save keeps its room code, and a code in use is not handed out twice')
 } finally {
   sessions.forEach(session => session.disconnect())
   wss.clients.forEach(socket => socket.terminate())

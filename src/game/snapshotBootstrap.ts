@@ -29,6 +29,7 @@ export function createBlankSnapshot(
   return {
     festival: createFestivalManagement(),
     version: 33,
+    multiplayerCode: '',
     waterLevel: DEFAULT_WATER_LEVEL,
     simTick: 0,
     rngState: hashStringSeed(

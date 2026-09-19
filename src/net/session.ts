@@ -59,7 +59,16 @@ export class MultiplayerSession {
     this.unbindGame()
     this.game = game
     this.bindGame()
-    if (this.status.mode === 'host') this.pushSync()
+    if (this.status.mode !== 'host') return
+    // A save loaded into a running room takes the room's code, not the other
+    // way round: the code cannot change mid-session, and saving again should
+    // keep the one the other players already have.
+    this.stampCode()
+    this.pushSync()
+  }
+
+  private stampCode(): void {
+    if (this.status.mode === 'host' && this.status.code) this.game.rememberMultiplayerCode(this.status.code)
   }
 
   get socketUrl(): string {
@@ -67,9 +76,15 @@ export class MultiplayerSession {
     return `${protocol}//${location.host}/ws`
   }
 
+  /**
+   * Opens the room. The code the world last hosted under comes along, so the
+   * same save keeps the same code and an invite handed out earlier still works.
+   * The server has the last word: if that code is taken right now it answers
+   * with another one, and the world is stamped with whatever came back.
+   */
   host(name: string): void {
     this.playerName = name.trim() || 'Host'
-    this.connect({ t: 'host', name: this.playerName })
+    this.connect({ t: 'host', name: this.playerName, code: this.game.snapshot.multiplayerCode || undefined })
   }
 
   join(code: string, name: string): void {
@@ -266,6 +281,7 @@ export class MultiplayerSession {
     this.cancelReconnect()
     this.status = status
     this.bindGame()
+    this.stampCode()
     this.pushSync()
     this.onStatus(this.status)
   }

@@ -63,6 +63,13 @@ Camp und Müll rekonstruiert.
 
 - Neue Snapshot-Felder: Default im Blank-Snapshot, Normalize beim Laden,
   Save-Kompatibilität für alte Stände, Multiplayer-Sync.
+  `multiplayerCode` hält den Raumcode, unter dem diese Welt hostet — er gehört
+  zum Spielstand, nicht zur Sitzung, damit derselbe Stand immer denselben Code
+  bekommt und eine verteilte Einladung weiter gilt. Ältere Stände haben ihn
+  nicht und bekommen beim ersten Hosten einen. Als einziges Feld geht er
+  bewusst **nicht** über die Leitung (`packWorld` nimmt ihn heraus wie
+  `selectedTool`): Ein Gast behält seinen eigenen, sonst würde er später mit dem
+  Code eines fremden Raums hosten wollen.
   v33 ergänzt optional `StageDesign.forecourtDepth` (1–24 Felder).
   v32 und ältere Bühnen ohne Wert behalten über `stageForecourtDepth`
   den bisherigen Vorplatz von zwei Bühnenbreiten.
