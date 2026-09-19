@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { GameState } from '../src/game/GameState'
-import { hasUnsavedWork, markWorkSaved, minutesSinceSave, trackUnsavedWork, WARN_AFTER_MS } from '../src/ui/unsavedWork'
+import { confirmDiscardingWork, hasUnsavedWork, markWorkSaved, minutesSinceSave, setUnsavedWarnings, trackUnsavedWork, unsavedWarningsEnabled, WARN_AFTER_MS } from '../src/ui/unsavedWork'
 
 export function testUnsavedWork(fixture: (count?: number) => GameState): void {
   const game = fixture(0)
@@ -36,4 +36,16 @@ export function testUnsavedWork(fixture: (count?: number) => GameState): void {
   running = false
   now += WARN_AFTER_MS * 4
   assert.equal(hasUnsavedWork(), false, 'back on the title screen nothing is pending')
+
+  // Switched off in the settings, the routes that would ask go straight through —
+  // the game still knows there is unsaved work, it just stops bringing it up.
+  running = true
+  assert.ok(game.place('path', 13, 4).ok)
+  assert.equal(hasUnsavedWork(), true)
+  assert.equal(unsavedWarningsEnabled(), true)
+  setUnsavedWarnings(false)
+  assert.equal(unsavedWarningsEnabled(), false)
+  assert.equal(confirmDiscardingWork('Weiter?'), true, 'no question is asked while the warning is off')
+  assert.equal(hasUnsavedWork(), true, 'and the pending work is still pending')
+  setUnsavedWarnings(true)
 }

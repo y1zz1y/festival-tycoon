@@ -5,6 +5,7 @@
  */
 export const WARN_AFTER_MS = 5 * 60 * 1000
 
+let warningsOn = true
 let editRevisionOf: () => number = () => 0
 let gameIsRunning: () => boolean = () => false
 let clock: () => number = () => Date.now()
@@ -42,9 +43,18 @@ export function minutesSinceSave(): number {
   return Math.floor((clock() - savedAt) / 60000)
 }
 
+/** Whether the player wants to be asked at all; off means every route goes straight through. */
+export function setUnsavedWarnings(enabled: boolean): void {
+  warningsOn = enabled
+}
+
+export function unsavedWarningsEnabled(): boolean {
+  return warningsOn
+}
+
 /** Asks before something would discard the session; true means go ahead. */
 export function confirmDiscardingWork(action: string): boolean {
-  if (!hasUnsavedWork()) return true
+  if (!warningsOn || !hasUnsavedWork()) return true
   const since = minutesSinceSave()
   const age = since >= 1 ? ` Zuletzt gespeichert vor ${since} Minute${since === 1 ? '' : 'n'}.` : ''
   return window.confirm(`${action}\n\nNicht gespeicherte Änderungen gehen dabei verloren.${age}`)
@@ -53,7 +63,7 @@ export function confirmDiscardingWork(action: string): boolean {
 /** The browser's own "leave site?" prompt, for closing or reloading the tab. */
 export function installUnsavedWorkGuard(): void {
   window.addEventListener('beforeunload', (event) => {
-    if (!hasUnsavedWork()) return
+    if (!warningsOn || !hasUnsavedWork()) return
     // Browsers show their own wording; setting returnValue is what asks at all.
     event.preventDefault()
     event.returnValue = ''

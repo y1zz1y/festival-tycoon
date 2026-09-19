@@ -30,7 +30,7 @@ import {
 import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financePeriodTotal } from './game/finance'
 import { goalName, goalProgressText } from './game/scenarioGoals'
 import { refreshAccount } from './accounts'
-import { installUnsavedWorkGuard, trackUnsavedWork } from './ui/unsavedWork'
+import { installUnsavedWorkGuard, setUnsavedWarnings, trackUnsavedWork } from './ui/unsavedWork'
 import type { BuildingKind, Tool } from './game/catalog'
 import type { PlacementPreviewResult } from './game/placementPreview'
 import {
@@ -5247,6 +5247,19 @@ trackUnsavedWork({
   running: () => !titleScreenController.isOpen(),
 })
 installUnsavedWorkGuard()
+
+const UNSAVED_WARNING_KEY = 'festival-unsaved-warning'
+const unsavedWarningToggle = requireElement<HTMLInputElement>('#setting-unsaved-warning')
+try {
+  unsavedWarningToggle.checked = window.localStorage.getItem(UNSAVED_WARNING_KEY) !== 'off'
+} catch { /* private mode or blocked storage: keep warning */ }
+setUnsavedWarnings(unsavedWarningToggle.checked)
+unsavedWarningToggle.addEventListener('change', () => {
+  setUnsavedWarnings(unsavedWarningToggle.checked)
+  try {
+    window.localStorage.setItem(UNSAVED_WARNING_KEY, unsavedWarningToggle.checked ? 'on' : 'off')
+  } catch { /* the setting simply does not survive a reload then */ }
+})
 
 const STOCK_BARS_KEY = 'festival-stock-bars'
 const stockBarsToggle = requireElement<HTMLInputElement>('#setting-stock-bars')
