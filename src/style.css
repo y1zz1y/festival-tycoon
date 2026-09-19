@@ -1917,15 +1917,23 @@ body.title-open #app-install-hint {
   cursor: pointer;
 }
 
+/* The same look every other button in an overlay has, so a tool that is merely
+   offered does not read as one that is already switched on. */
 #build-extra-logistics button,
 #terrain-planner-slot button {
   width: 100%;
   min-height: 36px;
   padding: 7px;
-  color: #f2dfb5;
-  background: #476859;
-  border: 1px solid #819b80;
+  color: #ecf5f0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
   cursor: pointer;
+}
+
+#build-extra-logistics button:hover,
+#terrain-planner-slot button:hover {
+  background: #3f715b;
 }
 
 .tools {

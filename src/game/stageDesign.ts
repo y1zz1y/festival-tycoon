@@ -103,8 +103,16 @@ export const DECO_PATTERN_NAMES:Record<DecoPattern,string> = {chase:'Lauflicht',
 export type ShowPhase = {movement?:number;pyro?:number;deco?:DecoPattern;intensity:number;speed:number;fog:number;volume:number;color:string}
 export type StageDesign = {audience?:Array<{x:number;z:number}>;tileWidth?:number;tileDepth?:number;tileHeight?:number;name:string;width:number;depth:number;height:number;parts:StagePart[];linked:boolean;phases:[ShowPhase,ShowPhase,ShowPhase]}
 export const PHASE_NAMES = ['Warm-up','Main','Finale'] as const
-/** Build cells per map tile, in each axis. Every part fills one cell, so this is also what sets how large the equipment reads against the rest of the world. */
-export const STAGE_TILE_DETAIL = 2
+/**
+ * Build cells per map tile, in each axis: one, so a cell of the workshop grid is a field
+ * of the map, and a part standing on it is as wide as that field. Finer grids made the
+ * equipment read as toy-sized next to the people and buildings around it.
+ *
+ * It stays a named constant instead of being folded away because it is also the lever
+ * regridStageDesign pulls: a design saved on an older, finer grid is scaled into the
+ * current one rather than failing validation.
+ */
+export const STAGE_TILE_DETAIL = 1
 /** How much headroom every stage gets to build in, in map tiles — fixed rather than chosen, since empty air above the rig costs nothing and simply leaves room for towers. */
 export const STAGE_TILE_HEIGHT = 15
 export function stageDetailSize(tileWidth?:number,tileDepth?:number,tileHeight?:number) {

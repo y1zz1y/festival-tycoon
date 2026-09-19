@@ -24,9 +24,11 @@ export function testStageTickets(fixture:(count?:number)=>GameState){
   // Pinned to a 2x2 footprint rather than the default one, so the expansion, rotation and
   // shrinking steps below keep testing what they were written for whatever the default becomes.
   const design=defaultStageDesign();Object.assign(design,{tileWidth:2,tileDepth:2},stageDetailSize(2,2,design.tileHeight))
-  design.parts.push({id:'truss',kind:'truss',brand:'touring',x:2,y:0,z:1,axis:'y',rotation:0,attachedTo:null,color:'#abcdef'},
-    {id:'light',kind:'spot',brand:'premium',x:3,y:0,z:1,rotation:0,attachedTo:'truss',color:'#abcdef'},
-    {id:'sound',kind:'fullRange',brand:'touring',x:2,y:0,z:0,rotation:0,attachedTo:'truss',color:'#abcdef'})
+  // In the front row of the smallest footprint the test later rotates into, so the same
+  // three parts stay inside the stage through every resize below.
+  design.parts.push({id:'truss',kind:'truss',brand:'touring',x:0,y:0,z:0,axis:'y',rotation:0,attachedTo:null,color:'#abcdef'},
+    {id:'light',kind:'spot',brand:'premium',x:1,y:0,z:0,rotation:0,attachedTo:'truss',color:'#abcdef'},
+    {id:'sound',kind:'fullRange',brand:'touring',x:0,y:1,z:0,rotation:0,attachedTo:'truss',color:'#abcdef'})
   assert.equal(stageDesignIssue(design),null)
   const bad=structuredClone(design);bad.parts=bad.parts.filter(p=>p.kind!=='truss');assert.ok(stageDesignIssue(bad))
   const cost=stageStats(design).cost,money=bs.money

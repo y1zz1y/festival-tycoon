@@ -26,7 +26,7 @@ import { createAttractionAccess } from './attractionAccess'
 import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
 import { createStageModel, animateStageModel, updateStageLightPool } from './stageModel'
-import { stagePhase, stageSize, occupiesBuildingCell, fohDeskRole } from '../game/stageDesign'
+import { stagePhase, stageSize, occupiesBuildingCell, fohDeskRole, STAGE_TILE_DETAIL } from '../game/stageDesign'
 import { activeBookings, showIssue } from '../game/festivalManagement'
 import { createEarthTexture, createTerrainBase, createTerrainMaterial, createTerrainSurface } from './terrainSurface'
 import { TerrainShape, terrainPads } from './terrainShape'
@@ -2151,7 +2151,7 @@ export class WorldView {
         fohVariants.get(item.id),
         item.kind === 'path' && this.pathSharesRoadGrade(item),
       )
-      if (item.stageDesign) { model.scale.set((stageSize(item.stageDesign).width-.04)/item.stageDesign.width, item.stageDesign.tileWidth ? .5 : .96/Math.max(item.stageDesign.width,item.stageDesign.depth), (stageSize(item.stageDesign).depth-.04)/item.stageDesign.depth); model.userData.stageDesign = item.stageDesign }
+      if (item.stageDesign) { model.scale.set((stageSize(item.stageDesign).width-.04)/item.stageDesign.width, item.stageDesign.tileWidth ? 1/STAGE_TILE_DETAIL : .96/Math.max(item.stageDesign.width,item.stageDesign.depth), (stageSize(item.stageDesign).depth-.04)/item.stageDesign.depth); model.userData.stageDesign = item.stageDesign }
       model.position.set(item.x + stageSize(item.stageDesign,item.rotation).width/2, item.elevation, item.z + stageSize(item.stageDesign,item.rotation).depth/2)
       const modelDirection =
         item.kind === 'path'
