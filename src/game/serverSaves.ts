@@ -3,7 +3,11 @@
  * signed-in account; a save can be shared, which lets everyone open it — writing
  * always goes to your own archive, never to someone else's row.
  */
-export type ServerSaveSlot = { id: string; name: string; savedAt: number; public: boolean; owner: string }
+export type ServerSaveSlot = {
+  id: string; name: string; savedAt: number; public: boolean; owner: string
+  /** Where the festival stood when it was saved; absent on saves from before this was kept. */
+  edition?: number; day?: number; minute?: number
+}
 export type ServerSaveArchive = {
   /** Who the server thinks is calling, or null for a guest. */
   account: string | null

@@ -46,7 +46,7 @@ const GROUND_ELEVATION_TOOLS = new Set([
   'roadSpeed10', 'roadSpeed30', 'roadSpeed50',
 ])
 const ROAD_EDIT_TOOLS = new Set([
-  'roadDirection', 'trafficLight', 'pathBarrier', 'roadSeparator', 'crosswalk',
+  'roadDirection', 'roadDirectionClear', 'trafficLight', 'pathBarrier', 'roadSeparator', 'crosswalk',
   'roadSpeed10', 'roadSpeed30', 'roadSpeed50',
 ])
 
@@ -177,6 +177,7 @@ export function createPathToolController(services: PathDragServices, view: PathD
         for (const cell of selectedCells) {
           const direction = game.snapshot.buildRotation as 0 | 1 | 2 | 3
           const result = tool === 'roadDirection' ? game.setRoadDirection(cell.x, cell.z, direction)
+            : tool === 'roadDirectionClear' ? game.clearRoadDirection(cell.x, cell.z)
             : tool === 'trafficLight' ? game.placeTrafficLight(cell.x, cell.z, direction)
               : tool === 'pathBarrier' ? game.placePathBarrier(cell.x, cell.z, game.snapshot.buildElevation, direction)
                 : tool === 'roadSeparator' ? game.toggleRoadSeparator(cell.x, cell.z, direction)

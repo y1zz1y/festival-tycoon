@@ -6,7 +6,7 @@ import { scenarioPreset } from '../game/scenarioPresets'
 import { mountTitleCrowd } from '../titleCrowd'
 import { isTextEntryTarget } from '../uiFocus'
 import { escapeHtml } from './format'
-import { saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
+import { saveProgressText, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
 
 export interface TitleScreenContext {
   getGame(): GameState
@@ -181,7 +181,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     resumeSlot = (pointer ? findSaveSlot(pointer.id) : undefined) ?? archive.own[0] ?? null
     titleResumeButton.disabled = !resumeSlot
     titleResumeMeta.textContent = resumeSlot
-      ? `${resumeSlot.name} · ${formatSaveTime(resumeSlot.savedAt)}`
+      ? [resumeSlot.name, saveProgressText(resumeSlot), formatSaveTime(resumeSlot.savedAt)].filter(Boolean).join(' · ')
       : 'Noch nicht gespielt'
     if (titleResumeButton.disabled && titleResumeButton.classList.contains('selected')) markTitleSelection(0)
   }
@@ -219,7 +219,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
    * puts a copy in your own archive.
    */
   function titleSlotRow(slot: SaveSlotView, withOwner: boolean): string {
-    const meta = withOwner ? `von ${escapeHtml(slot.owner)} · ${formatSaveTime(slot.savedAt)}` : formatSaveTime(slot.savedAt)
+    const meta = [withOwner ? `von ${escapeHtml(slot.owner)}` : '', saveProgressText(slot), formatSaveTime(slot.savedAt)].filter(Boolean).join(' · ')
     return `<button type="button" data-title-load-slot="${slot.id}"><span class="title-row-text"><span class="title-row-label">${escapeHtml(slot.name)}</span><span class="title-row-meta">${meta}</span></span><span class="title-row-value">Laden</span></button>`
   }
   async function openTitleLoad(): Promise<void> {

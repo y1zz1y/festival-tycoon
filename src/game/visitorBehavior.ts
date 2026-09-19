@@ -2183,11 +2183,11 @@ export class VisitorBehaviorService {
 
   dropPendingWaste(visitor: Visitor): void {
     if (visitor.pendingWaste <= 0) return
-    this.context.addGroundIncident(
-      'litter',
-      this.findLitterDropCell(visitor),
-      visitor.pendingWaste,
-    )
+    // Rubbish is only ever put down where it may lie: a footpath, the camping field,
+    // the forecourt, the medical area. Standing anywhere else — a road, bare ground,
+    // a building's own tile — the visitor carries it off the site instead.
+    const cell = this.findLitterDropCell(visitor)
+    if (cell) this.context.addGroundIncident('litter', cell, visitor.pendingWaste)
     visitor.pendingWaste = 0
     if (
       visitor.targetId &&
@@ -2199,14 +2199,16 @@ export class VisitorBehaviorService {
         visitor.route = []
       }
     }
-    visitor.thought = 'Hier liegt jetzt mein Müll. Ein Eimer wäre besser gewesen.'
+    visitor.thought = cell
+      ? 'Hier liegt jetzt mein Müll. Ein Eimer wäre besser gewesen.'
+      : 'Hier kann ich den Müll nicht lassen, ich nehme ihn mit.'
   }
 
   findLitterDropCell(visitor: Visitor): {
     x: number
     z: number
     elevation: number
-  } {
+  } | null {
     const here = {
       x: visitor.cellX,
       z: visitor.cellZ,
@@ -2220,7 +2222,7 @@ export class VisitorBehaviorService {
       allowQueue:
         this.context.getPathAt(here.x, here.z, here.elevation)?.pathType === 'queue',
     })[0]
-    return neighbor ?? here
+    return neighbor && this.canDropLitterAt(neighbor) ? neighbor : null
   }
 
   canDropLitterAt(cell: {

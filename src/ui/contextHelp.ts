@@ -154,6 +154,7 @@ export function contextHelpText({ game, hoveredCell, placementPreview, modes }: 
     road: 'Klicken oder ziehen, um eine ebenerdige Straße zu bauen.',
     parkingArea: 'Rechteckig ziehen, um Parkplätze auszuweisen.',
     roadDirection: 'Straße anklicken: aktuelle Baurichtung als Fahrtrichtung setzen.',
+    roadDirectionClear: 'Straße anklicken oder ziehen: Fahrtrichtung entfernen, die Straße ist wieder in beide Richtungen frei.',
     trafficLight: `${placementPreview?.message ?? 'Ampel prüfen'} · Danach öffnet sich die Steuerung.`,
     pathBarrier: `${placementPreview?.message ?? 'Personentor prüfen'} · Danach öffnet sich die Steuerung.`,
     deliveryYard: placementPreview?.message ?? 'Anlieferungsplatz prüfen',

@@ -98,4 +98,8 @@ export type LocalSaveSlot = {
   id: string
   name: string
   savedAt: number
+  /** Where the festival stood when it was saved; missing on saves from before this was recorded. */
+  edition?: number
+  day?: number
+  minute?: number
 }

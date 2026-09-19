@@ -2037,6 +2037,14 @@ function updatePathEditor(): void {
     )
   }
   pathDemolishButton.setAttribute('aria-pressed', String(pathDemolishActive))
+  // Which road tool is in hand. The palette keeps no state of its own, so it is read
+  // back from the game's selected tool — and nothing is in hand while the wrecking
+  // ball is out, however the tool was picked.
+  document.querySelectorAll<HTMLButtonElement>('[data-road-editor-tool]').forEach((button) => {
+    const active = !pathDemolishActive && button.dataset.roadEditorTool === game.snapshot.selectedTool
+    button.classList.toggle('active', active)
+    button.setAttribute('aria-pressed', String(active))
+  })
   document.querySelectorAll<HTMLButtonElement>('[data-path-access]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.pathAccess === game.snapshot.selectedTool))
   })
@@ -4553,7 +4561,10 @@ document.querySelectorAll<HTMLButtonElement>('[data-path-access]').forEach((butt
     if (!tool) return
     pathDemolishActive = false
     pathEditorActive = false
-    game.setTool(tool)
+    // Clicking the gate that is already in hand puts it down again: the window falls
+    // back to its own plain tool instead of leaving a gate stuck on the pointer.
+    const dropping = game.snapshot.selectedTool === tool
+    game.setTool(dropping ? (roadEditorOpen ? 'road' : 'path') : tool)
     updatePathEditor()
   })
 })

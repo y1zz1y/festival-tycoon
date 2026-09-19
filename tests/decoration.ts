@@ -24,8 +24,9 @@ import {
   decorationLightOf,
 } from '../src/game/decorationLights'
 import { WALL_KINDS, wallSpec, roofWallTop, ROOF_KINDS, roofSpec, THEMED_BIN_KINDS } from '../src/game/decorationWalls'
-import { FestivalLightsView } from '../src/view/FestivalLightsView'
-import { Vector3 } from 'three'
+import { FestivalLightsView, FESTIVAL_SPOT_LIGHT_BUDGET } from '../src/view/FestivalLightsView'
+import { Vector3, OrthographicCamera } from 'three'
+import { lightViewOf } from '../src/view/lightSelection'
 import { LARGE_SCENERY_KINDS } from '../src/game/scenery'
 import { createRetroBuilding } from '../src/view/retroBuildings'
 import { Box3 } from 'three'
@@ -277,12 +278,12 @@ export function testDecorationLampLights(fixture: (count?: number) => GameState)
   assert.notEqual(aurora, gas)
   assert.deepEqual([...lights.activeSourceColors()].sort(), [aurora, aurora, gas].sort())
 
-  lights.setFocus(new Vector3(8.5, 0, 6.5))
+  lights.setView((() => { const at = new Vector3(8.5, 0, 6.5); const above = new OrthographicCamera(-30, 30, 30, -30, 0.1, 100); above.position.set(at.x, 20, at.z); above.lookAt(at); above.updateMatrixWorld(); return lightViewOf(above, at) })())
   const pool = (lights as any).pool as { color: { getHex(): number }; intensity: number }[]
   const spots = (lights as any).spots as { intensity: number; parent: unknown }[]
   assert.ok(pool.some(light => light.color.getHex() === aurora && light.intensity > 0), 'aurora uses its ice-green point light')
   assert.ok(pool.some(light => light.color.getHex() === gas && light.intensity > 0), 'gas lamp uses brass light')
-  assert.equal(spots.length, 4)
+  assert.equal(spots.length, FESTIVAL_SPOT_LIGHT_BUDGET)
   assert.ok(spots.every(light => light.parent === lights.group), 'floods stay attached even when unused')
 
   const auroraBuilding = game.snapshot.buildings.find(building => building.kind === 'auroraLamp')!
@@ -297,7 +298,7 @@ export function testDecorationLampLights(fixture: (count?: number) => GameState)
   assert.ok(flood.place('workLamp', 6, 8).ok)
   const floodLights = new FestivalLightsView()
   floodLights.update(flood.snapshot)
-  floodLights.setFocus(new Vector3(6.5, 0, 8.5))
+  floodLights.setView((() => { const at = new Vector3(6.5, 0, 8.5); const above = new OrthographicCamera(-30, 30, 30, -30, 0.1, 100); above.position.set(at.x, 20, at.z); above.lookAt(at); above.updateMatrixWorld(); return lightViewOf(above, at) })())
   const floodSpots = (floodLights as any).spots as { color: { getHex(): number }; intensity: number; target: { position: { x: number; z: number } }; position: { x: number; z: number } }[]
   const sodium = decorationLightOf('workLamp')!.color
   assert.ok(floodSpots.some(light => light.color.getHex() === sodium && light.intensity > 0), 'Baustrahler uses a sodium flood')

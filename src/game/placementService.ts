@@ -54,6 +54,7 @@ export type PlacementServiceContext = {
     refund: boolean,
     options?: { preserveMedical?: boolean },
   ) => ActionResult | null
+  clearStrandedGroundDirt: () => boolean
   nextId: (prefix: string) => string
   invalidateBuildingIndex: () => void
   invalidateRoadGraph: () => void
@@ -560,6 +561,8 @@ export class PlacementService {
       visitor.state = 'exploring'
       visitor.thought = 'Mein Ziel ist verschwunden.'
     })
+    // A path that is torn up takes the rubbish lying on it with it.
+    c.clearStrandedGroundDirt()
     c.recalculatePark()
     c.refreshPower()
     c.emit()
@@ -570,6 +573,7 @@ export class PlacementService {
     const c = this.context
     const cleared = c.clearDesignatedOccupancyAt(x, z, true)
     if (cleared) {
+      c.clearStrandedGroundDirt()
       c.emit()
       return cleared
     }
@@ -610,7 +614,12 @@ export class PlacementService {
       c.emit()
       return { ok: true, message: 'Straße entfernt' }
     }
-    if (c.getCampingCellAt(x, z)) return c.designateCampingCell(x, z, false)
+    if (c.getCampingCellAt(x, z)) {
+      const given = c.designateCampingCell(x, z, false)
+      // A camping field that is given up loses its rubbish with it.
+      c.clearStrandedGroundDirt()
+      return given
+    }
     if (c.getPowerCableAt(x, z)) {
       c.state.power.cableCells = c.state.power.cableCells.filter(
         (cell) => cell.x !== x || cell.z !== z,

@@ -30,6 +30,8 @@ export async function testSaves(): Promise<void> {
     return (created.cookie ?? '').split(';')[0]!
   }
   const world = (marker: string) => JSON.stringify({ money: 1000, marker })
+  /** A save that looks like a real snapshot where it matters: it says where the festival stood. */
+  const standing = (edition: number, day: number, minute: number) => JSON.stringify({ money: 1, festival: { edition }, day, minute })
 
   try {
     // Listing must work before anyone has signed in. The public join onto users
@@ -93,6 +95,16 @@ export async function testSaves(): Promise<void> {
     assert.equal((await call('GET', '/api/saves', undefined, grace)).body.shared.length, 0, 'taking the share back hides it again')
     assert.equal((await call('DELETE', `/api/saves/${id}`, undefined, ada)).status, 200)
     assert.equal((await call('GET', '/api/saves', undefined, ada)).body.own.length, 0)
+
+    // Every save carries where the festival stood, read off the snapshot as it is written.
+    const stood = await call('POST', '/api/saves', { name: 'Samstagabend', snapshot: standing(2, 3, 14 * 60 + 30) }, grace)
+    assert.equal(stood.status, 201)
+    assert.deepEqual([stood.body.edition, stood.body.day, stood.body.minute], [2, 3, 870], 'edition, day and minute are kept')
+    const listed = (await call('GET', '/api/saves', undefined, grace)).body.own.find((slot: any) => slot.id === stood.body.id)
+    assert.deepEqual([listed.edition, listed.day, listed.minute], [2, 3, 870], 'and listed with the save')
+    const moved = await call('PUT', `/api/saves/${stood.body.id}`, { name: 'Samstagabend', snapshot: standing(3, 1, 5) }, grace)
+    assert.deepEqual([moved.body.edition, moved.body.day, moved.body.minute], [3, 1, 5], 'overwriting moves them along')
+    assert.equal((await call('GET', '/api/saves', undefined, grace)).body.own.find((slot: any) => slot.id === copy.body.id).edition, undefined, 'a save without the numbers simply has none')
 
     // Nonsense is refused before it reaches the database.
     assert.equal((await call('POST', '/api/saves', { name: '', snapshot: world('ada-3') }, ada)).status, 400)

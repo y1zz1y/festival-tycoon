@@ -1,10 +1,11 @@
 import { bandPositions, bandRoles, updateStageBand } from '../src/view/stageBand'
 import assert from 'node:assert/strict'
-import { Vector3, LineSegments, SpotLight, Box3, Quaternion, Mesh, type Group } from 'three'
+import { Vector3, LineSegments, SpotLight, Box3, Quaternion, Mesh, OrthographicCamera, type Group } from 'three'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { stagePlacement } from '../src/game/stagePlacement'
 import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, stageApronCells, stageApronDepth, fohDeskRole, lineArrayIndex, migrateStageDesign, stageStats, stageDetailSize, COMPONENTS, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, STAGE_TILE_DETAIL, type StagePart } from '../src/game/stageDesign'
-import { createStageModel, animateStageModel, disposeStageModel } from '../src/view/stageModel'
+import { createStageModel, animateStageModel, disposeStageModel, updateStageLightPool } from '../src/view/stageModel'
+import { lightViewOf } from '../src/view/lightSelection'
 import { showIssue } from '../src/game/festivalManagement'
 export function testStageInteraction(fixture:(count?:number)=>GameState){
   const legacy2d = defaultStageDesign()
@@ -113,6 +114,27 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.ok(beamDirection(downSpot).y<0,'a spot rotated to face down points down regardless of mount side')
   assert.ok(beamDirection(upSpot).y>0,'a spot rotated to face up points up regardless of mount side')
   for(const spot of spots){assert.ok(spot.userData.light instanceof SpotLight);assert.ok(spot.userData.light.intensity>0)}
+  // The pool's real lights go to the stage the camera looks at, not to whichever stage
+  // comes first: two copies of the rig, one under the camera and one far away, and every
+  // pooled light lands on the one in view.
+  {
+    const near=createStageModel(rig,{lightBudget:0}),far=createStageModel(rig,{lightBudget:0})
+    far.position.set(80,0,0);near.updateMatrixWorld(true);far.updateMatrixWorld(true)
+    for(const m of [near,far])animateStageModel(m,phase,1,true)
+    const pool=Array.from({length:2},()=>new SpotLight(0xffffff,0,12,.21,.45,1))
+    const camera=new OrthographicCamera(-6,6,6,-6,.1,100);camera.position.set(0,20,0);camera.lookAt(0,0,0);camera.updateMatrixWorld()
+    updateStageLightPool([far,near],pool,lightViewOf(camera,new Vector3(0,0,0)))
+    assert.ok(pool.every(light=>light.intensity>0&&Math.abs(light.position.x)<10),'both real lights serve heads on the stage in view, though the far stage is listed first')
+  }
+  // A beam has to carry across the crowd, so it throws eight units. The cone the player
+  // sees, the throw the mirror balls are tested against and the spot light's own angle
+  // all come from the same pair of numbers and must not drift apart.
+  for(const spot of spots){
+    assert.equal(spot.userData.length,8,'a moving head throws eight units')
+    const cone=(spot.userData.beams as any).children[0]
+    assert.equal(cone.geometry.parameters.height,8,'and its visible cone is exactly that long')
+    assert.ok(Math.abs(spot.userData.light.angle-Math.atan(cone.geometry.parameters.radius/8))<1e-9,'the light matches the cone it draws')
+  }
   // A moving head's two arms cradle the head at its *sides*, so they must stand square to the
   // lens for every mount side and every aim. Reaching an aim by twisting the head inside a fixed
   // yoke would hit the same aim but swing the arms round to the head's front and back, leaving

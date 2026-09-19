@@ -7,7 +7,6 @@ import { GROUND_WORK, groundInfo, roadGroundLimit, prepareGroundArea } from './g
 import type { GroundWork } from './game/ground'
 import { SUPPLIES } from './game/festivalManagement'
 import type { FestivalAction } from './game/festivalManagement'
-import { makeDraggable, makeResizable } from './dragPanel'
 import { createAreaDesignationHandler } from './ui/areaDesignation'
 import './logistics.css'
 
@@ -16,17 +15,15 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
   let editorRoad = false
   let groundOpen = false, overlayOn = false, mode = 'none'
 
-  const groundButton = document.createElement('button'); groundButton.textContent = '🏞️ Boden vorbereiten'; groundButton.id = 'open-terrain-planner'; groundButton.setAttribute('aria-pressed', 'false')
-  document.querySelector('#terrain-planner-slot')!.append(groundButton)
-  const groundPanel = document.createElement('aside'); groundPanel.className = 'supply-planner terrain-planner panel'; groundPanel.hidden = true
+  // The ground works stand in the Gelände tab of the build menu, not behind a button
+  // of their own: opening the tab is what puts the site into planning.
+  const groundPanel = document.createElement('section'); groundPanel.className = 'terrain-planner'
   groundPanel.setAttribute('aria-label', 'Gelände planen')
-  groundPanel.innerHTML = `<header class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 class="panel-header-title">Gelände</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Gelände schließen">×</button></header>
-    <p>Besucher sind ausgeblendet. Gebäude und Wege baut ihr weiterhin links. Hier bereitet ihr den Untergrund vor. Die Planung verändert eure normale Bauauswahl nicht.</p>
+  groundPanel.innerHTML = `<p class="terrain-planner-intro">Solange dieser Reiter offen ist, sind die Besucher ausgeblendet und ihr bereitet den Untergrund vor.</p>
     <nav class="supply-tools"><button data-tool="inspect" aria-pressed="false">Feld prüfen</button>${Object.entries(GROUND_WORK).map(([key, work]) => `<button data-tool="${key}">${work.name} · ${work.cost} €</button>`).join('')}</nav>
-    <p data-hint aria-live="polite">Links normal bauen oder hier eine Geländeoption wählen.</p><div data-cell class="supply-card">Boden erkennen: Furchen = Acker · rötliche Flecken = Lehm · Körnung = Kies · Grasbüschel = Wiese · Rippeln = Sand · Fugen = Pflaster.<br>Verdichteter Boden ist geglättet. Türkise Markierung: entwässert. Über ein Feld fahren für Tragfähigkeit und Ausbau.</div>`
-  document.querySelector('.game-shell')!.append(groundPanel)
-  makeDraggable(groundPanel.querySelector<HTMLElement>('.panel-header')!, groundPanel)
-  makeResizable(groundPanel)
+    <p data-hint aria-live="polite">Oben ein Werkzeug wählen und auf dem Gelände ein Rechteck aufziehen.</p><div data-cell class="supply-card">Boden erkennen: Furchen = Acker · rötliche Flecken = Lehm · Körnung = Kies · Grasbüschel = Wiese · Rippeln = Sand · Fugen = Pflaster.<br>Verdichteter Boden ist geglättet. Türkise Markierung: entwässert. Über ein Feld fahren für Tragfähigkeit und Ausbau.</div>`
+  const groundSlot = document.querySelector<HTMLElement>('#terrain-planner-slot')!
+  groundSlot.append(groundPanel)
 
   const qG = <T extends Element = HTMLElement>(selector: string) => groundPanel.querySelector<T>(selector)!
   const execute = (action: FestivalAction) => { const result = getGame().manageFestival(action); if (result.message !== 'Befehl eingeplant') toast(result.message, !result.ok); return result }
@@ -60,7 +57,7 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
   const releaseTool = () => {
     view.setGroundAreaTool(null); mode = 'none'
     groundPanel.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', 'false'))
-    qG('[data-hint]').textContent = 'Links normal bauen oder hier eine Geländeoption wählen.'
+    qG('[data-hint]').textContent = 'Oben ein Werkzeug wählen und auf dem Gelände ein Rechteck aufziehen.'
   }
   document.querySelector('.build-menu')!.addEventListener('click', event => {
     if ((event.target as Element).closest('[data-tool]')) releaseTool()
@@ -70,11 +67,18 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
     view.setLogisticsMode(overlayOn || groundOpen)
   }
   const toggleGround = (enabled: boolean) => {
-    groundOpen = enabled; groundPanel.hidden = !enabled
-    groundButton.setAttribute('aria-pressed', String(enabled))
+    if (groundOpen === enabled) return
+    groundOpen = enabled
+    if (!enabled) releaseTool()
     syncPlanningMode()
-    if (!enabled) groundButton.focus()
   }
+  // Planning follows the tab: the build menu shows and hides the tab's pane, and the
+  // ground works are live exactly while it is on screen.
+  const groundPane = groundSlot.closest<HTMLElement>('.build-extra') ?? groundSlot
+  const followPane = () => toggleGround(!groundPane.hidden && !groundPane.closest<HTMLElement>('.build-menu')?.hidden)
+  new MutationObserver(followPane).observe(groundPane, { attributes: true, attributeFilter: ['hidden'] })
+  const buildMenu = groundPane.closest<HTMLElement>('.build-menu')
+  if (buildMenu) new MutationObserver(followPane).observe(buildMenu, { attributes: true, attributeFilter: ['hidden'] })
   const setOverlay = (enabled: boolean) => {
     overlayOn = enabled
     syncPlanningMode()
@@ -197,13 +201,10 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
     })
   }
   refreshTypes()
-  groundButton.addEventListener('click', () => toggleGround(!groundOpen))
   groundPanel.addEventListener('click', event => {
     const b = (event.target as Element).closest<HTMLElement>('button'); if (!b) return
-    if (b.hasAttribute('data-close')) toggleGround(false)
     if (b.dataset.tool) choose(b.dataset.tool)
   })
-  groundPanel.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); toggleGround(false) } })
   function update(s: Readonly<GameSnapshot>) {
     if (mode !== 'none' && ((mode === 'path' || mode === 'road') ? s.selectedTool !== mode : s.selectedTool !== 'inspect')) releaseTool()
   }

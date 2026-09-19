@@ -90,6 +90,8 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.designatePowerCableArea(command.cells)
     case 'setRoadDirection':
       return game.setRoadDirection(command.x, command.z, command.direction)
+    case 'clearRoadDirection':
+      return game.clearRoadDirection(command.x, command.z)
     case 'placeTrafficLight':
       return game.placeTrafficLight(command.x, command.z, command.direction)
     case 'placePathBarrier':

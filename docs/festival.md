@@ -76,3 +76,5 @@ Buchungsquelle. `bandActors` sind keine Gäste; sie tragen `costumeId` /
 Aktualisieren, wenn Aktionen, Ticketregeln, Wetter, Rufachsen, Bands, der
 Planungs-/Start-Zyklus oder die Endauswertung (HEADLINE Magazin) ändern.
 Bühnenwerkstatt bleibt in `docs/stages.md`. Spielerregeln auch im Root-`README.md`.
+
+Der Festivalbereich kombiniert die Ticketpreis-Regler samt Nachfrageschätzung mit dem separaten Reiter **Upgrades** für die Infrastruktur-Ausbaustufen.

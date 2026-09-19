@@ -809,8 +809,9 @@ export const SIMULATION_CONFIG = {
     visitorDropIfBinFull: true,
     binFullBeauty: -12,
     cleanerCarrySpeedMultiplier: 0.62,
+    // A cleaner keeps collecting until the cart holds this much, and only then walks
+    // to a bin or the dump — a half-empty cart is never carried away on its own.
     cleanerMaxCarry: 12,
-    cleanerTripCarry: 3,
     // Idle cleaners empty bins at/above this fill (25% of capacity). Full bins stay urgent.
     cleanerIdleEmptyFill: 3,
     truckDispatchThreshold: 1,
