@@ -4,6 +4,7 @@ import { isDecorationCatalogKind } from '../game/decoration'
 import { createWayStructure, indexWayStructures, wayStructurePlan, type WayStructureCell } from './wayStructures'
 import { pathFurnitureRotation } from '../game/pathFurniture'
 import { isWasteBin } from '../game/decorationWalls'
+import { isSealedWasteContainer } from '../game/waste'
 import { wallSpec, isFacade } from '../game/decorationWalls'
 import { updateStageBand } from './stageBand'
 import { isScenery, isEdgeScenery, scenerySlot, sceneryTransform } from '../game/scenery'
@@ -964,7 +965,6 @@ export class WorldView {
       (x, z) => snapshot.festival.infrastructure.ground[`${x},${z}`]?.roadway,
       snapshot.speed === 0,
       undefined,
-      snapshot.selectedTool === 'roadDirection',
       this.logisticsMode || isRoadBuildTool(snapshot.selectedTool),
     )
     this.accessControlView.update(
@@ -4293,7 +4293,13 @@ export class WorldView {
 
     this.previewArrow.visible = showDirectionArrow
     if (showDirectionArrow) {
-      const angle = this.currentSnapshot.buildRotation * (Math.PI / 2)
+      // A waste depot or sealed container's ghost shows the facing it will actually be
+      // built with — turned to the road it sits next to — instead of the cursor's own
+      // build rotation, so hovering it is what makes the required road connection
+      // visible in the first place.
+      const facesRoad = tool === 'wasteDepot' || isSealedWasteContainer(tool)
+      const facing = facesRoad ? this.placementResult?.rotation ?? this.currentSnapshot.buildRotation : this.currentSnapshot.buildRotation
+      const angle = facing * (Math.PI / 2)
       const directing =
         tool === 'roadDirection' ||
         tool === 'trafficLight' ||

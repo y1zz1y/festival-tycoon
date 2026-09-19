@@ -96,7 +96,7 @@ export type Tool =
   | 'copy'
   | 'inspect'
 
-/** Autostraßen window and overlays: occupancy/P helpers stay here, not in the default camera. */
+/** Straßen window and overlays: occupancy/P helpers stay here, not in the default camera. */
 export const ROAD_BUILD_TOOLS = [
   'road',
   'parkingArea',
@@ -342,7 +342,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
   },
   sealedWasteContainer: {
     kind: 'sealedWasteContainer',
-    name: 'Versiegelter Müllcontainer',
+    name: 'Müllcontainer',
     ...SIMULATION_CONFIG.economy.buildings.sealedWasteContainer,
     height: 1.15,
     color: 0x3a4a38,

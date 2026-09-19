@@ -1700,12 +1700,29 @@ export class GameState {
     return seen
   }
 
+  /**
+   * Whether a truck can pull up to this container: standing on a road itself (the rare
+   * placement right on a road tile, like a bench can) or, the ordinary case, standing
+   * beside one on a path or bare ground with a road on any of its four sides. Checking
+   * only the container's own cell meant this was true for almost no real placement, since
+   * a container next to a road — the normal way to build one — was never itself a road
+   * cell, and trucks quietly treated it as unreachable.
+   */
   isSealedWasteContainerOnRoad(building: {
     x: number
     z: number
     elevation: number
   }): boolean {
-    return Boolean(this.getRoadCellAt(building.x, building.z, building.elevation))
+    if (this.getRoadCellAt(building.x, building.z, building.elevation)) return true
+    return [
+      { x: building.x, z: building.z + 1 },
+      { x: building.x + 1, z: building.z },
+      { x: building.x, z: building.z - 1 },
+      { x: building.x - 1, z: building.z },
+    ].some((cell) => {
+      const road = this.getRoadCellAt(cell.x, cell.z)
+      return road !== undefined && Math.abs((road.elevation ?? building.elevation) - building.elevation) < WAY_LEVEL_MATCH
+    })
   }
 
   getDepotAt(x: number, z: number) {
@@ -3351,6 +3368,8 @@ export class GameState {
       canPlaceBungee: (x, z, height) => this.canPlaceBungee(x, z, height),
       canPlace: (kind, x, z, decorationSlot, preserveLegacySlot) =>
         this.canPlace(kind, x, z, decorationSlot, preserveLegacySlot),
+      facingRoadDirection: (x, z, size, preferred) =>
+        this.facingRoadDirection(x, z, size, preferred as Direction),
       previewTool: (tool, x, z, enabled) =>
         this.previewToolPlacement(tool, x, z, enabled),
     }, request)
@@ -3681,6 +3700,8 @@ export class GameState {
       nextId: (prefix) => this.nextId(prefix),
       findFurnitureRotation: (cellX, cellZ, preferred) =>
         this.findBenchRotation(cellX, cellZ, preferred),
+      facingRoadDirection: (cellX, cellZ, size, preferred) =>
+        this.facingRoadDirection(cellX, cellZ, size, preferred as Direction),
       nextBandName: () => BAND_NAMES[this.idCounter % BAND_NAMES.length]!,
       syncStageAudience: () => syncStageAudience(this.state),
       recalculateQueueDirections: () => this.recalculateQueueDirections(),
@@ -3892,15 +3913,19 @@ export class GameState {
       this.clearDesignatedOccupancyAt(cell.x, cell.z, false, { preserveMedical: true })
       this.clearTreesAt(cell.x, cell.z, 0, 1)
     })
+    // Its open loading face always turns to the street, never left facing wherever the
+    // player's build cursor last pointed — placement itself already guarantees a road on
+    // one of the four sides, so this never falls through to the 0 default in practice.
+    const rotation = this.facingRoadDirection(x, z, 2, this.state.buildRotation as Direction) ?? 0
     const id = this.nextId('waste-depot')
     bookFinance(this.state, 'construction', -BUILDINGS.wasteDepot.cost)
-    this.state.logistics.wasteDepots.push({ id, x, z, truckIds: [] })
+    this.state.logistics.wasteDepots.push({ id, x, z, truckIds: [], rotation })
     this.state.buildings.push({
       id,
       kind: 'wasteDepot',
       x,
       z,
-      rotation: this.state.buildRotation,
+      rotation,
       elevation: 0,
       price: 0,
     })
@@ -4962,6 +4987,28 @@ export class GameState {
   findReachableRoadExit(start: RoadPosition, initialDirection: Direction, blockedCells?: ReadonlySet<string>, allowUTurn = false): { position: RoadPosition; route: RoadCell[] } | null { return this.roadVehicleSimulation.findReachableRoadExit(start, initialDirection, blockedCells, allowUTurn) }
   claimAdjacentFreeParking(vehicle: RoadVehicle): boolean { return this.roadVehicleSimulation.claimAdjacentFreeParking(vehicle) }
   private searchReachableRoadExit(start: RoadPosition, initialDirection: Direction, blockedCells?: ReadonlySet<string>, allowUTurn = false): { position: RoadPosition; route: RoadCell[] } | null { return this.roadVehicleSimulation.searchReachableRoadExit(start, initialDirection, blockedCells, allowUTurn) }
+
+  /**
+   * Which side of a square footprint touches a road, so a depot can turn its loading face
+   * towards the street it actually sits next to instead of always facing the same way. Tries
+   * `preferred` first (the side the player was already facing, if that happens to be a valid
+   * one), then falls back to whichever side has a road, in a fixed order. Returns null only
+   * when no side has one, which placement itself never allows to begin with.
+   */
+  private facingRoadDirection(x: number, z: number, size: number, preferred?: Direction): Direction | null {
+    const edge = (direction: Direction): RoadPosition[] => {
+      switch (direction) {
+        case 0: return Array.from({ length: size }, (_, i) => ({ x: x + i, z: z + size }))
+        case 1: return Array.from({ length: size }, (_, i) => ({ x: x + size, z: z + i }))
+        case 2: return Array.from({ length: size }, (_, i) => ({ x: x + i, z: z - 1 }))
+        case 3: return Array.from({ length: size }, (_, i) => ({ x: x - 1, z: z + i }))
+      }
+    }
+    const hasRoad = (direction: Direction) => edge(direction).some((cell) => Boolean(this.getRoadCellAt(cell.x, cell.z)))
+    if (preferred !== undefined && hasRoad(preferred)) return preferred
+    const directions: Direction[] = [0, 1, 2, 3]
+    return directions.find(hasRoad) ?? null
+  }
 
   private getAdjacentRoadPositions(position: RoadPosition): RoadPosition[] {
     return [

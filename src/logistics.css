@@ -99,11 +99,6 @@ body #toast { top: auto; bottom: 64px; z-index: 40; max-width: min(640px, calc(1
   color: #a9beb5;
   font-size: 11px;
 }
-.logistics-supply-settings input[type='range'],
-#logistics-supply input[type='range'] {
-  width: 100%;
-  accent-color: #5eb081;
-}
 .logistics-supply-settings select,
 #logistics-supply select {
   width: 100%;

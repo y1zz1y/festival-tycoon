@@ -2668,6 +2668,8 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     const placed = game.place('wasteDepot', -2, -18)
     assert.ok(placed.ok, placed.message)
     const depot = state.logistics.wasteDepots[0]!
+    assert.equal(depot.rotation, 1, 'the depot turns its loading face to the road on its east side, not the build cursor')
+    assert.equal(state.buildings.find((b) => b.kind === 'wasteDepot')!.rotation, 1)
     const bought = game.buyGarbageTruck(depot.id)
     assert.ok(bought.ok, bought.message)
     const truck = state.logistics.roadVehicles.find((vehicle) => vehicle.kind === 'garbageTruck')

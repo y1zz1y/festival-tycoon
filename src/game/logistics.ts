@@ -412,7 +412,7 @@ export function describeRoadVehicleDestination(vehicle: RoadVehicle): string | n
   }
   if (vehicle.target?.kind === 'busStop') return 'Nächste Bushaltestelle'
   if (vehicle.target?.kind === 'tourBusParking') return 'Tourbus-Parkplatz'
-  if (vehicle.target?.kind === 'sealedWasteContainer') return 'Versiegelter Müllcontainer'
+  if (vehicle.target?.kind === 'sealedWasteContainer') return 'Müllcontainer'
   if (vehicle.target?.kind === 'wasteDump') return 'Müllablage'
   if (vehicle.kind === 'deliveryTruck' && vehicle.target?.kind === 'depot') {
     return 'Anlieferungsplatz'
@@ -443,6 +443,8 @@ export type BusDepot = RoadPosition & {
 export type WasteDepot = RoadPosition & {
   id: string
   truckIds: string[]
+  /** Which way its open loading face points, towards the road it was built next to. Missing on depots from before this was tracked, which keep facing the way they always have. */
+  rotation?: Direction
 }
 
 export type SpecialDepot = RoadPosition & {

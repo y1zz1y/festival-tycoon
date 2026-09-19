@@ -9,16 +9,13 @@ import {
   CanvasTexture,
   Float32BufferAttribute,
   Group,
-  InstancedMesh,
   Line,
   LineBasicMaterial,
-  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   DoubleSide,
   PlaneGeometry,
-  Quaternion,
   SRGBColorSpace,
   Vector3,
 } from 'three'
@@ -101,21 +98,8 @@ function structureFingerprint(logistics: Readonly<LogisticsSnapshot>): string {
   ].join('#')
 }
 
-/** One arrow per one-way field, standing still: it says which way the street runs
- * without a stream of markers crawling over the map. */
-const FLOW_ARROWS = 1
-const FLOW_UP = new Vector3(0, 1, 0)
-const flowArrowGeometry = createRoadDirectionArrowGeometry('overlay')
 const roadArrowGeometry = createRoadDirectionArrowGeometry('paint')
 roadArrowGeometry.userData.shared = true
-const flowMaterial = new MeshBasicMaterial({
-  color: 0xffd56a,
-  transparent: true,
-  opacity: 0.82,
-  depthWrite: false,
-  depthTest: false,
-  side: DoubleSide,
-})
 const roadArrowMaterial = new MeshBasicMaterial({
   color: 0xf4f0de,
   depthTest: false,
@@ -158,13 +142,6 @@ const parkingOccupiedMaterial = new MeshStandardMaterial({
 parkingOccupiedMaterial.userData.shared = true
 
 type ParkingHelper = { group: Group; free: Mesh; occupied: Mesh }
-
-type DirectionFlowMark = {
-  x: number
-  z: number
-  y: number
-  direction: Direction
-}
 
 function addBox(
   parent: Group,
@@ -226,18 +203,10 @@ export class LogisticsView {
   private getGroundY: (x: number, z: number) => number = () => 0
   private roadsByKey = new Map<string, RoadCell[]>()
   private readonly marksGroup = new Group()
-  private readonly flowGroup = new Group()
-  private flowMarks: DirectionFlowMark[] = []
-  private flowArrows: InstancedMesh | null = null
   private facingFactor = 0
-  private readonly flowMatrix = new Matrix4()
-  private readonly flowPosition = new Vector3()
-  private readonly flowScale = new Vector3()
-  private readonly flowQuaternion = new Quaternion()
 
   constructor() {
-    this.flowGroup.renderOrder = 6
-    this.group.add(this.staticGroup, this.vehicleGroup, this.marksGroup, this.flowGroup)
+    this.group.add(this.staticGroup, this.vehicleGroup, this.marksGroup)
   }
 
   invalidate(): void {
@@ -274,7 +243,6 @@ export class LogisticsView {
     roadSurface: (x: number, z: number) => WayType | undefined = () => undefined,
     paused = false,
     time = performance.now(),
-    showDirectionFlow = false,
     showParkingHelpers = false,
   ): void {
     const seconds=this.lastAnimationTime===null?0:Math.min(.25,Math.max(0,(time-this.lastAnimationTime)/1000))
@@ -316,8 +284,6 @@ export class LogisticsView {
     this.updateVehicles(logistics.roadVehicles)
     this.updateInspectRoute(logistics.roadVehicles)
     this.refreshPlannerRoute()
-    this.flowGroup.visible = showDirectionFlow
-    if (showDirectionFlow) this.updateDirectionFlow()
   }
 
   private groundY(x: number, z: number): number {
@@ -370,7 +336,6 @@ export class LogisticsView {
       this.staticGroup.add(this.placeFacility(stop, 'busStop'))
     })
     this.staticGroup.add(batchRetroBuildings(this.staticGroup))
-    this.rebuildDirectionFlow(logistics)
   }
 
   private createRoad(road: RoadCell): Group {
@@ -452,60 +417,6 @@ export class LogisticsView {
     return group
   }
 
-  private rebuildDirectionFlow(logistics: Readonly<LogisticsSnapshot>): void {
-    this.flowMarks = logistics.roadCells.flatMap((road) => {
-      if (road.allowedDirections === null) return []
-      const y = this.roadY(road)
-      return directionsFromMask(road.allowedDirections).map((direction) => ({
-        x: road.x,
-        z: road.z,
-        y,
-        direction,
-      }))
-    })
-    const count = Math.max(1, this.flowMarks.length * FLOW_ARROWS)
-    if (this.flowArrows && this.flowArrows.instanceMatrix.count === count) {
-      this.updateDirectionFlow()
-      return
-    }
-    this.clearDirectionFlow()
-    this.flowArrows = new InstancedMesh(flowArrowGeometry, flowMaterial, count)
-    this.flowArrows.frustumCulled = false
-    this.flowArrows.renderOrder = 7
-    this.flowGroup.add(this.flowArrows)
-    this.updateDirectionFlow()
-  }
-
-  private clearDirectionFlow(): void {
-    this.flowArrows?.removeFromParent()
-    this.flowArrows?.dispose()
-    this.flowArrows = null
-  }
-
-  private updateDirectionFlow(): void {
-    if (!this.flowArrows) return
-    let index = 0
-    this.flowMarks.forEach((mark) => {
-      this.flowQuaternion.setFromAxisAngle(FLOW_UP, DIRECTION_ANGLE[mark.direction])
-      this.flowPosition.set(mark.x + 0.5, mark.y + 0.045, mark.z + 0.5)
-      this.flowScale.set(0.52, 0.52, 0.52)
-      this.flowMatrix.compose(
-        this.flowPosition,
-        this.flowQuaternion,
-        this.flowScale,
-      )
-      this.flowArrows!.setMatrixAt(index, this.flowMatrix)
-      index += 1
-    })
-    const hidden = this.flowMatrix.makeScale(0, 0, 0)
-    while (index < this.flowArrows.count) {
-      this.flowArrows.setMatrixAt(index, hidden)
-      index += 1
-    }
-    this.flowArrows.instanceMatrix.needsUpdate = true
-    this.flowArrows.count = this.flowMarks.length * FLOW_ARROWS
-  }
-
   private updateParkingOccupancy(spaces: readonly ParkingCell[]): void {
     spaces.forEach((space) => {
       const helper = this.parkingHelpers.get(`${space.x}:${space.z}`)
@@ -556,6 +467,11 @@ export class LogisticsView {
       this.groundY(facility.x, facility.z),
       facility.z + size / 2,
     )
+    // Only a waste depot carries a facing today (its model has an open loading side that has
+    // to turn towards the road it was built next to); every other facility here is symmetric
+    // enough, or handled elsewhere, that a rotation was never worth tracking for it.
+    const rotation = 'rotation' in facility ? facility.rotation : undefined
+    if (rotation) group.rotation.y = DIRECTION_ANGLE[rotation]
     return group
   }
 

@@ -1363,11 +1363,6 @@ body.title-open #app-install-hint {
   font-size: 10px;
 }
 
-.scenario-field input[type='range'] {
-  width: 100%;
-  accent-color: #5eb081;
-}
-
 .scenario-field select {
   width: 100%;
   padding: 7px 8px;
@@ -4356,11 +4351,6 @@ body.title-open #app-install-hint {
   font-size: 11px;
 }
 
-.coaster-options input[type='range'] {
-  width: 100%;
-  accent-color: #5eb081;
-}
-
 .coaster-options input[type='number'] {
   width: 100%;
   padding: 7px;
@@ -4863,6 +4853,108 @@ input[type='checkbox']:focus-visible {
 }
 
 input[type='checkbox']:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Every slider in the game wears the same face as a button and a checkbox: flat,
+   square, bevelled. The rille is a groove — bevel run the opposite way from a
+   button, so it reads as sunk in — and the knob is a small raised button that
+   travels along it, with the same hover, pressed and disabled states as any
+   other control. The knob stays a solid colour at rest (not the translucent
+   button fill) so it is always visible against the groove rather than fading
+   into it, with hover and drag still reading as a clear step up in colour. */
+input[type='range'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #1b322c;
+  border-left-color: #1b322c;
+  border-right-color: #819b8c;
+  border-bottom-color: #819b8c;
+  border-radius: 0;
+}
+
+input[type='range']::-moz-range-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #1b322c;
+  border-left-color: #1b322c;
+  border-right-color: #819b8c;
+  border-bottom-color: #819b8c;
+  border-radius: 0;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  background: #4d6a5d;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #819b8c;
+  border-left-color: #819b8c;
+  border-right-color: #1b322c;
+  border-bottom-color: #1b322c;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #4d6a5d;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #819b8c;
+  border-left-color: #819b8c;
+  border-right-color: #1b322c;
+  border-bottom-color: #1b322c;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+input[type='range']:hover:not(:disabled)::-webkit-slider-thumb {
+  background: #3f715b;
+}
+
+input[type='range']:hover:not(:disabled)::-moz-range-thumb {
+  background: #3f715b;
+}
+
+input[type='range']:active:not(:disabled)::-webkit-slider-thumb {
+  background: #3f715b;
+  border-top-color: #203c30;
+  border-left-color: #203c30;
+  box-shadow: inset 1px 1px #203c30;
+}
+
+input[type='range']:active:not(:disabled)::-moz-range-thumb {
+  background: #3f715b;
+  border-top-color: #203c30;
+  border-left-color: #203c30;
+  box-shadow: inset 1px 1px #203c30;
+}
+
+input[type='range']:focus-visible {
+  outline: 2px solid #ffd47d;
+  outline-offset: 2px;
+}
+
+input[type='range']:disabled {
   opacity: 0.45;
   cursor: default;
 }
