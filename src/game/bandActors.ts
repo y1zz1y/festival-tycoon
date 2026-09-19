@@ -36,6 +36,8 @@ export type BandActor = {
   memberIndex: number
   role: BandRole
   costumeId: string
+  /** Sitting on a backstage couch rather than standing around waiting. */
+  seated?: boolean
 }
 
 export function normalizeBandActor(value: unknown): BandActor | null {
@@ -83,6 +85,7 @@ export function normalizeBandActor(value: unknown): BandActor | null {
     memberIndex: Number.isFinite(Number(source.memberIndex)) ? Number(source.memberIndex) : 0,
     role: isBandRole(source.role) ? source.role : bandRoles(source.bandId)[0] ?? 'singer',
     costumeId: typeof source.costumeId === 'string' ? source.costumeId : bandCostumeId(source.bandId),
+    seated: source.seated === true,
   }
 }
 
@@ -128,6 +131,7 @@ export function createBandActor(
     memberIndex,
     role,
     costumeId: bandCostumeId(bandId),
+    seated: false,
   }
 }
 

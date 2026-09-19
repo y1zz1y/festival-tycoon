@@ -277,6 +277,54 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
     ),
     'idle band members occupy the active backstage after they leave the bus',
   )
+  // With a couch backstage the band sits it out there instead of drifting around in
+  // front of the stage, and walks over to the fridge every so often.
+  const lounge = prepare(fixture, 0)
+  const loungeStage = lounge.snapshot.buildings.find((building) => building.kind === 'stage')!
+  bookOnStage(lounge, loungeStage.id, [{ bandId: 'meadow', start: 840 }])
+  paintBackstage(lounge, [
+    { x: 5, z: -20 },
+    { x: 4, z: -20 },
+    { x: 3, z: -20 },
+    { x: 2, z: -20 },
+    { x: 1, z: -20 },
+    { x: 1, z: -19 },
+    { x: 1, z: -21 },
+    { x: 1, z: -22 },
+  ])
+  // Turned a quarter, the three-seater runs along z instead of x.
+  lounge.rotateBuild()
+  const couchPlacement = lounge.place('backstageCouch3', 1, -21)
+  assert.ok(couchPlacement.ok, `couch: ${couchPlacement.message}`)
+  assert.equal(
+    lounge.canPlace('bandFridge', 1, -20).ok,
+    false,
+    'the couch occupies every field it covers',
+  )
+  assert.ok(lounge.place('bandFridge', 1, -22).ok)
+  lounge.snapshot.minute = CONFIG.busArriveHour * 60
+  lounge.syncBandSupply()
+  const loungeBand = lounge.snapshot.bandActors.filter((actor) => actor.bandId === 'meadow')
+  assert.ok(loungeBand.length > 0, 'the band is on site once the day starts')
+  const couchCells = new Set(['1,-21', '1,-20', '1,-19'])
+  let everSeated = false
+  let everLeftTheCouch = false
+  for (let i = 0; i < 600; i++) {
+    lounge.tick(0.1)
+    const waiting = lounge.snapshot.bandActors.filter(
+      (actor) => actor.state !== 'performing' && actor.state !== 'leaving',
+    )
+    if (waiting.some((actor) => actor.seated && couchCells.has(`${actor.cellX},${actor.cellZ}`))) {
+      everSeated = true
+    }
+    if (everSeated && waiting.some((actor) => !actor.seated && actor.route.length > 0)) {
+      everLeftTheCouch = true
+    }
+    if (everSeated && everLeftTheCouch) break
+  }
+  assert.ok(everSeated, 'a waiting band member takes a seat on the couch')
+  assert.ok(everLeftTheCouch, 'and heads off to the fridge again after a while')
+
   const stageLook = new Group()
   updateStageBand(stageLook, 'lantern', 0, true)
   assert.equal(

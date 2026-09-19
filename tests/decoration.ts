@@ -133,6 +133,23 @@ export function testThemedDecorationPlacement(fixture: (count?: number) => GameS
     assert.equal((loaded as any).isPedestrianSolidAt(10, 6, 0), false)
   }
   {
+    // Only a continuing way closes a side: a hedge or a flower bed behind the edge
+    // is what the bench should look out over, not a reason to refuse it.
+    const dressed = fixture(0)
+    assert.ok(dressed.place('path', 10, 6).ok)
+    assert.ok(dressed.place('path', 10, 7).ok)
+    assert.ok(dressed.place('hedge', 11, 6).ok)
+    assert.ok(dressed.place('flowerbed', 9, 6).ok)
+    assert.ok(dressed.place('bench', 10, 6).ok)
+    const dressedBenches = dressed.snapshot.buildings.filter((b) => b.kind === 'bench')
+    assert.equal(dressedBenches.length, 3, 'decoration behind an edge still leaves it usable')
+    assert.equal(
+      dressedBenches.some((bench) => bench.rotation === 0),
+      false,
+      'the side the path continues on stays free',
+    )
+  }
+  {
     // A path tile boxed in on all four sides by other path has no Weg-Kante at all.
     const boxedIn = fixture(0)
     assert.ok(boxedIn.place('path', 20, 20).ok)

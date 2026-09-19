@@ -7,7 +7,18 @@ import { SIMULATION_CONFIG } from './simulationConfig'
 import { BANDS } from './festivalManagement'
 import type { Booking } from './festivalManagement'
 
-export const BAND_SUPPLY_KINDS = ['tourBusParking'] as const satisfies readonly BuildingKind[]
+export const BAND_SUPPLY_KINDS = [
+  'tourBusParking',
+  'bandFridge',
+  'backstageCouch2',
+  'backstageCouch3',
+  'backstageToilet',
+] as const satisfies readonly BuildingKind[]
+/** Seating the band waits on instead of milling about in front of the stage. */
+export const BACKSTAGE_COUCH_KINDS = ['backstageCouch2', 'backstageCouch3'] as const satisfies readonly BuildingKind[]
+export function isBackstageCouchKind(kind: string): boolean {
+  return (BACKSTAGE_COUCH_KINDS as readonly string[]).includes(kind)
+}
 export type BandSupplyKind = (typeof BAND_SUPPLY_KINDS)[number]
 export type BandArrivalMode = 'tourBus' | 'staffGate'
 

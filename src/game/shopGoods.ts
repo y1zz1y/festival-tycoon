@@ -41,7 +41,7 @@ export function isGeneralGoodsShopKind(kind: string): kind is GeneralGoodsShopKi
 export function shopSupplyKind(kind: BuildingKind | string): Supply | null {
   if (kind === 'food') return 'food'
   if (kind === 'alcohol') return 'drinks'
-  if (kind === 'toilet') return 'water'
+  if (kind === 'toilet' || kind === 'backstageToilet') return 'water'
   if (isGeneralGoodsShopKind(kind)) return 'goods'
   return null
 }

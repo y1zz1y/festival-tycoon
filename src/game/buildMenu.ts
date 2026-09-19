@@ -331,6 +331,22 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
             'tourBusParking',
             `${Math.floor(BUILDINGS.tourBusParking.cost).toLocaleString('de-DE')} € · nur Backstage`,
           ),
+          buildingMenuItem(
+            'bandFridge',
+            `${Math.floor(BUILDINGS.bandFridge.cost).toLocaleString('de-DE')} € · Pause zwischen den Auftritten`,
+          ),
+          buildingMenuItem(
+            'backstageCouch2',
+            `${Math.floor(BUILDINGS.backstageCouch2.cost).toLocaleString('de-DE')} € · 2 Felder · 2 Sitzplätze`,
+          ),
+          buildingMenuItem(
+            'backstageCouch3',
+            `${Math.floor(BUILDINGS.backstageCouch3.cost).toLocaleString('de-DE')} € · 3 Felder · 3 Sitzplätze`,
+          ),
+          buildingMenuItem(
+            'backstageToilet',
+            `${Math.floor(BUILDINGS.backstageToilet.cost).toLocaleString('de-DE')} € · braucht Trinkwasser`,
+          ),
         ],
       },
       {

@@ -27,6 +27,7 @@ const SOLID_KINDS = new Set<BuildingKind>([
   'directionalSpeaker', 'omniSpeaker', 'ambulanceGarage', 'busDepot',
   'wasteDepot', 'specialDepot', 'generator', 'backupGenerator', 'foh',
   'delayTower', 'videoWall', 'laserShow', 'fireworkBattery', 'tourBusParking',
+  'bandFridge', 'backstageToilet',
 ])
 
 export function isPedestrianSolidKind(kind: BuildingKind): boolean {

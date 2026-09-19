@@ -80,7 +80,7 @@ import { FestivalAreaSystem } from './festivalAreas';
 import type { StageForecourtCell } from './festivalAreas';
 import { acceptWasteAtDump, acceptWasteAtSealedContainer, designateWasteDumps, emptySealedContainerStored, isSealedWasteContainer, wasteTipCapacity, wasteTipProcessingPerMinute } from './waste';
 import type { SealedWasteContainerInfo, WasteDumpCell } from './waste';
-import { bandSupplyAt, bandSupplyForStage, buildBandSupplyGraph, collectBandSupplySnapshot, designateBackstageAreas, isBandSupplyKind, isFanIntrusionEligible, showQualityForStage, type BackstageCell, type BandSupplyComponent, type BandSupplyStats } from './bandSupply';
+import { backstageCellKey, bandSupplyAt, bandSupplyForStage, buildBandSupplyGraph, collectBandSupplySnapshot, designateBackstageAreas, isBackstageCouchKind, isBandSupplyKind, isFanIntrusionEligible, showQualityForStage, type BackstageCell, type BandSupplyComponent, type BandSupplyStats } from './bandSupply';
 import { bandActorShouldPerform, createBandActor, createTourBusVehicle, idleWanderReady, isBandOnSiteMinute, nextWanderDelay, placeActorOnCell, planBandPresence, stepBandActor, type BandActor, type PlannedBandPresence } from './bandActors';
 import { bandCostumeId, bandRoles } from './bandLooks';
 import { consumesPower, normalizePower, PowerSystem } from './power';
@@ -3953,6 +3953,7 @@ export class GameState {
     }
     if (kind === 'busStop') return this.canPlaceBusStop(x, z)
     if (kind === 'tourBusParking') return this.canPlaceTourBusParking(x, z)
+    if (isBandSupplyKind(kind)) return this.canPlaceBandSupplyFootprint(kind, x, z)
     const selected = kind==='stage' ? this.state.festival.stageTemplates?.find(t=>t.name===this.state.festival.selectedStageTemplate) : undefined
     if(selected){const issue=this.checkStageSite(selected,x,z,this.state.buildRotation,this.getPlaceElevation(x,z));if(issue)return {ok:false,message:issue}}
 
@@ -4466,6 +4467,36 @@ export class GameState {
    * one of the two rather than only under the field that was clicked. */
   private canPlaceTourBusParking(x: number, z: number): ActionResult {
     const footprint = buildingFootprint({ kind: 'tourBusParking', x, z, rotation: this.state.buildRotation })
+    const clear = this.checkBandSupplyFootprint('tourBusParking', footprint)
+    if (!clear.ok) return clear
+    const hasRoad = footprint.some((cell) => this.getAdjacentRoadPositions(cell).length > 0)
+    if (!hasRoad) {
+      return { ok: false, message: 'Der Tourbus-Parkplatz braucht eine angrenzende Straße' }
+    }
+    if (this.state.money < BUILDINGS.tourBusParking.cost) {
+      return { ok: false, message: 'Nicht genug Geld' }
+    }
+    return { ok: true, message: 'Tourbus-Parkplatz bauen' }
+  }
+
+  /**
+   * Backstage furniture longer than a tile — a couch, a bus pad — has to be clear and on
+   * designated backstage over its whole length, not just under the field that was clicked.
+   */
+  private canPlaceBandSupplyFootprint(kind: BuildingKind, x: number, z: number): ActionResult {
+    const footprint = buildingFootprint({ kind, x, z, rotation: this.state.buildRotation })
+    const clear = this.checkBandSupplyFootprint(kind, footprint)
+    if (!clear.ok) return clear
+    if (this.state.money < BUILDINGS[kind].cost) {
+      return { ok: false, message: 'Nicht genug Geld' }
+    }
+    return { ok: true, message: `${BUILDINGS[kind].name} bauen` }
+  }
+
+  private checkBandSupplyFootprint(
+    kind: BuildingKind,
+    footprint: ReadonlyArray<{ x: number; z: number }>,
+  ): ActionResult {
     for (const cell of footprint) {
       if (!this.isInWorld(cell.x, cell.z)) return { ok: false, message: 'Außerhalb des Geländes' }
       if (!this.getBackstageCellAt(cell.x, cell.z)) {
@@ -4485,17 +4516,10 @@ export class GameState {
       if (this.getMedicalCellAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche gehört zum Krankenbereich' }
       if (this.getStageForecourtCellAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche gehört zum Bühnenvorplatz' }
       if (this.getWasteDumpAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche ist als Müllablage ausgewiesen' }
-      const collision = this.findCollision('tourBusParking', cell.x, cell.z, placeElevation)
+      const collision = this.findCollision(kind, cell.x, cell.z, placeElevation)
       if (collision && collision.kind !== 'tree') return { ok: false, message: 'Die gesamte Fläche muss frei sein' }
     }
-    const hasRoad = footprint.some((cell) => this.getAdjacentRoadPositions(cell).length > 0)
-    if (!hasRoad) {
-      return { ok: false, message: 'Der Tourbus-Parkplatz braucht eine angrenzende Straße' }
-    }
-    if (this.state.money < BUILDINGS.tourBusParking.cost) {
-      return { ok: false, message: 'Nicht genug Geld' }
-    }
-    return { ok: true, message: 'Tourbus-Parkplatz bauen' }
+    return { ok: true, message: 'Bau möglich' }
   }
 
   private createFootprint(
@@ -8608,6 +8632,67 @@ export class GameState {
       }))
   }
 
+  /**
+   * One seat per field a backstage couch covers, within this component. A band that has
+   * somewhere to sit waits there instead of drifting around in front of the stage.
+   */
+  private backstageSeatCells(componentId: string): Cell[] {
+    const component = this.bandSupplyComponents.find((item) => item.id === componentId)
+    if (!component?.active) return []
+    const keys = new Set(component.cells.map((cell) => backstageCellKey(cell)))
+    const seats: Cell[] = []
+    for (const building of this.state.buildings) {
+      if (!isBackstageCouchKind(building.kind)) continue
+      for (const cell of buildingFootprint(building)) {
+        if (!keys.has(backstageCellKey(cell))) continue
+        seats.push({ x: cell.x, z: cell.z, elevation: building.elevation })
+      }
+    }
+    return seats.sort((left, right) => left.z - right.z || left.x - right.x)
+  }
+
+  /** Where someone stands to raid the fridge: the walkable backstage fields around it. */
+  private backstageFridgeStops(componentId: string): Cell[] {
+    const component = this.bandSupplyComponents.find((item) => item.id === componentId)
+    if (!component?.active) return []
+    const keys = new Set(component.cells.map((cell) => backstageCellKey(cell)))
+    const stops: Cell[] = []
+    for (const building of this.state.buildings) {
+      if (building.kind !== 'bandFridge') continue
+      if (!keys.has(backstageCellKey(building))) continue
+      for (const [dx, dz] of [[0, 1], [1, 0], [0, -1], [-1, 0]] as const) {
+        const cell = { x: building.x + dx, z: building.z + dz }
+        if (!keys.has(backstageCellKey(cell))) continue
+        if (this.isPedestrianSolidAt(cell.x, cell.z, building.elevation)) continue
+        stops.push({ x: cell.x, z: cell.z, elevation: building.elevation })
+      }
+    }
+    return stops
+  }
+
+  /** Hands out the couch seats so two band members never claim the same cushion. */
+  private assignBackstageSeats(): Map<string, Cell> {
+    const byComponent = new Map<string, BandActor[]>()
+    for (const actor of this.state.bandActors) {
+      if (actor.vehicleId || actor.state === 'performing' || actor.state === 'leaving') continue
+      const list = byComponent.get(actor.componentId)
+      if (list) list.push(actor)
+      else byComponent.set(actor.componentId, [actor])
+    }
+    const seats = new Map<string, Cell>()
+    for (const [componentId, actors] of byComponent) {
+      const cells = this.backstageSeatCells(componentId)
+      if (cells.length === 0) continue
+      actors
+        .slice()
+        .sort((left, right) => left.id.localeCompare(right.id))
+        .forEach((actor, index) => {
+          seats.set(actor.id, cells[index % cells.length]!)
+        })
+    }
+    return seats
+  }
+
   private syncBandActors(): void {
     if (!this.state.festival.enabled || this.state.festival.finished) {
       this.state.bandActors = []
@@ -8886,6 +8971,7 @@ export class GameState {
 
   private updateBandActors(minutes: number): void {
     if (!this.state.festival.enabled) return
+    const seatByActor = this.assignBackstageSeats()
     for (const actor of this.state.bandActors) {
       if (actor.vehicleId) continue
       const performing = bandActorShouldPerform(
@@ -8897,6 +8983,7 @@ export class GameState {
       if (performing) {
         const stage = this.state.buildings.find((building) => building.id === actor.stageId)
         if (stage) {
+          actor.seated = false
           actor.state = 'performing'
           placeActorOnCell(actor, {
             x: stage.x,
@@ -8915,6 +9002,7 @@ export class GameState {
       )
       if (leaving) {
         actor.state = 'leaving'
+        actor.seated = false
         if (actor.parkingId) {
           const bus = this.state.logistics.roadVehicles.find(
             (vehicle) =>
@@ -8948,7 +9036,42 @@ export class GameState {
               true,
             ) ?? []
         }
+      } else if (seatByActor.has(actor.id)) {
+        // With a couch backstage the band sits it out instead of waiting around in
+        // front of the stage, and walks over to the fridge every now and then.
+        const seat = seatByActor.get(actor.id)!
+        const onSeat = actor.route.length === 0 && actor.cellX === seat.x && actor.cellZ === seat.z
+        actor.seated = onSeat
+        if (actor.route.length === 0) {
+          actor.wanderMinutes = Math.max(0, actor.wanderMinutes - minutes)
+          if (actor.wanderMinutes <= 0 && this.decisionBudget > 0) {
+            const fridgeStops = onSeat ? this.backstageFridgeStops(actor.componentId) : []
+            const goals = fridgeStops.length > 0 ? fridgeStops : [seat]
+            const arrived = goals.some((cell) => cell.x === actor.cellX && cell.z === actor.cellZ)
+            if (!arrived) {
+              this.decisionBudget -= 1
+              actor.route =
+                this.findPath(
+                  { x: actor.cellX, z: actor.cellZ, elevation: actor.cellElevation },
+                  goals,
+                  false,
+                  false,
+                  false,
+                  false,
+                  true,
+                  undefined,
+                  true,
+                ) ?? []
+              actor.seated = false
+            }
+            actor.wanderMinutes =
+              fridgeStops.length > 0
+                ? SIMULATION_CONFIG.bandSupply.fridgeVisitMinutes
+                : SIMULATION_CONFIG.bandSupply.couchRestMinutes
+          }
+        }
       } else if (idleWanderReady(actor) && this.decisionBudget > 0) {
+        actor.seated = false
         const goals = this.activeBackstageGoals(actor.componentId)
         if (goals.length > 0) {
           this.decisionBudget -= 1

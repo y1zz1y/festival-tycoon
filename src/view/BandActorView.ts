@@ -6,6 +6,9 @@ import type { BandRole } from '../game/bandLooks'
 
 type Pose = { x: number; y: number; z: number }
 
+/** How far a seated band member drops so the couch cushion hides their legs. */
+const SEAT_SINK = -0.12
+
 export class BandActorView {
   readonly group = new Group()
   private models = new Map<string, Group>()
@@ -59,9 +62,12 @@ export class BandActorView {
       const moving = actor.route.length > 0
       const phase = Number(actor.id.replace(/\D/g, '').slice(-3)) * 0.37 + actor.facing
       const pose = this.interpolatedPose(actor, renderAlpha)
+      // Sitting on a couch: sunk into the cushion so the legs disappear behind the
+      // seat and only the upper body shows above it.
+      const seatOffset = actor.seated ? SEAT_SINK : 0.04
       model.position.set(
         pose.x,
-        (terrainHeight?.(pose.x, pose.z, pose.y) ?? pose.y) + 0.04,
+        (terrainHeight?.(pose.x, pose.z, pose.y) ?? pose.y) + seatOffset,
         pose.z,
       )
       model.rotation.y +=

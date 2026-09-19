@@ -217,6 +217,8 @@ export function stageSize(d:StageDesign|undefined,rotation=0){
 /** The rare building whose footprint isn't a single tile without going as far as a full stage design — a tour bus's own length, not a stage's. */
 const NON_STAGE_FOOTPRINTS: Partial<Record<string,{width:number;depth:number}>> = {
   tourBusParking: {width:1,depth:2},
+  backstageCouch2: {width:2,depth:1},
+  backstageCouch3: {width:3,depth:1},
 }
 /** Every building's real footprint, stage or not: a stage design's own size, this handful of
  * other multi-tile kinds, or the ordinary single tile — always turned to match its rotation. */

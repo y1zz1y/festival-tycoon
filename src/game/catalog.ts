@@ -61,6 +61,10 @@ export const BUILDING_KINDS = [
   'laserShow',
   'fireworkBattery',
   'tourBusParking',
+  'bandFridge',
+  'backstageCouch2',
+  'backstageCouch3',
+  'backstageToilet',
 ] as const
 
 export type BuildingKind = (typeof BUILDING_KINDS)[number]
@@ -422,6 +426,38 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
     height: 0.28,
     color: 0x3c4247,
     icon: '🚌',
+  },
+  bandFridge: {
+    kind: 'bandFridge',
+    name: 'Bandkühlschrank',
+    ...SIMULATION_CONFIG.economy.buildings.bandFridge,
+    height: 0.95,
+    color: 0xd7dbd4,
+    icon: '🧊',
+  },
+  backstageCouch2: {
+    kind: 'backstageCouch2',
+    name: 'Backstage-Couch (2er)',
+    ...SIMULATION_CONFIG.economy.buildings.backstageCouch2,
+    height: 0.72,
+    color: 0x8c4a55,
+    icon: '🛋️',
+  },
+  backstageCouch3: {
+    kind: 'backstageCouch3',
+    name: 'Backstage-Couch (3er)',
+    ...SIMULATION_CONFIG.economy.buildings.backstageCouch3,
+    height: 0.72,
+    color: 0x8c4a55,
+    icon: '🛋️',
+  },
+  backstageToilet: {
+    kind: 'backstageToilet',
+    name: 'Backstage-Klo',
+    ...SIMULATION_CONFIG.economy.buildings.backstageToilet,
+    height: 1.18,
+    color: 0xd6ab4a,
+    icon: '🚽',
   },
   fireworkBattery: {
     kind: 'fireworkBattery',

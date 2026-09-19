@@ -5,7 +5,7 @@ export function isPathSeat(kind: string | undefined): boolean {
   return kind === 'bench' || kind === 'table'
 }
 
-/** Every free outside edge (path/road actual placement layer, keeping benches and bins apart). */
+/** Every Weg-Kante of this tile: a side where the way itself ends, whatever stands beyond it. */
 export function pathFurnitureEdges(
   snapshot: Readonly<GameSnapshot>,
   x: number,
@@ -18,7 +18,10 @@ export function pathFurnitureEdges(
     const [dx, dz] = directions[rotation]!
     if (snapshot.buildings.some(b => b.x === x && b.z === z && Math.abs(b.elevation - elevation) < .1 &&
       (b.kind === 'bench' || b.kind === 'table' || isWasteBin(b.kind)) && b.rotation === rotation)) continue
-    if (snapshot.buildings.some(b => b.x === x + dx && b.z === z + dz && Math.abs(b.elevation - elevation) < .1)) continue
+    // Only a continuing way disqualifies a side. Whatever else stands behind the
+    // bench — a flower bed, a hedge, a stall — is exactly what it should look out
+    // over, so it must not rule the edge out.
+    if (snapshot.buildings.some(b => b.kind === 'path' && b.x === x + dx && b.z === z + dz && Math.abs(b.elevation - elevation) < .1)) continue
     if (snapshot.logistics.roadCells.some(road => road.x === x + dx && road.z === z + dz && Math.abs((road.elevation ?? elevation) - elevation) < .1)) continue
     if ([...snapshot.campingCells, ...snapshot.medicalCells, ...snapshot.stageForecourtCells].some(c => c.x === x + dx && c.z === z + dz)) continue
     edges.push(rotation)

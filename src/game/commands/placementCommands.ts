@@ -6,7 +6,7 @@ import { defaultShirtSettings, isQueuedFacilityKind } from '../shopGoods'
 import { isSealedWasteContainer } from '../waste'
 import { isWasteBin } from '../decorationWalls'
 import { DEFAULT_SECURITY_CONFIG } from '../security'
-import { stageSize, stageStats, buildingFootprint, type StageDesign } from '../stageDesign'
+import { stageSize, stageStats, buildingFootprint, buildingSize, type StageDesign } from '../stageDesign'
 import type {
   GhostRenderMode,
   PlacementPreviewRequest,
@@ -239,14 +239,12 @@ function placementFootprint(
 ): { width: number; depth: number } {
   if (kind === 'ambulanceGarage' || kind === 'wasteDepot') return { width: 2, depth: 2 }
   if (kind === 'busDepot' || kind === 'specialDepot') return { width: 3, depth: 3 }
-  if (kind === 'tourBusParking') {
-    return state.buildRotation % 2 ? { width: 2, depth: 1 } : { width: 1, depth: 2 }
-  }
   if (kind === 'stage') {
     const design = state.festival.stageTemplates?.find(
       (template) => template.name === state.festival.selectedStageTemplate,
     )
     return stageSize(design, state.buildRotation)
   }
-  return { width: 1, depth: 1 }
+  // Tour bus pads and backstage couches are longer than a tile; everything else is 1x1.
+  return buildingSize({ kind, rotation: state.buildRotation })
 }

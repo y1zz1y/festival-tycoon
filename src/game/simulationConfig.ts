@@ -80,6 +80,10 @@ export const SIMULATION_CONFIG = {
       laserShow: { cost: 2600, upkeep: 48, capacity: 0, appeal: 8, defaultPrice: 0 },
       fireworkBattery: { cost: 1400, upkeep: 20, capacity: 0, appeal: 6, defaultPrice: 0 },
       tourBusParking: { cost: 450, upkeep: 6, capacity: 1, appeal: 0, defaultPrice: 0 },
+      bandFridge: { cost: 100, upkeep: 3, capacity: 0, appeal: 0, defaultPrice: 0 },
+      backstageCouch2: { cost: 250, upkeep: 2, capacity: 2, appeal: 0, defaultPrice: 0 },
+      backstageCouch3: { cost: 450, upkeep: 3, capacity: 3, appeal: 0, defaultPrice: 0 },
+      backstageToilet: { cost: 1000, upkeep: 14, capacity: 2, appeal: 0, defaultPrice: 0 },
     },
   },
   ticketDemand: {
@@ -837,6 +841,10 @@ export const SIMULATION_CONFIG = {
     fanAttractivenessPenaltyPerFan: 6,
     fanAttractivenessPenaltyCap: 36,
     fanLingerMinutes: 4,
+    /** How long a band member stays put between trips off the couch. */
+    couchRestMinutes: 25,
+    /** And how long they hang around the fridge before going back to sit down. */
+    fridgeVisitMinutes: 8,
   },
   waste: {
     dumpDesignationCost: 15,

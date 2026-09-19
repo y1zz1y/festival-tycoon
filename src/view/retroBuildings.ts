@@ -65,6 +65,7 @@ export const DETAILED_BUILDINGS: readonly BuildingKind[] = [
   'sealedWasteContainer', ...THEMED_BIN_KINDS, 'stage', 'directionalSpeaker',
   'omniSpeaker', 'generator', 'backupGenerator', 'foh', 'delayTower',
   'videoWall', 'laserShow', 'fireworkBattery', 'securityGate', 'ride',
+  'bandFridge', 'backstageCouch2', 'backstageCouch3', 'backstageToilet',
   ...SCENERY_KINDS,
 ]
 
@@ -441,6 +442,108 @@ function buildThemedScenery(kind: BuildingKind, k: ModelKit): boolean {
     return true
   }
   return false
+}
+
+/** One moulded portable cabin, recoloured: the site's blue plastic, or the band's gold. */
+type CabinPalette = {
+  plastic: number; ridge: number; door: number; roof: number
+  skirt: number; base: number; recess: number; letter: number
+  capLow: number; capTop: number; capRib: number; vent: number; grip: number
+  handle: number; handleLip: number; step: number; vent2: number
+}
+const BLUE_CABIN: CabinPalette = {
+  plastic: 0x378caa, ridge: 0x59a6bc, door: 0x468fa9, roof: 0xe8ece1,
+  skirt: 0x2a718c, base: 0x34454b, recess: 0x245b72, letter: 0x235b72,
+  capLow: 0xcbd6d2, capTop: 0xf4f3e8, capRib: 0xd8e2dc, vent: 0x2a657a, grip: 0x6c8990,
+  handle: 0xcbd5c7, handleLip: 0xc4ceca, step: 0x778788, vent2: 0x40565e,
+}
+const GOLD_CABIN: CabinPalette = {
+  plastic: 0xd6ab4a, ridge: 0xf2d888, door: 0xc2932f, roof: 0xfaf3da,
+  skirt: 0xa87f26, base: 0x4a3a18, recess: 0x8a6620, letter: 0x5b4514,
+  capLow: 0xe6d6a2, capTop: 0xfbf5e2, capRib: 0xdcc88d, vent: 0x8a6a21, grip: 0xb9993f,
+  handle: 0xf6ecc8, handleLip: 0xe2d09a, step: 0xa08a4c, vent2: 0x6b5520,
+}
+function portableToilet(k: ModelKit, c: CabinPalette): void {
+  k.box(0, .045, 0, .74, .09, .78, c.base)
+  for (const x of [-.25, .25]) k.box(x, .02, 0, .1, .04, .8, ink) // pallet runners
+  k.box(0, .575, 0, .66, .99, .68, c.plastic)
+  k.box(0, .13, 0, .7, .1, .72, c.skirt)
+  for (const x of [-.315, .315]) {
+    k.box(x, .595, .335, .055, .97, .045, c.ridge)
+    k.box(x, .595, -.335, .055, .97, .045, c.ridge)
+  }
+  // Recessed door and raised mouldings, with a non-animated vacant indicator.
+  k.box(0, .575, .35, .535, .91, .026, c.recess)
+  k.box(0, .575, .369, .48, .85, .018, c.door)
+  k.box(0, .53, .383, .37, .57, .016, c.plastic)
+  for (const x of [-.17, 0, .17]) k.box(x, .51, .395, .018, .47, .014, c.ridge)
+  k.box(0, .92, .386, .22, .13, .018, c.roof)
+  // Pixel WC lettering is geometry, so it stays crisp in the world and menu thumbnail.
+  for (const x of [-.074, -.039, -.004]) k.box(x, .924, .399, .015, .066, .009, c.letter)
+  k.box(-.039, .897, .399, .085, .015, .009, c.letter)
+  k.box(.044, .924, .399, .015, .066, .009, c.letter)
+  for (const y of [.896, .95]) k.box(.065, y, .399, .05, .015, .009, c.letter)
+  k.box(.199, .66, .393, .054, .105, .02, ink)
+  k.box(.199, .69, .408, .028, .027, .014, c.handle)
+  k.box(.199, .638, .418, .018, .053, .028, c.handleLip)
+  for (const y of [.32, .81]) k.box(-.249, y, .389, .029, .085, .027, c.grip)
+  k.box(0, .097, .383, .53, .04, .12, c.step)
+  // Moulded ribs and upper ventilation louvers make side/back views recognisable too.
+  for (const side of [-1, 1]) {
+    for (const z of [-.22, -.075, .075, .22]) k.box(side * .338, .555, z, .025, .7, .027, c.ridge)
+    for (let j = 0; j < 3; j++) k.box(side * .342, .965 + j * .028, 0, .019, .014, .43, c.vent)
+  }
+  for (const x of [-.21, 0, .21]) k.box(x, .57, -.351, .032, .76, .026, c.ridge)
+  // Stepped, lightly domed cap rather than a house-shaped roof.
+  k.box(0, 1.074, 0, .75, .064, .79, c.capLow)
+  k.box(0, 1.116, 0, .72, .052, .76, c.roof)
+  k.box(0, 1.152, 0, .62, .026, .65, c.capTop)
+  for (const x of [-.2, 0, .2]) k.box(x, 1.17, 0, .025, .013, .51, c.capRib)
+  k.cylinder(.255, .79, -.365, .027, .9, c.vent2, .027, 6)
+  k.cylinder(.255, 1.25, -.365, .044, .04, c.base, .044, 6)
+}
+
+/**
+ * A worn backstage couch, `seats` tiles wide. Built centred on its footprint so the
+ * merged mesh lands on the middle of the two or three fields it occupies.
+ */
+function backstageCouch(k: ModelKit, seats: number): void {
+  const width = seats - .12
+  const velvet = 0x8c4a55, velvetDark = 0x6f3944, velvetLight = 0xa55c67
+  const wood = 0x4a3323, piping = 0xd8b46a
+  const half = width / 2
+  // Frame and feet.
+  k.box(0, .1, 0, width, .14, .86, wood)
+  for (const x of [-half + .12, half - .12]) for (const z of [-.3, .3]) k.box(x, .035, z, .1, .07, .1, 0x2e2117)
+  // Seat base and one cushion per seat, each a little different so it reads as used.
+  k.box(0, .24, .04, width, .18, .78, velvetDark)
+  for (let i = 0; i < seats; i++) {
+    const x = -half + .06 + (width - .12) * ((i + .5) / seats)
+    const sag = i % 2 ? .01 : 0
+    k.box(x, .36 - sag, .06, (width - .12) / seats - .06, .14, .66, velvet)
+    k.box(x, .432 - sag, .06, (width - .12) / seats - .12, .016, .6, velvetLight)
+  }
+  // Backrest with buttoned bolsters.
+  k.box(0, .52, -.33, width, .62, .2, velvet)
+  k.box(0, .82, -.33, width, .05, .24, velvetLight)
+  for (let i = 0; i < seats; i++) {
+    const x = -half + .06 + (width - .12) * ((i + .5) / seats)
+    k.box(x, .56, -.23, (width - .12) / seats - .1, .38, .06, velvetDark)
+    for (const y of [.47, .65]) k.box(x, y, -.2, .035, .035, .02, piping)
+  }
+  // Armrests, rolled and piped.
+  for (const side of [-1, 1]) {
+    k.box(side * (half - .07), .44, .02, .14, .42, .8, velvetDark)
+    k.box(side * (half - .07), .66, .02, .16, .08, .82, velvetLight)
+    k.box(side * (half - .07), .655, .38, .14, .06, .06, piping)
+  }
+  // The things that end up on it: a throw cushion and a folded jacket.
+  k.box(-half + .42, .5, .04, .26, .22, .2, 0xc9a24a)
+  k.box(-half + .42, .5, .04, .1, .08, .22, 0xe0bf70)
+  if (seats > 2) {
+    k.box(half - .55, .47, .1, .34, .1, .42, 0x33404a)
+    k.box(half - .55, .525, .06, .3, .04, .3, 0x445362)
+  }
 }
 
 function build(kind: BuildingKind, variant?: string): BufferGeometry {
@@ -897,46 +1000,44 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
         k.box(x, .6, .3, .05, .02, .04, cream)
       }
     }
-  } else if (kind === 'toilet') {
-    // A single moulded portable cabin: broad door, ribbed plastic shell and white roof cap.
-    const plastic = 0x378caa, ridge = 0x59a6bc, door = 0x468fa9, roof = 0xe8ece1
-    k.box(0, .045, 0, .74, .09, .78, 0x34454b)
-    for (const x of [-.25, .25]) k.box(x, .02, 0, .1, .04, .8, ink) // pallet runners
-    k.box(0, .575, 0, .66, .99, .68, plastic)
-    k.box(0, .13, 0, .7, .1, .72, 0x2a718c)
-    for (const x of [-.315, .315]) {
-      k.box(x, .595, .335, .055, .97, .045, ridge)
-      k.box(x, .595, -.335, .055, .97, .045, ridge)
+  } else if (kind === 'toilet' || kind === 'backstageToilet') {
+    portableToilet(k, kind === 'toilet' ? BLUE_CABIN : GOLD_CABIN)
+    if (kind === 'backstageToilet') {
+      // A velvet rope and a star on the door: the same cabin, but the band's own.
+      for (const x of [-.34, .34]) k.cylinder(x, .3, .56, .028, .6, 0x2d2419, .028, 6)
+      for (const x of [-.34, .34]) k.cylinder(x, .62, .56, .045, .05, 0xf0d386, .045, 6)
+      k.box(0, .56, .56, .62, .035, .035, 0x8d2740)
+      for (const [dx, dy] of [[0, .075], [0, -.075], [-.07, .025], [.07, .025], [-.045, -.055], [.045, -.055]]) {
+        k.box(dx!, .72 + dy!, .404, .045, .045, .01, 0xf6e6a8)
+      }
     }
-    // Recessed door and raised mouldings, with a non-animated vacant indicator.
-    k.box(0, .575, .35, .535, .91, .026, 0x245b72)
-    k.box(0, .575, .369, .48, .85, .018, door)
-    k.box(0, .53, .383, .37, .57, .016, plastic)
-    for (const x of [-.17, 0, .17]) k.box(x, .51, .395, .018, .47, .014, ridge)
-    k.box(0, .92, .386, .22, .13, .018, roof)
-    // Pixel WC lettering is geometry, so it stays crisp in the world and menu thumbnail.
-    for (const x of [-.074, -.039, -.004]) k.box(x, .924, .399, .015, .066, .009, 0x235b72)
-    k.box(-.039, .897, .399, .085, .015, .009, 0x235b72)
-    k.box(.044, .924, .399, .015, .066, .009, 0x235b72)
-    for (const y of [.896, .95]) k.box(.065, y, .399, .05, .015, .009, 0x235b72)
-    k.box(.199, .66, .393, .054, .105, .02, ink)
-    k.box(.199, .69, .408, .028, .027, .014, 0xcbd5c7)
-    k.box(.199, .638, .418, .018, .053, .028, 0xc4ceca)
-    for (const y of [.32, .81]) k.box(-.249, y, .389, .029, .085, .027, 0x6c8990)
-    k.box(0, .097, .383, .53, .04, .12, 0x778788)
-    // Moulded ribs and upper ventilation louvers make side/back views recognisable too.
-    for (const side of [-1, 1]) {
-      for (const z of [-.22, -.075, .075, .22]) k.box(side * .338, .555, z, .025, .7, .027, ridge)
-      for (let j = 0; j < 3; j++) k.box(side * .342, .965 + j * .028, 0, .019, .014, .43, 0x2a657a)
-    }
-    for (const x of [-.21, 0, .21]) k.box(x, .57, -.351, .032, .76, .026, ridge)
-    // Stepped, lightly domed white cap rather than a house-shaped roof.
-    k.box(0, 1.074, 0, .75, .064, .79, 0xcbd6d2)
-    k.box(0, 1.116, 0, .72, .052, .76, roof)
-    k.box(0, 1.152, 0, .62, .026, .65, 0xf4f3e8)
-    for (const x of [-.2, 0, .2]) k.box(x, 1.17, 0, .025, .013, .51, 0xd8e2dc)
-    k.cylinder(.255, .79, -.365, .027, .9, 0x40565e, .027, 6)
-    k.cylinder(.255, 1.25, -.365, .044, .04, 0x34454b, .044, 6)
+  } else if (kind === 'bandFridge') {
+    // A dented touring fridge on a pallet: two doors, a crate of bottles and a taped setlist.
+    const shell = 0xd7dbd4, edge = 0xb3bab4, trim = 0x8e9790
+    k.box(0, .035, 0, .72, .07, .58, 0x5b4a33)
+    for (const z of [-.2, .2]) k.box(0, .015, z, .74, .03, .11, 0x74603f)
+    k.box(0, .5, -.02, .56, .86, .46, shell)
+    k.box(0, .945, -.02, .6, .05, .5, edge)
+    for (const x of [-.29, .29]) k.box(x, .5, -.02, .02, .84, .46, edge)
+    // Doors: a short freezer above, the tall drinks door below, both slightly proud.
+    k.box(0, .82, .215, .5, .18, .035, 0xe6e9e3)
+    k.box(0, .47, .215, .5, .46, .035, 0xe6e9e3)
+    k.box(0, .715, .218, .52, .022, .04, trim)
+    for (const y of [.79, .6]) k.box(.185, y, .245, .035, .1, .03, 0x6d7a75)
+    for (const y of [.79, .6]) k.box(.185, y, .262, .05, .028, .022, 0x9aa8a2)
+    for (const y of [.9, .33]) k.box(-.255, y, .225, .022, .07, .022, trim)
+    // Band stickers and a taped list, the things that make it theirs.
+    k.box(-.09, .55, .236, .12, .12, .008, 0xd9534f)
+    k.box(.07, .41, .236, .1, .07, .008, 0x3f7fb5)
+    k.box(-.06, .28, .236, .16, .11, .008, 0xf1ead2)
+    for (let i = 0; i < 3; i++) k.box(-.06, .31 - i * .03, .241, .11, .008, .006, 0x7c8a86)
+    // Crate of bottles wedged against the side.
+    k.box(.36, .12, .16, .22, .18, .22, 0x9c6a38)
+    for (const x of [.3, .42]) for (const z of [.1, .22]) k.cylinder(x, .26, z, .034, .16, 0x3f6b46, .034, 6)
+    for (const x of [.3, .42]) for (const z of [.1, .22]) k.cylinder(x, .345, z, .018, .02, 0xd8c168, .018, 6)
+    k.box(0, 1.0, -.02, .34, .06, .3, 0x4c5a55)
+  } else if (kind === 'backstageCouch2' || kind === 'backstageCouch3') {
+    backstageCouch(k, kind === 'backstageCouch2' ? 2 : 3)
   } else if (kind === 'tree') {
     k.cylinder(0, .49, 0, .1, .96, timber, .058, 6)
     for (const sign of [-1, 1]) k.beam([0, .55, 0], [sign * .23, 1.04, .08], .065, 0x74543b)
