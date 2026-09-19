@@ -24,6 +24,20 @@ type UserDataHolder = {
   parent?: UserDataHolder | null
 }
 
+/**
+ * three.js raycasts hidden objects as readily as shown ones, so anything that is
+ * only switched off — a vehicle housed in its depot, say — has to be filtered out
+ * by hand or it keeps catching clicks meant for whatever is behind it.
+ */
+export function isVisibleInScene(object: { visible?: boolean; parent?: unknown } | null | undefined): boolean {
+  let current = object as { visible?: boolean; parent?: unknown } | null | undefined
+  while (current) {
+    if (current.visible === false) return false
+    current = current.parent as { visible?: boolean; parent?: unknown } | null | undefined
+  }
+  return true
+}
+
 export function cellFromWorldPoint(x: number, z: number): PickedCell {
   const cellX = Math.floor(x)
   const cellZ = Math.floor(z)

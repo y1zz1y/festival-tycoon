@@ -1,5 +1,6 @@
 import type { GameSnapshot } from './game/GameState'
 import { buildHeadlineMagazine, type HeadlineMagazine } from './game/headlineMagazine'
+import { isLoadingOverlayVisible } from './ui/loadingOverlay'
 import './headlineMagazine.css'
 
 const escape = (value: string) =>
@@ -84,6 +85,26 @@ export function mountHeadlineMagazine(root: ParentNode = document.body) {
     close()
   }, true)
 
+  // Loading a finished weekend would otherwise throw the magazine up while the
+  // save is still being read, shining through the loading overlay. Wait for the
+  // spinner to go before opening it.
+  let waitingForLoad = false
+  const openWhenLoaded = () => {
+    if (!isLoadingOverlayVisible()) {
+      waitingForLoad = false
+      open()
+      return
+    }
+    if (waitingForLoad) return
+    waitingForLoad = true
+    const poll = window.setInterval(() => {
+      if (isLoadingOverlayVisible()) return
+      window.clearInterval(poll)
+      waitingForLoad = false
+      if (currentKey && currentKey !== dismissedKey) open()
+    }, 100)
+  }
+
   const update = (s: Readonly<GameSnapshot>) => {
     const mag = buildHeadlineMagazine(s)
     if (!mag) {
@@ -94,7 +115,7 @@ export function mountHeadlineMagazine(root: ParentNode = document.body) {
     }
     currentKey = mag.weekendKey
     paint(mag)
-    if (currentKey !== dismissedKey) open()
+    if (currentKey !== dismissedKey) openWhenLoaded()
   }
 
   return { update, open, close, isOpen: () => !overlay.hidden }

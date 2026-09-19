@@ -5,6 +5,7 @@ import { createRetroBuilding, batchRetroBuildings } from '../src/view/retroBuild
 import {
   buildingIdFromObject,
   buildingIdFromUserData,
+  isVisibleInScene,
   resolveMeshPick,
   resolvePickedBuilding,
 } from '../src/view/picking'
@@ -38,6 +39,20 @@ export function testPicking(fixture: (count?: number) => GameState): void {
   parent.userData.buildingId = 'hedge-7'
   parent.add(nested)
   assert.equal(buildingIdFromObject(nested, undefined), 'hedge-7', 'child meshes inherit the placed building id')
+
+  // three.js raycasts hidden objects too, so a vehicle housed in its depot would
+  // keep catching the clicks meant for the building unless it is filtered out.
+  const housedDepot = new Group()
+  const housedTruck = new Group()
+  const truckBody = new Mesh()
+  housedTruck.add(truckBody)
+  housedDepot.add(housedTruck)
+  assert.equal(isVisibleInScene(truckBody), true, 'a shown vehicle can be picked')
+  housedTruck.visible = false
+  assert.equal(isVisibleInScene(truckBody), false, 'a housed vehicle is out of the way')
+  housedTruck.visible = true
+  housedDepot.visible = false
+  assert.equal(isVisibleInScene(truckBody), false, 'a hidden parent hides its meshes too')
 
   const game = fixture(0)
   assert.ok(game.place('food', 8, 0).ok)

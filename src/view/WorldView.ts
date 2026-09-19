@@ -21,6 +21,7 @@ import {
   accessIdFromObject,
   buildingIdFromObject,
   cellFromWorldPoint,
+  isVisibleInScene,
   resolvePickedBuilding,
 } from './picking'
 import { createAttractionAccess } from './attractionAccess'
@@ -4040,14 +4041,20 @@ export class WorldView {
   }
 
   private pickVehicle(): string | null {
-    const hit = this.raycaster.intersectObject(
+    const hits = this.raycaster.intersectObject(
       this.logisticsView.getVehiclePickRoot(),
       true,
-    )[0]
-    let object: Object3D | null = hit?.object ?? null
-    while (object) {
-      if (typeof object.userData.vehicleId === 'string') return object.userData.vehicleId
-      object = object.parent
+    )
+    for (const hit of hits) {
+      // A vehicle housed in its depot or garage is only hidden, and three.js
+      // raycasts hidden objects all the same — without this it would keep
+      // swallowing the clicks meant for the building it is parked in.
+      if (!isVisibleInScene(hit.object)) continue
+      let object: Object3D | null = hit.object
+      while (object) {
+        if (typeof object.userData.vehicleId === 'string') return object.userData.vehicleId
+        object = object.parent
+      }
     }
     return null
   }

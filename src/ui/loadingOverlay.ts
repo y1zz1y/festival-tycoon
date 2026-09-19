@@ -21,6 +21,11 @@ function showLoadingOverlay(caption: string): void {
   el.classList.remove('load-overlay-hide')
 }
 
+/** True while a save is being loaded, so nothing else pops up over the spinner. */
+export function isLoadingOverlayVisible(): boolean {
+  return Boolean(element && !element.hidden)
+}
+
 function hideLoadingOverlay(): void {
   if (!element) return
   element.classList.add('load-overlay-hide')
