@@ -4790,3 +4790,79 @@ button[class],
 .visitor-follow {
   border-radius: 0;
 }
+
+/* Every checkbox in the game wears the same face as a button: the same bevel
+   at rest, the same green fill when pressed in (here, checked). Unchecked
+   still carries a faint X so the empty square reads as a checkbox rather
+   than a blank tile, without competing with the gold check mark. */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  color: #ecf5f0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #819b8c;
+  border-left-color: #819b8c;
+  border-right-color: #1b322c;
+  border-bottom-color: #1b322c;
+  border-radius: 0;
+  cursor: pointer;
+  position: relative;
+  vertical-align: middle;
+}
+
+input[type='checkbox']:hover:not(:disabled) {
+  background: #3f715b;
+}
+
+input[type='checkbox']::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  opacity: 0.4;
+  background:
+    linear-gradient(45deg, transparent 44%, #ecf5f0 44%, #ecf5f0 56%, transparent 56%),
+    linear-gradient(135deg, transparent 44%, #ecf5f0 44%, #ecf5f0 56%, transparent 56%);
+}
+
+input[type='checkbox']:checked::before {
+  display: none;
+}
+
+input[type='checkbox']:disabled::before {
+  opacity: 0.18;
+}
+
+input[type='checkbox']:checked {
+  background: #3f715b;
+  border-top-color: #203c30;
+  border-left-color: #203c30;
+  box-shadow: inset 1px 1px #203c30;
+}
+
+input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid #ffd47d;
+  border-width: 0 2px 2px 0;
+  transform: rotate(40deg);
+}
+
+input[type='checkbox']:focus-visible {
+  outline: 2px solid #ffd47d;
+  outline-offset: 2px;
+}
+
+input[type='checkbox']:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
