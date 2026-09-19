@@ -1012,30 +1012,79 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
       }
     }
   } else if (kind === 'bandFridge') {
-    // A dented touring fridge on a pallet: two doors, a crate of bottles and a taped setlist.
-    const shell = 0xd7dbd4, edge = 0xb3bab4, trim = 0x8e9790
-    k.box(0, .035, 0, .72, .07, .58, 0x5b4a33)
-    for (const z of [-.2, .2]) k.box(0, .015, z, .74, .03, .11, 0x74603f)
-    k.box(0, .5, -.02, .56, .86, .46, shell)
-    k.box(0, .945, -.02, .6, .05, .5, edge)
-    for (const x of [-.29, .29]) k.box(x, .5, -.02, .02, .84, .46, edge)
-    // Doors: a short freezer above, the tall drinks door below, both slightly proud.
-    k.box(0, .82, .215, .5, .18, .035, 0xe6e9e3)
-    k.box(0, .47, .215, .5, .46, .035, 0xe6e9e3)
-    k.box(0, .715, .218, .52, .022, .04, trim)
-    for (const y of [.79, .6]) k.box(.185, y, .245, .035, .1, .03, 0x6d7a75)
-    for (const y of [.79, .6]) k.box(.185, y, .262, .05, .028, .022, 0x9aa8a2)
-    for (const y of [.9, .33]) k.box(-.255, y, .225, .022, .07, .022, trim)
-    // Band stickers and a taped list, the things that make it theirs.
-    k.box(-.09, .55, .236, .12, .12, .008, 0xd9534f)
-    k.box(.07, .41, .236, .1, .07, .008, 0x3f7fb5)
-    k.box(-.06, .28, .236, .16, .11, .008, 0xf1ead2)
-    for (let i = 0; i < 3; i++) k.box(-.06, .31 - i * .03, .241, .11, .008, .006, 0x7c8a86)
-    // Crate of bottles wedged against the side.
-    k.box(.36, .12, .16, .22, .18, .22, 0x9c6a38)
-    for (const x of [.3, .42]) for (const z of [.1, .22]) k.cylinder(x, .26, z, .034, .16, 0x3f6b46, .034, 6)
-    for (const x of [.3, .42]) for (const z of [.1, .22]) k.cylinder(x, .345, z, .018, .02, 0xd8c168, .018, 6)
-    k.box(0, 1.0, -.02, .34, .06, .3, 0x4c5a55)
+    // A branded upright cooler, the kind a brewery puts backstage: black cabinet,
+    // lit sign on top, a wrapped flank and a glass door with the stock on show.
+    // The pane itself is not drawn — the kit is one opaque merged mesh, so the door
+    // is an opening with a lit edge round it, which reads better in the isometric
+    // view than a sheet that would hide everything behind it. Height is set against
+    // the portable toilet next door: a head taller than a person, no more.
+    const carbon = 0x16191b, frame = 0x262c2e, chrome = 0x9aa8a2
+    const wrapDark = 0x0d2a16, wrapMid = 0x1f7a31, wrapLit = 0x6ec94c
+    const lining = 0xeef8ff, shelf = 0xeff6fa, sheen = 0xa9dcee
+    k.box(0, .035, 0, .56, .07, .5, 0x0a0c0d)
+    for (const x of [-.2, .2]) k.box(x, .01, 0, .08, .02, .46, 0x050707)
+    // Panels, not a block: the front has to stay open or the door would show
+    // nothing but the outside of a black box.
+    k.box(0, .54, -.25, .6, .94, .06, carbon)
+    for (const x of [-.27, .27]) k.box(x, .54, -.01, .06, .94, .54, carbon)
+    k.box(0, .98, -.01, .6, .06, .54, carbon)
+    k.box(0, .12, -.01, .6, .1, .54, carbon)
+    // The wrap: three bands of green up each flank, brightest at the top where the
+    // print catches the light, with the brand plate and a bottle stamped over it.
+    for (const x of [-.305, .305]) {
+      k.box(x, .28, -.01, .012, .34, .5, wrapDark)
+      k.box(x, .62, -.01, .012, .34, .5, wrapMid)
+      k.box(x, .885, -.01, .012, .19, .5, wrapLit)
+      k.box(x, .9, -.01, .018, .12, .26, 0xf1f4ef)
+      k.box(x, .8, -.01, .018, .07, .07, 0xb62a33)
+      k.box(x, .5, -.04, .018, .2, .1, wrapLit)
+      k.box(x, .63, -.04, .018, .09, .04, wrapLit)
+      k.box(x, .69, -.04, .018, .04, .06, wrapLit)
+      k.box(x, .48, -.04, .024, .07, .065, 0xf1f4ef)
+      for (let i = 0; i < 4; i++) k.box(x, .32 + i * .028, -.01 + (i % 2 ? .09 : -.09), .018, .016, .08, wrapLit)
+    }
+    // Door frame around the opening, left stile wider because the handle rides it.
+    k.box(0, .955, .28, .6, .09, .04, frame)
+    k.box(0, .165, .28, .6, .19, .04, frame)
+    for (const [x, w] of [[-.26, .07], [.27, .05]]) k.box(x!, .56, .28, w!, .7, .04, frame)
+    k.box(-.225, .57, .315, .03, .34, .03, frame)
+    for (const y of [.42, .72]) k.box(-.225, y, .3, .026, .035, .026, chrome)
+    // Lit interior: four shelves with the stock standing on them, cases low down
+    // where the weight goes and bottles above, at the height the door shows off.
+    k.box(0, .56, -.2, .48, .72, .03, lining)
+    for (const x of [-.235, .235]) k.box(x, .56, -.01, .03, .72, .44, lining)
+    k.box(0, .9, -.01, .48, .03, .44, lining)
+    for (let row = 0; row < 4; row++) {
+      const y = .28 + row * .16
+      k.box(0, y, -.01, .46, .02, .4, shelf)
+      k.box(0, y + .03, .17, .44, .045, .012, 0xf7fafc)
+      if (row < 2) {
+        for (const x of [-.15, 0, .15]) {
+          k.box(x, y + .075, .02, .12, .13, .2, row ? 0xe4e8e2 : 0xcfd8d2)
+          k.box(x, y + .105, .122, .09, .05, .012, row ? 0x2f6f3a : 0xb8343c)
+        }
+      } else {
+        for (const x of [-.17, -.085, 0, .085, .17]) {
+          const tint = x < -.04 ? 0x2c6b35 : x > .04 ? 0x7a4d1c : 0x3f8b3f
+          k.cylinder(x, y + .06, .03, .028, .09, tint, .028, 6)
+          k.cylinder(x, y + .125, .03, .012, .045, tint, .012, 6)
+          k.cylinder(x, y + .152, .03, .014, .012, 0xd8c168, .014, 6)
+        }
+      }
+    }
+    // A lit edge round the opening and one highlight: enough to read as glass,
+    // never enough to cover the stock behind it.
+    for (const x of [-.21, .23]) k.box(x, .57, .295, .012, .62, .01, sheen)
+    for (const y of [.275, .885]) k.box(0, y, .295, .45, .012, .01, sheen)
+    k.box(-.165, .8, .291, .045, .13, .008, sheen)
+    // Grille over the compressor, and the lit sign that crowns the whole thing.
+    for (let i = 0; i < 4; i++) k.box(0, .1 + i * .038, .292, .45, .018, .012, 0x2f3639)
+    k.box(0, 1.08, 0, .66, .17, .6, carbon)
+    k.box(0, 1.085, .295, .56, .12, .02, 0x101416)
+    k.box(.04, 1.085, .31, .34, .07, .012, 0xf1f4ef)
+    k.box(-.16, 1.09, .31, .09, .08, .012, 0xb62a33)
+    k.box(-.16, 1.09, .317, .035, .035, .01, 0xf1f4ef)
+    k.box(0, 1.18, 0, .62, .03, .56, 0x090b0c)
   } else if (kind === 'backstageCouch2' || kind === 'backstageCouch3') {
     backstageCouch(k, kind === 'backstageCouch2' ? 2 : 3)
   } else if (kind === 'tree') {

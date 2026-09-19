@@ -1,0 +1,20 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>Backstage – Modellvorschau</title>
+<style>body{margin:0;background:#2b3a33;color:#efe1ba;font:15px system-ui}header{position:absolute;top:24px;left:32px;pointer-events:none}h1{margin:0;font-size:26px}p{opacity:.8}canvas{display:block}footer{position:absolute;bottom:22px;left:32px;opacity:.75}</style>
+<header><h1>Die Bandversorgung von nahem.</h1><p>Kühlschrank · zwei Couchgrößen · Goldklo</p></header>
+<footer>Maus ziehen zum Drehen · Mausrad zum Zoomen</footer>
+<script type="module">
+import * as T from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createRetroBuilding } from '../src/view/retroBuildings.ts';
+const scene=new T.Scene();scene.background=new T.Color('#2b3a33');
+const camera=new T.PerspectiveCamera(34,innerWidth/innerHeight,.1,100);camera.position.set(3.4,3.2,5.2);
+const renderer=new T.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=T.SRGBColorSpace;document.body.append(renderer.domElement);
+scene.add(new T.HemisphereLight(0xfff1d4,0x6c8666,2.2));const sun=new T.DirectionalLight(0xffe6c4,2.4);sun.position.set(-3,5,4);scene.add(sun);
+const ground=new T.Mesh(new T.BoxGeometry(8,.12,4),new T.MeshStandardMaterial({color:0x6f8468,roughness:1}));ground.position.y=-.06;scene.add(ground);
+const kinds=['bandFridge','backstageCouch2','backstageCouch3','backstageToilet'];
+kinds.forEach((kind,index)=>{const model=createRetroBuilding(kind);model.position.set((index-1.5)*1.6,0,0);scene.add(model)});
+const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,.6,0);controls.minDistance=2;controls.maxDistance=16;controls.maxPolarAngle=Math.PI*.49;controls.update();
+const render=()=>renderer.render(scene,camera);
+window.preview={scene,camera,controls,render}; // handles for stepping through the models from the consolecontrols.addEventListener('change',render);render();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);render()});
+</script></html>

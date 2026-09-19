@@ -64,6 +64,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust |
 | `tests/headlineMagazine.ts` | HEADLINE Magazin nur nach Festivalende, ≥1 Pro/Kontra, deterministisch, nicht mitten im Wochenende |
 | `tests/headline-magazine-preview.html` | visuelles HEADLINE-Heft nach einem beendeten Wochenende |
+| `tests/backstage-preview.html` | Bandversorgung aus der Nähe: Getränkekühler, beide Couchgrößen, Goldklo; `window.preview` hält Szene und Kamera zum Anfahren einzelner Modelle |
 | `tests/visitorSleep.ts` | Festival-Schlafzeiten, Legacy-Remap, zirkadiane Energie, Zelt- und Abreiseziele |
 | `tests/festivalAdditions.ts` | spätere Festival-Systeme, Eimer-Karton-Batches, zusammenhängende Müllablage-Füllstände, Müllwagen-Ladungsanzeige, 1-Feld-Steigungen, Wagen-Mesh, gerundete Schienenjoins, Achterbahn-Komplettabriss, SI-Geschwindigkeitsuntergrenzen (`chainSpeed` / Launch / Drag / `maximumSpeed`) |
 | `tests/coasterTypes.ts` | Achterbahn-Typkatalog (alle Typen spielbar), Zug-Thumbnail-Spec je Typ, live vs diskrete Anschlussregeln, Helix/LIM/Junior/Maus/Mine/Bobbahn-Filter, fehlender typeId → classicSteel, Palette: Typ-Ausschluss vs aktuell ausgegraut, Hard-Switch inkl. Richtung (erster Klick ändert das Fenster), Ghost unverändert bei gesperrtem Klick, **Palette zweimal listen remountet keine IDs**, **`updateCoasterConstruction` bleibt über spielende Ticks unverändert**, Testbetrieb auf geschlossenem classicSteel-Rechteck während `festival.planning`, SI-Physik-Untergrenzen |
