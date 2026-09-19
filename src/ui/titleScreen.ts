@@ -330,6 +330,19 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
       void refreshLobbies()
     })
   }
+  // The menu's own Enter skips text fields, and a code field without Enter is a
+  // field you have to leave to use.
+  titleLobbyCode.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    joinLobby(titleLobbyCode.value)
+  })
+  titleLobbyName.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    titleLobbyCode.focus()
+  })
+
   function markTitleSelection(index: number): void {
     const entries = titleEntries()
     if (!entries.length) return

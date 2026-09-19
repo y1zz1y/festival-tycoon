@@ -842,7 +842,7 @@ export function mountAppShell(app: HTMLDivElement): void {
         </form>
       </div>
       <div id="title-multiplayer-mask" class="title-submenu" hidden>
-        <div class="title-submenu-card">
+        <div class="title-submenu-card title-form-card">
           <div class="title-submenu-head">
             <span class="title-submenu-title">Mehrspieler beitreten</span>
             <span id="title-lobby-kicker" class="title-submenu-kicker">Offene Lobbys</span>

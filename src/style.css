@@ -649,7 +649,8 @@ button {
 .title-submenu-rows button,
 .title-submenu [data-title-back],
 .title-submenu [data-title-freeplay-close],
-.title-submenu [data-title-load-close] {
+.title-submenu [data-title-load-close],
+.title-submenu [data-title-lobby-close] {
   border-style: solid;
   border-color: var(--ts-400) var(--ts-900) var(--ts-900) var(--ts-400);
   border-radius: 0;
@@ -918,7 +919,8 @@ button {
 
 .title-submenu [data-title-back],
 .title-submenu [data-title-freeplay-close],
-.title-submenu [data-title-load-close] {
+.title-submenu [data-title-load-close],
+.title-submenu [data-title-lobby-close] {
   align-self: flex-start;
   padding: 9px 22px;
   color: #ffffff;
@@ -932,7 +934,8 @@ button {
 
 .title-submenu [data-title-back]:hover,
 .title-submenu [data-title-freeplay-close]:hover,
-.title-submenu [data-title-load-close]:hover {
+.title-submenu [data-title-load-close]:hover,
+.title-submenu [data-title-lobby-close]:hover {
   background: var(--ts-500);
 }
 
@@ -979,12 +982,14 @@ button {
   text-align: left;
 }
 
+.title-form-card .scenario-field span,
 .title-account-card .scenario-field span {
   color: var(--ts-200);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
+.title-form-card input,
 .title-account-card input {
   width: 100%;
   padding: 8px 10px;
@@ -1002,6 +1007,7 @@ button {
   gap: 8px;
 }
 
+.title-lobby-actions button,
 .title-account-actions button {
   padding: 9px 20px;
   color: var(--ts-100);
@@ -1021,6 +1027,7 @@ button {
   border-color: var(--ts-300) var(--ts-900) var(--ts-900) var(--ts-300);
 }
 
+.title-lobby-actions button:hover,
 .title-account-actions button:hover:not(:disabled) {
   background: var(--ts-500);
 }
@@ -5169,11 +5176,35 @@ input[type='range']:disabled {
 
 .hotkey-key.unbound { opacity: 0.55; }
 
-/* The two ways into a room sit side by side above the list of open ones. */
+/* The two ways into a room sit side by side above the list of open ones; they
+   wear the same plate as the buttons in the account mask. */
 .title-lobby-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin-top: 2px;
 }
 
-.title-lobby-actions button { flex: 1 1 160px; }
+.title-lobby-actions button { flex: 1 1 200px; }
+
+/* A room code is four characters and nothing else, so the field is sized and
+   spaced for exactly that instead of running the width of the card. */
+.title-form-card #title-lobby-code {
+  /* Four characters plus the spacing between them; too narrow and the last one
+     is clipped out of the field. */
+  width: 9em;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
+  font-size: clamp(14px, 1.6vw, 18px);
+}
+
+.title-form-card #title-lobby-name { width: min(280px, 100%); }
+
+/* The list of open rooms needs a lid on it: a busy evening should scroll inside
+   the card rather than push the way back off the screen. */
+.title-form-card .title-submenu-rows {
+  max-height: min(34vh, 320px);
+  overflow-y: auto;
+}
