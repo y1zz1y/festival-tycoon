@@ -113,6 +113,15 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.ok(beamDirection(downSpot).y<0,'a spot rotated to face down points down regardless of mount side')
   assert.ok(beamDirection(upSpot).y>0,'a spot rotated to face up points up regardless of mount side')
   for(const spot of spots){assert.ok(spot.userData.light instanceof SpotLight);assert.ok(spot.userData.light.intensity>0)}
+  // A beam has to carry across the crowd, so it throws eight units. The cone the player
+  // sees, the throw the mirror balls are tested against and the spot light's own angle
+  // all come from the same pair of numbers and must not drift apart.
+  for(const spot of spots){
+    assert.equal(spot.userData.length,8,'a moving head throws eight units')
+    const cone=(spot.userData.beams as any).children[0]
+    assert.equal(cone.geometry.parameters.height,8,'and its visible cone is exactly that long')
+    assert.ok(Math.abs(spot.userData.light.angle-Math.atan(cone.geometry.parameters.radius/8))<1e-9,'the light matches the cone it draws')
+  }
   // A moving head's two arms cradle the head at its *sides*, so they must stand square to the
   // lens for every mount side and every aim. Reaching an aim by twisting the head inside a fixed
   // yoke would hit the same aim but swing the arms round to the head's front and back, leaving

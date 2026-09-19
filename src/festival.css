@@ -31,6 +31,7 @@
 .forecast-degrees { margin-left: 8px; font-variant-numeric: tabular-nums; color: #f4d887; }
 .festival-meter { display: grid; grid-template-columns: 1fr auto; gap: 5px; margin-bottom: 12px; }
 .festival-meter progress { width: 100%; grid-column: 1 / -1; height: 7px; accent-color: #dbbc70; }
+.festival-upgrade-level { margin: 0 0 8px; color: #f4d887; font-variant-numeric: tabular-nums; }
 .festival-number { font-size: 30px; font-variant-numeric: tabular-nums; color: #f4d887; }
 .festival-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; background: #253c32; padding: 14px; }
 .festival-form label { display: flex; flex-direction: column; gap: 6px; color: #bfcebc; }

@@ -16,6 +16,14 @@ const ALONG_AXES = {x:{x:1,y:0,z:0},y:{x:0,y:1,z:0},z:{x:0,y:0,z:1}} as const
 /** Colors used only by the floor slab/tiles, so its batched meshes can be found and hidden separately (e.g. when viewing from below). */
 const FLOOR_COLORS = new Set(['#75886a','#30394c','#485166','#515b70'])
 /** Half the height of each fixture's own body (matches its first box() call below), used to press it flush against a truss it is docked onto. */
+/**
+ * How far a light throws. A moving head's cone is this long with that radius at its
+ * end — the spot light's own angle is derived from the pair, so the invisible cone and
+ * the visible one always agree — and a laser fan reaches at least as far, more on a
+ * deep stage. Lasers and heads alike were half this until the beams turned out to die
+ * well before they reached the crowd.
+ */
+const BEAM_REACH = 8, BEAM_RADIUS = .85
 const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:.4,subwoofer:.45,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,star:.4,discoBall:.36}
 /** Top surface of a floor tile (the .24 base slab plus the .04 detail overlay from the floor loop below) — where a ground-standing fixture's own base belongs, matching stageBand.ts's world-map floor level. */
 const GROUND_Y=.28
@@ -266,7 +274,7 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
   const effect=(kind:string,x:number,y:number,z:number,color:string,dir:{x:number;y:number;z:number})=>{
     if(options.effects===false)return
     const rig=new Group();rig.position.set(x,y,z);rig.userData.kind=kind;rig.userData.index=effects.length;rig.userData.dir=dir;rig.userData.base=rig.position.clone()
-    rig.userData.length=kind==='laser'?Math.max(4,d.depth*.8):kind==='fog'||kind==='sparks'?4*STAGE_TILE_DETAIL:4
+    rig.userData.length=kind==='laser'?Math.max(BEAM_REACH,d.depth*1.6):kind==='fog'||kind==='sparks'?4*STAGE_TILE_DETAIL:4
     if(kind==='fireworks'){
       // One rocket per mortar tube, each on its own firing cycle: it climbs out of its tube,
       // slowing as it goes, and at the top bursts into a star of embers that fly apart and sag.
@@ -527,16 +535,16 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
           // own group: that is what switches off between shows, leaving the head itself on the
           // truss where it belongs (see animateStageModel).
           const beams=new Group();headGroup.add(beams)
-          const beamGeo=new ConeGeometry(.85,4,16,1,true);beamGeo.rotateZ(Math.PI);beamGeo.translate(0,2,0);beamGeo.rotateX(Math.PI/2)
+          const beamGeo=new ConeGeometry(BEAM_RADIUS,BEAM_REACH,16,1,true);beamGeo.rotateZ(Math.PI);beamGeo.translate(0,BEAM_REACH/2,0);beamGeo.rotateX(Math.PI/2)
           const beamMat=new MeshBasicMaterial({color:c,transparent:true,opacity:.07,depthWrite:false,side:DoubleSide,blending:AdditiveBlending})
           const beam=new Mesh(beamGeo,beamMat);beam.position.set(0,0,.46-headShift);beams.add(beam)
           const glowMat=new MeshBasicMaterial({color:c,transparent:true,opacity:.85,depthWrite:false,blending:AdditiveBlending})
           const glow=new Mesh(new SphereGeometry(.07,8,6),glowMat);glow.position.copy(beam.position);beams.add(glow)
           let light:SpotLight|undefined
           if(lights<(options.lightBudget??0)){
-            light=new SpotLight(c,0,40,Math.atan(.85/4),.45,1);light.castShadow=false;root.add(light,light.target);lights++
+            light=new SpotLight(c,0,40,Math.atan(BEAM_RADIUS/BEAM_REACH),.45,1);light.castShadow=false;root.add(light,light.target);lights++
           }
-          headGroup.userData={kind:'spot',id:p.id,index:effects.length,base:headGroup.position.clone(),armGroup,headRestQuat,beams,beamMat,glowMat,light,length:4}
+          headGroup.userData={kind:'spot',id:p.id,index:effects.length,base:headGroup.position.clone(),armGroup,headRestQuat,beams,beamMat,glowMat,light,length:BEAM_REACH}
           effects.push(headGroup)
         }
       }else if(p.kind==='laser'){

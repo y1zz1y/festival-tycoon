@@ -101,7 +101,9 @@ function structureFingerprint(logistics: Readonly<LogisticsSnapshot>): string {
   ].join('#')
 }
 
-const FLOW_ARROWS = 4
+/** One arrow per one-way field, standing still: it says which way the street runs
+ * without a stream of markers crawling over the map. */
+const FLOW_ARROWS = 1
 const FLOW_UP = new Vector3(0, 1, 0)
 const flowArrowGeometry = createRoadDirectionArrowGeometry('overlay')
 const roadArrowGeometry = createRoadDirectionArrowGeometry('paint')
@@ -227,7 +229,6 @@ export class LogisticsView {
   private readonly flowGroup = new Group()
   private flowMarks: DirectionFlowMark[] = []
   private flowArrows: InstancedMesh | null = null
-  private flowPhase = 0
   private facingFactor = 0
   private readonly flowMatrix = new Matrix4()
   private readonly flowPosition = new Vector3()
@@ -316,10 +317,7 @@ export class LogisticsView {
     this.updateInspectRoute(logistics.roadVehicles)
     this.refreshPlannerRoute()
     this.flowGroup.visible = showDirectionFlow
-    if (showDirectionFlow) {
-      this.flowPhase += seconds * 0.42
-      this.updateDirectionFlow()
-    }
+    if (showDirectionFlow) this.updateDirectionFlow()
   }
 
   private groundY(x: number, z: number): number {
@@ -486,36 +484,18 @@ export class LogisticsView {
 
   private updateDirectionFlow(): void {
     if (!this.flowArrows) return
-    const offsets: Readonly<Record<Direction, readonly [number, number]>> = {
-      0: [0, 1],
-      1: [1, 0],
-      2: [0, -1],
-      3: [-1, 0],
-    }
     let index = 0
     this.flowMarks.forEach((mark) => {
-      const [offsetX, offsetZ] = offsets[mark.direction]
       this.flowQuaternion.setFromAxisAngle(FLOW_UP, DIRECTION_ANGLE[mark.direction])
-      for (let step = 0; step < FLOW_ARROWS; step += 1) {
-        const travel = (this.flowPhase + step / FLOW_ARROWS) % 1
-        const along = (travel - 0.5) * 0.7
-        const edge = Math.min(travel, 1 - travel)
-        const appear = 0.72 + 0.28 * Math.min(1, edge / 0.18)
-        const size = 0.52 * appear
-        this.flowPosition.set(
-          mark.x + 0.5 + offsetX * along,
-          mark.y + 0.045,
-          mark.z + 0.5 + offsetZ * along,
-        )
-        this.flowScale.set(size, size, size)
-        this.flowMatrix.compose(
-          this.flowPosition,
-          this.flowQuaternion,
-          this.flowScale,
-        )
-        this.flowArrows!.setMatrixAt(index, this.flowMatrix)
-        index += 1
-      }
+      this.flowPosition.set(mark.x + 0.5, mark.y + 0.045, mark.z + 0.5)
+      this.flowScale.set(0.52, 0.52, 0.52)
+      this.flowMatrix.compose(
+        this.flowPosition,
+        this.flowQuaternion,
+        this.flowScale,
+      )
+      this.flowArrows!.setMatrixAt(index, this.flowMatrix)
+      index += 1
     })
     const hidden = this.flowMatrix.makeScale(0, 0, 0)
     while (index < this.flowArrows.count) {

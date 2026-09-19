@@ -2,8 +2,8 @@ import { mountMusicPlanner, musicOverview } from './musicPlanner'
 import type { GameState, GameSnapshot } from './game/GameState'
 import { makeDraggable, makeResizable } from './dragPanel'
 import './festival.css'
-import { AUDIENCES, AUDIENCE_NAMES, SUPPLIES, UPGRADES, WEATHER_ICONS, WEATHER_NAMES, audienceMix, forecast, formatTemperature, temperatureAt, festivalTime } from './game/festivalManagement'
-import type { FestivalAction, Supply, Upgrade } from './game/festivalManagement'
+import { AUDIENCES, AUDIENCE_NAMES, SUPPLIES, TIERED_UPGRADES, UPGRADES, upgradeLevel, WEATHER_ICONS, WEATHER_NAMES, audienceMix, forecast, formatTemperature, temperatureAt, festivalTime } from './game/festivalManagement'
+import type { FestivalAction, Supply, TieredUpgrade, Upgrade } from './game/festivalManagement'
 import { mountHeadlineMagazine } from './headlineMagazineUI'
 
 const money = (n: number) => `${Math.round(n).toLocaleString('de-DE')} €`
@@ -29,7 +29,7 @@ export function mountFestivalUI(
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-labelledby', 'festival-title')
   panel.innerHTML = `<div class="festival-chrome"><header class="festival-heading panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 id="festival-title" class="panel-header-title">Das Festivalwochenende</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Festivalverwaltung schließen">×</button></header>
     <div class="festival-status" aria-live="polite"></div>
-    <nav class="festival-tabs" aria-label="Festivalbereiche">${[['overview', 'Übersicht'], ['dayplan', 'Tagesplan'], ['lineup', 'Bands & Spielplan'], ['supply', 'Lager & Lieferungen'], ['prepare', 'Wetter & Vorsorge'], ['reports', 'Abrechnung & Ruf']].map(([id, label]) => `<button data-tab="${id}" aria-pressed="${id === 'overview'}">${label}</button>`).join('')}</nav></div>
+    <nav class="festival-tabs" aria-label="Festivalbereiche">${[['overview', 'Übersicht'], ['dayplan', 'Tagesplan'], ['lineup', 'Bands & Spielplan'], ['supply', 'Lager & Lieferungen'], ['prepare', 'Wetter & Vorsorge'], ['upgrades', 'Upgrades'], ['reports', 'Abrechnung & Ruf']].map(([id, label]) => `<button data-tab="${id}" aria-pressed="${id === 'overview'}">${label}</button>`).join('')}</nav></div>
     <section data-pane="overview"><div class="festival-intro"><h3>Ein Gelände. Ein Wochenende. Euer Publikum.</h3><p>Vorlauf und Festivaltage legt ihr im Reiter Tagesplan fest. Erst mit dem Start läuft die Festivalzeit. Bucht ein Programm, versorgt eure Gäste und entscheidet, welche Reserven ihr euch leisten könnt. Das vorhandene Gelände und Budget werden übernommen.</p><button data-action="start">Festival starten</button><button data-action="sandbox">Freies Spiel fortsetzen</button></div><form data-ticket-prices class="festival-form"><label>Preis Tagesticket<input name="dayTicketPrice" type="number" min="0" max="1000000" step="1" value="10" required></label><label>Preis Campingticket<input name="campTicketPrice" type="number" min="0" max="1000000" step="1" value="25" required></label><button>Preise übernehmen</button></form><form data-tickets class="festival-form"><label>Tagestickets je Festivaltag<input name="dayTickets" type="number" min="0" max="100000" value="150" required></label><label>Campingtickets für die gesamte Ausgabe<input name="campTickets" type="number" min="0" max="100000" value="0" required></label><button>Kontingente übernehmen</button></form><p data-camping-summary></p><div data-music-overview></div><div data-summary></div></section>
     <section data-pane="dayplan" hidden>
       <p>Vorlauf, Festivaltage und Angebotszeiten gelten für das ganze Gelände. Tagesgäste dürfen nur im eingestellten Fenster bleiben.</p>
@@ -56,7 +56,8 @@ export function mountFestivalUI(
       <details><summary>Besucherbasis & Genreverteilung vergleichen</summary><div data-lineup-mix></div></details><div data-music-planner></div></section>
     <section data-pane="supply" hidden><p>Waren werden am Kartenrand angeliefert und per Lastwagen zur Anlieferung gebracht. Träger versorgen Depots und Stände automatisch. Anlieferung, Depots und Personaltore baut ihr im Baumenü unter Logistik; Mindestbestände und Träger stellt ihr im Infofenster oder im Reiter Waren & Träger ein. Jede Lieferung kostet zusätzlich 45 €.</p><div data-stock class="festival-grid"></div>
       <form data-order class="festival-form"><label>Ware<select name="kind">${Object.entries(SUPPLIES).map(([key, item]) => `<option value="${key}">${item.name} · ${item.price.toLocaleString('de-DE')} €/Einheit</option>`).join('')}</select></label><label>Menge<input name="quantity" type="number" min="50" max="2000" step="50" value="200" required></label><label>Versandfenster<select name="delay"><option value="0">Jetzt</option><option value="360">In 6 Stunden</option><option value="720">In 12 Stunden</option></select></label><button type="submit">Kostenpflichtig bestellen</button></form><div data-deliveries></div></section>
-    <section data-pane="prepare" hidden><div data-forecast class="festival-grid"></div><p>Die Sechs-Stunden-Vorhersage zeigt Wetterrisiken; einzelne Stunden können milder ausfallen. Regen weicht unbefestigte Flächen auf; befestigte Wege bleiben schnell. Ohne Sturmsicherung ruhen Auftritte bei starkem Wind. Schutzmaßnahmen gelten festivalweit und bleiben für weitere Ausgaben erhalten.</p><div data-upgrades class="festival-grid"></div></section>
+    <section data-pane="prepare" hidden><div data-forecast class="festival-grid"></div><p>Die Sechs-Stunden-Vorhersage zeigt Wetterrisiken; einzelne Stunden können milder ausfallen. Regen weicht unbefestigte Flächen auf; befestigte Wege bleiben schnell. Ohne Sturmsicherung ruhen Auftritte bei starkem Wind — die Sturmsicherung und die übrigen Schutzmaßnahmen richtet ihr im Reiter Upgrades ein.</p></section>
+    <section data-pane="upgrades" hidden><p>Einmal bezahlt, bleiben Schutzmaßnahmen dem Gelände erhalten: sie gelten festivalweit und auch für alle weiteren Ausgaben. Bezahlt wird sofort aus der Kasse.</p><div data-upgrades class="festival-grid"></div></section>
     <section data-pane="reports" hidden><div data-reputation class="festival-grid"></div><p>Musikruf öffnet den Zugang zu größeren Bands. Atmosphäre, Komfort und Organisation beeinflussen die erwarteten Zielgruppen und die Nachfrage. Die Tagesbilanz enthält sämtliche Einnahmen und Ausgaben des Spiels.</p><div data-reports></div></section>`
   shell.append(panel)
   makeDraggable(panel.querySelector<HTMLElement>('.panel-header')!, panel)
@@ -81,6 +82,7 @@ export function mountFestivalUI(
     if (button.dataset.action) execute({ type: button.dataset.action === 'start'&&getGame().snapshot.festival.finished?'prepare':button.dataset.action as 'start' | 'sandbox' })
     if (button.dataset.cancel) execute({ type: 'cancel', id: button.dataset.cancel })
     if (button.dataset.upgrade) execute({ type: 'upgrade', kind: button.dataset.upgrade as Upgrade })
+    if (button.dataset.upgradeStep) execute({ type: 'upgradeStep', kind: button.dataset.upgradeStep as TieredUpgrade })
   })
   panel.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); close() } })
   panel.querySelector<HTMLFormElement>('[data-tickets]')!.addEventListener('submit', event => {
@@ -148,7 +150,15 @@ export function mountFestivalUI(
       const celsius = temperatureAt(f, s.day + offset, hour + 3, weather)
       return `<p class="festival-forecast-slot"><span>${String(hour).padStart(2, '0')}:00–${hour + 6}:00</span><strong><span class="weather-icon" aria-hidden="true">${WEATHER_ICONS[weather]}</span>${WEATHER_NAMES[weather]}<span class="forecast-degrees">${formatTemperature(celsius)}</span></strong></p>`
     }).join('')}</article>`).join(''))
-    put('[data-upgrades]', Object.entries(UPGRADES).map(([key, upgrade]) => `<article><h3>${upgrade.name}</h3><p>${upgrade.detail}</p><button data-upgrade="${key}" ${f.upgrades[key as Upgrade] ? 'disabled' : ''}>${f.upgrades[key as Upgrade] ? 'Vorhanden' : `Einrichten · ${money(upgrade.cost)}`}</button></article>`).join(''))
+    // The stepped upgrades stand among the one-off ones, each showing the step it is on
+    // and what the next one costs.
+    const tiered = Object.entries(TIERED_UPGRADES).map(([key, upgrade]) => {
+      const level = upgradeLevel(f, key as TieredUpgrade)
+      const next = upgrade.steps[level]
+      const carried = level > 0 ? upgrade.steps[level - 1]!.factor : 1
+      return `<article><h3>${upgrade.name}</h3><p>${upgrade.detail}</p><p class="festival-upgrade-level">Stufe ${level}/${upgrade.steps.length} · Ladung ×${carried}</p><button data-upgrade-step="${key}" ${next ? '' : 'disabled'}>${next ? `Ausbauen auf ×${next.factor} · ${money(next.cost)}` : 'Höchste Stufe'}</button></article>`
+    }).join('')
+    put('[data-upgrades]', Object.entries(UPGRADES).map(([key, upgrade]) => `<article><h3>${upgrade.name}</h3><p>${upgrade.detail}</p><button data-upgrade="${key}" ${f.upgrades[key as Upgrade] ? 'disabled' : ''}>${f.upgrades[key as Upgrade] ? 'Vorhanden' : `Einrichten · ${money(upgrade.cost)}`}</button></article>`).join('') + tiered)
     put('[data-reputation]', Object.entries(f.reputation).map(([key, value]) => `<article>${meter(({ music: 'Musik', atmosphere: 'Atmosphäre', comfort: 'Komfort', organization: 'Organisation' })[key]!, value)}</article>`).join(''))
     const festivalReports = f.reports.filter(r => r.day >= f.startDay + s.dayPlan.leadDays)
     const average = festivalReports.length ? festivalReports.reduce((sum, r) => sum + r.satisfaction, 0) / festivalReports.length : 0

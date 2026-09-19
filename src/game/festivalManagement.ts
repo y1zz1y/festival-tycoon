@@ -59,6 +59,32 @@ export const UPGRADES = {
   warehouse: { name: 'Lagererweiterung', cost: 750, detail: 'Erhöht die Kapazität je Depot von 3.000 auf 5.000 Einheiten.' },
 } as const
 export type Upgrade = keyof typeof UPGRADES
+/**
+ * Upgrades bought in steps rather than once. Every step doubles what it improves and
+ * is paid on top of the last one, so the ground crew can be built up gradually
+ * instead of in one expensive jump.
+ */
+export const TIERED_UPGRADES = {
+  cleanerCarry: {
+    name: 'Größere Müllkarren',
+    detail: 'Reinigungskräfte tragen je Gang doppelt so viel Müll. Jede weitere Stufe verdoppelt die Ladung erneut.',
+    steps: [
+      { cost: 1000, factor: 2 },
+      { cost: 1000, factor: 4 },
+      { cost: 5000, factor: 8 },
+    ],
+  },
+} as const
+export type TieredUpgrade = keyof typeof TIERED_UPGRADES
+/** How many steps of a tiered upgrade are paid for; a save from before them has none. */
+export function upgradeLevel(f: FestivalManagement, kind: TieredUpgrade): number {
+  return Math.min(TIERED_UPGRADES[kind].steps.length, Math.max(0, Math.floor(f.upgradeLevels?.[kind] ?? 0)))
+}
+/** What a cleaner can carry, as a multiple of the base load. */
+export function cleanerCarryFactor(f: FestivalManagement): number {
+  const level = upgradeLevel(f, 'cleanerCarry')
+  return level > 0 ? TIERED_UPGRADES.cleanerCarry.steps[level - 1]!.factor : 1
+}
 export type Booking = { id: string; bandId: string; stageId: string; day: number; start: number; duration: number; fee: number }
 export type Weather = 'sun' | 'rain' | 'heat' | 'wind'
 export const WEATHER_NAMES: Record<Weather, string> = { sun: 'Heiter', rain: 'Regen', heat: 'Hitze', wind: 'Starker Wind' }
@@ -71,7 +97,7 @@ export type FestivalManagement = {
   stageTemplates?: StageDesign[]; selectedStageTemplate?: string | null;
   tickets?: { day: number; camping: number; usedDay: Record<string, number>; usedCamping: number };
   infrastructure: Infrastructure; planning?: boolean; enabled: boolean; finished: boolean; edition: number; startDay: number; reportDay: number; openingMoney: number;
-  bookings: Booking[]; supplies: Record<Supply, number>; upgrades: Record<Upgrade, boolean>;
+  bookings: Booking[]; supplies: Record<Supply, number>; upgrades: Record<Upgrade, boolean>; upgradeLevels?: Partial<Record<TieredUpgrade, number>>;
   deliveries: Array<{ id: string; kind: Supply; quantity: number; due: number; remaining: number; depotId?: string }>;
   reputation: Reputation; reports: DayReport[]; weather: Weather; wetness: number; seed: number; nextId: number;
   metrics: { guests: number; samples: number; satisfaction: number; concertMinutes: number; stockouts: number; weatherImpact: number };
@@ -90,6 +116,7 @@ export type FestivalAction = InfrastructureAction
   | { type: 'cancel'; id: string }
   | { type: 'order'; kind: Supply; quantity: number; delay: number; depotId?: string }
   | { type: 'upgrade'; kind: Upgrade }
+  | { type: 'upgradeStep'; kind: TieredUpgrade }
   | { type: 'sandbox' }
 
 const metrics = () => ({ guests: 0, samples: 0, satisfaction: 0, concertMinutes: 0, stockouts: 0, weatherImpact: 0 })
@@ -284,6 +311,15 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
     if (!b || b.day * 1440 + b.start <= now) return fail('Nur zukünftige Auftritte können storniert werden')
     bookFinance(s, 'bands', b.fee / 2); f.bookings = f.bookings.filter(item => item.id !== b.id)
     return { ok: true, message: 'Buchung storniert, 50 % der Gage erstattet' }
+  }
+  if (action.type === 'upgradeStep') {
+    const upgrade = TIERED_UPGRADES[action.kind]
+    const level = upgrade ? upgradeLevel(f, action.kind) : 0
+    const step = upgrade?.steps[level]
+    if (!step) return fail('Höchste Stufe bereits erreicht')
+    if (!pay(step.cost, 'construction')) return fail('Nicht genug Geld für diesen Ausbau')
+    f.upgradeLevels = { ...(f.upgradeLevels ?? {}), [action.kind]: level + 1 }
+    return { ok: true, message: `${upgrade.name} · Stufe ${level + 1}: Ladung ×${step.factor}` }
   }
   if (action.type === 'upgrade') {
     const upgrade = UPGRADES[action.kind]

@@ -17,7 +17,7 @@ import { BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY, saveSlotDataKey } from './catalog'
 import { serializeSnapshot, storageErrorMessage } from './saveText';
 import { bookFinance, financeEdition, financeForecast, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance';
 import { updateScenarioProgress } from './scenarioGoals';
-import { createFestivalManagement, festivalAction, updateFestival, activeBookings, showIssue } from './festivalManagement';
+import { createFestivalManagement, festivalAction, updateFestival, activeBookings, cleanerCarryFactor, showIssue } from './festivalManagement';
 import type { Booking, FestivalAction } from './festivalManagement';
 import { createScenarioEntrance, createScenarioRoadEntry, normalizeScenarioSettings } from './scenario';
 import type { ScenarioSettings } from './scenario';
@@ -563,6 +563,7 @@ export class GameState {
       getTreeClearCost: (x, z, elevation, height) => this.getTreeClearCost(x, z, elevation, height),
       clearTreesAt: (x, z, elevation, height) => this.clearTreesAt(x, z, elevation, height),
       clearDesignatedOccupancyAt: (x, z, refund, options) => this.clearDesignatedOccupancyAt(x, z, refund, options),
+      clearStrandedGroundDirt: () => this.clearStrandedGroundDirt(),
       nextId: (prefix) => this.nextId(prefix),
       invalidateBuildingIndex: () => { this.indexedBuildingCount = -1 },
       invalidateRoadGraph: () => this.invalidateRoadGraph(),
@@ -4852,6 +4853,9 @@ export class GameState {
     this.state.incidents.forEach((incident) => {
       incident.ageMinutes += minutes
     })
+    // Whatever route the ground disappeared by — a bulldozer, an area given up, a
+    // multiplayer command — the dirt that was lying on it goes with it.
+    this.clearStrandedGroundDirt()
     this.updateLogistics(minutes)
     this.updateAbandonedCamps(minutes)
     this.updateStaff(minutes)
@@ -5339,11 +5343,43 @@ export class GameState {
     this.poweredBuildingIds = new Set(next.poweredBuildingIds)
   }
 
+  /**
+   * Where dirt can lie: the ground people actually use — footpaths, the camping field,
+   * the stage forecourt, the medical area. Never a road, never bare ground, and never
+   * a tile with something built on it, since a building's own footprint is not a path.
+   */
+  groundHoldsDirt(x: number, z: number, elevation: number): boolean {
+    return Boolean(
+      this.getPathAt(x, z, elevation) ||
+        this.getCampingCellAt(x, z) ||
+        this.getStageForecourtCellAt(x, z) ||
+        this.getMedicalCellAt(x, z),
+    )
+  }
+
+  /**
+   * Takes away the rubbish whose ground is gone. Tearing up a path takes what was
+   * lying on it along — the same for a camping field or a forecourt that is given up.
+   * Fire is left alone: it burns wherever it started.
+   */
+  clearStrandedGroundDirt(): boolean {
+    const kept = this.state.incidents.filter(
+      (incident) =>
+        incident.kind === 'fire' ||
+        this.groundHoldsDirt(incident.x, incident.z, incident.elevation),
+    )
+    if (kept.length === this.state.incidents.length) return false
+    this.state.incidents = kept
+    return true
+  }
+
   private addGroundIncident(
     kind: GroundIncidentKind,
     cell: { x: number; z: number; elevation: number },
     severity = 1,
   ): void {
+    // Rubbish and vomit need ground that can hold them; a fire can start anywhere.
+    if (kind !== 'fire' && !this.groundHoldsDirt(cell.x, cell.z, cell.elevation)) return
     const existing = this.state.incidents.find(
       (incident) =>
         incident.kind === kind &&
@@ -5498,6 +5534,10 @@ export class GameState {
         incidents: this.state.incidents,
         medicalCells: this.state.medicalCells,
         wasteDumps: this.state.wasteDumpCells,
+        cleanerCarry: {
+          capacity: SIMULATION_CONFIG.waste.cleanerMaxCarry * cleanerCarryFactor(this.state.festival),
+          trip: SIMULATION_CONFIG.waste.cleanerTripCarry * cleanerCarryFactor(this.state.festival),
+        },
         wasteBins: this.state.buildings
           .filter((building) => isWasteBin(building.kind))
           .map((building) => ({

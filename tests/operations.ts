@@ -8,6 +8,7 @@ import { updateDepotCarriers } from '../src/game/depotCarriers'
 import { createStaffMember } from '../src/game/staff'
 import { StaffSimulation } from '../src/game/staffSimulation'
 import { DeterministicRng } from '../src/game/rng'
+import { cleanerCarryFactor } from '../src/game/festivalManagement'
 import { zoneKey } from '../src/game/staffZones'
 import {
   abandonVisitorCamp,
@@ -2292,6 +2293,64 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   )
   assert.equal(debugBay.occupiedBy, null)
 
+  // Dirt lies on ground that people use, and nowhere else: tear up the path and the
+  // rubbish on it goes with it, and a piece seeded on bare ground does not survive a tick.
+  const dirtGame=fixture(0)
+  const dirt=dirtGame.snapshot as GameSnapshot
+  dirt.incidents.push({id:'on-path',kind:'litter',x:3,z:-10,elevation:0,severity:3,ageMinutes:0})
+  dirt.incidents.push({id:'on-bare-ground',kind:'litter',x:20,z:-10,elevation:0,severity:3,ageMinutes:0})
+  dirtGame.tick(0.1)
+  assert.ok(dirt.incidents.some(incident=>incident.id==='on-path'),'rubbish on a footpath stays')
+  assert.equal(
+    dirt.incidents.some(incident=>incident.id==='on-bare-ground'),
+    false,
+    'rubbish on bare ground is not a place it can lie',
+  )
+  assert.ok(dirtGame.bulldozeArea([{x:3,z:-10}]).ok)
+  assert.equal(
+    dirt.incidents.some(incident=>incident.id==='on-path'),
+    false,
+    'tearing up the path takes the rubbish with it',
+  )
+
+  // Bigger carts: each paid step doubles what a cleaner hauls, and the last one is final.
+  const cartGame=fixture(0)
+  cartGame.addDebugMoney()
+  const cart=cartGame.snapshot as GameSnapshot
+  const cartBase=cart.money
+  assert.equal(cleanerCarryFactor(cart.festival),1,'a crew starts with plain carts')
+  assert.ok(cartGame.manageFestival({type:'upgradeStep',kind:'cleanerCarry'}).ok)
+  assert.equal(cleanerCarryFactor(cart.festival),2,'the first step doubles the load')
+  assert.equal(cartBase-cart.money,1000,'and costs 1.000 €')
+  assert.ok(cartGame.manageFestival({type:'upgradeStep',kind:'cleanerCarry'}).ok)
+  assert.equal(cleanerCarryFactor(cart.festival),4)
+  assert.ok(cartGame.manageFestival({type:'upgradeStep',kind:'cleanerCarry'}).ok)
+  assert.equal(cleanerCarryFactor(cart.festival),8)
+  assert.equal(cartBase-cart.money,7000,'1.000 € + 1.000 € + 5.000 € for the three steps')
+  assert.equal(
+    cartGame.manageFestival({type:'upgradeStep',kind:'cleanerCarry'}).ok,
+    false,
+    'there is no fourth step to buy',
+  )
+  const carried=(game:GameState)=>{
+    const s=game.snapshot as GameSnapshot
+    const cleaner=s.staff.find(member=>member.role==='cleaner')!
+    for (const x of [2,3,4]) s.incidents.push({id:`cart-litter-${x}`,kind:'litter',x,z:-12,elevation:0,severity:40,ageMinutes:0})
+    for (let n=0;n<600;n+=1) game.tick(0.25)
+    return cleaner.carryingWaste
+  }
+  const plainGame=fixture(0)
+  plainGame.addDebugMoney()
+  assert.ok(plainGame.hireStaff('cleaner').ok)
+  const bigGame=fixture(0)
+  bigGame.addDebugMoney()
+  assert.ok(bigGame.hireStaff('cleaner').ok)
+  bigGame.manageFestival({type:'upgradeStep',kind:'cleanerCarry'})
+  assert.ok(
+    carried(bigGame) > carried(plainGame),
+    'with the bigger cart a cleaner walks around with more waste on board',
+  )
+
   const sweepGame=fixture(0)
   sweepGame.addDebugMoney()
   const sweep=sweepGame.snapshot as GameSnapshot
@@ -2317,6 +2376,9 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   const leftBin=sweep.buildings.find(building=>building.kind==='wasteBin')!
   leftBin.wasteFill=7
   assert.ok(sweepGame.designateWasteDump([{x:5,z:-14}]).ok)
+  // One cell of path beside the main strip: rubbish only ever lies on ground that can
+  // hold it, and the sweeper has to reach this piece from next door rather than drive onto it.
+  assert.ok(sweepGame.place('path',1,-16).ok)
   sweep.incidents.push({
     id:'path-litter',kind:'litter',x:1,z:-16,elevation:0,severity:4,ageMinutes:0,
   })
@@ -2364,7 +2426,7 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   sweeper.cargo=SIMULATION_CONFIG.logistics.sweeperCapacity
   sweeper.state='idle'
   sweeper.route=[]
-  for (let n=0;n<160;n+=1) sweepGame.tick(0.25)
+  for (let n=0;n<400;n+=1) sweepGame.tick(0.25)
   assert.ok(
     sweep.wasteDumpCells.some(cell=>cell.stored>=SIMULATION_CONFIG.logistics.sweeperCapacity),
     'a full sweeper unloads onto the waste dump',

@@ -3993,7 +3993,10 @@ document.querySelectorAll<HTMLButtonElement>('[data-path-access]').forEach((butt
     if (!tool) return
     pathDemolishActive = false
     pathEditorActive = false
-    game.setTool(tool)
+    // Clicking the gate that is already in hand puts it down again: the window falls
+    // back to its own plain tool instead of leaving a gate stuck on the pointer.
+    const dropping = game.snapshot.selectedTool === tool
+    game.setTool(dropping ? (roadEditorOpen ? 'road' : 'path') : tool)
     updatePathEditor()
   })
 })

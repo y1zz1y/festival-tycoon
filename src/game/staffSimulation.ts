@@ -60,7 +60,14 @@ type StaffContext = {
   emptySealedContainer?: (id: string, amount: number) => number
   abandonedCamps?: Array<{ id: string; x: number; z: number; elevation: number }>
   removeAbandonedCamp?: (id: string) => boolean
+  /** What a cleaner's cart holds, bigger once the festival has paid for bigger ones. */
+  cleanerCarry?: { capacity: number; trip: number }
 }
+const carryCapacity = (context: StaffContext): number =>
+  context.cleanerCarry?.capacity ?? SIMULATION_CONFIG.waste.cleanerMaxCarry
+/** How much makes the walk to the dump worth it — it grows with the cart. */
+const carryTrip = (context: StaffContext): number =>
+  context.cleanerCarry?.trip ?? SIMULATION_CONFIG.waste.cleanerTripCarry
 
 export class StaffSimulation {
   update(context: StaffContext, minutes: number): void {
@@ -284,7 +291,7 @@ export class StaffSimulation {
         : null
     }
     if (member.role === 'cleaner') {
-      if (member.carryingWaste >= SIMULATION_CONFIG.waste.cleanerMaxCarry) {
+      if (member.carryingWaste >= carryCapacity(context)) {
         return null
       }
       const binCapacity = SIMULATION_CONFIG.waste.binCapacity
@@ -299,7 +306,7 @@ export class StaffSimulation {
             candidate.stored >= idleEmptyFill &&
             !claimed.has(candidate.id) &&
             member.carryingWaste + candidate.stored <=
-              SIMULATION_CONFIG.waste.cleanerMaxCarry,
+              carryCapacity(context),
         )
         .sort((left, right) => {
           const leftFull = left.stored >= binCapacity
@@ -522,7 +529,7 @@ export class StaffSimulation {
     if (member.role === 'cleaner' && haulSealed) {
       const room = Math.max(
         0,
-        SIMULATION_CONFIG.waste.cleanerMaxCarry - member.carryingWaste,
+        carryCapacity(context) - member.carryingWaste,
       )
       const emptied = context.emptySealedContainer?.(haulSealed, room) ?? 0
       member.carryingWaste += emptied
@@ -566,7 +573,7 @@ export class StaffSimulation {
       const leftoverId = this.abandonedCampId(member.targetId)
       const room = Math.max(
         0,
-        SIMULATION_CONFIG.waste.cleanerMaxCarry - member.carryingWaste,
+        carryCapacity(context) - member.carryingWaste,
       )
       if (leftoverId && room > 0 && context.removeAbandonedCamp?.(leftoverId)) {
         member.carryingWaste += 1
@@ -577,7 +584,7 @@ export class StaffSimulation {
     if (member.role === 'cleaner' && incident?.kind === 'litter') {
       const room = Math.max(
         0,
-        SIMULATION_CONFIG.waste.cleanerMaxCarry - member.carryingWaste,
+        carryCapacity(context) - member.carryingWaste,
       )
       const taken = Math.min(incident.severity, room)
       member.carryingWaste += taken
@@ -610,7 +617,7 @@ export class StaffSimulation {
     if (binsHaveRoom && !member.wasteFromBin && this.sendCleanerToDump(member, context)) {
       return
     }
-    if (member.carryingWaste < SIMULATION_CONFIG.waste.cleanerTripCarry) {
+    if (member.carryingWaste < carryTrip(context)) {
       const claimed = new Set(
         context.staff.map((worker) => worker.targetId).filter((id): id is string => Boolean(id)),
       )
@@ -686,7 +693,7 @@ export class StaffSimulation {
     context: StaffContext,
     claimed: Set<string>,
   ): SealedWasteContainerInfo | null {
-    if (member.carryingWaste >= SIMULATION_CONFIG.waste.cleanerMaxCarry) return null
+    if (member.carryingWaste >= carryCapacity(context)) return null
     const haulDistance = (container: SealedWasteContainerInfo) =>
       Math.abs(container.x - member.cellX) + Math.abs(container.z - member.cellZ)
     return (
