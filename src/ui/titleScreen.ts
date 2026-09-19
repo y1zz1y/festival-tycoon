@@ -6,6 +6,8 @@ import type { ScenarioSettings } from '../game/scenario'
 import { scenarioPreset } from '../game/scenarioPresets'
 import { mountTitleCrowd } from '../titleCrowd'
 import { isTextEntryTarget } from '../uiFocus'
+import { fetchLobbies } from '../net/lobbies'
+import type { NetLobby } from '../net/protocol'
 import { escapeHtml } from './format'
 import { saveProgressText, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
 
@@ -28,6 +30,14 @@ export interface TitleScreenContext {
   isOwnSave(id: string): boolean
   readSaveSlot(slot: SaveSlotView): Promise<GameState | null>
   bindLoadedGame(game: GameState, message: string): void
+  /**
+   * Joins a room by code; the running game becomes the guest's view of it.
+   * `onError` carries the server's refusal back, because the toast that would
+   * otherwise say it sits behind the title screen.
+   */
+  joinMultiplayer(code: string, name: string, onError: (message: string) => void): void
+  readMultiplayerName(): string
+  setMultiplayerName(name: string): void
   tryQuickLoad(): Promise<boolean>
   formatSaveTime(value: number): string
 }
@@ -44,7 +54,7 @@ export interface TitleScreenController {
 }
 
 export function mountTitleScreen(context: TitleScreenContext): TitleScreenController {
-  const { getGame, getMultiplayerMode, scenarioPanel, saveSlotsPanel, setScenarioPanelOpen, setSaveSlotsPanelOpen, fillScenarioForm, readScenarioForm, closePathEditor, isPathWindowOpen, hideVisitorPanel, bindGameState, showToast, fetchSaveSlots, findSaveSlot, isOwnSave, readSaveSlot, bindLoadedGame, tryQuickLoad, formatSaveTime } = context
+  const { getGame, getMultiplayerMode, scenarioPanel, saveSlotsPanel, setScenarioPanelOpen, setSaveSlotsPanelOpen, fillScenarioForm, readScenarioForm, closePathEditor, isPathWindowOpen, hideVisitorPanel, bindGameState, showToast, fetchSaveSlots, findSaveSlot, isOwnSave, readSaveSlot, bindLoadedGame, joinMultiplayer, readMultiplayerName, setMultiplayerName, tryQuickLoad, formatSaveTime } = context
   const requireElement = <T extends Element>(selector: string): T => {
     const element = document.querySelector<T>(selector)
     if (!element) throw new Error(`Ben?tigtes UI-Element fehlt: ${selector}`)
@@ -62,6 +72,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
       openTitleFreeplay(false)
       openTitleSubmenu(false)
       closeTitleLoad()
+      openTitleLobbies(false)
       setAccountMaskOpen(false)
       // The running game's own windows belong to the running game: whatever was left
       // open behind the start screen is closed, so nothing of it still holds the keys.
@@ -87,6 +98,12 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   const titleLoadRows = requireElement<HTMLElement>('#title-load-rows')
   const titleLoadKicker = requireElement<HTMLElement>('#title-load-kicker')
   const titleLoadNote = requireElement<HTMLElement>('#title-load-note')
+  const titleLobbyMask = requireElement<HTMLElement>('#title-multiplayer-mask')
+  const titleLobbyRows = requireElement<HTMLElement>('#title-lobby-rows')
+  const titleLobbyKicker = requireElement<HTMLElement>('#title-lobby-kicker')
+  const titleLobbyNote = requireElement<HTMLElement>('#title-lobby-note')
+  const titleLobbyName = requireElement<HTMLInputElement>('#title-lobby-name')
+  const titleLobbyCode = requireElement<HTMLInputElement>('#title-lobby-code')
   const accountMask = requireElement<HTMLElement>('#title-account-mask')
   const accountForm = requireElement<HTMLFormElement>('#title-account-form')
   const accountTitle = requireElement<HTMLElement>('#title-account-title')
@@ -209,6 +226,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   function titleEntries(): HTMLButtonElement[] {
     if (!titleFreeplayMask.hidden) return [...titleFreeplayMask.querySelectorAll<HTMLButtonElement>('.title-freeplay-actions button')]
     if (!titleLoadMask.hidden) return [...titleLoadRows.querySelectorAll<HTMLButtonElement>('[data-title-load-slot]')]
+    if (!titleLobbyMask.hidden) return [...titleLobbyMask.querySelectorAll<HTMLButtonElement>('#title-lobby-join, #title-lobby-refresh, [data-title-lobby]')]
     return (titleSubmenu.hidden ? titleMenuButtons : titleRowButtons).filter((entry) => !entry.disabled)
   }
   
@@ -261,6 +279,57 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     closeTitleLoad()
     setTitleScreenOpen(false)
   }
+  /**
+   * Joining from the title screen. Two ways in, because rooms come in two kinds:
+   * a public one picks itself off the list, a private one is only reachable by
+   * the code its host passed around. The screen stays up until the room actually
+   * answers, so a wrong code leaves the player where they can try again.
+   */
+  function lobbyRow(lobby: NetLobby): string {
+    const meta = [
+      `${lobby.players} ${lobby.players === 1 ? 'Spieler' : 'Spieler'}`,
+      lobby.hostAway ? 'Host ist gerade weg' : '',
+    ].filter(Boolean).join(' · ')
+    return `<button type="button" data-title-lobby="${escapeHtml(lobby.code)}"><span class="title-row-text"><span class="title-row-label">${escapeHtml(lobby.host)}</span><span class="title-row-meta">${meta}</span></span><span class="title-row-value">${escapeHtml(lobby.code)}</span></button>`
+  }
+  async function refreshLobbies(): Promise<void> {
+    titleLobbyRows.innerHTML = '<p class="title-load-empty">Offene Lobbys werden gesucht …</p>'
+    titleLobbyKicker.textContent = 'Wird gesucht …'
+    markTitleSelection(0)
+    const lobbies = await fetchLobbies()
+    if (titleLobbyMask.hidden) return
+    titleLobbyKicker.textContent = lobbies.length
+      ? `${lobbies.length} offen`
+      : 'Keine offenen Lobbys'
+    titleLobbyRows.innerHTML = lobbies.length
+      ? lobbies.map(lobbyRow).join('')
+      : '<p class="title-load-empty">Gerade ist keine öffentliche Lobby offen. Mit einem Code kommst du trotzdem in eine private.</p>'
+    markTitleSelection(0)
+  }
+  function openTitleLobbies(open: boolean): void {
+    titleLobbyMask.hidden = !open
+    if (open) {
+      titleLobbyName.value = readMultiplayerName()
+      titleLobbyNote.textContent = ''
+      void refreshLobbies()
+    }
+    markTitleSelection(0)
+  }
+  function joinLobby(code: string): void {
+    const trimmed = code.trim().toUpperCase()
+    if (trimmed.length < 4) {
+      titleLobbyNote.textContent = 'Ein Raumcode hat vier Zeichen.'
+      return
+    }
+    const name = titleLobbyName.value.trim() || readMultiplayerName()
+    setMultiplayerName(name)
+    titleLobbyNote.textContent = `Trete ${trimmed} bei …`
+    joinMultiplayer(trimmed, name, (message) => {
+      if (titleLobbyMask.hidden) return
+      titleLobbyNote.textContent = message
+      void refreshLobbies()
+    })
+  }
   function markTitleSelection(index: number): void {
     const entries = titleEntries()
     if (!entries.length) return
@@ -292,7 +361,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   titleScreen.addEventListener('pointermove', (event) => {
     if (event.clientX === titlePointer.x && event.clientY === titlePointer.y) return
     titlePointer = { x: event.clientX, y: event.clientY }
-    const entry = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-title-menu], [data-title-scenario], [data-title-load-slot]')
+    const entry = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-title-menu], [data-title-scenario], [data-title-load-slot], [data-title-lobby]')
     const index = entry ? titleEntries().indexOf(entry) : -1
     if (index >= 0) markTitleSelection(index)
   })
@@ -313,6 +382,11 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     if (target.closest('[data-title-freeplay-close]')) { openTitleFreeplay(false); return }
     if (target.closest('[data-title-back]')) { openTitleSubmenu(false); return }
     if (target.closest('[data-title-load-close]')) { closeTitleLoad(); return }
+    if (target.closest('[data-title-lobby-close]')) { openTitleLobbies(false); return }
+    if (target.closest('#title-lobby-refresh')) { void refreshLobbies(); return }
+    if (target.closest('#title-lobby-join')) { joinLobby(titleLobbyCode.value); return }
+    const lobby = target.closest<HTMLButtonElement>('[data-title-lobby]')
+    if (lobby) { joinLobby(lobby.dataset.titleLobby!); return }
     const slot = target.closest<HTMLButtonElement>('[data-title-load-slot]')
     if (slot) { void loadTitleSlot(slot.dataset.titleLoadSlot!); return }
     const menu = target.closest<HTMLButtonElement>('[data-title-menu]')
@@ -323,6 +397,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
         void tryQuickLoad()
       }
       else if (menu.dataset.titleMenu === 'load') void openTitleLoad()
+      else if (menu.dataset.titleMenu === 'multiplayer') openTitleLobbies(true)
       else openAboveTitle(scenarioPanel, () => setScenarioPanelOpen(true))
       return
     }
@@ -357,6 +432,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     if (event.key === 'Escape' || event.key === 'Backspace') {
       if (!titleFreeplayMask.hidden) { event.preventDefault(); openTitleFreeplay(false) }
       else if (!titleLoadMask.hidden) { event.preventDefault(); closeTitleLoad() }
+      else if (!titleLobbyMask.hidden) { event.preventDefault(); openTitleLobbies(false) }
       else if (!titleSubmenu.hidden) { event.preventDefault(); openTitleSubmenu(false) }
       return
     }

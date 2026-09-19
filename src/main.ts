@@ -390,6 +390,8 @@ const multiplayerStatus = requireElement<HTMLElement>('#multiplayer-status')
 const multiplayerName = requireElement<HTMLInputElement>('#multiplayer-name')
 const multiplayerCode = requireElement<HTMLInputElement>('#multiplayer-code')
 const multiplayerHostButton = requireElement<HTMLButtonElement>('#multiplayer-host')
+const multiplayerPublicToggle = requireElement<HTMLInputElement>('#multiplayer-public')
+const multiplayerPublicField = requireElement<HTMLElement>('#multiplayer-public-field')
 const multiplayerJoinButton = requireElement<HTMLButtonElement>('#multiplayer-join')
 const multiplayerLeaveButton = requireElement<HTMLButtonElement>('#multiplayer-leave')
 const multiplayerCopyButton = requireElement<HTMLButtonElement>('#multiplayer-copy')
@@ -3897,6 +3899,13 @@ function readMultiplayerName(): string {
   return name
 }
 
+/** Joining from the title screen names the player there; both fields share one name. */
+function setMultiplayerName(name: string): void {
+  const trimmed = name.trim() || 'Spieler'
+  multiplayerName.value = trimmed
+  window.localStorage.setItem(MULTIPLAYER_NAME_KEY, trimmed)
+}
+
 function renderMultiplayerStatus(status: MultiplayerStatus): void {
   const connected = status.connected
   multiplayerStatusBadge.dataset.state = connected ? 'online' : status.message ? 'disconnected' : 'solo'
@@ -3912,6 +3921,7 @@ function renderMultiplayerStatus(status: MultiplayerStatus): void {
   multiplayerToggle.title = multiplayerLabel
   multiplayerToggle.setAttribute('aria-label', multiplayerLabel)
   multiplayerConnectActions.hidden = connected
+  multiplayerPublicField.hidden = connected
   multiplayerCodeField.hidden = connected
   multiplayerJoinActions.hidden = connected
   multiplayerRoom.hidden = !connected
@@ -3925,13 +3935,42 @@ function renderMultiplayerStatus(status: MultiplayerStatus): void {
     .join('')
 }
 
-multiplayer.onStatus = renderMultiplayerStatus
+/**
+ * Set while a join started from the title screen is in flight. The server's
+ * refusal reaches the player as a toast, and a toast is drawn behind the title
+ * screen, so it is handed to the screen as well.
+ */
+let joinErrorSink: ((message: string) => void) | null = null
+
+multiplayer.onStatus = (status) => {
+  renderMultiplayerStatus(status)
+  if (status.connected) joinErrorSink = null
+  // Joining from the title screen only leaves it once the room has answered, so a
+  // code that goes nowhere keeps the player where they can try the next one.
+  if (status.mode === 'client' && status.connected && titleScreenController.isOpen()) {
+    titleScreenController.setOpen(false)
+  }
+}
 multiplayer.onToast = (message, isError) => {
-  if (message) showToast(message, Boolean(isError))
+  if (!message) return
+  if (isError && joinErrorSink) {
+    joinErrorSink(message)
+    joinErrorSink = null
+  }
+  showToast(message, Boolean(isError))
 }
 multiplayerName.value =
   window.localStorage.getItem(MULTIPLAYER_NAME_KEY) ??
   `Spieler ${Math.floor(Math.random() * 90 + 10)}`
+const MULTIPLAYER_PUBLIC_KEY = 'festival-mp-public'
+try {
+  multiplayerPublicToggle.checked = window.localStorage.getItem(MULTIPLAYER_PUBLIC_KEY) === 'on'
+} catch { /* blocked storage: rooms stay private, which is the safer default */ }
+multiplayerPublicToggle.addEventListener('change', () => {
+  try {
+    window.localStorage.setItem(MULTIPLAYER_PUBLIC_KEY, multiplayerPublicToggle.checked ? 'on' : 'off')
+  } catch { /* the choice simply does not survive a reload then */ }
+})
 const joinFromUrl = new URLSearchParams(window.location.search).get('join')
 if (joinFromUrl) {
   multiplayerCode.value = joinFromUrl.toUpperCase()
@@ -3947,8 +3986,8 @@ requireElement<HTMLButtonElement>('#close-multiplayer').addEventListener('click'
 makeDraggable(multiplayerPanel.querySelector<HTMLElement>('.panel-header')!, multiplayerPanel)
 makeResizable(multiplayerPanel)
 multiplayerHostButton.addEventListener('click', () => {
-  multiplayer.host(readMultiplayerName())
-  showToast('Verbinde als Host…')
+  multiplayer.host(readMultiplayerName(), multiplayerPublicToggle.checked)
+  showToast(multiplayerPublicToggle.checked ? 'Öffentliche Lobby wird geöffnet…' : 'Verbinde als Host…')
 })
 multiplayerJoinButton.addEventListener('click', () => {
   const code = multiplayerCode.value.trim().toUpperCase()
@@ -4887,6 +4926,12 @@ titleScreenController = mountTitleScreen({
   isOwnSave: saveController.isOwnSave,
   readSaveSlot,
   bindLoadedGame,
+  joinMultiplayer: (code, name, onError) => {
+    joinErrorSink = onError
+    multiplayer.join(code, name)
+  },
+  readMultiplayerName,
+  setMultiplayerName,
   tryQuickLoad,
   formatSaveTime,
 })

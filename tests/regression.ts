@@ -785,6 +785,49 @@ try {
   // A guest never picks up the host's code: its own world stays its own to host.
   assert.equal(Object.hasOwn(packWorld(kept.snapshot), 'multiplayerCode'), false, 'the code stays off the wire')
   console.log('PASS a save keeps its room code, and a code in use is not handed out twice')
+
+  // Public rooms put themselves on a list anyone may read; private ones are only
+  // reachable by the code their host passed around.
+  const ask = async (): Promise<Array<{ code: string; host: string; players: number; hostAway: boolean }>> => {
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`)
+    await new Promise<void>(resolve => socket.on('open', () => resolve()))
+    const answer = new Promise<string>(resolve => socket.on('message', raw => resolve(String(raw))))
+    socket.send(JSON.stringify({ t: 'lobbies' }))
+    const lobbies = JSON.parse(await answer).lobbies
+    socket.close()
+    return lobbies
+  }
+  assert.deepEqual(await ask(), [], 'nothing is listed while every room is private')
+
+  const openWorld = fixture(0)
+  enableMultiplayerCommands(openWorld)
+  const openSession = new MultiplayerSession(openWorld)
+  sessions.push(openSession)
+  openSession.host('Offene Runde', true)
+  await until(() => openSession.status.connected)
+  const listed = await ask()
+  assert.equal(listed.length, 1, 'only the public room is on the list')
+  assert.equal(listed[0]!.code, openSession.status.code)
+  assert.equal(listed[0]!.host, 'Offene Runde')
+  assert.equal(listed[0]!.players, 1)
+  assert.equal(listed[0]!.hostAway, false)
+
+  // Joining one is an ordinary join by code — the list only saves the typing.
+  const walkIn = new GameState()
+  enableMultiplayerCommands(walkIn)
+  const walkInSession = new MultiplayerSession(walkIn)
+  sessions.push(walkInSession)
+  walkInSession.join(listed[0]!.code, 'Läuft rein')
+  await until(() => walkInSession.status.connected)
+  assert.equal((await ask())[0]!.players, 2, 'the list counts who is in the room')
+
+  // A room that loses its host stays listed, and says so, because it is waiting.
+  const openCode = openSession.status.code
+  ;(openSession as any).hello = null
+  ;(openSession as any).socket.close()
+  await until(() => (roomsForTest.rooms.get(openCode)?.hostAwaySince ?? null) !== null)
+  assert.equal((await ask())[0]!.hostAway, true, 'a waiting room says its host is away')
+  console.log('PASS public rooms are listed with host, players and whether the host is away')
 } finally {
   sessions.forEach(session => session.disconnect())
   wss.clients.forEach(socket => socket.terminate())

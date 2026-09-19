@@ -5168,3 +5168,12 @@ input[type='range']:disabled {
 }
 
 .hotkey-key.unbound { opacity: 0.55; }
+
+/* The two ways into a room sit side by side above the list of open ones. */
+.title-lobby-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.title-lobby-actions button { flex: 1 1 160px; }

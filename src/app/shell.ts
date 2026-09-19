@@ -153,6 +153,7 @@ export function mountAppShell(app: HTMLDivElement): void {
         <span>Name</span>
         <input id="multiplayer-name" type="text" maxlength="24" placeholder="Dein Name" />
       </label>
+      <label class="scenario-check" id="multiplayer-public-field"><input id="multiplayer-public" type="checkbox" /><span>Öffentliche Lobby</span></label>
       <div class="multiplayer-actions" id="multiplayer-connect-actions">
         <button id="multiplayer-host" type="button">Spiel hosten</button>
       </div>
@@ -809,6 +810,7 @@ export function mountAppShell(app: HTMLDivElement): void {
           <button type="button" data-title-menu="new" aria-haspopup="true"><span class="title-menu-label">Neues Spiel</span><span class="title-menu-meta">${SCENARIO_PRESETS.length + 1} Szenarien</span></button>
           <button type="button" data-title-menu="quickload"><span class="title-menu-label">Schnell laden</span><span class="title-menu-meta">Letzter Einzelspielstand</span></button>
           <button type="button" data-title-menu="load"><span class="title-menu-label">Spielstand laden</span><span class="title-menu-meta">Archiv öffnen</span></button>
+          <button type="button" data-title-menu="multiplayer" aria-haspopup="true"><span class="title-menu-label">Mehrspieler beitreten</span><span class="title-menu-meta">Offene Lobby oder Code</span></button>
           <button type="button" data-title-menu="settings"><span class="title-menu-label">Einstellungen</span><span class="title-menu-meta">Debug · Festivaldaten</span></button>
         </nav>
         <div class="title-account">
@@ -838,6 +840,23 @@ export function mountAppShell(app: HTMLDivElement): void {
             <button type="button" data-account-close>Zurück</button>
           </div>
         </form>
+      </div>
+      <div id="title-multiplayer-mask" class="title-submenu" hidden>
+        <div class="title-submenu-card">
+          <div class="title-submenu-head">
+            <span class="title-submenu-title">Mehrspieler beitreten</span>
+            <span id="title-lobby-kicker" class="title-submenu-kicker">Offene Lobbys</span>
+          </div>
+          <label class="scenario-field"><span>Dein Name</span><input id="title-lobby-name" type="text" maxlength="24" placeholder="Dein Name" autocomplete="off" /></label>
+          <label class="scenario-field"><span>Code einer privaten Lobby</span><input id="title-lobby-code" type="text" maxlength="4" placeholder="ABCD" autocomplete="off" spellcheck="false" /></label>
+          <div class="title-lobby-actions">
+            <button id="title-lobby-join" type="button">Mit Code beitreten</button>
+            <button id="title-lobby-refresh" type="button">Liste aktualisieren</button>
+          </div>
+          <div id="title-lobby-rows" class="title-submenu-rows"></div>
+          <p id="title-lobby-note" class="scenario-hint"></p>
+          <button type="button" data-title-lobby-close>Zurück</button>
+        </div>
       </div>
       <div id="title-load-mask" class="title-submenu" hidden>
         <div class="title-submenu-card">

@@ -21,6 +21,17 @@ sondern ein Aussetzer.
   neuen Code zu bekommen. Ohne das schlagen sich die beiden Zusagen: Der Raum
   überlebt den Abriss, also fände derselbe Spielstand beim erneuten Hosten
   seinen eigenen Code belegt. Ein Raum mit anwesendem Host wird nie übernommen.
+- **Öffentlich oder privat:** Beim Hosten entscheidet eine Checkbox, ob der Raum
+  auf die Liste kommt (`host.public`, gemerkt unter `festival-mp-public`). Nur
+  öffentliche Räume stehen in der Antwort auf `lobbies` — mit Hostname,
+  Spielerzahl und ob der Host gerade weg ist. Ein privater Raum ist
+  ausschließlich über seinen Code erreichbar. Beim Zurückholen des eigenen Raums
+  gilt die Checkbox erneut, der Host kann die Sichtbarkeit also ändern.
+- **Liste lesen ohne Beitritt:** `lobbies` beantwortet der Server auch einem
+  Socket, der noch in keinem Raum ist — der Titlescreen braucht die Liste, bevor
+  es eine Session gibt. `src/net/lobbies.ts` öffnet dafür eine eigene kurze
+  Verbindung und gibt bei Fehlern eine leere Liste zurück, damit das Codefeld
+  weiter nutzbar bleibt.
 - **Keepalive:** Der Server pingt alle 25 s und trennt Sockets, die die vorige
   Runde nicht beantwortet haben. Browser antworten selbst, der Client braucht
   dafür nichts. Ohne das schlief eine Verbindung ein, sobald ein Host allein im
@@ -47,6 +58,8 @@ sondern ein Aussetzer.
 | Kompakte Pakete | `src/net/codec.ts` | `packWorld` |
 | Deltas, Ankunft/Abreise | `src/net/worldUpdates.ts` | `WorldUpdates`, `applyWorld` |
 | Client-Session | `src/net/session.ts` | `MultiplayerSession` |
+| Lobby-Liste ohne Session | `src/net/lobbies.ts` | `fetchLobbies`, `multiplayerSocketUrl` |
+| Beitreten vom Titlescreen | `src/ui/titleScreen.ts` | `openTitleLobbies`, `joinLobby` |
 | UI-Bindung | `src/net/bind.ts` | `enableMultiplayerCommands` |
 | Host-Turns, Optimistic | `src/game/GameState.ts` | `gate`, `receiveTurn`, `applyNetworkWorld` |
 | Server-Räume | `server/rooms.ts` | `attachMultiplayer` |
@@ -178,7 +191,8 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
 
 `tests/regression.ts` (echte WebSockets, zwei Clients, später Join,
 Pause/Resume, Deltas, Host-Abriss mit Wiederaufnahme auf demselben Sitz, Sweep
-verwaister Räume, Raumcode am Spielstand inkl. Rückholen des eigenen Raums). Ride-Reconciliation: `tests/rideAccess.ts`.
+verwaister Räume, Raumcode am Spielstand inkl. Rückholen des eigenen Raums,
+öffentliche Lobbyliste mit Spielerzahl und abwesendem Host). Ride-Reconciliation: `tests/rideAccess.ts`.
 
 ## Bei Änderungen dieses Dokument
 

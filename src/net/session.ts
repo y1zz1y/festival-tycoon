@@ -1,6 +1,7 @@
 import type { GameState } from '../game/GameState'
 import { WorldUpdates } from './worldUpdates'
 import { packWorld } from './codec'
+import { multiplayerSocketUrl } from './lobbies'
 import type {
   ClientMessage,
   GameCommand,
@@ -46,6 +47,8 @@ export class MultiplayerSession {
   /** The hello of the session we are in, so a dropped socket can dial back. */
   private hello: ClientMessage | null = null
   private playerName = ''
+  /** Whether this room puts itself on the public list; kept for reconnects. */
+  private listed = false
   private reconnectTimer = 0
   private reconnectAttempt = 0
   /** True only while the player themselves is ending the session. */
@@ -72,8 +75,7 @@ export class MultiplayerSession {
   }
 
   get socketUrl(): string {
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${location.host}/ws`
+    return multiplayerSocketUrl()
   }
 
   /**
@@ -82,9 +84,15 @@ export class MultiplayerSession {
    * The server has the last word: if that code is taken right now it answers
    * with another one, and the world is stamped with whatever came back.
    */
-  host(name: string): void {
+  host(name: string, listed = false): void {
     this.playerName = name.trim() || 'Host'
-    this.connect({ t: 'host', name: this.playerName, code: this.game.snapshot.multiplayerCode || undefined })
+    this.listed = listed
+    this.connect({
+      t: 'host',
+      name: this.playerName,
+      code: this.game.snapshot.multiplayerCode || undefined,
+      public: listed,
+    })
   }
 
   join(code: string, name: string): void {
@@ -218,7 +226,9 @@ export class MultiplayerSession {
       // from scratch on the next try.
       this.open(this.status.code && this.status.playerId
         ? { t: 'resume', code: this.status.code, playerId: this.status.playerId, name: this.playerName }
-        : this.hello)
+        : this.hello.t === 'host'
+          ? { ...this.hello, public: this.listed }
+          : this.hello)
     }, delay) as unknown as number
   }
 

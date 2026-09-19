@@ -1,7 +1,7 @@
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { IncomingMessage } from 'node:http'
 import { networkInterfaces } from 'node:os'
-import type { ClientMessage, NetPlayer, ServerMessage } from '../src/net/protocol.ts'
+import type { ClientMessage, NetLobby, NetPlayer, ServerMessage } from '../src/net/protocol.ts'
 
 type RoomClient = {
   id: string
@@ -17,6 +17,8 @@ type Room = {
   clients: Map<string, RoomClient>
   /** When the host's socket went away, so an abandoned room can be swept later. */
   hostAwaySince: number | null
+  /** Listed for anyone to join. A private room is only reachable by its code. */
+  public: boolean
 }
 
 const rooms = new Map<string, Room>()
@@ -51,6 +53,18 @@ function playersOf(room: Room): NetPlayer[] {
     name: client.name,
     role: client.role,
   }))
+}
+
+/** The rooms that put themselves on the list, newest rooms last. */
+function publicLobbies(): NetLobby[] {
+  return [...rooms.values()]
+    .filter((room) => room.public)
+    .map((room) => ({
+      code: room.code,
+      host: room.hostName,
+      players: room.clients.size,
+      hostAway: room.hostAwaySince !== null,
+    }))
 }
 
 function broadcast(room: Room, message: ServerMessage, except?: string): void {
@@ -176,6 +190,7 @@ export function attachMultiplayer(
           returning.hostId = id
           returning.hostName = message.name || 'Host'
           returning.hostAwaySince = null
+          returning.public = message.public === true
           returning.clients.set(id, { id, name: returning.hostName, role: 'host', socket })
           joined = { room: returning, id }
           send(socket, {
@@ -196,6 +211,7 @@ export function attachMultiplayer(
           hostName: message.name || 'Host',
           clients: new Map(),
           hostAwaySince: null,
+          public: message.public === true,
         }
         const client: RoomClient = {
           id,
@@ -284,6 +300,13 @@ export function attachMultiplayer(
           players: playersOf(room),
         })
         broadcast(room, { t: 'players', players: playersOf(room) }, id)
+        return
+      }
+
+      // Anyone may read the list, including a player still on the title screen
+      // who has not joined anything yet.
+      if (message.t === 'lobbies') {
+        send(socket, { t: 'lobbies', lobbies: publicLobbies() })
         return
       }
 

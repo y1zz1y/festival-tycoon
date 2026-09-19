@@ -217,6 +217,15 @@ export type NetPlayer = {
   role: 'host' | 'client'
 }
 
+/** A room that has put itself on the list. Private rooms are never in here. */
+export type NetLobby = {
+  code: string
+  host: string
+  players: number
+  /** True while the host is away and the room is waiting for them. */
+  hostAway: boolean
+}
+
 export type PackedVisitor = Pick<
   Visitor,
   | 'id'
@@ -300,7 +309,8 @@ export type WorldUpdate = {
 
 export type ClientMessage =
   | WorldUpdate
-  | { t: 'host'; name: string; code?: string }
+  | { t: 'host'; name: string; code?: string; public?: boolean }
+  | { t: 'lobbies' }
   | { t: 'join'; code: string; name: string }
   | { t: 'resume'; code: string; playerId: string; name: string }
   | { t: 'command'; cmd: GameCommand }
@@ -325,6 +335,7 @@ export type ServerMessage =
   | { t: 'hosted'; code: string; playerId: string; joinUrl: string; players: NetPlayer[] }
   | { t: 'joined'; code: string; playerId: string; role: 'host' | 'client'; players: NetPlayer[] }
   | { t: 'players'; players: NetPlayer[]; hostAway?: boolean }
+  | { t: 'lobbies'; lobbies: NetLobby[] }
   | { t: 'command'; cmd: GameCommand; from: string }
   | { t: 'commandResult'; commandId: string; result: ActionResult }
   | { t: 'result'; ok: boolean; message: string; extra?: ActionResult }
