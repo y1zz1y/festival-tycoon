@@ -4,6 +4,7 @@ import { isDecorationCatalogKind } from '../game/decoration'
 import { createWayStructure, indexWayStructures, wayStructurePlan, type WayStructureCell } from './wayStructures'
 import { pathFurnitureRotation } from '../game/pathFurniture'
 import { isWasteBin } from '../game/decorationWalls'
+import { isSealedWasteContainer } from '../game/waste'
 import { wallSpec, isFacade } from '../game/decorationWalls'
 import { updateStageBand } from './stageBand'
 import { isScenery, isEdgeScenery, scenerySlot, sceneryTransform } from '../game/scenery'
@@ -26,7 +27,7 @@ import { createAttractionAccess } from './attractionAccess'
 import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
 import { createStageModel, animateStageModel, updateStageLightPool } from './stageModel'
-import { stagePhase, stageSize, occupiesBuildingCell, fohDeskRole } from '../game/stageDesign'
+import { stagePhase, stageSize, occupiesBuildingCell, fohDeskRole, STAGE_TILE_DETAIL } from '../game/stageDesign'
 import { activeBookings, showIssue } from '../game/festivalManagement'
 import { createEarthTexture, createTerrainBase, createTerrainMaterial, createTerrainSurface } from './terrainSurface'
 import { TerrainShape, terrainPads } from './terrainShape'
@@ -981,7 +982,6 @@ export class WorldView {
       (x, z) => snapshot.festival.infrastructure.ground[`${x},${z}`]?.roadway,
       snapshot.speed === 0,
       undefined,
-      snapshot.selectedTool === 'roadDirection',
       this.logisticsMode || isRoadBuildTool(snapshot.selectedTool),
     )
     this.accessControlView.update(
@@ -2168,7 +2168,7 @@ export class WorldView {
         fohVariants.get(item.id),
         item.kind === 'path' && this.pathSharesRoadGrade(item),
       )
-      if (item.stageDesign) { model.scale.set((stageSize(item.stageDesign).width-.04)/item.stageDesign.width, item.stageDesign.tileWidth ? .5 : .96/Math.max(item.stageDesign.width,item.stageDesign.depth), (stageSize(item.stageDesign).depth-.04)/item.stageDesign.depth); model.userData.stageDesign = item.stageDesign }
+      if (item.stageDesign) { model.scale.set((stageSize(item.stageDesign).width-.04)/item.stageDesign.width, item.stageDesign.tileWidth ? 1/STAGE_TILE_DETAIL : .96/Math.max(item.stageDesign.width,item.stageDesign.depth), (stageSize(item.stageDesign).depth-.04)/item.stageDesign.depth); model.userData.stageDesign = item.stageDesign }
       model.position.set(item.x + stageSize(item.stageDesign,item.rotation).width/2, item.elevation, item.z + stageSize(item.stageDesign,item.rotation).depth/2)
       const modelDirection =
         item.kind === 'path'
@@ -4341,7 +4341,13 @@ export class WorldView {
 
     this.previewArrow.visible = showDirectionArrow
     if (showDirectionArrow) {
-      const angle = this.currentSnapshot.buildRotation * (Math.PI / 2)
+      // A waste depot or sealed container's ghost shows the facing it will actually be
+      // built with — turned to the road it sits next to — instead of the cursor's own
+      // build rotation, so hovering it is what makes the required road connection
+      // visible in the first place.
+      const facesRoad = tool === 'wasteDepot' || isSealedWasteContainer(tool)
+      const facing = facesRoad ? this.placementResult?.rotation ?? this.currentSnapshot.buildRotation : this.currentSnapshot.buildRotation
+      const angle = facing * (Math.PI / 2)
       const directing =
         tool === 'roadDirection' ||
         tool === 'trafficLight' ||

@@ -144,7 +144,7 @@ export function contextHelpText({ game, hoveredCell, placementPreview, modes }: 
   if (tool === 'medicalArea') return `${placementPreview?.message ?? 'Krankenbereich prüfen'} · Klicken oder ziehen`
   if (tool === 'wasteDump') return `${placementPreview?.message ?? 'Müllablage prüfen'} · extrem unattraktiv`
   if (isWasteBin(tool)) return 'Mülleimer setzen. Gäste im Umkreis von 7 Feldern werfen gebrauchte Dinge hier hinein.'
-  if (isSealedWasteContainer(tool)) return 'Versiegelter Müllcontainer (80 Beutel). Reinigung bringt Müll hierher, wenn er näher als die Ablage ist. Müllwagen leeren ihn nur, wenn er auf einer Straße steht.'
+  if (isSealedWasteContainer(tool)) return 'Müllcontainer (80 Beutel). Reinigung bringt Müll hierher, wenn er näher als die Ablage ist, von jeder Seite. Richtet sich beim Bauen automatisch zur Straße aus; Müllwagen leeren ihn nur, wenn eine Straße angrenzt.'
   if (tool === 'stageForecourt') return 'Klicken oder rechteckig ziehen, um einen Bühnenvorplatz mit 9 Plätzen je Feld auszuweisen.'
   if (tool === 'backstageArea') return `${placementPreview?.message ?? 'Backstage prüfen'} · Klicken oder ziehen`
   if (tool === 'powerCable') return game.getPowerCableAt(cell.x, cell.z)

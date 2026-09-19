@@ -272,7 +272,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
   },
   {
     id: 'roads',
-    label: 'Autostraßen',
+    label: 'Straßen',
     icon: '🛣️',
     dock: 'left',
     extra: 'roads',
@@ -344,9 +344,12 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           toolItem('wasteDump', 'Müllablage', '🗑️', 'sehr unattraktiv'),
           buildingMenuItem(
             'sealedWasteContainer',
-            `${Math.floor(BUILDINGS.sealedWasteContainer.cost).toLocaleString('de-DE')} € · 80 Beutel, versiegelt`,
+            `${Math.floor(BUILDINGS.sealedWasteContainer.cost).toLocaleString('de-DE')} € · 80 Beutel, versiegelt · braucht Straßenanschluss`,
           ),
-          buildingMenuItem('wasteDepot'),
+          buildingMenuItem(
+            'wasteDepot',
+            `${Math.floor(BUILDINGS.wasteDepot.cost).toLocaleString('de-DE')} € · Müllwagen starten und laden hier ab · braucht Straßenanschluss`,
+          ),
           buildingMenuItem('specialDepot'),
         ],
       },

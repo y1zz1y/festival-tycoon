@@ -48,6 +48,7 @@ type StaffContext = {
   findPath: (start: Cell, goals: Cell[], allowGround?: boolean) => Cell[] | null
   /** Where a step can go from here; without grass unless it is asked for. */
   pathNeighbors: (cell: Cell, allowGrass?: boolean) => Cell[]
+  hasPath?: (cell: Cell) => boolean
   rng: RngSource
   reserveBed: (
     visitorId: string,
@@ -102,6 +103,18 @@ export class StaffSimulation {
         }
         return
       }
+      if (
+        member.role === 'cleaner' &&
+        member.state === 'carrying' &&
+        !cartIsFull(member, context) &&
+        context.incidents.some(
+          (incident) => incident.kind === 'litter' || incident.kind === 'vomit',
+        )
+      ) {
+        member.targetId = null
+        member.route = []
+        member.state = 'patrolling'
+      }
       if (member.route.length > 0) {
         this.move(member, minutes * this.staffSpeed(member) * (context.speedFactor ?? 1))
         if (member.role === 'medic' && member.state === 'carrying') {
@@ -155,7 +168,17 @@ export class StaffSimulation {
       }
       // Nothing left to pick up, so whatever is on board is taken away now rather
       // than riding along until the next piece of litter turns up.
-      if (member.role === 'cleaner' && member.carryingWaste > 0 && this.sendCleanerToDump(member, context)) return
+      const looseWasteRemains =
+        member.role === 'cleaner' &&
+        workContext.incidents.some(
+          (incident) => incident.kind === 'litter' || incident.kind === 'vomit',
+        )
+      if (
+        member.role === 'cleaner' &&
+        member.carryingWaste > 0 &&
+        !looseWasteRemains &&
+        this.sendCleanerToDump(member, context)
+      ) return
       this.patrol(member, context)
     })
   }
@@ -636,15 +659,26 @@ export class StaffSimulation {
       const claimed = new Set(
         context.staff.map((worker) => worker.targetId).filter((id): id is string => Boolean(id)),
       )
-      const next = this.findTarget(member, context, claimed)
-      if (next) {
-        const route = context.findPath(this.staffCell(member), [next.cell], next.allowMedical)
-        if (route) {
-          member.targetId = next.id
-          member.state = 'responding'
-          member.route = route
-          return
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const next = this.findTarget(member, context, claimed)
+        if (!next) break
+        const route = this.routeToStaffTarget(member, next, context)
+        if (!route) {
+          claimed.add(next.id)
+          continue
         }
+        member.targetId = next.id
+        member.state = 'responding'
+        member.route = route
+        return
+      }
+      if (
+        context.incidents.some(
+          (incident) => incident.kind === 'litter' || incident.kind === 'vomit',
+        )
+      ) {
+        this.patrol(member, context)
+        return
       }
     }
     if (!this.sendCleanerToDump(member, context)) {
@@ -730,7 +764,11 @@ export class StaffSimulation {
     // On patrol the crew keeps to paths and the areas laid out for people. Only someone
     // set down on open grass, with no path next to them, may cross grass to reach one.
     let neighbors = context.pathNeighbors(here, false).filter(p => isInAnyZone(zones, p.x, p.z))
-    if (!neighbors.length) neighbors = context.pathNeighbors(here, true).filter(p => isInAnyZone(zones, p.x, p.z))
+    const onPath = context.hasPath?.(here) ?? false
+    if (onPath && context.hasPath) neighbors = neighbors.filter((cell) => context.hasPath!(cell))
+    if (!neighbors.length && !onPath) {
+      neighbors = context.pathNeighbors(here, true).filter(p => isInAnyZone(zones, p.x, p.z))
+    }
     if (zones?.length && !neighbors.length) {
       const goals: Cell[] = []
       for (const key of zones) {

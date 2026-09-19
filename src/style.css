@@ -422,7 +422,6 @@ button {
   color: #edf7f1;
   background: #3f715b;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 7px;
   font: inherit;
   font-size: 12px;
   cursor: pointer;
@@ -1364,11 +1363,6 @@ body.title-open #app-install-hint {
   font-size: 10px;
 }
 
-.scenario-field input[type='range'] {
-  width: 100%;
-  accent-color: #5eb081;
-}
-
 .scenario-field select {
   width: 100%;
   padding: 7px 8px;
@@ -1497,7 +1491,6 @@ body.title-open #app-install-hint {
      here would out-specificity and flatten that. */
   border-width: 1px;
   border-style: solid;
-  border-radius: 2px;
   padding: 5px 9px;
   line-height: 1;
   cursor: pointer;
@@ -1554,11 +1547,11 @@ body.title-open #app-install-hint {
 .staff-panel button,
 .staff-details button,
 .scenario-panel button,
-.save-slots-panel button {
+.save-slots-panel button,
+.terrain-planner button {
   color: #ecf5f0;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 7px;
   padding: 7px 10px;
   cursor: pointer;
 }
@@ -1575,7 +1568,8 @@ body.title-open #app-install-hint {
 .staff-panel button:hover,
 .staff-details button:hover,
 .scenario-panel button:hover,
-.save-slots-panel button:hover {
+.save-slots-panel button:hover,
+.terrain-planner button:hover {
   background: #3f715b;
 }
 
@@ -1917,15 +1911,12 @@ body.title-open #app-install-hint {
   cursor: pointer;
 }
 
+/* These stand in a column of their own and fill its width; everything else about
+   them — face, bevel, hover — is the app's button, listed with the rest above. */
 #build-extra-logistics button,
 #terrain-planner-slot button {
   width: 100%;
-  min-height: 36px;
-  padding: 7px;
-  color: #f2dfb5;
-  background: #476859;
-  border: 1px solid #819b80;
-  cursor: pointer;
+  min-height: 34px;
 }
 
 .tools {
@@ -1945,7 +1936,6 @@ body.title-open #app-install-hint {
   color: #eaf4ee;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 8px;
   cursor: pointer;
 }
 
@@ -2189,7 +2179,6 @@ body.title-open #app-install-hint {
   border-left-color: #819b8c;
   border-right-color: #1b322c;
   border-bottom-color: #1b322c;
-  border-radius: 2px;
   box-shadow: none;
 }
 
@@ -2400,7 +2389,6 @@ body.title-open #app-install-hint {
   color: #eaf4ee;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
   font-size: 11px;
   cursor: pointer;
 }
@@ -2537,7 +2525,6 @@ body.title-open #app-install-hint {
   color: #eaf4ee;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
   font-size: 11px;
   cursor: pointer;
 }
@@ -2574,7 +2561,6 @@ body.title-open #app-install-hint {
   color: #eaf4ee;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
   font-size: 9px;
   cursor: pointer;
 }
@@ -2605,7 +2591,6 @@ body.title-open #app-install-hint {
   color: #ffd4d0;
   background: #6f3330;
   border: 1px solid #ad5b52;
-  border-radius: 6px;
   font-size: 11px;
   cursor: pointer;
 }
@@ -2707,7 +2692,6 @@ body.title-open #app-install-hint {
   color: #dfece6;
   background: linear-gradient(#38594b, #29463a);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
   cursor: pointer;
 }
@@ -2827,7 +2811,6 @@ body.title-open #app-install-hint {
 .chain-option {
   margin: 7px 0 0 !important;
   padding: 7px 8px;
-  border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
 }
 
@@ -3156,7 +3139,6 @@ body.title-open #app-install-hint {
   color: #eaf4ee;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 7px;
   cursor: pointer;
 }
 
@@ -3332,7 +3314,6 @@ body.title-open #app-install-hint {
   padding: 7px 10px;
   color: #edf7f1;
   border: 1px solid rgba(106, 200, 134, 0.42);
-  border-radius: 6px;
   background: rgba(64, 151, 91, 0.38);
   cursor: pointer;
 }
@@ -3550,7 +3531,6 @@ body.title-open #app-install-hint {
   flex: 1;
   padding: 7px;
   border: 1px solid rgba(213, 229, 220, 0.18);
-  border-radius: 7px;
   background: rgba(16, 38, 30, 0.7);
   color: #b9cec4;
 }
@@ -3594,7 +3574,6 @@ body.title-open #app-install-hint {
   min-width: 8rem;
   padding: 7px;
   border: 1px solid rgba(213, 229, 220, 0.18);
-  border-radius: 7px;
   background: rgba(16, 38, 30, 0.7);
   color: #b9cec4;
 }
@@ -3809,7 +3788,6 @@ body.title-open #app-install-hint {
   padding: 0;
   color: #d8f5df;
   border: 1px solid rgba(214, 229, 211, 0.12);
-  border-radius: 4px;
   background: rgba(14, 28, 23, 0.72);
   cursor: pointer;
 }
@@ -3865,7 +3843,6 @@ body.title-open #app-install-hint {
   padding: 7px 9px;
   color: #edf7f1;
   border: 1px solid rgba(214, 229, 211, 0.16);
-  border-radius: 7px;
   background: rgba(17, 35, 28, 0.88);
 }
 
@@ -4061,7 +4038,6 @@ body.title-open #app-install-hint {
   color: #dcebe4;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 7px;
   cursor: pointer;
 }
 
@@ -4196,7 +4172,6 @@ body.title-open #app-install-hint {
   color: #9fb5aa;
   background: transparent;
   border: 0;
-  border-radius: 6px;
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
@@ -4392,11 +4367,6 @@ body.title-open #app-install-hint {
   font-size: 11px;
 }
 
-.coaster-options input[type='range'] {
-  width: 100%;
-  accent-color: #5eb081;
-}
-
 .coaster-options input[type='number'] {
   width: 100%;
   padding: 7px;
@@ -4546,7 +4516,7 @@ body.title-open #app-install-hint {
 
 /* Compact, beveled park-management windows. Keep every action reachable. */
 :root { font-size: 12px; --muted: #b8c9b7; }
-.panel, .panel button, .panel input, .panel select, .brand-mark, .rct-group button {
+.panel, .panel input, .panel select, .brand-mark {
   border-radius: 2px;
 }
 .topbar {
@@ -4809,4 +4779,198 @@ body.walk-mode .ride-builder { visibility: hidden; pointer-events: none; }
   .ride-builder.placing-access #ride-platform-height,
   .ride-builder.placing-access > .construction-actions,
   .ride-builder.placing-access > #ride-builder-status { display: none; }
+}
+
+/* Buttons in this game are square — every one of them, in every window. The plates,
+   cards and readouts around them may keep their small corner; a button never does.
+   `button[class]` is the bare element written with the weight of a class, so this
+   also settles buttons a single-class rule elsewhere would otherwise round off, and
+   standing last in the file nothing of equal weight can put a corner back. */
+button,
+button[class],
+.panel button,
+.rct-group button,
+.tool,
+.delete-track,
+.demolish-coaster,
+.visitor-follow {
+  border-radius: 0;
+}
+
+/* Every checkbox in the game wears the same face as a button: the same bevel
+   at rest, the same green fill when pressed in (here, checked). Unchecked
+   still carries a faint X so the empty square reads as a checkbox rather
+   than a blank tile, without competing with the gold check mark. */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  color: #ecf5f0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #819b8c;
+  border-left-color: #819b8c;
+  border-right-color: #1b322c;
+  border-bottom-color: #1b322c;
+  border-radius: 0;
+  cursor: pointer;
+  position: relative;
+  vertical-align: middle;
+}
+
+input[type='checkbox']:hover:not(:disabled) {
+  background: #3f715b;
+}
+
+input[type='checkbox']::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  opacity: 0.4;
+  background:
+    linear-gradient(45deg, transparent 44%, #ecf5f0 44%, #ecf5f0 56%, transparent 56%),
+    linear-gradient(135deg, transparent 44%, #ecf5f0 44%, #ecf5f0 56%, transparent 56%);
+}
+
+input[type='checkbox']:checked::before {
+  display: none;
+}
+
+input[type='checkbox']:disabled::before {
+  opacity: 0.18;
+}
+
+input[type='checkbox']:checked {
+  background: #3f715b;
+  border-top-color: #203c30;
+  border-left-color: #203c30;
+  box-shadow: inset 1px 1px #203c30;
+}
+
+input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid #ffd47d;
+  border-width: 0 2px 2px 0;
+  transform: rotate(40deg);
+}
+
+input[type='checkbox']:focus-visible {
+  outline: 2px solid #ffd47d;
+  outline-offset: 2px;
+}
+
+input[type='checkbox']:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Every slider in the game wears the same face as a button and a checkbox: flat,
+   square, bevelled. The rille is a groove — bevel run the opposite way from a
+   button, so it reads as sunk in — and the knob is a small raised button that
+   travels along it, with the same hover, pressed and disabled states as any
+   other control. The knob stays a solid colour at rest (not the translucent
+   button fill) so it is always visible against the groove rather than fading
+   into it, with hover and drag still reading as a clear step up in colour. */
+input[type='range'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #1b322c;
+  border-left-color: #1b322c;
+  border-right-color: #819b8c;
+  border-bottom-color: #819b8c;
+  border-radius: 0;
+}
+
+input[type='range']::-moz-range-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #1b322c;
+  border-left-color: #1b322c;
+  border-right-color: #819b8c;
+  border-bottom-color: #819b8c;
+  border-radius: 0;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  background: #4d6a5d;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #819b8c;
+  border-left-color: #819b8c;
+  border-right-color: #1b322c;
+  border-bottom-color: #1b322c;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #4d6a5d;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #819b8c;
+  border-left-color: #819b8c;
+  border-right-color: #1b322c;
+  border-bottom-color: #1b322c;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+input[type='range']:hover:not(:disabled)::-webkit-slider-thumb {
+  background: #3f715b;
+}
+
+input[type='range']:hover:not(:disabled)::-moz-range-thumb {
+  background: #3f715b;
+}
+
+input[type='range']:active:not(:disabled)::-webkit-slider-thumb {
+  background: #3f715b;
+  border-top-color: #203c30;
+  border-left-color: #203c30;
+  box-shadow: inset 1px 1px #203c30;
+}
+
+input[type='range']:active:not(:disabled)::-moz-range-thumb {
+  background: #3f715b;
+  border-top-color: #203c30;
+  border-left-color: #203c30;
+  box-shadow: inset 1px 1px #203c30;
+}
+
+input[type='range']:focus-visible {
+  outline: 2px solid #ffd47d;
+  outline-offset: 2px;
+}
+
+input[type='range']:disabled {
+  opacity: 0.45;
+  cursor: default;
 }

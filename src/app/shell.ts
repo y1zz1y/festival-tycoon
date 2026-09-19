@@ -96,7 +96,7 @@ export function mountAppShell(app: HTMLDivElement): void {
       <div id="action-group-build" class="rct-group" aria-label="Bauen">
         ${BUILD_CATEGORIES.filter((category) => !['roads', 'logistics'].includes(category.id)).map((category) => `<button type="button" data-build-category="${category.id}" title="${category.label}" aria-label="${category.label}" aria-expanded="false">${category.icon}</button>`).join('')}
         <span class="rct-split" aria-hidden="true"></span>
-        <button type="button" data-build-category="roads" title="Autostraßen" aria-label="Autostraßen" aria-expanded="false">🛣️</button>
+        <button type="button" data-build-category="roads" title="Straßen" aria-label="Straßen" aria-expanded="false">🛣️</button>
         <button type="button" data-build-category="logistics" title="Logistik" aria-label="Logistik" aria-expanded="false">🚚</button>
         <button id="open-build-menu" class="rct-hidden-control" aria-expanded="false">Bauen</button>
       </div>

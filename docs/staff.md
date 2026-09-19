@@ -31,6 +31,9 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 - Junior-Bands und Bands ohne Tourbus-Platz kommen über den Personaleingang
   (`staffGate` / `allowStaff`); siehe [`band-supply.md`](band-supply.md).
   Security reduziert das Fan-Leck auf dem Backstage in v1 nicht.
+- Personalpatrouillen bleiben auf dem Fußwegenetz. Nur Personal, das auf
+  offenem Boden startet und keinen Wegnachbarn erreicht, darf über Boden
+  zum Netz zurückfinden; ein Wegende öffnet keinen Abstecher ins Gras.
 - Ist jemand verletzt (oder bewusstlos / stark übel), bekommt er den
   **nächsten freien** Sanitäter: idle, ohne Patient, nicht tragend.
   Beschäftigte Sanitäter bleiben bei ihrem Fall. Unter den Freien

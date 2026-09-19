@@ -337,6 +337,18 @@ export function testSealedWasteContainer(fixture: (count?: number) => GameState)
   )
   assert.ok(truck.cargo > 0)
 
+  // The ordinary placement: beside the road on open ground, not standing on the road
+  // tile itself. Checking only the container's own cell used to call this unreachable.
+  assert.ok(roadside.place('sealedWasteContainer', -1, -14).ok)
+  const besideRoad = roadState.buildings.find(
+    (item) => item.kind === 'sealedWasteContainer' && item.x === -1 && item.z === -14,
+  )!
+  assert.ok(
+    roadside.isSealedWasteContainerOnRoad(besideRoad),
+    'a container built beside a road, not on it, still counts as truck-reachable',
+  )
+  assert.equal(besideRoad.rotation, 1, 'it turns to face the road on its east side')
+
   const grass = fixture(0)
   grass.addDebugMoney()
   const grassState = grass.snapshot as GameSnapshot

@@ -419,7 +419,7 @@ export function describeRoadVehicleDestination(vehicle: RoadVehicle): string | n
   }
   if (vehicle.target?.kind === 'busStop') return 'Nächste Bushaltestelle'
   if (vehicle.target?.kind === 'tourBusParking') return 'Tourbus-Parkplatz'
-  if (vehicle.target?.kind === 'sealedWasteContainer') return 'Versiegelter Müllcontainer'
+  if (vehicle.target?.kind === 'sealedWasteContainer') return 'Müllcontainer'
   if (vehicle.target?.kind === 'wasteDump') return 'Müllablage'
   if (vehicle.kind === 'deliveryTruck' && vehicle.target?.kind === 'depot') {
     return 'Anlieferungsplatz'
@@ -454,7 +454,10 @@ export type BusDepot = RoadPosition & {
 export type WasteDepot = RoadPosition & {
   id: string
   truckIds: string[]
+  /** Road-facing vehicle gate used by routing and model orientation. */
   gateDirection?: Direction
+  /** Visual orientation of the open loading face; kept equal to `gateDirection`. */
+  rotation?: Direction
 }
 
 export type SpecialDepot = RoadPosition & {
@@ -1032,13 +1035,21 @@ function normalizeWasteDepot(value: unknown): WasteDepot | null {
   const position = normalizePosition(source)
   if (!source || !position || typeof source.id !== 'string') return null
   const gate = Number(source.gateDirection)
+  const rotation = Number(source.rotation)
   return {
     ...position,
     id: source.id,
     truckIds: stringArray(source.truckIds),
     ...(gate === 0 || gate === 1 || gate === 2 || gate === 3
       ? { gateDirection: gate as Direction }
+      : rotation === 0 || rotation === 1 || rotation === 2 || rotation === 3
+        ? { gateDirection: rotation as Direction }
       : {}),
+    ...(rotation === 0 || rotation === 1 || rotation === 2 || rotation === 3
+      ? { rotation: rotation as Direction }
+      : gate === 0 || gate === 1 || gate === 2 || gate === 3
+        ? { rotation: gate as Direction }
+        : {}),
   }
 }
 

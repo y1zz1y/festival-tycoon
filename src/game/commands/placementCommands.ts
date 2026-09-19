@@ -36,6 +36,8 @@ export type PlacementPreviewContext = {
     decorationSlot?: number,
     preserveLegacySlot?: boolean,
   ) => ActionResult
+  /** Which side of a square footprint touches a road, for buildings whose model turns to face it. */
+  facingRoadDirection: (x: number, z: number, size: number, preferred: number) => number | null
   previewTool: (
     tool: Exclude<Extract<PlacementPreviewRequest, { type: 'tool' }>['tool'], BuildingKind | 'copy'>,
     x: number,
@@ -86,13 +88,21 @@ export function previewPlacementCommand(
     const renderMode: GhostRenderMode = isScenery(request.kind)
       ? 'scenery'
       : BUILDING_GHOST_MODES[request.kind]
+    // A waste depot or sealed container always turns to face the road it will be built
+    // next to, so its ghost shows the facing it will actually be placed with rather than
+    // whatever direction the build cursor happens to be pointing.
+    const facingSize = request.kind === 'wasteDepot' ? 2 : isSealedWasteContainer(request.kind) ? 1 : null
+    const rotation =
+      facingSize !== null
+        ? context.facingRoadDirection(request.x, request.z, facingSize, context.state.buildRotation) ?? context.state.buildRotation
+        : context.state.buildRotation
     return {
       ...result,
       renderMode,
       kind: request.kind,
       x: request.x,
       z: request.z,
-      rotation: context.state.buildRotation,
+      rotation,
       decorationSlot: request.decorationSlot,
       footprint,
     }
@@ -109,6 +119,8 @@ export type PlaceBuildingContext = {
   clearTrees: (x: number, z: number, elevation: number, height: number) => void
   nextId: (prefix: string) => string
   findFurnitureRotation: (x: number, z: number, preferred?: number) => number | null
+  /** Which side of a square footprint touches a road, for furniture whose model turns to face it. */
+  facingRoadDirection: (x: number, z: number, size: number, preferred: number) => number | null
   nextBandName: () => string
   syncStageAudience: () => void
   recalculateQueueDirections: () => void
@@ -157,7 +169,12 @@ export function placeBuildingCommand(
       : isWasteBin(kind)
         ? (context.findFurnitureRotation(x, z, context.state.buildRotation) ??
           context.state.buildRotation)
-        : context.state.buildRotation
+        // A sealed container turns the opposite way from a bench or a bin: towards the
+        // road it is emptied from, not away from it into open walking space.
+        : isSealedWasteContainer(kind)
+          ? (context.facingRoadDirection(x, z, 1, context.state.buildRotation) ??
+            context.state.buildRotation)
+          : context.state.buildRotation
   context.state.buildings.push({
     stageDesign: design ? structuredClone(design) : undefined,
     decorationSlot,

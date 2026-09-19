@@ -219,7 +219,12 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
   }
   function readAutosaveSetting(): number {
     try {
-      const stored = Number(window.localStorage.getItem(AUTOSAVE_KEY))
+      // A nothing-stored-yet localStorage read comes back as null, and Number(null) is
+      // 0 — which also happens to be the "Aus" option's own value, so it used to read
+      // as a saved choice to turn autosaving off instead of as no choice at all.
+      const raw = window.localStorage.getItem(AUTOSAVE_KEY)
+      if (raw === null) return AUTOSAVE_DEFAULT_MINUTES
+      const stored = Number(raw)
       return AUTOSAVE_INTERVALS.some((option) => option.minutes === stored) ? stored : AUTOSAVE_DEFAULT_MINUTES
     } catch { return AUTOSAVE_DEFAULT_MINUTES }
   }

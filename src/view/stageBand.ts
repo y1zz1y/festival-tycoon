@@ -1,6 +1,6 @@
 import { Group, Mesh, BoxGeometry, CylinderGeometry, MeshStandardMaterial, Color, Float32BufferAttribute, type BufferGeometry } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { partOnAudience, type StageDesign } from '../game/stageDesign'
+import { partOnAudience, STAGE_TILE_DETAIL, type StageDesign } from '../game/stageDesign'
 import { bandCostumeId, bandLook, bandRoles, isDjAct } from '../game/bandLooks'
 import { createBandMemberModel } from './bandMemberMesh'
 import { disposeObject3D } from './disposeObject3D'
@@ -20,13 +20,16 @@ function freeDeckCells(d:StageDesign){
   }
   return cells
 }
+/** How far apart two players should stand at the least, in map tiles — they are people, so it is a distance on the floor rather than a number of build cells. */
+const BAND_SPACING = .75
 export function bandPositions(d?:StageDesign){
   if(!d)return [{x:0,z:.15},{x:-.29,z:.05},{x:.29,z:.05},{x:0,z:-.16}]
   const cells=freeDeckCells(d).map(c=>({x:c.x-d.width/2+.5,z:c.z-d.depth/2+.5}))
   // Prefer central, forward positions and spread the players across placed stage decks.
   cells.sort((a,b)=>(Math.abs(a.x)*.35-a.z)-(Math.abs(b.x)*.35-b.z))
   const chosen:typeof cells=[]
-  for(const cell of cells){if(chosen.every(p=>Math.hypot(p.x-cell.x,p.z-cell.z)>=1.5))chosen.push(cell);if(chosen.length===4)break}
+  const apart=BAND_SPACING*STAGE_TILE_DETAIL
+  for(const cell of cells){if(chosen.every(p=>Math.hypot(p.x-cell.x,p.z-cell.z)>=apart))chosen.push(cell);if(chosen.length===4)break}
   if(chosen.length<4)for(const cell of cells){if(!chosen.includes(cell))chosen.push(cell);if(chosen.length===4)break}
   return chosen
 }
@@ -43,7 +46,9 @@ export function djPlacement(d?:StageDesign){
   if(!d)return {desk:{x:0,z:.12},dj:{x:0,z:.12-behind(.55)},width:.55}
   const cells=freeDeckCells(d),free=(x:number,z:number)=>cells.some(c=>c.x===x&&c.z===z)
   const middle=d.width/2-1
-  const pairs=cells.filter(c=>free(c.x+1,c.z))
+  // The console is a tile wide whatever the grid is: on a fine grid that is a run of cells,
+  // on a coarse one a single one, so the desk comes out the same size on the floor either way.
+  const pairs=STAGE_TILE_DETAIL>1?cells.filter(c=>free(c.x+1,c.z)):[]
   const score=(c:{x:number;z:number},span:number)=>(free(c.x,c.z-1)&&free(c.x+span-1,c.z-1)?0:1000)+Math.abs(c.x-middle)*2-c.z
   const best=pairs.length?pairs.reduce((a,b)=>score(b,2)<score(a,2)?b:a):cells.length?cells.reduce((a,b)=>score(b,1)<score(a,1)?b:a):undefined
   if(!best)return undefined
@@ -115,7 +120,10 @@ export function updateStageBand(stage:Group,bandId:string|undefined,time:number,
   if(!band||band.userData.bandId!==key){
     if(band){stage.remove(band);disposeObject3D(band)}
     band=new Group();band.userData.bandId=key
-    const floor=design?.54:.28,scale=design?.tileWidth? .72:design?.width? .78:.55
+    // The band are people, not equipment: the rig around them is drawn in build cells
+    // and scaled to the map by the tile, so their own size has to be given per cell to
+    // come out human-sized however coarse or fine the grid is.
+    const floor=design?.54:.28,scale=design?.tileWidth? .39*STAGE_TILE_DETAIL:design?.width? .95:.34
     const place=(member:Group,x:number,z:number)=>{member.position.set(x,floor,z);member.scale.setScalar(scale);member.userData.baseY=floor;band!.add(member)}
     // An electro act plays a booth rather than a line-up: one DJ behind a console, no band.
     band.userData.costumeId=bandCostumeId(key)

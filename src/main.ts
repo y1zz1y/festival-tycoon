@@ -2019,8 +2019,8 @@ function undoLastPathSegment(): void {
 
 function updatePathEditor(): void {
   pathConstruction.classList.toggle('road-editor', roadEditorOpen)
-  pathConstruction.querySelector('.panel-header-title')!.textContent = roadEditorOpen ? 'Autostraßen' : 'Fußwege'
-  pathConstruction.setAttribute('aria-label', roadEditorOpen ? 'Autostraßen' : 'Fußwege')
+  pathConstruction.querySelector('.panel-header-title')!.textContent = roadEditorOpen ? 'Straßen' : 'Fußwege'
+  pathConstruction.setAttribute('aria-label', roadEditorOpen ? 'Straßen' : 'Fußwege')
   requireElement<HTMLElement>('#road-editor-tools').hidden = !roadEditorOpen
   pathDemolishButton.title = roadEditorOpen ? 'Straßen abreißen' : 'Wege abreißen'
   requireElement<HTMLButtonElement>('#close-path-editor').setAttribute('aria-label', roadEditorOpen ? 'Straßen schließen' : 'Wege schließen')

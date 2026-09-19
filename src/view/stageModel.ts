@@ -18,13 +18,15 @@ const ALONG_AXES = {x:{x:1,y:0,z:0},y:{x:0,y:1,z:0},z:{x:0,y:0,z:1}} as const
 const FLOOR_COLORS = new Set(['#75886a','#30394c','#485166','#515b70'])
 /** Half the height of each fixture's own body (matches its first box() call below), used to press it flush against a truss it is docked onto. */
 /**
- * How far a light throws. A moving head's cone is this long with that radius at its
- * end — the spot light's own angle is derived from the pair, so the invisible cone and
- * the visible one always agree — and a laser fan reaches at least as far, more on a
- * deep stage. Lasers and heads alike were half this until the beams turned out to die
- * well before they reached the crowd.
+ * How far a light throws, in map tiles turned into the build cells this model is drawn
+ * in. A moving head's cone is this long with that radius at its end — the spot light's
+ * own angle is derived from the pair, so the invisible cone and the visible one always
+ * agree — and a laser fan reaches at least as far, more on a deep stage. Lasers and
+ * heads alike threw half as far until the beams turned out to die well before they
+ * reached the crowd; the reach is kept in tiles so it stays that long across the floor
+ * however large the fixtures themselves are drawn.
  */
-const BEAM_REACH = 8, BEAM_RADIUS = .85
+const BEAM_REACH = 4 * STAGE_TILE_DETAIL, BEAM_RADIUS = .425 * STAGE_TILE_DETAIL
 const EQUIPMENT_REACH:Partial<Record<string,number>> = {lineArray:.48,fullRange:.4,subwoofer:.45,spot:.15,laser:.15,fireworks:.15,sparks:.15,fog:.15,star:.4,discoBall:.36}
 /** Top surface of a floor tile (the .24 base slab plus the .04 detail overlay from the floor loop below) — where a ground-standing fixture's own base belongs, matching stageBand.ts's world-map floor level. */
 const GROUND_Y=.28
