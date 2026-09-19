@@ -413,6 +413,12 @@ none). Do not add a parallel fun need.
 `showIssue` does **not** fail for missing backstage. Supply is quality, not
 a hard booking requirement.
 
+`syncBandSupply` berechnet Graph und Qualitätswerte einmal vor der
+Besucherphase. Laufende Konzertbesucher lesen `showQualityByStageId` aus diesem
+Tick-Snapshot; `showQualityForStage` darf innerhalb des Simulationsticks nicht
+für jede Person den vollständigen Backstage-Graph neu aufbauen. Aufrufe
+außerhalb eines Ticks aktualisieren weiterhin sofort.
+
 ## Logistics UI
 
 Window: `#logistics-panel` (Paket-Icon, group **Verwalten**).
@@ -523,6 +529,7 @@ Old saves without `backstageCells` play as today: every stage is bare
 | Fan leak | A visitor flagged on active backstage lowers Attraktivität vs the same area empty |
 | Clock | Bus-arrival band present after `busArriveHour` on the booking day; `tourBus` drives onto the parking tile and stays; band actors idle on active backstage; gone after evening leave (bus departs, then despawns) |
 | Costume | Idle backstage actor and `updateStageBand` group share `costumeId` for that `bandId` |
+| Konzertlast | Viele Qualitätsabfragen im selben Tick verwenden den einmal aktualisierten Supply-Snapshot und lösen keinen Graph-Neuaufbau pro Besucher aus |
 | Placement | `tourBusParking` (and any supply kind) rejected off backstage and on ordinary grass; accepted on designated backstage next to a road. Ordinary buildings and deco stay placeable on the overlay |
 | Disconnected | Designated tiles with no path to a stage stay markable but inactive; their deco/parking do not count |
 | Visitor arrival | Junior or unslotted band uses a `staffOnly` Personaleingang (`allowStaff`), not a tour bus |

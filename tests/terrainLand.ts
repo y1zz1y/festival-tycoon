@@ -46,7 +46,7 @@ export function testTerrainLand(fixture: (count?: number) => GameState): void {
 
   const fresh = new GameState()
   assert.equal(fresh.snapshot.waterLevel, -0.5)
-  assert.equal(fresh.snapshot.version, 31)
+  assert.equal(fresh.snapshot.version, 33)
   const loaded = new GameState({
     ...structuredClone(fresh.snapshot),
     waterLevel: undefined as unknown as number,

@@ -1,4 +1,5 @@
 import { WALL_KINDS, ROOF_KINDS, THEMED_BIN_KINDS, type RoofKind, type ThemedBinKind, type WallKind } from './decorationWalls'
+import type { TicketDemandTuning } from './demandTuning'
 /**
  * Zentrale Balancing-Konfiguration.
  *
@@ -81,6 +82,44 @@ export const SIMULATION_CONFIG = {
       tourBusParking: { cost: 450, upkeep: 6, capacity: 1, appeal: 0, defaultPrice: 0 },
     },
   },
+  ticketDemand: {
+    willingness: {
+      day: {
+        base: 0.18, beauty: 0.16, history: 0.1, size: 0.1,
+        lineupDraw: 0.22, lineupPrice: 0.28, attractions: 0.14, complaints: -0.22,
+      },
+      camping: {
+        base: 0.12, beauty: 0.28, history: 0.24, size: 0.16,
+        lineupDraw: 0.12, lineupPrice: 0.1, attractions: 0.06, complaints: -0.28,
+      },
+    },
+    fairPrice: {
+      dayBaseFactor: 0.55,
+      dayWillingnessFactor: 1.8,
+      campingBaseFactor: 0.6,
+      campingWillingnessFactor: 1.6,
+    },
+    priceAcceptance: {
+      fullUntilRatio: 0.7,
+      floorFromRatio: 2.2,
+      minimum: 0.05,
+    },
+    attendance: {
+      dayBaseGuests: 80,
+      dayLineupGuests: 420,
+      daySizeGuests: 180,
+      dayBaseShare: 0.25,
+      dayAcceptanceShare: 1.15,
+      campingBaseGuests: 12,
+      campingAcceptanceShare: 1,
+    },
+    arrivals: {
+      minimum: 0.2,
+      base: 0.25,
+      acceptanceFactor: 0.9,
+      maximum: 1.15,
+    },
+  } satisfies TicketDemandTuning,
   power: {
     cableCost: 18,
     backupFuelPerHour: 45,
@@ -200,7 +239,8 @@ export const SIMULATION_CONFIG = {
       stockout: 1.2,
     },
     toilet: { toilet: 100 },
-    ride: { fun: 100, energyCost: 8 },
+    /** Awarded after the timed carousel/bungee interaction actually finishes. */
+    ride: { funGain: 35, energyCost: 8 },
     stationaryConsumption: {
       foodConsumeBelow: 78,
       foodGain: 42,
@@ -677,6 +717,8 @@ export const SIMULATION_CONFIG = {
     leisureDecisionDistancePenalty: 0.85,
   },
   coasters: {
+    /** Awarded when a completed run reaches unloading, never on boarding/recall. */
+    funGain: 45,
     boardingMinutesPerPerson: 0.4,
     defaultDispatchIntervalMinutes: 30,
     minimumDispatchIntervalMinutes: 5,
@@ -872,6 +914,7 @@ export const SIMULATION_CONFIG = {
   courses: {
     pieceUpkeep: 1.6,
     progressPerMinute: 0.55,
+    /** Awarded after reaching the exit or completing a pool/paintball session. */
     funGain: 28,
     paintballTeamSize: 2,
     paintballTeamSizeMin: 1,

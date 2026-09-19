@@ -1,0 +1,9 @@
+{
+  "fixtures": [
+    {
+      "id": "festivalmittel",
+      "file": "tests/fixtures/performance/festivalmittel.json",
+      "ticks": 120
+    }
+  ]
+}

@@ -73,6 +73,31 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
   const bareSatisfaction = bareStats.satisfaction
   const bareQuality = bare.showQualityForStage(bareStage.id)
   assert.ok(bareQuality < CONFIG.maxShowQuality)
+  bare.syncBandSupply()
+  const internal = bare as unknown as {
+    processingSimulationStep: boolean
+    refreshBandSupplyGraph: () => void
+  }
+  const refreshBandSupplyGraph = internal.refreshBandSupplyGraph
+  let concertRefreshes = 0
+  internal.refreshBandSupplyGraph = () => {
+    concertRefreshes += 1
+    refreshBandSupplyGraph.call(bare)
+  }
+  internal.processingSimulationStep = true
+  try {
+    for (let index = 0; index < 200; index += 1) {
+      assert.equal(bare.showQualityForStage(bareStage.id), bareQuality)
+    }
+  } finally {
+    internal.processingSimulationStep = false
+    internal.refreshBandSupplyGraph = refreshBandSupplyGraph
+  }
+  assert.equal(
+    concertRefreshes,
+    0,
+    'concert attendees reuse the band-supply snapshot refreshed before the visitor phase',
+  )
 
   paintBackstage(bare, [
     { x: 5, z: -20 },

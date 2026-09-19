@@ -32,6 +32,9 @@ Neue oder geänderte Funktionen sind erst fertig, wenn die Doku stimmt:
 6. **Neuer Test oder anderes Prüfkommando:** `docs/testing.md`.
 7. Spieler-sichtbare Steuerung oder Feature: Root-`README.md`.
 
+Vor Abschluss jeder Änderung läuft `npm run validate`; Details und
+Qualitätsgrenzen stehen in [testing.md](testing.md).
+
 `AGENTS.md` bleibt kurz (harte Invarianten). Details und Dateikarten leben hier.
 
 ## Themenkarte

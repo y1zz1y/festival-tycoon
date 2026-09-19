@@ -59,7 +59,7 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
 | Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | |
 | Ziehbare Fenster | `src/dragPanel.ts` | |
 | Fokus / Texteingabe | `src/uiFocus.ts` | `isTextEntryTarget` |
-| PWA / Manifest | `src/appInstall.ts`, `public/` | kein Leisten-Button; Safari-Anleitung im Root-`README.md` |
+| PWA / Manifest | `public/`, `tests/installableApp.mjs` | kein Leisten-Button; Safari-Anleitung im Root-`README.md` |
 | Update-Hinweis | `src/updateNotice.ts` | |
 | Globales Styling | `src/style.css` | |
 | Versionsanzeige | `package.json`, `src/version.d.ts` | unten links inkl. Build-ID |
@@ -118,6 +118,11 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
   (`localStorage`, nicht im Spielstand). **Autos entfernen** löscht alle
   Besucherautos (nicht Abriss, nicht Flottenfahrzeuge), räumt Parkbelegung
   und setzt Insassen zu Fuß auf den Nachbarweg; die Gäste gehen heim.
+  **Nachfrage-Tuning** öffnet ein verschieb-/skalierbares Debugfenster mit
+  gruppierten Zahlenfeldern für Zahlungsbereitschaft, faire Preise,
+  Akzeptanz, Teilnahme und Anreise. Die Vorschau zeigt aktuelle faire Preise,
+  Akzeptanz, Teilnehmer und Erlös. **Standardwerte** füllt nur den Entwurf;
+  **Übernehmen** sendet ihn atomar an den Host.
   Die Iconleiste ist etwa ein
   Viertel größer als die alten 32-px-Kacheln. Linke Baupaletten enden
   oberhalb der Debug-/Versionsanzeige unten links.

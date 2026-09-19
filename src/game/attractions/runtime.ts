@@ -1,4 +1,5 @@
 import { SIMULATION_CONFIG } from '../simulationConfig'
+import { grantAttractionFun } from '../attractionFun'
 import type { Visitor } from '../types/entities'
 import { orderTrackFromStart, sampleTrackPoint } from './trackGraph'
 import type { Attraction, AttractionPoint } from './types'
@@ -161,6 +162,7 @@ function finishTrackRider(
   }
   visitor.state = 'exploring'
   visitor.targetId = null
+  grantAttractionFun(visitor, SIMULATION_CONFIG.courses.funGain)
   visitor.thought = layout.agentKind === 'slider'
     ? 'Die Wasserrutsche war großartig!'
     : 'Der Parcours war großartig!'
@@ -206,6 +208,7 @@ function stepCoasterTrack(
       if (!visitor) return
       visitor.state = 'exploring'
       visitor.targetId = null
+      grantAttractionFun(visitor, SIMULATION_CONFIG.coasters.funGain)
       visitor.thought = layout.topology === 'shuttle'
         ? 'Die Rückwärtsfahrt war aufregend!'
         : 'Die Achterbahn war großartig!'
@@ -263,6 +266,7 @@ function stepAreaCourse(
     ) {
       visitor.state = 'exploring'
       visitor.targetId = null
+      grantAttractionFun(visitor, SIMULATION_CONFIG.courses.funGain)
       visitor.thought = runtime.courseKind === 'paintball'
         ? 'Was für ein Paintballspiel!'
         : 'Das Wasser war herrlich!'
@@ -312,6 +316,7 @@ function stepScriptedRide(
     if (!visitor) return
     visitor.state = 'exploring'
     visitor.targetId = null
+    grantAttractionFun(visitor, SIMULATION_CONFIG.needs.ride.funGain)
     visitor.thought = runtime.rideKind === 'bungee'
       ? 'Was für ein Bungeesprung!'
       : 'Das Karussell war großartig!'

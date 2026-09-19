@@ -33,7 +33,10 @@ vollen Tages mit den aktuell berechenbaren Fixkosten.
 ## Tests
 
 `tests/finance.ts` prüft Kategorien, Ausgabenwechsel, Tagesabschluss,
-Prognose, Kreditrahmen, Zinsen und Snapshot-Defaults. Gesamtlauf: `npm test`.
+Prognose, Kreditrahmen, Zinsen und Snapshot-Defaults.
+`tests/courseAttractions.ts` sichert den stark reduzierten Pausenunterhalt
+sowie null Technikunterhalt für nicht live laufende Festivalbühnen.
+Gesamtlauf: `npm test`.
 
 ## Bei Änderungen dieses Dokuments
 

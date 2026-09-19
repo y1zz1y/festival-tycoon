@@ -26,6 +26,7 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
 | Flächen / Referenzen | `src/game/attractions/areaLayout.ts` | `addAreaCells`, `placeAreaReference`, `validateAreaAttraction` |
 | Gemeinsamer Resolver / Abschluss | `src/game/attractions/construction.ts` | `resolveAttractionConstruction`, `validateAttractionCompletion` |
 | Betriebsstrategien | `src/game/attractions/runtime.ts` | Loop/Shuttle, Fußgänger, Slider, Scripted |
+| Spaßgutschrift bei Abschluss | `src/game/attractionFun.ts`, `src/game/simulationConfig.ts` | `grantAttractionFun`, `needs.ride.funGain`, `coasters.funGain`, `courses.funGain` |
 | v30→v31 / Projektionen | `src/game/attractions/migration.ts`, `src/game/attractions/projections.ts` | `migrateLegacyAttractions`, `refreshAttractionProjections` |
 | Gemeinsamer Editor | `src/ui/attractionBuilderPanel.ts`, `src/main.ts` | Palette, offene Enden, Banking/Höhe, Fläche, Zugänge |
 | Autoritative Commands | `src/game/commands/attractionCommands.ts` | Start, Konstruktion, Betrieb, Preis, Konfiguration, Abriss |
@@ -97,8 +98,15 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
   Stations- oder Zugangs-Kachel ruft dieselbe Methode auf. Das Infofenster
   schließt danach.
 - Photo-Käufe und Brems-/Wasserwiderstand laufen im Tick, nicht im Render.
+- Spaß wird additiv und höchstens bis 100 erst beim tatsächlichen Abschluss
+  gutgeschrieben: beim Aussteigen nach einer vollständigen Achterbahnrunde,
+  nach dem Karussell-/Bungee-Timer oder am Kursende. Anstehen, Einsteigen und
+  ein vorzeitig zurückgeholter Achterbahnzug geben keinen Spaß. Gemeinsame
+  Runtimes und Legacy-Projektionen verwenden dieselbe Gutschrift.
 - Bungee: ein statisches Mesh, ein Rider, ein Seil, ein aktiver Besucher.
-  Visuals aus dem autoritativen Interaktions-Timer.
+  Visuals aus dem autoritativen Interaktions-Timer. Der Baumenüeintrag nutzt
+  das eigene Fallschirm-Icon und keine `ride`-Vorschau, da diese das
+  Karussellmodell zeigt.
 - Loops behalten eine feste Referenz-Heading durch vertikale Tangenten.
 - Steigungsstücke (sanft und steil) belegen **ein** Feld und werden direkt aus
   der Station gesetzt. Halbe Höhenstufen (`0.5`) sind für sanfte Stücke zulässig.
@@ -135,6 +143,8 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
 ## Tests
 
 `tests/rideAccess.ts` (beide Ride-Typen, Queues, Saves, Multiplayer).
+`tests/attractionFoundation.ts` (Abschlussgutschrift der gemeinsamen Track-,
+Area-, Coaster- und Scripted-Runtimes; keine Gutschrift beim Anstehen).
 `tests/operations.ts` (Serpentinen-Kette, Rückweg, leerer Stand).
 `tests/festivalAdditions.ts` (1-Feld-Steigungen, flach↔steil-Übergang, Wagen-Mesh, Schienenjoin-Rundung / Pfadkontinuität, vollständiger Abriss inkl. Queue und Command, Physik-Untergrenzen `chainSpeed` / `stationLaunchSpeed` / `dragArea` / `maximumSpeed`).
 `tests/coasterTypes.ts` (Typ-Katalog, alle Typen spielbar, Anschlussregeln, Helix, Palette-Filter, Testfahrt während Planung, SI-Geschwindigkeitsuntergrenzen — Pflicht bei Editor-/Typ-Änderungen, siehe `coaster.md`).

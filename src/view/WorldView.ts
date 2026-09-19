@@ -27,7 +27,7 @@ import { createAttractionAccess } from './attractionAccess'
 import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
 import { createStageModel, animateStageModel, updateStageLightPool } from './stageModel'
-import { stagePhase, stageSize, buildingSize, occupiesBuildingCell, fohDeskRole, STAGE_TILE_DETAIL } from '../game/stageDesign'
+import { stageApronCells, stagePhase, stageSize, buildingSize, occupiesBuildingCell, fohDeskRole, MAX_STAGE_FORECOURT_DEPTH, STAGE_TILE_DETAIL } from '../game/stageDesign'
 import { activeBookings, showIssue } from '../game/festivalManagement'
 import { createEarthTexture, createTerrainBase, createTerrainMaterial, createTerrainSurface } from './terrainSurface'
 import { TerrainShape, terrainPads } from './terrainShape'
@@ -118,6 +118,7 @@ import { usesGateEdgePlacement } from '../game/accessControl'
 import { queueDirectionVector, stallQueueLaneOffset } from '../game/queueLanes'
 import { CampingView } from './CampingView'
 import { FireworksView } from './FireworksView'
+import { FestivalEquipmentView } from './FestivalEquipmentView'
 import { CrowdingView } from './CrowdingView'
 import { PanicView } from './PanicView'
 import { visitorBubbleKind } from '../game/visitorBubbles'
@@ -449,6 +450,7 @@ export class WorldView {
   private readonly lightView: LightView = { frustum: new Frustum(), focus: new Vector3() }
   private powerView = new PowerView()
   private laserView = new LaserView()
+  private festivalEquipmentView = new FestivalEquipmentView()
   private campingView = new CampingView()
   private fireworksView = new FireworksView()
   private crowdingView = new CrowdingView()
@@ -554,6 +556,8 @@ export class WorldView {
   private cashEffectModels = new Map<string, Sprite>()
   private preview: Mesh
   private previewArrow: Mesh
+  private stageForecourtPreview: InstancedMesh
+  private stageForecourtPreviewPose = new Object3D()
   private constructionGrid = createConstructionGrid()
   private groundTileMarker = createGroundTileMarker()
   private shiftHeightActive = false
@@ -794,6 +798,19 @@ export class WorldView {
       side: DoubleSide,
     })
     this.preview = new Mesh(new BoxGeometry(0.94, 0.12, 0.94), previewMaterial)
+    this.stageForecourtPreview = new InstancedMesh(
+      new BoxGeometry(0.92, 0.04, 0.92),
+      new MeshBasicMaterial({
+        color: 0x9c72c7,
+        transparent: true,
+        opacity: 0.48,
+        depthWrite: false,
+      }),
+      8 * MAX_STAGE_FORECOURT_DEPTH,
+    )
+    this.stageForecourtPreview.instanceMatrix.setUsage(DynamicDrawUsage)
+    this.stageForecourtPreview.count = 0
+    this.stageForecourtPreview.visible = false
     this.previewArrow = new Mesh(
       createRoadDirectionArrowGeometry('paint'),
       previewArrowMaterial,
@@ -825,6 +842,7 @@ export class WorldView {
       this.rideGates,
       this.rideGatePreview,
       this.preview,
+      this.stageForecourtPreview,
       this.constructionGrid,
       this.groundTileMarker,
       this.sceneryPreview,
@@ -854,6 +872,7 @@ export class WorldView {
       this.supplyChainView.group,
       this.powerView.group,
       this.laserView.group,
+      this.festivalEquipmentView.group,
       this.terrainGroup,
       this.festivalLights.group,
       this.buildings,
@@ -994,7 +1013,9 @@ export class WorldView {
       snapshot.selectedTool === 'backupGenerator'
     this.powerView.setVisible(showPower)
     if (dataChanged) this.powerView.update(snapshot.power, snapshot.terrain)
-    this.laserView.update(snapshot, this.isShowPerforming(snapshot))
+    const showPerforming = this.isShowPerforming(snapshot)
+    this.laserView.update(snapshot, showPerforming)
+    this.festivalEquipmentView.update(snapshot, showPerforming)
     const coasterFingerprint = dataChanged ? snapshot.coasters
       .map(
         (coaster) =>
@@ -2273,6 +2294,11 @@ export class WorldView {
     }
     const detailed = createRetroBuilding(kind, variant)
     if (detailed) {
+      if (kind === 'directionalSpeaker' || kind === 'omniSpeaker') {
+        const soundWaves = this.createSoundWaves(kind === 'omniSpeaker')
+        detailed.add(soundWaves)
+        detailed.userData.soundWaves = soundWaves
+      }
       return detailed
     }
     const group = new Group()
@@ -4113,10 +4139,46 @@ export class WorldView {
     this.groundTileMarker.position.set(marker.x + 0.5, marker.y + 0.035, marker.z + 0.5)
   }
 
+  private updateStageForecourtPreview(tool: string, cell: CellPosition): void {
+    const snapshot = this.currentSnapshot
+    this.stageForecourtPreview.visible = false
+    this.stageForecourtPreview.count = 0
+    if (tool !== 'stage' || !snapshot) return
+    const design = snapshot.festival.stageTemplates?.find(
+      (template) => template.name === snapshot.festival.selectedStageTemplate,
+    )
+    if (!design) return
+    const cells = stageApronCells({
+      x: cell.x,
+      z: cell.z,
+      rotation: snapshot.buildRotation,
+      stageDesign: design,
+    })
+    const baseY =
+      getTerrainHeight(snapshot.terrain, cell.x, cell.z) +
+      snapshot.buildElevation +
+      0.035
+    const pose = this.stageForecourtPreviewPose
+    pose.rotation.set(0, 0, 0)
+    pose.scale.set(1, 1, 1)
+    cells.forEach((forecourt, index) => {
+      pose.position.set(forecourt.x + 0.5, baseY, forecourt.z + 0.5)
+      pose.updateMatrix()
+      this.stageForecourtPreview.setMatrixAt(index, pose.matrix)
+    })
+    const material = this.stageForecourtPreview.material as MeshBasicMaterial
+    material.color.setHex(this.placementResult?.ok === false ? 0xe84d4d : 0x9c72c7)
+    this.stageForecourtPreview.count = cells.length
+    this.stageForecourtPreview.instanceMatrix.needsUpdate = true
+    this.stageForecourtPreview.computeBoundingSphere()
+    this.stageForecourtPreview.visible = cells.length > 0
+  }
+
   private updatePreview(): void {
     this.updateConstructionGrid()
     this.updateGroundTileMarker()
     this.sceneryPreview.visible = false
+    this.stageForecourtPreview.visible = false
     if (this.walkMode) {
       this.preview.visible = false
       this.previewArrow.visible = false
@@ -4140,6 +4202,7 @@ export class WorldView {
     }
 
     const tool = this.currentSnapshot.selectedTool
+    this.updateStageForecourtPreview(tool, this.hoveredCell)
     if (tool === 'ride' && this.bungeePreviewHeight !== null) {
       const cell = this.hoveredCell, key = `bungee:${this.bungeePreviewHeight}`
       if (this.sceneryPreviewKind !== key) {

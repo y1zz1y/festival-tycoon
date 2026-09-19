@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { GameState } from '../src/game/GameState'
 
@@ -6,13 +6,32 @@ const requested = process.argv[2] ?? 'rtest3'
 let raw: string
 if (requested.endsWith('.json')) raw = readFileSync(requested, 'utf8')
 else {
-  const slot = readdirSync('saves').filter(file => file.endsWith('.json'))
+  const fixtureManifestPath = 'tests/fixtures/performance/manifest.json'
+  const fixtureManifest = existsSync(fixtureManifestPath)
+    ? JSON.parse(readFileSync(fixtureManifestPath, 'utf8')) as {
+        fixtures?: Array<{ id: string; file: string }>
+      }
+    : {}
+  const fixture = fixtureManifest.fixtures?.find(entry => entry.id === requested)
+  if (fixture) raw = readFileSync(fixture.file, 'utf8')
+  else {
+    const slot = (existsSync('saves') ? readdirSync('saves') : [])
+      .filter(file => file.endsWith('.json'))
     .map(file => JSON.parse(readFileSync(`saves/${file}`, 'utf8'))).find(slot => slot.name === requested)
-  if (!slot) throw new Error(`Save not found: ${requested}. Pass a save name or JSON path.`)
-  raw = slot.snapshot
+    if (!slot) {
+      throw new Error(
+        `Save not found: ${requested}. Pass a fixture ID, save name or JSON path.`,
+      )
+    }
+    raw = slot.snapshot
+  }
 }
 const parsed = JSON.parse(raw)
-raw = typeof parsed.snapshot === 'string' ? parsed.snapshot : raw
+raw = typeof parsed.snapshot === 'string'
+  ? parsed.snapshot
+  : parsed.snapshot && typeof parsed.snapshot === 'object'
+    ? JSON.stringify(parsed.snapshot)
+    : raw
 const steps = Number(process.argv[3] ?? 120)
 if (!Number.isSafeInteger(steps) || steps < 1 || steps > 100000) throw new Error('Tick count must be an integer between 1 and 100000')
 for (const speed of [1, 2, 3]) {

@@ -174,12 +174,21 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   const source = new Group()
   for (const kind of DETAILED_BUILDINGS) {
     const a = createRetroBuilding(kind)!, b = createRetroBuilding(kind)!
+    a.userData.buildingId = `${kind}-a`
+    b.userData.buildingId = `${kind}-b`
     b.position.set(3, 2, -1); b.rotation.y = Math.PI / 2
     source.add(a, b)
     const mesh = a.children[0] as Mesh
     assert.equal(a.children.length, 1, `${kind}: static details must be merged`)
     assert.ok(mesh.geometry.getAttribute('color'))
     assert.ok(mesh.geometry.getAttribute('position').count < 5000, `${kind}: geometry budget`)
+    mesh.geometry.computeBoundingBox()
+    const bounds = mesh.geometry.boundingBox!
+    assert.ok(
+      [bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z]
+        .every(Number.isFinite),
+      `${kind}: finite model bounds`,
+    )
     assert.equal(mesh.geometry, (b.children[0] as Mesh).geometry, 'instances share geometry')
   }
   const batches = batchRetroBuildings(source)
@@ -187,6 +196,7 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   for (const child of batches.children) {
     const batch = child as InstancedMesh
     assert.equal(batch.count, 2)
+    assert.equal((batch.userData.buildingIds as string[]).length, 2, 'batch keeps picking IDs')
     assert.ok(batch.boundingSphere!.containsPoint(new Vector3(3, 2, -1)))
   }
   const lightGame = fixture(1), lightSnapshot = lightGame.snapshot

@@ -1,5 +1,9 @@
 import { BANDS, bandPriceWillingness, bandVisitorDraw } from './festivalManagement'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import {
+  normalizeTicketDemandTuning,
+  type TicketDemandTuning,
+} from './demandTuning'
 import type { GameSnapshot } from './types/snapshot'
 
 export type TicketWillingness = {
@@ -76,49 +80,69 @@ export function purchaseWillingness(
     'attractiveness' | 'complaints' | 'festival' | 'buildings' | 'campingCells' | 'coasters'
   >,
 ): TicketWillingness {
+  const tuning = normalizeTicketDemandTuning(state.festival.demandTuning)
   const beauty = clamp01(((state.attractiveness.average ?? 0) + 40) / 80)
   const complaints = complaintPressure(state)
   const history = festivalHistory(state)
   const size = festivalSize(state)
   const lineup = lineupPull(state)
   const rides = attractionPull(state)
+  const dayWeights = tuning.willingness.day
+  const campingWeights = tuning.willingness.camping
   const day = clamp01(
-    0.18 +
-      beauty * 0.16 +
-      history * 0.1 +
-      size * 0.1 +
-      lineup.draw * 0.22 +
-      lineup.willingness * 0.28 +
-      rides * 0.14 -
-      complaints * 0.22,
+    dayWeights.base +
+      beauty * dayWeights.beauty +
+      history * dayWeights.history +
+      size * dayWeights.size +
+      lineup.draw * dayWeights.lineupDraw +
+      lineup.willingness * dayWeights.lineupPrice +
+      rides * dayWeights.attractions +
+      complaints * dayWeights.complaints,
   )
   const camping = clamp01(
-    0.12 +
-      beauty * 0.28 +
-      history * 0.24 +
-      size * 0.16 +
-      lineup.draw * 0.12 +
-      lineup.willingness * 0.1 +
-      rides * 0.06 -
-      complaints * 0.28,
+    campingWeights.base +
+      beauty * campingWeights.beauty +
+      history * campingWeights.history +
+      size * campingWeights.size +
+      lineup.draw * campingWeights.lineupDraw +
+      lineup.willingness * campingWeights.lineupPrice +
+      rides * campingWeights.attractions +
+      complaints * campingWeights.complaints,
   )
   return { day, camping }
 }
 
-export function priceAcceptance(price: number, fairPrice: number): number {
+export function priceAcceptance(
+  price: number,
+  fairPrice: number,
+  tuning: TicketDemandTuning = normalizeTicketDemandTuning(),
+): number {
   if (fairPrice <= 0) return price <= 0 ? 1 : 0
   const ratio = price / fairPrice
-  if (ratio <= 0.7) return 1
-  if (ratio >= 2.2) return 0.05
-  return clamp01(1 - (ratio - 0.7) / 1.5)
+  const acceptance = tuning.priceAcceptance
+  if (ratio <= acceptance.fullUntilRatio) return 1
+  if (ratio >= acceptance.floorFromRatio) return acceptance.minimum
+  const progress =
+    (ratio - acceptance.fullUntilRatio) /
+    (acceptance.floorFromRatio - acceptance.fullUntilRatio)
+  return clamp01(1 - progress * (1 - acceptance.minimum))
 }
 
-export function fairTicketPrices(willingness: TicketWillingness): { day: number; camping: number } {
+export function fairTicketPrices(
+  willingness: TicketWillingness,
+  tuning: TicketDemandTuning = normalizeTicketDemandTuning(),
+): { day: number; camping: number } {
   const baseDay = SIMULATION_CONFIG.economy.defaultEntryPrice
   const baseCamp = SIMULATION_CONFIG.economy.defaultCampingTicketPrice
   return {
-    day: Math.max(1, Math.round(baseDay * (0.55 + willingness.day * 1.8))),
-    camping: Math.max(2, Math.round(baseCamp * (0.6 + willingness.camping * 1.6))),
+    day: Math.max(1, Math.round(baseDay * (
+      tuning.fairPrice.dayBaseFactor +
+      willingness.day * tuning.fairPrice.dayWillingnessFactor
+    ))),
+    camping: Math.max(2, Math.round(baseCamp * (
+      tuning.fairPrice.campingBaseFactor +
+      willingness.camping * tuning.fairPrice.campingWillingnessFactor
+    ))),
   }
 }
 
@@ -128,15 +152,26 @@ export function estimateTicketDemand(
 ): TicketDemandEstimate {
   const dayPrice = prices?.day ?? state.entryPrice
   const campPrice = prices?.camping ?? state.campingTicketPrice
+  const tuning = normalizeTicketDemandTuning(state.festival.demandTuning)
   const willingness = purchaseWillingness(state)
-  const fair = fairTicketPrices(willingness)
-  const dayAccept = priceAcceptance(dayPrice, fair.day) * willingness.day
-  const campAccept = priceAcceptance(campPrice, fair.camping) * willingness.camping
+  const fair = fairTicketPrices(willingness, tuning)
+  const dayAccept = priceAcceptance(dayPrice, fair.day, tuning) * willingness.day
+  const campAccept = priceAcceptance(campPrice, fair.camping, tuning) * willingness.camping
   const lineup = lineupPull(state)
-  const baseDay = 80 + lineup.draw * 420 + festivalSize(state) * 180
+  const baseDay =
+    tuning.attendance.dayBaseGuests +
+    lineup.draw * tuning.attendance.dayLineupGuests +
+    festivalSize(state) * tuning.attendance.daySizeGuests
   const campCapacity = Math.max(0, state.campingCells.length)
-  const expectedDayGuests = Math.round(baseDay * (0.25 + dayAccept * 1.15))
-  const expectedCampers = Math.round(Math.min(campCapacity, 12 + campCapacity * campAccept))
+  const expectedDayGuests = Math.round(Math.max(0, baseDay * (
+    tuning.attendance.dayBaseShare +
+    dayAccept * tuning.attendance.dayAcceptanceShare
+  )))
+  const expectedCampers = Math.round(Math.min(
+    campCapacity,
+    tuning.attendance.campingBaseGuests +
+      campCapacity * campAccept * tuning.attendance.campingAcceptanceShare,
+  ))
   return {
     willingness,
     expectedDayGuests,
@@ -150,11 +185,19 @@ export function estimateTicketDemand(
 
 export function arrivalPriceMultiplier(state: GameSnapshot, ticket: 'day' | 'camping'): number {
   const estimate = estimateTicketDemand(state)
+  const tuning = normalizeTicketDemandTuning(state.festival.demandTuning)
+  const fair = fairTicketPrices(estimate.willingness, tuning)
   const accept =
     ticket === 'day'
-      ? priceAcceptance(state.entryPrice, fairTicketPrices(estimate.willingness).day) *
+      ? priceAcceptance(state.entryPrice, fair.day, tuning) *
         estimate.willingness.day
-      : priceAcceptance(state.campingTicketPrice, fairTicketPrices(estimate.willingness).camping) *
+      : priceAcceptance(state.campingTicketPrice, fair.camping, tuning) *
         estimate.willingness.camping
-  return Math.max(0.2, Math.min(1.15, 0.25 + accept * 0.9))
+  return Math.max(
+    tuning.arrivals.minimum,
+    Math.min(
+      tuning.arrivals.maximum,
+      tuning.arrivals.base + accept * tuning.arrivals.acceptanceFactor,
+    ),
+  )
 }

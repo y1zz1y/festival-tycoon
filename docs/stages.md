@@ -27,6 +27,10 @@ gelten Footprint, Strom, Vorplatz und Buchungen.
 
 - Maximal 30 Vorlagen und 96 Teile je Bühne. Statische Geometrie nach
   Material bündeln; dynamische Effekte auf 32 je Bühne begrenzen.
+- Die Werkstatt speichert `StageDesign.forecourtDepth` (1–24 Felder).
+  `stageForecourtDepth` übernimmt bei älteren Designs weiterhin zwei
+  Bühnenbreiten. Werkstatt und Karten-Bauvorschau zeigen dieselbe gewählte
+  Fläche; die Kartenansicht nutzt dafür genau einen Instanz-Batch.
 - Sechs aktive Map-Spots teilen sich Bühnenbeleuchtung
   (`docs/rendering.md`, `FestivalLightsView`).
 - Musiker nur auf Podesten (selbstgebaut) bzw. fester Plattform (Standard).
@@ -53,7 +57,8 @@ gelten Footprint, Strom, Vorplatz und Buchungen.
 ## Tests
 
 `tests/stageInteraction.ts`, `tests/stageTickets.ts`, `tests/festival.ts`
-(Vorplatz-Kapazität, Einlass vor Slotstart, Live-Show-Festivallust,
+(verkleinerte/vergrößerte und Legacy-Vorplatztiefe, Vorplatz-Kapazität,
+Einlass vor Slotstart, Live-Show-Festivallust,
 Oberteil-Ereignis). Licht-Stabilität: `tests/performanceGuards.ts`.
 
 Bandversorgung skaliert Show-Spaß, Festivallust und Trinkgeld (`sales`)

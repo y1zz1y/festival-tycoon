@@ -1,5 +1,49 @@
 # Simulation and rendering performance
 
+## Versionierte Referenz-Spielstände
+
+Mehrere gebaute Lastszenarien können unter
+`tests/fixtures/performance/*.json` versioniert werden. Die stabile ID, der
+Dateipfad und die Standard-Tickzahl stehen in
+`tests/fixtures/performance/manifest.json`; Aufnahme- und
+Anonymisierungsregeln stehen im dortigen `README.md`.
+
+- Ein Fixture: `npm run test:performance -- <fixture-id> 120`
+- Alle Fixtures: `npm run test:performance:fixtures`
+- Gemeinsamer Langlauf: `npm run test:performance:fixtures -- 1200`
+
+Der Runner baut das Profil-Harness einmal und startet jede registrierte Welt
+frisch für 1×, 3× und 8×. Fixtures werden niemals zurückgeschrieben.
+Vorher/Nachher verwendet dieselbe Fixture-Version und Tickzahl und berichtet
+Median/p95/Maximum, Besucherzahl und Endhash. Persönliche `saves/` bleiben
+ignoriert und werden nicht als Repository-Fixtures verwendet.
+
+Registriert ist `festivalmittel` (Snapshot v32): 832 Besucher, 2.376 Gebäude
+und 34 Mitarbeitende, mit 120 Ticks als Standardlauf.
+
+## Konzert-Bandversorgung (0.1.194, 2026-09-19)
+
+Im unveränderten `festivalmittel`-Fixture wurde die Welt bei 8× bis vor den
+ersten Auftritt simuliert und jeweils 40 Ticks gemessen. Vor der Korrektur
+stieg der Median von 37,86 ms ohne Konzert auf 80,08 ms bei 161
+Konzertbesuchern; p95 stieg von 60,53 auf 118,66 ms. In
+`updateConcertAttendance` entfielen dabei 1.047,83 ms auf 2.529 Aufrufe.
+
+Ursache war `showQualityForStage`: Jede Person baute den kompletten
+Backstage-Graph samt Gebäude-, Parkplatz-, Deko- und Fan-Auswertung erneut auf,
+obwohl `syncBandSupply` denselben Zustand bereits einmal vor der Besucherphase
+berechnet. Qualitätsabfragen lesen innerhalb des laufenden Simulationsticks
+jetzt diesen Tick-Snapshot. Außerhalb eines Ticks bleibt die sofortige
+Aktualisierung für UI, Commands und Tests erhalten.
+
+Im gleichen Ablauf danach lag der Konzert-Median bei 48,50 ms und p95 bei
+69,70 ms; `updateConcertAttendance` benötigte noch 1,65 ms für 2.529 Aufrufe.
+Der jeweilige Lauf ohne Konzert lag bei 31,57 / 50,15 ms Median/p95. Absolute
+Gesamtzeiten schwanken mit Maschinenlast und fortgeschrittener Population; der
+strukturelle Guard prüft deshalb zusätzlich, dass 200 Qualitätsabfragen im
+Besuchertick keinen Supply-Neuaufbau auslösen. Spielregeln, Tickbudget,
+Besucherzahl und Konzertwirkung wurden nicht reduziert.
+
 ## Final GameState decomposition (0.1.176, 2026-09-19)
 
 The cumulative extraction keeps the fixed-tick schedule, shared deterministic

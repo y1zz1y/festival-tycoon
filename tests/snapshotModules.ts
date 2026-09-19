@@ -7,10 +7,12 @@ import {
 } from '../src/game/snapshotBootstrap'
 import { migrateSnapshot } from '../src/game/snapshotMigration'
 import { createEmptyCourse, createSeededCourse } from '../src/game/courseAttractions'
+import { createTicketDemandTuning } from '../src/game/demandTuning'
+import { defaultStageDesign } from '../src/game/stageDesign'
 
 export function testSnapshotModules(): void {
   const blank = createBlankSnapshot()
-  assert.equal(blank.version, 31)
+  assert.equal(blank.version, 33)
   assert.equal(blank.buildings[0]?.id, ENTRANCE_PATH_ID)
   assert.equal(blank.parkOpen, true)
 
@@ -32,7 +34,7 @@ export function testSnapshotModules(): void {
   ]
   const migrated = migrateSnapshot(legacy)
   assert.ok(migrated)
-  assert.equal(migrated.version, 31)
+  assert.equal(migrated.version, 33)
   assert.equal(migrated.campingTicketPrice, 77)
   assert.ok(migrated.attractions.some((attraction) => attraction.definitionId === 'swimArea'))
   assert.ok(migrated.attractions.some((attraction) => attraction.definitionId === 'waterSlide'))
@@ -40,6 +42,27 @@ export function testSnapshotModules(): void {
 
   const throughStaticApi = GameState.fromJSON(JSON.stringify(legacy))
   assert.ok(throughStaticApi)
-  assert.equal(throughStaticApi.snapshot.version, 31)
+  assert.equal(throughStaticApi.snapshot.version, 33)
   assert.equal(throughStaticApi.snapshot.campingTicketPrice, 77)
+
+  const v31 = structuredClone(blank) as GameSnapshot & { version: number }
+  v31.version = 31
+  delete (v31.festival as Partial<typeof v31.festival>).demandTuning
+  const demandMigrated = migrateSnapshot(v31)
+  assert.ok(demandMigrated)
+  assert.equal(demandMigrated.version, 33)
+  assert.deepEqual(demandMigrated.festival.demandTuning, createTicketDemandTuning())
+
+  const v32 = structuredClone(blank) as GameSnapshot & { version: number }
+  v32.version = 32
+  const legacyStage = defaultStageDesign()
+  delete legacyStage.forecourtDepth
+  v32.festival.stageTemplates = [legacyStage]
+  const forecourtMigrated = migrateSnapshot(v32)
+  assert.ok(forecourtMigrated)
+  assert.equal(forecourtMigrated.version, 33)
+  assert.equal(
+    forecourtMigrated.festival.stageTemplates?.[0]?.forecourtDepth,
+    (legacyStage.tileWidth ?? 1) * 2,
+  )
 }

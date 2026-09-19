@@ -10,6 +10,7 @@ import { isStallQueueKind } from './queueLanes';
 import { buildingEfficiency } from './ground';
 import { BUILDINGS } from './catalog';
 import { type FinanceCategory } from './finance';
+import { grantAttractionFun } from './attractionFun';
 import { watchableBookings, showIssue, BANDS } from './festivalManagement';
 import type { Booking } from './festivalManagement';
 import type { BuildingKind } from './catalog';
@@ -3337,7 +3338,7 @@ export class VisitorBehaviorService {
       visitor.needs.toilet = SIMULATION_CONFIG.needs.toilet.toilet
       visitor.thought = 'Das war dringend nötig.'
     } else if (target?.kind === 'ride' && paid) {
-      visitor.needs.fun = SIMULATION_CONFIG.needs.ride.fun
+      grantAttractionFun(visitor, SIMULATION_CONFIG.needs.ride.funGain)
       visitor.needs.energy = Math.max(
         0,
         visitor.needs.energy - SIMULATION_CONFIG.needs.ride.energyCost,

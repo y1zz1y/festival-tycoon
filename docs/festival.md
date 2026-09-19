@@ -14,6 +14,7 @@ hält die Simulationsuhr an, bis **Festival starten**.
 | Musikgeschmack, Basis-Evolution | `src/game/musicTaste.ts` | `evolveMusicAudience`, `GENRES` |
 | Automatischer Spielplan | `src/game/autoLineup.ts` | `planAutoLineup` (min/max Sterne, bestehende Slots bleiben) |
 | Ticketnachfrage | `src/game/ticketDemand.ts` | `estimateTicketDemand`, `arrivalPriceMultiplier` |
+| Nachfrage-Tuning | `src/game/demandTuning.ts`, `src/game/simulationConfig.ts` | `TicketDemandTuning`, Normalisierung und Standardwerte |
 | Waren im Festivalkontext | `src/game/supplyChain.ts`, `src/game/festivalManagement.ts` | `Supply` inkl. `goods` (Allgemeine Waren) |
 | Spielplan-UI | `src/musicPlanner.ts` | Band ziehen, Raster |
 | Festival-Fenster | `src/festivalUI.ts` | Tickets, Preise, Tagesplan, Auswertung, Ausbauten |
@@ -47,6 +48,10 @@ hält die Simulationsuhr an, bis **Festival starten**.
   und Auto-Plan filtern nach Sternen und überschreiben keine bestehenden Slots.
   Ticket-Slider färben die erwartete Kaufbereitschaft; Spawn skaliert mit
   `arrivalPriceMultiplier`. Gästebudget ist `visitors.budget` (80), nicht 1e6.
+- Zahlungsbereitschaft, faire Preise, Preisakzeptanz, Teilnahme und Anreise
+  lesen ausschließlich `festival.demandTuning` mit normalisiertem Fallback auf
+  `SIMULATION_CONFIG.ticketDemand`. Das Debugfenster wertet Entwürfe live aus;
+  erst **Übernehmen** sendet die vollständige Konfiguration an den Host.
 - Nach dem letzten Festivaltag (`festival.finished`) öffnet einmal pro Ausgabe
   das **HEADLINE Magazin** (`buildHeadlineMagazine`). Es rechnet nur aus
   vorhandenen Snapshot-Feldern (Tagesberichte, Ruf, Anreisen, Bilanz,

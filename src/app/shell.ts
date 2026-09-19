@@ -82,6 +82,7 @@ export function mountAppShell(app: HTMLDivElement): void {
         <button id="debug-money" title="Debug-Geld hinzufügen">💰 +100.000 €</button>
         <button id="debug-clear-waste" title="Müll, Erbrochenes und verlassene Campinggegenstände sofort entfernen">🧹 Müll & alte Gegenstände entfernen</button>
         <button id="debug-remove-cars" title="Besucherautos entfernen">🚗 Autos entfernen & Gäste heimschicken</button>
+        <button id="debug-demand-tuning" title="Zahlungs- und Teilnahmebereitschaft einstellen">🎟️ Nachfrage-Tuning</button>
       </div>
       <div id="save-menu-panel" class="dropdown-menu-panel panel">
         <button id="save">💾 Schnell speichern</button>
@@ -92,6 +93,26 @@ export function mountAppShell(app: HTMLDivElement): void {
         <button id="paste-save" title="Base64-Spielstand einfügen">📋 Text einfügen</button>
       </div>
     </nav>
+    <aside id="demand-debug-panel" class="demand-debug-panel panel" hidden>
+      <div class="panel-header">
+        <span class="panel-drag-line" aria-hidden="true"></span>
+        <h2 class="panel-header-title">Nachfrage-Tuning</h2>
+        <span class="panel-drag-line" aria-hidden="true"></span>
+        <button id="close-demand-debug" class="panel-close-button" aria-label="Nachfrage-Tuning schließen">×</button>
+      </div>
+      <p class="scenario-hint">Änderungen werden erst mit „Übernehmen“ host-autoritative gespeichert.</p>
+      <form id="demand-debug-form">
+        <div id="demand-debug-fields" class="demand-debug-fields"></div>
+        <section class="demand-debug-preview">
+          <h3>Live-Auswertung</h3>
+          <dl id="demand-debug-results"></dl>
+        </section>
+        <div class="demand-debug-actions">
+          <button type="button" id="reset-demand-debug">Standardwerte</button>
+          <button type="submit">Übernehmen</button>
+        </div>
+      </form>
+    </aside>
     <aside id="scenario-panel" class="scenario-panel panel" hidden>
       <div class="panel-header">
         <span class="panel-drag-line" aria-hidden="true"></span>

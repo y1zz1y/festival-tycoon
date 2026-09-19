@@ -8,12 +8,15 @@ import { DeterministicRng } from '../src/game/rng'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import {
   acceptWasteAtSealedContainer,
+  findNearestVisitorWasteTarget,
   isSealedWasteContainer,
   sealedContainerAllowsManualHaul,
   sealedContainerCapacity,
   sealedContainerHasRoom,
   sealedContainerId,
+  visitorWasteInRange,
   type SealedWasteContainerInfo,
+  type VisitorWasteTarget,
 } from '../src/game/waste'
 
 function nearestPath(start: { x: number; z: number }, goals: Array<{ x: number; z: number; elevation: number }>) {
@@ -34,6 +37,26 @@ export function testSealedWasteContainer(fixture: (count?: number) => GameState)
   assert.equal(BUILDINGS.sealedWasteContainer.capacity, 80)
   assert.ok(isSealedWasteContainer('sealedWasteContainer'))
   assert.equal(isSealedWasteContainer('wasteBin'), false)
+  const visitorContainer: VisitorWasteTarget = {
+    id: 'visitor-sealed',
+    x: 3,
+    z: 3,
+    elevation: 0,
+    stored: 0,
+    kind: 'sealed',
+    capacity: 80,
+  }
+  assert.equal(visitorWasteInRange({ x: 0, z: 0 }, visitorContainer), true)
+  assert.equal(
+    findNearestVisitorWasteTarget({ x: 0, z: 0 }, [visitorContainer])?.id,
+    visitorContainer.id,
+    'visitors use a sealed container anywhere in their 7x7 neighborhood',
+  )
+  assert.equal(
+    visitorWasteInRange({ x: -1, z: 0 }, visitorContainer),
+    false,
+    'a sealed container outside the 7x7 neighborhood is not selected',
+  )
   assert.ok(
     SIMULATION_CONFIG.waste.sealedContainerStoredBeautyPerBag >
       SIMULATION_CONFIG.waste.dumpStoredBeautyPerBag,

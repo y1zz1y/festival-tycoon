@@ -1,7 +1,7 @@
 # Spielstände und Versionierung
 
 `GameSnapshot.version` in `src/game/types/snapshot.ts` ist die kanonische
-Schema-Version. Aktuelle Snapshot-Version: **31**. `npm run test:docs` gleicht
+Schema-Version. Aktuelle Snapshot-Version: **33**. `npm run test:docs` gleicht
 diesen dokumentierten Wert mit Typ, Bootstrap und Migration ab. Die sichtbare
 Spielversion kommt aus `package.json`. Feature-/Fix-Batches erhöhen den
 Patch (`npm version patch --no-git-tag-version`) und halten das Lockfile synchron.
@@ -63,6 +63,13 @@ Camp und Müll rekonstruiert.
 
 - Neue Snapshot-Felder: Default im Blank-Snapshot, Normalize beim Laden,
   Save-Kompatibilität für alte Stände, Multiplayer-Sync.
+  v33 ergänzt optional `StageDesign.forecourtDepth` (1–24 Felder).
+  v32 und ältere Bühnen ohne Wert behalten über `stageForecourtDepth`
+  den bisherigen Vorplatz von zwei Bühnenbreiten.
+  v32 ergänzt `festival.demandTuning` für alle Koeffizienten der Ticket-
+  Zahlungs- und Teilnahmebereitschaft. v31 und ältere Stände erhalten die
+  Werte aus `SIMULATION_CONFIG.ticketDemand`; ungültige Zahlen und
+  widersprüchliche Schwellen werden beim Laden normalisiert.
   v31 führt `attractions: Attraction[]` und optional
   `migrationReport.removedAttractionIds` ein. `track`, `area` und `scripted`
   sind die kanonischen Layouts. Der v30→v31-Lader konvertiert Achterbahnen,

@@ -7,6 +7,7 @@ import { createCoasterTelemetry, getCoasterType, migrateTrackPiece, resolveCoast
 import { normalizeCourses } from './courseAttractions'
 import { normalizeComplaintSnapshot } from './complaints'
 import { normalizeDayPlan } from './dayPlan'
+import { normalizeTicketDemandTuning } from './demandTuning'
 import { createFinanceState } from './finance'
 import { createFestivalInventory, getItemQuantity, normalizeInventory } from './inventory'
 import { normalizeLogisticsSnapshot } from './logistics'
@@ -81,7 +82,10 @@ export function normalizeSnapshotForRuntime(context: SnapshotRepairContext): voi
     .map(normalizeBandActor)
     .filter((actor): actor is BandActor => actor !== null)
   state.bandSupply ??= emptyBandSupplySnapshot()
-  state.version = 31
+  state.version = 33
+  state.festival.demandTuning = normalizeTicketDemandTuning(
+    state.festival.demandTuning,
+  )
   state.waterLevel = normalizeWaterLevel(state.waterLevel)
   syncStageAudience(state)
   state.attractiveness ??= { average: 0, maximum: 0, minimum: 0, cells: [] }

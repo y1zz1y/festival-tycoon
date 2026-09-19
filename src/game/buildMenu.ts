@@ -204,7 +204,6 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           buildingMenuItem('ride'),
           toolItem('ride', 'Bungee-Turm', '🪂', '1.200 € + 25 €/Meter', {
             bungee: true,
-            previewKind: 'ride',
           }),
         ],
       },

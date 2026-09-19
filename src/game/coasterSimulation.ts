@@ -1,4 +1,5 @@
 import { getCoasterType, sampleCoasterTrack, type Coaster, type TrackSample } from './coasters'
+import { grantAttractionFun } from './attractionFun'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import type { PlacedBuilding, Visitor } from './types/entities'
 import type { GameSnapshot } from './types/snapshot'
@@ -172,7 +173,7 @@ export class CoasterSimulation {
           const visitorId = train.passengerIds.shift()
           if (!visitorId) continue
           const visitor = this.context.getVisitor(visitorId)
-          if (visitor) this.releasePassenger(coaster, visitor)
+          if (visitor) this.releasePassenger(coaster, visitor, true)
           train.passengers = train.passengerIds.length
         }
         if (train.passengerIds.length === 0) {
@@ -202,7 +203,7 @@ export class CoasterSimulation {
     coaster.train.passengerIds.forEach((visitorId) => {
       const visitor = this.context.getVisitor(visitorId)
       if (!visitor) return
-      if (coaster.exit) this.releasePassenger(coaster, visitor)
+      if (coaster.exit) this.releasePassenger(coaster, visitor, false)
       else {
         visitor.state = 'exploring'
         visitor.targetId = null
@@ -526,7 +527,11 @@ export class CoasterSimulation {
     train.speed = 0
   }
 
-  private releasePassenger(coaster: Coaster, visitor: Visitor): void {
+  private releasePassenger(
+    coaster: Coaster,
+    visitor: Visitor,
+    completedRide: boolean,
+  ): void {
     const exit = coaster.exit
     if (!exit) return
     const nextPath =
@@ -543,7 +548,9 @@ export class CoasterSimulation {
     visitor.route = [nextPath]
     visitor.targetId = null
     visitor.state = 'exiting'
-    visitor.needs.fun = 100
+    if (completedRide) {
+      grantAttractionFun(visitor, SIMULATION_CONFIG.coasters.funGain)
+    }
     visitor.needs.energy = Math.max(
       0,
       visitor.needs.energy - SIMULATION_CONFIG.coasters.rideEnergyCost,

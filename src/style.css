@@ -326,8 +326,80 @@ button {
 
 .scenario-panel[hidden],
 .multiplayer-panel[hidden],
-.save-as-panel[hidden] {
+.save-as-panel[hidden],
+.demand-debug-panel[hidden] {
   display: none;
+}
+
+.demand-debug-panel {
+  position: absolute;
+  top: 84px;
+  left: 50%;
+  z-index: 30;
+  width: min(760px, calc(100vw - 24px));
+  max-height: calc(100dvh - 104px);
+  overflow: auto;
+  padding: 12px;
+  transform: translateX(-50%);
+}
+
+.demand-debug-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(250px, 1fr));
+  gap: 8px;
+}
+
+.demand-debug-fields fieldset {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 7px;
+  border: 1px solid #587568;
+}
+
+.demand-debug-fields legend {
+  padding: 0 5px;
+  color: #dcece4;
+  font-weight: 700;
+}
+
+.demand-debug-fields label {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 92px;
+  align-items: center;
+  gap: 7px;
+}
+
+.demand-debug-fields input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.demand-debug-preview {
+  margin-top: 8px;
+  padding: 8px;
+  background: #203c34;
+  border: 1px solid #587568;
+}
+
+.demand-debug-preview h3 { margin: 0 0 5px; }
+.demand-debug-preview dl { margin: 0; }
+.demand-debug-preview dl > div {
+  display: grid;
+  grid-template-columns: 155px 1fr;
+  gap: 8px;
+}
+.demand-debug-preview dt { color: #b8d3c6; }
+.demand-debug-preview dd { margin: 0; }
+.demand-debug-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .demand-debug-fields { grid-template-columns: 1fr; }
 }
 
 .multiplayer-panel {

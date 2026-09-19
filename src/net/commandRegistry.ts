@@ -111,6 +111,7 @@ export const COMMAND_METADATA = {
   configureShirtStall: { optimistic: false },
   updateEntryPrice: { optimistic: false },
   updateCampingTicketPrice: { optimistic: false },
+  updateDemandTuning: { optimistic: false },
   updateSecurityGate: { optimistic: false },
   setDayPlanHour: { optimistic: false },
   updateDayVisitorWindow: { optimistic: false },

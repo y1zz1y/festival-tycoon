@@ -101,7 +101,7 @@ export const DECO_PATTERNS = ['chase','sparkle','pulse','static'] as const
 export type DecoPattern = typeof DECO_PATTERNS[number]
 export const DECO_PATTERN_NAMES:Record<DecoPattern,string> = {chase:'Lauflicht',sparkle:'Funkeln',pulse:'Puls',static:'Dauerlicht'}
 export type ShowPhase = {movement?:number;pyro?:number;deco?:DecoPattern;intensity:number;speed:number;fog:number;volume:number;color:string}
-export type StageDesign = {audience?:Array<{x:number;z:number}>;tileWidth?:number;tileDepth?:number;tileHeight?:number;name:string;width:number;depth:number;height:number;parts:StagePart[];linked:boolean;phases:[ShowPhase,ShowPhase,ShowPhase]}
+export type StageDesign = {audience?:Array<{x:number;z:number}>;tileWidth?:number;tileDepth?:number;tileHeight?:number;forecourtDepth?:number;name:string;width:number;depth:number;height:number;parts:StagePart[];linked:boolean;phases:[ShowPhase,ShowPhase,ShowPhase]}
 export const PHASE_NAMES = ['Warm-up','Main','Finale'] as const
 /**
  * Build cells per map tile, in each axis: one, so a cell of the workshop grid is a field
@@ -115,14 +115,22 @@ export const PHASE_NAMES = ['Warm-up','Main','Finale'] as const
 export const STAGE_TILE_DETAIL = 1
 /** How much headroom every stage gets to build in, in map tiles — fixed rather than chosen, since empty air above the rig costs nothing and simply leaves room for towers. */
 export const STAGE_TILE_HEIGHT = 15
+export const MIN_STAGE_FORECOURT_DEPTH = 1
+export const MAX_STAGE_FORECOURT_DEPTH = 24
 export function stageDetailSize(tileWidth?:number,tileDepth?:number,tileHeight?:number) {
   return {width:(tileWidth??1)*STAGE_TILE_DETAIL,depth:(tileDepth??1)*STAGE_TILE_DETAIL,height:(tileHeight??1)*STAGE_TILE_DETAIL}
 }
-/** How far the standard audience area reaches in front of the stage, in build cells — the build area AUDIENCE_KINDS get beyond the platform itself (see stageApronCells for the same reach in map tiles). */
-export function stageApronDepth(d:{tileWidth?:number}){return (d.tileWidth??1)*2*STAGE_TILE_DETAIL}
+/** Legacy stages keep their former two-stage-width apron until edited. */
+export function stageForecourtDepth(d:{tileWidth?:number;forecourtDepth?:number}):number {
+  return Number.isInteger(d.forecourtDepth)
+    ? Math.max(MIN_STAGE_FORECOURT_DEPTH,Math.min(MAX_STAGE_FORECOURT_DEPTH,d.forecourtDepth!))
+    : Math.max(MIN_STAGE_FORECOURT_DEPTH,Math.min(MAX_STAGE_FORECOURT_DEPTH,(d.tileWidth??1)*2))
+}
+/** How far the chosen audience area reaches in front of the stage, in build cells. */
+export function stageApronDepth(d:{tileWidth?:number;forecourtDepth?:number}){return stageForecourtDepth(d)*STAGE_TILE_DETAIL}
 export function defaultStageDesign():StageDesign {
   const tileWidth=5,tileDepth=2,tileHeight=STAGE_TILE_HEIGHT
-  return {tileWidth,tileDepth,tileHeight,name:'Meine Traumbühne',...stageDetailSize(tileWidth,tileDepth,tileHeight),linked:false,parts:[],phases:[
+  return {tileWidth,tileDepth,tileHeight,forecourtDepth:tileWidth*2,name:'Meine Traumbühne',...stageDetailSize(tileWidth,tileDepth,tileHeight),linked:false,parts:[],phases:[
     {movement:20,pyro:0,deco:'pulse',intensity:40,speed:25,fog:15,volume:50,color:'#ffc369'},
     {movement:55,pyro:35,deco:'chase',intensity:75,speed:55,fog:40,volume:80,color:'#7f8cff'},
     {movement:100,pyro:100,deco:'sparkle',intensity:100,speed:85,fog:65,volume:100,color:'#ef66cd'}]}
@@ -141,6 +149,7 @@ export function stageDesignIssue(d:StageDesign):string|null {
   if(!d || typeof d.name!=='string'||d.name.length>60||typeof d.linked!=='boolean'||!Array.isArray(d.parts)) return 'Name mit höchstens 60 Zeichen wählen'
   if(![d.tileWidth??1,d.tileDepth??1].every(n=>Number.isInteger(n)&&n>=1&&n<=8))return 'Kartengrundfläche zwischen 1 und 8 Feldern wählen'
   if(!Number.isInteger(d.tileHeight??1)||(d.tileHeight??1)<1||(d.tileHeight??1)>STAGE_TILE_HEIGHT)return `Bühnenhöhe zwischen 1 und ${STAGE_TILE_HEIGHT} Kacheln wählen`
+  if(d.forecourtDepth!==undefined&&(!Number.isInteger(d.forecourtDepth)||d.forecourtDepth<MIN_STAGE_FORECOURT_DEPTH||d.forecourtDepth>MAX_STAGE_FORECOURT_DEPTH))return `Vorplatztiefe zwischen ${MIN_STAGE_FORECOURT_DEPTH} und ${MAX_STAGE_FORECOURT_DEPTH} Feldern wählen`
   const grid=stageDetailSize(d.tileWidth,d.tileDepth,d.tileHeight)
   if(d.width!==grid.width||d.depth!==grid.depth||d.height!==grid.height)return 'Bühnenraster muss zur Kartengrundfläche passen'
   const audience=d.audience??[],aw=d.tileWidth??1,ad=d.tileDepth??1
@@ -260,13 +269,13 @@ export function stageAudienceCells(b:{x:number;z:number;rotation:number;stageDes
 export function isStageAudienceCell(b:{x:number;z:number;rotation:number;stageDesign?:StageDesign},x:number,z:number){return stageAudienceCells(b).some(c=>c.x===x&&c.z===z)}
 /**
  * The audience area every stage comes with: it runs the full width of the stage's frontage and
- * twice that deep, laid directly in front of it — where a crowd actually stands. A stage design's
+ * uses the depth chosen in the workshop. A stage design's
  * own front is its +Z, so which way "in front" points on the map follows the rotation it was built
  * at, the same way stageAudienceCells maps its painted tiles.
  */
 export function stageApronCells(b:{x:number;z:number;rotation:number;stageDesign?:StageDesign}){
   const d=b.stageDesign;if(!d)return []
-  const w=d.tileWidth??1,h=d.tileDepth??1,reach=w*2,taken=stagePartTiles(d)
+  const w=d.tileWidth??1,h=d.tileDepth??1,reach=stageForecourtDepth(d),taken=stagePartTiles(d)
   const cells:Array<{x:number;z:number}>=[]
   for(let row=0;row<reach;row++)for(let col=0;col<w;col++){
     if(taken.has(`${col},${h+row}`))continue // a FOH stand or a delay tower built out here takes the field it stands on
@@ -347,8 +356,10 @@ export function migrateStageDesign(design:StageDesign):StageDesign {
   // regridding: undefined y would otherwise produce NaN vertices (or collisions).
   const missingHeight = !Number.isFinite(design.height)
   const missingPartHeight = design.parts.some(part => !Number.isFinite(part.y))
-  const normalized = missingHeight || missingPartHeight ? {
+  const missingForecourtDepth = !Number.isFinite(design.forecourtDepth)
+  const normalized = missingHeight || missingPartHeight || missingForecourtDepth ? {
     ...design,
+    ...(missingForecourtDepth ? { forecourtDepth: stageForecourtDepth(design) } : {}),
     ...(missingHeight ? {
       tileHeight: design.tileHeight ?? STAGE_TILE_HEIGHT,
       height: (design.tileHeight ?? STAGE_TILE_HEIGHT) * STAGE_TILE_DETAIL,
