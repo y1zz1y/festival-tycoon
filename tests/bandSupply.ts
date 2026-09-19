@@ -137,13 +137,18 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
     { x: 4, z: -20 },
     { x: 3, z: -20 },
     { x: 2, z: -20 },
+    // Each pad is now two fields long, so three of them stacked along z need the
+    // whole -20..-15 run, not just three fields.
     { x: 1, z: -20 },
     { x: 1, z: -19 },
     { x: 1, z: -18 },
+    { x: 1, z: -17 },
+    { x: 1, z: -16 },
+    { x: 1, z: -15 },
   ])
-  connectRoad(parking, 0, -18)
+  connectRoad(parking, 0, -15)
   assert.ok(parking.place('tourBusParking', 1, -20).ok)
-  assert.ok(parking.place('tourBusParking', 1, -19).ok)
+  assert.ok(parking.place('tourBusParking', 1, -18).ok)
   const twoOfThree = parking.getBandSupplyForStage(parkingStage.id)!
   assert.equal(twoOfThree.busDemand, 3)
   assert.equal(twoOfThree.usableSlots, 2)
@@ -152,7 +157,7 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
     '2 usable slots for 3 bus-bands do not reach the full parking bonus',
   )
   assert.equal(twoOfThree.parkingSufficient, false)
-  assert.ok(parking.place('tourBusParking', 1, -18).ok)
+  assert.ok(parking.place('tourBusParking', 1, -16).ok)
   const threeOfThree = parking.getBandSupplyForStage(parkingStage.id)!
   assert.equal(threeOfThree.usableSlots, 3)
   assert.equal(threeOfThree.parkingTerm, CONFIG.parkingFullAttractivenessBonus)
@@ -189,9 +194,11 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
     { x: 4, z: -20 },
     { x: 3, z: -20 },
     { x: 2, z: -20 },
+    // The pad is two fields long.
     { x: 1, z: -20 },
+    { x: 1, z: -19 },
   ])
-  connectRoad(clock, 0, -20)
+  connectRoad(clock, 0, -19)
   assert.ok(clock.place('tourBusParking', 1, -20).ok)
   clock.snapshot.minute = CONFIG.busArriveHour * 60 - 1
   clock.syncBandSupply()
@@ -293,6 +300,7 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
   )
   const painted = placement.designateBackstageArea([
     { x: 1, z: -20 },
+    { x: 1, z: -19 },
     { x: 5, z: -20 },
     { x: 6, z: -19 },
   ])
@@ -317,6 +325,7 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
   const orphanStage = orphan.snapshot.buildings.find((building) => building.kind === 'stage')!
   const disconnectedCells = [
     { x: 18, z: 8 },
+    { x: 18, z: 9 },
     { x: 19, z: 8 },
     { x: 20, z: 8 },
   ]
@@ -352,9 +361,11 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
     { x: 4, z: -20 },
     { x: 3, z: -20 },
     { x: 2, z: -20 },
+    // The pad is two fields long.
     { x: 1, z: -20 },
+    { x: 1, z: -19 },
   ])
-  connectRoad(junior, 0, -20)
+  connectRoad(junior, 0, -19)
   assert.ok(junior.place('tourBusParking', 1, -20).ok)
   bookOnStage(junior, juniorStage.id, [{ bandId: 'meadow', start: 840 }])
   junior.snapshot.minute = CONFIG.busArriveHour * 60

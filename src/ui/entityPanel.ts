@@ -14,6 +14,13 @@ import type { Supply } from '../game/festivalManagement'
 import { SUPPLIES } from '../game/festivalManagement'
 import { escapeHtml, formatMoney } from './format'
 
+/** A depot's stock for one good: a bar half the row wide by default, shrinking only when the
+ * label beside it needs the room, with the "current / minimum" count set right into the bar. */
+function depotStockBar(label: string, stock: number, minimum: number): string {
+  const percent = minimum > 0 ? Math.min(100, Math.round((stock / minimum) * 100)) : stock > 0 ? 100 : 0
+  return `<div class="entity-stat-bar"><span class="entity-stat-label">${escapeHtml(label)}</span><span class="stock-bar" title="${Math.floor(stock)} / ${minimum}"><span class="stock-bar-fill" style="width:${percent}%"></span><b>${Math.floor(stock)} / ${minimum}</b></span></div>`
+}
+
 export interface EntityDynamicsElements {
   dynamicsSafety: HTMLElement
   dynamicsStats: HTMLElement
@@ -273,7 +280,7 @@ export function updateEntityPanel(
       ? 'Lastwagen laden hier ab. Träger bringen Ware zu Depots und Ständen.'
       : depot.distribution === 'relay' ? 'Zwischenlager: andere Depots dürfen entnehmen.' : 'Versorgt Stände bis zum Mindestbestand.'
     const workers = services.depotWorkerCount(depot.id)
-    stats.innerHTML = `<span>Position <b>${depot.x}, ${depot.z}</b></span><span>Träger <b>${workers}</b></span>${Object.entries(SUPPLIES).map(([kind, item]) => `<span>${item.name} <b>${Math.floor(depot.stock[kind as Supply])} / ${depot.minimum[kind as Supply]}</b></span>`).join('')}`
+    stats.innerHTML = `<span>Position <b>${depot.x}, ${depot.z}</b></span><span>Träger <b>${workers}</b></span>${Object.entries(SUPPLIES).map(([kind, item]) => depotStockBar(item.name, depot.stock[kind as Supply], depot.minimum[kind as Supply])).join('')}`
     element('#depot-role-hint').textContent = delivery ? 'Mindestbestand löst Nachbestellungen aus. Träger holen Ware hier ab.' : 'Mindestbestand und Träger gelten für dieses Depot.'
     const workersInput = element<HTMLInputElement>('#depot-workers')
     if (document.activeElement !== workersInput) workersInput.value = String(workers)

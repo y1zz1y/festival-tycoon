@@ -5121,7 +5121,12 @@ window.addEventListener('keydown', (event) => {
     updateCoasterBuilder()
   } else if (event.key.toLowerCase() === 'r') {
     if (pathEditorActive) rotatePathDirection(1)
-    else {
+    else if (game.snapshot.selectedTool === 'wasteDepot' && hoveredCell) {
+      // Several roads can border the same field; R steps clockwise through only the ones
+      // that actually have one, rather than the plain four-way turn every other building gets.
+      game.cycleWasteDepotFacing(hoveredCell.x, hoveredCell.z)
+      updateCopyPreview(hoveredCell)
+    } else {
       game.rotateBuild()
       updateCopyPreview(hoveredCell)
     }

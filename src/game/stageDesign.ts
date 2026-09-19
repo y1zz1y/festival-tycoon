@@ -205,18 +205,29 @@ export function stageSize(d:StageDesign|undefined,rotation=0){
   const width=d?.tileWidth??1,depth=d?.tileDepth??1
   return rotation%2 ? {width:depth,depth:width} : {width,depth}
 }
-export function occupiesBuildingCell(b:{x:number;z:number;rotation:number;stageDesign?:StageDesign},x:number,z:number){
-  const size=stageSize(b.stageDesign,b.rotation)
+/** The rare building whose footprint isn't a single tile without going as far as a full stage design — a tour bus's own length, not a stage's. */
+const NON_STAGE_FOOTPRINTS: Partial<Record<string,{width:number;depth:number}>> = {
+  tourBusParking: {width:1,depth:2},
+}
+/** Every building's real footprint, stage or not: a stage design's own size, this handful of
+ * other multi-tile kinds, or the ordinary single tile — always turned to match its rotation. */
+export function buildingSize(b:{kind?:string;rotation:number;stageDesign?:StageDesign}){
+  if(b.stageDesign)return stageSize(b.stageDesign,b.rotation)
+  const base=NON_STAGE_FOOTPRINTS[b.kind??'']??{width:1,depth:1}
+  return b.rotation%2 ? {width:base.depth,depth:base.width} : base
+}
+export function occupiesBuildingCell(b:{kind?:string;x:number;z:number;rotation:number;stageDesign?:StageDesign},x:number,z:number){
+  const size=buildingSize(b)
   return x>=b.x&&x<b.x+size.width&&z>=b.z&&z<b.z+size.depth
 }
-export function buildingFootprint(b:{x:number;z:number;rotation:number;stageDesign?:StageDesign}){
-  const size=stageSize(b.stageDesign,b.rotation),cells:Array<{x:number;z:number}>=[]
+export function buildingFootprint(b:{kind?:string;x:number;z:number;rotation:number;stageDesign?:StageDesign}){
+  const size=buildingSize(b),cells:Array<{x:number;z:number}>=[]
   for(let z=b.z;z<b.z+size.depth;z++)for(let x=b.x;x<b.x+size.width;x++)cells.push({x,z})
   return cells
 }
 
-export function stageDistance(b:{x:number;z:number;rotation:number;stageDesign?:StageDesign},p:{x:number;z:number}){
-  const size=stageSize(b.stageDesign,b.rotation)
+export function stageDistance(b:{kind?:string;x:number;z:number;rotation:number;stageDesign?:StageDesign},p:{x:number;z:number}){
+  const size=buildingSize(b)
   return Math.hypot(Math.max(b.x-p.x,0,p.x-(b.x+size.width-1)),Math.max(b.z-p.z,0,p.z-(b.z+size.depth-1)))
 }
 

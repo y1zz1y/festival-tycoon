@@ -114,18 +114,34 @@ export function testThemedDecorationPlacement(fixture: (count?: number) => GameS
     const bins = fixture(0)
     assert.ok(bins.place('path', 10, 6).ok)
     assert.ok(bins.place('path', 10, 7).ok)
-    assert.ok(bins.place('bench', 10, 6).ok)
     bins.rotateBuild(); bins.rotateBuild(); bins.rotateBuild()
-    assert.ok(bins.place(kind, 10, 6).ok)
-    const bench = bins.snapshot.buildings.find(b => b.kind === 'bench')!
+    assert.ok(bins.place(kind, 10, 6).ok, 'a bin claims its requested free edge first')
     const bin = bins.snapshot.buildings.at(-1)!
     assert.notEqual(bin.rotation, 0, 'do not obstruct the continued path')
-    assert.notEqual(bin.rotation, bench.rotation, 'bench and bin use different edges')
     assert.equal(bin.rotation, 3, 'R lets the selected bin face its requested free edge')
+    assert.ok(bins.place('bench', 10, 6).ok)
+    const benches = bins.snapshot.buildings.filter(b => b.kind === 'bench')
+    assert.equal(benches.length, 2, 'a bench fills every remaining Weg-Kante on this tile')
+    for (const bench of benches) {
+      assert.notEqual(bench.rotation, 0, 'do not obstruct the continued path')
+      assert.notEqual(bench.rotation, bin.rotation, 'bench and bin use different edges')
+    }
+    assert.equal(bins.canPlace('bench', 10, 6).ok, false, 'no Weg-Kante is left once every edge has a bench')
     bin.wasteFill = 5
     const loaded = GameState.fromJSON(JSON.stringify(bins.snapshot))!
     assert.equal(loaded.snapshot.buildings.find(b => b.id === bin.id)!.wasteFill, 5)
     assert.equal((loaded as any).isPedestrianSolidAt(10, 6, 0), false)
+  }
+  {
+    // A path tile boxed in on all four sides by other path has no Weg-Kante at all.
+    const boxedIn = fixture(0)
+    assert.ok(boxedIn.place('path', 20, 20).ok)
+    assert.ok(boxedIn.place('path', 20, 21).ok)
+    assert.ok(boxedIn.place('path', 20, 19).ok)
+    assert.ok(boxedIn.place('path', 21, 20).ok)
+    assert.ok(boxedIn.place('path', 19, 20).ok)
+    assert.equal(boxedIn.canPlace('bench', 20, 20).ok, false, 'no free edge remains for a bench')
+    assert.equal(boxedIn.place('bench', 20, 20).ok, false)
   }
   const roadsideBench = fixture(0)
   assert.ok(roadsideBench.placeRoadSegment(14, 6, 0).ok)

@@ -60,7 +60,7 @@ export function pedestrianBarrierOccupancy(item: {
   }
   return 'solid'
 }
-export const LARGE_SCENERY_KINDS = [...ROOF_KINDS, 'desertPalm', 'palmTree', 'alpineFir', 'icePine', 'neonArch', 'miniBigTop', 'beerGardenTable', 'altarTable', 'mossLog', 'palletBench', 'iceBench', 'gearBench', 'iceSculpture', 'woodlandIdol', 'playaTotem', 'maypole', 'giantMushroom', 'crystalTotem', 'inflatableCactus', 'parasol', 'loungeChair', 'inflatable', 'popcornCart'] as const
+export const LARGE_SCENERY_KINDS = [...ROOF_KINDS, 'desertPalm', 'palmTree', 'alpineFir', 'icePine', 'neonArch', 'miniBigTop', 'beerGardenTable', 'altarTable', 'mossLog', 'palletBench', 'iceBench', 'gearBench', 'iceSculpture', 'woodlandIdol', 'playaTotem', 'maypole', 'giantMushroom', 'crystalTotem', 'inflatableCactus', 'parasol', 'loungeChair', 'inflatable', 'popcornCart', 'picnicTable'] as const
 export function isLargeScenery(kind: string): boolean { return (LARGE_SCENERY_KINDS as readonly string[]).includes(kind) }
 export type SceneryObject = { kind: BuildingKind; rotation: number; decorationSlot?: number }
 

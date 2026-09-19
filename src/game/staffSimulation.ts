@@ -49,6 +49,8 @@ type StaffContext = {
   /** Where a step can go from here; without grass unless it is asked for. */
   pathNeighbors: (cell: Cell, allowGrass?: boolean) => Cell[]
   hasPath?: (cell: Cell) => boolean
+  /** Whether a cell is part of the road network, so a patrol can leave it to the traffic. */
+  isRoadAt?: (x: number, z: number) => boolean
   rng: RngSource
   reserveBed: (
     visitorId: string,
@@ -767,6 +769,13 @@ export class StaffSimulation {
     let neighbors = context.pathNeighbors(here, false).filter(p => isInAnyZone(zones, p.x, p.z))
     const onPath = context.hasPath?.(here) ?? false
     if (onPath && context.hasPath) neighbors = neighbors.filter((cell) => context.hasPath!(cell))
+    else if (context.isRoadAt) {
+      // Off the footpath network — standing on camping ground, a forecourt, or the
+      // roadway itself — a patrol still leaves the road to the traffic where it can:
+      // only once every other paved neighbour is a dead end does it step onto one.
+      const offRoad = neighbors.filter((cell) => !context.isRoadAt!(cell.x, cell.z))
+      if (offRoad.length) neighbors = offRoad
+    }
     if (!neighbors.length && !onPath) {
       neighbors = context.pathNeighbors(here, true).filter(p => isInAnyZone(zones, p.x, p.z))
     }
