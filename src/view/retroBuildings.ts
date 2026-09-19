@@ -953,13 +953,15 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
       k.box(-.36 + i * .12, .535 + i % 2 * .025, 0, .15, .035, .3, 0x79a35c)
     }
   } else if (kind === 'bench') {
-    for (let i = 0; i < 4; i++) k.box(0, .28, .25 + i * .065, .69, .035, .048, i % 2 ? 0xb6814e : timber)
-    for (let i = 0; i < 3; i++) k.box(0, .37 + i * .066, .215, .69, .043, .035, 0xb6814e)
+    // Mirrored along z from the original build: the seat faces the path the bench
+    // stands on, backrest towards the outside edge it was placed against.
+    for (let i = 0; i < 4; i++) k.box(0, .28, .4175 - i * .065, .69, .035, .048, i % 2 ? 0xb6814e : timber)
+    for (let i = 0; i < 3; i++) k.box(0, .37 + i * .066, .4525, .69, .043, .035, 0xb6814e)
     for (const x of [-.26, .26]) {
-      k.box(x, .15, .33, .04, .28, .22, ink)
-      k.box(x, .4, .22, .04, .26, .045, ink)
-      k.box(x, .37, .335, .04, .035, .27, ink)
-      for (const y of [.37, .5]) k.box(x, y, .238, .018, .018, .01, steel)
+      k.box(x, .15, .3375, .04, .28, .22, ink)
+      k.box(x, .4, .4475, .04, .26, .045, ink)
+      k.box(x, .37, .3325, .04, .035, .27, ink)
+      for (const y of [.37, .5]) k.box(x, y, .4295, .018, .018, .01, steel)
     }
   } else if (kind === 'sealedWasteContainer') {
     // One merged dumpster: lid, body, rails. No mesh per bag.

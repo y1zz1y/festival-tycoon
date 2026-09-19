@@ -12,9 +12,92 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/app-icons/apple-touch-icon.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/app-icons/icon-192.png" />
     <title>Headliner Tycoon</title>
+    <style>
+      /* Inline and independent of style.css on purpose: this has to paint the instant the
+         raw HTML parses, before the module graph (main.ts and everything it imports,
+         including style.css) has even been fetched. */
+      #boot-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #17241f;
+        color: #edf7f1;
+        font-family: 'Tahoma', 'Verdana', system-ui, sans-serif;
+        opacity: 1;
+        transition: opacity .35s ease;
+      }
+      #boot-loader.boot-loader-hide {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .boot-ring {
+        position: relative;
+        width: 84px;
+        height: 84px;
+        display: grid;
+        place-items: center;
+      }
+      .boot-ring::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 5px solid #344d48;
+        border-top-color: #efcf86;
+        border-right-color: #efcf86;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      .boot-mark {
+        display: grid;
+        place-items: center;
+        width: 50px;
+        height: 50px;
+        border-radius: 10px;
+        color: white;
+        background: linear-gradient(135deg, #ffb736, #e66e32);
+        font-size: 26px;
+        font-weight: 800;
+        box-shadow: inset 0 1px rgba(255, 255, 255, 0.45);
+      }
+      .boot-title {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+      .boot-caption {
+        font-size: 12px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: #efcf86;
+      }
+      @keyframes boot-spin {
+        to { transform: rotate(360deg); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-ring::before { animation: none; }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot-loader" role="status" aria-live="polite">
+      <div class="boot-ring"><div class="boot-mark">H</div></div>
+      <div class="boot-title">Headliner Tycoon</div>
+      <div class="boot-caption">Wird geladen …</div>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
+    <script>
+      // Safety net: if boot ever fails to reach the point where main.ts removes this
+      // itself, don't leave the player staring at a spinner forever.
+      setTimeout(function () {
+        var loader = document.getElementById('boot-loader')
+        if (loader) loader.remove()
+      }, 20000)
+    </script>
   </body>
 </html>

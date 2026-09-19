@@ -126,6 +126,16 @@ function getParkingAsphaltMaterial(): MeshStandardMaterial {
 }
 const parkingMarkMaterial = new MeshStandardMaterial({ color: 0xf4f4ec, roughness: 0.85 })
 parkingMarkMaterial.userData.shared = true
+/** The "P" painted on every space, all the time — faint, so it reads as a parking lot at a
+ * glance without competing with the free/occupied overlay drawn on top of it. */
+const parkingLetterMaterial = new MeshStandardMaterial({
+  color: 0xf4f4ec,
+  transparent: true,
+  opacity: 0.3,
+  depthWrite: false,
+  roughness: 0.85,
+})
+parkingLetterMaterial.userData.shared = true
 const parkingFreeMaterial = new MeshStandardMaterial({
   color: 0x4c9b63,
   transparent: true,
@@ -163,11 +173,20 @@ function addSharedMark(
   parent: Group,
   size: readonly [number, number, number],
   position: readonly [number, number, number],
+  material: MeshStandardMaterial = parkingMarkMaterial,
 ): Mesh {
-  const mesh = new Mesh(new BoxGeometry(...size), parkingMarkMaterial)
+  const mesh = new Mesh(new BoxGeometry(...size), material)
   mesh.position.set(...position)
   parent.add(mesh)
   return mesh
+}
+/** The four strokes of a "P": a stem and a bowl closed on its right. Shared by the always-on
+ * paint and the free/occupied helper overlay, so both read as the same letter in the same spot. */
+function addParkingLetter(parent: Group, y: number, material: MeshStandardMaterial): void {
+  addSharedMark(parent, [0.07, 0.018, 0.5], [-0.17, y, 0], material)
+  addSharedMark(parent, [0.3, 0.018, 0.07], [-0.02, y, -0.215], material)
+  addSharedMark(parent, [0.3, 0.018, 0.07], [-0.02, y, 0], material)
+  addSharedMark(parent, [0.07, 0.018, 0.22], [0.13, y, -0.11], material)
 }
 
 export class LogisticsView {
@@ -438,6 +457,7 @@ export class LogisticsView {
     asphalt.rotation.x = -HALF_PI
     asphalt.receiveShadow = true
     group.add(asphalt)
+    addParkingLetter(group, 0.006, parkingLetterMaterial)
     const helpers = new Group()
     helpers.visible = this.showParkingHelpers
     const free = new Mesh(parkingHelperGeometry, parkingFreeMaterial)
@@ -449,10 +469,7 @@ export class LogisticsView {
     busy.position.y = 0.004
     busy.visible = occupied
     helpers.add(free, busy)
-    addSharedMark(helpers, [0.07, 0.018, 0.5], [-0.17, 0.018, 0])
-    addSharedMark(helpers, [0.3, 0.018, 0.07], [-0.02, 0.018, -0.215])
-    addSharedMark(helpers, [0.3, 0.018, 0.07], [-0.02, 0.018, 0])
-    addSharedMark(helpers, [0.07, 0.018, 0.22], [0.13, 0.018, -0.11])
+    addParkingLetter(helpers, 0.018, parkingMarkMaterial)
     group.add(helpers)
     this.parkingHelpers.set(`${space.x}:${space.z}`, { group: helpers, free, occupied: busy })
     return group

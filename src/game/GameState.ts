@@ -1,4 +1,4 @@
-import { isPathSeat, pathFurnitureRotation } from './pathFurniture';
+import { isPathSeat, pathFurnitureRotation, pathFurnitureEdges } from './pathFurniture';
 import { isWasteBin } from './decorationWalls';
 import { wallSpec } from './decorationWalls';
 import { isScenery, isLargeScenery, isEdgeScenery, sceneryOverlaps, sceneryTransform, pedestrianBarrierOccupancy } from './scenery';
@@ -3952,6 +3952,7 @@ export class GameState {
       return this.canPlaceLogisticsFootprint(this.createFootprint(x, z, 3), BUILDINGS.specialDepot.cost, 'path')
     }
     if (kind === 'busStop') return this.canPlaceBusStop(x, z)
+    if (kind === 'tourBusParking') return this.canPlaceTourBusParking(x, z)
     const selected = kind==='stage' ? this.state.festival.stageTemplates?.find(t=>t.name===this.state.festival.selectedStageTemplate) : undefined
     if(selected){const issue=this.checkStageSite(selected,x,z,this.state.buildRotation,this.getPlaceElevation(x,z));if(issue)return {ok:false,message:issue}}
 
@@ -3990,12 +3991,6 @@ export class GameState {
     }
     if (isBandSupplyKind(kind) && !this.getBackstageCellAt(x, z)) {
       return { ok: false, message: 'Bandversorgung nur auf ausgewiesenem Backstage' }
-    }
-    if (
-      kind === 'tourBusParking' &&
-      this.getAdjacentRoadPositions({ x, z }).length === 0
-    ) {
-      return { ok: false, message: 'Der Tourbus-Parkplatz braucht eine angrenzende Straße' }
     }
     const placeElevation = this.getPlaceElevation(x, z)
     if (this.isWaterTerrain(x, z) && placeElevation <= this.getWaterLevel()) {
@@ -4115,6 +4110,7 @@ export class GameState {
       nextId: (prefix) => this.nextId(prefix),
       findFurnitureRotation: (cellX, cellZ, preferred) =>
         this.findBenchRotation(cellX, cellZ, preferred),
+      findFurnitureEdges: (cellX, cellZ) => this.findBenchEdges(cellX, cellZ),
       facingRoadDirection: (cellX, cellZ, size, preferred) =>
         this.facingRoadDirection(cellX, cellZ, size, preferred as Direction),
       nextBandName: () => BAND_NAMES[this.idCounter % BAND_NAMES.length]!,
@@ -4465,6 +4461,42 @@ export class GameState {
     return { ok: true, message: 'Bushaltestelle bauen' }
   }
 
+  /** A tour bus needs its own length, not just a single field: two cells long, and a road along
+   * one of the two rather than only under the field that was clicked. */
+  private canPlaceTourBusParking(x: number, z: number): ActionResult {
+    const footprint = buildingFootprint({ kind: 'tourBusParking', x, z, rotation: this.state.buildRotation })
+    for (const cell of footprint) {
+      if (!this.isInWorld(cell.x, cell.z)) return { ok: false, message: 'Außerhalb des Geländes' }
+      if (!this.getBackstageCellAt(cell.x, cell.z)) {
+        return { ok: false, message: 'Bandversorgung nur auf ausgewiesenem Backstage' }
+      }
+      const placeElevation = this.getPlaceElevation(cell.x, cell.z)
+      if (this.isWaterTerrain(cell.x, cell.z) && placeElevation <= this.getWaterLevel()) {
+        return { ok: false, message: 'Im Wasser kann nicht gebaut werden' }
+      }
+      if (this.getRoadCellAt(cell.x, cell.z) || this.isLogisticsBuildingCell(cell.x, cell.z)) {
+        return { ok: false, message: 'Diese Fläche wird für die Logistik genutzt' }
+      }
+      if (this.hasLiveParkingOccupancy(cell.x, cell.z)) {
+        return { ok: false, message: 'Diese Fläche wird für die Logistik genutzt' }
+      }
+      if (this.getCampingCellAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche ist als Zeltbereich ausgewiesen' }
+      if (this.getMedicalCellAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche gehört zum Krankenbereich' }
+      if (this.getStageForecourtCellAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche gehört zum Bühnenvorplatz' }
+      if (this.getWasteDumpAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche ist als Müllablage ausgewiesen' }
+      const collision = this.findCollision('tourBusParking', cell.x, cell.z, placeElevation)
+      if (collision && collision.kind !== 'tree') return { ok: false, message: 'Die gesamte Fläche muss frei sein' }
+    }
+    const hasRoad = footprint.some((cell) => this.getAdjacentRoadPositions(cell).length > 0)
+    if (!hasRoad) {
+      return { ok: false, message: 'Der Tourbus-Parkplatz braucht eine angrenzende Straße' }
+    }
+    if (this.state.money < BUILDINGS.tourBusParking.cost) {
+      return { ok: false, message: 'Nicht genug Geld' }
+    }
+    return { ok: true, message: 'Tourbus-Parkplatz bauen' }
+  }
+
   private createFootprint(
     x: number,
     z: number,
@@ -4558,7 +4590,10 @@ export class GameState {
             this.getPathAt(x, z)
           return Boolean(path && path.pathType === 'normal')
         }
-        return Boolean(this.getRoadCellAt(x, z))
+        // Match the footprint cell's own ground level, not just any road stacked
+        // above or below it — otherwise a terrace edge counts as "next to the
+        // road" even though the two sit at completely different heights.
+        return Boolean(this.getRoadCellAt(x, z, this.getTerrainHeight(cell.x, cell.z)))
       }),
     )
     return adjacentAccess
@@ -5480,7 +5515,11 @@ export class GameState {
    * one), then falls back to whichever side has a road, in a fixed order. Returns null only
    * when no side has one, which placement itself never allows to begin with.
    */
-  private facingRoadDirection(x: number, z: number, size: number, preferred?: Direction): Direction | null {
+  /**
+   * Every side of a square footprint that touches a road, in clockwise order (south, west,
+   * north, east) — the order cycling through them with a key press should step in.
+   */
+  private roadFacingCandidates(x: number, z: number, size: number): Direction[] {
     const edge = (direction: Direction): RoadPosition[] => {
       switch (direction) {
         case 0: return Array.from({ length: size }, (_, i) => ({ x: x + i, z: z + size }))
@@ -5489,10 +5528,31 @@ export class GameState {
         case 3: return Array.from({ length: size }, (_, i) => ({ x: x - 1, z: z + i }))
       }
     }
-    const hasRoad = (direction: Direction) => edge(direction).some((cell) => Boolean(this.getRoadCellAt(cell.x, cell.z)))
-    if (preferred !== undefined && hasRoad(preferred)) return preferred
-    const directions: Direction[] = [0, 1, 2, 3]
-    return directions.find(hasRoad) ?? null
+    // Same ground level as the footprint itself — a road stacked above or below on
+    // the same column doesn't make that side a real, walkable connection.
+    const elevation = this.getTerrainHeight(x, z)
+    const hasRoad = (direction: Direction) => edge(direction).some((cell) => Boolean(this.getRoadCellAt(cell.x, cell.z, elevation)))
+    const clockwise: Direction[] = [0, 3, 2, 1]
+    return clockwise.filter(hasRoad)
+  }
+
+  private facingRoadDirection(x: number, z: number, size: number, preferred?: Direction): Direction | null {
+    const candidates = this.roadFacingCandidates(x, z, size)
+    if (preferred !== undefined && candidates.includes(preferred)) return preferred
+    return candidates[0] ?? null
+  }
+
+  /**
+   * Turns a waste depot's ghost to the next road it could face, clockwise, for a field with
+   * more than one candidate side. Does nothing when the field has only one side with a road
+   * (or none at all), so pressing R there simply leaves the facing as it is.
+   */
+  cycleWasteDepotFacing(x: number, z: number): void {
+    const candidates = this.roadFacingCandidates(x, z, 2)
+    if (candidates.length < 2) return
+    const at = candidates.indexOf(this.state.buildRotation as Direction)
+    this.state.buildRotation = candidates[(at + 1) % candidates.length] ?? candidates[0]!
+    this.emit('local')
   }
 
   private getAdjacentRoadPositions(position: RoadPosition): RoadPosition[] {
@@ -6112,6 +6172,7 @@ export class GameState {
             allowGrass,
           }),
         hasPath: (cell) => Boolean(this.getPathAt(cell.x, cell.z, cell.elevation)),
+        isRoadAt: (x, z) => Boolean(this.getRoadCellAt(x, z)),
         rng: this.rng,
         reserveBed: (visitorId, preferredCell) =>
           this.medical.reserveBed(
@@ -7683,6 +7744,10 @@ export class GameState {
 
   private findBenchRotation(x: number, z: number, preferredRotation?: number): number | null {
     return pathFurnitureRotation(this.state, x, z, this.getPlaceElevation(x, z), preferredRotation)
+  }
+
+  private findBenchEdges(x: number, z: number): number[] {
+    return pathFurnitureEdges(this.state, x, z, this.getPlaceElevation(x, z))
   }
 
   private isAtEntrance(visitor: Visitor): boolean {

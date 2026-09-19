@@ -6,6 +6,7 @@ import { deleteServerSave, listServerSaves, loadServerSave, saveServerSave, shar
 import { AUTOSAVE_DEFAULT_MINUTES, AUTOSAVE_INTERVALS, AUTOSAVE_KEY, AUTOSAVE_NAME } from '../app/shell'
 import { EMPTY_SAVE_ARCHIVE, composeSaveArchive, findSaveSlot as findArchiveSlot, offlineSaveArchive, saveArchiveHtml, saveAsArchiveHtml, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
 import { formatSaveTime } from './format'
+import { loadWithOverlay } from './loadingOverlay'
 
 export interface SaveControllerContext {
   getGame(): GameState
@@ -75,10 +76,12 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
   const findSaveSlot = (id: string): SaveSlotView | undefined =>
     findArchiveSlot(saveArchive, id)
   function bindLoadedGame(loaded: GameState, message: string): void {
-    if (isPathWindowOpen()) closePathEditor()
-    bindGameState(loaded)
-    fillScenarioForm(loaded.snapshot.scenario)
-    showToast(message)
+    loadWithOverlay('Spielstand wird geladen …', () => {
+      if (isPathWindowOpen()) closePathEditor()
+      bindGameState(loaded)
+      fillScenarioForm(loaded.snapshot.scenario)
+      showToast(message)
+    })
   }
   async function persistQuicksave(): Promise<void> {
     try {
@@ -376,11 +379,8 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     try {
       const loaded = GameState.fromJSON(decodeSaveText(saveTextArea.value))
       if (!loaded) throw new Error('invalid save')
-      if (isPathWindowOpen()) closePathEditor()
-      bindGameState(loaded)
-      fillScenarioForm(loaded.snapshot.scenario)
       saveTextDialog.close()
-      showToast('Spielstand aus Base64 geladen')
+      bindLoadedGame(loaded, 'Spielstand aus Base64 geladen')
     } catch {
       saveTextError.textContent = 'Ungültiger oder unvollständiger Base64-Spielstand.'
     }

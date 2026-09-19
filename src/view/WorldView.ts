@@ -27,7 +27,7 @@ import { createAttractionAccess } from './attractionAccess'
 import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
 import { createStageModel, animateStageModel, updateStageLightPool } from './stageModel'
-import { stageApronCells, stagePhase, stageSize, occupiesBuildingCell, fohDeskRole, MAX_STAGE_FORECOURT_DEPTH, STAGE_TILE_DETAIL } from '../game/stageDesign'
+import { stageApronCells, stagePhase, stageSize, buildingSize, occupiesBuildingCell, fohDeskRole, MAX_STAGE_FORECOURT_DEPTH, STAGE_TILE_DETAIL } from '../game/stageDesign'
 import { activeBookings, showIssue } from '../game/festivalManagement'
 import { createEarthTexture, createTerrainBase, createTerrainMaterial, createTerrainSurface } from './terrainSurface'
 import { TerrainShape, terrainPads } from './terrainShape'
@@ -2190,7 +2190,7 @@ export class WorldView {
         item.kind === 'path' && this.pathSharesRoadGrade(item),
       )
       if (item.stageDesign) { model.scale.set((stageSize(item.stageDesign).width-.04)/item.stageDesign.width, item.stageDesign.tileWidth ? 1/STAGE_TILE_DETAIL : .96/Math.max(item.stageDesign.width,item.stageDesign.depth), (stageSize(item.stageDesign).depth-.04)/item.stageDesign.depth); model.userData.stageDesign = item.stageDesign }
-      model.position.set(item.x + stageSize(item.stageDesign,item.rotation).width/2, item.elevation, item.z + stageSize(item.stageDesign,item.rotation).depth/2)
+      model.position.set(item.x + buildingSize(item).width/2, item.elevation, item.z + buildingSize(item).depth/2)
       const modelDirection =
         item.kind === 'path'
           ? item.pathSlope
@@ -4305,11 +4305,12 @@ export class WorldView {
       }
       const valid = this.placementResult.ok
       const ground = getTerrainHeight(this.currentSnapshot.terrain, cell.x, cell.z)
+      const footprint = this.placementResult.footprint ?? { width: 1, depth: 1 }
       this.sceneryPreview.visible = true
       this.sceneryPreview.position.set(
-        cell.x + 0.5,
+        cell.x + footprint.width / 2,
         ground + this.currentSnapshot.buildElevation,
-        cell.z + 0.5,
+        cell.z + footprint.depth / 2,
       )
       this.sceneryPreview.rotation.y = this.currentSnapshot.buildRotation * Math.PI / 2
       this.sceneryPreview.scale.setScalar(1)

@@ -600,8 +600,6 @@ button {
   --ts-200: #cbdcd4;
   --ts-100: #edf7f1;
   --ts-gold: #efcf86;
-  /* The proof-reader's red, the one colour on this screen that is not of the palette. */
-  --ts-red: #e2483a;
   position: absolute;
   inset: 0;
   z-index: 60;
@@ -687,29 +685,7 @@ button {
   letter-spacing: 0.34em;
   text-transform: uppercase;
   color: var(--ts-gold);
-  /* The line stays on one line: the correction is painted over a fixed spot in it,
-     and a wrap would drop the next line straight through the brushed word. */
   white-space: nowrap;
-  /* Room under the line for the word brushed in below the crossed-out one. */
-  padding-bottom: 2.3em;
-}
-
-/* The corrected word keeps its place in the line - the paint lies over and under
-   it, and is sized in em so it follows the text at every screen width. */
-.kicker-swap {
-  position: relative;
-  display: inline-block;
-}
-
-.kicker-brush {
-  position: absolute;
-  left: 50%;
-  top: -0.5em;
-  width: 7em;
-  height: 3.8em;
-  transform: translateX(-50%) rotate(-1.4deg);
-  overflow: visible;
-  pointer-events: none;
 }
 
 .title-name {
@@ -4386,6 +4362,47 @@ body.title-open #app-install-hint {
   color: #edf7f1;
 }
 
+/* A depot's stock, in the same stat list but as a bar rather than a bare number: half the
+   row's width by default, giving way only when its own label needs more room. */
+.entity-stat-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9eb6ac;
+  font-size: 11px;
+}
+
+.entity-stat-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.stock-bar {
+  position: relative;
+  flex: 0 1 50%;
+  min-width: 54px;
+  height: 15px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.stock-bar-fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: #3f715b;
+}
+
+.stock-bar b {
+  position: relative;
+  z-index: 1;
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  line-height: 13px;
+  color: #edf7f1;
+}
+
 .coaster-options {
   display: none;
   margin-top: 13px;
@@ -5045,4 +5062,52 @@ input[type='range']:focus-visible {
 input[type='range']:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* Transient overlay shown while a save is being loaded (loadingOverlay.ts). Same
+   palette as the boot loader in index.html, but dismissible and reusable in-session. */
+.load-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(23, 36, 31, 0.82);
+  backdrop-filter: blur(4px);
+  color: #edf7f1;
+  opacity: 1;
+  transition: opacity .25s ease;
+}
+
+.load-overlay.load-overlay-hide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.load-overlay-ring {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 5px solid #344d48;
+  border-top-color: #efcf86;
+  border-right-color: #efcf86;
+  animation: load-overlay-spin 0.9s linear infinite;
+}
+
+.load-overlay-caption {
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #efcf86;
+}
+
+@keyframes load-overlay-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .load-overlay-ring { animation: none; }
 }

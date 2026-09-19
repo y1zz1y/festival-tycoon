@@ -6,7 +6,7 @@ import { defaultShirtSettings, isQueuedFacilityKind } from '../shopGoods'
 import { isSealedWasteContainer } from '../waste'
 import { isWasteBin } from '../decorationWalls'
 import { DEFAULT_SECURITY_CONFIG } from '../security'
-import { stageSize, stageStats, type StageDesign } from '../stageDesign'
+import { stageSize, stageStats, buildingFootprint, type StageDesign } from '../stageDesign'
 import type {
   GhostRenderMode,
   PlacementPreviewRequest,
@@ -119,6 +119,8 @@ export type PlaceBuildingContext = {
   clearTrees: (x: number, z: number, elevation: number, height: number) => void
   nextId: (prefix: string) => string
   findFurnitureRotation: (x: number, z: number, preferred?: number) => number | null
+  /** Every free outside edge on this tile, for furniture placed at each one (benches). */
+  findFurnitureEdges: (x: number, z: number) => number[]
   /** Which side of a square footprint touches a road, for furniture whose model turns to face it. */
   facingRoadDirection: (x: number, z: number, size: number, preferred: number) => number | null
   nextBandName: () => string
@@ -148,10 +150,18 @@ export function placeBuildingCommand(
   if (special) return special
   const result = context.canPlace(kind, x, z, decorationSlot, preserveLegacySlot)
   if (!result.ok) return result
-  context.clearDesignatedOccupancy(x, z)
+  for (const cell of buildingFootprint({ kind, x, z, rotation: context.state.buildRotation })) {
+    context.clearDesignatedOccupancy(cell.x, cell.z)
+  }
 
   const elevation = context.getPlaceElevation(x, z)
-  if (!isScenery(kind)) context.clearTrees(x, z, elevation, BUILDINGS[kind].height)
+  if (!isScenery(kind)) {
+    // Most buildings are one cell; the handful that are not (a tour bus's own length,
+    // say) still need every cell of their footprint cleared, not just the one clicked.
+    for (const cell of buildingFootprint({ kind, x, z, rotation: context.state.buildRotation })) {
+      context.clearTrees(cell.x, cell.z, elevation, BUILDINGS[kind].height)
+    }
+  }
   const design: StageDesign | undefined =
     kind === 'stage'
       ? context.state.festival.stageTemplates?.find(
@@ -163,42 +173,53 @@ export function placeBuildingCommand(
     'construction',
     -(BUILDINGS[kind].cost + (design ? stageStats(design).cost : 0)),
   )
-  const rotation =
-    kind === 'bench' || kind === 'table'
-      ? (context.findFurnitureRotation(x, z) ?? context.state.buildRotation)
-      : isWasteBin(kind)
-        ? (context.findFurnitureRotation(x, z, context.state.buildRotation) ??
-          context.state.buildRotation)
-        // A sealed container turns the opposite way from a bench or a bin: towards the
-        // road it is emptied from, not away from it into open walking space.
-        : isSealedWasteContainer(kind)
-          ? (context.facingRoadDirection(x, z, 1, context.state.buildRotation) ??
-            context.state.buildRotation)
-          : context.state.buildRotation
-  context.state.buildings.push({
-    stageDesign: design ? structuredClone(design) : undefined,
-    decorationSlot,
-    id: context.nextId('building'),
-    kind,
-    x,
-    z,
-    rotation,
-    elevation,
-    pathType: kind === 'path' ? 'normal' : undefined,
-    pathSlope: kind === 'path' ? 0 : undefined,
-    pathSlopeDirection: kind === 'path' ? context.state.buildRotation : undefined,
-    price: BUILDINGS[kind].defaultPrice,
-    securityConfig:
-      kind === 'securityGate' ? structuredClone(DEFAULT_SECURITY_CONFIG) : undefined,
-    bandName: kind === 'stage' ? context.nextBandName() : undefined,
-    wasteFill: isWasteBin(kind) || isSealedWasteContainer(kind) ? 0 : undefined,
-    ...(kind === 'shirt'
-      ? {
-          shirtColor: defaultShirtSettings().color,
-          shirtStyle: defaultShirtSettings().style,
-        }
-      : {}),
-  })
+  // A bench stands at every free Weg-Kante on this tile, not just the first one found,
+  // so a path corner or dead end gets fully furnished from a single click.
+  const rotations: number[] =
+    kind === 'bench'
+      ? (() => {
+          const edges = context.findFurnitureEdges(x, z)
+          return edges.length ? edges : [context.state.buildRotation]
+        })()
+      : [
+          kind === 'table'
+            ? (context.findFurnitureRotation(x, z) ?? context.state.buildRotation)
+            : isWasteBin(kind)
+              ? (context.findFurnitureRotation(x, z, context.state.buildRotation) ??
+                context.state.buildRotation)
+              // A sealed container turns the opposite way from a bench or a bin: towards the
+              // road it is emptied from, not away from it into open walking space.
+              : isSealedWasteContainer(kind)
+                ? (context.facingRoadDirection(x, z, 1, context.state.buildRotation) ??
+                  context.state.buildRotation)
+                : context.state.buildRotation,
+        ]
+  for (const rotation of rotations) {
+    context.state.buildings.push({
+      stageDesign: design ? structuredClone(design) : undefined,
+      decorationSlot,
+      id: context.nextId('building'),
+      kind,
+      x,
+      z,
+      rotation,
+      elevation,
+      pathType: kind === 'path' ? 'normal' : undefined,
+      pathSlope: kind === 'path' ? 0 : undefined,
+      pathSlopeDirection: kind === 'path' ? context.state.buildRotation : undefined,
+      price: BUILDINGS[kind].defaultPrice,
+      securityConfig:
+        kind === 'securityGate' ? structuredClone(DEFAULT_SECURITY_CONFIG) : undefined,
+      bandName: kind === 'stage' ? context.nextBandName() : undefined,
+      wasteFill: isWasteBin(kind) || isSealedWasteContainer(kind) ? 0 : undefined,
+      ...(kind === 'shirt'
+        ? {
+            shirtColor: defaultShirtSettings().color,
+            shirtStyle: defaultShirtSettings().style,
+          }
+        : {}),
+    })
+  }
   if (kind === 'delayTower') {
     context.state.stageForecourtCells = context.state.stageForecourtCells.filter(
       (cell) => cell.x !== x || cell.z !== z,
@@ -218,6 +239,9 @@ function placementFootprint(
 ): { width: number; depth: number } {
   if (kind === 'ambulanceGarage' || kind === 'wasteDepot') return { width: 2, depth: 2 }
   if (kind === 'busDepot' || kind === 'specialDepot') return { width: 3, depth: 3 }
+  if (kind === 'tourBusParking') {
+    return state.buildRotation % 2 ? { width: 2, depth: 1 } : { width: 1, depth: 2 }
+  }
   if (kind === 'stage') {
     const design = state.festival.stageTemplates?.find(
       (template) => template.name === state.festival.selectedStageTemplate,

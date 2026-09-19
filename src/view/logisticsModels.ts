@@ -183,34 +183,40 @@ function buildWasteDepot(): ReturnType<ModelKit['finish']> {
   return k.finish()
 }
 
+/** A small maintenance yard for the sweepers, built the same way the bus depot reads well:
+ * an enclosed hall with a side office, not a scatter of lane paint across open ground. */
 function buildSpecialDepot(): ReturnType<ModelKit['finish']> {
   const k = new ModelKit()
-  buildPad(k, 3, 0x3a4044)
-  k.box(0, 0.07, 0, 2.8, 0.03, 2.8, 0x4d555b)
-  // Lane markings
-  for (const offset of [-0.9, -0.3, 0.3, 0.9]) {
-    k.box(offset, 0.09, 0.35, 0.42, 0.02, 1.6, 0xd7b45b)
-    k.box(offset - 0.18, 0.1, 0.35, 0.04, 0.03, 1.6, 0xf0d27a)
-    k.box(offset + 0.18, 0.1, 0.35, 0.04, 0.03, 1.6, 0xf0d27a)
+  const size = 3
+  buildPad(k, size)
+  k.box(0, 0.08, 0, size - 0.22, 0.04, size - 0.22, 0x4a5055)
+  // Workshop hall, open to +z
+  k.box(0, 0.6, -0.35, 2.15, 1.05, 1.7, 0x6a7a86)
+  k.box(0, 1.2, -0.3, 2.3, 0.12, 1.9, 0x2c343a)
+  k.box(0, 1.28, -0.3, 2.0, 0.06, 1.6, 0x3a454c)
+  for (const x of [-0.95, 0.95]) {
+    k.box(x, 0.62, 0.5, 0.1, 1.1, 0.1, ink)
   }
-  // Office / workshop
-  k.box(0, 0.48, -1.05, 1.1, 0.8, 0.85, 0x5a6a72)
-  k.box(0, 0.95, -1.05, 1.22, 0.12, 0.95, 0x2c3236)
-  k.box(0, 0.55, -0.6, 0.55, 0.35, 0.05, glass)
-  k.box(0.35, 0.35, -0.6, 0.22, 0.4, 0.05, ink)
-  // Tool racks
-  for (const x of [-1.15, 1.15]) {
-    k.box(x, 0.45, -0.9, 0.35, 0.75, 0.12, steel)
-    for (let i = 0; i < 4; i++) {
-      k.box(x, 0.25 + i * 0.16, -0.82, 0.28, 0.03, 0.04, cream)
+  k.box(0, 1.15, 0.5, 1.98, 0.08, 0.1, ink)
+  // Bay stripes on the open front
+  for (const x of [-0.55, 0, 0.55]) {
+    k.box(x, 0.58, 0.53, 0.06, 0.9, 0.05, 0xe0a832)
+  }
+  // Side office
+  k.box(-1.05, 0.42, -1.05, 0.65, 0.68, 0.65, 0x546575)
+  k.box(-1.05, 0.78, -1.05, 0.73, 0.08, 0.73, cream)
+  k.box(-1.05, 0.5, -0.72, 0.32, 0.24, 0.04, glass)
+  k.box(-1.05, 0.28, -0.72, 0.2, 0.3, 0.04, ink)
+  // Two clean lane lines out front instead of a dense grid
+  k.box(0, 0.09, 1.0, 1.9, 0.02, 0.06, 0xd7b45b)
+  k.box(0, 0.09, 1.32, 1.9, 0.02, 0.06, 0xd7b45b)
+  // Tool racks against the hall
+  for (const x of [0.75, 1.2]) {
+    k.box(x, 0.5, -1.15, 0.28, 0.7, 0.12, steel)
+    for (let i = 0; i < 3; i++) {
+      k.box(x, 0.32 + i * 0.2, -1.06, 0.22, 0.03, 0.04, cream)
     }
   }
-  // Small canopy posts at entrance
-  for (const x of [-1.2, 1.2]) {
-    k.box(x, 0.55, 1.2, 0.08, 1.0, 0.08, ink)
-  }
-  k.box(0, 1.1, 1.2, 2.5, 0.08, 0.35, 0x3a454c)
-  k.box(0, 1.05, 1.35, 2.4, 0.05, 0.08, 0xe0a832)
   return k.finish()
 }
 
@@ -502,15 +508,22 @@ function buildSweeper(): ReturnType<ModelKit['finish']> {
   return k.finish()
 }
 
+/** Two tiles long (z: -1 to 1), one wide — a coach's own length, not a car's. */
 function buildTourBusParking(): ReturnType<ModelKit['finish']> {
   const k = new ModelKit()
-  k.box(0, 0.03, 0, 0.94, 0.06, 0.94, 0x3c4247)
-  k.box(0, 0.045, 0, 0.82, 0.02, 0.82, 0x4a5258)
-  k.box(0, 0.05, 0, 0.08, 0.02, 0.7, 0xe0a832)
-  k.box(-0.28, 0.05, 0.28, 0.18, 0.02, 0.04, 0xe8e6e0)
-  k.box(0.28, 0.05, -0.28, 0.18, 0.02, 0.04, 0xe8e6e0)
-  k.box(-0.32, 0.22, -0.32, 0.08, 0.36, 0.08, 0x2a3036)
-  k.box(-0.32, 0.42, -0.32, 0.2, 0.08, 0.04, 0xd4a017)
+  const white = 0xe8e6e0
+  // Asphalt bay, the full two-tile length.
+  k.box(0, 0.03, 0, 0.94, 0.06, 1.94, asphalt)
+  // Painted outline the length and width of a coach, so the bay reads at a glance.
+  k.box(-0.4, 0.065, 0, 0.05, 0.02, 1.7, white)
+  k.box(0.4, 0.065, 0, 0.05, 0.02, 1.7, white)
+  k.box(0, 0.065, -0.85, 0.85, 0.02, 0.05, white)
+  k.box(0, 0.065, 0.85, 0.85, 0.02, 0.05, white)
+  // A small sign at the near end: post, blue placard, white coach glyph.
+  k.box(-0.62, 0.32, -0.78, 0.06, 0.6, 0.06, ink)
+  k.box(-0.62, 0.64, -0.78, 0.34, 0.24, 0.03, 0x2f6fdb)
+  k.box(-0.62, 0.64, -0.765, 0.22, 0.1, 0.02, white)
+  k.box(-0.62, 0.575, -0.765, 0.26, 0.03, 0.02, white)
   return k.finish()
 }
 

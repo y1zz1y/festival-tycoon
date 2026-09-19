@@ -257,9 +257,6 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           buildingMenuItem('stage'),
           buildingMenuItem('directionalSpeaker'),
           buildingMenuItem('omniSpeaker'),
-          toolItem('powerCable', 'Stromkabel', '🔌', '18 € je Feld'),
-          buildingMenuItem('generator'),
-          buildingMenuItem('backupGenerator'),
           buildingMenuItem('foh'),
           buildingMenuItem('delayTower'),
           buildingMenuItem('videoWall'),
@@ -343,7 +340,7 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           toolItem('wasteDump', 'Müllablage', '🗑️', 'sehr unattraktiv'),
           buildingMenuItem(
             'sealedWasteContainer',
-            `${Math.floor(BUILDINGS.sealedWasteContainer.cost).toLocaleString('de-DE')} € · 80 Beutel, versiegelt · braucht Straßenanschluss`,
+            `${Math.floor(BUILDINGS.sealedWasteContainer.cost).toLocaleString('de-DE')} € · 80 Beutel · braucht Straßenanschluss`,
           ),
           buildingMenuItem(
             'wasteDepot',
@@ -359,6 +356,15 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           buildingMenuItem('ambulanceGarage'),
           buildingMenuItem('fireStation'),
           toolItem('medicalArea', 'Krankenbereich', '🏥', '3 Liegen je Feld'),
+        ],
+      },
+      {
+        id: 'power',
+        label: 'Strom',
+        items: [
+          toolItem('powerCable', 'Stromkabel', '🔌', '18 € je Feld'),
+          buildingMenuItem('generator'),
+          buildingMenuItem('backupGenerator'),
         ],
       },
     ],

@@ -5138,7 +5138,12 @@ window.addEventListener('keydown', (event) => {
     updateCoasterBuilder()
   } else if (event.key.toLowerCase() === 'r') {
     if (pathEditorActive) rotatePathDirection(1)
-    else {
+    else if (game.snapshot.selectedTool === 'wasteDepot' && hoveredCell) {
+      // Several roads can border the same field; R steps clockwise through only the ones
+      // that actually have one, rather than the plain four-way turn every other building gets.
+      game.cycleWasteDepotFacing(hoveredCell.x, hoveredCell.z)
+      updateCopyPreview(hoveredCell)
+    } else {
       game.rotateBuild()
       updateCopyPreview(hoveredCell)
     }
@@ -5259,6 +5264,16 @@ startGameLoop({
 // The game opens on its title screen. Last thing in the module, so everything it can
 // reach — the scenario form, the save management — has been built by the time it shows.
 titleScreenController.setOpen(true)
+
+// index.html's boot loader has done its job now that the title screen is up. Wait for
+// this frame to actually paint (a bare requestAnimationFrame fires before that paint,
+// so this chains two) before fading it out, then drop it from the DOM.
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  const bootLoader = document.getElementById('boot-loader')
+  if (!bootLoader) return
+  bootLoader.addEventListener('transitionend', () => bootLoader.remove(), { once: true })
+  bootLoader.classList.add('boot-loader-hide')
+}))
 
 // Who the session cookie belongs to. Asked once, after everything is wired, and the
 // account bar redraws itself when the answer arrives.

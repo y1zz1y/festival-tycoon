@@ -291,7 +291,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   titleScreen.addEventListener('pointermove', (event) => {
     if (event.clientX === titlePointer.x && event.clientY === titlePointer.y) return
     titlePointer = { x: event.clientX, y: event.clientY }
-    const entry = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-title-menu], [data-title-scenario]')
+    const entry = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-title-menu], [data-title-scenario], [data-title-load-slot]')
     const index = entry ? titleEntries().indexOf(entry) : -1
     if (index >= 0) markTitleSelection(index)
   })
