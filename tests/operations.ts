@@ -2313,6 +2313,33 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
     'tearing up the path takes the rubbish with it',
   )
 
+  // A cleaner fills the cart before walking anywhere: small piles are collected one
+  // after the other, and the load only leaves once it is full.
+  const cartHaulGame=fixture(0)
+  cartHaulGame.addDebugMoney()
+  const cartHaul=cartHaulGame.snapshot as GameSnapshot
+  assert.ok(cartHaulGame.hireStaff('cleaner').ok)
+  const hauler=cartHaul.staff.find(member=>member.role==='cleaner')!
+  assert.ok(cartHaulGame.designateWasteDump([{x:5,z:-14}]).ok)
+  for (let n=0;n<6;n+=1) {
+    cartHaul.incidents.push({id:`haul-litter-${n}`,kind:'litter',x:2+(n%3),z:-20+n,elevation:0,severity:2,ageMinutes:0})
+  }
+  let sawPartialHaul=false
+  for (let n=0;n<2400;n+=1) {
+    cartHaulGame.tick(0.25)
+    // 'carrying' is the walk to a bin or the dump; before the cart is full it must not happen.
+    if (hauler.state==='carrying' && hauler.carryingWaste>0 && hauler.carryingWaste<SIMULATION_CONFIG.waste.cleanerMaxCarry && cartHaul.incidents.some(incident=>incident.kind==='litter'||incident.kind==='vomit')) {
+      sawPartialHaul=true
+      break
+    }
+  }
+  assert.equal(sawPartialHaul,false,'a cleaner never sets off with a half-empty cart while litter is left')
+  assert.equal(
+    cartHaul.incidents.some(incident=>incident.id.startsWith('haul-litter-')),
+    false,
+    'and the piles are collected all the same',
+  )
+
   // Bigger carts: each paid step doubles what a cleaner hauls, and the last one is final.
   const cartGame=fixture(0)
   cartGame.addDebugMoney()

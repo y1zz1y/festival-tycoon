@@ -5536,7 +5536,6 @@ export class GameState {
         wasteDumps: this.state.wasteDumpCells,
         cleanerCarry: {
           capacity: SIMULATION_CONFIG.waste.cleanerMaxCarry * cleanerCarryFactor(this.state.festival),
-          trip: SIMULATION_CONFIG.waste.cleanerTripCarry * cleanerCarryFactor(this.state.festival),
         },
         wasteBins: this.state.buildings
           .filter((building) => isWasteBin(building.kind))
