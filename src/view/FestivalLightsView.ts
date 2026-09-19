@@ -1,3 +1,4 @@
+import { rankByView, type LightView } from './lightSelection'
 import { AdditiveBlending, Color, DataTexture, Group, InstancedMesh, LinearFilter, MeshBasicMaterial, PlaneGeometry, SphereGeometry, Matrix4, PointLight, SpotLight, Vector3 } from 'three'
 import type { GameSnapshot } from '../game/GameState'
 import { isFestivalOfferActive } from '../game/dayPlan'
@@ -10,8 +11,8 @@ export function nightStrength(minute: number): number {
   return hour < 5 || hour >= 22 ? 1 : hour < 8 ? (8 - hour) / 3 : hour >= 19 ? (hour - 19) / 3 : 0
 }
 
-export const FESTIVAL_LIGHT_BUDGET = 8
-export const FESTIVAL_SPOT_LIGHT_BUDGET = 4
+export const FESTIVAL_LIGHT_BUDGET = 12
+export const FESTIVAL_SPOT_LIGHT_BUDGET = 6
 export const WARM_LIGHT_COLOR = 0xffca82
 export const DAYLIGHT_LIGHT_COLOR = 0xf4f8ff
 export const WARM_LIGHT_DISTANCE = 3.5
@@ -73,6 +74,8 @@ export class FestivalLightsView {
   private glowMaterial = new MeshBasicMaterial({ color: 0xffffff, map: glowTexture(), transparent: true, blending: AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
   private sources: LightSource[] = []
   private focus = new Vector3()
+  private view: LightView | null = null
+  private viewApplied = false
   private geometry = new SphereGeometry(1, 6, 4)
   private material = new MeshBasicMaterial({ color: 0xffffff })
   private scratchColor = new Color()
@@ -191,15 +194,18 @@ export class FestivalLightsView {
     this.sources = sources
     this.updateLocalLights()
   }
-  setFocus(position: Vector3): void {
-    if (this.focus.distanceToSquared(position) < .25) return
-    this.focus.copy(position)
-    this.updateLocalLights()
+  /** The camera's view for this frame; the real lights go to the sources inside it. */
+  setView(view: LightView): void {
+    const moved = this.focus.distanceToSquared(view.focus) >= .25
+    this.view = view
+    this.focus.copy(view.focus)
+    if (moved || !this.viewApplied) this.updateLocalLights()
   }
   private updateLocalLights(): void {
-    const ranked = this.sources
-      .map((source, index) => ({ source, index, distance: focusDistance(source, this.focus) }))
-      .sort((a, b) => a.distance - b.distance || a.index - b.index)
+    this.viewApplied = true
+    // In view before out of view; inside each, the nearer the middle the sooner.
+    const order = rankByView(this.sources.map((source) => source.position), this.view)
+    const ranked = order.map((index) => ({ source: this.sources[index]!, index, distance: focusDistance(this.sources[index]!, this.focus) }))
     const assignedSpots = new Set<LightSource>()
     let spotIndex = 0
     for (const entry of ranked) {

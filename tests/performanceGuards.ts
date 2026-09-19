@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { Group, InstancedMesh, Mesh, Vector3 } from 'three'
+import { Group, InstancedMesh, Mesh, Vector3, OrthographicCamera } from 'three'
 import { GameState } from '../src/game/GameState'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { createRetroBuilding, batchRetroBuildings, DETAILED_BUILDINGS } from '../src/view/retroBuildings'
 import { DAYLIGHT_LIGHT_COLOR, DAYLIGHT_LIGHT_DISTANCE, FESTIVAL_LIGHT_BUDGET, FestivalLightsView } from '../src/view/FestivalLightsView'
+import { lightViewOf } from '../src/view/lightSelection'
 import { createAttractionAccess } from '../src/view/attractionAccess'
 import { createCoasterCar } from '../src/view/coasterCars'
 import {
@@ -318,8 +319,14 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   assert.equal((festivalLights as any).bulbs.count, 514)
   assert.equal((festivalLights as any).glows.count, 514)
   assert.deepEqual((festivalLights as any).pool, originalLights, 'adding hundreds of lights cannot increase shader light count')
-  festivalLights.setFocus(new Vector3(39, 0, 11))
-  assert.ok(originalLights.some(light => light.position.x > 35), 'real-time illumination follows the viewed area')
+  // The real lights go to what the camera can see: a view over the far corner of the
+  // field serves only sources inside it, nearest its middle first.
+  const corner = new OrthographicCamera(-4, 4, 4, -4, 0.1, 100)
+  corner.position.set(39, 20, 11); corner.lookAt(39, 0, 11); corner.updateMatrixWorld()
+  festivalLights.setView(lightViewOf(corner, new Vector3(39, 0, 11)))
+  const lit = originalLights.filter(light => light.intensity > 0)
+  assert.equal(lit.length, FESTIVAL_LIGHT_BUDGET, 'every real light is in use where there is plenty to light')
+  assert.ok(lit.every(light => Math.abs(light.position.x - 39) <= 4 && Math.abs(light.position.z - 11) <= 4), 'and every one of them lights a source inside the view')
   const balloonLights = new FestivalLightsView()
   lightSnapshot.buildings = [{
     id: 'moon-balloon',
@@ -335,7 +342,7 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   lightSnapshot.dayPlan.offers.lights[23] = true
   lightSnapshot.visitors[0]!.campingPhase = 'none'
   balloonLights.update(lightSnapshot)
-  balloonLights.setFocus(new Vector3(4.5, 0, 6.5))
+  balloonLights.setView((() => { const at = new Vector3(4.5, 0, 6.5); const above = new OrthographicCamera(-30, 30, 30, -30, 0.1, 100); above.position.set(at.x, 20, at.z); above.lookAt(at); above.updateMatrixWorld(); return lightViewOf(above, at) })())
   const balloonPool = (balloonLights as any).pool as { color: { getHex(): number }; distance: number; intensity: number; parent: unknown }[]
   assert.equal(balloonPool.length, FESTIVAL_LIGHT_BUDGET, 'daylight balloons reuse the same shader light budget')
   assert.ok(balloonPool.some(light => light.color.getHex() === DAYLIGHT_LIGHT_COLOR && light.distance === DAYLIGHT_LIGHT_DISTANCE && light.intensity > 0), 'balloons use white light with a wider radius')

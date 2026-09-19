@@ -80,6 +80,7 @@ import {
   SpriteMaterial,
   TubeGeometry,
   Vector2,
+  Frustum,
   Vector3,
   WebGLRenderer,
   WebGLRenderTarget,
@@ -141,6 +142,7 @@ import {
   tileShowsWater,
 } from '../game/terrain'
 import { supportGap, tileSupportSolids, isSupportlessKind } from '../game/supportOccupancy'
+import { lightViewOf, type LightView } from './lightSelection'
 import { attachSupportPosts, DEFAULT_SUPPORT_OFFSETS } from './supports'
 import { wayOverlapsRoadGrade } from '../game/wayElevation'
 import {
@@ -337,6 +339,8 @@ export class WorldView {
   /** Set when the ground itself changed: then every model has to be placed afresh. */
   private buildingModelsStale = true
   private shadersWarmed = false
+  /** What the scene held when its shaders were last compiled ahead of time. */
+  private warmedPopulation = ''
   private rideGates = new Group()
   private rideGatePreview = Object.assign(new Group(), {visible:false})
 
@@ -438,6 +442,8 @@ export class WorldView {
   private nightLightMaterials: MeshStandardMaterial[] = []
   private nightLightBuildingIds: string[] = []
   private readonly stageLightPool: SpotLight[] = []
+  /** Where the camera looks this frame — what decides which sources get the real lights. */
+  private readonly lightView: LightView = { frustum: new Frustum(), focus: new Vector3() }
   private powerView = new PowerView()
   private laserView = new LaserView()
   private campingView = new CampingView()
@@ -890,7 +896,8 @@ export class WorldView {
         snapshot.selectedTool !== 'bulldoze'
     }
     if (dataChanged) this.festivalLights.update(snapshot)
-    this.festivalLights.setFocus(this.cameraTarget)
+    lightViewOf(this.walkMode ? this.walkCamera : this.camera, this.walkMode ? this.walkCamera.position : this.cameraTarget, this.lightView)
+    this.festivalLights.setView(this.lightView)
     const cursorCell = this.hoveredCell
     this.festivalLights.updateCursor(cursorCell ? new Vector3(cursorCell.x + (cursorCell.localX ?? .5), this.terrainShape?.sample(cursorCell.x + (cursorCell.localX ?? .5), cursorCell.z + (cursorCell.localZ ?? .5)) ?? 0, cursorCell.z + (cursorCell.localZ ?? .5)) : null)
     if (fingerprint !== this.buildingFingerprint) {
@@ -927,6 +934,7 @@ export class WorldView {
     updateStageLightPool(
       this.buildings.children.filter(m=>m.userData.stageDesign) as Group[],
       this.stageLightPool,
+      this.lightView,
     )
     if (dataChanged) this.campingView.update(snapshot)
     if (dataChanged) this.medicalView.update(snapshot)
@@ -1008,6 +1016,17 @@ export class WorldView {
       const position=this.resolveStaffPosition(this.followedStaffId,snapshot)
       if(position) {this.cameraTarget.set(position.x,position.y,position.z);this.updateCamera()}
       else this.followedStaffId=null
+    }
+    // Shaders compile the first time an object is drawn — and only then. Someone who
+    // is hired or arrives out of the main camera's view is never drawn by it, so the
+    // first thing to draw them is the preview in their info panel, and that click
+    // stalls for the compile. Compiling whenever the population has changed — after
+    // the crowd and crew views have put the new figures into the scene — moves it to
+    // a moment nobody is waiting on; for everything already compiled it is a walk.
+    const population = `${snapshot.staff.length}:${snapshot.visitors.length > 0}:${snapshot.logistics.roadVehicles.length}:${snapshot.festival.infrastructure.routes.length}:${snapshot.coasters.length}`
+    if (population !== this.warmedPopulation) {
+      this.warmedPopulation = population
+      this.renderer.compile(this.scene, this.camera)
     }
     this.renderPersonPreview(this.staffPreview, snapshot)
     this.renderPersonPreview(this.visitorPreview, snapshot)
@@ -1968,7 +1987,8 @@ export class WorldView {
     this.sunLight.shadow.camera.top = 18
     this.sunLight.shadow.camera.bottom = -18
     this.scene.add(this.ambientLight, this.sunLight)
-    for(let n=0;n<6;n++){const light=new SpotLight(0xffffff,0,12,.21,.45,1);light.castShadow=false;this.stageLightPool.push(light);this.scene.add(light,light.target)}
+    // Ten real lights for the moving heads: enough for every head of a stage in view.
+    for(let n=0;n<10;n++){const light=new SpotLight(0xffffff,0,12,.21,.45,1);light.castShadow=false;this.stageLightPool.push(light);this.scene.add(light,light.target)}
   }
 
   private buildingFingerprintOf(items: readonly PlacedBuilding[]): string {

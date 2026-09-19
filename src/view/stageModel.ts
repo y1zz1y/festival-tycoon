@@ -1,3 +1,4 @@
+import { rankByView, type LightView } from './lightSelection'
 import { Group, Mesh, BoxGeometry, CylinderGeometry, ConeGeometry, SphereGeometry, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial, SpotLight, Vector3, Quaternion, Color, DoubleSide, MeshStandardMaterial, MeshBasicMaterial, AdditiveBlending } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { isTruss, stageMotion, mountDirection, partFacing, isLastLineArrayElement, partOnAudience, fohDeskRole, STAGE_TILE_DETAIL, type StageDesign, type StagePart, type ShowPhase } from '../game/stageDesign'
@@ -1183,11 +1184,18 @@ function reflectOntoMirrorBalls(root:Group,phase:ShowPhase,active:boolean){
   }
 }
 /** A shared pool illuminates the whole map; beam meshes remain visible for every fixture. */
-export function updateStageLightPool(models:Group[],pool:SpotLight[]){
+/**
+ * Hands the pool's real lights to the lit moving heads — the ones in the camera's view
+ * first, nearest the middle of it first, so what the player is looking at is what gets
+ * lit. Heads beyond the pool keep their drawn beam and simply cast no light.
+ */
+export function updateStageLightPool(models:Group[],pool:SpotLight[],view:LightView|null=null){
   const candidates:Group[]=[]
   for(const root of models)for(const rig of (root.userData.effects??[]) as Group[]){if(rig.userData.lit&&rig.userData.kind==='spot')candidates.push(rig)}
+  const positions=candidates.map(rig=>rig.getWorldPosition(new Vector3()))
+  const order=rankByView(positions,view)
   pool.forEach((light,index)=>{
-    const rig=candidates[Math.floor(index*candidates.length/pool.length)];if(!rig){light.intensity=0;return}
+    const rig=candidates[order[index]??-1];if(!rig){light.intensity=0;return}
     const material=rig.userData.beamMat as MeshBasicMaterial
     rig.getWorldPosition(light.position);light.target.position.copy(rig.localToWorld(new Vector3(0,0,rig.userData.length)));light.color.copy(material.color);light.intensity=45*rig.userData.intensity/100;light.distance=12
   })
