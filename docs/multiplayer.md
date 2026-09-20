@@ -82,7 +82,12 @@ wählt das Schema aus der Seite: HTTPS-Seite → `wss:`, sonst `ws:`. Es gibt
 keinen Polling-Fallback, und es soll auch keinen geben.
 
 Der Produktionsserver (`server/serve.ts`) lauscht auf `HOST`/`PORT`
-(Standard `0.0.0.0:8080`). Vor ihm steht in der Regel ein Reverse Proxy mit
+(Standard `0.0.0.0:8080`). Das Docker-Image enthält nur `server/` und `dist/` —
+Laufzeit-Imports des Servers dürfen deshalb nur aus `server/` kommen.
+`import type` aus `src/net/` (z. B. `protocol.ts`) ist ok, weil
+`--experimental-strip-types` Typen wegwirft; Wert-Imports wie Chat-Sanitize
+gehören nach `server/chatProtocol.ts` (Client re-exportiert über
+`src/net/chatProtocol.ts`). Vor dem Server steht in der Regel ein Reverse Proxy mit
 TLS — und genau dort scheitert es, wenn der Upgrade nicht durchgereicht wird:
 
 ```nginx
@@ -127,7 +132,7 @@ Was auf einem offen erreichbaren Server sonst noch gilt:
 | Lobby-Liste ohne Session | `src/net/lobbies.ts` | `fetchLobbies`, `multiplayerSocketUrl` |
 | Beitreten vom Titlescreen | `src/ui/titleScreen.ts` | `openTitleLobbies`, `joinLobby` |
 | UI-Bindung | `src/net/bind.ts` | `enableMultiplayerCommands` |
-| Live-Chat / Map-Ping | `src/net/chatProtocol.ts`, `src/ui/multiplayerChat.ts`, `src/net/session.ts` | `t: 'chat'` Relay; Enter öffnet Eingabe; Ping TTL 10 s |
+| Live-Chat / Map-Ping | `server/chatProtocol.ts`, `src/net/chatProtocol.ts`, `src/ui/multiplayerChat.ts`, `src/net/session.ts` | Sanitize/Relay in `server/`; Client re-exportiert + UI-Helfer; Enter öffnet Eingabe; Ping TTL 10 s |
 | Host-Turns, Optimistic | `src/game/GameState.ts` | `gate`, `receiveTurn`, `applyNetworkWorld` |
 | Server-Räume | `server/rooms.ts` | `attachMultiplayer` |
 | WebSocket-Plugin | `server/wsPlugin.ts` | Kompression, Puffergrenze |

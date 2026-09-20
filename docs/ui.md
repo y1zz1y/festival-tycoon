@@ -59,7 +59,7 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
 | Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | |
 | Ziehbare Fenster | `src/dragPanel.ts` | |
 | Fokus / Texteingabe | `src/uiFocus.ts` | `isTextEntryTarget` |
-| Mehrspieler-Chat / Map-Ping | `src/ui/multiplayerChat.ts`, `src/net/chatProtocol.ts` | Enter öffnet Eingabe; Log unten links; Ping-Overlay + Randpfeil; Option „Chat anzeigen“ |
+| Mehrspieler-Chat / Map-Ping | `src/ui/multiplayerChat.ts`, `src/net/chatProtocol.ts` (Sanitize: `server/chatProtocol.ts`) | Enter öffnet Eingabe; Log unten links; Ping-Overlay + Randpfeil; Option „Chat anzeigen“ |
 | PWA / Manifest | `public/`, `tests/installableApp.mjs` | kein Leisten-Button; Safari-Anleitung im Root-`README.md` |
 | Update-Hinweis | `src/updateNotice.ts` | |
 | Globales Styling | `src/style.css` | Shared Checkbox-/Range-Styling; Range-Thumb nutzt `--range-accent` |

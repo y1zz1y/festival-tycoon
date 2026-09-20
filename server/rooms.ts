@@ -2,7 +2,7 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import type { IncomingMessage } from 'node:http'
 import { networkInterfaces } from 'node:os'
 import type { ClientMessage, NetLobby, NetPlayer, ServerMessage } from '../src/net/protocol.ts'
-import { cleanChatPing, cleanChatText, isSendableChat } from '../src/net/chatProtocol.ts'
+import { cleanChatPing, cleanChatText, isSendableChat } from './chatProtocol.ts'
 
 type RoomClient = {
   id: string
