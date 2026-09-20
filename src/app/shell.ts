@@ -165,6 +165,7 @@ export function mountAppShell(app: HTMLDivElement): void {
         <input id="multiplayer-name" type="text" maxlength="24" placeholder="Dein Name" />
       </label>
       <label class="scenario-check" id="multiplayer-public-field"><input id="multiplayer-public" type="checkbox" /><span>Öffentliche Lobby</span></label>
+      <label class="scenario-check" id="multiplayer-chat-display-field"><input id="multiplayer-chat-display" type="checkbox" checked /><span>Chat anzeigen</span></label>
       <div class="multiplayer-actions" id="multiplayer-connect-actions">
         <button id="multiplayer-host" type="button">Spiel hosten</button>
       </div>

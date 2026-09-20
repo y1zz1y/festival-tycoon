@@ -42,6 +42,21 @@ sondern ein Aussetzer.
   Pong beantwortet der Netzwerk-Stack des Browsers, nicht JavaScript, eine
   gedrosselte Seite hält die Verbindung also von allein. Fehlt die API
   (Firefox) oder wird sie verweigert, passiert nichts weiter.
+- **Live-Chat und Map-Ping:** Ephemere UI-Ereignisse, kein `GameCommand` und
+  kein Snapshot-Feld. Client sendet `{ t: 'chat', text, ping? }`; der Server
+  säubert Text (max. 200 Zeichen) und Ping-Koordinaten und broadcastet
+  `{ t: 'chat', id, from, name, text, ping? }` an alle Sitze im Raum
+  (inkl. Absender). Steuerung: **Enter** öffnet/fokussiert die Eingabe
+  (Weg-Stückbau behält Enter solange der Pfadeditor aktiv ist); **Esc**
+  schließt die Eingabe. Das Log liegt unten links, transparent und
+  scrollbar. Unter Mehrspieler → **Chat anzeigen** (`localStorage`
+  `festival-mp-chat-display`) blendet nur HUD/Log aus — Senden bleibt
+  möglich. Bei offener Eingabe aktiviert der Ping-Button einen Kartenmarker;
+  Absenden (auch leere Nachricht) schickt den Ping mit. Position: Cursor-
+  Weltpunkt auf dem Terrain, sonst Kamera-Look-at / Walk-Position. Marker
+  und Randpfeil (außerhalb des sichtbaren Bereichs) leben 10 Sekunden auf
+  allen Clients; im Log springt das 📍-Icon die Kamera zum Punkt
+  (`WorldView.focusWorldPosition`).
 - **Rückkehr zum Tab:** `MultiplayerSession.retryNow` wählt beim Sichtbarwerden
   sofort nach, statt den Backoff von bis zu 15 s abzuwarten.
 - **Keepalive:** Der Server pingt alle 25 s und trennt Sockets, die die vorige
@@ -112,6 +127,7 @@ Was auf einem offen erreichbaren Server sonst noch gilt:
 | Lobby-Liste ohne Session | `src/net/lobbies.ts` | `fetchLobbies`, `multiplayerSocketUrl` |
 | Beitreten vom Titlescreen | `src/ui/titleScreen.ts` | `openTitleLobbies`, `joinLobby` |
 | UI-Bindung | `src/net/bind.ts` | `enableMultiplayerCommands` |
+| Live-Chat / Map-Ping | `src/net/chatProtocol.ts`, `src/ui/multiplayerChat.ts`, `src/net/session.ts` | `t: 'chat'` Relay; Enter öffnet Eingabe; Ping TTL 10 s |
 | Host-Turns, Optimistic | `src/game/GameState.ts` | `gate`, `receiveTurn`, `applyNetworkWorld` |
 | Server-Räume | `server/rooms.ts` | `attachMultiplayer` |
 | WebSocket-Plugin | `server/wsPlugin.ts` | Kompression, Puffergrenze |
@@ -243,7 +259,9 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
 `tests/regression.ts` (echte WebSockets, zwei Clients, später Join,
 Pause/Resume, Deltas, Host-Abriss mit Wiederaufnahme auf demselben Sitz, Sweep
 verwaister Räume, Raumcode am Spielstand inkl. Rückholen des eigenen Raums,
-öffentliche Lobbyliste mit Spielerzahl und abwesendem Host). Ride-Reconciliation: `tests/rideAccess.ts`.
+öffentliche Lobbyliste mit Spielerzahl und abwesendem Host, Chat-/Ping-
+Roundtrip inkl. leerer Ping-Nachricht). `tests/multiplayerChat.ts`
+(Sanitizing, TTL, Edge-Arrow-Math). Ride-Reconciliation: `tests/rideAccess.ts`.
 
 ## Bei Änderungen dieses Dokument
 

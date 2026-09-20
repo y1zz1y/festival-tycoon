@@ -2,6 +2,7 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import type { IncomingMessage } from 'node:http'
 import { networkInterfaces } from 'node:os'
 import type { ClientMessage, NetLobby, NetPlayer, ServerMessage } from '../src/net/protocol.ts'
+import { cleanChatPing, cleanChatText, isSendableChat } from '../src/net/chatProtocol.ts'
 
 type RoomClient = {
   id: string
@@ -87,6 +88,27 @@ function broadcast(room: Room, message: ServerMessage, except?: string): void {
   room.clients.forEach((client) => {
     if (client.id === except) return
     send(client.socket, message)
+  })
+}
+
+/** Sanitize and relay ephemeral chat / map pings to every seat in the room. */
+function relayChat(
+  room: Room,
+  clientId: string,
+  message: Extract<ClientMessage, { t: 'chat' }>,
+): void {
+  const client = room.clients.get(clientId)
+  if (!client) return
+  const text = cleanChatText(message.text)
+  const ping = cleanChatPing(message.ping)
+  if (!isSendableChat(text, ping)) return
+  broadcast(room, {
+    t: 'chat',
+    id: `chat-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    from: client.id,
+    name: client.name,
+    text,
+    ...(ping ? { ping } : {}),
   })
 }
 
@@ -367,6 +389,12 @@ export function attachMultiplayer(
         }
         if (joined.id === joined.room.hostId) return
         send(host.socket, { t: 'command', cmd: message.cmd, from: joined.id })
+        return
+      }
+
+      // Chat and map pings are UI events, not simulation commands.
+      if (message.t === 'chat') {
+        relayChat(joined.room, joined.id, message)
         return
       }
 

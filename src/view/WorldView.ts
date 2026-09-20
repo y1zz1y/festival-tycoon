@@ -45,6 +45,7 @@ import { groundInfo } from '../game/ground'
 import { SupplyChainView } from './SupplyChainView'
 import { scenePixelRatio } from './renderResolution'
 import { isTextEntryTarget } from '../uiFocus'
+import { isProjectedOnScreen } from '../net/chatProtocol'
 import type { AreaDesignationHandler } from '../ui/areaDesignation'
 import {
   AmbientLight,
@@ -1485,6 +1486,55 @@ export class WorldView {
     if (this.walkMode) this.setWalkMode(false)
     this.cameraTarget.set(x, 0, z)
     this.updateCamera()
+  }
+
+  /**
+   * World point for a map ping: cursor on terrain when available, otherwise the
+   * orbit (or walk) look-at so a ping still lands somewhere useful.
+   */
+  getPingWorldPoint(): { x: number; z: number } {
+    if (this.hoveredCell) {
+      const localX = this.hoveredCell.localX ?? 0.5
+      const localZ = this.hoveredCell.localZ ?? 0.5
+      return {
+        x: this.hoveredCell.x + localX,
+        z: this.hoveredCell.z + localZ,
+      }
+    }
+    if (this.walkMode) return { x: this.walkX, z: this.walkZ }
+    return { x: this.cameraTarget.x, z: this.cameraTarget.z }
+  }
+
+  /**
+   * Projects a world point into CSS pixels relative to the canvas. `onScreen`
+   * is false when the point is outside a slightly inset NDC box (used for edge
+   * arrows). Always returns projected coordinates so off-screen pings still
+   * have a direction.
+   */
+  projectWorldToCanvas(x: number, y: number, z: number): {
+    x: number
+    y: number
+    ndcX: number
+    ndcY: number
+    ndcZ: number
+    onScreen: boolean
+  } | null {
+    const width = this.canvas.clientWidth
+    const height = this.canvas.clientHeight
+    if (width <= 0 || height <= 0) return null
+    const camera = this.walkMode ? this.walkCamera : this.camera
+    const point = new Vector3(x, y, z).project(camera)
+    const screenX = (point.x * 0.5 + 0.5) * width
+    const screenY = (-point.y * 0.5 + 0.5) * height
+    const onScreen = isProjectedOnScreen(point.x, point.y, point.z)
+    return {
+      x: screenX,
+      y: screenY,
+      ndcX: point.x,
+      ndcY: point.y,
+      ndcZ: point.z,
+      onScreen,
+    }
   }
 
   private resolveStaffPosition(id: string, snapshot: Readonly<GameSnapshot>): { x: number; y: number; z: number } | null {

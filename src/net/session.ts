@@ -3,11 +3,14 @@ import { WorldUpdates } from './worldUpdates'
 import { packWorld } from './codec'
 import { multiplayerSocketUrl } from './lobbies'
 import type {
+  ChatPing,
   ClientMessage,
   GameCommand,
   NetPlayer,
   ServerMessage,
 } from './protocol'
+import type { ChatMessage } from './chatProtocol'
+import { cleanChatPing, cleanChatText, isSendableChat } from './chatProtocol'
 
 export type MultiplayerStatus = {
   mode: 'solo' | 'host' | 'client'
@@ -33,6 +36,7 @@ export class MultiplayerSession {
   status: MultiplayerStatus = { ...EMPTY_STATUS }
   onStatus: (status: MultiplayerStatus) => void = () => {}
   onToast: (message: string, isError?: boolean) => void = () => {}
+  onChat: (message: ChatMessage) => void = () => {}
   private socket: WebSocket | null = null
   private game: GameState
   private updates = new WorldUpdates()
@@ -138,6 +142,24 @@ export class MultiplayerSession {
     this.status = { ...EMPTY_STATUS, message: 'Getrennt' }
     this.onStatus(this.status)
     this.leaving = false
+  }
+
+  /**
+   * Sends an ephemeral chat line and optional map ping. Empty text is allowed
+   * when a ping is attached. No-ops when offline or when neither text nor ping
+   * is present.
+   */
+  sendChat(text: string, ping?: ChatPing): boolean {
+    if (this.status.mode === 'solo' || !this.canSend()) return false
+    const cleaned = cleanChatText(text)
+    const cleanedPing = cleanChatPing(ping)
+    if (!isSendableChat(cleaned, cleanedPing)) return false
+    this.send({
+      t: 'chat',
+      text: cleaned,
+      ...(cleanedPing ? { ping: cleanedPing } : {}),
+    })
+    return true
   }
 
   tick(deltaSeconds: number): void {
@@ -406,6 +428,16 @@ export class MultiplayerSession {
     }
     if (message.t === 'result') {
       this.onToast(message.message, !message.ok)
+      return
+    }
+    if (message.t === 'chat') {
+      this.onChat({
+        id: message.id,
+        from: message.from,
+        name: message.name,
+        text: message.text,
+        ping: message.ping,
+      })
       return
     }
     if (message.t === 'error') {

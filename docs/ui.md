@@ -59,6 +59,7 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
 | Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | |
 | Ziehbare Fenster | `src/dragPanel.ts` | |
 | Fokus / Texteingabe | `src/uiFocus.ts` | `isTextEntryTarget` |
+| Mehrspieler-Chat / Map-Ping | `src/ui/multiplayerChat.ts`, `src/net/chatProtocol.ts` | Enter öffnet Eingabe; Log unten links; Ping-Overlay + Randpfeil; Option „Chat anzeigen“ |
 | PWA / Manifest | `public/`, `tests/installableApp.mjs` | kein Leisten-Button; Safari-Anleitung im Root-`README.md` |
 | Update-Hinweis | `src/updateNotice.ts` | |
 | Globales Styling | `src/style.css` | Shared Checkbox-/Range-Styling; Range-Thumb nutzt `--range-accent` |
@@ -97,6 +98,15 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
   links neben Mehrspieler öffnet die letzten Einträge. Keine
   Sim-Mutation, kein neues Command. Auf Mobile sitzt die Leiste über
   den Touch-Steuerungen.
+  Im Mehrspieler öffnet **Enter** den Live-Chat (unten links, transparentes
+  Log); **Esc** schließt die Eingabe. Weg-Stückbau behält Enter, solange der
+  Pfadeditor aktiv ist. Texteingabe-Fokus blockiert weiterhin Bau-Hotkeys.
+  Der Ping-Button an der Eingabe markiert den Cursor-Weltpunkt (sonst
+  Kamera-Zentrum) für alle Spieler 10 s; außerhalb des sichtbaren Bereichs
+  erscheint ein Randpfeil. 📍 in der Nachricht springt die Kamera dorthin.
+  Mehrspieler → **Chat anzeigen** blendet nur das Log aus (`localStorage`
+  `festival-mp-chat-display`); Senden bleibt möglich. Details:
+  [multiplayer.md](multiplayer.md).
   Oben rechts sitzt eine RCT-Iconleiste in vier Gruppen: **Bauen** (Abriss,
   Gelände, Kopieren, Deko, Wege, Attraktionen, Autostraßen, Logistik),   **Verwalten**
   (Festival, Bühnenwerkstatt, Logistikverwaltung für Bestellungen/Träger,

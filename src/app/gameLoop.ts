@@ -34,6 +34,8 @@ export type GameLoopDependencies = {
   performanceIndicator: HTMLElement
   versionLabel: string
   isTitleOpen: () => boolean
+  /** Optional HUD work after the frame is drawn (map-ping overlays, etc.). */
+  afterRender?: () => void
   now?: () => number
   requestFrame?: (callback: FrameRequestCallback) => number
 }
@@ -100,6 +102,7 @@ export function startGameLoop(dependencies: GameLoopDependencies): GameLoop {
     measuredViewMs += renderStart - viewStart
     dependencies.view.render()
     measuredRenderMs += now() - renderStart
+    dependencies.afterRender?.()
     measuredFrames += 1
 
     const elapsed = time - measurementStart

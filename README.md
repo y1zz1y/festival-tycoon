@@ -293,6 +293,13 @@ Zustand übertragen. WebSocket-Kompression und eine Sendepuffergrenze am Host re
 Übertragungsaufwand und Rückstau. Alle Teilnehmer müssen dieselbe Spielversion verwenden.
 Der Host muss geöffnet bleiben; eine automatische Host-Übernahme ist nicht enthalten.
 
+**Live-Chat:** Mit **Enter** öffnest du die Chat-Eingabe (unten links). Nachrichten
+erscheinen im transparenten Log. Unter Mehrspieler kannst du **Chat anzeigen**
+abschalten — dann bleibt nur das Log unsichtbar, Senden geht weiter. Der
+**Ping**-Button markiert einen Punkt auf der Karte für alle Spieler (10 Sekunden);
+außerhalb des sichtbaren Bereichs zeigt ein Pfeil am Bildschirmrand die Richtung.
+📍 in der Nachricht springt die Kamera zum Ping.
+
 Die 3D-Ansicht nutzt eine auf maximal 1440 × 810 Bildpunkte begrenzte Pixelrasterung
 (auch bei Full HD und 4K), helleres Tageslicht und weiterhin die
 isometrische Kamera. Die Oberfläche verwendet kompakte, gerahmte Tycoon-Fenster,

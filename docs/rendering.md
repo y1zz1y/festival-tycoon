@@ -22,7 +22,7 @@ erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Szene, Kamera, Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | Haupt-View; `setPlacementPreviewResult` rendert den autoritativen Game-Layer-Vertrag; `pickPlacedObject` für Info/Abriss; ein `LineSegments`-Baugitter 7×7 auf `buildElevation`; Personalzonen als InstancedMesh |
-| Frame-Orchestrierung | `src/app/gameLoop.ts` | `startGameLoop`: Tick, Interpolation, Audio-Listener, Render und Messzeile; Hidden-Tab-Hosttick 100 ms |
+| Frame-Orchestrierung | `src/app/gameLoop.ts` | `startGameLoop`: Tick, Interpolation, Audio-Listener, Render, optionales `afterRender` (Map-Ping-HUD) und Messzeile; Hidden-Tab-Hosttick 100 ms |
 | Pixel-Personen | `src/view/pixelPeople.ts` | 6 Visitor-Batches + Accessoires |
 | Souvenir-Props | `src/view/souvenirMeshes.ts` | 1 Maskottchen- + 4 Shirt-Schnitt-Batches, Instanzfarbe |
 | Gebäude-Instancing | `src/view/retroBuildings.ts` | ein gemergtes Vertex-Color-Mesh je `DETAILED_BUILDINGS`-Art inkl. aller `SCENERY_KINDS`; Themen-Deko über `buildThemedScenery` (Familien + Vertexfarben); Instanz-`buildingIds` für Picking |

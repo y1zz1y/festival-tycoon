@@ -10,6 +10,7 @@ import { setupDemandDebugUI } from './ui/demandDebugUI'
 import './style.css'
 import { mountFestivalUI } from './festivalUI'
 import { mountTickerUI } from './tickerUI'
+import { mountMultiplayerChat, CHAT_DISPLAY_KEY } from './ui/multiplayerChat'
 import { SUPPLIES, WEATHER_ICONS, WEATHER_NAMES, formatTemperature, temperatureAt } from './game/festivalManagement'
 import type { Supply } from './game/festivalManagement'
 import {
@@ -631,6 +632,16 @@ const visitorPanelController = mountVisitorPanel({
 const tickerUI = mountTickerUI({
   focusWorld: (x, z) => view.focusWorldPosition(x, z),
 })
+const multiplayerChat = mountMultiplayerChat({
+  sendChat: (text, ping) => multiplayer.sendChat(text, ping),
+  view: {
+    getPingWorldPoint: () => view.getPingWorldPoint(),
+    projectWorldToCanvas: (x, y, z) => view.projectWorldToCanvas(x, y, z),
+    focusWorld: (x, z) => view.focusWorldPosition(x, z),
+    getSnapshot: () => game.snapshot,
+  },
+})
+multiplayer.onChat = (message) => multiplayerChat.receive(message)
 const walkModeButton = requireElement<HTMLButtonElement>('#toggle-walk-mode')
 const walkHud = requireElement<HTMLElement>('#walk-hud')
 const walkStick = requireElement<HTMLElement>('#walk-stick')
@@ -3975,6 +3986,7 @@ keepAwakeToggle.addEventListener('change', () => {
 multiplayer.onStatus = (status) => {
   renderMultiplayerStatus(status)
   keepAwake.refresh()
+  multiplayerChat.setConnected(status.connected)
   if (status.connected) joinErrorSink = null
   // Joining from the title screen only leaves it once the room has answered, so a
   // code that goes nowhere keeps the player where they can try the next one.
@@ -4001,6 +4013,14 @@ multiplayerPublicToggle.addEventListener('change', () => {
   try {
     window.localStorage.setItem(MULTIPLAYER_PUBLIC_KEY, multiplayerPublicToggle.checked ? 'on' : 'off')
   } catch { /* the choice simply does not survive a reload then */ }
+})
+const multiplayerChatDisplayToggle = requireElement<HTMLInputElement>('#multiplayer-chat-display')
+try {
+  multiplayerChatDisplayToggle.checked = window.localStorage.getItem(CHAT_DISPLAY_KEY) !== 'off'
+} catch { /* blocked storage: keep chat visible */ }
+multiplayerChat.setDisplayEnabled(multiplayerChatDisplayToggle.checked)
+multiplayerChatDisplayToggle.addEventListener('change', () => {
+  multiplayerChat.setDisplayEnabled(multiplayerChatDisplayToggle.checked)
 })
 const joinFromUrl = new URLSearchParams(window.location.search).get('join')
 if (joinFromUrl) {
@@ -5179,6 +5199,7 @@ dispatchIntervalInput.addEventListener('input', () => {
 })
 
 window.addEventListener('keydown', (event) => {
+  if (multiplayerChat.handleKeydown(event)) return
   if (isTextEntryTarget(event.target) || isTextEntryTarget(document.activeElement)) return
   // Nothing reaches the world while the start screen is up — not the build shortcuts,
   // not the camera keys, not the speed keys.
@@ -5208,6 +5229,12 @@ window.addEventListener('keydown', (event) => {
   }
   if (event.key === 'Enter' && pathEditorActive) {
     buildNextPathSegment()
+    return
+  }
+  // Multiplayer chat: Enter opens/focuses compose when not building a path segment.
+  if (event.key === 'Enter' && multiplayer.status.connected && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    event.preventDefault()
+    multiplayerChat.openCompose()
     return
   }
   if (event.key === 'Backspace' && pathEditorActive) {
@@ -5445,6 +5472,7 @@ startGameLoop({
   performanceIndicator,
   versionLabel,
   isTitleOpen: () => document.body.classList.contains('title-open'),
+  afterRender: () => multiplayerChat.updateOverlay(),
 })
 
 // The game opens on its title screen. Last thing in the module, so everything it can

@@ -27,6 +27,9 @@ import type { FireworkEffect } from '../game/fireworks'
 import type { FestivalAction } from '../game/festivalManagement'
 import type { ShirtStyle } from '../game/shopGoods'
 import type { BlueprintItem } from '../game/blueprints'
+import type { ChatPing } from './chatProtocol'
+
+export type { ChatPing }
 
 export type CellRef = { x: number; z: number }
 
@@ -329,6 +332,8 @@ export type ClientMessage =
     }
   | { t: 'sync'; world: WorldSnapshot }
   | { t: 'resync' }
+  /** Ephemeral chat / map ping — not a simulation command. */
+  | { t: 'chat'; text: string; ping?: ChatPing }
 
 export type ServerMessage =
   | WorldUpdate
@@ -353,5 +358,7 @@ export type ServerMessage =
   | { t: 'resync' }
   | { t: 'error'; message: string }
   | { t: 'closed'; message: string }
+  /** Relayed chat / map ping for every seat in the room. */
+  | { t: 'chat'; id: string; from: string; name: string; text: string; ping?: ChatPing }
 
 export type { Tool }

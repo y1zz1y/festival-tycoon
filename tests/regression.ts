@@ -70,6 +70,7 @@ import { testSimulationModules } from './simulationModules'
 import { testUiModules } from './uiModules'
 import { testAttractionFoundation } from './attractionFoundation'
 import { testTicketDemandTuning } from './ticketDemandTuning'
+import { testMultiplayerChat } from './multiplayerChat'
 
 function test(name: string, run: () => void) {
   run()
@@ -117,6 +118,7 @@ testUnsavedWork(fixture)
 console.log('PASS unsaved work is noticed on edits and after five quiet minutes')
 testHotkeys()
 console.log('PASS hotkeys rebind, keep one key per action and survive broken storage')
+testMultiplayerChat()
 await testWakeLock()
 console.log('PASS the screen lock follows the session, the page and a browser that drops it')
 await testBlueprintLibraryRoundtrip()
@@ -899,6 +901,34 @@ try {
   assert.equal(named.hostName.length, 24, 'a long name is cut to the limit')
   assert.equal(named.hostName.trim(), named.hostName, 'and comes back trimmed')
   console.log('PASS invite links use the address the host reached the server on, and names are bounded')
+
+  // Live chat and map pings are relayed by the server, not GameCommands.
+  const chatHost = new GameState()
+  const chatGuest = new GameState()
+  for (const game of [chatHost, chatGuest]) enableMultiplayerCommands(game)
+  const chatHostSession = new MultiplayerSession(chatHost)
+  const chatGuestSession = new MultiplayerSession(chatGuest)
+  sessions.push(chatHostSession, chatGuestSession)
+  const hostInbox: Array<{ text: string; ping?: { x: number; z: number }; name: string }> = []
+  const guestInbox: Array<{ text: string; ping?: { x: number; z: number }; name: string }> = []
+  chatHostSession.onChat = (message) => hostInbox.push(message)
+  chatGuestSession.onChat = (message) => guestInbox.push(message)
+  chatHostSession.host('Chat host')
+  await until(() => chatHostSession.status.connected)
+  chatGuestSession.join(chatHostSession.status.code, 'Chat guest')
+  await until(() => chatGuestSession.status.connected)
+  assert.equal(chatGuestSession.sendChat('Hallo vom Gast', { x: 12.5, z: -4 }), true)
+  await until(() => hostInbox.length >= 1 && guestInbox.length >= 1)
+  assert.equal(hostInbox[0]?.text, 'Hallo vom Gast')
+  assert.equal(hostInbox[0]?.name, 'Chat guest')
+  assert.deepEqual(hostInbox[0]?.ping, { x: 12.5, z: -4 })
+  assert.equal(guestInbox[0]?.text, 'Hallo vom Gast')
+  assert.equal(chatHostSession.sendChat('', { x: 1, z: 2 }), true)
+  await until(() => hostInbox.length >= 2 && guestInbox.length >= 2)
+  assert.equal(hostInbox[1]?.text, '')
+  assert.deepEqual(guestInbox[1]?.ping, { x: 1, z: 2 })
+  assert.equal(chatGuestSession.sendChat('   '), false)
+  console.log('PASS multiplayer chat and ping roundtrip including empty ping-only message')
 } finally {
   sessions.forEach(session => session.disconnect())
   wss.clients.forEach(socket => socket.terminate())
