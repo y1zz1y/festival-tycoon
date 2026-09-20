@@ -22,7 +22,7 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Bootstrap / Verdrahtung | `src/main.ts` | RCT-Iconleiste `.rct-toolbar`, erzeugt Controller und verbindet Callbacks |
-| Festival-Preise / Bandplaner | `src/festivalUI.ts`, `src/musicPlanner.ts` | Ticket-Slider + Schätzung; Sterne-Tabs und Auto-Plan-Filter |
+| Festival-Preise / Bandplaner | `src/festivalUI.ts`, `src/musicPlanner.ts`, `src/festival.css` | Ticket-Slider + Schätzung; Kaufbereitschaft über `--range-accent` (Thumb/Track); Sterne-Tabs und Auto-Plan-Filter |
 | Stabile App-Shell / DOM-Vertrag | `src/app/shell.ts` | `mountAppShell`; vollständiges statisches Markup und Autosave-Konstanten |
 | Titel, Szenario und Saves | `src/ui/titleScreen.ts`, `src/ui/scenarioScreen.ts`, `src/ui/saveController.ts` | Controller mit injiziertem `GameState`-/Multiplayer-/Lade-Kontext |
 | Objekt- und Besucheranzeige | `src/ui/entityPanel.ts`, `src/ui/visitorPanel.ts` | Vollständige Objektpanel-Orchestrierung, Achterbahn-Telemetrie sowie zustandsbehaftete Besucher-Inspektion |
@@ -61,7 +61,7 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
 | Fokus / Texteingabe | `src/uiFocus.ts` | `isTextEntryTarget` |
 | PWA / Manifest | `public/`, `tests/installableApp.mjs` | kein Leisten-Button; Safari-Anleitung im Root-`README.md` |
 | Update-Hinweis | `src/updateNotice.ts` | |
-| Globales Styling | `src/style.css` | |
+| Globales Styling | `src/style.css` | Shared Checkbox-/Range-Styling; Range-Thumb nutzt `--range-accent` |
 | Versionsanzeige | `package.json`, `src/version.d.ts` | unten links inkl. Build-ID |
 
 ## Wichtige Regeln

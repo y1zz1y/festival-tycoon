@@ -8,6 +8,7 @@ import {
   estimateTicketDemand,
   fairTicketPrices,
   purchaseWillingness,
+  willingnessColor,
 } from '../src/game/ticketDemand'
 import { applyGameCommand } from '../src/net/commands'
 
@@ -30,6 +31,21 @@ export function testTicketDemandTuning(): void {
   const estimate = estimateTicketDemand(game.snapshot)
   assert.ok(Number.isFinite(estimate.expectedDayRevenue))
   assert.ok(estimate.expectedDayGuests >= 0)
+
+  // Slider accents (festivalUI --range-accent) come from these thresholds.
+  assert.equal(willingnessColor(0.7), '#3dba6b')
+  assert.equal(willingnessColor(0.5), '#d4b43a')
+  assert.equal(willingnessColor(0.2), '#d4543a')
+  assert.match(estimate.dayColor, /^#[0-9a-f]{6}$/i)
+  assert.match(estimate.campingColor, /^#[0-9a-f]{6}$/i)
+
+  const cheap = estimateTicketDemand(game.snapshot, { day: 20, camping: 40 })
+  const expensive = estimateTicketDemand(game.snapshot, { day: 250, camping: 500 })
+  // Higher price must not look more appealing than a bargain on the same lineup.
+  const rank = (color: string) =>
+    color === '#3dba6b' ? 2 : color === '#d4b43a' ? 1 : 0
+  assert.ok(rank(cheap.dayColor) >= rank(expensive.dayColor))
+  assert.ok(rank(cheap.campingColor) >= rank(expensive.campingColor))
 
   const normalized = normalizeTicketDemandTuning({
     ...tuning,

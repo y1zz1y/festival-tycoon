@@ -46,8 +46,11 @@ hält die Simulationsuhr an, bis **Festival starten**.
   RCT-/Echtband-Inhalte. Sterne aus Reputation (`bandStarRating`); 5-Sterne
   nur aus `festival.headlinerPool` (Sim-RNG beim Vorbereiten). Planner-Tabs
   und Auto-Plan filtern nach Sternen und überschreiben keine bestehenden Slots.
-  Ticket-Slider färben die erwartete Kaufbereitschaft; Spawn skaliert mit
-  `arrivalPriceMultiplier`. Gästebudget ist `visitors.budget` (80), nicht 1e6.
+  Ticket-Slider färben die erwartete Kaufbereitschaft (grün/gelb/rot über
+  CSS-Variable `--range-accent` am Range-Thumb und -Track; natives
+  `accent-color` greift nach dem custom Slider-Styling nicht mehr);
+  Spawn skaliert mit `arrivalPriceMultiplier`. Gästebudget ist
+  `visitors.budget` (80), nicht 1e6.
 - Zahlungsbereitschaft, faire Preise, Preisakzeptanz, Teilnahme und Anreise
   lesen ausschließlich `festival.demandTuning` mit normalisiertem Fallback auf
   `SIMULATION_CONFIG.ticketDemand`. Das Debugfenster wertet Entwürfe live aus;

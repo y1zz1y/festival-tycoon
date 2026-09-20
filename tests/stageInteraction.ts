@@ -7,6 +7,39 @@ import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCel
 import { createStageModel, animateStageModel, disposeStageModel, updateStageLightPool } from '../src/view/stageModel'
 import { lightViewOf } from '../src/view/lightSelection'
 import { showIssue } from '../src/game/festivalManagement'
+
+function assertFiniteStageMeshes(model: Group, label: string): void {
+  model.traverse(object => {
+    if (!(object instanceof Mesh || object instanceof LineSegments)) return
+    for (const value of object.geometry.getAttribute('position').array) {
+      assert.ok(Number.isFinite(value), `${label}: every model vertex must be finite`)
+    }
+  })
+}
+
+function assertStageBandBehaviour(performerDesign: ReturnType<typeof defaultStageDesign>, performanceStage: Group): void {
+  updateStageBand(performanceStage,'meadow',0,false);assert.equal(performanceStage.userData.band,undefined)
+  updateStageBand(performanceStage,'meadow',0,true,performerDesign);const performers=performanceStage.userData.band;assert.equal(performers.children.length,4)
+  assert.ok(performers.children.every((p:any)=>p.position.y>=.54),'musicians stand on top of podiums')
+  const arm=performers.children[1].userData.arms[0],angle=arm.rotation.x
+  updateStageBand(performanceStage,'meadow',.4,true,performerDesign);assert.equal(performanceStage.userData.band,performers);assert.notEqual(arm.rotation.x,angle)
+  updateStageBand(performanceStage,'meadow',.4,false);assert.equal(performers.visible,false)
+  // An electro act ('neon') brings a DJ booth instead of a line-up: one console, one DJ centred
+  // behind it, and cue buttons that blink on their own without the console itself moving.
+  updateStageBand(performanceStage,'neon',1,true,performerDesign);assert.equal(performers.parent,null)
+  const booth=performanceStage.userData.band
+  const console_=booth.children.find((c:any)=>c.userData.lights),dj=booth.children.find((c:any)=>c.userData.role==='dj')
+  assert.ok(console_&&dj,'an electro act plays a console with a DJ behind it')
+  assert.equal(booth.children.length,2,'and brings no band along with it')
+  assert.ok(Math.abs(console_.position.x-dj.position.x)<1e-6,'the DJ stands centred on the console')
+  assert.ok(dj.position.z<console_.position.z,'and behind it, with the console between them and the crowd')
+  const buttons=(console_.userData.lights as any).geometry.getAttribute('color')
+  const beforeBlink=Array.from(buttons.array as Float32Array)
+  updateStageBand(performanceStage,'neon',1.4,true,performerDesign)
+  assert.notDeepEqual(Array.from(buttons.array as Float32Array),beforeBlink,'its buttons blink over time')
+  assert.ok(bandRoles('brass').includes('brass'));assert.ok(bandRoles('campfire').includes('guitar'))
+}
+
 export function testStageInteraction(fixture:(count?:number)=>GameState){
   /** A stage with room to build on: the largest footprint the workshop offers, so the fixtures below can set parts a few cells apart whatever the default stage happens to measure. */
   const roomy=()=>{const d=defaultStageDesign();Object.assign(d,{tileWidth:8,tileDepth:8},stageDetailSize(8,8,d.tileHeight));return d}
@@ -34,12 +67,7 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
       { id:`finite-${kind}`, kind, x:0, y:1, z:0, rotation, attachedTo:'finite-host', brand:'budget', color:'#ffffff' },
     ]
     const model = createStageModel(design, { floor:false })
-    model.traverse(object => {
-      if (!(object instanceof Mesh || object instanceof LineSegments)) return
-      for (const value of object.geometry.getAttribute('position').array) {
-        assert.ok(Number.isFinite(value), `${kind} rotation ${rotation}: every model vertex must be finite`)
-      }
-    })
+    assertFiniteStageMeshes(model, `${kind} rotation ${rotation}`)
     disposeStageModel(model)
   }
   const performerDesign=defaultStageDesign()
@@ -48,26 +76,7 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   assert.equal(bandPositions(performerDesign).length,4)
   for(const pos of bandPositions(performerDesign))assert.ok(performerDesign.parts.some(p=>p.x===pos.x+performerDesign.width/2-.5&&p.z===pos.z+performerDesign.depth/2-.5))
   const performanceStage=createStageModel(performerDesign)
-  updateStageBand(performanceStage,'meadow',0,false);assert.equal(performanceStage.userData.band,undefined)
-  updateStageBand(performanceStage,'meadow',0,true,performerDesign);const performers=performanceStage.userData.band;assert.equal(performers.children.length,4)
-  assert.ok(performers.children.every((p:any)=>p.position.y>=.54),'musicians stand on top of podiums')
-  const arm=performers.children[1].userData.arms[0],angle=arm.rotation.x
-  updateStageBand(performanceStage,'meadow',.4,true,performerDesign);assert.equal(performanceStage.userData.band,performers);assert.notEqual(arm.rotation.x,angle)
-  updateStageBand(performanceStage,'meadow',.4,false);assert.equal(performers.visible,false)
-  // An electro act ('neon') brings a DJ booth instead of a line-up: one console, one DJ centred
-  // behind it, and cue buttons that blink on their own without the console itself moving.
-  updateStageBand(performanceStage,'neon',1,true,performerDesign);assert.equal(performers.parent,null)
-  const booth=performanceStage.userData.band
-  const console_=booth.children.find((c:any)=>c.userData.lights),dj=booth.children.find((c:any)=>c.userData.role==='dj')
-  assert.ok(console_&&dj,'an electro act plays a console with a DJ behind it')
-  assert.equal(booth.children.length,2,'and brings no band along with it')
-  assert.ok(Math.abs(console_.position.x-dj.position.x)<1e-6,'the DJ stands centred on the console')
-  assert.ok(dj.position.z<console_.position.z,'and behind it, with the console between them and the crowd')
-  const buttons=(console_.userData.lights as any).geometry.getAttribute('color')
-  const beforeBlink=Array.from(buttons.array as Float32Array)
-  updateStageBand(performanceStage,'neon',1.4,true,performerDesign)
-  assert.notDeepEqual(Array.from(buttons.array as Float32Array),beforeBlink,'its buttons blink over time')
-  assert.ok(bandRoles('brass').includes('brass'));assert.ok(bandRoles('campfire').includes('guitar'))
+  assertStageBandBehaviour(performerDesign, performanceStage)
   // A deck floor with one spectator tile (its cells: the left half, back half) and one cell taken
   // by a truss — musicians may use neither.
   const occupied=defaultStageDesign();occupied.audience=[{x:0,z:1}]

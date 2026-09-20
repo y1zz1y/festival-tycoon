@@ -1,10 +1,10 @@
 {
   "name": "festival-simulator",
   "private": true,
-  "version": "0.1.195",
+  "version": "0.1.196",
   "type": "module",
   "scripts": {
-    "lint": "eslint . --max-warnings 42",
+    "lint": "eslint . --max-warnings 36",
     "quality:dead-code": "knip --include files,dependencies,unlisted,unresolved",
     "quality:duplicates": "jscpd src server scripts --config .jscpd.json",
     "quality": "npm run lint && npm run quality:dead-code && npm run quality:duplicates",

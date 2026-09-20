@@ -99,6 +99,9 @@ export function mountFestivalUI(
     priceFormEl.querySelector<HTMLElement>('[data-camp-price]')!.textContent = `${camping} €`
     const dayInput = priceFormEl.querySelector<HTMLInputElement>('[name=dayTicketPrice]')!
     const campInput = priceFormEl.querySelector<HTMLInputElement>('[name=campTicketPrice]')!
+    // Custom range styling uses --range-accent (accent-color alone is ignored).
+    dayInput.style.setProperty('--range-accent', estimate.dayColor)
+    campInput.style.setProperty('--range-accent', estimate.campingColor)
     dayInput.style.accentColor = estimate.dayColor
     campInput.style.accentColor = estimate.campingColor
     panel.querySelector<HTMLElement>('[data-ticket-estimate]')!.innerHTML =

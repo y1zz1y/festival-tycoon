@@ -98,6 +98,40 @@ function connectorRotation(start: Vector3, end: Vector3): Quaternion {
   )
 }
 
+function addBridgeOrTreeObstacle(
+  kit: ModelKit,
+  kind: 'hangingBridge' | 'treeObstacle',
+  start: Vector3,
+  mid: Vector3,
+  end: Vector3,
+  length: number,
+  q: Quaternion,
+): void {
+  const planks = Math.max(2, Math.ceil(length * 4))
+  for (let index = 0; index <= planks; index += 1) {
+    const t = index / planks
+    const point = start.clone().lerp(end, t)
+    const sag = Math.sin(t * Math.PI) * 0.11
+    kit.box(point.x, point.y - sag, point.z, 0.5, 0.055, 0.2, index % 2 ? 0x9b7044 : 0x805a37, q)
+    if (kind === 'treeObstacle' && index % 2 === 0) {
+      kit.beam(
+        [point.x - 0.2, point.y + 0.02, point.z],
+        [point.x + 0.2, point.y + 0.35, point.z],
+        0.035,
+        0x4c3828,
+      )
+    }
+  }
+  for (const side of [-1, 1]) {
+    const offset = new Vector3(side * 0.29, 0.36, 0).applyQuaternion(q)
+    const ropeStart = start.clone().add(offset)
+    const ropeMid = mid.clone().add(offset).add(new Vector3(0, -0.12, 0))
+    const ropeEnd = end.clone().add(offset)
+    kit.beam([ropeStart.x, ropeStart.y, ropeStart.z], [ropeMid.x, ropeMid.y, ropeMid.z], 0.025, 0x433427)
+    kit.beam([ropeMid.x, ropeMid.y, ropeMid.z], [ropeEnd.x, ropeEnd.y, ropeEnd.z], 0.025, 0x433427)
+  }
+}
+
 function addConnectedPiece(
   kit: ModelKit,
   piece: CourseAttraction['pieces'][number],
@@ -127,29 +161,7 @@ function addConnectedPiece(
       kit.box(ringX, end.y, ringZ, 0.22, 0.06, 0.28, 0x9a7442, ringRotation)
     }
   } else if (kind === 'hangingBridge' || kind === 'treeObstacle') {
-    const planks = Math.max(2, Math.ceil(length * 4))
-    for (let index = 0; index <= planks; index += 1) {
-      const t = index / planks
-      const point = start.clone().lerp(end, t)
-      const sag = Math.sin(t * Math.PI) * 0.11
-      kit.box(point.x, point.y - sag, point.z, 0.5, 0.055, 0.2, index % 2 ? 0x9b7044 : 0x805a37, q)
-      if (kind === 'treeObstacle' && index % 2 === 0) {
-        kit.beam(
-          [point.x - 0.2, point.y + 0.02, point.z],
-          [point.x + 0.2, point.y + 0.35, point.z],
-          0.035,
-          0x4c3828,
-        )
-      }
-    }
-    for (const side of [-1, 1]) {
-      const offset = new Vector3(side * 0.29, 0.36, 0).applyQuaternion(q)
-      const ropeStart = start.clone().add(offset)
-      const ropeMid = mid.clone().add(offset).add(new Vector3(0, -0.12, 0))
-      const ropeEnd = end.clone().add(offset)
-      kit.beam([ropeStart.x, ropeStart.y, ropeStart.z], [ropeMid.x, ropeMid.y, ropeMid.z], 0.025, 0x433427)
-      kit.beam([ropeMid.x, ropeMid.y, ropeMid.z], [ropeEnd.x, ropeEnd.y, ropeEnd.z], 0.025, 0x433427)
-    }
+    addBridgeOrTreeObstacle(kit, kind, start, mid, end, length, q)
   } else if (kind === 'treeZip' || kind === 'treeSwing') {
     kit.beam(
       [start.x, start.y + 0.48, start.z],

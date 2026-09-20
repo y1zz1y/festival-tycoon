@@ -20,7 +20,7 @@ Achterbahnen bleiben in [`coaster.md`](coaster.md) / [`attractions.md`](attracti
 | Gemeinsame Typen / Regeln | `src/game/attractions/types.ts`, `definitions.ts`, `construction.ts` | `Attraction`, Registry, Abschlussvalidierung |
 | Strecken / Flächen | `src/game/attractions/trackGraph.ts`, `areaLayout.ts` | Graph-Neuordnung, Area-Referenzen |
 | Gemeinsamer Editor | `src/ui/attractionBuilderPanel.ts` | RCT2-Palette, offene Enden, Höhe/Banking |
-| Typen, Katalog, Validierung, Tick | `src/game/courseAttractions.ts` | `appendCourseAreaCell`, `appendCoursePiece`, `courseTrackEnd`, `validateCourse`, `stepCourses` |
+| Typen, Katalog, Validierung, Tick | `src/game/courseAttractions.ts` | `appendCourseAreaCell`, `appendCoursePiece`, `courseTrackEnd`, `validateCourse`, `stepCourses`, `COURSE_RIDER_THOUGHTS` |
 | Platzieren / Betrieb / Preis / Team | `src/game/GameState.ts` | `startCourseArea`, `addCourseAreaCells`, `removeCourseAreaCells`, `startCourse`, `addCoursePiece`, `undoCoursePiece`, `setCourseOperating`, `setCoursePrice`, `setCourseTeamSize`, `removeCourse` |
 | Balancing | `src/game/simulationConfig.ts` | `courses` (`paintballTeamSize*`, `slideLaunchSpeed`, `slideGravity`) |
 | Abschlussbelohnung | `src/game/attractionFun.ts`, `src/game/attractions/runtime.ts`, `src/game/courseAttractions.ts` | `courses.funGain`, gemeinsame Runtime und Legacy-Projektion |
@@ -30,7 +30,7 @@ Achterbahnen bleiben in [`coaster.md`](coaster.md) / [`attractions.md`](attracti
 | Baumenü | `src/game/buildMenu.ts`, `src/ui/buildCatalog.ts` | Gruppe *Kurse*, Tool `course` |
 | Klick / Fläche ziehen | `src/main.ts`, `src/input/pathToolController.ts`, `src/input/toolRouter.ts` | Endpunkte/Hindernisse klicken; Anlagenfläche ziehen |
 | Gäste | `src/game/visitorBehavior.ts` | `findReachableCourse`; Becken über `isCourseSwimCell` / `ensureSwimGoals` |
-| Darstellung | `src/view/CourseView.ts` | zusammengeführte Spannweiten/Flächenränder, InstancedMesh für Fläche und Gegenstände, Landemarkierung |
+| Darstellung | `src/view/CourseView.ts` | zusammengeführte Spannweiten/Flächenränder, InstancedMesh für Fläche und Gegenstände, Landemarkierung; `addBridgeOrTreeObstacle` |
 | Tests | `tests/courseAttractions.ts` | `testCourseAttractions` |
 
 ## Konstruktion

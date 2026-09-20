@@ -162,6 +162,63 @@ export type VisitorBehaviorContext = {
 }, category?: FinanceCategory): boolean;
 }
 
+/** Applies purchase side-effects after a finished stall/ride interaction. */
+function applyPurchaseOutcome(
+  visitor: Visitor,
+  target: PlacedBuilding | undefined,
+  paid: boolean,
+  available: boolean,
+  holdMascotRoll: () => number,
+): void {
+  if (target?.kind === 'food' && paid) {
+    addItem(visitor.inventory, 'food')
+    visitor.thought = 'Ich habe Essen gekauft und suche einen Platz zum Essen.'
+    return
+  }
+  if (target?.kind === 'toilet' && paid) {
+    visitor.needs.toilet = SIMULATION_CONFIG.needs.toilet.toilet
+    visitor.thought = 'Das war dringend nötig.'
+    return
+  }
+  if (target?.kind === 'ride' && paid) {
+    grantAttractionFun(visitor, SIMULATION_CONFIG.needs.ride.funGain)
+    visitor.needs.energy = Math.max(
+      0,
+      visitor.needs.energy - SIMULATION_CONFIG.needs.ride.energyCost,
+    )
+    visitor.thought = target.rideType === 'bungee' ? 'Was für ein Bungeesprung!' : 'Das Karussell war großartig!'
+    visitor.bungeeNude = false
+    return
+  }
+  if (target?.kind === 'alcohol' && paid) {
+    addItem(visitor.inventory, 'alcohol')
+    visitor.thought = 'Ich habe ein Getränk gekauft und trinke es gleich in Ruhe.'
+    return
+  }
+  if (target?.kind === 'mascot' && paid) {
+    visitor.ownedMascot = true
+    visitor.heldMascot = holdMascotRoll() < SIMULATION_CONFIG.souvenirs.holdMascotChance
+    visitor.needs.fun = Math.min(100, visitor.needs.fun + SIMULATION_CONFIG.souvenirs.funGain)
+    visitor.thought = souvenirPurchaseThought('mascot', Boolean(visitor.heldMascot))
+    return
+  }
+  if (target?.kind === 'shirt' && paid) {
+    const shirt = defaultShirtSettings()
+    visitor.wornShirt = {
+      color: normalizeShirtColor(target.shirtColor ?? shirt.color),
+      style: normalizeShirtStyle(target.shirtStyle ?? shirt.style),
+    }
+    visitor.needs.fun = Math.min(100, visitor.needs.fun + SIMULATION_CONFIG.souvenirs.funGain)
+    visitor.thought = souvenirPurchaseThought('shirt', false)
+    return
+  }
+  if (target && !paid) {
+    visitor.thought = available ? 'Dafür reicht mein Budget nicht.' : 'Ausverkauft! Hier fehlt Nachschub.'
+    visitor.emotion = 'sad'
+    visitor.emotionMinutes = 45
+  }
+}
+
 /**
  * Detailed visitor movement, destination, interaction, and needs behavior.
  * Runtime-only caches live here; authoritative data remains in GameSnapshot.
@@ -3331,45 +3388,13 @@ export class VisitorBehaviorService {
         z: target.z + 0.5,
       })
     if (paid && shopSupply && target) consumeLocal(this.context.state, target.id, shopSupply)
-    if (target?.kind === 'food' && paid) {
-      addItem(visitor.inventory, 'food')
-      visitor.thought = 'Ich habe Essen gekauft und suche einen Platz zum Essen.'
-    } else if (target?.kind === 'toilet' && paid) {
-      visitor.needs.toilet = SIMULATION_CONFIG.needs.toilet.toilet
-      visitor.thought = 'Das war dringend nötig.'
-    } else if (target?.kind === 'ride' && paid) {
-      grantAttractionFun(visitor, SIMULATION_CONFIG.needs.ride.funGain)
-      visitor.needs.energy = Math.max(
-        0,
-        visitor.needs.energy - SIMULATION_CONFIG.needs.ride.energyCost,
-      )
+    applyPurchaseOutcome(visitor, target, Boolean(paid), available, () => this.context.rng.next())
+    if (target?.kind === 'ride' && paid) {
       this.context.incidents.addRideNausea(
         visitor,
         SIMULATION_CONFIG.nausea.carouselIntensity,
       )
-      visitor.thought = target.rideType === 'bungee' ? 'Was für ein Bungeesprung!' : 'Das Karussell war großartig!'
-      visitor.bungeeNude = false
       delete target.bungeeVisitorId
-    } else if (target?.kind === 'alcohol' && paid) {
-      addItem(visitor.inventory, 'alcohol')
-      visitor.thought = 'Ich habe ein Getränk gekauft und trinke es gleich in Ruhe.'
-    } else if (target?.kind === 'mascot' && paid) {
-      visitor.ownedMascot = true
-      visitor.heldMascot = this.context.rng.next() < SIMULATION_CONFIG.souvenirs.holdMascotChance
-      visitor.needs.fun = Math.min(100, visitor.needs.fun + SIMULATION_CONFIG.souvenirs.funGain)
-      visitor.thought = souvenirPurchaseThought('mascot', Boolean(visitor.heldMascot))
-    } else if (target?.kind === 'shirt' && paid) {
-      const shirt = defaultShirtSettings()
-      visitor.wornShirt = {
-        color: normalizeShirtColor(target.shirtColor ?? shirt.color),
-        style: normalizeShirtStyle(target.shirtStyle ?? shirt.style),
-      }
-      visitor.needs.fun = Math.min(100, visitor.needs.fun + SIMULATION_CONFIG.souvenirs.funGain)
-      visitor.thought = souvenirPurchaseThought('shirt', false)
-    } else if (target && !paid) {
-      visitor.thought = available ? 'Dafür reicht mein Budget nicht.' : 'Ausverkauft! Hier fehlt Nachschub.'
-      visitor.emotion = 'sad'
-      visitor.emotionMinutes = 45
     }
 
     const purchasedConsumable =

@@ -36,7 +36,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 - `eslint.config.js` prüft alle TypeScript-Dateien. SonarJS meldet kognitive
   Komplexität über 50 und identische Funktionen als Warnung; echte
   Korrektheits-/Unused-Verstöße schlagen fehl. Der bestehende Warnungs-Budget
-  ist 42 (`--max-warnings 42`): senken ist erwünscht, erhöhen nicht.
+  ist 36 (`--max-warnings 36`): senken ist erwünscht, erhöhen nicht.
 - `knip.json` kennt Browser-, Server-, Test- und Script-Einstiege. Der
   Abschlusscheck beschränkt Knip bewusst auf Dateien und Abhängigkeiten;
   öffentliche Fach-Exports werden nicht als Fehler behandelt.

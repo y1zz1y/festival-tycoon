@@ -9,7 +9,7 @@ sind abgeleitete Darstellung desselben Zustands.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Tick-Phase, Entscheidungsqueue | `src/game/visitorSimulation.ts` | `VisitorSimulation`, `VisitorSimulationContext`, `runTickPhase`, `flushDecisions` |
-| Detailverhalten, Bewegung, Ziele | `src/game/visitorBehavior.ts` | `VisitorBehaviorService`, `VisitorBehaviorContext`; Bewegung/Ankunft, Needs, Konzert, Shop, Camping, Baden (auch Schwimmbad-Becken), Müll und Laufzeit-Caches |
+| Detailverhalten, Bewegung, Ziele | `src/game/visitorBehavior.ts` | `VisitorBehaviorService`, `VisitorBehaviorContext`, `applyPurchaseOutcome`; Bewegung/Ankunft, Needs, Konzert, Shop, Camping, Baden (auch Schwimmbad-Becken), Müll und Laufzeit-Caches |
 | Typen, Spawn, Fassade | `src/game/types/entities.ts`, `src/game/visitorSpawning.ts`, `src/game/GameState.ts` | `Visitor`, `VisitorState`; Admission, Ankunftsgruppen und stabile Kompatibilitäts-Einstiege |
 | Stand-Queue-Spuren | `src/game/queueLanes.ts` | `queueStandOffset`, `stallQueueTileOffset` |
 | Need-/Alkohol-/Übelkeitswerte | `src/game/simulationConfig.ts` | `visitors`, `needs` (`interactionMinutes.stockout`), `alcohol`, `nausea` |

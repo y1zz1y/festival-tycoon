@@ -7,6 +7,48 @@ const unitX=new Vector3(1,0,0)
 const unitZ=new Vector3(0,0,1)
 /** Rotates a Y-axis CylinderGeometry to point along +Z, for lens/rim discs facing the fixture's own forward axis. */
 const CYL_TO_FORWARD=new Quaternion().setFromAxisAngle(unitX,Math.PI/2)
+
+function stashBucketGeometry(buckets:Map<string,BufferGeometry[]>,color:string,geometry:BufferGeometry):void{
+  const list=buckets.get(color)??[];list.push(geometry);buckets.set(color,list)
+}
+
+/** Vertex-colours a geometry for live meshes (moving-head head, LED-wall pixels). */
+function tintVertexColors(geometry:BufferGeometry,color:string):BufferGeometry{
+  const col=new Color(color),arr=new Float32Array(geometry.getAttribute('position').count*3)
+  for(let i=0;i<arr.length;i+=3)col.toArray(arr,i)
+  geometry.setAttribute('color',new Float32BufferAttribute(arr,3));geometry.deleteAttribute('uv')
+  return geometry
+}
+
+/** Box built in fixture-local space, then rotated onto the part's facing and pushed into a colour bucket. */
+function orientedBox(
+  buckets:Map<string,BufferGeometry[]>,
+  pivot:Vector3,
+  facingQuat:Quaternion,
+  lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string,
+  localQuat?:Quaternion,
+):void{
+  const g=new BoxGeometry(w,h,depth)
+  if(localQuat)g.applyQuaternion(localQuat)
+  g.applyQuaternion(facingQuat)
+  const wp=new Vector3(lx,ly,lz).applyQuaternion(facingQuat).add(pivot)
+  g.translate(wp.x,wp.y,wp.z)
+  stashBucketGeometry(buckets,color,g)
+}
+
+/** Forward-facing cylinder (+Z after CYL_TO_FORWARD), for lenses, spouts and funnels on facing fixtures. */
+function orientedForwardCylinder(
+  buckets:Map<string,BufferGeometry[]>,
+  pivot:Vector3,
+  facingQuat:Quaternion,
+  lz:number,topRadius:number,bottomRadius:number,height:number,color:string,
+):void{
+  const g=new CylinderGeometry(topRadius,bottomRadius,height,10)
+  g.applyQuaternion(CYL_TO_FORWARD);g.applyQuaternion(facingQuat)
+  const wp=new Vector3(0,0,lz).applyQuaternion(facingQuat).add(pivot)
+  g.translate(wp.x,wp.y,wp.z)
+  stashBucketGeometry(buckets,color,g)
+}
 /** For a truss's long axis, the two perpendicular unit vectors used to arrange its 3 chords. */
 const CROSS_AXES = {
   x: [{x:0,y:1,z:0},{x:0,y:0,z:1}],
@@ -488,12 +530,6 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         // Each moving part (arm, head) is its own merged, vertex-coloured mesh — one draw call
         // per part regardless of how many little boxes make it up — so that live pan/tilt
         // animation doesn't explode the scene's mesh count the way per-box materials would.
-        const tint=(geometry:BufferGeometry,color:string)=>{
-          const col=new Color(color),arr=new Float32Array(geometry.getAttribute('position').count*3)
-          for(let i=0;i<arr.length;i+=3)col.toArray(arr,i)
-          geometry.setAttribute('color',new Float32BufferAttribute(arr,3));geometry.deleteAttribute('uv')
-          return geometry
-        }
         const merge=(group:Group,parts:BufferGeometry[],vertexColors:boolean,color?:string)=>{
           const merged=mergeGeometries(parts);parts.forEach(g=>g.dispose())
           if(!merged)return
@@ -520,8 +556,8 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         const headPivotZ=armStart+armReach,headShift=.12
         const headGroup=new Group();headGroup.position.set(0,0,headPivotZ);headGroup.quaternion.copy(headRestQuat)
         armGroup.add(headGroup)
-        const headBox=(x:number,y:number,z:number,w:number,h:number,depth:number,color:string)=>tint(new BoxGeometry(w,h,depth).translate(x,y,z-headShift),color)
-        const headDisc=(z:number,radius:number,height:number,color:string)=>tint(new CylinderGeometry(radius,radius,height,12).rotateX(Math.PI/2).translate(0,0,z-headShift),color)
+        const headBox=(x:number,y:number,z:number,w:number,h:number,depth:number,color:string)=>tintVertexColors(new BoxGeometry(w,h,depth).translate(x,y,z-headShift),color)
+        const headDisc=(z:number,radius:number,height:number,color:string)=>tintVertexColors(new CylinderGeometry(radius,radius,height,12).rotateX(Math.PI/2).translate(0,0,z-headShift),color)
         merge(headGroup,[
           headBox(0,0,.16,.3,.3,.44,'#1a2129'), // elongated barrel, cradled between the arms
           headBox(0,0,-.08,.26,.24,.12,'#1a2129'), // rounded rear counterweight
@@ -556,31 +592,16 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
         const facingQuat=new Quaternion().setFromUnitVectors(unitZ,facingVec)
         const pivot=new Vector3(ex,ey+.16,ez)
-        const put=(lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string,localQuat?:Quaternion)=>{
-          const g=new BoxGeometry(w,h,depth)
-          if(localQuat)g.applyQuaternion(localQuat)
-          g.applyQuaternion(facingQuat)
-          const wp=new Vector3(lx,ly,lz).applyQuaternion(facingQuat).add(pivot)
-          g.translate(wp.x,wp.y,wp.z)
-          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
-        }
-        const putLens=(lz:number,radius:number,height:number,color:string)=>{
-          const g=new CylinderGeometry(radius,radius,height,10)
-          g.applyQuaternion(CYL_TO_FORWARD);g.applyQuaternion(facingQuat)
-          const wp=new Vector3(0,0,lz).applyQuaternion(facingQuat).add(pivot)
-          g.translate(wp.x,wp.y,wp.z)
-          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
-        }
         const housing='#161d26',trim='#232d38',bezel='#0d1117',clampColor='#3a4551'
-        put(0,-.03,-.1,.24,.19,.16,clampColor) // mounting foot/clamp, toward the back
-        put(0,0,.02,.36,.26,.32,housing) // main housing
-        for(const fx of [-.1,0,.1])put(fx,.145,.02,.045,.03,.24,bezel) // heat-sink fins on top
-        for(const side of [-1,1])put(side*.18,0,.02,.02,.17,.28,trim) // side trim panels
-        put(0,0,.18,.3,.2,.04,bezel) // recessed front bezel
-        putLens(.205,.095,.02,bezel) // dark lens rim
-        putLens(.216,.075,.014,c) // bright round lens
-        put(.1,.085,.06,.028,.028,.028,'#8ef29b') // status LED
-        put(0,-.08,-.18,.05,.05,.045,bezel) // DMX/cable stub
+        orientedBox(buckets,pivot,facingQuat,0,-.03,-.1,.24,.19,.16,clampColor) // mounting foot/clamp, toward the back
+        orientedBox(buckets,pivot,facingQuat,0,0,.02,.36,.26,.32,housing) // main housing
+        for(const fx of [-.1,0,.1])orientedBox(buckets,pivot,facingQuat,fx,.145,.02,.045,.03,.24,bezel) // heat-sink fins on top
+        for(const side of [-1,1])orientedBox(buckets,pivot,facingQuat,side*.18,0,.02,.02,.17,.28,trim) // side trim panels
+        orientedBox(buckets,pivot,facingQuat,0,0,.18,.3,.2,.04,bezel) // recessed front bezel
+        orientedForwardCylinder(buckets,pivot,facingQuat,.205,.095,.095,.02,bezel) // dark lens rim
+        orientedForwardCylinder(buckets,pivot,facingQuat,.216,.075,.075,.014,c) // bright round lens
+        orientedBox(buckets,pivot,facingQuat,.1,.085,.06,.028,.028,.028,'#8ef29b') // status LED
+        orientedBox(buckets,pivot,facingQuat,0,-.08,-.18,.05,.05,.045,bezel) // DMX/cable stub
         const lens=new Vector3(0,0,.22).applyQuaternion(facingQuat).add(pivot)
         effect('laser',lens.x,lens.y,lens.z,c,facing)
       }else if(p.kind==='fireworks'){
@@ -617,28 +638,15 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
         const facingQuat=new Quaternion().setFromUnitVectors(unitZ,facingVec)
         const pivot=new Vector3(ex,ey+.15,ez)
-        const put=(lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string)=>{
-          const g=new BoxGeometry(w,h,depth);g.applyQuaternion(facingQuat)
-          const wp=new Vector3(lx,ly,lz).applyQuaternion(facingQuat).add(pivot)
-          g.translate(wp.x,wp.y,wp.z)
-          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
-        }
-        const putFunnel=(lz:number,topRadius:number,bottomRadius:number,height:number,color:string)=>{
-          const g=new CylinderGeometry(topRadius,bottomRadius,height,10)
-          g.applyQuaternion(CYL_TO_FORWARD);g.applyQuaternion(facingQuat)
-          const wp=new Vector3(0,0,lz).applyQuaternion(facingQuat).add(pivot)
-          g.translate(wp.x,wp.y,wp.z)
-          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
-        }
         const housing='#3a3d42',trim='#55595f',bezel='#1c1e21'
-        put(0,0,-.02,.3,.28,.26,housing) // hopper body
-        putFunnel(.2,.14,.08,.2,trim) // funnel neck flaring toward the mouth
-        putFunnel(.32,.02,.14,.03,bezel) // funnel rim
-        putFunnel(.345,.055,.055,.014,c) // charge glowing right at the mouth, tinted by the chosen colour
-        put(.14,.02,-.1,.09,.09,.04,bezel) // control box
-        put(.14,.02,-.08,.03,.03,.02,c) // indicator LED, tinted by the chosen colour
-        put(0,-.09,-.16,.06,.05,.05,bezel) // cable stub
-        for(const fx of [-.13,.13])for(const fz of [-.1,.1])put(fx,-.15,fz,.05,.03,.05,bezel) // feet
+        orientedBox(buckets,pivot,facingQuat,0,0,-.02,.3,.28,.26,housing) // hopper body
+        orientedForwardCylinder(buckets,pivot,facingQuat,.2,.14,.08,.2,trim) // funnel neck flaring toward the mouth
+        orientedForwardCylinder(buckets,pivot,facingQuat,.32,.02,.14,.03,bezel) // funnel rim
+        orientedForwardCylinder(buckets,pivot,facingQuat,.345,.055,.055,.014,c) // charge glowing right at the mouth, tinted by the chosen colour
+        orientedBox(buckets,pivot,facingQuat,.14,.02,-.1,.09,.09,.04,bezel) // control box
+        orientedBox(buckets,pivot,facingQuat,.14,.02,-.08,.03,.03,.02,c) // indicator LED, tinted by the chosen colour
+        orientedBox(buckets,pivot,facingQuat,0,-.09,-.16,.06,.05,.05,bezel) // cable stub
+        for(const fx of [-.13,.13])for(const fz of [-.1,.1])orientedBox(buckets,pivot,facingQuat,fx,-.15,fz,.05,.03,.05,bezel) // feet
         const mouth=new Vector3(0,0,.34).applyQuaternion(facingQuat).add(pivot)
         effect('sparks',mouth.x,mouth.y,mouth.z,c,facing)
       }else if(p.kind==='fog'){
@@ -647,35 +655,22 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         const facing=partFacing(p),facingVec=new Vector3(facing.x,facing.y,facing.z)
         const facingQuat=new Quaternion().setFromUnitVectors(unitZ,facingVec)
         const pivot=new Vector3(ex,ey+.14,ez)
-        const put=(lx:number,ly:number,lz:number,w:number,h:number,depth:number,color:string)=>{
-          const g=new BoxGeometry(w,h,depth);g.applyQuaternion(facingQuat)
-          const wp=new Vector3(lx,ly,lz).applyQuaternion(facingQuat).add(pivot)
-          g.translate(wp.x,wp.y,wp.z)
-          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
-        }
         const putTopDisc=(ly:number,radius:number,height:number,color:string)=>{
           const g=new CylinderGeometry(radius,radius,height,10);g.applyQuaternion(facingQuat)
           const wp=new Vector3(0,ly,0).applyQuaternion(facingQuat).add(pivot)
           g.translate(wp.x,wp.y,wp.z)
-          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
-        }
-        const putSpout=(lz:number,radius:number,height:number,color:string)=>{
-          const g=new CylinderGeometry(radius,radius,height,10)
-          g.applyQuaternion(CYL_TO_FORWARD);g.applyQuaternion(facingQuat)
-          const wp=new Vector3(0,0,lz).applyQuaternion(facingQuat).add(pivot)
-          g.translate(wp.x,wp.y,wp.z)
-          const list=buckets.get(color)??[];list.push(g);buckets.set(color,list)
+          stashBucketGeometry(buckets,color,g)
         }
         const housing='#5b6470',vent='#40474f',bezel='#23272c',foot='#2b2f33'
-        put(0,0,0,.4,.26,.3,housing) // main housing
-        for(const fx of [-.11,0,.11])put(fx,.14,-.03,.05,.03,.18,vent) // heating-element vent ridges
+        orientedBox(buckets,pivot,facingQuat,0,0,0,.4,.26,.3,housing) // main housing
+        for(const fx of [-.11,0,.11])orientedBox(buckets,pivot,facingQuat,fx,.14,-.03,.05,.03,.18,vent) // heating-element vent ridges
         putTopDisc(.14,.06,.03,bezel) // fluid tank cap
-        put(0,-.03,.16,.18,.16,.06,bezel) // nozzle collar
-        putSpout(.26,.075,.14,c) // spout, tinted by the chosen colour
-        put(.13,.08,.14,.022,.022,.022,'#ff8a5c') // heat-ready LED
-        put(-.13,.08,.14,.022,.022,.022,'#79e07a') // power LED
-        put(0,-.1,-.16,.06,.05,.05,bezel) // cable stub
-        for(const fx of [-.16,.16])for(const fz of [-.12,.12])put(fx,-.14,fz,.05,.03,.05,foot) // feet
+        orientedBox(buckets,pivot,facingQuat,0,-.03,.16,.18,.16,.06,bezel) // nozzle collar
+        orientedForwardCylinder(buckets,pivot,facingQuat,.26,.075,.075,.14,c) // spout, tinted by the chosen colour
+        orientedBox(buckets,pivot,facingQuat,.13,.08,.14,.022,.022,.022,'#ff8a5c') // heat-ready LED
+        orientedBox(buckets,pivot,facingQuat,-.13,.08,.14,.022,.022,.022,'#79e07a') // power LED
+        orientedBox(buckets,pivot,facingQuat,0,-.1,-.16,.06,.05,.05,bezel) // cable stub
+        for(const fx of [-.16,.16])for(const fz of [-.12,.12])orientedBox(buckets,pivot,facingQuat,fx,-.14,fz,.05,.03,.05,foot) // feet
         const nozzle=new Vector3(0,-.03,.33).applyQuaternion(facingQuat).add(pivot)
         effect('fog',nozzle.x,nozzle.y,nozzle.z,'#c9d6dd',facing)
       }else if(p.kind==='screen'){
@@ -707,19 +702,13 @@ export function createStageModel(d:StageDesign,options:{floor?:boolean;partIds?:
         // this module's own 3x3, so the wave reads as one continuous ripple across however many
         // modules are joined together instead of restarting inside each one.
         const screenGroup=screenGroups.get(p.id)
-        const tintPixel=(geometry:BufferGeometry,color:string)=>{
-          const col=new Color(color),arr=new Float32Array(geometry.getAttribute('position').count*3)
-          for(let i=0;i<arr.length;i+=3)col.toArray(arr,i)
-          geometry.setAttribute('color',new Float32BufferAttribute(arr,3));geometry.deleteAttribute('uv')
-          return geometry
-        }
         const pixelGeoms:BufferGeometry[]=[],pixelCoords:{row:number;col:number}[]=[]
         for(let a=0;a<pixelsPerSide;a++)for(let b=0;b<pixelsPerSide;b++){
           const r=rotateAround(ex+(a-mid)*pitch,ez+SCREEN_DEPTH/2+.015)
           let w=pixel,depth=.03
           if(origin&&origin.rotation%2)[w,depth]=[depth,w]
           const g=new BoxGeometry(w,pixel,depth);g.translate(r.x,ey+.5+(b-mid)*pitch,r.z)
-          pixelGeoms.push(tintPixel(g,(a+b)%3?c:'#f3dfb0'))
+          pixelGeoms.push(tintVertexColors(g,(a+b)%3?c:'#f3dfb0'))
           pixelCoords.push({row:(screenGroup?.row??0)*pixelsPerSide+b,col:(screenGroup?.col??0)*pixelsPerSide+a})
         }
         const mergedPixels=mergeGeometries(pixelGeoms);pixelGeoms.forEach(g=>g.dispose())

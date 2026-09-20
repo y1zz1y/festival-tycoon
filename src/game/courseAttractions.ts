@@ -1090,6 +1090,23 @@ function pieceHeight(piece: CoursePiece): number {
   return piece.elevation * 0.85
 }
 
+const COURSE_RIDER_THOUGHTS: Partial<Record<CoursePieceKind, string>> = {
+  poolBasin: 'Ich schwimme im Becken.',
+  waterDitch: 'Durch den Wassergraben!',
+  treeRing: 'Einmal um den Baum.',
+  climbWall: 'Hoch über die Kletterwand!',
+  ropeSwing: 'Festhalten und schwingen!',
+  treeSwing: 'Festhalten und schwingen!',
+  crawlTunnel: 'Durch den Kriechtunnel.',
+  ladder: 'Die Leiter hinauf!',
+  treeLadder: 'Die Leiter hinauf!',
+  jump: 'Absprung!',
+  monkeyBars: 'Weiterhangeln!',
+  treeObstacle: 'Weiterhangeln!',
+  hangingBridge: 'Die Brücke schwankt!',
+  treeZip: 'Mit der Seilbahn zum nächsten Baum!',
+}
+
 function coursePiecePosition(
   piece: CoursePiece,
   progress: number,
@@ -1288,17 +1305,8 @@ function advanceCourseRiders(
       visitor.cellZ = Math.floor(visitor.z)
       visitor.y = pose.y
     }
-    if (piece.kind === 'poolBasin') visitor.thought = 'Ich schwimme im Becken.'
-    if (piece.kind === 'waterDitch') visitor.thought = 'Durch den Wassergraben!'
-    if (piece.kind === 'treeRing') visitor.thought = 'Einmal um den Baum.'
-    if (piece.kind === 'climbWall') visitor.thought = 'Hoch über die Kletterwand!'
-    if (piece.kind === 'ropeSwing' || piece.kind === 'treeSwing') visitor.thought = 'Festhalten und schwingen!'
-    if (piece.kind === 'crawlTunnel') visitor.thought = 'Durch den Kriechtunnel.'
-    if (piece.kind === 'ladder' || piece.kind === 'treeLadder') visitor.thought = 'Die Leiter hinauf!'
-    if (piece.kind === 'jump') visitor.thought = 'Absprung!'
-    if (piece.kind === 'monkeyBars' || piece.kind === 'treeObstacle') visitor.thought = 'Weiterhangeln!'
-    if (piece.kind === 'hangingBridge') visitor.thought = 'Die Brücke schwankt!'
-    if (piece.kind === 'treeZip') visitor.thought = 'Mit der Seilbahn zum nächsten Baum!'
+    const riderThought = COURSE_RIDER_THOUGHTS[piece.kind]
+    if (riderThought) visitor.thought = riderThought
     if (rider.progress < 1) {
       remaining.push(rider)
       continue

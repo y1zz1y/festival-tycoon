@@ -4987,8 +4987,11 @@ input[type='checkbox']:disabled {
    travels along it, with the same hover, pressed and disabled states as any
    other control. The knob stays a solid colour at rest (not the translucent
    button fill) so it is always visible against the groove rather than fading
-   into it, with hover and drag still reading as a clear step up in colour. */
+   into it, with hover and drag still reading as a clear step up in colour.
+   `--range-accent` replaces native accent-color (ignored once appearance is
+   none). Ticket-price sliders set it to green/yellow/red Kaufbereitschaft. */
 input[type='range'] {
+  --range-accent: #4d6a5d;
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
@@ -4998,6 +5001,7 @@ input[type='range'] {
   background: transparent;
   cursor: pointer;
   vertical-align: middle;
+  accent-color: var(--range-accent);
 }
 
 input[type='range']::-webkit-slider-runnable-track {
@@ -5028,7 +5032,7 @@ input[type='range']::-webkit-slider-thumb {
   width: 16px;
   height: 16px;
   margin-top: -5px;
-  background: #4d6a5d;
+  background: var(--range-accent);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-top-color: #819b8c;
   border-left-color: #819b8c;
@@ -5041,7 +5045,7 @@ input[type='range']::-webkit-slider-thumb {
 input[type='range']::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  background: #4d6a5d;
+  background: var(--range-accent);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-top-color: #819b8c;
   border-left-color: #819b8c;
@@ -5052,22 +5056,22 @@ input[type='range']::-moz-range-thumb {
 }
 
 input[type='range']:hover:not(:disabled)::-webkit-slider-thumb {
-  background: #3f715b;
+  background: color-mix(in srgb, var(--range-accent) 78%, #fff);
 }
 
 input[type='range']:hover:not(:disabled)::-moz-range-thumb {
-  background: #3f715b;
+  background: color-mix(in srgb, var(--range-accent) 78%, #fff);
 }
 
 input[type='range']:active:not(:disabled)::-webkit-slider-thumb {
-  background: #3f715b;
+  background: color-mix(in srgb, var(--range-accent) 82%, #000);
   border-top-color: #203c30;
   border-left-color: #203c30;
   box-shadow: inset 1px 1px #203c30;
 }
 
 input[type='range']:active:not(:disabled)::-moz-range-thumb {
-  background: #3f715b;
+  background: color-mix(in srgb, var(--range-accent) 82%, #000);
   border-top-color: #203c30;
   border-left-color: #203c30;
   box-shadow: inset 1px 1px #203c30;

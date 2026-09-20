@@ -35,8 +35,23 @@
 .festival-number { font-size: 30px; font-variant-numeric: tabular-nums; color: #f4d887; }
 .festival-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; background: #253c32; padding: 14px; }
 .festival-form label { display: flex; flex-direction: column; gap: 6px; color: #bfcebc; }
-.festival-form input, .festival-form select { max-width: 100%; padding: 8px; background: #162e27; color: #f1eedb; border: 1px solid #7e9986; font: inherit; }
+.festival-form input:not([type=range]), .festival-form select { max-width: 100%; padding: 8px; background: #162e27; color: #f1eedb; border: 1px solid #7e9986; font: inherit; }
 .festival-form input[type=number] { width: 100px; }
+/* Ticket-price sliders: Kaufbereitschaft paints thumb + track via --range-accent
+   (set in festivalUI from estimate.dayColor / campingColor). */
+.festival-price-sliders input[type=range] { min-width: 160px; }
+.festival-price-sliders input[type=range]::-webkit-slider-runnable-track {
+  background: color-mix(in srgb, var(--range-accent) 42%, rgba(22, 46, 39, 0.9));
+  border-color: color-mix(in srgb, var(--range-accent) 50%, #1b322c);
+  border-right-color: color-mix(in srgb, var(--range-accent) 35%, #819b8c);
+  border-bottom-color: color-mix(in srgb, var(--range-accent) 35%, #819b8c);
+}
+.festival-price-sliders input[type=range]::-moz-range-track {
+  background: color-mix(in srgb, var(--range-accent) 42%, rgba(22, 46, 39, 0.9));
+  border-color: color-mix(in srgb, var(--range-accent) 50%, #1b322c);
+  border-right-color: color-mix(in srgb, var(--range-accent) 35%, #819b8c);
+  border-bottom-color: color-mix(in srgb, var(--range-accent) 35%, #819b8c);
+}
 .festival-management .day-plan-scroll { margin-top: 12px; }
 .festival-management .day-plan-status { color: #c3d3c6; }
 .festival-note { padding: 10px; border-left: 3px solid #c4ab64; }
