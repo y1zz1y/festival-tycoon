@@ -352,6 +352,20 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
     FESTIVAL_LIGHT_BUDGET,
     'and the whole pool stays in use',
   )
+  // The point of following the zoom: a view with far more lamps on it than there
+  // are lights must still light all of them. Handing the lights to the ones
+  // nearest the middle of the screen lit a clump in the centre and left two
+  // thirds of the park dark, so neighbours share a light instead.
+  {
+    const view = lightViewOf(zoomedOut, new Vector3(39, 0, 11))
+    const sources: Array<{ position: Vector3 }> = (festivalLights as any).sources
+    const onScreen = sources.filter(source => view.frustum.containsPoint(source.position))
+    const shining = originalLights.filter(light => light.intensity > 0)
+    assert.ok(onScreen.length > FESTIVAL_LIGHT_BUDGET * 2, 'the zoomed-out view really is crowded')
+    const dark = onScreen.filter(source => !shining.some(light =>
+      Math.hypot(light.position.x - source.position.x, light.position.z - source.position.z) <= light.distance))
+    assert.deepEqual(dark, [], 'every lamp on screen stands in the reach of some light')
+  }
   const balloonLights = new FestivalLightsView()
   lightSnapshot.buildings = [{
     id: 'moon-balloon',

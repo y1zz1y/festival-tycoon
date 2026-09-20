@@ -66,6 +66,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust |
 | `tests/headlineMagazine.ts` | HEADLINE Magazin nur nach Festivalende, ≥1 Pro/Kontra, deterministisch, nicht mitten im Wochenende |
 | `tests/headline-magazine-preview.html` | visuelles HEADLINE-Heft nach einem beendeten Wochenende |
+| `tests/lights-preview.html` | Parkbeleuchtung bei Nacht über zwei Lampenalleen; `show(halbbreite)` in der Konsole fährt die Zoomstufen ab und zeigt, dass beim Rauszoomen die ganze Allee beleuchtet bleibt statt nur die Bildmitte |
 | `tests/backstage-preview.html` | Bandversorgung aus der Nähe: Getränkekühler, beide Couchgrößen, Goldklo; `window.preview` hält Szene und Kamera zum Anfahren einzelner Modelle |
 | `tests/visitorSleep.ts` | Festival-Schlafzeiten, Legacy-Remap, zirkadiane Energie, Zelt- und Abreiseziele |
 | `tests/festivalAdditions.ts` | spätere Festival-Systeme, Eimer-Karton-Batches, zusammenhängende Müllablage-Füllstände, Müllwagen-Ladungsanzeige, 1-Feld-Steigungen, Wagen-Mesh, gerundete Schienenjoins, Achterbahn-Komplettabriss, SI-Geschwindigkeitsuntergrenzen (`chainSpeed` / Launch / Drag / `maximumSpeed`) |

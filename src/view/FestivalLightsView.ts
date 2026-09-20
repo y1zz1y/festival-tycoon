@@ -1,4 +1,4 @@
-import { lightViewsDiffer, rankByView, type LightView } from './lightSelection'
+import { groupForBudget, lightViewsDiffer, rankByView, type LightView } from './lightSelection'
 import { AdditiveBlending, Color, DataTexture, Group, InstancedMesh, LinearFilter, MeshBasicMaterial, PlaneGeometry, SphereGeometry, Matrix4, PointLight, SpotLight, Vector3 } from 'three'
 import type { GameSnapshot } from '../game/GameState'
 import { isFestivalOfferActive } from '../game/dayPlan'
@@ -235,23 +235,63 @@ export class FestivalLightsView {
       light.intensity = 0
       light.color.setHex(WARM_LIGHT_COLOR)
     }
-    const points = ranked.filter(entry => !assignedSpots.has(entry.source))
+    const points = ranked.filter(entry => !assignedSpots.has(entry.source)).map(entry => entry.source)
+    const view = this.view
+    const visible = view ? points.filter(source => view.frustum.containsPoint(source.position)) : points
+    // While what is on screen fits the pool, every source keeps its own light and
+    // the leftovers go to sources just outside the view, as before. Only once
+    // there are more on screen than lights to give — a zoomed-out view of a
+    // built-up park — do neighbours share one, because handing the lights to the
+    // ones nearest the middle lit a clump and left the rest of the park dark.
+    const groups: LightSource[][] = visible.length <= this.pool.length
+      ? points.map(source => [source])
+      : groupForBudget(visible.map(source => source.position), visible.map(source => source.spec.color), this.pool.length)
+        .map(indices => indices.map(index => visible[index]!))
     this.pool.forEach((light, i) => {
-      const source = points[i]?.source
-      if (!source) {
+      const group = groups[i]
+      if (!group || group.length === 0) {
         light.intensity = 0
         light.color.setHex(WARM_LIGHT_COLOR)
         light.distance = WARM_LIGHT_DISTANCE
         light.decay = 1.6
         return
       }
-      light.color.setHex(source.spec.color)
-      light.distance = source.spec.distance
-      light.decay = source.spec.decay
-      light.intensity = sourceIntensity(source, this.night)
-      light.position.copy(source.position)
-      light.position.y += source.spec.flatBulb ? .2 : .15
+      this.applyGroup(light, group)
     })
+  }
+
+  /**
+   * One real light standing in for a group of sources. Brightness grows with the
+   * square root of the count rather than the sum: ten lamps in a square are
+   * brighter than one, but nothing like ten times, and summing blew the whole
+   * area out to white.
+   */
+  private applyGroup(light: PointLight, group: readonly LightSource[]): void {
+    const lead = group.reduce((best, source) =>
+      sourceIntensity(source, this.night) > sourceIntensity(best, this.night) ? source : best)
+    light.color.setHex(lead.spec.color)
+    light.decay = lead.spec.decay
+    if (group.length === 1) {
+      light.distance = lead.spec.distance
+      light.intensity = sourceIntensity(lead, this.night)
+      light.position.copy(lead.position)
+      light.position.y += lead.spec.flatBulb ? .2 : .15
+      return
+    }
+    let x = 0, y = 0, z = 0, reach = 0
+    for (const source of group) {
+      x += source.position.x
+      y += source.position.y
+      z += source.position.z
+    }
+    x /= group.length; y /= group.length; z /= group.length
+    // Far enough to still reach the sources it stands in for.
+    for (const source of group) {
+      reach = Math.max(reach, Math.hypot(source.position.x - x, source.position.z - z))
+    }
+    light.position.set(x, y + (lead.spec.flatBulb ? .2 : .15), z)
+    light.distance = reach + lead.spec.distance
+    light.intensity = sourceIntensity(lead, this.night) * Math.min(2.5, Math.sqrt(group.length))
   }
   private applySpot(light: SpotLight, source: LightSource): void {
     const angle = source.rotation * Math.PI / 2

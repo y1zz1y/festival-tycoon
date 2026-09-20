@@ -1,0 +1,56 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>Parkbeleuchtung – Vorschau</title>
+<style>body{margin:0;background:#0b1512;color:#efe1ba;font:14px system-ui}canvas{display:block}#hud{position:absolute;top:14px;left:18px}</style>
+<div id="hud"><b>Parkbeleuchtung</b> · <span id="info"></span><br><small>In der Konsole <code>show(8)</code> bis <code>show(40)</code> für die Zoomstufen.</small></div>
+<script type="module">
+import * as T from 'three';
+import { GameState } from '../src/game/GameState.ts';
+import { FestivalLightsView } from '../src/view/FestivalLightsView.ts';
+import { lightViewOf } from '../src/view/lightSelection.ts';
+
+const snapshot = structuredClone(new GameState().snapshot);
+snapshot.terrain = { heights: {} };
+snapshot.buildings = [];
+snapshot.minute = 23 * 60;
+for (let i = 0; i < 24; i++) snapshot.dayPlan.offers.lights[i] = true;
+let id = 0;
+for (let z = -20; z <= 20; z += 2) for (const x of [-6, 6])
+  snapshot.buildings.push({ id: `lamp-${id++}`, kind: 'lighting', x, z, elevation: 0, rotation: 0 });
+snapshot.power.poweredBuildingIds = snapshot.buildings.map(b => b.id);
+const game = new GameState(snapshot);
+
+const scene = new T.Scene(); scene.background = new T.Color('#0b1512');
+// Almost no ambient: what you see is the lamps doing the work.
+scene.add(new T.AmbientLight(0xffffff, 0.06));
+const ground = new T.Mesh(new T.BoxGeometry(40, .2, 60), new T.MeshStandardMaterial({ color: 0x8c8f78, roughness: 1 }));
+ground.position.y = -.1; scene.add(ground);
+// Posts along the avenue, so the light has something to fall on.
+const posts = new T.InstancedMesh(new T.BoxGeometry(.5, 1.2, .5), new T.MeshStandardMaterial({ color: 0xbdbfae, roughness: .9 }), 84);
+let n = 0; const m = new T.Matrix4();
+for (let z = -20; z <= 20; z += 2) for (const x of [-4.2, 4.2]) { m.setPosition(x, .6, z); posts.setMatrixAt(n++, m) }
+posts.count = n; scene.add(posts);
+
+const lights = new FestivalLightsView();
+lights.update(game.snapshot);
+scene.add(lights.group);
+
+const camera = new T.OrthographicCamera(-8, 8, 4.5, -4.5, .1, 400);
+const renderer = new T.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight); renderer.outputColorSpace = T.SRGBColorSpace;
+document.body.append(renderer.domElement);
+
+function show(halfWidth) {
+  const aspect = innerWidth / innerHeight;
+  camera.left = -halfWidth; camera.right = halfWidth;
+  camera.top = halfWidth / aspect; camera.bottom = -halfWidth / aspect;
+  camera.position.set(halfWidth * 2, halfWidth * 2, halfWidth * 2);
+  camera.lookAt(0, 0, 0); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  lights.setView(lightViewOf(camera, new T.Vector3(0, 0, 0)));
+  const pool = lights.pool ?? [];
+  document.getElementById('info').textContent =
+    `Halbbreite ${halfWidth} · Lichter an: ${pool.filter(l => l.intensity > 0).length}`;
+  renderer.render(scene, camera);
+}
+window.show = show;
+window.lightsView = lights;
+show(8);
+</script></html>
