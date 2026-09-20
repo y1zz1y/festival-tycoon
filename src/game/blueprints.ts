@@ -31,6 +31,7 @@ type CaptureSnapshot = {
       roadSlope?: number
       roadSlopeDirection?: Direction
     }>
+    parkingCells?: ReadonlyArray<{ x: number; z: number }>
   }
   festival: { infrastructure: { ground: Record<string, { roadway?: WayType } | undefined> } }
 }
@@ -74,13 +75,19 @@ export type BlueprintRoadItem = {
   wayType?: WayType
 }
 
+export type BlueprintParkingItem = {
+  type: 'parking'
+  dx: number
+  dz: number
+}
+
 export type BlueprintTerrainCell = {
   dx: number
   dz: number
   height: number
 }
 
-export type BlueprintItem = BlueprintBuildingItem | BlueprintRoadItem
+export type BlueprintItem = BlueprintBuildingItem | BlueprintRoadItem | BlueprintParkingItem
 
 export type Blueprint = {
   version: 1
@@ -101,13 +108,14 @@ export type BlueprintLibraryEntry = {
 export type BlueprintGhost = {
   x: number
   z: number
-  kind: BuildingKind | 'road'
+  kind: BuildingKind | 'road' | 'parking'
   rotation: number
   decorationSlot?: number
   elevationOffset: number
   valid: boolean
   isRoad: boolean
   isPath: boolean
+  isParking?: boolean
 }
 
 export function isBlueprintCopyableKind(kind: string): boolean {
@@ -166,6 +174,9 @@ export function transformBlueprintItems(items: readonly BlueprintItem[], rotatio
         slopeDirection: (item.slopeDirection + turns) % 4,
       }
     }
+    if (item.type === 'parking') {
+      return { ...item, dx: offset.dx, dz: offset.dz }
+    }
     const decorationSlot = rotateDecorationSlot(item.kind, item.decorationSlot, turns)
     const next: BlueprintBuildingItem = {
       ...item,
@@ -187,6 +198,9 @@ export function transformBlueprintItems(items: readonly BlueprintItem[], rotatio
 }
 
 export function catalogItemCost(item: BlueprintItem): number {
+  if (item.type === 'parking') {
+    return SIMULATION_CONFIG.logistics.parkingDesignationCost
+  }
   if (item.type === 'road') {
     return item.wayType ? WAY_TYPES[item.wayType].cost : SIMULATION_CONFIG.logistics.roadBuildCost
   }
@@ -207,9 +221,11 @@ export function blueprintStampCharge(items: readonly BlueprintItem[]): number {
 export function describeBlueprint(blueprint: Blueprint): string {
   const buildings = blueprint.items.filter((item) => item.type === 'building').length
   const roads = blueprint.items.filter((item) => item.type === 'road').length
+  const parking = blueprint.items.filter((item) => item.type === 'parking').length
   const cost = blueprintStampCharge(blueprint.items)
   const parts = [`${buildings} Objekt${buildings === 1 ? '' : 'e'}`]
   if (roads) parts.push(`${roads} Straßenfeld${roads === 1 ? '' : 'er'}`)
+  if (parking) parts.push(`${parking} Parkplatz${parking === 1 ? '' : 'felder'}`)
   parts.push(`${cost.toLocaleString('de-DE')} €`)
   return `${blueprint.width}×${blueprint.depth} · ${parts.join(' · ')}`
 }
@@ -275,6 +291,15 @@ export function captureBlueprint(
     })
   }
 
+  for (const parking of snapshot.logistics.parkingCells ?? []) {
+    if (!inside.has(`${parking.x},${parking.z}`)) continue
+    items.push({
+      type: 'parking',
+      dx: parking.x - minX,
+      dz: parking.z - minZ,
+    })
+  }
+
   const terrain: BlueprintTerrainCell[] = cells.map((cell) => ({
     dx: cell.x - minX,
     dz: cell.z - minZ,
@@ -308,6 +333,11 @@ export function normalizeBlueprint(raw: unknown): Blueprint | null {
         slopeDirection: Number(item.slopeDirection) || 0,
         wayType: item.wayType,
       })
+      continue
+    }
+    if (item.type === 'parking') {
+      if (!Number.isFinite(item.dx) || !Number.isFinite(item.dz)) continue
+      items.push({ type: 'parking', dx: item.dx, dz: item.dz })
       continue
     }
     if (item.type !== 'building' || !isBlueprintCopyableKind(item.kind)) continue

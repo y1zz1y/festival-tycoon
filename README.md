@@ -349,7 +349,9 @@ das freie Spiel folgen.
 - **Publikum:** Musikfans, Partygänger, Familien, Komfortgäste und Campingfans unterscheiden
   sich in Budget, Vorlieben und Verhalten. Das erwartete Publikum reagiert auf Programm
   und Festivalruf; die tatsächliche Zielgruppe ist in der Besucherinformation sichtbar.
-  Konzertbesucher reservieren weiterhin höchstens neun Plätze pro Vorplatzfeld.
+  Konzertbesucher reservieren weiterhin höchstens neun Plätze pro Vorplatzfeld
+  und drängen sich dabei nach vorne zur Bühne; hintere Reihen füllen sich erst,
+  wenn vorne kein Platz mehr ist.
 - **Wetter:** Heiter, Regen, Hitze und starker Wind mit einer Sechs-Stunden-Risikovorhersage.
   Einzelne Stunden können milder ausfallen. Regen hinterlässt langsam trocknenden Boden
   und verlangsamt unbefestigte Strecken. Hitze kostet Energie; Wind unterbricht ungesicherte
@@ -390,9 +392,9 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - schrittweises Bauen und Rückgängig-Funktion für die aktuelle Wegkonstruktion
 - drehbare Gebäude mit sichtbarer, funktionaler Zugangsrichtung
 - Baukosten, stündlicher Unterhalt und einfache Einnahmen
-- In Tagesplan-Pausen sinkt der Unterhalt von Buden und Attraktionen auf
-  15 %. Festivalbühnen zahlen außerhalb laufender Festivaltage ebenfalls
-  nur 15 % Gebäudeunterhalt und keine Technikkosten.
+- Läuft gerade kein Festival, sinkt der Unterhalt von Buden, Fahrgeschäften
+  und Kursen auf 5 % (Leerlauf). Festivalbühnen zahlen dann 5 %
+  Gebäudeunterhalt und keine Technikkosten. Personal und Kreditzinsen bleiben.
 - Gästezahl, Attraktivität und Reputation
 - pausierbare Simulation mit drei Geschwindigkeiten
 - Bauvorschau, Belegungsprüfung, Abriss- und Info-Werkzeug (Abriss trifft das Mesh unter dem Zeiger)
@@ -404,7 +406,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Alkoholstände mit konfigurierbaren Preisen und echten Besucherzahlungen
 - individueller Alkoholpegel sowie ruhige oder aggressive Reaktion auf Trunkenheit
 - torkelnde Besucher, erhöhter Energieverlust und Einschlafen bei starker Erschöpfung
-- ausweisbare Zeltbereiche mit persönlichen Besucherparzellen
+- ausweisbare Zeltbereiche mit persönlichen Besucherparzellen; darauf dürfen keine Gebäude, Wege oder Deko stehen (nur Bauzaun, oder höher als 1,2)
 - Anreise mit Bollerwagen, Zeltaufbau, Erholung im eigenen Zelt und geregelter Abreise
 - langlebige Campingaufenthalte mit Zeltabbau erst bei Parkschließung
 - soziale Treffpunkte zwischen den Zelten sowie sichtbare Gespräche und Schlafanzeigen
@@ -418,7 +420,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - zuschaltbares Gedränge-Overlay mit durchschnittlicher Parkauslastung
 - getrennte Karten-Overlays für lokale Attraktivität und Partystimmung mit abflachender Quellenaddition
 - Dekoration mit Themen oben im Deko-Reiter (Klassik, Wüste, Wald, Neon, Industrie, Tropen, Mystik, Zirkus, Alpin, Arktis, Steampunk) und darunter den Kategorien Pflanzen, Möbel, Licht, Fest, Kulisse, Zaun. Darin Bäume, Hecken, Banner, thematische Palmen, Neonbögen, Eisskulpturen, Zahnräder und die bisherigen Stücke (Totems, Lampions, Bierfässer, Diskokugeln, Willkommensbögen, Bänke, Mastleuchten, Tageslichtballons, …). Jede Lampe unter **Licht** leuchtet in der Farbe ihres Modells (warmes Laternenlicht, UV/Neon, Polarlicht, Gaslicht, Natrium-Baustrahler, …), sobald Beleuchtung im Tagesplan aktiv ist. Hecken, Zäune und Wände sind für Fußgänger undurchlässig; Türen in Wänden bleiben begehbar. Jede Art hat eine eigene Attraktivität: kleine billige Stücke wirken nur nah, teure Blickfänge stärker und weiter (Karten-Overlay Attraktivität)
-- Festivalbühnen, gerichtete sowie omnidirektionale Lautsprecher und ausweisbare Bühnenvorplätze
+- Festivalbühnen, gerichtete sowie omnidirektionale Lautsprecher und ausweisbare Bühnenvorplätze; auf dem Vorplatz dürfen keine Gebäude, Wege oder Deko stehen (Ausnahmen: Bauzaun und Delay-Turm)
 - maximal neun feiernde Besucher je Vorplatzfeld, lokale Tanz-Hotspots und Stimmungsverstärkung durch Tänzer
 - individuelle Vorlieben für schöne Umgebung und Partystimmung sowie Meidung von Feuer, Kotze und Schlafenden
 - kleine Camping-Musikboxen und Gespräche als lokale Stimmungsquellen
@@ -438,7 +440,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Personalverwaltung für Reinigung, Sicherheit, Feuerwehr und Sanitäter mit laufenden Lohnkosten
 - Feuerwache mit Feuerwehrwagen, der ohne Auftrag in der Wache steht
 - Tische am Weg zum Essen und Trinken; Camper bleiben häufiger am eigenen Platz
-- Kurs-Attraktionen unter Attraktionen → Kurse: Mudmasters und Tree-to-Tree wechseln nach dem Eingang direkt in den Wegbau. Vom aktuellen Streckenende wird wie beim Straßenbau Feld für Feld eine richtungsfeste Linie gezogen; automatisch erzeugte Übergangsplattformen und Stützen verbinden realistisch aufeinanderfolgende Wege, Hindernisse und Höhenwechsel. Mudmasters nutzt Holz-/Erdhindernisse, Tree-to-Tree Bäume, Kronenpodeste, Planken und Seile. Ein angrenzender Warteschlangenweg verbindet sich gerichtet mit dem Kurseingang; **Fertig** validiert und öffnet die Anlage. Schwimmbad und Paintball beginnen mit einer klar markierten, nachträglich erweiter- und löschbaren Anlagenfläche; verfugte Beckenumgänge, Wasserflächen, gestützte Rutschen sowie Rasen, Netzgrenzen, Bunker und Teamunterstände geben beiden Anlagen einen eigenen Stil. Gäste bleiben während aller Kursinteraktionen sichtbar. Paintballteams warten an ihren Startpunkten und führen anschließend ein langsameres, sichtbares Match mit Markierern und fliegenden Farbkugeln aus. Der Rutschen-Editor zeigt den physikalischen Landepunkt grün/rot an.
+- Kurs-Attraktionen unter Attraktionen → Kurse: Mudmasters und Tree-to-Tree wechseln nach dem Eingang direkt in den Wegbau. Vom aktuellen Streckenende wird wie beim Straßenbau Feld für Feld eine richtungsfeste Linie gezogen; automatisch erzeugte Übergangsplattformen und Stützen verbinden realistisch aufeinanderfolgende Wege, Hindernisse und Höhenwechsel. Mudmasters nutzt Holz-/Erdhindernisse, Tree-to-Tree Bäume, Kronenpodeste, Planken und Seile. Ein angrenzender Warteschlangenweg verbindet sich gerichtet mit dem Kurseingang; **Fertig** prüft die Anlage und öffnet das Infofenster. Öffnen und Schließen stehen dort, nicht im Baumenü. Schwimmbad und Paintball beginnen mit einer klar markierten, nachträglich erweiter- und löschbaren Anlagenfläche; verfugte Beckenumgänge, Wasserflächen, gestützte Rutschen sowie Rasen, Netzgrenzen, Bunker und Teamunterstände geben beiden Anlagen einen eigenen Stil. Gäste bleiben während aller Kursinteraktionen sichtbar. Paintballteams warten an ihren Startpunkten und führen anschließend ein langsameres, sichtbares Match mit Markierern und fliegenden Farbkugeln aus. Der Rutschen-Editor zeigt den physikalischen Landepunkt grün/rot an.
 - Bandplaner in 1–5-Sterne-Tabs; 5-Sterne-Headliner nur selten im Lostopf
 - Sanitäter wählen für Transporte stets das über die Wegstrecke nächstgelegene freie Krankenbett
 - Bei Verletzten rückt immer der nächste freie Sanitäter oder Krankenwagen aus; wer schon einen Patienten hat, bleibt bei ihm
@@ -457,7 +459,8 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - lokales, nicht ausbreitendes Brandrisiko durch betrunken gezündetes Feuerwerk
 - patrouillierende Feuerwehrkräfte, die lokale Brände löschen
 - RCT-Iconleiste oben rechts: Bauen, Verwalten und Sitzung; Baupaletten und Straßeneditor links
-- **Kopieren** in der Bauleiste: Rechteck aufziehen, Geistervorschau folgt dem Zeiger, Klick stempelt (Katalogpreis × 0,8). **R** dreht. Optional mit Namen in der **Baubibliothek** dieses Browsers speichern (nicht im Spielstand)
+- **Rückgängig** in der Sitzungsleiste nimmt den letzten Bau zurück (Gebäude, Wege, Straßen, Parkplätze, Kopierstempel)
+- **Kopieren** in der Bauleiste: Rechteck aufziehen, Geistervorschau folgt dem Zeiger, Klick stempelt (Katalogpreis × 0,8). **R** dreht. Mitkopiert werden Gebäude, Deko, Wege, Autostraßen und Parkplätze. Optional mit Namen in der **Baubibliothek** dieses Browsers speichern (nicht im Spielstand)
 - Dekoration, Attraktionen und Logistik als Bildkatalog: Kacheln im Raster, Name und Preis unten beim Darüberfahren. Im Deko-Fenster zuerst das Thema antippen, darunter scrollen die Kategorien des Themas
 - Camping unter Attraktionen, Krankenhaus (Garage und Krankenbereich) unter Logistik
 - generisches Achterbahnsystem mit erweiterbarem Typ- und Schienenkatalog
@@ -497,20 +500,33 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - zentrale Balancing-Werte in `src/game/simulationConfig.ts`
 - gedrosselte UI-/Gedrängeupdates und indizierte Weg-/Besuchersuche für große Besuchermengen
 
-### Gemeinsamer Attraktionseditor
+### Achterbahneditor und Kurseditor
 
-Weggeführte Attraktionen verwenden dieselbe RCT2-artige Baugrundlage:
-Achterbahnen, Mudmasters, Tree-to-Tree und Wasserrutschen werden ab einem
-offenen Ende Feld für Feld gebaut. Richtung, Höhenänderung und – bei
-Fahrzeugbahnen – Banking liegen in derselben Palette. „Streckenteil löschen“
-entfernt auch ein mittleres Teil, ohne die beiden übrigen Streckenteile zu
-löschen; ein offenes Ende anklicken und die Lücke neu verbinden.
+Die Achterbahn hat ihr eigenes RCT2-artiges Konstruktionsfenster: Stückpalette
+(Gerade, Kurven, Speziell), Neigung, Rollen, Kettenlift, Vorschau des nächsten
+Stücks mit Kosten, **Dies bauen**, Rückgängig für das letzte Stück, Vor-/Zurück
+durch die Strecke und **Startrichtung drehen**. Gebaut wird immer am aktuellen
+offenen Ende. „Markiertes Stück entfernen“ entfernt auch ein mittleres Teil,
+ohne die beiden übrigen Streckenteile zu löschen; ein offenes Ende anklicken
+und die Lücke neu verbinden.
+
+Die Kurse (Mudmasters, Tree-to-Tree, Schwimmbad, Paintball) teilen den
+Bauanker am aktuellen Streckenende. Path-led Kurse (Mudmasters, Tree-to-Tree,
+Wasserrutsche im Schwimmbad) zeigen wie Fußwege **Richtungspfeile** in die
+noch freien Nachbarfelder; ein Klick setzt das nächste Stück. Paintball und
+echte Achterbahnen behalten die Stückpalette und den großen Bauen-Knopf.
+Der Ebenen-Regler setzt die Höhe, eine Bauvorschau markiert die nächsten
+Felder, **↶** nimmt das letzte Stück zurück. Klicken und Linienziehen auf der
+Karte bleiben zusätzlich möglich. Die kursspezifischen Regeln bleiben:
+Hindernisse spannen über die ganze Strecke, Baumhindernisse müssen an einem
+Kletterbaum enden, Flächenkurse bauen nur innerhalb ihrer Anlagenfläche.
 
 Paintball und Schwimmflächen werden als zusammenhängende Fläche gezogen.
 Danach erscheinen nur die dort erlaubten Referenzen in der Palette.
 Wasserrutschen sind eigene offene Strecken und können nur geöffnet werden,
-wenn ihr Auslauf in einer Schwimmfläche landet. Eingang, Ausgang, Test/Fertig,
-Preis und Abriss verwenden für alle Attraktionsarten dieselben Prüfungen.
+wenn ihr Auslauf in einer Schwimmfläche landet. Eingang, Ausgang und Abriss
+teilen die Prüfungen; Betrieb und Preis der Kurse sitzen im Infofenster
+wie bei Achterbahnen, nicht im Baumenü.
 
 ## Steuerung
 
@@ -519,6 +535,7 @@ Preis und Abriss verwenden für alle Attraktionsarten dieselben Prüfungen.
 - Mausrad: zoomen
 - Q / E: Kamera um 90 Grad drehen
 - 🔊 in der Sitzungsleiste oder Einstellungen → **Ton stumm**: Festival-SFX aus (Kamera-Listener, bleibt lokal gespeichert)
+- **Finanzen** in der Sitzungsleiste: Ausgaben und Einnahmen je Festivalausgabe. Ein Klick auf **Betriebskosten**, **Personal**, **Gagen** oder **Kreditzinsen** klappt die aktuelle Aufschlüsselung auf (Stände, Attraktionen, Bühnen, Löhne, Darlehen, Buchungen); ein weiterer Klick schließt sie. Mehrere Zeilen können gleichzeitig offen sein.
 - R: Gebäude, Deko oder Kopiervorlage um 90 Grad drehen
 - Shift halten und Maus hoch/runter (oder Mausrad / Bild hoch/runter): Bauhöhe in halben Stufen (0.5, 0–6) ändern. Um das Gebäude erscheint ein 7×7-Baugitter auf dieser Ebene. Die Bodenkachel unter dem Zeiger bleibt immer gelb umrandet, auch wenn das Objekt angehoben ist. Shift loslassen behält die Höhe; ein neues Bauwerkzeug setzt sie auf 0.
 - 1–9: Werkzeug wählen, 0: Achterbahn
@@ -561,7 +578,7 @@ Eine Bahn fährt erst, wenn Strecke, Eingang und Ausgang vollständig sind. Mit 
 
 Eine noch nicht vollständige Achterbahn kann mit dem Info-Werkzeug angeklickt werden. Sie wird dadurch erneut im Achterbahn-Editor geöffnet und am Endanker des letzten vorhandenen Schienenelements fortgesetzt.
 
-Im Attraktionsfenster kann eine geschlossene Strecke geöffnet oder ohne Besucher im kontinuierlichen Testbetrieb gefahren werden. Testbetrieb läuft auch schon in der Festivalplanung (neue Szenarien starten dort), sobald die Uhr nicht auf Pause steht. „Wagen zurückholen“ setzt den Zug sicher an die Station; vorhandene Fahrgäste werden dabei über den Ausgang zurück in den Park geführt. **Achterbahn abreißen** entfernt die gesamte Bahn: Schiene, Stützen, Zug, Station, Ein- und Ausgang sowie die angeschlossene Warteschlange. Das Infofenster schließt danach. Denselben Knopf gibt es im Konstruktionsfenster, solange die Bahn noch unvollständig ist. Abriss auf der Stations- oder Zugangskachel entfernt ebenfalls die ganze Bahn.
+Im Attraktionsfenster kann eine geschlossene Strecke geöffnet oder ohne Besucher im kontinuierlichen Testbetrieb gefahren werden. Testbetrieb läuft auch schon in der Festivalplanung (neue Szenarien starten dort), sobald die Uhr nicht auf Pause steht. „Wagen zurückholen“ setzt den Zug sicher an die Station; vorhandene Fahrgäste werden dabei über den Ausgang zurück in den Park geführt. **Achterbahn abreißen** fragt zuerst nach (Name der Bahn) und entfernt dann die gesamte Bahn: Schiene, Stützen, Zug, Station, Ein- und Ausgang sowie die angeschlossene Warteschlange. Das Infofenster schließt danach. Denselben Knopf gibt es im Konstruktionsfenster, solange die Bahn noch unvollständig ist. Abriss auf der Stations- oder Zugangskachel fragt ebenfalls nach und entfernt dann die ganze Bahn. Kurs-**Abriss** im Kurseditor und im Infofenster nutzt dieselbe Nachfrage. Ein Info-Klick auf Mudmasters, Tree-to-Tree, Paintball oder Schwimmbad öffnet dasselbe Infofenster: Betrieb öffnen/schließen, Preis, Konstruktion und Abriss. Unfertige Kurse gehen weiter in den Editor.
 
 Über „Strecke bearbeiten“ lässt sich jede Bahn erneut öffnen. Vor- und Zurück-Schaltflächen markieren die vorhandenen Elemente nacheinander. „Markiertes Element löschen“ entfernt ausschließlich dieses Element und setzt den Bauanker auf das davorliegende Segment. Die späteren Segmente bleiben erhalten; die Strecke gilt als unterbrochen, bis neue Elemente die Lücke geometrisch korrekt schließen.
 
@@ -597,7 +614,7 @@ RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafi
 
 ## Festivalbetrieb und automatische Logistik
 
-Neue Szenarien beginnen geschlossen in der Planung. Unter **Festival planen** legt ihr Vorlauf, Festivaltage, Angebotszeiten sowie die Preise für Tages- und Campingticket fest; erst **Festival starten** setzt die Festivalzeit in Gang. Nach dem Ende erscheint das **HEADLINE Magazin**, Abreise und Reinigung bleiben aktiv, der Park bleibt bis zum nächsten Start geschlossen. Bestehende laufende Spielstände behalten ihren Ablauf.
+Neue Szenarien beginnen geschlossen in der Planung. Unter **Festival planen** legt ihr Vorlauf, Festivaltage, Angebotszeiten sowie die Preise für Tages- und Campingticket fest und öffnet oder schließt das Gelände im freien Spiel; erst **Festival starten** setzt die Festivalzeit in Gang. Nach dem Ende erscheint das **HEADLINE Magazin**, Abreise und Reinigung bleiben aktiv, der Park bleibt bis zum nächsten Start geschlossen. Bestehende laufende Spielstände behalten ihren Ablauf.
 
 Unter **Logistik** in der Iconleiste einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen. Das Paket-Icon in der Gruppe **Verwalten** öffnet die Logistikverwaltung für Bestellungen, Träger, **Buslinien** und **Bandversorgung**. Im Reiter **Buslinien** liegen ungenutzte Haltestellen links, die Fahrreihenfolge rechts — per Ziehen einreihen oder umsortieren (Pfeile bleiben als Extra). Die gelbe Linie auf der Karte trägt die Stoppnummern 1, 2, 3 …. **Automatisch sortieren** sucht die kürzeste Runde. Einer bestehenden Linie könnt ihr später **Bus hinzufügen** (Kosten wie ein neuer Bus, Start am Depot). Ein Bus nimmt bis zu 40 Gäste mit und holt Wartende an der Haltestelle ab, auch wenn sie schon länger stehen oder etwas weiter in der Schlange / gegenüber der Straße warten. Krankenwagen kauft und verkauft ihr in der Übersicht; ohne Einsatz fahren sie zur Garage zurück.
 
@@ -660,8 +677,8 @@ sie sind dekorative Verkleidungen und sperren keine Besucherwege.
 
 - **Kopieren / Baubibliothek:** In der Iconleiste **Kopieren** wählen und ein
   Rechteck aufziehen (wie Gelände). Kopiert werden gesetzte Gebäude, Deko
-  (inkl. `decorationSlot`, Legacy-Vollfelder bleiben voll), Zäune, Wege und
-  Autostraßen — nicht Gäste, Fahrzeuge oder Müllhaufen. Danach folgt eine
+  (inkl. `decorationSlot`, Legacy-Vollfelder bleiben voll), Zäune, Wege,
+  Autostraßen und Parkplätze — nicht Gäste, Fahrzeuge oder Müllhaufen. Danach folgt eine
   Vorschau dem Zeiger; Klick zahlt 80 % des Katalogpreises und stempelt.
   Mit Namen speichert ihr die Auswahl in der persönlichen Bibliothek dieses
   Browsers (IndexedDB/`localStorage`, nicht im Spielstand).

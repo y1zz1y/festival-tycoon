@@ -10,14 +10,14 @@ hält die Simulationsuhr an, bis **Festival starten**.
 | --- | --- | --- |
 | Zustand, Aktionen, Wetter, Ruf | `src/game/festivalManagement.ts` | `FestivalManagement`, `FestivalAction`, `updateFestival`, `BANDS` |
 | Command-Einstieg | `src/game/GameState.ts` | `manageFestival` |
-| Tages-/Campingzyklus | `src/game/dayPlan.ts` | `getFestivalCycleStatus`, `FestivalPhase` (`lead` Vorbereitung, `festival`, `break` Pause), Angebote |
+| Tages-/Campingzyklus | `src/game/dayPlan.ts` | `getFestivalCycleStatus`, `FestivalPhase` (`lead` Vorbereitung, `festival`, `break` Pause), Angebote; Live-Phase steuert Venue-Unterhalt (`docs/finance.md`) |
 | Musikgeschmack, Basis-Evolution | `src/game/musicTaste.ts` | `evolveMusicAudience`, `GENRES` |
 | Automatischer Spielplan | `src/game/autoLineup.ts` | `planAutoLineup` (min/max Sterne, bestehende Slots bleiben) |
 | Ticketnachfrage | `src/game/ticketDemand.ts` | `estimateTicketDemand`, `arrivalPriceMultiplier` |
 | Nachfrage-Tuning | `src/game/demandTuning.ts`, `src/game/simulationConfig.ts` | `TicketDemandTuning`, Normalisierung und Standardwerte |
 | Waren im Festivalkontext | `src/game/supplyChain.ts`, `src/game/festivalManagement.ts` | `Supply` inkl. `goods` (Allgemeine Waren) |
 | Spielplan-UI | `src/musicPlanner.ts` | Band ziehen, Raster |
-| Festival-Fenster | `src/festivalUI.ts` | Tickets, Preise, Tagesplan, Auswertung, Ausbauten |
+| Festival-Fenster | `src/festivalUI.ts` | Tickets, Preise, Tagesplan, Auswertung, Ausbauten, **Park öffnen/schließen** (`setParkOpen`) |
 | HEADLINE Magazin | `src/game/headlineMagazine.ts`, `src/headlineMagazineUI.ts` | `buildHeadlineMagazine`, Overlay nach Festivalende |
 | Balancing | `src/game/simulationConfig.ts` | `visitors.festivalArrivals`, `economy.defaultEntryPrice`, `economy.defaultCampingTicketPrice` |
 
@@ -34,6 +34,9 @@ hält die Simulationsuhr an, bis **Festival starten**.
   kleinem Plus tragen (600×260 + 5×600×120 = 516 k€). Slider 20–250 /
   40–500. Gäste bekommen `visitors.budget` plus Camper
   `campingTicketReserve`, damit der Eintritt zahlbar bleibt.
+  Im Reiter Übersicht schließt oder öffnet ihr das Gelände (`setParkOpen`);
+  der frühere Leistenknopf sitzt dort. Während Planung und nach dem Wochenende
+  bleibt der Knopf gesperrt, weil das Festival den Zugang selbst steuert.
   Tagesplan, Zyklus und Preise stellt ihr im Fenster **Festival planen**.
   Ampeln und Personentore können dieselben Angebote (`DayPlanOffer`, inkl.
   `shops` für Souvenirläden) sowie die Zyklusphasen als Zeitsteuerung nutzen.

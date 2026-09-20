@@ -85,6 +85,60 @@ export function testBlueprints(): void {
   )
 }
 
+export function testBlueprintParkingCopy(): void {
+  const game = emptyPark()
+  const designated = game.designateParkingArea([
+    { x: 8, z: 2 },
+    { x: 9, z: 2 },
+  ])
+  assert.ok(designated.ok, designated.message)
+  const parkingBefore = game.snapshot.logistics.parkingCells.length
+  const moneyBefore = game.snapshot.money
+
+  const blueprint = captureBlueprint(
+    game.snapshot,
+    [
+      { x: 8, z: 2 },
+      { x: 9, z: 2 },
+      { x: 8, z: 3 },
+      { x: 9, z: 3 },
+    ],
+    (x, z) => game.getTerrainHeight(x, z),
+  )
+  assert.equal(blueprint.items.filter((item) => item.type === 'parking').length, 2)
+  assert.ok(describeBlueprint(blueprint).includes('Parkplatz'))
+
+  const preview = game.previewBlueprint(12, 6, 0, blueprint.items)
+  assert.equal(preview.placements.length, 2)
+  assert.equal(preview.placements.every((entry) => entry.valid), true)
+  assert.equal(game.snapshot.logistics.parkingCells.length, parkingBefore, 'preview must not place parking')
+  assert.equal(game.snapshot.money, moneyBefore, 'preview must not charge')
+
+  const result = game.stampBlueprint(12, 6, 0, blueprint.items)
+  assert.ok(result.ok, result.message)
+  assert.ok(
+    game.snapshot.logistics.parkingCells.some((cell) => cell.x === 12 && cell.z === 6),
+    'stamped parking at origin',
+  )
+  assert.ok(
+    game.snapshot.logistics.parkingCells.some((cell) => cell.x === 13 && cell.z === 6),
+    'stamped parking neighbor',
+  )
+  const expectedCharge = Math.ceil(
+    SIMULATION_CONFIG.logistics.parkingDesignationCost * 2 *
+      SIMULATION_CONFIG.economy.blueprintCopyCostFactor,
+  )
+  assert.equal(game.snapshot.money, moneyBefore - expectedCharge)
+
+  const rotated = transformBlueprintItems(blueprint.items, 1)
+    .filter((item) => item.type === 'parking')
+    .map((item) => [item.dx || 0, item.dz || 0])
+  assert.deepEqual(rotated, [
+    [0, 0],
+    [0, -1],
+  ])
+}
+
 export async function testBlueprintLibraryRoundtrip(): Promise<void> {
   const previous = globalThis.localStorage
   const map = new Map<string, string>()

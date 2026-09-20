@@ -14,12 +14,15 @@ import {
   TRACK_SPECIAL_KINDS,
   isTrackChainLiftEligible,
   isTrackChainLiftVisible,
+  listCoasterDirectionChoices,
   listTrackBankChoices,
   listTrackPalettePieces,
   listTrackPitchChoices,
   resolveNextTrackPiece,
   type CoasterWindowState,
 } from '../game/coasterConnections'
+import { resolveCoasterEditorMode } from '../game/coasterTypes'
+import { trackEditorUsesDirectionArrows } from '../game/trackEditorMode'
 import {
   TRACK_CHAIN_PALETTE_ID,
   describeCoasterConstructionChrome,
@@ -95,6 +98,7 @@ export interface CoasterBuilderElements {
   bankPalette: HTMLElement
   specialPalette: HTMLElement
   specialToggle: HTMLButtonElement
+  directionGrid?: HTMLElement
 }
 
 export interface CoasterBuilderView {
@@ -157,9 +161,28 @@ export function updateCoasterBuilderPanel(
     cameraQuarter: state.cameraQuarter,
   })
   const construction = updateCoasterConstruction(state.lastConstructionKey, chrome)
-  if (!construction.changed) return { key: state.lastConstructionKey, editIndex, chainLift: elements.chainLift.checked }
-
   const type = getCoasterType(state.window.typeId)
+  const arrows = trackEditorUsesDirectionArrows(resolveCoasterEditorMode(type.id))
+  elements.root.classList.toggle('editor-mode-arrows', arrows)
+  elements.root.classList.toggle('editor-mode-palette', !arrows)
+  if (!construction.changed) return { key: state.lastConstructionKey, editIndex, chainLift: elements.chainLift.checked }
+  const directionChoices = listCoasterDirectionChoices(
+    coaster?.pieces[editIndex]?.end ?? null,
+    type.id,
+    Boolean(coaster),
+  )
+  if (elements.directionGrid) elements.directionGrid.hidden = !arrows
+  elements.directionGrid?.querySelectorAll<HTMLButtonElement>('[data-coaster-direction]').forEach((button) => {
+    const heading = Number(button.dataset.coasterDirection)
+    const choice = directionChoices.find((entry) => entry.heading === heading)
+    button.disabled = arrows ? !choice?.enabled : true
+    button.hidden = !arrows
+    const icon = button.querySelector('span')
+    if (icon) icon.textContent = directionIcon(heading, state.cameraQuarter)
+    button.title = choice?.enabled
+      ? `Stück nach ${directionIcon(heading, state.cameraQuarter)} bauen`
+      : 'Diese Richtung ist nicht frei.'
+  })
   elements.typeName.textContent = type.name
   elements.typeHint.textContent = typeHint(type.id)
   elements.title.textContent = `${coaster?.name ?? type.name} Konstruktion`

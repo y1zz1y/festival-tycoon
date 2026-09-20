@@ -117,6 +117,8 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.setPathFlow(command.x, command.z, command.elevation, command.direction)
     case 'setParkOpen':
       return game.setParkOpen(command.open)
+    case 'undoLastBuild':
+      return game.undoLastBuild()
     case 'setSpeed':
       game.setSpeed(command.speed)
       return { ok: true, message: `Tempo ${command.speed}` }

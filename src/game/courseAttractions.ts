@@ -1,7 +1,14 @@
 import { SIMULATION_CONFIG } from './simulationConfig'
 import { grantAttractionFun } from './attractionFun'
+import {
+  resolveTrackEditorMode,
+  trackEditorUsesDirectionArrows,
+  type TrackEditorMode,
+} from './trackEditorMode'
 import type { Visitor } from './types/entities'
 import type { GameSnapshot } from './types/snapshot'
+
+export type { TrackEditorMode } from './trackEditorMode'
 
 export const COURSE_KINDS = ['mudmasters', 'pool', 'treeToTree', 'paintball'] as const
 export type CourseKind = (typeof COURSE_KINDS)[number]
@@ -36,12 +43,56 @@ export type CoursePieceKind = (typeof COURSE_PIECE_KINDS)[number]
 
 export const COURSE_SPECS: Record<
   CourseKind,
-  { name: string; icon: string; startCost: number; price: number; upkeep: number }
+  {
+    name: string
+    icon: string
+    startCost: number
+    price: number
+    upkeep: number
+    /** Path-led courses use neighbor arrows; area-only paintball keeps palette chrome. */
+    editorMode: TrackEditorMode
+  }
 > = {
-  mudmasters: { name: 'Mudmasters', icon: '🏃', startCost: 4200, price: 12, upkeep: 90 },
-  pool: { name: 'Schwimmbad', icon: '🏊', startCost: 5600, price: 10, upkeep: 110 },
-  treeToTree: { name: 'Tree-to-Tree', icon: '🌲', startCost: 4800, price: 14, upkeep: 95 },
-  paintball: { name: 'Paintball', icon: '🎯', startCost: 3800, price: 16, upkeep: 80 },
+  mudmasters: {
+    name: 'Mudmasters',
+    icon: '🏃',
+    startCost: 4200,
+    price: 12,
+    upkeep: 90,
+    editorMode: 'directionArrows',
+  },
+  pool: {
+    name: 'Schwimmbad',
+    icon: '🏊',
+    startCost: 5600,
+    price: 10,
+    upkeep: 110,
+    editorMode: 'directionArrows',
+  },
+  treeToTree: {
+    name: 'Tree-to-Tree',
+    icon: '🌲',
+    startCost: 4800,
+    price: 14,
+    upkeep: 95,
+    editorMode: 'directionArrows',
+  },
+  paintball: {
+    name: 'Paintball',
+    icon: '🎯',
+    startCost: 3800,
+    price: 16,
+    upkeep: 80,
+    editorMode: 'palette',
+  },
+}
+
+export function courseEditorMode(kind: CourseKind): TrackEditorMode {
+  return resolveTrackEditorMode(COURSE_SPECS[kind].editorMode)
+}
+
+export function courseUsesDirectionArrows(kind: CourseKind): boolean {
+  return trackEditorUsesDirectionArrows(courseEditorMode(kind))
 }
 
 export const COURSE_PIECE_CATALOG: Record<CourseKind, readonly CoursePieceKind[]> = {
@@ -275,9 +326,9 @@ export function courseCapacityFor(course: Pick<CourseAttraction, 'kind' | 'teamS
   return courseCapacity(course.kind)
 }
 
-export function courseHourlyUpkeep(course: Pick<CourseAttraction, 'kind' | 'pieces'>, onBreak: boolean): number {
+export function courseHourlyUpkeep(course: Pick<CourseAttraction, 'kind' | 'pieces'>, idle: boolean): number {
   const base = COURSE_SPECS[course.kind].upkeep + course.pieces.length * SIMULATION_CONFIG.courses.pieceUpkeep
-  return onBreak ? base * SIMULATION_CONFIG.economy.pauseUpkeepMultiplier : base
+  return idle ? base * SIMULATION_CONFIG.economy.pauseUpkeepMultiplier : base
 }
 
 export function courseEntrance(course: CourseAttraction): CoursePiece | undefined {
@@ -305,13 +356,33 @@ export function piecesAreLinked(left: CoursePiece, right: CoursePiece): boolean 
 export function courseOccupiesCell(course: CourseAttraction, x: number, z: number): boolean {
   return (
     course.areaCells.some((cell) => cell.x === x && cell.z === z) ||
-    course.pieces.some(
-      (piece) =>
-        (piece.x === x && piece.z === z) ||
-        (piece.endX === x && piece.endZ === z) ||
-        pieceCrossesCell(piece, x, z),
-    )
+    courseTrackOccupiesCell(course, x, z)
   )
+}
+
+export function courseTrackOccupiesCell(course: CourseAttraction, x: number, z: number): boolean {
+  return course.pieces.some(
+    (piece) =>
+      (piece.x === x && piece.z === z) ||
+      (piece.endX === x && piece.endZ === z) ||
+      pieceCrossesCell(piece, x, z),
+  )
+}
+
+/** True when a piece already spans these two cells in either direction. */
+export function courseHasSpan(
+  course: CourseAttraction,
+  from: Pick<CourseAreaCell, 'x' | 'z'>,
+  to: Pick<CourseAreaCell, 'x' | 'z'>,
+): boolean {
+  return course.pieces.some((piece) => {
+    const endX = piece.endX ?? piece.x
+    const endZ = piece.endZ ?? piece.z
+    return (
+      (piece.x === from.x && piece.z === from.z && endX === to.x && endZ === to.z) ||
+      (piece.x === to.x && piece.z === to.z && endX === from.x && endZ === from.z)
+    )
+  })
 }
 
 function pieceCrossesCell(piece: CoursePiece, x: number, z: number): boolean {
@@ -495,6 +566,62 @@ export function courseSpanCells(
   return cells
 }
 
+/** Heading order shared with the coaster editor and the path tool. */
+export const COURSE_HEADINGS: readonly { x: number; z: number }[] = [
+  { x: 0, z: 1 },
+  { x: 1, z: 0 },
+  { x: 0, z: -1 },
+  { x: -1, z: 0 },
+]
+
+export type CourseGhostSpan = {
+  cells: CourseAreaCell[]
+  elevation: number
+  valid: boolean
+}
+
+/**
+ * Next piece target for the course editors: one field ahead of the open end in
+ * the current build direction. The coaster editor resolves its next track piece
+ * the same way, from the open end plus the construction window.
+ */
+export function courseNextBuildTarget(
+  course: CourseAttraction,
+  kind: CoursePieceKind,
+  rotation: 0 | 1 | 2 | 3,
+  elevation: number,
+): { x: number; z: number; elevation: number } | null {
+  if (!isCourseTrackPiece(course.kind, kind)) return null
+  const end = courseTrackEnd(course)
+  if (!end) return null
+  const step = COURSE_HEADINGS[rotation] ?? COURSE_HEADINGS[0]!
+  return { x: end.x + step.x, z: end.z + step.z, elevation }
+}
+
+/**
+ * Ghost for the course build preview. `valid` only covers what the preview can
+ * decide without the world: area courses must keep the span inside their own
+ * area. `appendCoursePiece` stays the authoritative gate.
+ */
+export function courseGhostSpan(
+  course: CourseAttraction,
+  kind: CoursePieceKind,
+  rotation: 0 | 1 | 2 | 3,
+  elevation: number,
+): CourseGhostSpan | null {
+  const end = courseTrackEnd(course)
+  const target = courseNextBuildTarget(course, kind, rotation, elevation)
+  if (!end || !target) return null
+  const cells = courseSpanCells(end, target)
+  return {
+    cells,
+    elevation,
+    valid:
+      !courseUsesArea(course.kind) ||
+      cells.every((cell) => courseAreaContains(course, cell.x, cell.z)),
+  }
+}
+
 export function isCourseSwimPiece(piece: Pick<CoursePiece, 'kind'>): boolean {
   return piece.kind === 'poolBasin'
 }
@@ -560,6 +687,51 @@ function placementAdjacency(course: CourseAttraction, kind: CoursePieceKind, x: 
   }
   if (course.pieces.some((piece) => manhattan(piece, point) === 1)) return null
   return 'Stücke müssen an den bestehenden Kurs anschließen.'
+}
+
+export function isCourseReadyToOperate(course: CourseAttraction): boolean {
+  return validateCourse(course) === null
+}
+
+export function formatCourseInspect(
+  course: CourseAttraction,
+  ridesOfferActive: boolean,
+): {
+  icon: string
+  typeLabel: string
+  name: string
+  status: string
+  lines: { label: string; value: string }[]
+} {
+  const spec = COURSE_SPECS[course.kind]
+  const issue = validateCourse(course)
+  const status = issue
+    ? issue
+    : !course.operating
+      ? `${spec.name} ist geschlossen.`
+      : !ridesOfferActive
+        ? 'Nach Tagesplan derzeit geschlossen.'
+        : course.kind === 'paintball' && course.match
+          ? `Match läuft · ${course.match.scoreA}:${course.match.scoreB}`
+          : course.riders.length > 0
+            ? `${course.riders.length} Gäste unterwegs`
+            : `${spec.name} ist geöffnet.`
+  const lines: { label: string; value: string }[] = [
+    { label: 'Betrieb', value: course.operating ? 'Geöffnet' : 'Geschlossen' },
+    { label: 'Stücke', value: String(course.pieces.length) },
+  ]
+  if (course.areaCells.length > 0) {
+    lines.push({ label: 'Fläche', value: `${course.areaCells.length} Felder` })
+  }
+  lines.push(
+    { label: 'Gäste', value: `${course.riders.length}/${courseCapacityFor(course)}` },
+    { label: 'Warteschlange', value: String(course.queue.length) },
+    { label: 'Unterhalt', value: `${courseHourlyUpkeep(course, false)} €/h` },
+  )
+  if (course.kind === 'paintball') {
+    lines.push({ label: 'Personen pro Team', value: String(courseTeamSize(course)) })
+  }
+  return { icon: spec.icon, typeLabel: spec.name, name: course.name, status, lines }
 }
 
 export function validateCourse(course: CourseAttraction): string | null {
@@ -794,14 +966,17 @@ export function courseStartCost(kind: CourseKind): number {
   return COURSE_SPECS[kind].startCost
 }
 
-export function appendCoursePiece(
+function isTreeCourseDestination(kind: CoursePieceKind): boolean {
+  return TREE_LINKS.has(kind) || kind === 'treeLadder' || kind === 'treeRing'
+}
+
+export function describeCourseAppendIssue(
   course: CourseAttraction,
   kind: CoursePieceKind,
   x: number,
   z: number,
-  rotation: 0 | 1 | 2 | 3,
   elevation = COURSE_PIECE_ELEVATION[kind],
-): CoursePiece | string {
+): string | null {
   if (!COURSE_PIECE_CATALOG[course.kind].includes(kind)) {
     return 'Dieses Stück gehört nicht zu diesem Kurs.'
   }
@@ -817,7 +992,7 @@ export function appendCoursePiece(
   const occupants = occupantsAt(course, x, z)
   const treeDestination =
     course.kind === 'treeToTree' &&
-    (TREE_LINKS.has(kind) || kind === 'treeLadder' || kind === 'treeRing') &&
+    isTreeCourseDestination(kind) &&
     occupants.some((piece) => piece.kind === 'tree')
   const areaTrackDestination =
     courseUsesArea(course.kind) && isCourseTrackPiece(course.kind, kind)
@@ -844,11 +1019,7 @@ export function appendCoursePiece(
   const trackEnd = courseTrackEnd(course)
   const isTrack = isCourseTrackPiece(course.kind, kind)
   if (isTrack && kind !== 'entrance' && !trackEnd) return 'Setze zuerst den Eingang der Strecke.'
-  if (
-    course.kind === 'treeToTree' &&
-    (TREE_LINKS.has(kind) || kind === 'treeLadder' || kind === 'treeRing') &&
-    !treeDestination
-  ) {
+  if (course.kind === 'treeToTree' && isTreeCourseDestination(kind) && !treeDestination) {
     return 'Dieses Streckenelement muss an einem Kletterbaum enden.'
   }
   if (
@@ -860,6 +1031,62 @@ export function appendCoursePiece(
   ) {
     return 'Das Streckenelement braucht einen anderen Endpunkt.'
   }
+  return null
+}
+
+export type CourseDirectionChoice = {
+  heading: 0 | 1 | 2 | 3
+  x: number
+  z: number
+  elevation: number
+  enabled: boolean
+  issue: string | null
+}
+
+/**
+ * Neighbor headings from the open end. Occupied or illegal directions stay listed
+ * with `enabled: false` so the path-style arrow menu can grey them.
+ */
+export function listCourseDirectionChoices(
+  course: CourseAttraction,
+  kind: CoursePieceKind,
+  elevation = COURSE_PIECE_ELEVATION[kind],
+): CourseDirectionChoice[] {
+  const end = courseTrackEnd(course)
+  if (!end || !isCourseTrackPiece(course.kind, kind)) return []
+  return ([0, 1, 2, 3] as const).map((heading) => {
+    const step = COURSE_HEADINGS[heading] ?? COURSE_HEADINGS[0]!
+    const target = { x: end.x + step.x, z: end.z + step.z, elevation }
+    const alreadyBuilt = courseHasSpan(course, end, target)
+    const occupied =
+      !courseUsesArea(course.kind) &&
+      courseTrackOccupiesCell(course, target.x, target.z) &&
+      !(
+        course.kind === 'treeToTree' &&
+        isTreeCourseDestination(kind) &&
+        occupantsAt(course, target.x, target.z).some((piece) => piece.kind === 'tree')
+      )
+    const issue = alreadyBuilt
+      ? 'In dieser Richtung liegt schon ein Stück.'
+      : occupied
+        ? 'Dieses Feld ist schon belegt.'
+        : describeCourseAppendIssue(course, kind, target.x, target.z, elevation)
+    return { heading, ...target, enabled: issue === null, issue }
+  })
+}
+
+export function appendCoursePiece(
+  course: CourseAttraction,
+  kind: CoursePieceKind,
+  x: number,
+  z: number,
+  rotation: 0 | 1 | 2 | 3,
+  elevation = COURSE_PIECE_ELEVATION[kind],
+): CoursePiece | string {
+  const issue = describeCourseAppendIssue(course, kind, x, z, elevation)
+  if (issue) return issue
+  const trackEnd = courseTrackEnd(course)
+  const isTrack = isCourseTrackPiece(course.kind, kind)
   const start = isTrack && trackEnd ? trackEnd : { x, z, elevation }
   const piece: CoursePiece = {
     id: `${course.id}-p${course.pieces.length}-${x}-${z}-${kind}`,
@@ -1362,13 +1589,13 @@ export function releaseCourseVisitor(course: CourseAttraction, visitorId: string
 
 export function courseBuilderHint(kind: CourseKind): string {
   if (kind === 'mudmasters') {
-    return 'Jeder Klick setzt den nächsten Strecken-Endpunkt. Wege lassen sich ziehen; Hindernisse verbinden den bisherigen Endpunkt mit dem neuen. Der Pfad muss am Ausgang enden.'
+    return 'Am Streckenende erscheinen Richtungspfeile in noch freie Nachbarfelder. Ein Klick setzt das nächste Stück. Wege lassen sich zusätzlich ziehen; Hindernisse verbinden den bisherigen Endpunkt mit dem neuen. Der Pfad muss am Ausgang enden.'
   }
   if (kind === 'pool') {
-    return 'Zuerst die Anlagenfläche ziehen, dann Becken und Zugänge darin setzen. Leiter und Rutschen verbinden echte Endpunkte; der Auslauf muss im Becken landen.'
+    return 'Zuerst die Anlagenfläche ziehen, dann Becken und Zugänge darin setzen. Für Weg und Rutsche zeigen Pfeile die freien Nachbarfelder; der Auslauf muss im Becken landen.'
   }
   if (kind === 'treeToTree') {
-    return 'Bäume frei setzen. Danach Eingang, Leiter und echte Spannweiten bauen: Verbindung wählen und den Zielbaum anklicken. Der Pfad endet am Ausgang.'
+    return 'Bäume frei setzen. Am Streckenende zeigen Pfeile freie Nachbarfelder; ein Klick setzt das nächste Stück. Längere Spannweiten weiterhin per Zielbaum. Der Pfad endet am Ausgang.'
   }
   return 'Zuerst die Spielfläche ziehen. Deckungen und beide Teamstarts kommen hinein; Ein- und Ausgang liegen am Flächenrand.'
 }

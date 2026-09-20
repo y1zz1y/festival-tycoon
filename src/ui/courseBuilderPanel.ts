@@ -5,13 +5,17 @@ import {
   COURSE_PIECE_LABELS,
   COURSE_SPECS,
   courseBuilderHint,
+  courseNextBuildTarget,
   coursePaintMode,
   courseTeamSize,
   courseTrackEnd,
+  courseUsesDirectionArrows,
   isCourseTrackPiece,
+  listCourseDirectionChoices,
   validateCourse,
   type CourseAreaCell,
   type CourseAttraction,
+  type CourseDirectionChoice,
   type CourseKind,
   type CoursePieceKind,
 } from '../game/courseAttractions'
@@ -21,6 +25,8 @@ export type CourseBuilderState = {
   course: CourseAttraction | null
   selectedKind: CourseBuilderTool
   elevation: number
+  buildRotation: number
+  cameraQuarter: number
 }
 
 export type CourseBuilderTool = CoursePieceKind | 'area' | 'areaErase'
@@ -62,6 +68,51 @@ export function courseBuilderTitle(kind: CourseKind, course: CourseAttraction | 
   return course ? `${course.name} Konstruktion` : `${COURSE_SPECS[kind].name} bauen`
 }
 
+export function courseDirectionIcon(rotation: number, cameraQuarter: number): string {
+  const icons = ['↙', '↘', '↗', '↖']
+  return icons[((rotation - cameraQuarter) % icons.length + icons.length) % icons.length] ?? '◆'
+}
+
+export function courseDirectionChoicesForPanel(state: CourseBuilderState): CourseDirectionChoice[] {
+  if (!state.course || state.selectedKind === 'area' || state.selectedKind === 'areaErase') return []
+  if (!courseUsesDirectionArrows(state.kind)) return []
+  return listCourseDirectionChoices(state.course, state.selectedKind, state.elevation)
+}
+
+export function syncCourseDirectionGrid(
+  root: HTMLElement,
+  choices: readonly CourseDirectionChoice[],
+  cameraQuarter: number,
+): void {
+  root.querySelectorAll<HTMLButtonElement>('[data-course-direction]').forEach((button) => {
+    const heading = Number(button.dataset.courseDirection)
+    const choice = choices.find((entry) => entry.heading === heading)
+    const enabled = Boolean(choice?.enabled)
+    button.disabled = !enabled
+    button.hidden = choices.length === 0
+    button.setAttribute('aria-disabled', String(!enabled))
+    button.title = enabled
+      ? `Stück nach ${courseDirectionIcon(heading, cameraQuarter)} bauen`
+      : choice?.issue ?? 'Diese Richtung ist nicht frei.'
+    const icon = button.querySelector('span')
+    if (icon) icon.textContent = courseDirectionIcon(heading, cameraQuarter)
+  })
+}
+
+/** True when the build button can place the selected piece at the open end. */
+export function isCourseBuildReady(state: CourseBuilderState): boolean {
+  if (!state.course) return false
+  if (state.selectedKind === 'area' || state.selectedKind === 'areaErase') return false
+  return Boolean(
+    courseNextBuildTarget(
+      state.course,
+      state.selectedKind,
+      normalizeCourseRotation(state.buildRotation),
+      state.elevation,
+    ),
+  )
+}
+
 export function courseBuilderStatus(state: CourseBuilderState): string {
   if (!state.course) {
     return state.kind === 'paintball'
@@ -71,9 +122,15 @@ export function courseBuilderStatus(state: CourseBuilderState): string {
   const issue = validateCourse(state.course)
   if (issue) return issue
   const end = courseTrackEnd(state.course)
-  return end
-    ? `${state.course.pieces.length} Stücke · Streckenende ${end.x}/${end.z} auf Ebene ${end.elevation}`
-    : `${state.course.areaCells.length} Felder · bereit zum Öffnen`
+  if (!end) return `${state.course.areaCells.length} Felder · bereit zum Öffnen`
+  const arrowHint = courseUsesDirectionArrows(state.kind)
+    ? ' · Pfeil wählt die nächste freie Richtung'
+    : ` · Richtung ${courseDirectionIcon(state.buildRotation, state.cameraQuarter)}`
+  return `Bauanker: ${end.x}, ${end.z} · Höhe ${end.elevation}${arrowHint} · ${state.course.pieces.length} Stücke`
+}
+
+export function normalizeCourseRotation(rotation: number): 0 | 1 | 2 | 3 {
+  return (((Math.round(rotation) % 4) + 4) % 4) as 0 | 1 | 2 | 3
 }
 
 export function coursePaletteHtml(kind: CourseKind, selected: CourseBuilderTool): string {
@@ -119,8 +176,29 @@ export function renderCourseBuilderPanel(
   const elevation = root.querySelector('#course-elevation-label')
   const teamSection = root.querySelector<HTMLElement>('#course-team-section')
   const teamInput = root.querySelector<HTMLInputElement>('#course-team-size')
-  const operating = root.querySelector<HTMLButtonElement>('#course-toggle-operating')
   const undo = root.querySelector<HTMLButtonElement>('#course-undo')
+  const direction = root.querySelector<HTMLElement>('#course-direction')
+  const build = root.querySelector<HTMLButtonElement>('#course-build-piece')
+  const rotate = root.querySelector<HTMLButtonElement>('#course-rotate')
+  const paletteBuild = root.querySelector<HTMLElement>('#course-palette-build')
+  const directionGrid = root.querySelector<HTMLElement>('#course-direction-grid')
+  const arrows = courseUsesDirectionArrows(state.kind)
+  const choices = courseDirectionChoicesForPanel(state)
+  root.classList.toggle('course-editor-arrows', arrows)
+  root.classList.toggle('course-editor-palette', !arrows)
+  if (direction) {
+    direction.textContent = courseDirectionIcon(state.buildRotation, state.cameraQuarter)
+  }
+  if (paletteBuild) paletteBuild.hidden = arrows
+  if (rotate) rotate.hidden = arrows
+  if (build) {
+    build.hidden = arrows
+    build.disabled = arrows || !isCourseBuildReady(state)
+  }
+  if (directionGrid) {
+    directionGrid.hidden = !arrows
+    syncCourseDirectionGrid(root, choices, state.cameraQuarter)
+  }
   if (name) name.textContent = courseBuilderTitle(state.kind, state.course)
   if (status) status.textContent = courseBuilderStatus(state)
   if (hint) hint.textContent = courseBuilderHint(state.kind)
@@ -128,11 +206,6 @@ export function renderCourseBuilderPanel(
   if (elevation) elevation.textContent = String(state.elevation)
   if (teamSection) teamSection.hidden = state.kind !== 'paintball'
   if (teamInput && state.course) teamInput.value = String(courseTeamSize(state.course))
-  if (operating) {
-    const issue = state.course ? validateCourse(state.course) : 'Noch kein Kurs.'
-    operating.disabled = !state.course || Boolean(issue)
-    operating.textContent = state.course?.operating ? 'Schließen' : 'Öffnen'
-  }
   if (undo) {
     undo.disabled =
       !state.course ||

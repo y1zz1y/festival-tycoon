@@ -19,13 +19,11 @@ import type {
   TrackGraph,
   TrackNode,
 } from '../src/game/attractions/types'
-import {
-  attractionPaletteHtml,
-  nextTrackEdge,
-  type AttractionBuilderState,
-} from '../src/ui/attractionBuilderPanel'
 import { GameState } from '../src/game/GameState'
+import { defaultStageDesign, stageDetailSize } from '../src/game/stageDesign'
 import { applyGameCommand } from '../src/net/commands'
+import { packWorld } from '../src/net/codec'
+import { WorldUpdates } from '../src/net/worldUpdates'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import type { Visitor } from '../src/game/types/entities'
 
@@ -35,8 +33,9 @@ export function testAttractionFoundation(): void {
   testConstructionParity()
   testAreaRulesAndWaterLanding()
   testRuntimeFunRewards()
-  testUnifiedBuilder()
+  testDedicatedSystemsKeepTheirAttractions()
   testAttractionCommands()
+  testCampingAndForecourtStayLive()
 }
 
 function testRuntimeFunRewards(): void {
@@ -90,15 +89,6 @@ function testRuntimeFunRewards(): void {
   paintball.runtime.riders.push({ visitorId: fighter.id, pieceId: '', progress: 0, airborne: false, team: 'a' })
   paintball.runtime.match = { remainingTicks: 1, scoreA: 0, scoreB: 0 }
 
-  const coasterGuest = runtimeVisitor('coaster-guest')
-  coasterGuest.state = 'riding'
-  const coaster = createAttraction('coaster-fun', 'coaster:classicSteel', 0, 0, 0, 0)!
-  if (coaster.runtime.kind !== 'coaster') throw new Error('coaster runtime expected')
-  coaster.operationMode = 'open'
-  coaster.runtime.train.state = 'unloading'
-  coaster.runtime.train.passengerIds = [coasterGuest.id]
-  coaster.runtime.train.passengers = 1
-
   const carouselGuest = runtimeVisitor('carousel-guest')
   carouselGuest.state = 'riding'
   const carousel = createAttraction('carousel-fun', 'carousel', 0, 0, 0, 0)!
@@ -107,8 +97,8 @@ function testRuntimeFunRewards(): void {
   carousel.runtime.occupantIds = [carouselGuest.id]
   carousel.runtime.remainingMinutes = 1.19
 
-  const visitors = [queued, runner, slider, swimmer, fighter, coasterGuest, carouselGuest]
-  stepAttractions([mud, waterSlide, pool, paintball, coaster, carousel], {
+  const visitors = [queued, runner, slider, swimmer, fighter, carouselGuest]
+  stepAttractions([mud, waterSlide, pool, paintball, carousel], {
     visitors,
     simTick: 1,
     minutes: 0.1,
@@ -121,8 +111,34 @@ function testRuntimeFunRewards(): void {
   for (const visitor of [runner, slider, swimmer, fighter]) {
     assert.equal(visitor.needs.fun, 10 + SIMULATION_CONFIG.courses.funGain)
   }
-  assert.equal(coasterGuest.needs.fun, 10 + SIMULATION_CONFIG.coasters.funGain)
   assert.equal(carouselGuest.needs.fun, 10 + SIMULATION_CONFIG.needs.ride.funGain)
+}
+
+/**
+ * Coasters run on `CoasterSimulation` and courses on `stepCourses`. The shared
+ * runtime must leave those alone, otherwise the same guest boards twice.
+ */
+function testDedicatedSystemsKeepTheirAttractions(): void {
+  const guest = runtimeVisitor('legacy-guest')
+  guest.state = 'queuing'
+  const coaster = createAttraction('coaster-legacy', 'coaster:classicSteel', 0, 0, 0, 0)!
+  if (coaster.runtime.kind !== 'coaster') throw new Error('coaster runtime expected')
+  coaster.operationMode = 'open'
+  coaster.queue.push(guest.id)
+  guest.targetId = coaster.id
+
+  stepAttractions([coaster], {
+    visitors: [guest],
+    simTick: 1,
+    minutes: 0.1,
+    charge: () => true,
+    injure: () => undefined,
+    isWater: () => false,
+    legacyIds: new Set([coaster.id]),
+  })
+  assert.equal(coaster.queue.length, 1, 'a coaster driven by CoasterSimulation is not admitted here')
+  assert.equal(coaster.runtime.train.passengerIds.length, 0)
+  assert.equal(guest.state, 'queuing')
 }
 
 function testAttractionCommands(): void {
@@ -162,26 +178,6 @@ function testAttractionCommands(): void {
   })
   assert.equal(client.snapshot.attractions.length, 1)
   assert.equal(client.snapshot.courses.length, 1, 'network attraction deltas refresh runtime projections')
-}
-
-function testUnifiedBuilder(): void {
-  const attraction = createAttraction('builder', 'course:mudmasters', 4, 4, 0, 1)!
-  attraction.access.entrance = { x: 4, z: 4, elevation: 0 }
-  const state: AttractionBuilderState = {
-    attraction,
-    mode: 'track',
-    selectedKind: 'path',
-    direction: 1,
-    elevationDelta: 0.5,
-    banking: 0,
-  }
-  const preview = nextTrackEdge(state, 'edge', 'node')
-  assert.notEqual(typeof preview, 'string')
-  if (typeof preview === 'string') return
-  assert.equal(preview.to.anchor.x, 5)
-  assert.equal(preview.to.anchor.elevation, 0.5)
-  assert.match(attractionPaletteHtml(state), /data-attraction-piece="trackDelete"/)
-  assert.match(attractionPaletteHtml(state), /data-attraction-piece="entrance"/)
 }
 
 function testTrackDeleteAndReconnect(): void {
@@ -325,4 +321,123 @@ function edge(id: string, from: TrackNode, to: TrackNode): TrackEdge {
     ],
     cost: 10,
   }
+}
+
+function testCampingAndForecourtStayLive(): void {
+  const game = new GameState()
+  game.addDebugMoney()
+  const campCells = [{ x: 4, z: -10 }, { x: 5, z: -10 }]
+  assert.ok(applyGameCommand(game, { type: 'designateCampingArea', cells: campCells }).ok)
+  assert.ok(game.getCampingCellAt(4, -10))
+  assert.equal(game.canPlace('food', 4, -10).ok, false, 'food stays off a camping overlay')
+  assert.match(game.canPlace('food', 4, -10).message, /Zeltbereich/)
+  assert.equal(game.canPlace('path', 4, -10).ok, false, 'paths stay off a camping overlay')
+  assert.equal(game.canPlace('totem', 4, -10).ok, false, 'scenery stays off a camping overlay')
+  assert.equal(game.canPlace('fence', 4, -10).ok, true, 'construction fence remains the camping exception')
+  assert.ok(
+    game.snapshot.attractions.some((attraction) => attraction.definitionId === 'camping'),
+    'designate writes the camping overlay back onto attractions',
+  )
+
+  const started = applyGameCommand(game, {
+    type: 'startAttraction',
+    definitionId: 'paintball',
+    x: 8,
+    z: -8,
+    rotation: 0,
+  })
+  assert.ok(started.ok)
+  assert.ok(game.getCampingCellAt(4, -10), 'attraction commands must not drop designated camping')
+  assert.equal(game.canPlace('food', 4, -10).ok, false)
+
+  const reloaded = GameState.fromJSON(JSON.stringify(game.snapshot))!
+  assert.ok(reloaded.getCampingCellAt(4, -10), 'save/load keeps camping when attractions exist')
+  assert.equal(reloaded.canPlace('food', 4, -10).ok, false)
+  assert.ok(reloaded.snapshot.attractions.some((attraction) => attraction.definitionId === 'camping'))
+
+  const client = new GameState()
+  client.applyNetworkUpdate({ campingCells: structuredClone(game.snapshot.campingCells) })
+  assert.ok(client.getCampingCellAt(4, -10))
+  client.applyNetworkUpdate({ attractions: structuredClone(game.snapshot.attractions) })
+  assert.ok(client.getCampingCellAt(4, -10), 'MP attraction deltas must not wipe camping cells')
+  assert.equal(client.canPlace('totem', 4, -10).ok, false)
+
+  const guest = new GameState()
+  const sync = JSON.parse(new WorldUpdates().encode(packWorld(game.snapshot), true)) as {
+    world: Parameters<GameState['applyNetworkUpdate']>[0]
+  }
+  guest.applyNetworkUpdate(sync.world)
+  assert.ok(guest.getCampingCellAt(5, -10), 'full MP sync carries camping cells')
+
+  const stageDesign = defaultStageDesign()
+  Object.assign(
+    stageDesign,
+    { tileWidth: 3, tileDepth: 3, forecourtDepth: 4 },
+    stageDetailSize(3, 3, stageDesign.tileHeight),
+  )
+  assert.ok(game.manageFestival({ type: 'stageDesign', design: stageDesign, selectForBuild: true }).ok)
+  for (let x = 6; x < 9; x++) {
+    for (let z = -20; z < -12; z++) {
+      game.manageFestival({ type: 'ground', x, z, kind: 'drain' })
+      game.manageFestival({ type: 'ground', x, z, kind: 'compact' })
+    }
+  }
+  assert.ok(game.place('stage', 6, -20).ok)
+  const stage = game.snapshot.buildings.find((building) => building.kind === 'stage')!
+  const owned = game.snapshot.stageForecourtCells.filter((cell) => cell.stageId === stage.id)
+  assert.ok(owned.length > 0, 'placing a stage still paints its apron')
+  const apron = owned[0]!
+  assert.equal(game.canPlace('food', apron.x, apron.z).ok, false, 'food stays off the stage apron')
+  assert.match(game.canPlace('food', apron.x, apron.z).message, /Bühnenvorplatz/)
+  assert.equal(game.canPlace('path', apron.x, apron.z).ok, false)
+  assert.equal(game.canPlace('totem', apron.x, apron.z).ok, false)
+  assert.equal(game.canPlace('fence', apron.x, apron.z).ok, true, 'construction fence remains the apron exception')
+  assert.equal(game.canPlace('delayTower', apron.x, apron.z).ok, true, 'delay towers may stand in the crowd')
+
+  const preview = game.previewPlacement({ type: 'tool', tool: 'stageForecourt', x: 3, z: -14 })
+  assert.equal(preview.ok, true, 'forecourt preview uses the designate dry-run')
+  assert.match(preview.message, /Bühnenvorplatz/)
+  assert.ok(
+    applyGameCommand(game, { type: 'designateStageForecourt', cells: [{ x: 3, z: -14 }] }).ok,
+  )
+  assert.ok(game.getStageForecourtCellAt(3, -14))
+  assert.equal(game.canPlace('food', 3, -14).ok, false)
+  assert.equal(
+    game.previewPlacement({ type: 'tool', tool: 'stageForecourt', x: 3, z: -14 }).ok,
+    false,
+  )
+
+  applyGameCommand(game, {
+    type: 'constructAttraction',
+    request: {
+      kind: 'addAreaCells',
+      attractionId: started.placedId!,
+      cells: [{ x: 8, z: -8, elevation: 0 }],
+    },
+  })
+  assert.equal(
+    game.snapshot.stageForecourtCells.filter((cell) => cell.stageId === stage.id).length,
+    owned.length,
+    'attraction edits must not drop the stage apron',
+  )
+  assert.ok(game.getStageForecourtCellAt(3, -14), 'manual forecourt survives attraction edits')
+  assert.equal(game.canPlace('food', apron.x, apron.z).ok, false)
+
+  const afterEdit = GameState.fromJSON(JSON.stringify(game.snapshot))!
+  assert.equal(
+    afterEdit.snapshot.stageForecourtCells.filter((cell) => cell.stageId === stage.id).length,
+    owned.length,
+    'load keeps the rebuilt stage apron',
+  )
+  assert.ok(afterEdit.getStageForecourtCellAt(3, -14), 'load keeps a manual forecourt designation')
+  assert.equal(afterEdit.canPlace('food', 3, -14).ok, false)
+
+  const forecourtGuest = new GameState()
+  forecourtGuest.applyNetworkUpdate({
+    attractions: structuredClone(game.snapshot.attractions),
+    stageForecourtCells: structuredClone(game.snapshot.stageForecourtCells),
+    buildings: structuredClone(game.snapshot.buildings),
+  })
+  assert.ok(forecourtGuest.getStageForecourtCellAt(3, -14), 'MP sync carries manual forecourt cells')
+  assert.equal(forecourtGuest.canPlace('food', apron.x, apron.z).ok, false)
 }

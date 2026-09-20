@@ -23,6 +23,8 @@ export interface PathDragServices {
   showToast(message: string, error?: boolean): void
   coursePaintMode?(): 'area' | 'line' | null
   placeCourseCells?(cells: ReadonlyArray<CellPosition>): void
+  /** Return false / a rejected promise to skip area demolish (ride confirm). */
+  confirmAreaDemolish?(cells: ReadonlyArray<CellPosition>): boolean | Promise<boolean>
 }
 
 export interface PathDragView {
@@ -77,6 +79,26 @@ export function connectedPathLine(start: CellPosition, end: CellPosition): CellP
     cells.push({ x, z })
   }
   return cells
+}
+
+function runBulldozeArea(
+  game: GameState,
+  cells: ReadonlyArray<CellPosition>,
+  services: PathDragServices,
+): void {
+  const proceed = (): void => {
+    const result = game.bulldozeArea(cells)
+    services.showToast(result.message, !result.ok)
+  }
+  const gate = services.confirmAreaDemolish?.(cells)
+  if (gate === undefined || gate === true) {
+    proceed()
+    return
+  }
+  if (gate === false) return
+  void Promise.resolve(gate).then((ok) => {
+    if (ok) proceed()
+  })
 }
 
 export function createPathToolController(services: PathDragServices, view: PathDragView): PathToolController {
@@ -150,7 +172,7 @@ export function createPathToolController(services: PathDragServices, view: PathD
         const result = game.placeSceneryLine(tool as BuildingKind, selectedCells, slot, sceneryRotation)
         services.showToast(result.message, !result.ok)
       } else if (tool === 'bulldoze') {
-        const result = game.bulldozeArea(selectedCells); services.showToast(result.message, !result.ok)
+        runBulldozeArea(game, selectedCells, services)
       } else if (tool === 'camping') {
         const result = game.designateCampingArea(selectedCells); services.showToast(result.message, !result.ok)
       } else if (tool === 'medicalArea') {

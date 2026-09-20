@@ -11,8 +11,9 @@ vollen Tages mit den aktuell berechenbaren Fixkosten.
 | Ledger, Kategorien, Prognose | `src/game/finance.ts` | `bookFinance`, `financeEdition`, `financeForecast` |
 | Darlehensregeln | `src/game/finance.ts` | `LOAN`, `loanLimit`, `loanInterest` |
 | Zustands-API und laufende Kosten | `src/game/GameState.ts` | `GameState.financeOverview`, `GameState.manageLoan`, `GameState.financeForecast` |
-| Pausen-/Bühnen-/Kurs-Unterhalt | `src/game/upkeep.ts` | `buildingHourlyUpkeep`, `coasterHourlyUpkeep`, `courseHourlyUpkeep` |
-| Finanzfenster | `src/main.ts` | `updateFinancePanel`, `openFinancePanel` |
+| Aufschlüsselung der Kostenzeilen | `src/game/financeBreakdown.ts` | `financeCostBreakdown` |
+| Leerlauf-/Bühnen-/Kurs-Unterhalt | `src/game/upkeep.ts` | `buildingHourlyUpkeep`, `coasterHourlyUpkeep`, `courseHourlyUpkeep`, `festivalIsLive`, `venueUpkeepIdle` |
+| Finanzfenster | `src/main.ts`, `src/ui/financePanel.ts` | `updateFinancePanel`, `renderFinanceLedger` |
 | Szenario-Finanzziele | `src/game/scenarioGoals.ts` | `updateScenarioProgress` |
 | Regressionen | `tests/finance.ts` | `testFinance` |
 
@@ -22,19 +23,31 @@ vollen Tages mit den aktuell berechenbaren Fixkosten.
   ändern Bargeld und Schuld, sind aber weder Einnahme noch Ausgabe.
 - Buchungen werden auf Cent gerundet und auf acht Festival-Ausgaben begrenzt.
 - Zinsen und laufende Kosten werden aus Simulationszeit berechnet.
-  Buden und Attraktionen zahlen in der Tagesplan-**Pause** nur
-  `economy.pauseUpkeepMultiplier` (15 %). Festivalbühnen ohne laufendes
-  Festival senken den Gebäudeunterhalt und setzen Technik auf 0. Coaster-
-  und Kursstücke haben eigenen Stückunterhalt, ebenfalls pausenreduziert.
-  Maßgeblich ist `getFestivalCycleStatus`, nicht `speed === 0`.
+  Ist kein Festival **live** (`festivalIsLive`: gestartet, nicht Planung,
+  nicht beendet, Zyklusphase `festival`), sitzen Stände, Fahrgeschäfte,
+  Coaster und Kurse auf `economy.pauseUpkeepMultiplier` (**5 %** Leerlauf).
+  Festivalbühnen zahlen dann `economy.inactiveFestivalStageMultiplier`
+  (**5 %** Gebäudeunterhalt) und **0** Technik. Personal, Träger, Zinsen,
+  Müllwagen und sonstige Infra bleiben voll. Maßgeblich ist
+  `getFestivalCycleStatus` plus Festivalstatus, nicht `speed === 0`.
 - `GameSnapshot.finance` bleibt save- und multiplayer-kompatibel; alte Stände
   ohne gültige Perioden erhalten `createFinanceState()`.
+- Die Ledger-Zeilen **Betriebskosten**, **Personal**, **Gagen** und
+  **Kreditzinsen** sind unabhängig aufklappbar. Die Teilposten kommen nicht
+  aus historischen Buchungszeilen, sondern aus dem aktuellen Park
+  (`financeCostBreakdown`): Gebäude-/Bühnen-/Attraktionsunterhalt,
+  Müllwagen, Notstrom, Löhne nach Rolle, Träger, offenes Darlehen und
+  gebuchte Gagen. Die Tagesbeträge von Betrieb, Personal und Zinsen
+  entsprechen der Spalte **Prognose morgen**. Die Simulation bucht weiter
+  nur Kategoriesummen.
 
 ## Tests
 
 `tests/finance.ts` prüft Kategorien, Ausgabenwechsel, Tagesabschluss,
-Prognose, Kreditrahmen, Zinsen und Snapshot-Defaults.
-`tests/courseAttractions.ts` sichert den stark reduzierten Pausenunterhalt
+Prognose, Kreditrahmen, Zinsen, Snapshot-Defaults und die aufklappbare
+Aufschlüsselung (gruppierte Stände, Personal, Zinsen, Gagen, Ledger-HTML).
+`tests/courseAttractions.ts` und `tests/finance.ts` sichern den
+Leerlauf-Unterhalt (aktiv vs. inaktiv, Beträge ≤ 10 % der Volllast)
 sowie null Technikunterhalt für nicht live laufende Festivalbühnen.
 Gesamtlauf: `npm test`.
 

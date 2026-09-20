@@ -47,6 +47,12 @@ sind abgeleitete Darstellung desselben Zustands.
   Ticket-/Campingzulassung und Visitor-Erzeugung. `VisitorCrowdingSimulation`
   besitzt den einmaligen räumlichen Crowd-Pass, Motivation und Panik. Beide
   erhalten schmale Kontexte und importieren keinen konkreten `GameState`.
+- Attraktionsziele sind aufgeteilt: `findReachableRide`, `findReachableCoaster`
+  und `findReachableCourse` kennen Ride-Angebot, Queue-Kapazität und die von
+  einem Gast gemiedene Bahn. `findReachableAttraction` bedient nur kanonische
+  Attraktionen **ohne** Legacy-Besitzer und überspringt IDs aus
+  `state.coasters`, `state.courses` und Ride-Gebäuden, sonst wird eine Bahn
+  zweimal angeboten und die Fachregeln fallen weg.
 - Gäste erreichen Imbiss und Getränkestand ausschließlich an der gedrehten
   Vorderseite (`getFacilityAccessCells`); auch die Queue muss dort anschließen.
   Warenträger dürfen weiterhin von allen vier Seiten liefern.
@@ -129,6 +135,15 @@ sind abgeleitete Darstellung desselben Zustands.
   Alle Konzertgäste eines Ticks verwenden dabei denselben zuvor von
   `syncBandSupply` erzeugten Qualitäts-Snapshot; kein Backstage-/Gebäude-/
   Besucher-Vollscan pro Zuschauer.
+  Die Platzwahl (`tryVisitConcert`) füllt zuerst die vordere Apron-/
+  Forecourt-Reihe (`stageFrontRank` in `stageDesign.ts`), verteilt dort über
+  die vorhandene `concertSlots`-Belegung und nimmt hintere Reihen nur, wenn
+  vorne voll oder unerreichbar ist. Pro bevorzugter Reihe läuft eine
+  Multi-Goal-Suche (`concertSpreadGoals`, höchstens
+  `concertFrontGoalAttempts` Fallbacks); Distanz zum Gast ist nur ein
+  schwacher Tie-Break, kein primäres Kriterium. Sandbox-Tanzen auf dem
+  Vorplatz (`findPartyDestination`) nutzt denselben Front-Bias
+  (`concertFrontRowPenalty`).
   Fans können budgetiert ins aktive Backstage eindringen
   (`backstageIntrusion`); das ist kein zweites Need.
 - Baden (`swimming`) ist Freizeit wie `relaxing`: bei niedrigem Spaß und
@@ -183,8 +198,10 @@ Bereits begonnene Müllwege werden beim wiederholten Schließzeit-Check beibehal
 `tests/pixelPeople.ts` (Batches, stabile Optik). `tests/shopGoods.ts` (Kauf,
 Hand-Chance, Shirt vom Stand, Save). `tests/regression.ts`
 (Spawn, Needs, Speed-Partition, Festivalende-Abreise durch Campingflächen).
-Festival-Anreisen und Live-Show-Festivallust: `tests/festival.ts`,
-`tests/stageTickets.ts`. Queue-Reihenfolge, kontinuierliches Nachrücken,
+Festival-Anreisen, Live-Show-Festivallust und vordere Konzertplätze
+(Fallback auf die nächste Reihe, wenn vorne voll): `tests/festival.ts`,
+`tests/stageTickets.ts`. `tests/stageInteraction.ts` prüft `stageFrontRank`
+gegen Apron-Zellen und gedrehte Bühnen. Queue-Reihenfolge, kontinuierliches Nachrücken,
 Queue-Rückweg, geteilte Stand-Spuren, leere Stände, Aussteigen auf den
 Nachbarweg, Insassen steigen nach dem Parken aus und bleiben zu Fuß
 (keine Verletzung/Belegung vor dem Aussteigen), Abreise wartet im Auto

@@ -262,7 +262,7 @@ function migratePool(course: CourseAttraction): Attraction[] {
   return result
 }
 
-function migrateCamping(
+export function migrateCamping(
   cells: readonly CampingCell[],
   installations: readonly CampInstallation[],
 ): Attraction[] | null {
@@ -296,7 +296,7 @@ function migrateCamping(
   }]
 }
 
-function migratePartyAreas(cells: readonly StageForecourtCell[]): Attraction[] {
+export function migratePartyAreas(cells: readonly StageForecourtCell[]): Attraction[] {
   const grouped = new Map<string, StageForecourtCell[]>()
   cells.forEach((cell) => {
     const id = cell.stageId ?? 'free'

@@ -134,7 +134,9 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   **Verwalten**; das Lkw-Icon im Baubereich bleibt dem Baukatalog vorbehalten.
 - Die Logistikansicht mit Untergrund ist ein Overlay
   (`setLogisticsMode`), unabhängig vom Geländeplaner.
-- Parkplätze sind ausgewiesene Felder, kein eigener Wegtyp. Im normalen
+- Parkplätze sind ausgewiesene Felder, kein eigener Wegtyp. Das Kopierwerkzeug
+  nimmt leere Buchten in Auswahl, Vorschau und Stempel mit (`type: 'parking'`).
+  Im normalen
   Blick (ohne Autostraßen-Fenster und ohne Logistik-Overlay) liegt grauer
   Asphalt im Terrain-Atlas und als geteilte Overlay-Fläche mit
   Stellplatzlinien. Straßen, Pfade und Wiese bleiben unverändert. Die

@@ -138,6 +138,7 @@ export type GameCommandAction =
   | { type: 'setRoadSpeed'; x: number; z: number; speedLimit: SpeedLimit }
   | { type: 'setPathFlow'; x: number; z: number; elevation: number; direction: number | null }
   | { type: 'setParkOpen'; open: boolean }
+  | { type: 'undoLastBuild' }
   | { type: 'setSpeed'; speed: number }
   | { type: 'hireStaff'; role: StaffRole }
   | { type: 'fireStaff'; role: StaffRole }

@@ -9,6 +9,30 @@ Headliner uses a **shared** parametric engine gated by a discrete
 `{heading, pitchLevel, bankLevel}` connection machine and per-type catalogs.
 All `COASTER_CATALOG` rows are playable. Do not add freeform spline placement.
 
+## Der Editor gehört der Achterbahn (nicht dem Kurs-Framework)
+
+`0` / „Achterbahn“ öffnet immer direkt `#coaster-builder`. Der Editor darf
+**nicht** über ein generisches Attraktionspanel laufen: Stück-Palette,
+Neigung, Rollen, Kettenlift, Vorschau, „Dies bauen“, Rückgängig,
+Stück-Auswahl (◀ ▶), mittleres Löschen sowie Ein-/Ausgang sind
+achterbahnspezifisch. Weitere Regeln, die beim Vereinheitlichen verloren
+gegangen waren und erhalten bleiben müssen:
+
+- `handleInspectCell` prüft Achterbahn und Kurs **vor** generischen
+  Attraktionen; sonst wird ein Bahnklick als fremde Attraktion behandelt.
+- Der Zug läuft in `CoasterSimulation` (echte SI-Physik). Es darf keinen
+  vereinfachten `stepCoasterTrack`-Fortschritt im generischen
+  `stepAttractions` geben; `legacyIds` überspringt Bahnen und Kurse dort.
+- `updateCoasters` läuft immer, auch wenn kanonische Attraktionen existieren.
+- Besucher zielen über `findReachableCoaster` / `findReachableCourse` /
+  `findReachableRide`; `findReachableAttraction` überspringt IDs, die zu einer
+  Bahn, einem Kurs oder einem Fahrgeschäft-Gebäude gehören.
+- `state.coasters` bleibt die editierte Wahrheit; der kanonische
+  `attractions`-Datensatz wird danach nachgezogen
+  (`refreshLegacyAttractionRecords`), sonst verliert ein Save Bahnen.
+  `closed` wird dabei wie im Editor über `isCoasterCircuitClosed` bestimmt,
+  nicht aus Graph-Knoten geraten.
+
 ## Current vs target
 
 | Layer | Current Headliner | RCT2 / OpenRCT2 target |
@@ -37,7 +61,8 @@ RCT2 60° is not mixed into comments or the palette. Gentle is `atan(0.5)`.
 | --- | --- | --- |
 | Piece kinds, geometry, trains, sampling | `src/game/coasters.ts` | `TRACK_PIECE_KINDS`, `TrackAnchor`, `createTrackPiece`, `sampleCoasterTrack`, `getSmoothedCoasterPiecePoints` |
 | Fester Betriebs-/Physik-Tick | `src/game/coasterSimulation.ts` | `CoasterSimulation`; Queue, Dispatch, Integration, Telemetrie, Recall, Ausstieg |
-| Playable type catalog + styles | `src/game/coasterTypes.ts` | `COASTER_CATALOG`, `resolveSupportedTrackPieces`, `resolveCoasterTypeId`, `coasterVehiclePreview` |
+| Playable type catalog + styles | `src/game/coasterTypes.ts` | `COASTER_CATALOG`, `resolveSupportedTrackPieces`, `resolveCoasterTypeId`, `coasterVehiclePreview`, `resolveCoasterEditorMode` (`editorMode`, Default `palette`) |
+| Editor-Modus | `src/game/trackEditorMode.ts` | `palette` (großer Build-Button) vs `directionArrows` (Weg-Pfeile) |
 | Live type table / helix geometry | `src/game/coasters.ts` | `COASTER_TYPES`, `getCoasterType`, `createHelixTrack` |
 | Connection / palette legality | `src/game/coasterConnections.ts` | `describeTrackAppendIssue`, `resolveNextTrackPiece`, `applyConstructionPitch` / `Bank` / `Kind`, `listTrackPalettePieces` (type-supported + `enabled`) |
 | Schienen-Baucommands | `src/game/commands/coasterCommands.ts`, `src/game/GameState.ts` | Services `startCoasterCommand`, `appendCoasterPieceCommand`, `undoCoasterPieceCommand`, `deleteCoasterPieceCommand`; gleichnamige Fassadenmethoden bleiben für Netz/UI |
@@ -45,6 +70,8 @@ RCT2 60° is not mixed into comments or the palette. Gentle is `atan(0.5)`.
 | Commands | `src/net/protocol.ts`, `src/net/commands.ts`, `src/net/bind.ts` | `GameCommand` coaster variants |
 | Balancing / SI physics | `src/game/simulationConfig.ts` | `coasters`, `classicSteel.physics` (shared SI baseline + per-type overrides), `trackPieceCosts.helixLeft/Right`, `physicsSimulation`, `trackJoinSmoothing`. Speed keys: `stationLaunchSpeed` 22.4, `stationDriveSpeed` 6.72, `chainSpeed` 10.4, `dragArea` 0.53, `maximumSpeed` 90; gravity stays 9.81 |
 | Construction window | `src/ui/coasterBuilderPanel.ts`, `src/main.ts` (`#coaster-builder`) | `updateCoasterBuilderPanel` owns rendering/preview; the composition root supplies typed state and DOM groups |
+| Full-ride demolish confirm | `src/ui/confirmDialog.ts` | `rideDemolishPrompt` / `confirmAction` before `removeCoaster`; also inspect `#demolish-coaster` and bulldoze on station/access |
+| Legacy-Datensatz-Sync | `src/game/attractions/projections.ts` | `refreshLegacyAttractionRecords`, `dropLegacyAttractionRecords`, `legacyAttractionSignature` |
 | Palette mount helper | `src/game/coasterConstructionUI.ts` | `updateCoasterConstruction` / `coasterConstructionViewKey`, `syncCoasterPalette`, stable ids, `coasterConstructionPreviewKey` |
 | Catalog train tiles | `src/view/WorldView.ts` | `coasterTrainThumbnail` — same `createCoasterCar` family as in-world trains |
 | Track styles | `src/view/coasterTrack.ts` | one merged vertex-color mesh per piece; family rails / ties / supports; posts stop at land or a solid and skip if the bay is filled |
@@ -201,13 +228,14 @@ Do not reinvent this window.
 | Slope | `#track-slope-palette` | steep down / gentle down / flat / gentle up / steep up. Type-never slopes (junior Steil) stay **hidden**. Unreachable from this end stay **greyed**. Enabled slope clicks may still **hard-switch** bank; greyed clicks do nothing |
 | Bank | `#track-bank-palette` | left / none / right (`±TRACK_BANK_ANGLE`). Types without banking hide left/right. Opposite-bank and illegal combos stay **greyed**. Enabled bank clicks may snap slope |
 | Chain | `#toggle-chain-lift` / `#chain-lift` | Shown when the type allows a lift (`isTrackChainLiftVisible`). Greyed when this end / next piece cannot take one (`isTrackChainLiftEligible`). LIM / no-lift types hide it |
-| Preview / build | `#coaster-build-piece` | Ghost via `createTrackPiece` → `setCoasterConstructionPreview`. First click sets start candidate; confirm calls `startCoaster`. Later calls `appendCoasterPiece` |
+| Preview / build | `#coaster-build-piece` | Ghost via `createTrackPiece` → `setCoasterConstructionPreview`. First click sets start candidate; confirm calls `startCoaster`. Later calls `appendCoasterPiece`. Hidden when `editorMode === 'directionArrows'` |
+| Path-style arrows | `#coaster-direction-grid` | Only if `COASTER_CATALOG.editorMode === 'directionArrows'`. Legal unbuilt headings; click appends `straight` / 1-tile curve. All shipped types stay `palette` |
 | Undo last | `#coaster-undo` | `undoCoasterPiece` |
 | Delete selected | `#delete-track-from-here` | `deleteCoasterPiece` (cannot delete index 0) |
 | Cursor | `#track-previous` / `#track-next` | Selects the open end after that piece |
 | Start heading | `#coaster-rotate` | Only before the first station exists |
 | Gates | `#place-coaster-entrance` / `#place-coaster-exit` | `setCoasterAccess` — must be adjacent to a `station` tile |
-| Demolish ride | `#demolish-coaster-construction` | `removeCoaster` |
+| Demolish ride | `#demolish-coaster-construction` | In-Game-Nachfrage (`confirmAction` / `rideDemolishPrompt`, Bahnname), dann `removeCoaster`. Denselben Dialog öffnen `#demolish-coaster` (Infofenster) und das Abrisswerkzeug, wenn der Klick/das Rechteck eine Station oder einen Zugang trifft. |
 | Info panel | `#coaster-options` | `setCoasterOperationMode` (`closed` / `open` / `test`), `updateCoasterSettings`, `updateCoasterPrice`, `recallCoasterTrain`. **Testbetrieb** dispatches the empty train immediately on a closed circuit and keeps integrating physics on every sim tick — including during festival **planning** (new scenarios start there) as long as speed is not 0. Planning still holds guests, economy and the weekend clock. |
 
 Palette visibility **must** go through `src/game/coasterConnections.ts`
@@ -490,8 +518,9 @@ Run: `npm test` (full suite via `scripts/test.mjs`) and `npm run build`.
 
 | File | What it locks |
 | --- | --- |
-| `tests/coasterTypes.ts` | Catalog matrix, all types playable, **vehicle thumbnail spec** per type, live append legality, palette **type-omit vs current-state grey** (wooden / junior / LIM / wild mouse / mine train / bobsled), hard-switch slope/bank/**kind** (first enabled click changes window), disabled kind does not change ghost, **palette listed twice without click keeps ids / does not remount**, **`updateCoasterConstruction` does not apply across playing `tick`s**, helix, missing-type → classicSteel, discrete machine, `GameState` smoke, **classicSteel rectangle in Testbetrieb during planning advances distance/speed**, SI floors (`chainSpeed` ≥ 10, `stationLaunchSpeed` ≥ 20, `dragArea` ≤ 0.55, `gravity` 9.81, `maximumSpeed` ≥ 85) |
+| `tests/coasterTypes.ts` | Catalog matrix, all types playable, **every shipped type `editorMode === 'palette'`**, **vehicle thumbnail spec** per type, live append legality, palette **type-omit vs current-state grey** (wooden / junior / LIM / wild mouse / mine train / bobsled), hard-switch slope/bank/**kind** (first enabled click changes window), disabled kind does not change ghost, **palette listed twice without click keeps ids / does not remount**, **`updateCoasterConstruction` does not apply across playing `tick`s**, helix, missing-type → classicSteel, discrete machine, `GameState` smoke, **classicSteel rectangle in Testbetrieb during planning advances distance/speed**, SI floors (`chainSpeed` ≥ 10, `stationLaunchSpeed` ≥ 20, `dragArea` ≤ 0.55, `gravity` 9.81, `maximumSpeed` ≥ 85), `listCoasterDirectionChoices` greys the back heading |
 | `tests/festivalAdditions.ts` | 1-tile slopes, flat↔steep clothoid, inversions, join smoothing, full demolish, physics speed floors |
+| `tests/uiModules.ts` | Full-ride demolish prompt copy (name / fallback) and `wouldBulldozeRemoveCoaster` on a station tile |
 | `tests/performanceGuards.ts` | Specials batch, one photo charge, car mesh |
 | `tests/rideAccess.ts` | Carousel / bungee gates (not the track editor) |
 

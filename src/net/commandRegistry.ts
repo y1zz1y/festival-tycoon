@@ -66,6 +66,7 @@ export const COMMAND_METADATA = {
   setRoadSpeed: { optimistic: true },
   setPathFlow: { optimistic: true },
   setParkOpen: { optimistic: false },
+  undoLastBuild: { optimistic: false },
   setSpeed: { optimistic: false },
   hireStaff: { optimistic: false },
   fireStaff: { optimistic: false },

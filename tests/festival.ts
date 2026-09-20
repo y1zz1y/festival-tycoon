@@ -119,11 +119,43 @@ export function testFestival(fixture: (count?: number) => GameState): void {
     ringTiles.set(key, (ringTiles.get(key) ?? 0) + 1)
   }
   assert.ok(ringGuests.length >= 12, 'a ring of dance-floor tiles seats more than one packed tile')
-  assert.ok(ringTiles.size >= 4, 'concert guests spread around the connected stage')
+  const ringFront = ringGuests.filter(v => v.activityTarget!.z === -19)
+  assert.ok(ringFront.length >= 12, 'fans pack the first apron row instead of the nearest side tile')
+  assert.ok(ringTiles.size >= 2, 'they spread along that front row instead of stacking one tile')
   assert.ok(
-    Math.max(...ringTiles.values()) <= Math.ceil(ringGuests.length / ringTiles.size) + 2,
-    'occupancy stays even around the dance floor',
+    Math.max(...[...ringTiles.entries()].filter(([key]) => key.endsWith(',-19')).map(([, count]) => count)) <= 9,
+    'a front-row tile still respects the nine-guest cap',
   )
+
+  const frontBias = create(20), fb = frontBias.snapshot as GameSnapshot
+  const frontStage = fb.buildings.find(b => b.kind === 'stage')!
+  assert.ok(frontBias.manageFestival({ type: 'book', bandId: 'meadow', stageId: frontStage.id, day: fb.festival.startDay + 1, start: 840, duration: 90 }).ok)
+  assert.ok(frontBias.designateStageForecourt([
+    { x: 6, z: -19 }, { x: 6, z: -18 }, { x: 6, z: -17 },
+  ]).ok)
+  fb.day = book.day
+  fb.minute = 840
+  fb.power.poweredBuildingIds.push(frontStage.id)
+  fb.festival.weather = 'sun'
+  for (const visitor of fb.visitors) {
+    visitor.route = []
+    visitor.targetId = null
+    visitor.state = 'exploring'
+    visitor.musicTaste = 'indie'
+    visitor.audience = 'music'
+    visitor.cellX = 4
+    visitor.cellZ = -20
+    visitor.x = 4.5
+    visitor.z = -19.5
+    ;(frontBias as any).tryVisitConcert(visitor)
+  }
+  const frontSeated = fb.visitors.filter(v => v.concertId)
+  const tileCount = (x: number, z: number) => frontSeated.filter(v => v.activityTarget!.x === x && v.activityTarget!.z === z).length
+  assert.ok(frontSeated.length >= 18, 'a deep apron seats almost the whole test crowd')
+  assert.equal(tileCount(6, -19), 9, 'the first apron row fills before later rows')
+  assert.equal(tileCount(6, -18), 9, 'the second row is the fallback once the front is full')
+  assert.ok(tileCount(6, -17) >= 2, 'further rows take the overflow after that')
+  assert.equal(tileCount(5, -20), 0, 'the nearest side tile stays empty while apron rows still have room')
 
   assert.equal(game.manageFestival({ type: 'cancel', id: f.bookings[0]!.id }).ok, false, 'no refund after show starts')
 

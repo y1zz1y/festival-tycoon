@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { Vector3, LineSegments, SpotLight, Box3, Quaternion, Mesh, OrthographicCamera, type Group } from 'three'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { stagePlacement } from '../src/game/stagePlacement'
-import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, stageApronCells, stageApronDepth, stageForecourtDepth, fohDeskRole, lineArrayIndex, migrateStageDesign, stageStats, stageDetailSize, COMPONENTS, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, STAGE_TILE_DETAIL, type StagePart } from '../src/game/stageDesign'
+import { defaultStageDesign, stageDesignIssue, removeStagePart, stageAudienceCells, stageApronCells, stageApronDepth, stageForecourtDepth, stageFrontRank, fohDeskRole, lineArrayIndex, migrateStageDesign, stageStats, stageDetailSize, COMPONENTS, NEIGHBOR_STEPS, ROTATION_DIRECTIONS, STAGE_TILE_DETAIL, type StagePart } from '../src/game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel, updateStageLightPool } from '../src/view/stageModel'
 import { lightViewOf } from '../src/view/lightSelection'
 import { showIssue } from '../src/game/festivalManagement'
@@ -394,6 +394,16 @@ export function testStageInteraction(fixture:(count?:number)=>GameState){
   const legacyApron={...audience,forecourtDepth:undefined}
   assert.equal(stageForecourtDepth(legacyApron),6,'legacy designs retain the former two-stage-width forecourt')
   assert.equal(migrateStageDesign(legacyApron).forecourtDepth,6,'loading persists the legacy-compatible forecourt depth')
+  const catalogStage={x:6,z:-20,rotation:0}
+  assert.equal(stageFrontRank(catalogStage,{x:6,z:-19}).row,1,'the first cell in front of a catalog stage is row 1')
+  assert.equal(stageFrontRank(catalogStage,{x:6,z:-18}).row,2,'deeper apron tiles rank further back')
+  assert.ok(stageFrontRank(catalogStage,{x:5,z:-20}).row>stageFrontRank(catalogStage,{x:6,z:-18}).row,'a side tile ranks behind the apron')
+  assert.ok(stageFrontRank(catalogStage,{x:6,z:-21}).row>stageFrontRank(catalogStage,{x:6,z:-18}).row,'so does a cell behind the stage')
+  const turned={x:6,z:-20,rotation:1,stageDesign:{...audience,forecourtDepth:4}}
+  const firstTurned=stageApronCells(turned)[0]!
+  assert.equal(stageFrontRank(turned,firstTurned).row,1,'rotated stages keep row 1 on the first apron cell')
+  const lastTurned=stageApronCells(turned).at(-1)!
+  assert.equal(stageFrontRank(turned,lastTurned).row,4,'and the last workshop row stays the furthest front rank')
   const game=fixture(0),s=game.snapshot as GameSnapshot;game.addDebugMoney()
   for(let x=6;x<9;x++)for(let z=-20;z<-17;z++){game.manageFestival({type:'ground',x,z,kind:'drain'});game.manageFestival({type:'ground',x,z,kind:'compact'})}
   assert.ok(game.placePathSegment(5,-19,0).ok)

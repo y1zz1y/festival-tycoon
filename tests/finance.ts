@@ -2,8 +2,24 @@ import assert from 'node:assert/strict'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { normalizeScenarioSettings } from '../src/game/scenario'
 import { SCENARIO_PRESETS, scenarioPreset } from '../src/game/scenarioPresets'
-import { bookFinance, financeEdition, financePeriodTotal, loanInterest, loanLimit, rollFinanceDay, LOAN } from '../src/game/finance'
+import { bookFinance, financeEdition, financePeriodTotal, loanInterest, loanLimit, rollFinanceDay, LOAN, type FinanceCategory } from '../src/game/finance'
+import { financeCostBreakdown } from '../src/game/financeBreakdown'
+import {
+  breakdownItemLabel,
+  renderFinanceLedger,
+  toggleFinanceCategory,
+} from '../src/ui/financePanel'
 import { goalName, updateScenarioProgress } from '../src/game/scenarioGoals'
+import { createBlankSnapshot } from '../src/game/snapshotBootstrap'
+import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
+import { courseHourlyUpkeep } from '../src/game/courseAttractions'
+import {
+  buildingHourlyUpkeep,
+  coasterHourlyUpkeep,
+  festivalIsLive,
+  snapshotHourlyBuildingUpkeep,
+} from '../src/game/upkeep'
+import { defaultStageDesign } from '../src/game/stageDesign'
 
 export function testFinance(): void {
   // Every euro that moves is booked, and the columns are festival editions.
@@ -129,4 +145,148 @@ export function testFinance(): void {
   updateScenarioProgress(q, 2)
   assert.equal(q.scenarioProgress.status[1], 'failed', 'the loan goal is missed once the second edition has begun')
   assert.equal(quest.financeOverview().companyValue, Math.round(quest.parkValue() + q.money - q.finance.loan))
+
+  // Expandable cost rows: current buildings, wages, loan and bookings — same numbers as the forecast.
+  const items = GameState.startNew(normalizeScenarioSettings({ worldSize: 32, unevenness: 0, startingMoney: 80_000 }))
+  const park = items.snapshot as GameSnapshot
+  const beforeStand = financeCostBreakdown(park)
+  assert.ok(items.place('food', 4, 4).ok)
+  assert.ok(items.place('food', 6, 4).ok)
+  const afterStands = financeCostBreakdown(park)
+  const stands = afterStands.upkeep?.sections.find((section) => section.id === 'stands')
+  const food = stands?.items.find((item) => item.label === 'Imbiss')
+  assert.ok(food, 'Betriebskosten list the food stand')
+  assert.equal(food.count, 2, 'identical stands share one line')
+  assert.equal(breakdownItemLabel(food), 'Imbiss × 2')
+  assert.ok((afterStands.upkeep?.total ?? 0) < (beforeStand.upkeep?.total ?? 0))
+  assert.equal(afterStands.upkeep?.total, items.financeForecast().upkeep)
+
+  assert.ok(items.hireStaff('cleaner').ok)
+  assert.ok(items.hireStaff('cleaner').ok)
+  const wages = financeCostBreakdown(park).staff
+  const cleaners = wages?.sections.find((section) => section.id === 'wages')?.items.find((item) => item.label === 'Reinigungskraft')
+  assert.equal(cleaners?.count, 2)
+  assert.equal(wages?.total, items.financeForecast().staff)
+
+  assert.ok(items.manageLoan({ type: 'borrow', amount: 5_000 }).ok)
+  const interest = financeCostBreakdown(park).interest
+  assert.equal(interest?.total, items.financeForecast().interest)
+  assert.equal(interest?.total, -loanInterest(5_000, 1))
+
+  park.festival.bookings.push({
+    id: 'booking-meadow',
+    bandId: 'meadow',
+    stageId: 'stage-1',
+    day: 1,
+    start: 18 * 60,
+    duration: 60,
+    fee: 450,
+  })
+  const bands = financeCostBreakdown(park).bands
+  assert.equal(bands?.total, -450)
+  assert.equal(bands?.sections[0]?.items[0]?.label, 'Meadow Letters')
+  const finalBreakdown = items.financeOverview().breakdown
+  assert.equal(finalBreakdown.bands?.total, -450)
+
+  const expanded = new Set<FinanceCategory>()
+  const ledger = renderFinanceLedger({
+    periods: [{ edition: 1, entries: { upkeep: finalBreakdown.upkeep?.total } }],
+    forecast: items.financeForecast(),
+    breakdown: finalBreakdown,
+    expanded,
+  })
+  assert.match(ledger, /data-finance-toggle="upkeep"/)
+  assert.match(ledger, /data-finance-toggle="staff"/)
+  assert.match(ledger, /data-finance-toggle="interest"/)
+  assert.match(ledger, /data-finance-toggle="bands"/)
+  assert.doesNotMatch(ledger, /data-finance-toggle="tickets"/)
+  assert.match(ledger, /id="finance-breakdown-upkeep"[^>]*hidden/)
+  assert.equal(toggleFinanceCategory(expanded, 'upkeep'), true)
+  const open = renderFinanceLedger({
+    periods: [{ edition: 1, entries: {} }],
+    forecast: items.financeForecast(),
+    breakdown: finalBreakdown,
+    expanded,
+  })
+  assert.match(open, /aria-expanded="true"/)
+  assert.match(open, /Imbiss × 2/)
+  assert.doesNotMatch(open, /id="finance-breakdown-upkeep"[^>]*hidden/)
+
+  assertIdleFestivalUpkeep()
+}
+
+function assertIdleFestivalUpkeep(): void {
+  const idleShare = SIMULATION_CONFIG.economy.pauseUpkeepMultiplier
+  const stageShare = SIMULATION_CONFIG.economy.inactiveFestivalStageMultiplier
+  assert.ok(idleShare <= 0.05, 'idle venue upkeep is mothball-level, not a few percent off')
+  assert.ok(stageShare <= 0.05, 'idle stage building upkeep is mothball-level')
+
+  const booth = { kind: 'food' as const }
+  const ride = { kind: 'ride' as const }
+  const live = { festivalLive: true, onBreak: false }
+  const idle = { festivalLive: false, onBreak: false }
+  const fullBooth = buildingHourlyUpkeep(booth, live)
+  const idleBooth = buildingHourlyUpkeep(booth, idle)
+  const fullRide = buildingHourlyUpkeep(ride, live)
+  const idleRide = buildingHourlyUpkeep(ride, idle)
+  assert.equal(idleBooth, fullBooth * idleShare)
+  assert.equal(idleRide, fullRide * idleShare)
+  assert.ok(idleBooth < fullBooth * 0.1, 'stands sit far below live operating cost')
+  assert.ok(idleRide < fullRide * 0.1, 'rides sit far below live operating cost')
+
+  const equipped = defaultStageDesign()
+  equipped.parts.push({
+    id: 'idle-tech',
+    kind: 'truss',
+    brand: 'premium',
+    x: 0,
+    y: 0,
+    z: 0,
+    rotation: 0,
+    attachedTo: null,
+    color: '#ffffff',
+  })
+  const liveStage = buildingHourlyUpkeep({ kind: 'stage', stageDesign: equipped }, live)
+  const idleStage = buildingHourlyUpkeep({ kind: 'stage', stageDesign: equipped }, idle)
+  const bareStage = buildingHourlyUpkeep({ kind: 'stage' }, live)
+  assert.ok(liveStage > bareStage, 'show equipment adds technical upkeep while live')
+  assert.equal(idleStage, bareStage * stageShare)
+  assert.ok(idleStage < liveStage * 0.1, 'dark stages keep only a sliver of building upkeep')
+
+  const fullCoaster = coasterHourlyUpkeep(40, false)
+  const idleCoaster = coasterHourlyUpkeep(40, true)
+  assert.equal(idleCoaster, fullCoaster * idleShare)
+  const coursePieces = [{ id: 'a' }, { id: 'b' }, { id: 'c' }] as never
+  const fullCourse = courseHourlyUpkeep({ kind: 'mudmasters', pieces: coursePieces }, false)
+  const idleCourse = courseHourlyUpkeep({ kind: 'mudmasters', pieces: coursePieces }, true)
+  assert.equal(idleCourse, fullCourse * idleShare)
+
+  const park = createBlankSnapshot(normalizeScenarioSettings({ worldSize: 32, unevenness: 0 }))
+  park.buildings.push(
+    { id: 'idle-food', kind: 'food', x: 4, z: 4, rotation: 0, elevation: 0, price: 12 },
+    { id: 'idle-ride', kind: 'ride', x: 6, z: 4, rotation: 0, elevation: 0, price: 18 },
+    { id: 'idle-stage', kind: 'stage', x: 8, z: 4, rotation: 0, elevation: 0, price: 0, stageDesign: equipped },
+  )
+  park.coasters = [{ id: 'idle-coaster', pieces: Array.from({ length: 12 }, (_, index) => ({ id: `p${index}` })) } as never]
+  park.courses = [{ id: 'idle-course', kind: 'mudmasters', pieces: [{ id: 'c1' }, { id: 'c2' }] } as never]
+
+  park.festival.enabled = false
+  park.festival.planning = true
+  park.festival.finished = false
+  assert.equal(festivalIsLive(park), false)
+  const inactiveUpkeep = snapshotHourlyBuildingUpkeep(park)
+
+  park.festival.enabled = true
+  park.festival.planning = false
+  park.festival.finished = false
+  park.dayPlan.leadDays = 0
+  park.dayPlan.festivalDays = 3
+  park.dayPlan.breakDays = 2
+  park.dayPlan.cycleStartDay = 1
+  park.day = 1
+  assert.equal(festivalIsLive(park), true)
+  const liveUpkeep = snapshotHourlyBuildingUpkeep(park)
+  assert.ok(liveUpkeep > 0)
+  assert.ok(inactiveUpkeep < liveUpkeep * 0.1, 'whole-park venue upkeep collapses when no festival is live')
+  assert.ok(inactiveUpkeep > 0, 'idle venues still pay a caretaker sliver')
 }

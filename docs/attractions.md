@@ -8,10 +8,29 @@ parametrisiert drei Layouts:
 - `area`: Paintball, Schwimm-, Camping- und Partyfläche;
 - `scripted`: Karussell und stapelbarer Bungee-Turm.
 
-`coasters`, `courses`, Camping- und Vorplatzarrays sind abgeleitete
-Laufzeitprojektionen für noch nicht umgestellte Fachsysteme. Baucommands
-ändern die kanonische Attraktion und erzeugen die Projektion danach neu.
-Kursdetails: [`course-attractions.md`](course-attractions.md).
+`coasters` und `courses` sind Laufzeitprojektionen: Baucommands ändern die
+kanonische Attraktion, `refreshAttractionProjections` schreibt die Arrays
+danach neu. Campingflächen und Bühnenvorplätze bleiben die **live**
+Ausweisungsarrays (`campingCells`, `campInstallations`,
+`stageForecourtCells`) — `designateCampingCell` /
+`designateCampingArea`, `designateStageForecourt` und `syncStageAudience`
+schreiben sie direkt. `refreshAttractionProjections` darf diese Arrays
+nicht verwerfen; sonst löscht jeder Achterbahn-/Kurs-Command die
+Ausweisung, `canPlace` gibt die Fläche frei und Mehrspieler-Deltas
+kommen ohne Overlay an. Die `camping`-/`partyArea`-Datensätze werden
+nachgezogen wie Coaster: `refreshLegacyAttractionRecords` nach
+Ausweisung, Laden (`migrateSnapshot` / `snapshotRepair`) und
+Netzwerk-Apply. Kursdetails: [`course-attractions.md`](course-attractions.md).
+
+**Achterbahnen und Kurse sind Ausnahmen und gehören ihren Fachsystemen.** Sie
+werden über `state.coasters` / `state.courses` editiert und getickt
+(`CoasterSimulation`, `stepCourses`); ihr kanonischer `attractions`-Datensatz
+wird danach über `refreshLegacyAttractionRecords` nachgezogen, damit ein Save
+keine Bahn verliert. `stepAttractions` überspringt diese IDs
+(`legacyIds`), sonst würden sie doppelt simuliert. `removeCoaster` /
+`removeCourse` räumen den Datensatz über `dropLegacyAttractionRecords` ab.
+Der Sync hängt an einem billigen `legacyAttractionSignature`-Gate
+(inkl. Camping-/Vorplatzzellen) und läuft nicht auf jedem Tick.
 
 **Schienen-Editor / RCT2-Anschlussregeln:** [`coaster.md`](coaster.md).
 Gameplay, Queues und Fahrgeschäfte bleiben hier; der Track-Editor, die
@@ -28,7 +47,8 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
 | Betriebsstrategien | `src/game/attractions/runtime.ts` | Loop/Shuttle, Fußgänger, Slider, Scripted |
 | Spaßgutschrift bei Abschluss | `src/game/attractionFun.ts`, `src/game/simulationConfig.ts` | `grantAttractionFun`, `needs.ride.funGain`, `coasters.funGain`, `courses.funGain` |
 | v30→v31 / Projektionen | `src/game/attractions/migration.ts`, `src/game/attractions/projections.ts` | `migrateLegacyAttractions`, `refreshAttractionProjections` |
-| Gemeinsamer Editor | `src/ui/attractionBuilderPanel.ts`, `src/main.ts` | Palette, offene Enden, Banking/Höhe, Fläche, Zugänge |
+| Eigene Editoren (kein gemeinsames Panel) | `src/ui/coasterBuilderPanel.ts`, `src/ui/courseBuilderPanel.ts`, `src/main.ts` | Achterbahn: Palette, Pitch/Bank/Chain, offenes Ende; Kurse: Palette oder Weg-Pfeile laut `editorMode`. Betrieb für Kurse/Paintball/Pool im Infofenster `#course-options`, nicht im Builder |
+| Editor-Modus | `src/game/trackEditorMode.ts`, `src/game/coasterTypes.ts`, `src/game/courseAttractions.ts` | `editorMode: 'palette' \| 'directionArrows'` am Katalog; Default Achterbahn = Palette |
 | Autoritative Commands | `src/game/commands/attractionCommands.ts` | Start, Konstruktion, Betrieb, Preis, Konfiguration, Abriss |
 | Gemeinsames Rendering / Picking | `src/view/AttractionView.ts`, `src/view/WorldView.ts` | gebatchte Track-/Area-/Scripted-Instanzen |
 | Schienen-Editor, Typen, Anschlussregeln | [`coaster.md`](coaster.md), `src/game/coasterTypes.ts`, `src/game/coasterConnections.ts` | Katalog, `describeTrackAppendIssue` |
@@ -49,6 +69,9 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
 - Preview und Command rufen denselben puren
   `resolveAttractionConstruction` auf. UI und Rendering mutieren keinen
   Spielzustand.
+- Coaster-Stückunterhalt (`economy.coasterUpkeepPerPiece`) und Ride-Gebäude
+  sitzen ohne live laufendes Festival auf `economy.pauseUpkeepMultiplier`
+  (5 % Leerlauf). Kurse: [`course-attractions.md`](course-attractions.md).
 - Mittleres Löschen erhält beide Graphkomponenten. Der Spieler wählt ein
   offenes Ende und verbindet feldweise neu; die Reihenfolge wird immer vom
   Startknoten abgeleitet, nie aus Arraypositionen.
@@ -95,8 +118,9 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
   (`demolitionRefundRate`). Queue- und Stationswechsel invalidieren
   Navigation über `emit()` / `worldRevision`. Das Infofenster und der
   Konstruktionseditor bieten **Achterbahn abreißen**; Abriss auf einer
-  Stations- oder Zugangs-Kachel ruft dieselbe Methode auf. Das Infofenster
-  schließt danach.
+  Stations- oder Zugangs-Kachel ruft dieselbe Methode auf. Vor dem
+  Command fragt die UI lokal nach (`src/ui/confirmDialog.ts`, mit
+  Bahnname). Das Infofenster schließt danach.
 - Photo-Käufe und Brems-/Wasserwiderstand laufen im Tick, nicht im Render.
 - Spaß wird additiv und höchstens bis 100 erst beim tatsächlichen Abschluss
   gutgeschrieben: beim Aussteigen nach einer vollständigen Achterbahnrunde,

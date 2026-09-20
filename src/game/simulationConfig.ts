@@ -35,10 +35,13 @@ export const SIMULATION_CONFIG = {
     /** Stamp copies charge this share of catalog / way costs (1 = full price). */
     blueprintCopyCostFactor: 0.8,
     treeClearCost: 45,
-    /** Booths and attractions during day-plan break. */
-    pauseUpkeepMultiplier: 0.15,
-    /** Stage building upkeep while the festival is not in the live phase. */
-    inactiveFestivalStageMultiplier: 0.15,
+    /**
+     * Idle/standby share of booth, ride, coaster and course upkeep while the
+     * festival is not in the live phase (planning, lead, break, finished, sandbox).
+     */
+    pauseUpkeepMultiplier: 0.05,
+    /** Stage building upkeep while the festival is not live; technical upkeep is 0. */
+    inactiveFestivalStageMultiplier: 0.05,
     /** Hourly upkeep per placed coaster track piece while the park clock runs. */
     coasterUpkeepPerPiece: 2.5,
     emptyParkBaseReputation: 45,
@@ -696,7 +699,10 @@ export const SIMULATION_CONFIG = {
     danceFloorCrowdingScale: 0.4,
     danceFloorOvercrowdingStart: 92,
     danceFloorAnglePenalty: 6,
-    concertSpreadGoals: 4,
+    // Multi-goal candidates per preferred apron row; next row only if that row is full or unreachable.
+    concertSpreadGoals: 8,
+    concertFrontGoalAttempts: 3,
+    concertFrontRowPenalty: 80,
     hotspotCapacity: 4,
     forecourtScoreBonus: 90,
     partyPreferenceDecisionWeight: 0.7,

@@ -8,7 +8,7 @@ Browser, nie im Spielstand und nie in Git.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Auswahl, Drehung, Kosten | `src/game/blueprints.ts` | `captureBlueprint`, `transformBlueprintItems`, `blueprintStampCharge` |
+| Auswahl, Drehung, Kosten | `src/game/blueprints.ts` | `captureBlueprint`, `transformBlueprintItems`, `blueprintStampCharge`; Item-Typen Gebäude, Straße, Parkplatz |
 | Persönliche Bibliothek | `src/game/blueprintLibrary.ts`, `src/game/browserPersistence.ts` | IndexedDB `headliner-tycoon-blueprints` + `BLUEPRINT_LIBRARY_KEY`, gemeinsamer Browser-Adapter |
 | Stempeln | `src/game/GameState.ts` | `previewPlacement({ type: 'blueprint' })` delegiert an `previewBlueprint`; `stampBlueprint` |
 | Command | `src/net/protocol.ts`, `src/net/commands.ts` | `stampBlueprint` |
@@ -23,6 +23,7 @@ Browser, nie im Spielstand und nie in Git.
 - Zäune, Bänke, Lampen, Stände und andere Katalogobjekte, die `place` kann
 - Fußwege (`path`) mit Belag, Schlange, Neigung
 - Autostraßenfelder inkl. optionalem Straßenbelag
+- Parkplätze (`logistics.parkingCells`) als leere Buchten; Belegung und Autos bleiben zurück
 - Geländehöhen werden **mitgespeichert**, beim Stempeln **nicht** angewendet
 
 Nicht kopiert: Besucher, Fahrzeuge, lebende Müllhaufen, Camping-Installationen,
@@ -36,7 +37,9 @@ Ursprungsecke (min-x/min-z der Auswahl). Klick sendet `stampBlueprint`
 (Host-autoritativ, optimistic wie andere Baucommands).
 
 Kollision nutzt `canPlace` / `scenery.ts` bzw. `placePathSegment` /
-`placeRoadSegment`. Die Vorschau mutiert die Welt nicht.
+`placeRoadSegment` bzw. dieselbe Parkplatzprüfung wie `designateParkingArea`.
+Die Vorschau mutiert die Welt nicht. Parkfelder kosten
+`logistics.parkingDesignationCost` × denselben Kopierfaktor.
 Kontexthilfe und `WorldView` konsumieren dasselbe `PlacementPreviewResult`;
 die einzelnen Ghost-Einträge bleiben für die spezialisierte
 Mehrfachobjekt-Darstellung erhalten.
@@ -56,8 +59,9 @@ Bibliothek bleiben fachlich separat.
 ## Tests
 
 `tests/blueprints.ts`: 2×2 mit zwei Dekos stempeln, Preview ohne Mutation,
-Bibliothek-Roundtrip ohne `SAVE_KEY`. `tests/placementPreview.ts` prüft den
-zentralen Preview-Vertrag und identische Meldungen.
+Parkplätze in Auswahl/Preview/Stempel, Bibliothek-Roundtrip ohne `SAVE_KEY`.
+`tests/placementPreview.ts` prüft den zentralen Preview-Vertrag und identische
+Meldungen. `tests/buildUndo.ts` nimmt einen Stempel inkl. Parkplatz zurück.
 
 ## Bei Änderungen dieses Dokument
 

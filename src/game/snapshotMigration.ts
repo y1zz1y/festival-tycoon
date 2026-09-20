@@ -6,6 +6,7 @@ import {
   projectCoasters,
   projectCourses,
   projectPartyAreas,
+  refreshLegacyAttractionRecords,
 } from './attractions/projections'
 import type { Attraction } from './attractions/types'
 import { emptyBandSupplySnapshot, normalizeBackstageCell } from './bandSupply'
@@ -45,7 +46,14 @@ export function migrateSnapshot(
   const canonicalAttractions = normalizeAttractions(data.attractions)
   const useCanonical = (data.version ?? 0) >= 31 && canonicalAttractions.length > 0
   const attractions = useCanonical ? canonicalAttractions : legacy.attractions
-  const camping = projectCamping(attractions)
+  const projectedCamping = projectCamping(attractions)
+  const campingCells = Array.isArray(data.campingCells) ? data.campingCells : projectedCamping.cells
+  const campInstallations = Array.isArray(data.campInstallations)
+    ? data.campInstallations
+    : projectedCamping.installations
+  const stageForecourtCells = Array.isArray(data.stageForecourtCells)
+    ? data.stageForecourtCells
+    : projectPartyAreas(attractions)
   const migrated: GameSnapshot = {
     ...createBlankSnapshot(),
     ...data,
@@ -62,8 +70,8 @@ export function migrateSnapshot(
         ? { ...building, stageDesign: migrateStageDesign(building.stageDesign) }
         : building,
     ),
-    campingCells: camping.cells,
-    campInstallations: camping.installations,
+    campingCells,
+    campInstallations,
     staff: Array.isArray(data.staff) ? data.staff : [],
     medicalCells: Array.isArray(data.medicalCells) ? data.medicalCells : [],
     wasteDumpCells: Array.isArray(data.wasteDumpCells)
@@ -87,7 +95,7 @@ export function migrateSnapshot(
       data.scenarioProgress && Array.isArray(data.scenarioProgress.status)
         ? data.scenarioProgress
         : createScenarioProgress(scenario.goals),
-    stageForecourtCells: projectPartyAreas(attractions),
+    stageForecourtCells,
     backstageCells: Array.isArray(data.backstageCells)
       ? data.backstageCells
           .map(normalizeBackstageCell)
@@ -116,6 +124,7 @@ export function migrateSnapshot(
     migrated.festival.stageTemplates =
       migrated.festival.stageTemplates.map(migrateStageDesign)
   }
+  refreshLegacyAttractionRecords(migrated)
   return migrated
 }
 

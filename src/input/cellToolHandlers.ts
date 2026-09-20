@@ -1,4 +1,5 @@
 import type { GameState } from '../game/GameState'
+import { isCourseReadyToOperate } from '../game/courseAttractions'
 import { isSwimmableHeight, isWaterHeight } from '../game/terrain'
 import { lockShiftElevationOrigin } from '../game/wayElevation'
 import type { Coaster } from '../game/coasters'
@@ -126,7 +127,7 @@ export interface InspectCellActions {
   openWasteDump(x: number, z: number): void
   openBackstage(x: number, z: number): void
   openCourseBuilder(id: string): void
-  openAttractionBuilder(id: string): void
+  openCourse(id: string): void
   toast(message: string): void
 }
 
@@ -138,18 +139,21 @@ export function handleInspectCell(game: GameState, cell: CellPosition, actions: 
     else actions.openVehicle(vehicle.id)
     return true
   }
-  const attraction = game.getAttractionAt(cell.x, cell.z, cell.buildingId)
-  if (attraction) {
-    actions.openAttractionBuilder(attraction.id)
-    actions.toast(`${attraction.name} wird im gemeinsamen Attraktionseditor geöffnet`)
-    return true
-  }
   const coaster = game.getCoasterAt(cell.x, cell.z)
   if (coaster) {
     if (coaster.closed) actions.openCoaster(coaster.id)
     else {
       actions.openCoasterBuilder(coaster.id)
       actions.toast(`${coaster.name} wird am letzten Element fortgesetzt`)
+    }
+    return true
+  }
+  const course = game.getCourseAt(cell.x, cell.z)
+  if (course) {
+    if (isCourseReadyToOperate(course)) actions.openCourse(course.id)
+    else {
+      actions.openCourseBuilder(course.id)
+      actions.toast(`${course.name} wird weitergebaut`)
     }
     return true
   }
@@ -165,11 +169,6 @@ export function handleInspectCell(game: GameState, cell: CellPosition, actions: 
   else if (game.getCampingCellAt(cell.x, cell.z)) actions.toast('Ausgewiesener Zeltbereich')
   else if (game.getWasteDumpAt(cell.x, cell.z)) actions.openWasteDump(cell.x, cell.z)
   else if (game.getBackstageCellAt(cell.x, cell.z)) actions.openBackstage(cell.x, cell.z)
-  else if (game.getCourseAt(cell.x, cell.z)) {
-    const course = game.getCourseAt(cell.x, cell.z)!
-    actions.openCourseBuilder(course.id)
-    actions.toast(`${course.name} wird weitergebaut`)
-  }
   else {
     const height = game.getTerrainHeight(cell.x, cell.z)
     actions.toast(isWaterHeight(height, game.getWaterLevel())

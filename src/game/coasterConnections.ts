@@ -821,6 +821,35 @@ export function listVisibleTrackPalettePieces(
   return listTrackPalettePieces(kinds, end, hasCoaster, typeId).map((entry) => entry.kind)
 }
 
+export type CoasterDirectionChoice = {
+  heading: 0 | 1 | 2 | 3
+  kind: TrackPieceKind
+  enabled: boolean
+}
+
+/**
+ * Path-style neighbor arrows for `editorMode: 'directionArrows'`.
+ * Forward → straight, left/right → 1-tile curve, back stays disabled.
+ * Before the first station every heading is enabled so the start pose can turn.
+ */
+export function listCoasterDirectionChoices(
+  end: Pick<TrackAnchor, 'heading' | 'pitch' | 'bank'> | null,
+  typeId: string,
+  hasCoaster: boolean,
+): CoasterDirectionChoice[] {
+  return ([0, 1, 2, 3] as const).map((heading) => {
+    if (!hasCoaster || !end) return { heading, kind: 'station', enabled: true }
+    const turn = (((heading - end.heading) % 4) + 4) % 4
+    if (turn === 2) return { heading, kind: 'straight', enabled: false }
+    const kind: TrackPieceKind = turn === 0 ? 'straight' : turn === 1 ? 'curveRight1' : 'curveLeft1'
+    return {
+      heading,
+      kind,
+      enabled: isTrackPalettePieceEnabled(kind, end, hasCoaster, typeId),
+    }
+  })
+}
+
 function resolvedAppliesPitch(
   typeId: string,
   end: Pick<TrackAnchor, 'pitch' | 'bank'>,

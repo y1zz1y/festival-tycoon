@@ -286,6 +286,45 @@ export function stageApronCells(b:{x:number;z:number;rotation:number;stageDesign
   }
   return cells
 }
+/** Map-space step of a stage's audience front (local +Z, same as `stageApronCells`). */
+export function stageFacingStep(rotation:number):{x:number;z:number}{
+  return rotation===1?{x:1,z:0}:rotation===2?{x:0,z:-1}:rotation===3?{x:-1,z:0}:{x:0,z:1}
+}
+/**
+ * How far a standing cell sits from the apron. `row` 1 is the first tile in front of
+ * the footprint; larger rows are further back. Cells beside or behind the stage rank
+ * after every true front row so concert crowds fill the apron first.
+ */
+export function stageFrontRank(
+  stage:{x:number;z:number;rotation:number;stageDesign?:StageDesign},
+  cell:{x:number;z:number},
+):{row:number;lateral:number;forward:number}{
+  const size=buildingSize(stage)
+  const facing=stageFacingStep(stage.rotation)
+  let forward:number
+  let across:number
+  let span:number
+  if(facing.z===1){
+    forward=cell.z-(stage.z+size.depth-1)
+    across=cell.x-stage.x
+    span=size.width
+  }else if(facing.z===-1){
+    forward=stage.z-cell.z
+    across=cell.x-stage.x
+    span=size.width
+  }else if(facing.x===1){
+    forward=cell.x-(stage.x+size.width-1)
+    across=cell.z-stage.z
+    span=size.depth
+  }else{
+    forward=stage.x-cell.x
+    across=cell.z-stage.z
+    span=size.depth
+  }
+  const lateral=across<0?-across:across>=span?across-span+1:0
+  const row=forward>=1&&lateral===0?forward:forward>=1?32+forward+lateral:64+Math.max(0,1-forward)+lateral
+  return {row,lateral,forward}
+}
 export function removeStagePart(d:StageDesign,id:string):StageDesign {
   const next=structuredClone(d),removed=new Set([id]);let added=true
   while(added){added=false;for(const p of next.parts)if(!removed.has(p.id)&&p.attachedTo&&removed.has(p.attachedTo)){removed.add(p.id);added=true}}

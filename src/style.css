@@ -1256,6 +1256,80 @@ body.title-open #app-install-hint {
   color: #cbdcd4;
 }
 
+.finance-row-expandable {
+  cursor: pointer;
+}
+
+.finance-row-expandable:hover th,
+.finance-row-expandable:hover td {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.finance-row-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.finance-chevron {
+  display: inline-block;
+  width: 0.45em;
+  height: 0.45em;
+  margin-top: -0.15em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.12s ease;
+}
+
+.finance-row-toggle[aria-expanded='true'] .finance-chevron {
+  transform: rotate(45deg);
+}
+
+.finance-breakdown td {
+  padding: 6px 8px 10px 22px;
+  text-align: left;
+  white-space: normal;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.finance-breakdown-hint {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.finance-breakdown-group h4 {
+  margin: 8px 0 4px;
+  color: #efcf86;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.finance-breakdown-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.finance-breakdown-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 1px 0;
+}
+
 .finance-in {
   color: #9fe3ac;
 }
@@ -2504,6 +2578,19 @@ body.title-open #app-install-hint {
 }
 
 .course-builder { z-index: 36; }
+.course-builder.course-editor-arrows #course-palette-build,
+.course-builder.course-editor-palette #course-direction-grid,
+.coaster-builder.editor-mode-arrows #track-direction-palette,
+.coaster-builder.editor-mode-arrows #toggle-track-specials,
+.coaster-builder.editor-mode-arrows #track-special-palette,
+.coaster-builder.editor-mode-arrows #coaster-build-piece,
+.coaster-builder.editor-mode-palette #coaster-direction-grid {
+  display: none;
+}
+.course-builder #course-direction-grid,
+.coaster-builder #coaster-direction-grid {
+  margin: 8px 0;
+}
 .course-builder #course-piece-palette {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -4769,11 +4856,16 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   background: #3f715b;
 }
 
-.save-text-dialog { width: min(600px, 85vw); color: #dedcc6; background: #263c2e; border: 2px solid #a89b61; border-radius: 5px; }
-.save-text-dialog::backdrop { background: #0009; }
+.save-text-dialog, .confirm-dialog { width: min(600px, 85vw); color: #dedcc6; background: #263c2e; border: 2px solid #a89b61; border-radius: 5px; }
+.save-text-dialog::backdrop, .confirm-dialog::backdrop { background: #0009; }
 .save-text-dialog textarea { box-sizing: border-box; width: 100%; height: 180px; resize: vertical; font: 11px monospace; }
-.save-text-dialog h2 { font-size: 16px; }
-.save-text-dialog p { font-size: 12px; }
+.save-text-dialog h2, .confirm-dialog h2 { font-size: 16px; }
+.save-text-dialog p, .confirm-dialog p { font-size: 12px; }
+.confirm-dialog { width: min(420px, 85vw); padding: 16px 18px; }
+.confirm-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.confirm-dialog-actions button { min-height: 36px; padding: 6px 14px; }
+.confirm-dialog [data-confirm] { background: #6f3330; color: #ffd4d0; border: 1px solid #ad5b52; }
+.confirm-dialog [data-cancel] { background: #3f715b; color: #f2efd8; border: 1px solid #819b8c; }
 .save-text-error { color: #ffc0aa; }
 
 .save-slots-message, .save-slots-empty { font-size: 12px; color: #c5d3c5; }

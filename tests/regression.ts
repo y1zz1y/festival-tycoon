@@ -63,7 +63,8 @@ import { testTickerAndWasteCaps } from './ticker'
 import { testAccounts } from './accounts'
 import { testSaves } from './saves'
 import { testBrowserSaves, testServerSaveClient } from './browserSaves'
-import { testBlueprints, testBlueprintLibraryRoundtrip } from './blueprints'
+import { testBlueprints, testBlueprintLibraryRoundtrip, testBlueprintParkingCopy } from './blueprints'
+import { testBuildUndo } from './buildUndo'
 import { testFestivalAudio } from './audio'
 import { testSnapshotModules } from './snapshotModules'
 import { testSimulationModules } from './simulationModules'
@@ -97,6 +98,12 @@ test('build menu lists every placeable tool once', () => {
 })
 test('copy tool captures 2x2 scenery, preview is dry, stamp duplicates', () => {
   testBlueprints()
+})
+test('copy tool captures parking bays, preview is dry, stamp duplicates', () => {
+  testBlueprintParkingCopy()
+})
+test('build undo reverses place, parking, stamp and path', () => {
+  testBuildUndo()
 })
 test('placement height snaps to half-steps and reports the ground cell', () => {
   testPlacementPreview()

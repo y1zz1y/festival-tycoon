@@ -182,6 +182,13 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   `StageDesign.forecourtDepth` (1–24). Der vorhandene
   `manageFestival.stageDesign`-Command transportiert das gesamte Design;
   ältere Designs ohne Wert bleiben bei zwei Bühnenbreiten.
+  Camping- und Vorplatzänderungen laufen über
+  `designateCampingCell` / `designateCampingArea` /
+  `designateStageForecourt` (optimistic) und die Snapshot-Felder
+  `campingCells`, `campInstallations`, `stageForecourtCells`. Ein
+  Attraction-Delta darf diese Overlay-Arrays auf dem Client nicht
+  verwerfen; Host und Client ziehen die `camping`-/`partyArea`-
+  Datensätze nur nach.
   Fahrzeugpositionen und Routen behalten das bestehende optionale
   `RoadPosition.elevation` auch beim Laden/Normalisieren. Der Host berechnet
   Straßenbelegung und Vorfahrt pro Ebene; keine zusätzlichen Commands oder
@@ -234,7 +241,9 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   einer gestapelten Autostraße zurückgenommen wird.
   `removeCoaster` (`coasterId`) reißt Schiene, Station, Zug, Tore und die
   angeschlossene Eingangsqueue host-autoritativ ab; optimistic wie die
-  übrigen Coaster-Baucommands.
+  übrigen Coaster-Baucommands. Die Nachfrage „wirklich abreißen?“ läuft
+  nur lokal in der UI (`src/ui/confirmDialog.ts`) und ändert Command,
+  Payload oder Host-Prüfung nicht. Dasselbe gilt für `removeCourse`.
   Backstage: `designateBackstageArea` (`cells`, optionales `enabled` zum
   Löschen) ist optimistic wie Vorplatz/Müllablage. Snapshot:
   `backstageCells`, `bandActors` (`memberIndex`, `role`, `costumeId`),
@@ -257,9 +266,15 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   IDs löst der Host zu `classicSteel` auf. Snapshot-`coaster.typeId` kommt
   mit den Sim-Paketen; kein neues Command.
   `stampBlueprint` (`originX`, `originZ`, `rotation`, `items`) stempelt eine
-  lokale Vorlage host-autoritativ (optimistic wie `place`). Die Bibliothek
-  liegt nur im Client-Browser, nicht im Snapshot. Unbekannte `kind`-Werte
-  in `items` werden verworfen. Alte Clients ohne das Command bleiben gültig.
+  lokale Vorlage host-autoritativ (optimistic wie `place`). `items` dürfen
+  Gebäude, Straßen und Parkplätze (`type: 'parking'`) enthalten; unbekannte
+  `kind`-Werte werden verworfen. Die Bibliothek liegt nur im Client-Browser,
+  nicht im Snapshot. Alte Clients ohne das Command bleiben gültig.
+  `undoLastBuild` nimmt den letzten Bau auf dem Host-Stack zurück (nicht
+  optimistic, nicht im Spielstand). Derselbe Stack zeichnet `place`,
+  `placePath`/`placeRoad`, `designateParking`, `stampBlueprint`,
+  `placeSceneryLine` und Flächen-Wege auf. Spezielle Stück-Undos
+  (`undoPath`, `undoRoad`, `undoCoasterPiece`, `undoCoursePiece`) bleiben.
 - Clients dürfen Construction optimistic zeigen, aber der Host bleibt
   maßgeblich (`resolveOptimisticCommand`, Reconciliation).
 - Besucher feldweise updaten; unveränderte Bereiche nicht erneut senden.

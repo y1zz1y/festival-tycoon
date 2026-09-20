@@ -87,6 +87,7 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | 3D-Szene | `src/view/WorldView.ts` |
 | Fassaden, Dächer, Themen-Eimer | `src/game/decorationWalls.ts` (`WALL_KINDS`, `wallSpec`, `ROOF_KINDS`, `roofSpec`) |
 | Wegmöbel-Ausrichtung | `src/game/pathFurniture.ts` (`pathFurnitureRotation`) |
+| Track-Editor-Modus | `src/game/trackEditorMode.ts` (`palette` / `directionArrows`) |
 | Brücken- und Wegdetails | `src/view/wayStructures.ts` (`indexWayStructures`, `wayStructurePlan`, `createWayStructure`) |
 | Bühnen-Orientierungsgizmo | `src/view/orientationGizmo.ts` (`createOrientationGizmo`, `OrientationGizmo`) |
 | Titelbild-Publikum | `src/titleCrowd.ts` (`mountTitleCrowd`, `TitleCrowd`) |

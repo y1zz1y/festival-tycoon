@@ -18,19 +18,25 @@ export function festivalIsOnBreak(state: Pick<GameSnapshot, 'dayPlan' | 'day'>):
   return getFestivalCycleStatus(state.dayPlan, state.day).phase === 'break'
 }
 
+/** Venues sit idle unless a started festival is in its live phase. */
+export function venueUpkeepIdle(options: { festivalLive: boolean; onBreak: boolean }): boolean {
+  return !options.festivalLive || options.onBreak
+}
+
 export function buildingHourlyUpkeep(
   building: Pick<PlacedBuilding, 'kind' | 'stageDesign' | 'rideType'>,
   options: { festivalLive: boolean; onBreak: boolean },
 ): number {
   const base = BUILDINGS[building.kind].upkeep
   const tech = building.stageDesign ? stageStats(building.stageDesign).upkeep : 0
+  const idle = venueUpkeepIdle(options)
   if (building.kind === 'stage') {
-    if (!options.festivalLive) {
+    if (idle) {
       return base * SIMULATION_CONFIG.economy.inactiveFestivalStageMultiplier
     }
     return base + tech
   }
-  if (options.onBreak && (BOOTH_KINDS.has(building.kind) || ATTRACTION_KINDS.has(building.kind))) {
+  if (idle && (BOOTH_KINDS.has(building.kind) || ATTRACTION_KINDS.has(building.kind))) {
     return (base + tech) * SIMULATION_CONFIG.economy.pauseUpkeepMultiplier
   }
   return base + tech
@@ -38,25 +44,26 @@ export function buildingHourlyUpkeep(
 
 export function coasterHourlyUpkeep(
   pieces: number,
-  onBreak: boolean,
+  idle: boolean,
 ): number {
   const full = Math.max(0, pieces) * SIMULATION_CONFIG.economy.coasterUpkeepPerPiece
-  return onBreak ? full * SIMULATION_CONFIG.economy.pauseUpkeepMultiplier : full
+  return idle ? full * SIMULATION_CONFIG.economy.pauseUpkeepMultiplier : full
 }
 
 export function snapshotHourlyBuildingUpkeep(state: GameSnapshot): number {
   const festivalLive = festivalIsLive(state)
   const onBreak = festivalIsOnBreak(state)
+  const idle = venueUpkeepIdle({ festivalLive, onBreak })
   const buildings = state.buildings.reduce(
     (total, building) => total + buildingHourlyUpkeep(building, { festivalLive, onBreak }),
     0,
   )
   const coasters = (state.coasters ?? []).reduce(
-    (total, coaster) => total + coasterHourlyUpkeep(coaster.pieces?.length ?? 0, onBreak),
+    (total, coaster) => total + coasterHourlyUpkeep(coaster.pieces?.length ?? 0, idle),
     0,
   )
   const courses = (state.courses ?? []).reduce(
-    (total, course) => total + courseHourlyUpkeep(course, onBreak),
+    (total, course) => total + courseHourlyUpkeep(course, idle),
     0,
   )
   return buildings + coasters + courses + garbageTruckHourlyUpkeep(state)

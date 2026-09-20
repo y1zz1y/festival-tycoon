@@ -1,4 +1,5 @@
 import { getCoasterType, type Coaster } from '../game/coasters'
+import { formatCourseInspect } from '../game/courseAttractions'
 import { BUILDINGS } from '../game/catalog'
 import { formatBackstageInspect } from '../game/bandSupply'
 import { isWasteBin } from '../game/decorationWalls'
@@ -241,7 +242,7 @@ function drawTelemetryChart(
 }
 
 export type EntitySelection = {
-  type: 'building' | 'coaster' | 'vehicle' | 'access' | 'depot' | 'wasteDump' | 'backstage'
+  type: 'building' | 'coaster' | 'course' | 'vehicle' | 'access' | 'depot' | 'wasteDump' | 'backstage'
   id: string
 }
 
@@ -292,6 +293,7 @@ export function updateEntityPanel(
   const applyPrice = element<HTMLButtonElement>('#apply-price-to-kind')
   const shirts = element<HTMLElement>('#shirt-options')
   const coasterOptions = element<HTMLElement>('#coaster-options')
+  const courseOptions = element<HTMLElement>('#course-options')
   const security = element<HTMLElement>('#security-options')
   const depotOptions = element<HTMLElement>('#depot-options')
   const accessOptions = element<HTMLElement>('#access-control-options')
@@ -299,6 +301,7 @@ export function updateEntityPanel(
     tabs.classList.remove('visible'); overview.hidden = false; dynamics.classList.remove('visible')
     price.classList.remove('visible'); shirts.classList.remove('visible'); applyPrice.hidden = true
     security.classList.remove('visible'); coasterOptions.classList.remove('visible')
+    courseOptions.classList.remove('visible')
   }
   accessOptions.hidden = selected.type !== 'access'
   accessOptions.classList.toggle('visible', selected.type === 'access')
@@ -433,6 +436,27 @@ export function updateEntityPanel(
     return
   }
 
+  if (selected.type === 'course') {
+    const course = game.getCourse(selected.id)
+    if (!course) return services.close()
+    const inspect = formatCourseInspect(course, game.isOfferCurrentlyActive('rides'))
+    icon.textContent = inspect.icon
+    typeLabel.textContent = inspect.typeLabel
+    name.textContent = inspect.name
+    status.textContent = inspect.status
+    stats.innerHTML = inspect.lines
+      .map((line) => `<span>${escapeHtml(line.label)} <b>${escapeHtml(line.value)}</b></span>`)
+      .join('')
+    resetCommon()
+    courseOptions.classList.add('visible')
+    price.classList.add('visible')
+    applyPrice.hidden = true
+    if (document.activeElement !== priceInput) priceInput.value = String(course.price)
+    element<HTMLSelectElement>('#course-operation-mode').value = course.operating ? 'open' : 'closed'
+    depotOptions.classList.remove('visible')
+    return
+  }
+
   const coaster = game.getCoaster(selected.id)
   if (!coaster) return services.close()
   const coasterType = getCoasterType(coaster.typeId)
@@ -448,6 +472,7 @@ export function updateEntityPanel(
   const operationLabels = { closed: 'Geschlossen', open: 'Geöffnet', test: 'Testbetrieb' }
   stats.innerHTML = `<span>Status <b>${operationLabels[coaster.operationMode]}</b></span><span>Schienenelemente <b>${coaster.pieces.length}</b></span><span>Stationsplattformen/Wagen <b>${train.cars}</b></span><span>Warteschlange <b>${coaster.queue.length}/${game.getCoasterQueueCapacity(coaster.id)}</b></span><span>Stationskettenantrieb <b>Automatisch</b></span><span>Kettenzüge <b>${coaster.pieces.filter((piece) => piece.chainLift).length}</b></span><span>Geschwindigkeit <b>${Math.abs(train.speed * 3.6).toFixed(1)} km/h</b></span>`
   coasterOptions.classList.add('visible'); shirts.classList.remove('visible'); security.classList.remove('visible'); depotOptions.classList.remove('visible')
+  courseOptions.classList.remove('visible')
   tabs.classList.add('visible'); overview.hidden = state.tab !== 'overview'; dynamics.classList.toggle('visible', state.tab === 'dynamics')
   document.querySelectorAll<HTMLButtonElement>('[data-entity-tab]').forEach((button) => button.classList.toggle('active', button.dataset.entityTab === state.tab))
   price.classList.add('visible'); applyPrice.hidden = true

@@ -11,6 +11,12 @@ export type AttractionRuntimeHooks = {
   charge: (visitor: Visitor, amount: number) => boolean
   injure: (visitor: Visitor, point: AttractionPoint) => void
   isWater: (x: number, z: number, elevation: number) => boolean
+  /**
+   * Attractions that a dedicated system already drives this tick. Coasters run
+   * on `CoasterSimulation` (SI physics) and courses on `stepCourses`; stepping
+   * them here as well would admit and move the same guests twice.
+   */
+  legacyIds?: ReadonlySet<string>
 }
 
 const PEDESTRIAN_PROGRESS_PER_MINUTE = 0.42
@@ -24,12 +30,11 @@ export function stepAttractions(
   const visitors = new Map(hooks.visitors.map((visitor) => [visitor.id, visitor]))
   attractions.forEach((attraction) => {
     if (attraction.operationMode === 'closed') return
+    if (hooks.legacyIds?.has(attraction.id)) return
     admitQueuedVisitors(attraction, visitors, hooks)
     if (attraction.layout.kind === 'track') {
       if (attraction.runtime.kind === 'course') {
         stepCourseTrack(attraction, visitors, hooks)
-      } else if (attraction.runtime.kind === 'coaster') {
-        stepCoasterTrack(attraction, visitors, hooks.minutes)
       }
     } else if (attraction.layout.kind === 'area' && attraction.runtime.kind === 'course') {
       stepAreaCourse(attraction, visitors, hooks.simTick, hooks.minutes)
@@ -166,67 +171,6 @@ function finishTrackRider(
   visitor.thought = layout.agentKind === 'slider'
     ? 'Die Wasserrutsche war großartig!'
     : 'Der Parcours war großartig!'
-}
-
-function stepCoasterTrack(
-  attraction: Attraction,
-  visitors: Map<string, Visitor>,
-  minutes: number,
-): void {
-  if (attraction.runtime.kind !== 'coaster' || attraction.layout.kind !== 'track') return
-  const layout = attraction.layout
-  const train = attraction.runtime.train
-  if (train.state === 'boarding') {
-    train.waitMinutes += minutes
-    const full = train.passengerIds.length >= train.capacity
-    const timed = train.waitMinutes >= attraction.runtime.settings.dispatchIntervalMinutes
-    if (
-      train.passengerIds.length > 0 &&
-      (attraction.runtime.settings.dispatchMode === 'full-only' ? full
-        : attraction.runtime.settings.dispatchMode === 'timed' ? timed
-          : full || timed)
-    ) {
-      train.state = 'running'
-      train.waitMinutes = 0
-      train.progress = 0
-      train.distance = 0
-    }
-  } else if (train.state === 'running') {
-    const duration = layout.topology === 'shuttle' ? 2.5 : 1.8
-    train.distance += minutes / duration
-    if (layout.topology === 'shuttle') {
-      train.progress = train.distance <= 0.5
-        ? train.distance * 2
-        : Math.max(0, 2 - train.distance * 2)
-    } else {
-      train.progress = train.distance
-    }
-    if (train.distance >= 1) train.state = 'unloading'
-  } else {
-    train.passengerIds.splice(0).forEach((id) => {
-      const visitor = visitors.get(id)
-      if (!visitor) return
-      visitor.state = 'exploring'
-      visitor.targetId = null
-      grantAttractionFun(visitor, SIMULATION_CONFIG.coasters.funGain)
-      visitor.thought = layout.topology === 'shuttle'
-        ? 'Die Rückwärtsfahrt war aufregend!'
-        : 'Die Achterbahn war großartig!'
-    })
-    train.passengers = 0
-    train.progress = 0
-    train.distance = 0
-    train.state = 'boarding'
-  }
-  const point = sampleTrackPoint(layout.graph, train.progress)
-  if (!point) return
-  train.x = point.x
-  train.y = point.elevation
-  train.z = point.z
-  train.passengerIds.forEach((id) => {
-    const visitor = visitors.get(id)
-    if (visitor) placeVisitor(visitor, point)
-  })
 }
 
 function stepAreaCourse(

@@ -1,4 +1,5 @@
-import { createCoasterTelemetry, type Coaster, type TrackPiece } from '../coasters'
+import { createCoasterTelemetry, isCoasterCircuitClosed, type Coaster, type TrackPiece } from '../coasters'
+import { migrateCamping, migrateCoaster, migrateCourse, migratePartyAreas } from './migration'
 import type { CampInstallation } from '../camping'
 import type {
   CourseAttraction,
@@ -11,14 +12,8 @@ import type { GameSnapshot } from '../types/snapshot'
 export function refreshAttractionProjections(state: GameSnapshot): void {
   state.coasters = projectCoasters(state.attractions)
   state.courses = projectCourses(state.attractions)
-  if (state.attractions.some((attraction) => attraction.definitionId === 'camping')) {
-    const camping = projectCamping(state.attractions)
-    state.campingCells = camping.cells
-    state.campInstallations = camping.installations
-  }
-  if (state.attractions.some((attraction) => attraction.definitionId === 'partyArea')) {
-    state.stageForecourtCells = projectPartyAreas(state.attractions)
-  }
+  // Camping overlays and stage forecourts stay the live designate/sync arrays.
+  // Projecting them here discarded player edits whenever any attraction changed.
 }
 
 export function projectCoasters(attractions: readonly Attraction[]): Coaster[] {
@@ -91,11 +86,94 @@ export function projectCoasters(attractions: readonly Attraction[]): Coaster[] {
       train: attraction.runtime.train,
       telemetry: attraction.runtime.telemetry ?? createCoasterTelemetry(),
       queue: attraction.queue,
-      closed: attraction.layout.graph.startNodeId !== null &&
-        attraction.layout.graph.terminalNodeId === attraction.layout.graph.startNodeId,
+      closed: false,
     }
+    // The graph keeps its first node as both start and terminal, so a closed
+    // circuit has to be decided on the pieces the same way the editor does.
+    projected.closed = isCoasterCircuitClosed(projected)
     return [projected]
   })
+}
+
+/**
+ * Inverse of `refreshAttractionProjections`. Coasters, courses, camping overlays
+ * and stage forecourts are edited through their live arrays; the canonical
+ * `attractions` records are rebuilt from those so a save and MP stay in step.
+ * Settings, train, telemetry and queue stay shared references, so tick mutations
+ * land in both shapes. Records without a legacy owner are left alone — only
+ * `removeCoaster` / `removeCourse` delete ride records.
+ */
+export function refreshLegacyAttractionRecords(state: GameSnapshot): void {
+  const byId = new Map(state.attractions.map((attraction) => [attraction.id, attraction]))
+  for (const coaster of state.coasters ?? []) {
+    const record = migrateCoaster(coaster)
+    if (!record) continue
+    const existing = byId.get(coaster.id)
+    if (existing) Object.assign(existing, record)
+    else state.attractions.push(record)
+  }
+  for (const course of state.courses ?? []) {
+    // `migrateCourse` splits pool water slides into extra ids; only the record
+    // that keeps the course id is canonical, so the sync stays idempotent.
+    const record = migrateCourse(course).find((entry) => entry.id === course.id)
+    if (!record) continue
+    const existing = byId.get(course.id)
+    if (existing) Object.assign(existing, record)
+    else state.attractions.push(record)
+  }
+  writeCampingAndPartyRecords(state)
+}
+
+function writeCampingAndPartyRecords(state: GameSnapshot): void {
+  state.attractions = state.attractions.filter((attraction) =>
+    attraction.definitionId !== 'camping' && attraction.definitionId !== 'partyArea',
+  )
+  const camping = migrateCamping(state.campingCells ?? [], state.campInstallations ?? [])
+  if (camping) state.attractions.push(...camping)
+  state.attractions.push(...migratePartyAreas(state.stageForecourtCells ?? []))
+}
+
+export function dropLegacyAttractionRecords(state: GameSnapshot, ownerId: string): void {
+  state.attractions = state.attractions.filter((attraction) =>
+    attraction.id !== ownerId && !attraction.id.startsWith(`${ownerId}-slide-`),
+  )
+}
+
+/**
+ * Cheap change gate for `refreshLegacyAttractionRecords`. Every editor mutation
+ * moves a piece, area, access, price or operation mode, so those are enough and
+ * the check allocates nothing on the tick path.
+ */
+export function legacyAttractionSignature(state: GameSnapshot): number {
+  let signature = (state.coasters?.length ?? 0) * 31 + (state.courses?.length ?? 0)
+  for (const coaster of state.coasters ?? []) {
+    signature = signature * 31 +
+      coaster.pieces.length * 7 +
+      (coaster.entrance ? 3 : 0) +
+      (coaster.exit ? 5 : 0) +
+      (coaster.closed ? 11 : 0) +
+      coaster.operationMode.length +
+      Math.round(coaster.ticketPrice * 100)
+  }
+  for (const course of state.courses ?? []) {
+    signature = signature * 31 +
+      course.pieces.length * 7 +
+      course.areaCells.length * 3 +
+      (course.operating ? 13 : 0) +
+      (course.teamSize ?? 0) +
+      Math.round(course.price * 100)
+  }
+  signature = signature * 31 +
+    (state.campingCells?.length ?? 0) +
+    (state.campInstallations?.length ?? 0) * 5 +
+    (state.stageForecourtCells?.length ?? 0) * 11
+  for (const cell of state.campingCells ?? []) {
+    signature = signature * 31 + cell.x + cell.z * 1024
+  }
+  for (const cell of state.stageForecourtCells ?? []) {
+    signature = signature * 31 + cell.x + cell.z * 1024 + (cell.stageId ? 17 : 0)
+  }
+  return signature
 }
 
 export function projectCourses(attractions: readonly Attraction[]): CourseAttraction[] {

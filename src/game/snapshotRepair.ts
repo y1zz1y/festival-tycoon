@@ -20,6 +20,7 @@ import { DEFAULT_SECURITY_CONFIG } from './security'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import { defaultShirtSettings, normalizeShirtColor, normalizeShirtStyle, normalizeWornShirt } from './shopGoods'
 import { isWasteBin } from './decorationWalls'
+import { refreshLegacyAttractionRecords } from './attractions/projections'
 import { syncStageAudience } from './stageAudience'
 import { normalizeTerrain, normalizeWaterLevel } from './terrain'
 import type { Cell, Visitor } from './types/entities'
@@ -91,6 +92,7 @@ export function normalizeSnapshotForRuntime(context: SnapshotRepairContext): voi
   )
   state.waterLevel = normalizeWaterLevel(state.waterLevel)
   syncStageAudience(state)
+  refreshLegacyAttractionRecords(state)
   state.attractiveness ??= { average: 0, maximum: 0, minimum: 0, cells: [] }
   state.partyMood ??= { average: 0, maximum: 0, minimum: 0, cells: [] }
   state.dayPlan = normalizeDayPlan(state.dayPlan)

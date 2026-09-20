@@ -31,7 +31,7 @@ export function mountFestivalUI(
   panel.innerHTML = `<div class="festival-chrome"><header class="festival-heading panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 id="festival-title" class="panel-header-title">Das Festivalwochenende</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Festivalverwaltung schließen">×</button></header>
     <div class="festival-status" aria-live="polite"></div>
     <nav class="festival-tabs" aria-label="Festivalbereiche">${[['overview', 'Übersicht'], ['dayplan', 'Tagesplan'], ['lineup', 'Bands & Spielplan'], ['supply', 'Lager & Lieferungen'], ['prepare', 'Wetter & Vorsorge'], ['upgrades', 'Upgrades'], ['reports', 'Abrechnung & Ruf']].map(([id, label]) => `<button data-tab="${id}" aria-pressed="${id === 'overview'}">${label}</button>`).join('')}</nav></div>
-    <section data-pane="overview"><div class="festival-intro"><h3>Ein Gelände. Ein Wochenende. Euer Publikum.</h3><p>Vorlauf und Festivaltage legt ihr im Reiter Tagesplan fest. Erst mit dem Start läuft die Festivalzeit. Bucht ein Programm, versorgt eure Gäste und entscheidet, welche Reserven ihr euch leisten könnt. Das vorhandene Gelände und Budget werden übernommen.</p><button data-action="start">Festival starten</button><button data-action="sandbox">Freies Spiel fortsetzen</button></div><form data-ticket-prices class="festival-form festival-price-sliders"><label>Preis Tagesticket<input name="dayTicketPrice" type="range" min="20" max="250" step="5" value="120"><output data-day-price>120 €</output></label><label>Preis Campingticket<input name="campTicketPrice" type="range" min="40" max="500" step="5" value="260"><output data-camp-price>260 €</output></label><p data-ticket-estimate></p><button>Preise übernehmen</button></form><form data-tickets class="festival-form"><label>Tagestickets je Festivaltag<input name="dayTickets" type="number" min="0" max="100000" value="150" required></label><label>Campingtickets für die gesamte Ausgabe<input name="campTickets" type="number" min="0" max="100000" value="0" required></label><button>Kontingente übernehmen</button></form><p data-camping-summary></p><div data-music-overview></div><div data-summary></div></section>
+    <section data-pane="overview"><div class="festival-intro"><h3>Ein Gelände. Ein Wochenende. Euer Publikum.</h3><p>Vorlauf und Festivaltage legt ihr im Reiter Tagesplan fest. Erst mit dem Start läuft die Festivalzeit. Bucht ein Programm, versorgt eure Gäste und entscheidet, welche Reserven ihr euch leisten könnt. Das vorhandene Gelände und Budget werden übernommen.</p><button data-action="start">Festival starten</button><button data-action="sandbox">Freies Spiel fortsetzen</button></div><div class="festival-park-gate"><h3>Gelände öffnen und schließen</h3><p>Im freien Spiel schließt ihr das Gelände für neue Gäste. Wer schon da ist, reist ab. Während der Festivalplanung und nach dem Wochenende steuert das Festival den Zugang selbst.</p><button type="button" data-park-toggle>Park schließen</button></div><form data-ticket-prices class="festival-form festival-price-sliders"><label>Preis Tagesticket<input name="dayTicketPrice" type="range" min="20" max="250" step="5" value="120"><output data-day-price>120 €</output></label><label>Preis Campingticket<input name="campTicketPrice" type="range" min="40" max="500" step="5" value="260"><output data-camp-price>260 €</output></label><p data-ticket-estimate></p><button>Preise übernehmen</button></form><form data-tickets class="festival-form"><label>Tagestickets je Festivaltag<input name="dayTickets" type="number" min="0" max="100000" value="150" required></label><label>Campingtickets für die gesamte Ausgabe<input name="campTickets" type="number" min="0" max="100000" value="0" required></label><button>Kontingente übernehmen</button></form><p data-camping-summary></p><div data-music-overview></div><div data-summary></div></section>
     <section data-pane="dayplan" hidden>
       <p>Vorlauf, Festivaltage und Angebotszeiten gelten für das ganze Gelände. Tagesgäste dürfen nur im eingestellten Fenster bleiben.</p>
       <div class="festival-cycle-controls">
@@ -79,6 +79,12 @@ export function mountFestivalUI(
       panel.querySelectorAll('[data-tab]').forEach(tab => tab.setAttribute('aria-pressed', String(tab === button)))
       render(getGame().snapshot, true)
       onPane?.(button.dataset.tab)
+    }
+    if (button.hasAttribute('data-park-toggle')) {
+      const result = getGame().setParkOpen(!getGame().snapshot.parkOpen)
+      toast(result.message, !result.ok)
+      render(getGame().snapshot, true)
+      return
     }
     if (button.dataset.action) execute({ type: button.dataset.action === 'start'&&getGame().snapshot.festival.finished?'prepare':button.dataset.action as 'start' | 'sandbox' })
     if (button.dataset.cancel) execute({ type: 'cancel', id: button.dataset.cancel })
@@ -141,6 +147,17 @@ export function mountFestivalUI(
     panel.querySelector<HTMLButtonElement>('[data-action=start]')!.disabled = f.enabled && !f.finished
     panel.querySelector<HTMLButtonElement>('[data-action=start]')!.textContent = f.finished ? 'Nächste Ausgabe vorbereiten' : 'Festival starten'
     panel.querySelector<HTMLButtonElement>('[data-action=sandbox]')!.hidden = !f.enabled
+    const parkToggle = panel.querySelector<HTMLButtonElement>('[data-park-toggle]')
+    if (parkToggle) {
+      const locked = Boolean(f.planning || f.finished)
+      parkToggle.disabled = locked
+      parkToggle.textContent = locked
+        ? 'Zugang steuert das Festival'
+        : s.parkOpen
+          ? 'Park schließen'
+          : 'Park öffnen'
+      parkToggle.classList.toggle('park-closed', !s.parkOpen)
+    }
     const capacity = getGame().getBookableCampingCapacity(), occupied = s.visitors.filter(v => v.ticketType === 'camping').length
     const ticketForm = panel.querySelector<HTMLFormElement>('[data-tickets]')!
     ticketForm.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input,button').forEach(el => el.disabled = f.enabled && !f.finished)

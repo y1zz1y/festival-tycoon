@@ -52,26 +52,26 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `tests/regression.ts` | Orchestrierung, Tick-Partition, Multiplayer-Sockets, Saves, Abreise durch Camping-Ausweisungen nach Festivalende |
 | `tests/accounts.ts` | Registrierung, Sessions, Passwort-Hashes und Rate-Limit |
 | `tests/saves.ts` | kontoabhängige und öffentliche Server-Spielstände |
-| `tests/finance.ts` | Bücher, Kredite, vorbereitete Szenarien und Ziele |
-| `tests/courseAttractions.ts` | Kurs-Konstruktion, Validierung, Einlass, Rutschverletzung, Pause-Unterhalt, Ticketnachfrage, Sterne-Bands |
+| `tests/finance.ts` | Bücher, Kredite, vorbereitete Szenarien, Ziele, aufklappbare Kostenaufschlüsselung, Leerlauf-Unterhalt aktiv vs. inaktiv |
+| `tests/courseAttractions.ts` | Kurs-Konstruktion, Validierung, Einlass, Rutschverletzung, Leerlauf-Unterhalt, Ticketnachfrage, Sterne-Bands, `editorMode` (Weg-Pfeile vs Palette), freie Nachbarrichtungen, Infotext/Betrieb (`formatCourseInspect`, `isCourseReadyToOperate`) |
 | `tests/snapshotModules.ts` | Deterministischer Snapshot-Bootstrap, sichere Migration, delegierendes `GameState.fromJSON` |
 | `tests/ticketDemandTuning.ts` | Nachfrageformeln, Normalisierung, Live-Zustand und host-autoritativer Command |
 | `tests/simulationModules.ts` | Extraktionsgrenzen: Logistik/Visitor-Phasen, `RoadVehicleSimulation`, `VisitorBehaviorService`, `VisitorSpawning`, `VisitorCrowdingSimulation`, `CoasterSimulation`, `PlacementService` und `snapshotRepair`; faire Routingqueue und direkte Aufrufe außerhalb des Ticks |
-| `tests/uiModules.ts` | Extraktionsgrenzen: Command-Registry/Optimistic-Policy, Flächen-Preview/Execute, Weglinien-/Rechteckbildung, autoritative Kontexthilfe, differentielle Update-Gates, Archiv-Merge/Escaping, gemeinsame Geld-/Zeit-/HTML-Formatierung, Katalog-HTML und Kartenwerkzeuge weiterhin durch Multiplayer-Gate |
+| `tests/uiModules.ts` | Extraktionsgrenzen: Command-Registry/Optimistic-Policy, Flächen-Preview/Execute, Weglinien-/Rechteckbildung, autoritative Kontexthilfe, differentielle Update-Gates, Archiv-Merge/Escaping, gemeinsame Geld-/Zeit-/HTML-Formatierung, Katalog-HTML, Abriss-Nachfrage-Text/`wouldBulldozeRemoveCoaster`, Kurs-Inspect-Routing und Kartenwerkzeuge weiterhin durch Multiplayer-Gate |
 | `tests/browserSaves.ts` | Gemeinsame Quota-Erkennung, lokaler Slot- und Schnellspeichern-Roundtrip (Besucher/Gebäude bleiben), Liste ohne `fromJSON`, gemockter Server-Client (HTML/401) |
 | `tests/unsavedWork.ts` | Ungespeicherte Arbeit: Bauen/Abreißen markiert sie, Speichern setzt zurück, reines Ticken zählt nicht, Fünf-Minuten-Grenze exakt, abgeschaltete Warnung lässt Abbruchwege durch |
 | `tests/wakeLock.ts` | Bildschirmsperre: nur bei laufender Sitzung, kein Doppel-Lock, Freigabe beim Verbergen und Rückholen beim Sichtbarwerden, vom Browser abgeworfener Lock wird neu geholt, Sitzungsende während laufender Anfrage, Verweigerung und fehlende API |
 | `tests/multiplayerChat.ts` | Chat-Sanitizing, Ping-TTL, Edge-Arrow-Projektion; Roundtrip in `regression.ts` |
 | `tests/hotkeys.ts` | Tastenbelegung: Standardbelegung kollisionsfrei, Numpad zählt als Ziffernreihe, eine Taste gehört einer Aktion (der vorherige Halter wird frei), reservierte Tasten gesperrt, Beschriftungen, Speichern/Laden inkl. kaputtem Eintrag |
 | `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, endliche Festivalmodell-Bounds/Picking, Lights, Achterbahnwagen, Logistik-Modelle |
-| `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust |
+| `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust, vordere Konzertplätze |
 | `tests/headlineMagazine.ts` | HEADLINE Magazin nur nach Festivalende, ≥1 Pro/Kontra, deterministisch, nicht mitten im Wochenende |
 | `tests/headline-magazine-preview.html` | visuelles HEADLINE-Heft nach einem beendeten Wochenende |
 | `tests/lights-preview.html` | Parkbeleuchtung bei Nacht über zwei Lampenalleen; `show(halbbreite)` in der Konsole fährt die Zoomstufen ab und zeigt, dass beim Rauszoomen die ganze Allee beleuchtet bleibt statt nur die Bildmitte |
 | `tests/backstage-preview.html` | Bandversorgung aus der Nähe: Getränkekühler, beide Couchgrößen, Goldklo; `window.preview` hält Szene und Kamera zum Anfahren einzelner Modelle |
 | `tests/visitorSleep.ts` | Festival-Schlafzeiten, Legacy-Remap, zirkadiane Energie, Zelt- und Abreiseziele |
 | `tests/festivalAdditions.ts` | spätere Festival-Systeme, Eimer-Karton-Batches, zusammenhängende Müllablage-Füllstände, Müllwagen-Ladungsanzeige, 1-Feld-Steigungen, Wagen-Mesh, gerundete Schienenjoins, Achterbahn-Komplettabriss, SI-Geschwindigkeitsuntergrenzen (`chainSpeed` / Launch / Drag / `maximumSpeed`) |
-| `tests/coasterTypes.ts` | Achterbahn-Typkatalog (alle Typen spielbar), Zug-Thumbnail-Spec je Typ, live vs diskrete Anschlussregeln, Helix/LIM/Junior/Maus/Mine/Bobbahn-Filter, fehlender typeId → classicSteel, Palette: Typ-Ausschluss vs aktuell ausgegraut, Hard-Switch inkl. Richtung (erster Klick ändert das Fenster), Ghost unverändert bei gesperrtem Klick, **Palette zweimal listen remountet keine IDs**, **`updateCoasterConstruction` bleibt über spielende Ticks unverändert**, Testbetrieb auf geschlossenem classicSteel-Rechteck während `festival.planning`, SI-Physik-Untergrenzen |
+| `tests/coasterTypes.ts` | Achterbahn-Typkatalog (alle Typen spielbar, alle `editorMode: 'palette'`), Zug-Thumbnail-Spec je Typ, live vs diskrete Anschlussregeln, Helix/LIM/Junior/Maus/Mine/Bobbahn-Filter, fehlender typeId → classicSteel, Palette: Typ-Ausschluss vs aktuell ausgegraut, Hard-Switch inkl. Richtung (erster Klick ändert das Fenster), Ghost unverändert bei gesperrtem Klick, **Palette zweimal listen remountet keine IDs**, **`updateCoasterConstruction` bleibt über spielende Ticks unverändert**, Testbetrieb auf geschlossenem classicSteel-Rechteck während `festival.planning`, SI-Physik-Untergrenzen, `listCoasterDirectionChoices` sperrt die Rückrichtung |
 | `tests/bandSupply.ts` | Bare vs versorgt, geteilter Pool, Konzertgäste ohne Supply-Graph-Neuaufbau pro Person, Tourbus-Quote 2/3 vs 3/3, Fans senken Attraktivität, Ankunft 08:00 mit Bus auf dem Parkplatz / Abreise abends, Idle-Akteure auf aktivem Backstage, gleiche `costumeId` Bühne/Backstage, Ausweisen neben der Bühne, Tourbus nur auf Backstage an der Straße (nicht auf Gras), Gebäude/Deko auf dem Overlay, inaktive Fläche bleibt markierbar zählt aber nicht, Junior/ohne Slot → Personaleingang; siehe [`band-supply.md`](band-supply.md) |
 | `tests/ticker.ts` | Müllwagen 90, Ablage 180, kein Overflow, Ticker >90 % / Feuer / Panik, keine Verletztenmeldung für Insassen |
 | `tests/musicPlanning.ts` | Spielplan, Genres |
@@ -92,7 +92,8 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/decoration.ts` | Themenliste 8–12 inkl. Klassik/Arktis/Steampunk, Filter ohne Themen-Leaks, Legacy-Vollfeld, Platzierung über `scenery.ts`, Licht-Deskriptor je Lampenart, N Lampen → N Quellen, Abriss entfernt Licht |
 | `tests/picking.ts` | Abriss-Raycast: Instanz-IDs, getroffenes Mesh vs. Nachbar/Kachelmitte, Reittor-Zelle |
 | `tests/buildMenu.ts` | Jedes platzierbare Tool außer `inspect` genau einmal im Baumenü; Deko/Attraktionen/Logistik als Katalog; Achterbahn-Kacheln mit Zugstil/`coasterVehiclePreview`; Camping-, Krankenhaus- und Bandversorgung-Tabs (`backstageArea`, `tourBusParking`); Bauhöhe bleibt beim gleichen Tool und fällt bei neuem `setTool` auf 0; Deko-Gruppen kommen aus `decoration.ts` |
-| `tests/blueprints.ts` | 2×2 mit zwei Dekos stempeln, Preview ohne Mutation, Bibliothek-Roundtrip ohne `SAVE_KEY` |
+| `tests/blueprints.ts` | 2×2 mit zwei Dekos stempeln, Preview ohne Mutation, Parkplätze kopieren, Bibliothek-Roundtrip ohne `SAVE_KEY` |
+| `tests/buildUndo.ts` | Host-Bau-Stack: Place, Parkplatz, Stempel inkl. Parkplatz, Weg; vollständige Kostenerstattung |
 | `tests/placementPreview.ts` | Bauhöhe/Bodenkachel; autoritative Preview-Matrix für Gebäude, Slots, Haltestelle, Bandversorgung, Medizin/Dächer, Depots, Blueprint und Ride-Zugang; jede Anfrage bleibt mutationsfrei |
 | `tests/terrainSurface.ts` | Gelände-Mesh (zwei Dreiecke je Kachel), Pads, Parkplatz-Asphalt nur auf Parkfeldern |
 | `tests/terrainLand.ts` | Drei Geländewerkzeuge, Stufe 0,5, Fläche auf Starthöhe, Klippe nach 0,5, Wasser am Uferhang, Baden, Nav nach Edit, Stützen nur im Freiraum, Fußweg land-0→0,5 ja / land-0→1 nein |
@@ -101,6 +102,7 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/pixelPeople.ts` | Personen-Batches |
 | `tests/carrierModels.ts` | Träger: geteilte Gästeteile, Warnweste, Karren |
 | `tests/campingModels.ts` | Zelt-/Pavillon-Batches |
+| `tests/attractionFoundation.ts` | Camping-/Vorplatz-Ausweisung bleibt nach Attraction-Commands, Save/Load und MP-Deltas; Placement-Sperre (Gebäude/Weg/Deko), Fence/Delay-Ausnahme, Forecourt-Preview |
 | `tests/mobileTouch.ts` | Touch-Kamera / Gesten |
 | `tests/audio.ts` | Kamera-Listener (Look-At, nicht Gäste), Range-Skip, One-Shot-Cap, geclusterter Jubel + Cooldown |
 | `tests/performance.ts` | synthetische Last |

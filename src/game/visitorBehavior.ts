@@ -1,7 +1,7 @@
 import { isWasteBin } from './decorationWalls';
 import { isSealedWasteContainer } from './waste';
 import { musicTaste, musicAppeal } from './musicTaste';
-import { stageDistance, stageSize, type StageDesign } from './stageDesign';
+import { stageDistance, stageFrontRank, stageSize, type StageDesign } from './stageDesign';
 import { wayInfo } from './wayTypes';
 import { localStock, consumeLocal } from './supplyChain';
 import { isShopServiceKind } from './shopAccess';
@@ -239,6 +239,7 @@ export class VisitorBehaviorService {
   private concertSlots = new Map<number, Set<number>>()
   private concertForecourtByStage = new Map<string, StageForecourtCell[]>()
   private concertForecourtStageIds = new Map<number, string>()
+  private concertStagesById = new Map<string, GameSnapshot['buildings'][number]>()
   private danceFloorFocusByStage = new Map<string, { x: number; z: number }>()
   private swimGoalCells: Cell[] | null = null
   private swimGoalRevision = -1
@@ -1907,6 +1908,7 @@ export class VisitorBehaviorService {
     this.concertSlots.clear()
     this.concertForecourtByStage.clear()
     this.concertForecourtStageIds.clear()
+    this.concertStagesById.clear()
     this.danceFloorFocusByStage.clear()
     for (const guest of this.context.state.visitors) {
       if (!guest.activityTarget || !['partying', 'relaxing'].includes(guest.state)) continue
@@ -1917,6 +1919,7 @@ export class VisitorBehaviorService {
     }
     const stages = this.context.state.buildings.filter((building) => building.kind === 'stage')
     for (const stage of stages) {
+      this.concertStagesById.set(stage.id, stage)
       this.danceFloorFocusByStage.set(stage.id, this.stageFocusPoint(stage))
     }
     for (const cell of this.context.state.stageForecourtCells) {
@@ -1948,57 +1951,94 @@ export class VisitorBehaviorService {
     const slotOrder = [4, 0, 2, 6, 8, 1, 3, 5, 7]
     for (const show of shows.slice(0, 2)) {
       if (visitor.audience === 'family' && this.context.state.minute >= 21 * 60) continue
-      const cells = this.concertForecourtByStage.get(show.stage.id) ?? []
-      const open = cells.filter((cell) => (this.concertSlots.get(this.context.packCell(cell))?.size ?? 0) < capacity)
-      if (!open.length) continue
-      const focus = this.danceFloorFocusByStage.get(show.stage.id) ?? this.stageFocusPoint(show.stage)
-      const want = this.visitorDanceAngle(visitor, show.stage.id)
-      const goals = open
-        .map((cell) => {
-          const used = this.concertSlots.get(this.context.packCell(cell))?.size ?? 0
-          const distance =
-            Math.abs(cell.x - visitor.cellX) + Math.abs(cell.z - visitor.cellZ)
-          return {
-            cell,
-            score: used * 24 + distance + this.angularDelta(cell, focus, want) * 0.4,
-          }
-        })
-        .sort((left, right) => left.score - right.score)
-        .slice(0, atmosphere.concertSpreadGoals)
-        .map((entry) => entry.cell)
-      const route = this.context.findPath(
-        { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation },
-        goals,
-        true,
-        true,
-        false,
-        false,
-        true,
-      )
-      if (!route) continue
-      const end = route.at(-1) ?? goals[0]!
-      const cell =
-        goals.find(
-          (goal) =>
-            goal.x === end.x &&
-            goal.z === end.z &&
-            Math.abs(goal.elevation - end.elevation) < 0.01,
-        ) ?? goals[0]!
-      const key = this.context.packCell(cell)
-      const used = this.concertSlots.get(key) ?? new Set<number>()
-      const slot = slotOrder.find((n) => !used.has(n))
-      if (slot === undefined) continue
-      used.add(slot)
-      this.concertSlots.set(key, used)
-      this.beginPartyVisit(visitor, { cell, route, slot, capacity, forecourt: true })
-      visitor.concertId = show.booking.id
-      visitor.interactionRemaining = show.booking.start + show.booking.duration - this.context.state.minute
-      visitor.thought = this.context.state.minute < show.booking.start
-        ? `Ich gehe schon zu ${show.band.name}, damit ich den Anfang nicht verpasse.`
-        : `Ich möchte ${show.band.name} sehen!`
-      return true
+      if (this.tryReserveConcertForecourt(visitor, show, capacity, slotOrder)) return true
     }
     return false
+  }
+
+  tryReserveConcertForecourt(
+    visitor: Visitor,
+    show: { booking: Booking; band: (typeof BANDS)[number]; stage: GameSnapshot['buildings'][number] },
+    capacity: number,
+    slotOrder: number[],
+  ): boolean {
+    const atmosphere = SIMULATION_CONFIG.atmosphere
+    const cells = this.concertForecourtByStage.get(show.stage.id) ?? []
+    const open = cells.filter((cell) => (this.concertSlots.get(this.context.packCell(cell))?.size ?? 0) < capacity)
+    if (!open.length) return false
+    const focus = this.danceFloorFocusByStage.get(show.stage.id) ?? this.stageFocusPoint(show.stage)
+    const want = this.visitorDanceAngle(visitor, show.stage.id)
+    const ranked = open
+      .map((cell) => {
+        const used = this.concertSlots.get(this.context.packCell(cell))?.size ?? 0
+        const front = stageFrontRank(show.stage, cell)
+        const distance = Math.abs(cell.x - visitor.cellX) + Math.abs(cell.z - visitor.cellZ)
+        return {
+          cell,
+          row: front.row,
+          score:
+            front.row * 1000 +
+            used * 24 +
+            front.lateral * 2 +
+            distance * 0.15 +
+            this.angularDelta(cell, focus, want) * 0.4,
+        }
+      })
+      .sort((left, right) => left.score - right.score)
+    let cursor = 0
+    let attempts = 0
+    while (cursor < ranked.length && attempts < atmosphere.concertFrontGoalAttempts) {
+      const row = ranked[cursor]!.row
+      let end = cursor + 1
+      while (end < ranked.length && ranked[end]!.row === row) end++
+      const goals = ranked.slice(cursor, end).slice(0, atmosphere.concertSpreadGoals).map((entry) => entry.cell)
+      cursor = end
+      attempts++
+      const reserved = this.reserveConcertGoals(visitor, show, goals, capacity, slotOrder)
+      if (reserved) return true
+    }
+    return false
+  }
+
+  reserveConcertGoals(
+    visitor: Visitor,
+    show: { booking: Booking; band: (typeof BANDS)[number] },
+    goals: StageForecourtCell[],
+    capacity: number,
+    slotOrder: number[],
+  ): boolean {
+    if (!goals.length) return false
+    const route = this.context.findPath(
+      { x: visitor.cellX, z: visitor.cellZ, elevation: visitor.cellElevation },
+      goals,
+      true,
+      true,
+      false,
+      false,
+      true,
+    )
+    if (!route) return false
+    const end = route.at(-1) ?? goals[0]!
+    const cell =
+      goals.find(
+        (goal) =>
+          goal.x === end.x &&
+          goal.z === end.z &&
+          Math.abs(goal.elevation - end.elevation) < 0.01,
+      ) ?? goals[0]!
+    const key = this.context.packCell(cell)
+    const used = this.concertSlots.get(key) ?? new Set<number>()
+    const slot = slotOrder.find((n) => !used.has(n))
+    if (slot === undefined) return false
+    used.add(slot)
+    this.concertSlots.set(key, used)
+    this.beginPartyVisit(visitor, { cell, route, slot, capacity, forecourt: true })
+    visitor.concertId = show.booking.id
+    visitor.interactionRemaining = show.booking.start + show.booking.duration - this.context.state.minute
+    visitor.thought = this.context.state.minute < show.booking.start
+      ? `Ich gehe schon zu ${show.band.name}, damit ich den Anfang nicht verpasse.`
+      : `Ich möchte ${show.band.name} sehen!`
+    return true
   }
 
   updateConcertAttendance(
@@ -2975,7 +3015,9 @@ export class VisitorBehaviorService {
         const stageId = candidate.forecourt
           ? this.concertForecourtStageIds.get(this.context.packCell(candidate.cell))
           : undefined
+        const stage = stageId ? this.concertStagesById.get(stageId) : undefined
         const focus = stageId ? this.danceFloorFocusByStage.get(stageId) : undefined
+        const front = stage ? stageFrontRank(stage, candidate.cell) : { row: 0, lateral: 0 }
         let angle = 0
         if (stageId && focus) {
           let want = danceAngleByStage.get(stageId)
@@ -2994,7 +3036,9 @@ export class VisitorBehaviorService {
             occupantCount * atmosphere.occupancyScorePenalty -
             distance * atmosphere.distanceScorePenalty -
             crowding * atmosphere.crowdingScorePenalty -
-            angle * atmosphere.danceFloorAnglePenalty +
+            angle * atmosphere.danceFloorAnglePenalty -
+            front.row * atmosphere.concertFrontRowPenalty -
+            front.lateral * 2 +
             (candidate.forecourt ? atmosphere.forecourtScoreBonus : 0),
         }
       })
@@ -3128,8 +3172,19 @@ export class VisitorBehaviorService {
       z: visitor.cellZ,
       elevation: visitor.cellElevation,
     }
+    // Coasters, courses and rides keep their own finders, which know the ride
+    // offer, queue capacity and the coaster a guest is avoiding. Their canonical
+    // records must not be offered a second time here.
+    const legacyIds = new Set<string>([
+      ...(this.context.state.coasters ?? []).map((coaster) => coaster.id),
+      ...(this.context.state.courses ?? []).map((course) => course.id),
+      ...this.context.state.buildings
+        .filter((building) => building.kind === 'ride')
+        .map((building) => building.id),
+    ])
     const candidates = this.context.state.attractions
       .filter((attraction) =>
+        !legacyIds.has(attraction.id) &&
         attraction.operationMode === 'open' &&
         attraction.access.mode === 'queuedEntrance' &&
         Boolean(attraction.access.entrance) &&

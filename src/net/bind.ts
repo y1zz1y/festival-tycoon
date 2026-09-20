@@ -253,6 +253,7 @@ export function enableMultiplayerCommands(game: GameState): void {
     type: 'setParkOpen',
     open,
   }))
+  game.undoLastBuild = wrap(game, game.undoLastBuild, () => ({ type: 'undoLastBuild' }))
   game.setSpeed = wrap(game, game.setSpeed, (speed) => ({ type: 'setSpeed', speed }))
   game.hireStaff = wrap(game, game.hireStaff, (role) => ({ type: 'hireStaff', role }))
   game.fireStaff = wrap(game, game.fireStaff, (role) => ({ type: 'fireStaff', role }))

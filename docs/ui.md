@@ -3,36 +3,51 @@
 `main.ts` verdrahtet Tools, Fenster und Commands. Fach-UIs liegen daneben,
 nicht in `GameState`. Mobile und schmale Layouts haben eigene CSS/Module.
 
-## Einheitlicher Attraktionseditor (v31)
+## Attraktionseditoren: zwei Fenster, ein Bedienmuster
 
-`src/ui/attractionBuilderPanel.ts` rendert die gemeinsame RCT2-artige Palette
-für `track`, `area` und `scripted`. `src/main.ts` hält nur den lokalen
-Editorzustand (Werkzeug, Richtung, Höhenänderung, Banking und ausgewähltes
-offenes Ende). Linien-/Flächenzüge laufen weiter über
-`PathToolController`; die autoritative Änderung geht als
-`constructAttraction` an `GameState`.
+Es gibt **kein** gemeinsames Attraktionspanel. Achterbahnen bedient
+`src/ui/coasterBuilderPanel.ts` (`#coaster-builder`), Kurse
+`src/ui/courseBuilderPanel.ts` (`#course-builder`). Achterbahnen folgen dem
+RCT2-Muster (Palette, großer Bauen-Knopf). Path-led Kurse nutzen dasselbe
+Weg-Richtungsmenü wie Fußwege: Pfeile nur in freie Nachbarn, Klick setzt das
+Stück. `editorMode` am Katalog schaltet die Chrome.
 
-Track-Klicks auf ein anderes offenes Ende wählen dieses als Bauanker.
-„Streckenteil löschen“ darf eine mittlere Kante entfernen; beide Komponenten
-bleiben erhalten und können neu verbunden werden. Fläche, Flächenlöscher,
-Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
+| Schritt | Achterbahn | Kurs |
+| --- | --- | --- |
+| Bauanker | offenes Streckenende (`#coaster-status`) | `courseTrackEnd` im Status |
+| Richtung | Richtungs-Palette `#track-direction-palette`, Startrichtung `#coaster-rotate`. Bei `editorMode: 'directionArrows'` stattdessen `#coaster-direction-grid` | `COURSE_SPECS.editorMode`: Path-led Kurse nutzen `#course-direction-grid` (nur freie Nachbarn); Paintball behält `#course-rotate` |
+| Höhe | Neigung `#track-slope-palette` plus Rollen `#track-bank-palette` | Ebenen-Regler `#course-elevation-*` |
+| Ghost | `WorldView.setCoasterConstructionPreview` | `WorldView.setCourseConstructionPreview` |
+| Anbauen | `#coaster-build-piece` (verborgen bei `directionArrows`) | Pfeil-Klick oder `#course-build-piece` (`buildCoursePieceAtEnd`) |
+| Rückgängig | `#coaster-undo` | `#course-undo` |
+
+`src/main.ts` hält nur den lokalen Editorzustand (Werkzeug, Richtung, Ebene,
+aktive Anlage) und schickt jede Änderung als autoritatives `GameState`-Command.
+Der Ghost ist eine reine Funktion aus offenem Ende plus Bauzustand
+(`courseNextBuildTarget` / `courseGhostSpan`, `resolveNextTrackPiece`) und wird
+nur bei geändertem Key neu gebaut. Beide Panels teilen Status- und
+Fehleranzeige für Palette, Fläche, Flächenlöscher, Referenzen und
+Eingang/Ausgang.
 
 ## Wo finden
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Bootstrap / Verdrahtung | `src/main.ts` | RCT-Iconleiste `.rct-toolbar`, erzeugt Controller und verbindet Callbacks |
+| Bootstrap / Verdrahtung | `src/main.ts` | RCT-Iconleiste `.rct-toolbar`, erzeugt Controller und verbindet Callbacks; `#undo-last-build` |
+| Bau-Undo-Stack | `src/game/buildUndo.ts`, `src/game/GameState.ts` | `undoLastBuild`, Marker/Diff, max. 40 Einträge, nicht im Snapshot |
 | Festival-Preise / Bandplaner | `src/festivalUI.ts`, `src/musicPlanner.ts`, `src/festival.css` | Ticket-Slider + Schätzung; Kaufbereitschaft über `--range-accent` (Thumb/Track); Sterne-Tabs und Auto-Plan-Filter |
 | Stabile App-Shell / DOM-Vertrag | `src/app/shell.ts` | `mountAppShell`; vollständiges statisches Markup und Autosave-Konstanten |
 | Titel, Szenario und Saves | `src/ui/titleScreen.ts`, `src/ui/scenarioScreen.ts`, `src/ui/saveController.ts` | Controller mit injiziertem `GameState`-/Multiplayer-/Lade-Kontext |
-| Objekt- und Besucheranzeige | `src/ui/entityPanel.ts`, `src/ui/visitorPanel.ts` | Vollständige Objektpanel-Orchestrierung, Achterbahn-Telemetrie sowie zustandsbehaftete Besucher-Inspektion |
+| Objekt- und Besucheranzeige | `src/ui/entityPanel.ts`, `src/ui/visitorPanel.ts` | Vollständige Objektpanel-Orchestrierung, Achterbahn-Telemetrie, Kurs-/Paintball-/Pool-Betrieb sowie zustandsbehaftete Besucher-Inspektion |
 | UI-Formatierung | `src/ui/format.ts` | HTML-Escaping, Geld-, Uhrzeit- und Speicherzeitformat |
+| Finanz-Ledger | `src/ui/financePanel.ts` | `renderFinanceLedger`, aufklappbare Kostenzeilen |
 | Render- und Hidden-Tab-Schleife | `src/app/gameLoop.ts` | `startGameLoop`; schmale Game/View/Audio-Schnittstellen |
 | Kartenklick-Werkzeugrouting | `src/input/toolRouter.ts`, `src/input/cellToolHandlers.ts` | Direkte Commands sowie typisierte Achterbahn-, Wegeditor- und Inspect-Routen |
 | Weg-/Straßen-Ziehcontroller | `src/input/pathToolController.ts` | `createPathToolController`; besitzt Ziehzustand, Linien-/Rechteckbildung und Ausführung |
 | Achterbahn-Baufenster | `src/ui/coasterBuilderPanel.ts` | `updateCoasterBuilderPanel`; stabile Palette und Ghost-/Auswahlvorschau |
-| Kurs-Baufenster | `src/ui/courseBuilderPanel.ts` | `renderCourseBuilderPanel`; atomare Werkzeuge **Anlagenfläche** und **Fläche entfernen** für Pool/Paintball, Endpunkt-Palette und Ebene für Mudmasters/Tree-to-Tree/Rutschen, Paintball-Teamgröße |
+| Kurs-Baufenster | `src/ui/courseBuilderPanel.ts` | `renderCourseBuilderPanel`; `editorMode` schaltet Palette+**Am Ende bauen** gegen Weg-Richtungspfeile; atomare Werkzeuge **Anlagenfläche** und **Fläche entfernen** für Pool/Paintball, Endpunkt-Palette und Ebene für Mudmasters/Tree-to-Tree/Rutschen, Paintball-Teamgröße. Betrieb (Öffnen/Schließen) sitzt nicht hier, sondern im Infofenster |
 | Kontexthilfe | `src/ui/contextHelp.ts` | `contextHelpText`; verwendet das autoritative `PlacementPreviewResult` |
+| Nachfrage-Dialog | `src/ui/confirmDialog.ts` | `confirmAction` (`<dialog>`, wie Spielstand-Text); `rideDemolishPrompt` vor `removeCoaster` / `removeCourse` |
 | Baukatalog / stabile Statusanzeige | `src/ui/buildCatalog.ts` | `createBuildCatalog`, `catalogTileHtml` |
 | Spielstand-Archivdarstellung | `src/ui/saveArchive.ts` | Zusammenführen Server/Browser, sichere Zeilen, Speicherhinweis |
 | Differentielle UI-Updates | `src/ui/differentialUpdates.ts` | `DifferentialUpdates`, `listFingerprint` |
@@ -45,13 +60,13 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
 | Bau-Kategorien und Raster | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` |
 | Kopieren / Baubibliothek | `src/main.ts`, `src/game/blueprints.ts`, [blueprints.md](blueprints.md) | Kategorie **Kopieren**, Rechteck wie Gelände, Geistervorschau, `stampBlueprint`, lokale Bibliothek |
 | Deko-Themenfilter | `src/game/decoration.ts`, `src/main.ts` | `renderDecorationCatalog`, Themen-Chips in `#decoration-themes` |
-| Festival-Verwaltung | `src/festivalUI.ts`, `src/festival.css` | |
+| Festival-Verwaltung | `src/festivalUI.ts`, `src/festival.css` | Tickets, Plan, **Park öffnen/schließen** (`setParkOpen`) |
 | HEADLINE Magazin | `src/headlineMagazineUI.ts`, `src/headlineMagazine.css`, `src/game/headlineMagazine.ts` | Vollbild-Heft nach `festival.finished`; Weiter/Schließen; erneut unter Abrechnung & Ruf |
 | Bandplan | `src/musicPlanner.ts` | |
 | Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css`, `src/game/buildMenu.ts` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold. Gelände-Reiter: Feld anheben/senken, Glätten (Fläche) |
 | Buslinien-Planer | `src/main.ts`, `src/game/busPlanner.ts`, `src/view/LogisticsView.ts` | Zwei Spalten ohne Duplikate, DnD, `sortBusLineStops`, nummerierte `setBusPlannerRoute`; Klick auf Haltestelle in der Karte |
 | Shift-Rampen-Ausgang | `src/main.ts`, `src/game/wayElevation.ts` | `lockShiftElevationOrigin`, `planLockedOriginRamp` |
-| Bauvorschau / Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/game/GameState.ts`, `src/view/WorldView.ts` | `PlacementPreviewRequest/Result` und `previewPlacement` liefern gemeinsame Gültigkeit/Meldung; Halbstufen `snapBuildElevation`; `groundTileMarker` |
+| Bauvorschau / Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/game/GameState.ts`, `src/view/WorldView.ts` | `PlacementPreviewRequest/Result` und `previewPlacement` liefern gemeinsame Gültigkeit/Meldung; Halbstufen `snapBuildElevation`; `groundTileMarker`; Werkzeug `stageForecourt` nutzt dieselbe Dry-Run-Prüfung wie die Ausweisung |
 | Bühnenwerkstatt | `src/stageEditor.ts`, `src/stageEditor.css` | |
 | Werkstatt-Orientierung | `src/view/orientationGizmo.ts` | `createOrientationGizmo`, `OrientationGizmo` |
 | Titelbild-Publikum | `src/titleCrowd.ts` | `mountTitleCrowd`, `TitleCrowd.setRunning`, `TitleCrowd.dispose` |
@@ -77,7 +92,10 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
   die öffentliche `GameState`-Fassade auf und umgehen den Multiplayer-Gate nicht.
   Snapshot-Listener ändern Werkzeug-/Speed-DOM nur bei geändertem Fingerprint.
   Die vorhandenen Panel-Fingerprints bleiben für Personal, Besucher, Tagesplan,
-  Beschwerden, Finanzen und Logistik maßgeblich. Coaster-Palette und
+  Beschwerden, Finanzen und Logistik maßgeblich. Im Finanzfenster klappen
+  **Betriebskosten**, **Personal**, **Gagen** und **Kreditzinsen** unabhängig
+  auf; der Offen-Zustand bleibt beim Tick-Refresh erhalten
+  (`src/ui/financePanel.ts`, Aufschlüsselung aus `src/game/financeBreakdown.ts`). Coaster-Palette und
   Busplanerlisten behalten ihre DOM-Knoten bei unverändertem Fach-Fingerprint,
   damit Hover, Fokus und Drag-and-drop nicht abbrechen.
   Kontexthilfe und Ghost-Farbe lesen dasselbe `PlacementPreviewResult`;
@@ -112,8 +130,11 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
   (Festival, Bühnenwerkstatt, Logistikverwaltung für Bestellungen/Träger,
   Beschwerden, Besucher, Personal, Meldungen, Mehrspieler),
   **Kartenansichten** (Logistik/Untergrund, Gedränge, Attraktivität,
-  Partystimmung) und   **Sitzung** (Finanzen, Gelände betreten, Ton stumm, Speichern,
-  Park, Debug-Käfer, Einstellungen). **Ton stumm** (🔊/🔇) und
+  Partystimmung) und   **Sitzung** (Finanzen mit aufklappbaren Kostenzeilen, Gelände betreten, Ton stumm, Speichern,
+  Rückgängig, Debug-Käfer, Einstellungen). **Rückgängig** (`#undo-last-build`) hängt am
+  Host-Bau-Stack (`GameState.undoLastBuild`, Command `undoLastBuild`, nicht im Spielstand);
+  das schließt den letzten Bau, Stempel, Parkplatz oder Weg. **Park schließen** sitzt in der
+  Festivalverwaltung, nicht mehr in der Leiste. **Ton stumm** (🔊/🔇) und
   Einstellungen → **Ton stumm** teilen `localStorage` (`festival-audio-muted`),
   nicht den Spielstand; siehe [audio.md](audio.md). Das Speicher-Dropdown hält
   **Schnell speichern** / **Schnell laden** für den einzelnen
@@ -208,10 +229,20 @@ Referenzen sowie Eingang/Ausgang teilen dieselbe Status- und Fehleranzeige.
   `syncCoasterPalette` stabile Button-IDs und ändert nur `disabled` /
   `active`. Sonst flackert `:hover` und Klicks gehen verloren (wie
   früher die Bus-Haltestellenliste). Die Geisterschiene wird nur neu
-  gebaut, wenn sich das Stück wirklich ändert. Eine fertige Bahn
+  gebaut, wenn sich das Stück wirklich ändert.   Eine fertige Bahn
   öffnet das Infofenster: Betrieb, Preis, **Achterbahn abreißen**
-  (Command `removeCoaster`, schließt das Fenster). Unfertige Bahnen
-  haben denselben Knopf im Konstruktionsfenster.
+  (nach In-Game-Nachfrage `confirmAction` den Command `removeCoaster`,
+  schließt das Fenster). Unfertige Bahnen haben denselben Knopf im
+  Konstruktionsfenster; das Abrisswerkzeug fragt ebenfalls nach, wenn
+  der Klick bzw. das Rechteck die ganze Bahn treffen würde. Kurse,
+  Paintball und Schwimmbad folgen demselben Infofenster: ein Info-Klick
+  auf eine gültige Anlage öffnet `#course-options` (Betrieb
+  Geschlossen/Geöffnet via `setCourseOperating`, Preis,
+  **Konstruktion öffnen**, Abriss). Unfertige Kurse gehen in den
+  Builder; **Fertig** prüft und öffnet das Infofenster, ohne den
+  Betrieb zu schalten. Kurse mit **Abriss** im Kurseditor oder
+  Infofenster nutzen dieselbe Nachfrage. Der Host bekommt
+  erst nach Bestätigung das Command — keine serverseitige Extra-Prüfung.
   Untergruppen der übrigen Kategorien stehen in `buildMenu.ts`. Info bleibt
   das Standardwerkzeug.
   Tagesplan und Ticketpreise liegen unter **Festival planen**. Endet das
@@ -289,7 +320,8 @@ Hellcyan-Vorschau (`staffZoneHoverOverlay`). Träger-Rechtecke bleiben bei
 **Arbeitsbereich ziehen** (`setGroundAreaTool`).
 
 `tests/staffZones.ts` (Zonen-Ziehen). `tests/mobileTouch.ts`. UI-lastige Festival-/Stage-Flows in
-`tests/stageInteraction.ts`, `tests/musicPlanning.ts`. Magazin-Modell nach Festivalende:
+`tests/stageInteraction.ts`, `tests/musicPlanning.ts`. Bau-Undo-Stack: `tests/buildUndo.ts`.
+Magazin-Modell nach Festivalende:
 `tests/headlineMagazine.ts`.
 Infotexte für Müllwagen-Ladung und zusammenhängende Ablagen:
 `tests/festivalAdditions.ts`. Ticker und Müllkappen: `tests/ticker.ts`.
@@ -297,11 +329,15 @@ Debug **Autos entfernen** (Autos weg, Belegung frei, Insassen zu Fuß):
 `tests/operations.ts`.
 Abriss-Picking (Mesh vor Nachbar/Kachelmitte): `tests/picking.ts`.
 Achterbahn-Komplettabriss aus Infofenster/Command: `tests/festivalAdditions.ts`.
+Abriss-Nachfrage-Text und Trefferprüfung (Station ohne Gebäude-ID): `tests/uiModules.ts`.
+Kurs-Inspect (unfertig → Builder, gültig → Infofenster) für Mudmasters,
+Tree-to-Tree, Paintball und Pool: `tests/uiModules.ts`.
 Bauhöhe 0.5 und Bodenkachel der Vorschau: `tests/placementPreview.ts`.
 Extrahierte Update-Gates, Archivzusammenführung/-Escaping, gemeinsame
 Formatierungshelfer, Katalogkacheln und
 Werkzeugrouting durch den Multiplayer-Gate, Linien-/Rechteckbildung und
 autoritative Kontexthilfe: `tests/uiModules.ts`.
+Aufklappbare Finanz-Teilposten und Ledger-HTML: `tests/finance.ts`.
 
 Reiter **Bandversorgung** in `#logistics-panel` plus Backstage-Infofenster:
 `tests/bandSupply.ts`, [`band-supply.md`](band-supply.md).

@@ -80,7 +80,7 @@ export function mountAppShell(app: HTMLDivElement): void {
         <button id="toggle-walk-mode" type="button" title="Gelände betreten" aria-label="Gelände betreten" aria-pressed="false">🚶</button>
         <button id="toggle-mute" type="button" title="Ton" aria-label="Ton" aria-pressed="false">🔊</button>
         <button id="toggle-save-menu" type="button" title="Spielstand" aria-label="Spielstand" aria-expanded="false" aria-haspopup="true">💾</button>
-        <button id="toggle-park" type="button" title="Park schließen" aria-label="Park schließen">🔓</button>
+        <button id="undo-last-build" type="button" title="Rückgängig" aria-label="Rückgängig">↶</button>
         <button id="toggle-multiplayer" type="button" title="Mehrspieler" aria-label="Mehrspieler" aria-expanded="false">🌐</button>
         <button id="toggle-debug-menu" type="button" title="Debug" aria-label="Debug" aria-expanded="false">🐞</button>
         <button id="toggle-scenario" class="scenario-toggle" type="button" title="Einstellungen" aria-label="Einstellungen" aria-expanded="false">⚙️</button>
@@ -360,6 +360,12 @@ export function mountAppShell(app: HTMLDivElement): void {
       <section class="rct-editor-section track-section">
         <label>Richtung <b id="coaster-direction">↙</b></label>
         <div id="track-direction-palette" class="piece-palette track-piece-palette"></div>
+        <div class="path-direction-grid" id="coaster-direction-grid" hidden>
+          <button type="button" data-coaster-direction="3" class="path-dir-tile" title="Richtung bauen"><span>↖</span></button>
+          <button type="button" data-coaster-direction="2" class="path-dir-tile" title="Richtung bauen"><span>↗</span></button>
+          <button type="button" data-coaster-direction="0" class="path-dir-tile" title="Richtung bauen"><span>↙</span></button>
+          <button type="button" data-coaster-direction="1" class="path-dir-tile" title="Richtung bauen"><span>↘</span></button>
+        </div>
         <button id="toggle-track-specials" class="track-special-toggle" type="button" aria-expanded="false">Speziell …</button>
         <div id="track-special-palette" class="piece-palette track-piece-palette" hidden></div>
       </section>
@@ -411,13 +417,25 @@ export function mountAppShell(app: HTMLDivElement): void {
           <button id="course-elevation-up" type="button" aria-label="Ebene anheben">+</button>
         </div>
       </section>
+      <section class="rct-editor-section" id="course-direction-section">
+        <label>Richtung <b id="course-direction">↙</b></label>
+        <div class="path-direction-grid" id="course-direction-grid" hidden>
+          <button type="button" data-course-direction="3" class="path-dir-tile" title="Richtung bauen"><span>↖</span></button>
+          <button type="button" data-course-direction="2" class="path-dir-tile" title="Richtung bauen"><span>↗</span></button>
+          <button type="button" data-course-direction="0" class="path-dir-tile" title="Richtung bauen"><span>↙</span></button>
+          <button type="button" data-course-direction="1" class="path-dir-tile" title="Richtung bauen"><span>↘</span></button>
+        </div>
+        <div class="ride-height-controls" id="course-palette-build">
+          <button id="course-rotate" type="button" aria-label="Baurichtung drehen">↻</button>
+          <button id="course-build-piece" type="button" disabled>⚒ Am Ende bauen</button>
+        </div>
+      </section>
       <section class="rct-editor-section" id="course-team-section" hidden>
         <label for="course-team-size">Personen pro Team</label>
         <input id="course-team-size" type="number" min="1" max="8" value="2" />
       </section>
       <div class="construction-actions">
         <button id="course-undo" type="button" disabled>↶ Letztes Stück</button>
-        <button id="course-toggle-operating" type="button" disabled>Öffnen</button>
         <button id="demolish-course" class="demolish" type="button">💣 Abriss</button>
         <button id="finish-course-builder" class="primary" type="button">✓ Fertig</button>
       </div>
@@ -538,6 +556,17 @@ export function mountAppShell(app: HTMLDivElement): void {
           <label for="dispatch-interval">Maximale Wartezeit: <b id="dispatch-value">30 min</b></label>
           <input id="dispatch-interval" type="range" min="5" max="120" step="5" value="30" />
         </div>
+        <div id="course-options" class="coaster-options">
+          <label for="course-operation-mode">Betrieb</label>
+          <select id="course-operation-mode">
+            <option value="closed">Geschlossen</option>
+            <option value="open">Geöffnet</option>
+          </select>
+          <div class="entity-action-row">
+            <button id="edit-course-construction" type="button">🛠 Konstruktion öffnen</button>
+          </div>
+          <button id="demolish-course-inspect" class="demolish-coaster" type="button">💣 Attraktion abreißen</button>
+        </div>
         <div id="access-control-options" class="coaster-options" hidden>
           <p id="access-signal" class="visitor-thought">–</p>
           <label>Schaltung</label>
@@ -657,7 +686,7 @@ export function mountAppShell(app: HTMLDivElement): void {
         <button id="close-finance" class="panel-close-button" aria-label="Finanzen schließen">×</button>
       </div>
       <div class="finance-scroll"><table id="finance-table" class="finance-table"></table></div>
-      <p class="scenario-hint">Prognose morgen: laufende Kosten (Betrieb, Personal, Zinsen) exakt gerechnet, Besuchereinnahmen und Wareneinkauf aus dem letzten vollen Tag. Bau, Gelände und Gagen sind Entscheidungen und werden nicht vorhergesagt.</p>
+      <p class="scenario-hint">Prognose morgen: laufende Kosten (Betrieb, Personal, Zinsen) exakt gerechnet, Besuchereinnahmen und Wareneinkauf aus dem letzten vollen Tag. Bau, Gelände und Gagen sind Entscheidungen und werden nicht vorhergesagt. Klick auf Betriebskosten, Personal, Gagen oder Kreditzinsen klappt die aktuelle Aufschlüsselung auf.</p>
       <div class="finance-loan">
         <label for="finance-loan-amount">Darlehen</label>
         <div class="finance-loan-controls">

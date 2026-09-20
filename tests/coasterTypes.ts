@@ -20,6 +20,7 @@ import {
   isTrackPalettePieceEnabled,
   isTrackPitchChoiceCurrentlyEnabled,
   isTrackPitchChoiceEnabled,
+  listCoasterDirectionChoices,
   listTrackBankChoices,
   listTrackPalettePieces,
   listTrackPitchChoices,
@@ -56,6 +57,7 @@ import {
   catalogAllowsTrackPiece,
   coasterVehiclePreview,
   listPlayableCoasterCatalogTypes,
+  resolveCoasterEditorMode,
   resolveSupportedTrackPieces,
   type CoasterCatalogTypeId,
   type CoasterInversionAvailability,
@@ -72,6 +74,7 @@ import {
 } from '../src/game/coasters'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { GameState } from '../src/game/GameState'
+import { migrateSnapshot } from '../src/game/snapshotMigration'
 
 function mockCoasterPaletteButton(spec: CoasterPaletteButtonSpec): CoasterPaletteButtonNode {
   const attrs: Record<string, string> = {}
@@ -949,6 +952,20 @@ export function testCoasterTypes(fixture?: (n?: number) => GameState): void {
   assert.equal(listPlayableCoasterCatalogTypes().length, COASTER_CATALOG_TYPE_IDS.length)
   assert.equal(listPlayableCoasterCatalogTypes()[0]?.id, 'classicSteel')
   assert.deepEqual(Object.keys(COASTER_TYPES), [...COASTER_CATALOG_TYPE_IDS])
+  for (const typeId of COASTER_CATALOG_TYPE_IDS) {
+    assert.equal(
+      resolveCoasterEditorMode(typeId),
+      'palette',
+      `${typeId} keeps the RCT2 palette + large build button`,
+    )
+  }
+  assert.equal(resolveCoasterEditorMode('unknown-ride'), 'palette')
+  const arrowChoices = listCoasterDirectionChoices({ heading: 0, pitch: 0, bank: 0 }, 'classicSteel', true)
+  assert.equal(arrowChoices.find((choice) => choice.heading === 0)?.kind, 'straight')
+  assert.equal(arrowChoices.find((choice) => choice.heading === 0)?.enabled, true)
+  assert.equal(arrowChoices.find((choice) => choice.heading === 1)?.kind, 'curveRight1')
+  assert.equal(arrowChoices.find((choice) => choice.heading === 3)?.kind, 'curveLeft1')
+  assert.equal(arrowChoices.find((choice) => choice.heading === 2)?.enabled, false, 'the already-built heading stays closed')
   assert.ok(!COASTER_TYPES.classicSteel.supportedPieces.includes('helixLeft'))
   assert.ok(!COASTER_TYPES.classicSteel.supportedPieces.includes('helixRight'))
   assert.deepEqual(
@@ -1489,5 +1506,83 @@ export function testCoasterTypes(fixture?: (n?: number) => GameState): void {
   applyConstruction()
   assert.equal(constructionApplies, 2, 'an enabled pitch change must refresh the construction window')
 
+  testRctConstructionAndPersistence(fixture)
+
   console.log('PASS coaster type catalog, connection rules and playable type wiring')
+}
+
+/**
+ * The RCT2 construction loop: append at the selected open end, undo the last
+ * piece, delete a selected one, keep the start platform, refuse illegal pieces —
+ * and keep the canonical `attractions` record in step so a save keeps the ride
+ * even when other attractions already exist.
+ */
+function testRctConstructionAndPersistence(fixture: (n?: number) => GameState): void {
+  const game = fixture(0)
+  game.addDebugMoney()
+  const first = game.startCoaster('classicSteel', 6, 6)
+  assert.ok(first.ok && first.id, first.message)
+  const coasterId = first.id!
+
+  const station = game.getCoaster(coasterId)!.pieces[0]!
+  assert.equal(station.kind, 'station')
+  assert.ok(game.appendCoasterPiece(coasterId, 'straight', false).ok)
+  const climb = game.appendCoasterPiece(coasterId, 'slopeGentleUp', true)
+  assert.ok(climb.ok, climb.message)
+  const climbed = game.getCoaster(coasterId)!.pieces[2]!
+  assert.equal(climbed.chainLift, true, 'an uphill piece keeps the chain flag')
+  assert.equal(
+    Math.round((climbed.end.elevation - climbed.start.elevation) * 100) / 100,
+    0.5,
+    'a gentle climb rises half a tile',
+  )
+  assert.equal(
+    game.appendCoasterPiece(coasterId, 'halfLoopDown', false).ok,
+    false,
+    'a special that needs an inverted end stays refused',
+  )
+
+  assert.equal(game.getCoaster(coasterId)!.pieces.length, 3)
+  assert.ok(game.undoCoasterPiece(coasterId).ok)
+  assert.equal(game.getCoaster(coasterId)!.pieces.length, 2, 'undo drops the last piece')
+  assert.equal(
+    game.deleteCoasterPiece(coasterId, 0).ok,
+    false,
+    'the start platform cannot be deleted',
+  )
+  assert.ok(game.deleteCoasterPiece(coasterId, 1).ok)
+  assert.equal(game.getCoaster(coasterId)!.pieces.length, 1)
+  assert.equal(
+    game.undoCoasterPiece(coasterId).ok,
+    false,
+    'undo stops at the start platform',
+  )
+
+  // Build a second coaster: the loader used to prefer the canonical records and
+  // silently dropped every ride that only existed in the legacy array.
+  assert.ok(game.appendCoasterPiece(coasterId, 'straight', false).ok)
+  const second = game.startCoaster('wooden', -6, -6)
+  assert.ok(second.ok && second.id, second.message)
+  const record = game.getAttraction(coasterId)
+  assert.equal(record?.runtime.kind, 'coaster', 'the canonical record follows the editor')
+  assert.equal(
+    record?.layout.kind === 'track' ? record.layout.graph.edges.length : 0,
+    game.getCoaster(coasterId)!.pieces.length,
+  )
+
+  const reloaded = migrateSnapshot(structuredClone(game.snapshot))
+  assert.ok(reloaded, 'snapshot must migrate')
+  assert.equal(reloaded!.coasters.length, 2, 'both coasters survive a save round trip')
+  assert.equal(
+    reloaded!.coasters.find((entry) => entry.id === coasterId)?.pieces.length,
+    2,
+  )
+  assert.equal(
+    reloaded!.coasters.find((entry) => entry.id === coasterId)?.closed,
+    false,
+    'an open track must not report a closed circuit after loading',
+  )
+
+  assert.ok(game.removeCoaster(second.id!).ok)
+  assert.equal(game.getAttraction(second.id!), undefined, 'demolish drops the record too')
 }

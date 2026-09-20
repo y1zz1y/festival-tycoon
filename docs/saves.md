@@ -109,9 +109,14 @@ Camp und Müll rekonstruiert.
   Kurse, Camping-/Partyflächen und Rides einmalig. Pool wird in `swimArea`
   plus eigenständige Wasserrutschen aufgeteilt; nicht sicher konvertierbare
   Anlagen werden gemeldet und entfernt.
-  `coasters`, `courses`, `campingCells`, `campInstallations` und
-  `stageForecourtCells` werden beim Laden aus `attractions` als
-  Laufzeitprojektionen erzeugt und nicht unabhängig migriert.
+  `coasters` und `courses` werden beim Laden aus `attractions`
+  projiziert. `campingCells`, `campInstallations` und
+  `stageForecourtCells` bleiben die gespeicherten Live-Arrays, wenn
+  sie im Stand stehen; nur fehlende Arrays fallen auf die
+  `camping`-/`partyArea`-Projektion zurück. Anschließend schreibt
+  `refreshLegacyAttractionRecords` die Overlay-Datensätze nach, und
+  `syncStageAudience` baut bühnenzugehörige Vorplätze neu. Snapshot-
+  Version bleibt 33.
   `courses` (Kurs-Attraktionen): fehlend = `[]` via `normalizeCourses`.
   `CourseAttraction.areaCells` speichert die explizite Schwimmbad-/
   Paintball-Fläche; fehlt sie, werden alte `poolBasin`-/`paintballField`-
@@ -208,6 +213,9 @@ Camp und Müll rekonstruiert.
 - Die persönliche Baubibliothek (`BLUEPRINT_LIBRARY_KEY` /
   IndexedDB `headliner-tycoon-blueprints`) ist kein Snapshot-Feld und
   überschreibt keine Spielstände. Details: [blueprints.md](blueprints.md).
+- Der Bau-Undo-Stack (`undoLastBuild`) ist Host-Laufzeitzustand, kein
+  Snapshot-Feld. Nach dem Laden ist er leer. Parkplätze in Blueprints
+  sind Bibliothek-/Command-Payload, nicht Weltfelder.
 - `sealedWasteContainer` ist ein Gebäude-`kind` mit vorhandenem
   `wasteFill` (0–80, `waste.sealedContainerCapacity`). Alte Stände ohne
   das Kind bleiben unverändert. `RoadVehicle.target.kind` kann

@@ -2,9 +2,20 @@ import assert from 'node:assert/strict'
 import {
   COURSE_KINDS,
   COURSE_SPECS,
+  appendCoursePiece,
+  courseEditorMode,
+  courseGhostSpan,
+  courseNextBuildTarget,
   courseSpanCells,
+  courseTrackEnd,
+  courseUsesDirectionArrows,
+  createEmptyCourse,
   createSeededCourse,
+  describeCourseAppendIssue,
+  formatCourseInspect,
+  isCourseReadyToOperate,
   isCourseSwimCell,
+  listCourseDirectionChoices,
   stepCourses,
   validateCourse,
 } from '../src/game/courseAttractions'
@@ -61,7 +72,22 @@ export function testCourseAttractions(): void {
     const course = createSeededCourse(`c-${kind}`, kind, 4, 6)
     assert.equal(validateCourse(course), null, `${kind} default layout must reach the exit`)
     assert.ok(COURSE_SPECS[kind].startCost > 0)
+    assert.equal(isCourseReadyToOperate(course), true, `${kind} seed is inspectable`)
+    const inspect = formatCourseInspect(course, true)
+    assert.equal(inspect.typeLabel, COURSE_SPECS[kind].name)
+    assert.equal(inspect.lines.find((line) => line.label === 'Betrieb')?.value, 'Geöffnet')
+    assert.match(inspect.status, /geöffnet/i)
+    course.operating = false
+    const closedInspect = formatCourseInspect(course, true)
+    assert.equal(closedInspect.lines.find((line) => line.label === 'Betrieb')?.value, 'Geschlossen')
+    assert.match(closedInspect.status, /geschlossen/i)
+    course.operating = true
+    const scheduled = formatCourseInspect(course, false)
+    assert.match(scheduled.status, /Tagesplan/)
   }
+  const unfinished = createEmptyCourse('draft-inspect', 'mudmasters')
+  assert.equal(isCourseReadyToOperate(unfinished), false)
+  assert.match(formatCourseInspect(unfinished, true).status, /Eingang/)
   const mud = createSeededCourse('shape-mud', 'mudmasters', 0, 0)
   assert.ok(mud.pieces.some((piece) => piece.kind === 'climbWall'))
   assert.ok(mud.pieces.some((piece) => piece.kind === 'waterDitch'))
@@ -331,6 +357,74 @@ export function testCourseAttractions(): void {
     },
   })
   assert.ok(injured || fallen.state === 'injured', 'a waterslide without a basin injures the rider')
+
+  testCourseEditorFollowsTheTrackEditor()
+}
+
+/**
+ * The course editors build like the coaster editor: a piece is appended at the
+ * open end in the selected direction, the ghost shows that span before the click,
+ * undo peels the last piece off, and the canonical attraction record follows the
+ * edit so a save keeps the course.
+ */
+function testCourseEditorFollowsTheTrackEditor(): void {
+  const park = new GameState(
+    createBlankSnapshot(normalizeScenarioSettings({ worldSize: 48, unevenness: 0, startingMoney: 120_000 })),
+  )
+  const started = park.startCourse('mudmasters', 4, 0)
+  assert.ok(started.ok && started.id, started.message)
+  const courseId = started.id!
+  const course = park.getCourse(courseId)!
+  assert.equal(course.pieces.length, 1, 'a fresh parkour only owns its entrance')
+  assert.deepEqual(courseTrackEnd(course), { x: 4, z: 0, elevation: 0 })
+
+  assert.deepEqual(courseNextBuildTarget(course, 'path', 1, 0), { x: 5, z: 0, elevation: 0 })
+  assert.deepEqual(courseNextBuildTarget(course, 'path', 3, 0), { x: 3, z: 0, elevation: 0 })
+  assert.deepEqual(courseNextBuildTarget(course, 'climbWall', 0, 1), { x: 4, z: 1, elevation: 1 })
+  const ghost = courseGhostSpan(course, 'path', 1, 0)
+  assert.deepEqual(
+    ghost?.cells,
+    [{ x: 4, z: 0 }, { x: 5, z: 0 }],
+    'the ghost spans from the open end to the next field',
+  )
+  assert.equal(ghost?.valid, true)
+
+  const forward = courseNextBuildTarget(course, 'path', 1, 0)!
+  assert.ok(park.addCoursePiece(courseId, 'path', forward.x, forward.z, forward.elevation).ok)
+  assert.deepEqual(courseTrackEnd(course), { x: 5, z: 0, elevation: 0 })
+  const climb = courseNextBuildTarget(course, 'climbWall', 1, 1)!
+  assert.ok(park.addCoursePiece(courseId, 'climbWall', climb.x, climb.z, climb.elevation).ok)
+  assert.deepEqual(courseTrackEnd(course), { x: 6, z: 0, elevation: 1 }, 'elevation follows the build height')
+  assert.equal(course.pieces.length, 3)
+
+  assert.ok(park.undoCoursePiece(courseId).ok)
+  assert.equal(course.pieces.length, 2, 'undo removes the last piece only')
+  assert.deepEqual(courseTrackEnd(course), { x: 5, z: 0, elevation: 0 })
+
+  // Area courses keep their own rule: the ghost already reports a span that
+  // leaves the pool, so the preview turns red before the click is refused.
+  const poolStart = park.startCourseArea('pool', [
+    { x: 12, z: 0 },
+    { x: 13, z: 0 },
+  ])
+  assert.ok(poolStart.ok && poolStart.id, poolStart.message)
+  const pool = park.getCourse(poolStart.id!)!
+  assert.ok(park.addCoursePiece(pool.id, 'entrance', 12, 0).ok)
+  assert.equal(courseGhostSpan(pool, 'ladder', 1, 0)?.valid, true)
+  assert.equal(
+    courseGhostSpan(pool, 'ladder', 3, 0)?.valid,
+    false,
+    'a span leaving the pool area is not a valid ghost',
+  )
+
+  const record = park.getAttraction(courseId)
+  assert.equal(record?.runtime.kind, 'course', 'the canonical record follows the course editor')
+  const reloaded = new GameState(structuredClone(park.snapshot))
+  assert.equal(reloaded.getCourse(courseId)?.pieces.length, 2, 'a save keeps the edited course')
+  assert.equal(reloaded.getCourse(pool.id)?.areaCells.length, 2)
+
+  assert.ok(park.removeCourse(pool.id).ok)
+  assert.equal(park.getAttraction(pool.id), undefined, 'demolish drops the canonical record too')
 }
 
 export function testPostRefactorBacklog(): void {
@@ -355,11 +449,13 @@ export function testPostRefactorBacklog(): void {
   const booth = { kind: 'food' as const }
   const full = buildingHourlyUpkeep(booth, { festivalLive: true, onBreak: false })
   const reduced = buildingHourlyUpkeep(booth, { festivalLive: true, onBreak: true })
-  assert.ok(reduced < full * 0.3, 'booths drop upkeep hard during a day-plan break')
+  const idleBooth = buildingHourlyUpkeep(booth, { festivalLive: false, onBreak: false })
+  assert.ok(reduced < full * 0.1, 'booths drop upkeep hard during a day-plan break')
+  assert.ok(idleBooth < full * 0.1, 'booths sit at idle upkeep when the festival is not live')
   const stage = { kind: 'stage' as const }
   const liveStage = buildingHourlyUpkeep(stage, { festivalLive: true, onBreak: false })
   const idleStage = buildingHourlyUpkeep(stage, { festivalLive: false, onBreak: false })
-  assert.ok(idleStage < liveStage, 'inactive festival stages pay less upkeep')
+  assert.ok(idleStage < liveStage * 0.1, 'inactive festival stages pay idle upkeep')
   const equippedDesign = defaultStageDesign()
   equippedDesign.parts.push({
     id: 'upkeep-truss',
@@ -396,5 +492,39 @@ export function testPostRefactorBacklog(): void {
   assert.ok(estimateTicketDemand(game.snapshot, { day: dayPrice, camping: campPrice }).expectedDayGuests > 0)
   assert.ok(BANDS.some((band) => isFiveStarBand(band)))
   assert.ok(BANDS.some((band) => bandStarRating(band) === 1))
+
+  assert.equal(courseEditorMode('mudmasters'), 'directionArrows')
+  assert.equal(courseEditorMode('treeToTree'), 'directionArrows')
+  assert.equal(courseEditorMode('pool'), 'directionArrows')
+  assert.equal(courseEditorMode('paintball'), 'palette')
+  assert.equal(COURSE_SPECS.mudmasters.editorMode, 'directionArrows')
+  assert.equal(courseUsesDirectionArrows('paintball'), false)
+  const arrowCourse = createEmptyCourse('arrow-course', 'mudmasters')
+  assert.deepEqual(listCourseDirectionChoices(arrowCourse, 'path'), [])
+  assert.notEqual(appendCoursePiece(arrowCourse, 'entrance', 4, 4, 0), 'string')
+  const openArrows = listCourseDirectionChoices(arrowCourse, 'path')
+  assert.equal(openArrows.length, 4)
+  assert.ok(openArrows.every((choice) => choice.enabled), 'an isolated entrance can grow in every neighbor heading')
+  const before = arrowCourse.pieces.length
+  assert.equal(describeCourseAppendIssue(arrowCourse, 'path', 5, 4), null)
+  assert.equal(arrowCourse.pieces.length, before, 'direction checks must not mutate the course')
+  assert.notEqual(appendCoursePiece(arrowCourse, 'path', 5, 4, 1), 'string')
+  const continued = listCourseDirectionChoices(arrowCourse, 'path')
+  const backward = continued.find((choice) => choice.heading === 3)
+  assert.equal(backward?.x, 4)
+  assert.equal(backward?.z, 4)
+  assert.equal(backward?.enabled, false, 'the already-built heading stays disabled')
+  assert.ok(
+    continued.filter((choice) => choice.enabled).length === 3,
+    'only unbuilt neighbor headings stay clickable',
+  )
+  const trees = createEmptyCourse('tree-arrows', 'treeToTree')
+  assert.notEqual(appendCoursePiece(trees, 'entrance', 0, 0, 0), 'string')
+  assert.deepEqual(
+    listCourseDirectionChoices(trees, 'tree'),
+    [],
+    'free-placed trees are not path-led neighbor arrows',
+  )
+
   console.log('PASS course attractions, pause upkeep, built-area atmosphere, ticket demand and star bands')
 }

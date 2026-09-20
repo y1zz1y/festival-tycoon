@@ -28,7 +28,8 @@ import {
   listBlueprintLibrary,
   saveBlueprintLibraryEntry,
 } from './game/blueprintLibrary'
-import { FINANCE_CATEGORIES, FINANCE_CATEGORY_NAMES, financeEntriesTotal, financePeriodTotal } from './game/finance'
+import { type FinanceCategory } from './game/finance'
+import { applyFinanceBreakdownToggle, formatLedgerEuro, renderFinanceLedger, toggleFinanceCategory } from './ui/financePanel'
 import { goalName, goalProgressText } from './game/scenarioGoals'
 import { refreshAccount } from './accounts'
 import { installUnsavedWorkGuard, setUnsavedWarnings, trackUnsavedWork } from './ui/unsavedWork'
@@ -63,6 +64,7 @@ import {
   isTrackBankChoiceCurrentlyEnabled,
   isTrackPalettePieceEnabled,
   isTrackPitchChoiceCurrentlyEnabled,
+  listCoasterDirectionChoices,
   resolveNextTrackPiece,
   type CoasterWindowState,
 } from './game/coasterConnections'
@@ -129,6 +131,12 @@ import { startGameLoop } from './app/gameLoop'
 import { mountAppShell } from './app/shell'
 import { applyDirectCellTool } from './input/toolRouter'
 import {
+  confirmAction,
+  removableCoastersAtCells,
+  rideDemolishPrompt,
+  wouldBulldozeRemoveCoaster,
+} from './ui/confirmDialog'
+import {
   handleCoasterCell,
   handleInspectCell,
   handlePathEditorCell,
@@ -149,21 +157,20 @@ import { contextHelpText } from './ui/contextHelp'
 import { updateCoasterBuilderPanel } from './ui/coasterBuilderPanel'
 import {
   defaultCoursePiece,
+  normalizeCourseRotation,
   orderedCourseLineTargets,
   renderCourseBuilderPanel,
   type CourseBuilderTool,
 } from './ui/courseBuilderPanel'
-import {
-  renderAttractionBuilderPanel,
-  type AttractionBuilderState,
-} from './ui/attractionBuilderPanel'
-import { createAttraction } from './game/attractions/factory'
-import { getAttractionDefinition } from './game/attractions/definitions'
-import { openTrackNodeIds } from './game/attractions/trackGraph'
 import { mountVisitorPanel } from './ui/visitorPanel'
 import {
   COURSE_PIECE_ELEVATION,
+  courseGhostSpan,
+  courseNextBuildTarget,
   coursePaintMode,
+  courseUsesDirectionArrows,
+  listCourseDirectionChoices,
+  validateCourse,
   type CourseKind,
 } from './game/courseAttractions'
 
@@ -239,7 +246,7 @@ const weatherStat = requireElement<HTMLElement>('#weather-stat')
 const weatherIcon = requireElement<HTMLElement>('#weather-icon')
 const weatherName = requireElement<HTMLElement>('#weather')
 const temperature = requireElement<HTMLElement>('#temperature')
-const toggleParkButton = requireElement<HTMLButtonElement>('#toggle-park')
+const undoLastBuildButton = requireElement<HTMLButtonElement>('#undo-last-build')
 const logisticsOverlayButton =
   requireElement<HTMLButtonElement>('#toggle-logistics-overlay')
 const crowdingOverlayButton =
@@ -498,8 +505,6 @@ let coasterSelectedKind: TrackPieceKind = 'station'
 let lastCoasterConstructionKey: string | null = null
 let courseBuilderActive = false
 let activeCourseId: string | null = null
-let activeAttractionId: string | null = null
-let attractionBuilderState: AttractionBuilderState | null = null
 let selectedCoursePiece: CourseBuilderTool = 'entrance'
 let courseBuildElevation = 0
 let selectedEntity: EntitySelection | null = null
@@ -586,14 +591,13 @@ pathToolController = createPathToolController({
   applyCopySelection,
   demolish: demolishPathAt,
   showToast,
+  confirmAreaDemolish: (cells) => {
+    const rides = removableCoastersAtCells(game, cells)
+    if (rides.length === 0) return true
+    return confirmAction(rideDemolishPrompt('coaster', rides.map((ride) => ride.name)))
+  },
   coursePaintMode: () => {
     if (!courseBuilderActive || game.snapshot.selectedTool !== 'course') return null
-    if (attractionBuilderState) {
-      if (attractionBuilderState.mode === 'areaAdd' || attractionBuilderState.mode === 'areaErase') {
-        return 'area'
-      }
-      return attractionBuilderState.mode === 'track' ? 'line' : null
-    }
     const mode =
       selectedCoursePiece === 'area' || selectedCoursePiece === 'areaErase'
         ? 'area'
@@ -856,17 +860,8 @@ function bindGameState(nextGame: GameState): void {
     weatherName.textContent = WEATHER_NAMES[weather]
     temperature.textContent = formatTemperature(celsius)
     weatherStat.title = `Wetter: ${WEATHER_NAMES[weather]} · ${formatTemperature(celsius)} · Bodennässe ${Math.round(snapshot.festival.wetness)} %`
-    toggleParkButton.textContent = snapshot.parkOpen ? '🔓' : '🔒'
-    toggleParkButton.disabled = Boolean(snapshot.festival.planning || snapshot.festival.finished)
-    toggleParkButton.title = toggleParkButton.disabled
-      ? 'Start über das Festivalmenü'
-      : snapshot.parkOpen
-        ? 'Park schließen'
-        : snapshot.festival.planning || snapshot.festival.finished
-          ? 'Gelände eröffnen'
-          : 'Park öffnen'
-    toggleParkButton.setAttribute('aria-label', toggleParkButton.title)
-    toggleParkButton.classList.toggle('park-closed', !snapshot.parkOpen)
+    undoLastBuildButton.title = 'Rückgängig'
+    undoLastBuildButton.setAttribute('aria-label', 'Rückgängig')
     const crowdingAverage = Math.round(snapshot.crowding.average)
     averageCrowding.textContent = `${crowdingAverage}%`
     averageCrowdingBar.style.width = `${crowdingAverage}%`
@@ -1615,10 +1610,24 @@ function handleCellClick(cell: CellPosition): void {
     openRide: openRideBuilder, openBuilding: openEntityInfoForBuilding, openDepot: openEntityInfoForDepot,
     openWasteDump: openEntityInfoForWasteDump, openBackstage: openEntityInfoForBackstage,
     openCourseBuilder: (id) => openCourseBuilder(id),
-    openAttractionBuilder: (id) => openAttractionBuilder(id),
+    openCourse: openEntityInfoForCourse,
     toast: showToast,
   })) return
 
+  if (tool === 'bulldoze') {
+    const hit = wouldBulldozeRemoveCoaster(game, cell)
+    if (hit) {
+      void confirmAction(rideDemolishPrompt('coaster', hit.name)).then((ok) => {
+        if (ok) applyRoutedCellTool(cell)
+      })
+      return
+    }
+  }
+  applyRoutedCellTool(cell)
+}
+
+function applyRoutedCellTool(cell: CellPosition): void {
+  const tool = game.snapshot.selectedTool
   const routed = applyDirectCellTool(game, cell, {
     pathConstructionType,
     pathDirection,
@@ -1683,13 +1692,24 @@ function updateCopyPreview(cell: CellPosition | null): void {
     (preview.placements ?? []).map((entry) => ({
       x: entry.x,
       z: entry.z,
-      kind: entry.item.type === 'road' ? 'road' : entry.item.kind,
-      rotation: entry.item.type === 'road' ? entry.item.slopeDirection : entry.item.rotation,
+      kind:
+        entry.item.type === 'road'
+          ? 'road'
+          : entry.item.type === 'parking'
+            ? 'parking'
+            : entry.item.kind,
+      rotation:
+        entry.item.type === 'road'
+          ? entry.item.slopeDirection
+          : entry.item.type === 'parking'
+            ? 0
+            : entry.item.rotation,
       decorationSlot: entry.item.type === 'building' ? entry.item.decorationSlot : undefined,
-      elevationOffset: entry.item.elevationOffset,
+      elevationOffset: entry.item.type === 'parking' ? 0 : entry.item.elevationOffset,
       valid: entry.valid,
       isRoad: entry.item.type === 'road',
       isPath: entry.item.type === 'building' && entry.item.kind === 'path',
+      isParking: entry.item.type === 'parking',
     })),
   )
 }
@@ -2107,16 +2127,6 @@ function updatePathEditor(): void {
 }
 
 function openCoasterBuilder(coasterId: string | null = null, typeId?: CoasterTypeId): void {
-  if (!coasterId) {
-    const selectedType = getCoasterType(typeId ?? pendingCoasterTypeId).id
-    pendingCoasterTypeId = selectedType
-    openAttractionDefinition(`coaster:${selectedType}`)
-    return
-  }
-  if (game.getAttraction(coasterId)) {
-    openAttractionBuilder(coasterId)
-    return
-  }
   closeRideBuilder(false)
   if (courseBuilderActive) closeCourseBuilder()
   buildMenuPanel.hidden = true
@@ -2162,84 +2172,6 @@ function closeCoasterBuilder(): void {
   view.setCoasterTrackSelection([])
 }
 
-function openAttractionBuilder(attractionId: string): void {
-  const attraction = game.getAttraction(attractionId)
-  if (!attraction) return
-  closeRideBuilder(false)
-  if (coasterBuilderActive) closeCoasterBuilder()
-  if (pathWindowOpen) closePathEditor()
-  closeEntityPanel()
-  closeBuildMenu()
-  supplyPlanner.releaseTool()
-  hideVisitorPanel()
-  const definition = getAttractionDefinition(attraction.definitionId)
-  pendingCourseKind =
-    attraction.runtime.kind === 'course'
-      ? attraction.runtime.courseKind
-      : 'mudmasters'
-  courseBuilderActive = true
-  activeCourseId = null
-  activeAttractionId = attraction.id
-  attractionBuilderState = {
-    attraction,
-    mode: attraction.layout.kind === 'area'
-      ? 'areaAdd'
-      : attraction.layout.kind === 'scripted'
-        ? 'scripted'
-        : attraction.access.entrance
-          ? 'track'
-          : 'entrance',
-    selectedKind: definition?.pieceKinds.find((kind) => kind !== 'station') ??
-      definition?.allowedReferences?.[0] ??
-      'path',
-    direction: game.snapshot.buildRotation as 0 | 1 | 2 | 3,
-    elevationDelta: 0,
-    banking: 0,
-  }
-  game.setTool('course')
-  updateCourseBuilder()
-}
-
-function openAttractionDefinition(definitionId: string): void {
-  const attraction = createAttraction(
-    'preview-attraction',
-    definitionId,
-    0,
-    0,
-    0,
-    game.snapshot.buildRotation as 0 | 1 | 2 | 3,
-  )
-  const definition = getAttractionDefinition(definitionId)
-  if (!attraction || !definition) return
-  closeRideBuilder(false)
-  if (coasterBuilderActive) closeCoasterBuilder()
-  if (pathWindowOpen) closePathEditor()
-  closeEntityPanel()
-  closeBuildMenu()
-  supplyPlanner.releaseTool()
-  hideVisitorPanel()
-  pendingCourseKind = 'mudmasters'
-  courseBuilderActive = true
-  activeCourseId = null
-  activeAttractionId = null
-  attractionBuilderState = {
-    attraction,
-    mode: attraction.layout.kind === 'track'
-      ? definitionId.startsWith('coaster:') ? 'track' : 'entrance'
-      : attraction.layout.kind === 'area'
-        ? 'areaAdd'
-        : 'scripted',
-    selectedKind: definitionId.startsWith('coaster:')
-      ? 'station'
-      : definition.pieceKinds[0] ?? definition.allowedReferences?.[0] ?? 'path',
-    direction: game.snapshot.buildRotation as 0 | 1 | 2 | 3,
-    elevationDelta: 0,
-    banking: 0,
-  }
-  game.setTool('course')
-  updateCourseBuilder()
-}
-
 function openCourseBuilder(courseId: string | null = null, kind?: CourseKind): void {
   closeRideBuilder(false)
   if (coasterBuilderActive) closeCoasterBuilder()
@@ -2249,42 +2181,10 @@ function openCourseBuilder(courseId: string | null = null, kind?: CourseKind): v
   supplyPlanner.releaseTool()
   hideVisitorPanel()
   const existing = courseId ? game.getCourse(courseId) : undefined
-  const canonical = courseId
-    ? game.snapshot.attractions.find((attraction) => attraction.id === courseId)
-    : undefined
   pendingCourseKind = existing?.kind ?? kind ?? pendingCourseKind
   if (!pendingCourseKind) return
   courseBuilderActive = true
-  activeCourseId = canonical ? null : existing?.id ?? null
-  activeAttractionId = canonical?.id ?? null
-  const definitionId =
-    pendingCourseKind === 'mudmasters' || pendingCourseKind === 'treeToTree'
-      ? `course:${pendingCourseKind}`
-      : pendingCourseKind === 'paintball'
-        ? 'paintball'
-        : 'swimArea'
-  const attraction = canonical ?? createAttraction(
-    'preview-attraction',
-    definitionId,
-    0,
-    0,
-    0,
-    game.snapshot.buildRotation as 0 | 1 | 2 | 3,
-  )
-  attractionBuilderState = attraction
-    ? {
-        attraction,
-        mode: attraction.layout.kind === 'area'
-          ? 'areaAdd'
-          : attraction.access.entrance
-            ? 'track'
-            : 'entrance',
-        selectedKind: attraction.layout.kind === 'track' ? 'path' : 'areaAdd',
-        direction: game.snapshot.buildRotation as 0 | 1 | 2 | 3,
-        elevationDelta: 0,
-        banking: 0,
-      }
-    : null
+  activeCourseId = existing?.id ?? null
   selectedCoursePiece = existing
     ? existing.kind === 'paintball' || existing.kind === 'pool'
       ? 'area'
@@ -2302,22 +2202,14 @@ function openCourseBuilder(courseId: string | null = null, kind?: CourseKind): v
 
 function closeCourseBuilder(): void {
   courseBuilderActive = false
-  activeAttractionId = null
-  attractionBuilderState = null
   courseBuilder.classList.remove('visible')
+  view.setCourseConstructionPreview([])
 }
 
 function updateCourseBuilder(): void {
   if (!courseBuilderActive || !pendingCourseKind) {
     courseBuilder.classList.remove('visible')
-    return
-  }
-  if (attractionBuilderState) {
-    const current = activeAttractionId
-      ? game.snapshot.attractions.find((attraction) => attraction.id === activeAttractionId)
-      : undefined
-    if (current) attractionBuilderState = { ...attractionBuilderState, attraction: current }
-    renderAttractionBuilderPanel(courseBuilder, attractionBuilderState)
+    view.setCourseConstructionPreview([])
     return
   }
   const course = activeCourseId ? game.getCourse(activeCourseId) ?? null : null
@@ -2327,236 +2219,50 @@ function updateCourseBuilder(): void {
     course,
     selectedKind: selectedCoursePiece,
     elevation: courseBuildElevation,
+    buildRotation: game.snapshot.buildRotation,
+    cameraQuarter,
   })
-}
-
-function ensureActiveAttraction(cell: CellPosition): string | null {
-  if (activeAttractionId) return activeAttractionId
-  if (!attractionBuilderState) return null
-  const result = game.startAttraction(
-    attractionBuilderState.attraction.definitionId,
-    cell.x,
-    cell.z,
-    attractionBuilderState.direction,
+  const arrowChoices =
+    course &&
+    selectedCoursePiece !== 'area' &&
+    selectedCoursePiece !== 'areaErase' &&
+    courseUsesDirectionArrows(pendingCourseKind)
+      ? listCourseDirectionChoices(course, selectedCoursePiece, courseBuildElevation)
+      : []
+  const ghost =
+    arrowChoices.length > 0
+      ? null
+      : course && selectedCoursePiece !== 'area' && selectedCoursePiece !== 'areaErase'
+        ? courseGhostSpan(
+            course,
+            selectedCoursePiece,
+            normalizeCourseRotation(game.snapshot.buildRotation),
+            courseBuildElevation,
+          )
+        : null
+  view.setCourseConstructionPreview(
+    arrowChoices.length > 0
+      ? arrowChoices
+          .filter((choice) => choice.enabled)
+          .map((choice) => ({
+            x: choice.x,
+            z: choice.z,
+            elevation: choice.elevation,
+            valid: true,
+          }))
+      : ghost
+        ? ghost.cells.map((cell) => ({
+            x: cell.x,
+            z: cell.z,
+            elevation: ghost.elevation,
+            valid: ghost.valid,
+          }))
+        : [],
   )
-  if (!result.ok || !result.placedId) {
-    showToast(result.message, true)
-    return null
-  }
-  activeAttractionId = result.placedId
-  const current = game.snapshot.attractions.find((attraction) => attraction.id === result.placedId)
-  if (current) attractionBuilderState = { ...attractionBuilderState, attraction: current }
-  return activeAttractionId
-}
-
-function placeAttractionAt(cell: CellPosition): void {
-  if (!attractionBuilderState) return
-  const attractionId = ensureActiveAttraction(cell)
-  if (!attractionId) return
-  const point = {
-    x: cell.x,
-    z: cell.z,
-    elevation: game.getTerrainHeight(cell.x, cell.z),
-    heading: attractionBuilderState.direction * Math.PI / 2,
-  }
-  let request
-  if (attractionBuilderState.mode === 'entrance') {
-    request = { kind: 'setEntrance' as const, attractionId, point }
-  } else if (attractionBuilderState.mode === 'exit') {
-    request = { kind: 'setExit' as const, attractionId, point }
-  } else if (attractionBuilderState.mode === 'reference') {
-    request = {
-      kind: 'placeReference' as const,
-      attractionId,
-      reference: {
-        id: `${attractionId}-reference-${game.snapshot.simTick}-${cell.x}-${cell.z}`,
-        kind: attractionBuilderState.selectedKind,
-        x: cell.x,
-        z: cell.z,
-        elevation: point.elevation,
-        rotation: attractionBuilderState.direction,
-      },
-    }
-  } else if (attractionBuilderState.mode === 'scripted') {
-    request = {
-      kind: 'addScriptedSegment' as const,
-      attractionId,
-      segmentKind: attractionBuilderState.selectedKind,
-    }
-  } else if (attractionBuilderState.mode === 'trackDelete') {
-    const attraction = game.getAttraction(attractionId)
-    const edge = attraction?.layout.kind === 'track'
-      ? attraction.layout.graph.edges.find((candidate) =>
-          candidate.points.some((candidatePoint) =>
-            Math.floor(candidatePoint.x) === cell.x &&
-            Math.floor(candidatePoint.z) === cell.z
-          ),
-        )
-      : undefined
-    if (!edge) {
-      showToast('Kein Streckenteil auf diesem Feld.', true)
-      return
-    }
-    request = {
-      kind: 'removeTrackEdge' as const,
-      attractionId,
-      edgeId: edge.id,
-    }
-  } else {
-    placeAttractionCells([cell])
-    return
-  }
-  const result = game.constructAttraction(request)
-  if (result.ok && attractionBuilderState.mode === 'entrance') {
-    attractionBuilderState.mode =
-      attractionBuilderState.attraction.layout.kind === 'track' ? 'track' : 'areaAdd'
-  }
-  showToast(result.message, !result.ok)
-  updateCourseBuilder()
-}
-
-function placeAttractionCells(cells: ReadonlyArray<CellPosition>): void {
-  if (!attractionBuilderState || cells.length === 0) return
-  const attractionId = ensureActiveAttraction(cells[0]!)
-  if (!attractionId) return
-  const state = attractionBuilderState
-  if (state.mode === 'areaAdd' || state.mode === 'areaErase') {
-    const request = {
-      kind: state.mode === 'areaAdd' ? 'addAreaCells' as const : 'removeAreaCells' as const,
-      attractionId,
-      cells: cells.map((cell) => ({
-        x: cell.x,
-        z: cell.z,
-        elevation: game.getTerrainHeight(cell.x, cell.z),
-      })),
-    }
-    const result = game.constructAttraction(request)
-    showToast(result.message, !result.ok)
-    updateCourseBuilder()
-    return
-  }
-  if (state.mode !== 'track') {
-    placeAttractionAt(cells[0]!)
-    return
-  }
-  const currentTrack = game.snapshot.attractions.find((candidate) => candidate.id === attractionId)
-  if (cells.length === 1 && currentTrack?.layout.kind === 'track') {
-    const cell = cells[0]!
-    const openIds = new Set(openTrackNodeIds(currentTrack.layout.graph))
-    const selected = currentTrack.layout.graph.nodes.find((node) =>
-      openIds.has(node.id) &&
-      Math.floor(node.anchor.x) === cell.x &&
-      Math.floor(node.anchor.z) === cell.z
-    )
-    if (selected && selected.id !== currentTrack.layout.selectedOpenNodeId) {
-      const result = game.constructAttraction({
-        kind: 'selectOpenNode',
-        attractionId,
-        nodeId: selected.id,
-      })
-      showToast(result.ok ? 'Offenes Streckenende ausgewählt.' : result.message, !result.ok)
-      updateCourseBuilder()
-      return
-    }
-  }
-  for (const cell of cells) {
-    const attraction = game.snapshot.attractions.find((candidate) => candidate.id === attractionId)
-    if (!attraction || attraction.layout.kind !== 'track') break
-    const layout = attraction.layout
-    const selectedNode = layout.graph.nodes.find((node) =>
-      node.id === layout.selectedOpenNodeId
-    )
-    const from = selectedNode ?? {
-      id: `${attractionId}-start`,
-      anchor: {
-        x: attraction.access.entrance?.x ?? cell.x,
-        z: attraction.access.entrance?.z ?? cell.z,
-        elevation: attraction.access.entrance?.elevation ?? game.getTerrainHeight(cell.x, cell.z),
-        heading: state.direction * Math.PI / 2,
-        pitch: 0,
-        bank: state.banking * Math.PI / 6,
-      },
-    }
-    let targetX = cell.x
-    let targetZ = cell.z
-    if (
-      layout.graph.edges.length === 0 &&
-      targetX === from.anchor.x &&
-      targetZ === from.anchor.z
-    ) {
-      const forward = [
-        { x: 0, z: -1 },
-        { x: 1, z: 0 },
-        { x: 0, z: 1 },
-        { x: -1, z: 0 },
-      ][state.direction]
-      targetX += forward.x
-      targetZ += forward.z
-    }
-    if (targetX === from.anchor.x && targetZ === from.anchor.z) continue
-    const deltaX = targetX - from.anchor.x
-    const deltaZ = targetZ - from.anchor.z
-    if (Math.abs(deltaX) + Math.abs(deltaZ) !== 1) {
-      showToast('Die Strecke muss Feld für Feld am offenen Ende weitergebaut werden.', true)
-      break
-    }
-    const elevation = from.anchor.elevation + state.elevationDelta
-    const heading = Math.atan2(deltaX, -deltaZ)
-    const reconnectNode = layout.graph.nodes.find((node) =>
-      node.id !== from.id &&
-      Math.abs(node.anchor.x - targetX) < 0.01 &&
-      Math.abs(node.anchor.z - targetZ) < 0.01 &&
-      Math.abs(node.anchor.elevation - elevation) < 0.01
-    )
-    const to = reconnectNode ?? {
-      id: `${attractionId}-node-${game.snapshot.simTick}-${layout.graph.nodes.length}-${targetX}-${targetZ}`,
-      anchor: {
-        x: targetX,
-        z: targetZ,
-        elevation,
-        heading,
-        pitch: Math.atan2(state.elevationDelta, 1),
-        bank: state.banking * Math.PI / 6,
-      },
-    }
-    const edge = {
-      id: `${attractionId}-edge-${game.snapshot.simTick}-${layout.graph.edges.length}`,
-      kind: state.selectedKind,
-      fromNodeId: from.id,
-      toNodeId: to.id,
-      points: [
-        { x: from.anchor.x, z: from.anchor.z, elevation: from.anchor.elevation, heading: from.anchor.heading },
-        { x: to.anchor.x, z: to.anchor.z, elevation: to.anchor.elevation, heading },
-      ],
-      cost: 0,
-      metadata: { banking: state.banking, elevationDelta: state.elevationDelta },
-    }
-    const result = game.constructAttraction({
-      kind: 'addTrackEdge',
-      attractionId,
-      edge,
-      from,
-      to,
-    })
-    if (!result.ok) {
-      showToast(result.message, true)
-      break
-    }
-  }
-  updateCourseBuilder()
 }
 
 function handleCourseCell(cell: CellPosition): boolean {
   if (!courseBuilderActive && game.snapshot.selectedTool !== 'course') return false
-  if (attractionBuilderState) {
-    const drag =
-      attractionBuilderState.mode === 'areaAdd' ||
-      attractionBuilderState.mode === 'areaErase' ||
-      attractionBuilderState.mode === 'track'
-    if (drag) placeCourseCells([cell])
-    else placeAttractionAt(cell)
-    return true
-  }
   const dragTool =
     selectedCoursePiece === 'area' ||
     selectedCoursePiece === 'areaErase' ||
@@ -2570,10 +2276,6 @@ function handleCourseCell(cell: CellPosition): boolean {
 }
 
 function placeCourseCells(cells: ReadonlyArray<CellPosition>): void {
-  if (attractionBuilderState) {
-    placeAttractionCells(cells)
-    return
-  }
   if (!pendingCourseKind) {
     showToast('Kein Kurstyp gewählt.', true)
     return
@@ -2631,6 +2333,26 @@ function placeCourseCells(cells: ReadonlyArray<CellPosition>): void {
   for (const cell of cells) last = placeCourseAt(cell, true)
   if (last) showToast(last.message, !last.ok)
   updateCourseBuilder()
+}
+
+/**
+ * Course counterpart to `buildCoasterPiece`: place the selected piece one field
+ * ahead of the open end in the current build direction, without clicking the map.
+ */
+function buildCoursePieceAtEnd(): void {
+  const course = activeCourseId ? game.getCourse(activeCourseId) : undefined
+  if (!course || selectedCoursePiece === 'area' || selectedCoursePiece === 'areaErase') return
+  const target = courseNextBuildTarget(
+    course,
+    selectedCoursePiece,
+    normalizeCourseRotation(game.snapshot.buildRotation),
+    courseBuildElevation,
+  )
+  if (!target) {
+    showToast('Setze zuerst den Eingang der Strecke.', true)
+    return
+  }
+  placeCourseAt({ x: target.x, z: target.z })
 }
 
 function placeCourseAt(cell: CellPosition, quiet = false): { ok: boolean; message: string } {
@@ -2839,6 +2561,7 @@ function updateCoasterBuilder(): void {
     selection: trackSelection, deleteTrack: deleteTrackButton, directionPalette: trackDirectionPalette,
     slopePalette: trackSlopePalette, bankPalette: trackBankPalette, specialPalette: trackSpecialPalette,
     specialToggle: trackSpecialToggle,
+    directionGrid: document.querySelector<HTMLElement>('#coaster-direction-grid') ?? undefined,
   }, view)
   lastCoasterConstructionKey = result.key
   coasterEditIndex = result.editIndex
@@ -3048,6 +2771,17 @@ function openEntityInfoForBuilding(buildingId: string): void {
 function openEntityInfoForCoaster(coasterId: string): void {
   closeRideBuilder(false)
   selectedEntity = { type: 'coaster', id: coasterId }
+  entityTab = 'overview'
+  hideVisitorPanel()
+  view.setInspectedVehicle(null)
+  entityPanel.hidden = false
+  updateEntityPanel()
+}
+
+function openEntityInfoForCourse(courseId: string): void {
+  closeRideBuilder(false)
+  if (courseBuilderActive) closeCourseBuilder()
+  selectedEntity = { type: 'course', id: courseId }
   entityTab = 'overview'
   hideVisitorPanel()
   view.setInspectedVehicle(null)
@@ -3649,13 +3383,8 @@ const financeLoanStatus = requireElement<HTMLElement>('#finance-loan-status')
 const financeGoals = requireElement<HTMLElement>('#finance-goals')
 const financeGoalList = requireElement<HTMLElement>('#finance-goal-list')
 makeDraggable(financePanel.querySelector<HTMLElement>('.panel-header')!, financePanel)
-const euro = (value: number): string =>
-  `${value < 0 ? '−' : ''}${Math.abs(Math.round(value)).toLocaleString('de-DE')} €`
-/** Same line the ledger of every tycoon game draws: a signed figure, red when it leaves. */
-const ledgerCell = (value: number | undefined, extra = ''): string =>
-  value === undefined || Math.round(value) === 0
-    ? `<td class="finance-empty ${extra}"></td>`
-    : `<td class="${value < 0 ? 'finance-out' : 'finance-in'} ${extra}">${value > 0 ? '+' : '−'}${Math.abs(Math.round(value)).toLocaleString('de-DE')} €</td>`
+const euro = (value: number): string => formatLedgerEuro(value)
+const expandedFinanceRows = new Set<FinanceCategory>()
 
 let financeFingerprint = ''
 function updateFinancePanel(force = false): void {
@@ -3667,22 +3396,12 @@ function updateFinancePanel(force = false): void {
   financeFingerprint = fingerprint
   // Columns are festival editions, oldest on the left, like the months in the classics.
   const periods = overview.periods.length ? overview.periods : [{ edition: overview.edition, entries: {} }]
-  const forecast = overview.forecast
-  financeTable.innerHTML = `
-    <thead><tr><th scope="col">Ausgaben / Einnahmen</th>${periods
-      .map((period) => `<th scope="col">${period.edition}. Ausgabe</th>`)
-      .join('')}<th scope="col" class="finance-forecast">Prognose morgen</th></tr></thead>
-    <tbody>${FINANCE_CATEGORIES.map(
-      // Every row every time, even the ones standing at zero: what a park could earn and
-      // could be spending is part of the picture, the same way it is in the ledger of the
-      // games this is modelled on.
-      (category) => `<tr><th scope="row">${FINANCE_CATEGORY_NAMES[category]}</th>${periods
-        .map((period) => ledgerCell(period.entries[category]))
-        .join('')}${ledgerCell(forecast[category], 'finance-forecast')}</tr>`,
-    ).join('')}</tbody>
-    <tfoot><tr><th scope="row">Saldo</th>${periods
-      .map((period) => ledgerCell(financePeriodTotal(period)))
-      .join('')}${ledgerCell(financeEntriesTotal(forecast), 'finance-forecast')}</tr></tfoot>`
+  financeTable.innerHTML = renderFinanceLedger({
+    periods,
+    forecast: overview.forecast,
+    breakdown: overview.breakdown,
+    expanded: expandedFinanceRows,
+  })
   financeTotals.innerHTML = [
     ['Guthaben', euro(overview.money)],
     ['Darlehen', euro(-overview.loan)],
@@ -3711,6 +3430,12 @@ const openFinancePanel = (open: boolean): void => {
 financeToggle.addEventListener('click', () => openFinancePanel(!financePanel.classList.contains('visible')))
 requireElement<HTMLButtonElement>('#open-finance-money').addEventListener('click', () => openFinancePanel(true))
 requireElement<HTMLButtonElement>('#close-finance').addEventListener('click', () => openFinancePanel(false))
+financeTable.addEventListener('click', (event) => {
+  const toggle = (event.target as HTMLElement | null)?.closest('[data-finance-toggle]')
+  const category = toggle?.getAttribute('data-finance-toggle')
+  if (!category || !toggleFinanceCategory(expandedFinanceRows, category)) return
+  applyFinanceBreakdownToggle(financeTable, expandedFinanceRows, category as FinanceCategory)
+})
 const loanStep = (direction: number): void => {
   const step = 1_000
   const value = Math.max(0, Math.round((Number(financeLoanAmount.value) || 0) / step) * step + direction * step)
@@ -4569,6 +4294,8 @@ entityPriceInput.addEventListener('change', () => {
   if (!selectedEntity || selectedEntity.type === 'depot' || selectedEntity.type === 'access' || selectedEntity.type === 'vehicle' || selectedEntity.type === 'wasteDump' || selectedEntity.type === 'backstage') return
   if (selectedEntity.type === 'coaster') {
     game.updateCoasterPrice(selectedEntity.id, Number(entityPriceInput.value))
+  } else if (selectedEntity.type === 'course') {
+    game.setCoursePrice(selectedEntity.id, Number(entityPriceInput.value))
   } else {
     game.updateBuildingPrice(selectedEntity.id, Number(entityPriceInput.value))
   }
@@ -4696,160 +4423,63 @@ document.querySelector<HTMLButtonElement>('#close-course-builder')?.addEventList
   game.setTool('inspect')
 })
 document.querySelector<HTMLButtonElement>('#finish-course-builder')?.addEventListener('click', () => {
-  if (activeAttractionId) {
-    const result = game.setAttractionOperation(activeAttractionId, 'open')
-    showToast(result.message, !result.ok)
-    if (!result.ok) {
-      updateCourseBuilder()
-      return
-    }
-  }
-  if (activeCourseId) {
-    const result = game.setCourseOperating(activeCourseId, true)
-    showToast(result.message, !result.ok)
-    if (!result.ok) {
+  const courseId = activeCourseId
+  if (courseId) {
+    const course = game.getCourse(courseId)
+    const issue = course ? validateCourse(course) : 'Noch kein Kurs.'
+    if (issue) {
+      showToast(issue, true)
       updateCourseBuilder()
       return
     }
   }
   closeCourseBuilder()
   game.setTool('inspect')
+  if (courseId && game.getCourse(courseId)) openEntityInfoForCourse(courseId)
 })
 document.querySelector<HTMLButtonElement>('#course-undo')?.addEventListener('click', () => {
-  if (activeAttractionId && attractionBuilderState) {
-    const attraction = game.snapshot.attractions.find((candidate) => candidate.id === activeAttractionId)
-    if (!attraction) return
-    const request = attraction.layout.kind === 'track'
-      ? {
-          kind: 'removeTrackEdge' as const,
-          attractionId: attraction.id,
-          edgeId: attraction.layout.graph.edges.at(-1)?.id ?? '',
-        }
-      : attraction.layout.kind === 'area' && attraction.layout.references.length > 0
-        ? {
-            kind: 'removeReference' as const,
-            attractionId: attraction.id,
-            referenceId: attraction.layout.references.at(-1)!.id,
-          }
-        : null
-    if (!request) return
-    const result = game.constructAttraction(request)
-    showToast(result.message, !result.ok)
-    updateCourseBuilder()
-    return
-  }
   if (!activeCourseId) return
   const result = game.undoCoursePiece(activeCourseId)
   if (!game.getCourse(activeCourseId)) activeCourseId = null
   showToast(result.message, !result.ok)
   updateCourseBuilder()
 })
-document.querySelector<HTMLButtonElement>('#course-toggle-operating')?.addEventListener('click', () => {
-  if (activeAttractionId) {
-    const attraction = game.snapshot.attractions.find((candidate) => candidate.id === activeAttractionId)
-    if (!attraction) return
-    const result = game.setAttractionOperation(
-      activeAttractionId,
-      attraction.operationMode === 'open' ? 'closed' : 'open',
-    )
-    showToast(result.message, !result.ok)
-    updateCourseBuilder()
-    return
-  }
-  if (!activeCourseId) return
-  const course = game.getCourse(activeCourseId)
-  if (!course) return
-  const result = game.setCourseOperating(activeCourseId, !course.operating)
-  showToast(result.message, !result.ok)
-  updateCourseBuilder()
-})
 document.querySelector<HTMLButtonElement>('#demolish-course')?.addEventListener('click', () => {
-  if (activeAttractionId) {
-    const result = game.removeAttraction(activeAttractionId)
-    showToast(result.message, !result.ok)
-    activeAttractionId = null
-    closeCourseBuilder()
-    game.setTool('inspect')
-    return
-  }
-  if (!activeCourseId) return
-  const result = game.removeCourse(activeCourseId)
-  showToast(result.message, !result.ok)
-  activeCourseId = null
-  updateCourseBuilder()
+  const courseId = activeCourseId
+  if (!courseId) return
+  requestCourseDemolish(courseId)
 })
 document.querySelector<HTMLButtonElement>('#course-elevation-up')?.addEventListener('click', () => {
-  if (attractionBuilderState) {
-    attractionBuilderState.elevationDelta = Math.min(
-      1,
-      attractionBuilderState.elevationDelta + 0.5,
-    ) as AttractionBuilderState['elevationDelta']
-    updateCourseBuilder()
-    return
-  }
   courseBuildElevation = Math.min(6, courseBuildElevation + 1)
   updateCourseBuilder()
 })
 document.querySelector<HTMLButtonElement>('#course-elevation-down')?.addEventListener('click', () => {
-  if (attractionBuilderState) {
-    attractionBuilderState.elevationDelta = Math.max(
-      -1,
-      attractionBuilderState.elevationDelta - 0.5,
-    ) as AttractionBuilderState['elevationDelta']
-    updateCourseBuilder()
-    return
-  }
   courseBuildElevation = Math.max(0, courseBuildElevation - 1)
   updateCourseBuilder()
 })
+document.querySelector<HTMLButtonElement>('#course-rotate')?.addEventListener('click', () => {
+  game.rotateBuild()
+  updateCourseBuilder()
+})
+document.querySelector<HTMLButtonElement>('#course-build-piece')?.addEventListener('click', () => {
+  buildCoursePieceAtEnd()
+})
+document.querySelectorAll<HTMLButtonElement>('[data-course-direction]').forEach((button) => {
+  button.addEventListener('click', () => {
+    if (button.disabled) return
+    const heading = Number(button.dataset.courseDirection)
+    if (!Number.isFinite(heading)) return
+    game.setBuildRotation(heading)
+    buildCoursePieceAtEnd()
+  })
+})
 requireElement<HTMLInputElement>('#course-team-size').addEventListener('change', (event) => {
-  if (activeAttractionId) {
-    const result = game.configureAttraction(activeAttractionId, {
-      teamSize: Number((event.target as HTMLInputElement).value),
-    })
-    showToast(result.message, !result.ok)
-    updateCourseBuilder()
-    return
-  }
   if (!activeCourseId) return
   const result = game.setCourseTeamSize(activeCourseId, Number((event.target as HTMLInputElement).value))
   showToast(result.message, !result.ok)
   updateCourseBuilder()
 })
 requireElement<HTMLElement>('#course-piece-palette').addEventListener('click', (event) => {
-  const attractionButton = (event.target as Element).closest<HTMLButtonElement>('[data-attraction-piece]')
-  if (attractionButton && attractionBuilderState) {
-    const value = attractionButton.dataset.attractionPiece!
-    if (value === 'rotateDirection') {
-      attractionBuilderState.direction = ((attractionBuilderState.direction + 1) % 4) as 0 | 1 | 2 | 3
-      updateCourseBuilder()
-      return
-    }
-    if (value === 'bankLeft' || value === 'bankFlat' || value === 'bankRight') {
-      attractionBuilderState.banking =
-        value === 'bankLeft' ? -1 : value === 'bankRight' ? 1 : 0
-      updateCourseBuilder()
-      return
-    }
-    if (
-      value === 'areaAdd' ||
-      value === 'areaErase' ||
-      value === 'entrance' ||
-      value === 'exit' ||
-      value === 'trackDelete'
-    ) {
-      attractionBuilderState.mode = value
-    } else if (attractionBuilderState.attraction.layout.kind === 'area') {
-      attractionBuilderState.mode = 'reference'
-      attractionBuilderState.selectedKind = value
-    } else {
-      attractionBuilderState.mode =
-        attractionBuilderState.attraction.layout.kind === 'scripted' ? 'scripted' : 'track'
-      attractionBuilderState.selectedKind = value
-    }
-    updateCourseBuilder()
-    return
-  }
   const button = (event.target as Element).closest<HTMLButtonElement>('[data-course-piece]')
   if (!button) return
   selectedCoursePiece = button.dataset.coursePiece as CourseBuilderTool
@@ -4863,6 +4493,25 @@ requireElement<HTMLElement>('#course-piece-palette').addEventListener('click', (
 coasterRotateButton.addEventListener('click', () => {
   if (!activeCoasterId) game.rotateBuild()
   updateCoasterBuilder()
+})
+document.querySelectorAll<HTMLButtonElement>('[data-coaster-direction]').forEach((button) => {
+  button.addEventListener('click', () => {
+    if (button.disabled) return
+    const heading = Number(button.dataset.coasterDirection) as 0 | 1 | 2 | 3
+    if (!Number.isFinite(heading)) return
+    game.setBuildRotation(heading)
+    if (!activeCoasterId) {
+      updateCoasterBuilder()
+      return
+    }
+    const ride = game.getCoaster(activeCoasterId)
+    const end = ride?.pieces[coasterEditIndex]?.end ?? null
+    const choice = listCoasterDirectionChoices(end, selectedCoasterTypeId(), Boolean(ride))
+      .find((entry) => entry.heading === heading)
+    if (!choice?.enabled) return
+    if (choice.kind !== 'station') selectCoasterPaletteKind(choice.kind, false)
+    buildCoasterPiece()
+  })
 })
 
 function selectCoasterPaletteKind(kind: TrackPieceKind, fromSpecials: boolean): void {
@@ -4984,9 +4633,9 @@ titleScreenController = mountTitleScreen({
   setMultiplayerName,
   formatSaveTime,
 })
-toggleParkButton.addEventListener('click', () => {
-  const result = game.setParkOpen(!game.snapshot.parkOpen)
-  showToast(result.message)
+undoLastBuildButton.addEventListener('click', () => {
+  const result = game.undoLastBuild()
+  showToast(result.message, !result.ok)
 })
 
 document.querySelector<HTMLButtonElement>('#close-entity')?.addEventListener('click', () => {
@@ -5155,6 +4804,29 @@ operationModeSelect.addEventListener('change', () => {
   showToast(result.message, !result.ok)
 })
 
+const courseOperationModeSelect = requireElement<HTMLSelectElement>('#course-operation-mode')
+courseOperationModeSelect.addEventListener('change', () => {
+  if (selectedEntity?.type !== 'course') return
+  const result = game.setCourseOperating(selectedEntity.id, courseOperationModeSelect.value === 'open')
+  if (!result.ok) {
+    courseOperationModeSelect.value = game.getCourse(selectedEntity.id)?.operating ? 'open' : 'closed'
+  }
+  showToast(result.message, !result.ok)
+  updateEntityPanel()
+})
+
+document.querySelector<HTMLButtonElement>('#edit-course-construction')?.addEventListener('click', () => {
+  if (selectedEntity?.type !== 'course') return
+  const courseId = selectedEntity.id
+  closeEntityPanel()
+  openCourseBuilder(courseId)
+})
+
+document.querySelector<HTMLButtonElement>('#demolish-course-inspect')?.addEventListener('click', () => {
+  if (selectedEntity?.type !== 'course') return
+  requestCourseDemolish(selectedEntity.id)
+})
+
 document.querySelector<HTMLButtonElement>('#recall-train')?.addEventListener('click', () => {
   if (selectedEntity?.type !== 'coaster') return
   const result = game.recallCoasterTrain(selectedEntity.id)
@@ -5178,14 +4850,41 @@ function demolishCoasterById(coasterId: string): void {
   }
 }
 
+function demolishCourseById(courseId: string): void {
+  const result = game.removeCourse(courseId)
+  showToast(result.message, !result.ok)
+  if (!result.ok) return
+  if (activeCourseId === courseId) {
+    activeCourseId = null
+    closeCourseBuilder()
+  }
+  if (selectedEntity?.type === 'course' && selectedEntity.id === courseId) {
+    closeEntityPanel()
+  }
+}
+
+function requestCourseDemolish(courseId: string): void {
+  const course = game.getCourse(courseId)
+  void confirmAction(rideDemolishPrompt('course', course?.name)).then((ok) => {
+    if (ok) demolishCourseById(courseId)
+  })
+}
+
+function requestCoasterDemolish(coasterId: string): void {
+  const coaster = game.getCoaster(coasterId)
+  void confirmAction(rideDemolishPrompt('coaster', coaster?.name)).then((ok) => {
+    if (ok) demolishCoasterById(coasterId)
+  })
+}
+
 document.querySelector<HTMLButtonElement>('#demolish-coaster')?.addEventListener('click', () => {
   if (selectedEntity?.type !== 'coaster') return
-  demolishCoasterById(selectedEntity.id)
+  requestCoasterDemolish(selectedEntity.id)
 })
 
 demolishCoasterConstructionButton.addEventListener('click', () => {
   if (!activeCoasterId) return
-  demolishCoasterById(activeCoasterId)
+  requestCoasterDemolish(activeCoasterId)
 })
 
 dispatchIntervalInput.addEventListener('input', () => {

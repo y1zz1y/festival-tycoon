@@ -17,6 +17,13 @@
 .festival-management p { line-height: 1.6; color: #c3d3c6; }
 .festival-management h3 { font-size: 14px; margin: 0 0 10px; }
 .festival-intro { padding: 18px; margin: 12px 0; background: linear-gradient(110deg, #243d34, #45604a); border: 1px solid #627e65; }
+.festival-park-gate { padding: 14px; margin: 12px 0; background: #253c32; border: 1px solid #577364; }
+.festival-park-gate h3 { margin: 0 0 8px; }
+.festival-management button.park-closed {
+  color: #ffd8d3;
+  background: rgba(176, 61, 51, 0.38);
+  border-color: rgba(239, 116, 104, 0.58);
+}
 .festival-intro h3 { font-size: 20px; }
 .festival-intro button { margin-right: 8px; }
 .festival-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }

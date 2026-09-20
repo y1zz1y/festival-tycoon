@@ -8,6 +8,12 @@ import {
   type CoasterTypeId,
   type TrackPieceKind,
 } from './coasters'
+import {
+  resolveTrackEditorMode,
+  type TrackEditorMode,
+} from './trackEditorMode'
+
+export type { TrackEditorMode } from './trackEditorMode'
 
 /**
  * Live coaster-type catalog for the track editor.
@@ -149,6 +155,11 @@ export type CoasterCatalogEntry = {
   trackStyle: CoasterTrackStyleId
   trainStyle: CoasterTrainStyleId
   notes: string
+  /**
+   * Construction chrome. Omitted rows use the RCT2 palette + large build button.
+   * Path-led rides set `directionArrows`.
+   */
+  editorMode?: TrackEditorMode
 }
 
 const ALL_HEADLINER_PIECES: readonly TrackPieceKind[] = TRACK_PIECE_KINDS
@@ -883,6 +894,11 @@ export function isCoasterCatalogTypeId(value: string): value is CoasterCatalogTy
 
 export function getCoasterCatalogEntry(typeId: CoasterCatalogTypeId): CoasterCatalogEntry {
   return COASTER_CATALOG[typeId]
+}
+
+export function resolveCoasterEditorMode(typeId: string): TrackEditorMode {
+  if (!isCoasterCatalogTypeId(typeId)) return 'palette'
+  return resolveTrackEditorMode(COASTER_CATALOG[typeId].editorMode)
 }
 
 export function listPlayableCoasterCatalogTypes(): CoasterCatalogEntry[] {

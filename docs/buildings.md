@@ -10,7 +10,7 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 | --- | --- | --- |
 | Arten, Tools, Anzeige | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` (`trafficLight`, `pathBarrier`, `deliveryYard`, `supplyDepot`, `staffGate`, `tourBusParking`, `backstageArea`, `sealedWasteContainer`, `fireStation`, `table`, `course`) |
 | Bau-Menü / Kategorien | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` (keine stillen Fallbacks). Abriss bleibt als Kategorie für die Toolbar, öffnet aber kein Raster. Wege öffnen `#path-construction` mit Schnellzugriff auf `pathBarrier`, `staffGate`, `securityGate`. `isCatalogBuildCategory`: Deko, Attraktionen und Logistik als Bildraster mit Hover-Fußzeile. Camping unter Attraktionen; Krankenhaus (`ambulanceGarage`, `medicalArea`); Bandversorgung (`backstageArea`, `tourBusParking`) unter Logistik. |
-| Bauhöhe / autoritative Vorschau | `src/game/GameState.ts`, `src/game/placementPreview.ts`, `src/game/commands/placementCommands.ts` | Fassadenmethode `previewPlacement`; Dispatch `previewPlacementCommand`; `PlacementPreviewRequest` / `PlacementPreviewResult`, `GhostRenderMode`; `adjustBuildElevation`, `setBuildElevation` (0–6, **Halbstufen 0.5**, wie Wege). |
+| Bauhöhe / autoritative Vorschau | `src/game/GameState.ts`, `src/game/placementPreview.ts`, `src/game/commands/placementCommands.ts` | Fassadenmethode `previewPlacement`; Dispatch `previewPlacementCommand`; `PlacementPreviewRequest` / `PlacementPreviewResult`, `GhostRenderMode`; `adjustBuildElevation`, `setBuildElevation` (0–6, **Halbstufen 0.5**, wie Wege); `setBuildRotation` / `rotateBuild` (lokal, für Weg-Pfeile und Palette). |
 | Kosten / Upkeep / Appeal | `src/game/simulationConfig.ts` | `economy.buildings` |
 | Platzieren, prüfen, abräumen | `src/game/placementService.ts`, `src/game/commands/placementCommands.ts`, `src/game/commands/bulldozeCommands.ts`, `src/game/GameState.ts`, `src/view/picking.ts` | `PlacementService` für Weg/Straße/Undo/konkreten Abriss; Commands und stabile Fassaden bleiben erhalten |
 | Bereich kopieren | `src/game/blueprints.ts`, [blueprints.md](blueprints.md) | Rechteck, `stampBlueprint`, lokale Bibliothek |
@@ -33,6 +33,9 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 - Neuer Gebäude- oder Werkzeugtyp braucht Einträge in `catalog.ts`,
   `SIMULATION_CONFIG.economy.buildings` (falls kostenpflichtig), `canPlace` /
   `place`, `buildMenu.ts`, Rendering und oft einen `GameCommand`.
+  Stände (`food`, `alcohol`, `shirt`, `mascot`, `toilet`) und `ride` zahlen
+  ohne live laufendes Festival nur `economy.pauseUpkeepMultiplier` (5 %)
+  statt voller Betriebskosten; siehe `docs/finance.md` und `src/game/upkeep.ts`.
 - `GameState.previewPlacement` ist der einzige Vertrag für Gültigkeit und
   Meldung unter dem Mauszeiger. Er delegiert Gebäude an `canPlace` (inklusive
   Bus-Haltestelle und 2×2/3×3-Depotflächen), Zugänge an
@@ -80,7 +83,12 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
   hoch-runter ändert eine Halbstufe. Nach dem Loslassen von Shift bleibt sie;
   ein neues Werkzeug startet wieder auf Ebene 0.
 - Große Bühnen nutzen `buildingFootprint` / `occupiesBuildingCell`, nicht nur
-  das Ankerfeld.
+  das Ankerfeld. Campingflächen und Bühnenvorplatz sind keine freie
+  Baufläche: `canPlace` lehnt Gebäude, Wege und Deko unter
+  `buildElevation` 1.2 ab (Camping-Text „Zeltbereich“, Vorplatz-Text
+  „Bühnenvorplatz“). Erlaubt bleiben Bauzaun und auf dem Vorplatz der
+  Delay-Turm; Details in [`camping.md`](camping.md) und
+  [`stages.md`](stages.md).
 - Angehobene Gebäude und Deko (keine Fassaden, keine Wege) bekommen Säulen
   nur wo zwischen Unterkante und Land/Solid Luft ist. Land einschließlich
   Seegrund zählt; Wasser selbst nicht. Ein Weg oder Gebäude in der Lücke
@@ -128,7 +136,8 @@ Bandversorgung, Medizin/Dächer, Depot-Footprints, Ride-Zugang, Blaupause und
 Mutationsfreiheit). Draw-Call-Grenzen: `tests/performanceGuards.ts`.
 Stützen nur im Freiraum: `tests/terrainLand.ts`, `tests/wayStructures.ts`.
 `tests/sealedWasteContainer.ts` (Katalog-Kapazität 80, Platzierung).
-`tests/blueprints.ts` (2×2-Deko kopieren, Preview ohne Mutation, Bibliothek).
+`tests/blueprints.ts` (2×2-Deko kopieren, Parkplätze, Preview ohne Mutation, Bibliothek).
+`tests/buildUndo.ts` (letzter Bau / Stempel / Parkplatz / Weg).
 
 ## Bei Änderungen dieses Dokument
 

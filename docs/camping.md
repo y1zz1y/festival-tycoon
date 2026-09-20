@@ -10,6 +10,8 @@ Multi-Goal-Suche, kein A* pro Objekt.
 | --- | --- | --- |
 | Zellen, Installationen, Gathering | `src/game/camping.ts` | `CampingSystem`, `findRouteToGathering`, `CampInstallation` |
 | Ausweisung im Spielzustand | `src/game/GameState.ts` | `designateCampingCell`, `designateCampingArea` |
+| MP-Commands | `src/net/protocol.ts`, `src/net/commands.ts`, `src/net/bind.ts` | `designateCampingCell`, `designateCampingArea` (optimistic) |
+| Save / Attraktions-Nachzug | `src/game/snapshotMigration.ts`, `src/game/attractions/projections.ts` | Live-Array bleibt Quelle; `refreshLegacyAttractionRecords` schreibt `camping` nach |
 | Baumenü | `src/game/buildMenu.ts` | Attraktionen → Tab **Camping** (`camping`) |
 | Wegschranken-Sensor | `src/game/accessControl.ts` | freie/belegte Campingflächen im Gebiet |
 | Verfall verlassener Camps | `src/game/camping.ts` | `decayUnclaimedInstallations`, `abandonVisitorCamp` |
@@ -43,6 +45,14 @@ Multi-Goal-Suche, kein A* pro Objekt.
   Parkschließung und nach Festivalende. Normale Wege sind günstiger, aber ein
   eingeschlossener Besucher darf als Fallback über freie Campingzellen zum
   Weg beziehungsweise Ausgang laufen; feste Installationen bleiben unverändert.
+- Ausgewiesene Campingzellen sind keine freie Baufläche:
+  `canPlace` blockiert Gebäude, Wege und Deko auf Bodenhöhe
+  (`buildElevation < 1.2`). Ausnahme bleibt der Bauzaun (`fence`).
+  Höher gesetzte Objekte (ab 1.2) sind wie bisher erlaubt.
+- `campingCells` / `campInstallations` sind die live Quelle, kein verworfenes
+  Attraction-Spiegelbild. Ein `startAttraction`/`constructAttraction` darf
+  die Ausweisung nicht überschreiben. Save und Mehrspieler transportieren
+  die Arrays; der `camping`-Datensatz wird nur nachgezogen.
 - Geplanter Schlaf schickt Camper mit `findRouteToCampsite` zurück ins eigene
   Zelt (`campingPhase: returning` → `resting`). Das Ziel bleibt das
   bestehende Camp; neu ist nur das Festival-Fenster in
@@ -56,6 +66,8 @@ Multi-Goal-Suche, kein A* pro Objekt.
 `tests/campingModels.ts` (Batches, Vertices, stabile IDs).
 Schlafziel Zelt vs. nächtliches Wachbleiben: `tests/visitorSleep.ts`.
 Abreise durch umgebende Camping-Ausweisungen: `tests/regression.ts`.
+Placement, Save/Load und MP-Roundtrip gegen Attraction-Deltas:
+`tests/attractionFoundation.ts` (`testCampingAndForecourtStayLive`).
 Visuelle Fixture: `tests/camping-preview.html`.
 
 ## Bei Änderungen dieses Dokument

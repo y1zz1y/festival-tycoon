@@ -667,6 +667,8 @@ export class WorldView {
   private constructionNext: Mesh
   private constructionSlope: Mesh
   private pathDragPreview = new Group()
+  private courseConstructionPreview = new Group()
+  private courseConstructionKey = ''
   private blueprintPreview = new Group()
   private groundAreaHandler: AreaDesignationHandler<CellPosition> | null = null
   private groundAreaStart: CellPosition | null = null
@@ -851,6 +853,7 @@ export class WorldView {
       this.constructionNext,
       this.constructionSlope,
       this.pathDragPreview,
+      this.courseConstructionPreview,
       this.blueprintPreview,
       this.campingView.group,
       this.fireworksView.group,
@@ -1863,6 +1866,36 @@ export class WorldView {
       const ground = getTerrainHeight(this.currentSnapshot?.terrain, cell.x, cell.z)
       tile.position.set(cell.x + 0.5, ground + elevation + 0.12, cell.z + 0.5)
       this.pathDragPreview.add(tile)
+    })
+  }
+
+  /**
+   * Ghost for the course editors. Mirrors the coaster ghost: the next piece is a
+   * pure function of the open end plus the construction window, and the mesh is
+   * only rebuilt when that result changes.
+   */
+  setCourseConstructionPreview(
+    span: readonly { x: number; z: number; elevation: number; valid: boolean }[],
+  ): void {
+    const key = span
+      .map((cell) => `${cell.x}:${cell.z}:${cell.elevation}:${cell.valid ? 1 : 0}`)
+      .join('|')
+    if (key === this.courseConstructionKey) return
+    this.courseConstructionKey = key
+    disposeChildren(this.courseConstructionPreview)
+    span.forEach((cell) => {
+      const tile = new Mesh(
+        this.pathDragGeometry,
+        new MeshStandardMaterial({
+          color: cell.valid ? 0x65e6ee : 0xf05a65,
+          transparent: true,
+          opacity: 0.6,
+          depthWrite: false,
+        }),
+      )
+      const ground = getTerrainHeight(this.currentSnapshot?.terrain, cell.x, cell.z)
+      tile.position.set(cell.x + 0.5, Math.max(ground, cell.elevation) + 0.14, cell.z + 0.5)
+      this.courseConstructionPreview.add(tile)
     })
   }
 
