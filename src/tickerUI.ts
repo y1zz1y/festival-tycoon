@@ -6,6 +6,7 @@ import {
   formatTickerClock,
   observeTickerEvents,
   pickTickerDisplay,
+  pruneResolvedTicker,
   tickerKindIcon,
   type TickerItem,
   type TickerWatchState,
@@ -159,7 +160,22 @@ export function mountTickerUI(options: {
   return {
     update: (snapshot) => {
       const incoming = observeTickerEvents(snapshot, watch)
-      if (incoming.length === 0) return
+      // Messages go as soon as what they were about is dealt with: the injured
+      // carried off, the crowd calmed. Done before the early return, because a
+      // quiet frame is exactly when things finish.
+      const settled = pruneResolvedTicker(history, snapshot)
+      const dropped = settled.length !== history.length
+      history = settled
+      if (current && !history.some((item) => item.id === current!.id)) {
+        // The banner is showing something that has just been sorted out.
+        hideBar()
+      }
+      if (incoming.length === 0) {
+        if (!dropped) return
+        syncToggle()
+        if (panel.classList.contains('visible')) renderHistory()
+        return
+      }
       history = appendTickerHistory(history, incoming)
       const shown = pickTickerDisplay(incoming)
       if (shown) showItem(shown)

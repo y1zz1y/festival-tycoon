@@ -20,6 +20,13 @@ export type TickerItem = {
   day: number
   minute: number
   position?: { x: number; z: number }
+  /**
+   * What the message is about: the injured guests, the fires. A message is
+   * only worth showing while its subject is still a problem, and once none of
+   * them is, it goes. Panic and full dumps have no ids — they are conditions of
+   * the whole park, and end when the condition does.
+   */
+  subjects?: readonly string[]
 }
 
 export type TickerSource = {
@@ -73,6 +80,7 @@ function tickerItem(
   message: string,
   position: { x: number; z: number } | undefined,
   severity: TickerSeverity,
+  subjects?: readonly string[],
 ): TickerItem {
   return {
     id: `${kind}:${source.simTick}:${position?.x ?? 'x'}:${position?.z ?? 'z'}`,
@@ -84,7 +92,50 @@ function tickerItem(
     day: source.day,
     minute: source.minute,
     position,
+    subjects,
   }
+}
+
+/** Who still needs an ambulance: injured, and not already in one. */
+function injuredIds(source: TickerSource): Set<string> {
+  const seated = collectSeatedPassengerIds(source.logistics?.roadVehicles)
+  return new Set(
+    source.visitors
+      .filter((visitor) => visitor.state === 'injured' && !seated.has(visitor.id))
+      .map((visitor) => visitor.id),
+  )
+}
+
+/**
+ * Drops the messages whose reason has gone: the injured carried off or back on
+ * their feet, the crowd calmed, the fire out, the dump emptied. They used to
+ * stay in the list for the rest of the festival, so the panel filled up with
+ * problems that had long been dealt with and there was no telling which ones
+ * still needed anybody.
+ */
+export function pruneResolvedTicker(
+  history: readonly TickerItem[],
+  source: TickerSource,
+): TickerItem[] {
+  const injured = injuredIds(source)
+  const fires = new Set(
+    source.incidents.filter((incident) => incident.kind === 'fire').map((incident) => incident.id),
+  )
+  const panicking = source.visitors.some(
+    (visitor) => visitor.isPanicking || visitor.state === 'panicking',
+  )
+  const dumpOver = isParkWasteDumpOverFull(source.wasteDumpCells)
+  const stillOpen = (item: TickerItem): boolean => {
+    // A message from before subjects were recorded falls back to the condition
+    // of its kind, which is the best that can be said about it.
+    const anySubject = (live: Set<string>): boolean =>
+      item.subjects ? item.subjects.some((id) => live.has(id)) : live.size > 0
+    if (item.kind === 'medical') return anySubject(injured)
+    if (item.kind === 'fire') return anySubject(fires)
+    if (item.kind === 'panic') return panicking
+    return dumpOver
+  }
+  return history.filter(stillOpen)
 }
 
 function cellCenter(cell: { x: number; z: number }): { x: number; z: number } {
@@ -128,6 +179,7 @@ export function observeTickerEvents(
           : `Es brennt an ${newFires.length} Stellen.`,
         cellCenter(latest),
         'alert',
+        newFires.map((fire) => fire.id),
       ),
     )
     watch.lastFireRemindClock = clock
@@ -142,6 +194,7 @@ export function observeTickerEvents(
           : `${fires.length} Brände dauern noch an.`,
         fireFocus ? cellCenter(fireFocus) : undefined,
         'alert',
+        fires.map((fire) => fire.id),
       ),
     )
     watch.lastFireRemindClock = clock
@@ -219,11 +272,8 @@ export function observeTickerEvents(
   watch.dumpOver = dumpOver
   if (!dumpOver) watch.lastDumpWarnClock = Number.NEGATIVE_INFINITY
 
-  const seated = collectSeatedPassengerIds(source.logistics?.roadVehicles)
-  const injured = source.visitors.filter(
-    (visitor) =>
-      visitor.state === 'injured' && !seated.has(visitor.id),
-  )
+  const stillHurt = injuredIds(source)
+  const injured = source.visitors.filter((visitor) => stillHurt.has(visitor.id))
   const newInjured = injured.filter(
     (visitor) => !watch.knownInjuredIds.has(visitor.id),
   )
@@ -239,6 +289,7 @@ export function observeTickerEvents(
           : `${newInjured.length} Personen brauchen medizinische Hilfe.`,
         { x: latest.x, z: latest.z },
         'warning',
+        newInjured.map((visitor) => visitor.id),
       ),
     )
   }

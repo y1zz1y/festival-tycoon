@@ -6,6 +6,7 @@ import {
   createTickerWatchState,
   observeTickerEvents,
   pickTickerDisplay,
+  pruneResolvedTicker,
   type TickerSource,
 } from '../src/game/ticker'
 import {
@@ -183,5 +184,49 @@ export function testTickerAndWasteCaps(): void {
   const history = appendTickerHistory([], [...crossing, ...fire])
   assert.equal(history[0]!.kind, 'dumpFull')
   assert.equal(pickTickerDisplay([...crossing, ...fire])!.kind, 'fire')
-  console.log('PASS waste caps, no dump overflow, ticker fire/panic/dump-full/seated-injury')
+
+  // A message is only worth keeping while its reason is: once the injured are
+  // carried off and the crowd has calmed, the entries go rather than filling
+  // the panel with problems that were dealt with hours ago.
+  const hurt = { id: 'hurt', x: 4.5, z: 2.5, state: 'injured' }
+  const scared = { id: 'scared', x: 6.5, z: 1.5, isPanicking: true, state: 'panicking' }
+  const blaze = { id: 'fire-9', kind: 'fire', x: 8, z: 3 }
+  const trouble = source({ visitors: [hurt, scared], incidents: [blaze] })
+  const raised = observeTickerEvents(trouble, createTickerWatchState())
+  assert.deepEqual(
+    [...raised.map(item => item.kind)].sort(),
+    ['fire', 'medical', 'panic'],
+    'all three are reported while they are happening',
+  )
+  assert.deepEqual(raised.find(item => item.kind === 'medical')!.subjects, ['hurt'])
+  assert.deepEqual(raised.find(item => item.kind === 'fire')!.subjects, ['fire-9'])
+  assert.deepEqual(pruneResolvedTicker(raised, trouble).map(item => item.kind).sort(),
+    ['fire', 'medical', 'panic'], 'and nothing is dropped while they still are')
+
+  // Carried off: in a vehicle counts as dealt with, the same as being gone.
+  const inAmbulance = source({
+    visitors: [hurt, scared],
+    incidents: [blaze],
+    logistics: { roadVehicles: [{ passengerIds: ['hurt'] }] },
+  })
+  assert.deepEqual(pruneResolvedTicker(raised, inAmbulance).map(item => item.kind).sort(),
+    ['fire', 'panic'], 'the injured message goes once they are in the ambulance')
+
+  const calm = source({ visitors: [{ ...scared, isPanicking: false, state: 'exploring' }], incidents: [blaze] })
+  assert.deepEqual(pruneResolvedTicker(raised, calm).map(item => item.kind), ['fire'],
+    'panic and injury both go once the crowd has calmed and nobody is hurt')
+  assert.deepEqual(pruneResolvedTicker(raised, source()), [], 'and with the fire out, nothing is left')
+
+  // One of two still hurt keeps the message: it is not dealt with yet.
+  const both = source({ visitors: [hurt, { id: 'hurt-2', x: 5.5, z: 2.5, state: 'injured' }] })
+  const pair = observeTickerEvents(both, createTickerWatchState())
+  assert.deepEqual(pair[0]!.subjects, ['hurt', 'hurt-2'])
+  assert.equal(pruneResolvedTicker(pair, source({ visitors: [hurt] })).length, 1,
+    'while one of them is still down the message stays')
+
+  // Messages from before subjects were recorded fall back to their kind.
+  const legacy = { ...pair[0]!, subjects: undefined }
+  assert.equal(pruneResolvedTicker([legacy], both).length, 1)
+  assert.equal(pruneResolvedTicker([legacy], source()).length, 0)
+  console.log('PASS waste caps, no dump overflow, ticker fire/panic/dump-full/seated-injury, settled messages go')
 }
