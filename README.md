@@ -45,6 +45,10 @@ docker run --rm -p 8080:8080 -v festival-saves:/app/saves ghcr.io/y1zz1y/festiva
 
 Oder aus dem Repo: `docker compose up --build`. Danach http://localhost:8080 öffnen.
 
+Für Entwickler: Das Image enthält nur `server/` und `dist/` (kein `src/`).
+Server-Code darf deshalb keine Value-Imports aus `src/` ziehen — siehe
+`docs/multiplayer.md` (Docker-Laufzeit).
+
 ## Mobile Bedienung
 
 ### iOS-Homescreen-App

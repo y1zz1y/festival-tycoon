@@ -29,8 +29,11 @@ Neue oder geänderte Funktionen sind erst fertig, wenn die Doku stimmt:
    Themen-MD erwähnen, welches Config-Feld gilt.
 5. **Neuer `GameCommand` / Snapshot-Feld:** `docs/multiplayer.md` und
    `docs/saves.md` aktualisieren.
-6. **Neuer Test oder anderes Prüfkommando:** `docs/testing.md`.
-7. Spieler-sichtbare Steuerung oder Feature: Root-`README.md`.
+6. **Server-/Shared-Änderung:** prüfen, dass Docker-Laufzeitdateien im Image
+   liegen (kein Value-Import `server/` → `src/`); Regel in
+   [multiplayer.md](multiplayer.md#docker-laufzeit).
+7. **Neuer Test oder anderes Prüfkommando:** `docs/testing.md`.
+8. Spieler-sichtbare Steuerung oder Feature: Root-`README.md`.
 
 Vor Abschluss jeder Änderung läuft `npm run validate`; Details und
 Qualitätsgrenzen stehen in [testing.md](testing.md).

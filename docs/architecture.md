@@ -116,6 +116,9 @@ Snapshot und interpoliert zwischen Ticks.
   `applyGameCommand` und eine `GameState`-Methode mit `ActionResult`.
 - Geometrie, IDs und Texte bleiben in Fachmodulen; Zahlen, die Tempo oder
   Stärke steuern, gehören nach `simulationConfig.ts`.
+- Docker-Image enthält nur `server/` + `dist/` (kein `src/`). Keine
+  Value-Imports von `server/` nach `src/`; `import type` ist ok. Kanonisch:
+  [multiplayer.md](multiplayer.md#docker-laufzeit).
 
 ## Tests
 
@@ -130,6 +133,7 @@ Commands oder Snapshot treffen fast immer auch `docs/multiplayer.md` und
 
 ## Bei Änderungen dieses Dokument
 
-Aktualisieren, wenn sich Schichten, der Snapshot-Einstieg, der Command-Pfad
-oder die Rolle von `GameState` / `WorldView` / `main.ts` ändern. Neue
-Top-Level-Ordner oder ein neues Orchestrierungsmodul hier eintragen.
+Aktualisieren, wenn sich Schichten, der Snapshot-Einstieg, der Command-Pfad,
+die Rolle von `GameState` / `WorldView` / `main.ts` oder die Docker-/Server-
+Importgrenze ändern. Neue Top-Level-Ordner oder ein neues Orchestrierungsmodul
+hier eintragen.

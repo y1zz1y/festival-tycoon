@@ -75,6 +75,25 @@ sondern ein Aussetzer.
   30 Minuten weg ist, wird verworfen. Das ist ein Sicherheitsnetz gegen
   liegengebliebene Codes, keine Sitzungsdauer.
 
+## Docker-Laufzeit
+
+Das Produktions-Image (`Dockerfile`, final stage) kopiert nur `server/` und
+`dist/` — **kein** `src/`. Node startet mit
+`--experimental-strip-types server/serve.ts`.
+
+Bei jeder Server- oder Shared-Änderung prüfen:
+
+1. Jede Datei, die der Server zur **Laufzeit** lädt, muss im Image landen
+   (`server/` oder bereits in `dist/`).
+2. **Keine Value-Imports** von `server/` → `src/…` (Modul fehlt im Container).
+3. `import type` aus `src/` ist ok (wird weggestrippt).
+4. Shared Laufzeit-Logik (Sanitize, Konstanten): unter `server/` halten;
+   Client re-exportiert bei Bedarf (Beispiel: `server/chatProtocol.ts` →
+   `src/net/chatProtocol.ts`).
+
+Lokal mit Vite kann ein `server/`→`src/`-Import unbemerkt laufen; im Image
+bricht er erst beim Start oder ersten Request.
+
 ## Übers Internet spielen
 
 Der Spielzustand läuft ausschließlich über eine WebSocket auf `/ws`. Der Client
@@ -82,12 +101,7 @@ wählt das Schema aus der Seite: HTTPS-Seite → `wss:`, sonst `ws:`. Es gibt
 keinen Polling-Fallback, und es soll auch keinen geben.
 
 Der Produktionsserver (`server/serve.ts`) lauscht auf `HOST`/`PORT`
-(Standard `0.0.0.0:8080`). Das Docker-Image enthält nur `server/` und `dist/` —
-Laufzeit-Imports des Servers dürfen deshalb nur aus `server/` kommen.
-`import type` aus `src/net/` (z. B. `protocol.ts`) ist ok, weil
-`--experimental-strip-types` Typen wegwirft; Wert-Imports wie Chat-Sanitize
-gehören nach `server/chatProtocol.ts` (Client re-exportiert über
-`src/net/chatProtocol.ts`). Vor dem Server steht in der Regel ein Reverse Proxy mit
+(Standard `0.0.0.0:8080`). Vor dem Server steht in der Regel ein Reverse Proxy mit
 TLS — und genau dort scheitert es, wenn der Upgrade nicht durchgereicht wird:
 
 ```nginx
@@ -151,6 +165,8 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
 
 ## Wichtige Regeln
 
+- Docker: Server-Laufzeitdateien nur unter `server/` (oder in `dist/`); keine
+  Value-Imports `server/` → `src/`. Details: Abschnitt „Docker-Laufzeit“.
 - Neue spielerseitige Aktion: `GameCommand` in `protocol.ts`, Zweig in
   `commands.ts`, autoritative Methode in `GameState`, ggf. Optimistic-Flags.
   Gemeinsame Attraktionen verwenden `startAttraction`,
@@ -270,8 +286,9 @@ Roundtrip inkl. leerer Ping-Nachricht). `tests/multiplayerChat.ts`
 
 ## Bei Änderungen dieses Dokument
 
-Aktualisieren, wenn Commands, Snapshot-Teile, Delta-Strategie, Tick-Delay
-oder Server-Raumlogik ändern. Save-Felder parallel in `docs/saves.md`.
+Aktualisieren, wenn Commands, Snapshot-Teile, Delta-Strategie, Tick-Delay,
+Server-Raumlogik oder Docker-/Server-Importgrenzen ändern. Save-Felder
+parallel in `docs/saves.md`.
 
 ## Deko-Fassaden (0.1.125)
 

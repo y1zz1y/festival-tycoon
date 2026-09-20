@@ -18,7 +18,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 
 | Kommando | Zweck |
 | --- | --- |
-| `npm run validate` | vollständiger Abschlusscheck: ESLint, Knip, jscpd, Regressionen, Build und Doku |
+| `npm run validate` | vollständiger Abschlusscheck: ESLint, Knip, jscpd, Regressionen, Build und Doku; prüft **nicht** Docker-Importgrenzen (`server/` → `src/`) — bei Server-Änderungen manuell bzw. per Image-Start prüfen ([multiplayer.md](multiplayer.md#docker-laufzeit)) |
 | `npm run lint` | ESLint für TypeScript; Fehlerregeln plus SonarJS-Komplexitätswarnungen |
 | `npm run quality:dead-code` | Knip: verwaiste Dateien, unbenutzte/fehlende Abhängigkeiten und nicht auflösbare Imports |
 | `npm run quality:duplicates` | jscpd: Duplikate in `src`, `server` und `scripts`; maximal 15 % |

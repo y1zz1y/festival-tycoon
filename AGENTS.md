@@ -52,6 +52,7 @@ Do not leave new modules, commands or kinds undocumented.
 ## Hard invariants
 
 - Preserve existing gameplay, save compatibility and host-authoritative multiplayer.
+- Docker runtime files must live on the image path: final stage copies only `server/` + `dist/` (no `src/`). No value-imports from `server/` into `src/`; `import type` is fine. Details: `docs/multiplayer.md` (Docker-Laufzeit).
 - Increment the package patch version for feature/fix batches; the visible version comes from package.json. Keep the lockfile in sync.
 - Simulation time is authoritative: fixed 100 ms ticks; speed indices 1/2/3 mean 1×/3×/8×. Rendering only interpolates. Never run decisions or mutate game state from render frames.
 - Bound destination decisions with `SIMULATION_CONFIG.pathfinding.decisionsPerTick`, including direct arrival/interaction callbacks. Deferred requests must drain fairly; urgent state transitions and movement/needs still advance every tick.
