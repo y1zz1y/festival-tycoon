@@ -19,6 +19,8 @@ import { testPerformanceGuards } from './performanceGuards'
 import { testStageInteraction } from './stageInteraction'
 import { testStageTickets } from './stageTickets'
 import { SupplyChainView } from '../src/view/SupplyChainView'
+import { createSupplyStructure } from '../src/view/logisticsModels'
+import { createRetroBuilding } from '../src/view/retroBuildings'
 import { transportMotionFactor } from '../src/view/transportMotion'
 import { testOperations } from './operations'
 import { testBusPlanner } from './busPlanner'
@@ -26,7 +28,7 @@ import { testSealedWasteContainer } from './sealedWasteContainer'
 import { testStaffZonePaint } from './staffZones'
 import { testAccessControl } from './accessControl'
 import { CampingView } from '../src/view/CampingView'
-import { Color, Quaternion, Vector3 } from 'three'
+import { Box3, Color, Quaternion, Vector3 } from 'three'
 import { readFileSync } from 'node:fs'
 import { encodeSaveText, decodeSaveText } from '../src/game/saveText'
 import { testEnvironments } from './environments'
@@ -275,6 +277,30 @@ test('transport rendering moves between cells smoothly and respects pause', () =
     assert.ok(standBars,'a stand carries a fill plank')
     assert.equal(standBars.position.x,barStand.x+.5,'centred across the stand')
     assert.equal(standBars.position.z,barStand.z+.5,'and over its middle, not its front')
+  }
+  // And above it, not inside it. The height used to be one number for everything,
+  // so the taller models swallowed their own planks — the delivery yard and the
+  // toilets. It is measured off the model now.
+  {
+    const roofOf = (model: unknown): number => new Box3().setFromObject(model as never).max.y
+    const deliveryTop = roofOf(createSupplyStructure('delivery'))
+    const storageTop = roofOf(createSupplyStructure('supply'))
+    assert.ok(deliveryTop > storageTop, 'the delivery yard really is the taller of the two')
+    snapshot.festival.infrastructure.depots.push({ id: 'tall-depot', x: 6, z: -18, role: 'delivery', distribution: 'shops', stock: { food: 10, drinks: 0, water: 0, goods: 0 }, minimum: { food: 200, drinks: 200, water: 200, goods: 0 } } as never)
+    view.update(snapshot, false)
+    const tall = (view as any).stockModels.get('tall-depot')
+    // The four planks stack downwards from the group's own origin.
+    const lowest = Math.min(...(tall.children as Array<{ position: { y: number } }>).map(child => child.position.y))
+    assert.ok(tall.position.y + lowest > deliveryTop, 'the delivery yard carries its planks above its roof')
+    const storage = (view as any).stockModels.get('fill-depot')
+    assert.ok(storage.position.y + lowest > storageTop, 'and so does the storage depot')
+    for (const kind of ['food', 'toilet'] as const) {
+      const stand = snapshot.buildings.find(b => b.kind === kind)
+      if (!stand) continue
+      const planks = (view as any).stockModels.get(stand.id)
+      assert.ok(planks, `a ${kind} stand carries a plank`)
+      assert.ok(planks.position.y > roofOf(createRetroBuilding(kind)), `and it clears the ${kind} roof`)
+    }
   }
   // The planks can be switched off in the settings; then they are neither drawn nor turned.
   view.setStockVisible(false)

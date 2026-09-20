@@ -1,15 +1,35 @@
 import { transportMotionFactor } from './transportMotion'
-import { BoxGeometry, Group, Line, BufferGeometry, LineBasicMaterial, Mesh, MeshStandardMaterial, Color, Quaternion, Vector3 } from 'three'
+import { Box3, BoxGeometry, Group, Line, BufferGeometry, LineBasicMaterial, Mesh, MeshStandardMaterial, Color, Quaternion, Vector3, type Object3D } from 'three'
 import { TerrainShape } from './terrainShape'
 import { createTerrainSurface } from './terrainSurface'
 import type { GameSnapshot } from '../game/GameState'
 import { groundInfo } from '../game/ground'
 import { getTerrainHeight } from '../game/terrain'
-import { disposeChildren } from './disposeObject3D'
+import { disposeChildren, disposeObject3D } from './disposeObject3D'
 import { createCarrierDriver, createCarrierFigure, createPorterModel } from './carrierModels'
 import { createRoadVehicleModel, createSupplyStructure } from './logisticsModels'
+import { createRetroBuilding } from './retroBuildings'
 import { staffGateWorldPosition, staffGateYaw } from '../game/supplyChain'
 import { buildingSize } from '../game/stageDesign'
+
+/**
+ * How high the fill bars float above what they belong to, measured from the
+ * model rather than guessed. A fixed height had them hanging inside the taller
+ * ones — the delivery yard swallowed its own bars, and so did the toilets.
+ * Measuring means a model that grows takes its bars up with it.
+ */
+const BAR_CLEARANCE = .18
+const modelTops = new Map<string, number>()
+function modelTop(key: string, build: () => Object3D | null, fallback: number): number {
+  const known = modelTops.get(key)
+  if (known !== undefined) return known
+  const model = build()
+  // Built once only to be measured; the scene gets its own copy elsewhere.
+  const top = model ? new Box3().setFromObject(model).max.y : fallback
+  if (model) disposeObject3D(model)
+  modelTops.set(key, top)
+  return top
+}
 
 export class SupplyChainView {
   group = new Group()
@@ -62,7 +82,8 @@ export class SupplyChainView {
       // Over the middle of whatever it belongs to, not its front edge: the plate turns
       // with the camera, and a pivot off to one side swings it away from its own stand.
       const footprint=buildingSize(b)
-      model.position.set(b.x+footprint.width/2,b.elevation+1.1,b.z+footprint.depth/2)
+      const standTop=modelTop(`stand:${b.kind}`,()=>createRetroBuilding(b.kind),.92)
+      model.position.set(b.x+footprint.width/2,b.elevation+standTop+BAR_CLEARANCE,b.z+footprint.depth/2)
       paintBar(model,1,Math.min(1,(i.shops[b.id]?.[kind]??0)/40),0)
     }
     const supplies=['food','drinks','water','goods'] as const
@@ -79,7 +100,11 @@ export class SupplyChainView {
         this.stock.add(created);this.stockModels.set(depot.id,created)
         model=created
       }
-      model.position.set(depot.x+.5,getTerrainHeight(s.terrain,depot.x,depot.z)+1.25,depot.z+.5)
+      // Four bars stack downwards from the origin, so the lowest of them is what
+      // has to clear the roof.
+      const role=depot.role==='delivery'?'delivery':'supply'
+      const depotTop=modelTop(`depot:${role}`,()=>createSupplyStructure(role),1.0)
+      model.position.set(depot.x+.5,getTerrainHeight(s.terrain,depot.x,depot.z)+depotTop+BAR_CLEARANCE+.24,depot.z+.5)
       supplies.forEach((kind,index)=>{
         const capacity=Math.max(depot.minimum[kind],200)
         paintBar(model,index*2+1,Math.min(1,depot.stock[kind]/capacity),(1-index)*.12)
