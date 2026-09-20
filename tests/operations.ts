@@ -2359,6 +2359,7 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   const cartHaulGame=fixture(0)
   cartHaulGame.addDebugMoney()
   const cartHaul=cartHaulGame.snapshot as GameSnapshot
+  cartHaul.parkOpen=false
   assert.ok(cartHaulGame.hireStaff('cleaner').ok)
   const hauler=cartHaul.staff.find(member=>member.role==='cleaner')!
   assert.ok(cartHaulGame.designateWasteDump([{x:5,z:-14}]).ok)
@@ -2369,7 +2370,7 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   for (let n=0;n<2400;n+=1) {
     cartHaulGame.tick(0.25)
     // 'carrying' is the walk to a bin or the dump; before the cart is full it must not happen.
-    if (hauler.state==='carrying' && hauler.carryingWaste>0 && hauler.carryingWaste<SIMULATION_CONFIG.waste.cleanerMaxCarry && cartHaul.incidents.some(incident=>incident.kind==='litter'||incident.kind==='vomit')) {
+    if (hauler.state==='carrying' && hauler.carryingWaste>0 && hauler.carryingWaste<SIMULATION_CONFIG.waste.cleanerMaxCarry && cartHaul.incidents.some(incident=>incident.id.startsWith('haul-litter-'))) {
       sawPartialHaul=true
       break
     }

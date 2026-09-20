@@ -68,6 +68,7 @@ import { testBuildUndo } from './buildUndo'
 import { testFestivalAudio } from './audio'
 import { testSnapshotModules } from './snapshotModules'
 import { testSimulationModules } from './simulationModules'
+import { testSimulationTime } from './simulationTime'
 import { testUiModules } from './uiModules'
 import { testAttractionFoundation } from './attractionFoundation'
 import { testTicketDemandTuning } from './ticketDemandTuning'
@@ -82,6 +83,9 @@ testFacadeReveal()
 testSnapshotModules()
 testTicketDemandTuning()
 testSimulationModules()
+test('calendar pace is half as fast as walking', () => {
+  testSimulationTime()
+})
 testUiModules()
 test('canonical attraction graph, area and construction foundations', () => {
   testAttractionFoundation()

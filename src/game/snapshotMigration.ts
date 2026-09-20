@@ -112,8 +112,13 @@ export function migrateSnapshot(
     migrationReport: {
       removedAttractionIds: useCanonical ? [] : legacy.removedIds,
     },
-    coasters: projectCoasters(attractions),
-    courses: projectCourses(attractions),
+    coasters: Array.isArray(data.coasters) && data.coasters.length > 0
+      ? data.coasters
+      : projectCoasters(attractions),
+    courses: (() => {
+      const saved = normalizeCourses(data.courses)
+      return saved.length > 0 ? saved : projectCourses(attractions)
+    })(),
     power: normalizePower(data.power),
     campingTicketPrice:
       data.campingTicketPrice ??

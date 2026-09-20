@@ -1,4 +1,4 @@
-import { SIMULATION_CONFIG } from './simulationConfig'
+import { calendarMinutesPerRealSecond, SIMULATION_CONFIG } from './simulationConfig'
 
 export type WasteDumpCell = {
   x: number
@@ -473,8 +473,7 @@ export function isParkWasteDumpOverFull(
  * "per second" figures are quoted in, so what the player is told matches what
  * they watch happen on the clock.
  */
-export const GAME_MINUTES_PER_REAL_SECOND =
-  SIMULATION_CONFIG.time.minutesPerDay / SIMULATION_CONFIG.time.normalDayDurationSeconds
+export const GAME_MINUTES_PER_REAL_SECOND = calendarMinutesPerRealSecond()
 
 /** Where a truck can tip its load: the waste depot, or the works yard. */
 export type WasteTipKind = 'wasteDepot' | 'specialDepot'

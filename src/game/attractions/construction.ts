@@ -214,13 +214,18 @@ export function validateAttractionCompletion(
       const end = layout.graph.nodes.find((node) =>
         node.id === layout.graph.terminalNodeId
       )
-      const landsInWater = end && allAttractions.some((candidate) =>
-        candidate.definitionId === 'swimArea' &&
-        candidate.layout.kind === 'area' &&
-        candidate.layout.cells.some((cell) =>
-          cell.x === Math.floor(end.anchor.x) &&
-          cell.z === Math.floor(end.anchor.z) &&
-          Math.abs(cell.elevation - end.anchor.elevation) <= 2
+      const landsInWater = end && (
+        allAttractions.some((candidate) =>
+          candidate.definitionId === 'swimArea' &&
+          candidate.layout.kind === 'area' &&
+          candidate.layout.cells.some((cell) =>
+            cell.x === Math.floor(end.anchor.x) &&
+            cell.z === Math.floor(end.anchor.z) &&
+            Math.abs(cell.elevation - end.anchor.elevation) <= 2
+          )
+        ) ||
+        layout.graph.edges.some((edge) =>
+          edge.kind === 'poolBasin' && edge.toNodeId === end.id
         )
       )
       if (!landsInWater) messages.push('Der Auslauf der Wasserrutsche landet nicht in einer Wasserfläche.')

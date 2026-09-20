@@ -1,6 +1,11 @@
 import type { CampInstallation, CampingCell } from '../camping'
 import type { Coaster, TrackAnchor, TrackPiece } from '../coasters'
-import type { CourseAttraction, CoursePiece } from '../courseAttractions'
+import {
+  courseEntrance,
+  courseExit,
+  type CourseAttraction,
+  type CoursePiece,
+} from '../courseAttractions'
 import type { StageForecourtCell } from '../festivalAreas'
 import type { PlacedBuilding } from '../types/entities'
 import type {
@@ -89,6 +94,7 @@ export function migrateCoaster(coaster: Coaster): Attraction | null {
 export function migrateCourse(course: CourseAttraction): Attraction[] {
   if (course.kind === 'pool') return migratePool(course)
   if (course.kind === 'paintball') {
+    if (course.areaCells.length === 0 && course.pieces.length === 0) return []
     const references = course.pieces.map(coursePieceReference)
     return [{
       id: course.id,
@@ -114,16 +120,25 @@ export function migrateCourse(course: CourseAttraction): Attraction[] {
       },
     }]
   }
+  const record = migrateTrackCourse(course)
+  return record ? [record] : []
+}
+
+function migrateTrackCourse(course: CourseAttraction): Attraction | null {
   const graph = graphFromCoursePieces(course.pieces)
-  if (!graph.startNodeId || graph.edges.length === 0) return []
-  return [{
+  const entrance = courseEntrance(course)
+  if (!graph.startNodeId && graph.edges.length === 0 && !entrance && course.pieces.length === 0) {
+    return null
+  }
+  const water = course.kind === 'waterSlide'
+  return {
     id: course.id,
-    definitionId: `course:${course.kind}`,
+    definitionId: water ? 'waterSlide' : `course:${course.kind}`,
     name: course.name,
     layout: {
       kind: 'track',
-      topology: 'startEnd',
-      agentKind: 'pedestrian',
+      topology: water ? 'openExit' : 'startEnd',
+      agentKind: water ? 'slider' : 'pedestrian',
       graph,
       selectedOpenNodeId: graph.terminalNodeId,
     },
@@ -136,7 +151,7 @@ export function migrateCourse(course: CourseAttraction): Attraction[] {
       courseKind: course.kind,
       riders: course.riders,
     },
-  }]
+  }
 }
 
 export function graphFromCoasterPieces(pieces: readonly TrackPiece[]): TrackGraph {
@@ -180,9 +195,10 @@ export function graphFromCoursePieces(pieces: readonly CoursePiece[]): TrackGrap
   const edges: TrackEdge[] = []
   pathPieces.forEach((piece) => {
     const start = courseAnchor(piece.x, piece.z, piece.elevation, piece.rotation)
+    const stackedLadder = piece.kind === 'ladder' && piece.endX === undefined
     const end = courseAnchor(
-      piece.endX ?? piece.x + direction(piece.rotation).x,
-      piece.endZ ?? piece.z + direction(piece.rotation).z,
+      stackedLadder ? piece.x : piece.endX ?? piece.x + direction(piece.rotation).x,
+      stackedLadder ? piece.z : piece.endZ ?? piece.z + direction(piece.rotation).z,
       piece.endElevation ?? piece.elevation,
       piece.rotation,
     )
@@ -256,7 +272,7 @@ function migratePool(course: CourseAttraction): Attraction[] {
       operationMode: course.operating ? 'open' : 'closed',
       price: 0,
       queue: [],
-      runtime: { kind: 'course', courseKind: 'pool', riders: [] },
+      runtime: { kind: 'course', courseKind: 'waterSlide', riders: [] },
     })
   })
   return result
@@ -374,8 +390,8 @@ function courseAccess(
   course: CourseAttraction,
   mode: 'entranceExit' | 'queuedEntrance',
 ): Attraction['access'] {
-  const entrance = course.pieces.find((piece) => piece.kind === 'entrance')
-  const exit = course.pieces.find((piece) => piece.kind === 'exit')
+  const entrance = courseEntrance(course)
+  const exit = courseExit(course)
   return {
     mode,
     entrance: entrance ? point(entrance.x, entrance.z, entrance.elevation, entrance.rotation * Math.PI / 2) : null,

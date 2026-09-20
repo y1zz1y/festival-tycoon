@@ -425,7 +425,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - individuelle Vorlieben für schöne Umgebung und Partystimmung sowie Meidung von Feuer, Kotze und Schlafenden
 - kleine Camping-Musikboxen und Gespräche als lokale Stimmungsquellen
 - sortier- und durchsuchbare Besucherübersicht mit Seitenansicht für große Besuchermengen
-- vollständiger Tag-Nacht-Zyklus mit zehn realen Minuten pro Spieltag, Sonnenstand, Dämmerung und Nachtbeleuchtung
+- vollständiger Tag-Nacht-Zyklus mit zwanzig realen Minuten pro Spieltag, Sonnenstand, Dämmerung und Nachtbeleuchtung
 - 24-Stunden-Tagesplan unter **Festival planen** für Bühnen, Buden, Toiletten, Fahrgeschäfte und Lampen
 - getrennte Preise für Tages- und Campingticket unter **Festival planen** (Standard 120 € / 260 €, Slider mit Farbcodierung der Kaufbereitschaft und Live-Schätzung)
 - getrennte Tages- und Campingtickets mit festgelegtem Einlass- und Räumungsfenster für Tagesgäste
@@ -440,7 +440,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Personalverwaltung für Reinigung, Sicherheit, Feuerwehr und Sanitäter mit laufenden Lohnkosten
 - Feuerwache mit Feuerwehrwagen, der ohne Auftrag in der Wache steht
 - Tische am Weg zum Essen und Trinken; Camper bleiben häufiger am eigenen Platz
-- Kurs-Attraktionen unter Attraktionen → Kurse: Mudmasters und Tree-to-Tree wechseln nach dem Eingang direkt in den Wegbau. Vom aktuellen Streckenende wird wie beim Straßenbau Feld für Feld eine richtungsfeste Linie gezogen; automatisch erzeugte Übergangsplattformen und Stützen verbinden realistisch aufeinanderfolgende Wege, Hindernisse und Höhenwechsel. Mudmasters nutzt Holz-/Erdhindernisse, Tree-to-Tree Bäume, Kronenpodeste, Planken und Seile. Ein angrenzender Warteschlangenweg verbindet sich gerichtet mit dem Kurseingang; **Fertig** prüft die Anlage und öffnet das Infofenster. Öffnen und Schließen stehen dort, nicht im Baumenü. Schwimmbad und Paintball beginnen mit einer klar markierten, nachträglich erweiter- und löschbaren Anlagenfläche; verfugte Beckenumgänge, Wasserflächen, gestützte Rutschen sowie Rasen, Netzgrenzen, Bunker und Teamunterstände geben beiden Anlagen einen eigenen Stil. Gäste bleiben während aller Kursinteraktionen sichtbar. Paintballteams warten an ihren Startpunkten und führen anschließend ein langsameres, sichtbares Match mit Markierern und fliegenden Farbkugeln aus. Der Rutschen-Editor zeigt den physikalischen Landepunkt grün/rot an.
+- Kurs-Attraktionen unter Attraktionen → Kurse: Mudmasters und Tree-to-Tree wechseln nach dem Eingang direkt in den Wegbau. Vom aktuellen Streckenende wird wie beim Straßenbau Feld für Feld eine richtungsfeste Linie gezogen; automatisch erzeugte Übergangsplattformen und Stützen verbinden realistisch aufeinanderfolgende Wege, Hindernisse und Höhenwechsel. Mudmasters nutzt Holz-/Erdhindernisse, Tree-to-Tree Bäume, Kronenpodeste, Planken und Seile. Ein angrenzender Warteschlangenweg verbindet sich gerichtet mit dem Kurseingang; **Fertig** prüft die Anlage und öffnet das Infofenster. Öffnen und Schließen stehen dort, nicht im Baumenü. Schwimmbad und Paintball beginnen mit einer klar markierten, nachträglich erweiter- und löschbaren Anlagenfläche; Schwimmbecken und Rutschen-Auslauf tragen sichtbares Wasser: benachbarte Becken derselben Anlage wirken als eine Fläche ohne Zwischenwände (kein Extra-Draw je Kachel). Die Wasserrutsche ist eine eigene Strecke: sie startet immer mit Leitern, die man aufeinander stapelt, danach kommt die Rutsche, am Ende der Auslauf — keine Leiter. Paintball nutzt Rasen, Netzgrenzen, Bunker und Teamunterstände. Gäste bleiben während aller Kursinteraktionen sichtbar. Paintballteams warten an ihren Startpunkten und führen anschließend ein langsameres, sichtbares Match mit Markierern und fliegenden Farbkugeln aus. Der Rutschen-Editor zeigt den physikalischen Landepunkt grün/rot an.
 - Bandplaner in 1–5-Sterne-Tabs; 5-Sterne-Headliner nur selten im Lostopf
 - Sanitäter wählen für Transporte stets das über die Wegstrecke nächstgelegene freie Krankenbett
 - Bei Verletzten rückt immer der nächste freie Sanitäter oder Krankenwagen aus; wer schon einen Patienten hat, bleibt bei ihm
@@ -510,9 +510,9 @@ offenen Ende. „Markiertes Stück entfernen“ entfernt auch ein mittleres Teil
 ohne die beiden übrigen Streckenteile zu löschen; ein offenes Ende anklicken
 und die Lücke neu verbinden.
 
-Die Kurse (Mudmasters, Tree-to-Tree, Schwimmbad, Paintball) teilen den
+Die Kurse (Mudmasters, Tree-to-Tree, Schwimmbad, Paintball, Wasserrutsche) teilen den
 Bauanker am aktuellen Streckenende. Path-led Kurse (Mudmasters, Tree-to-Tree,
-Wasserrutsche im Schwimmbad) zeigen wie Fußwege **Richtungspfeile** in die
+Schwimmbad, Wasserrutsche) zeigen wie Fußwege **Richtungspfeile** in die
 noch freien Nachbarfelder; ein Klick setzt das nächste Stück. Paintball und
 echte Achterbahnen behalten die Stückpalette und den großen Bauen-Knopf.
 Der Ebenen-Regler setzt die Höhe, eine Bauvorschau markiert die nächsten
@@ -520,11 +520,13 @@ Felder, **↶** nimmt das letzte Stück zurück. Klicken und Linienziehen auf de
 Karte bleiben zusätzlich möglich. Die kursspezifischen Regeln bleiben:
 Hindernisse spannen über die ganze Strecke, Baumhindernisse müssen an einem
 Kletterbaum enden, Flächenkurse bauen nur innerhalb ihrer Anlagenfläche.
+Die Wasserrutsche beginnt immer mit Leitern (aufeinander stapelbar) und endet
+im Wasserauslauf, nicht mit einer Leiter.
 
 Paintball und Schwimmflächen werden als zusammenhängende Fläche gezogen.
 Danach erscheinen nur die dort erlaubten Referenzen in der Palette.
 Wasserrutschen sind eigene offene Strecken und können nur geöffnet werden,
-wenn ihr Auslauf in einer Schwimmfläche landet. Eingang, Ausgang und Abriss
+wenn ihr Auslauf Wasser hat. Eingang, Ausgang und Abriss
 teilen die Prüfungen; Betrieb und Preis der Kurse sitzen im Infofenster
 wie bei Achterbahnen, nicht im Baumenü.
 
@@ -578,7 +580,7 @@ Eine Bahn fährt erst, wenn Strecke, Eingang und Ausgang vollständig sind. Mit 
 
 Eine noch nicht vollständige Achterbahn kann mit dem Info-Werkzeug angeklickt werden. Sie wird dadurch erneut im Achterbahn-Editor geöffnet und am Endanker des letzten vorhandenen Schienenelements fortgesetzt.
 
-Im Attraktionsfenster kann eine geschlossene Strecke geöffnet oder ohne Besucher im kontinuierlichen Testbetrieb gefahren werden. Testbetrieb läuft auch schon in der Festivalplanung (neue Szenarien starten dort), sobald die Uhr nicht auf Pause steht. „Wagen zurückholen“ setzt den Zug sicher an die Station; vorhandene Fahrgäste werden dabei über den Ausgang zurück in den Park geführt. **Achterbahn abreißen** fragt zuerst nach (Name der Bahn) und entfernt dann die gesamte Bahn: Schiene, Stützen, Zug, Station, Ein- und Ausgang sowie die angeschlossene Warteschlange. Das Infofenster schließt danach. Denselben Knopf gibt es im Konstruktionsfenster, solange die Bahn noch unvollständig ist. Abriss auf der Stations- oder Zugangskachel fragt ebenfalls nach und entfernt dann die ganze Bahn. Kurs-**Abriss** im Kurseditor und im Infofenster nutzt dieselbe Nachfrage. Ein Info-Klick auf Mudmasters, Tree-to-Tree, Paintball oder Schwimmbad öffnet dasselbe Infofenster: Betrieb öffnen/schließen, Preis, Konstruktion und Abriss. Unfertige Kurse gehen weiter in den Editor.
+Im Attraktionsfenster kann eine geschlossene Strecke geöffnet oder ohne Besucher im kontinuierlichen Testbetrieb gefahren werden. Testbetrieb läuft auch schon in der Festivalplanung (neue Szenarien starten dort), sobald die Uhr nicht auf Pause steht. „Wagen zurückholen“ setzt den Zug sicher an die Station; vorhandene Fahrgäste werden dabei über den Ausgang zurück in den Park geführt. **Achterbahn abreißen** fragt zuerst nach (Name der Bahn) und entfernt dann die gesamte Bahn: Schiene, Stützen, Zug, Station, Ein- und Ausgang sowie die angeschlossene Warteschlange. Das Infofenster schließt danach. Denselben Knopf gibt es im Konstruktionsfenster, solange die Bahn noch unvollständig ist. Abriss auf der Stations- oder Zugangskachel fragt ebenfalls nach und entfernt dann die ganze Bahn. Kurs-**Abriss** im Kurseditor und im Infofenster nutzt dieselbe Nachfrage. Ein Info-Klick auf Mudmasters, Tree-to-Tree, Paintball, Schwimmbad oder Wasserrutsche öffnet dasselbe Infofenster: Betrieb öffnen/schließen, Preis, Konstruktion und Abriss. Unfertige Kurse gehen weiter in den Editor.
 
 Über „Strecke bearbeiten“ lässt sich jede Bahn erneut öffnen. Vor- und Zurück-Schaltflächen markieren die vorhandenen Elemente nacheinander. „Markiertes Element löschen“ entfernt ausschließlich dieses Element und setzt den Bauanker auf das davorliegende Segment. Die späteren Segmente bleiben erhalten; die Strecke gilt als unterbrochen, bis neue Elemente die Lücke geometrisch korrekt schließen.
 

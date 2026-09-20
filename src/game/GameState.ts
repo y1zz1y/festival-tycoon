@@ -71,7 +71,11 @@ import { IncidentSystem } from './incidents';
 import type { GroundIncident, GroundIncidentKind } from './incidents';
 import { DEFAULT_SECURITY_CONFIG, SecuritySystem } from './security';
 import type { SecurityGateConfig } from './security';
-import { SIMULATION_CONFIG } from './simulationConfig';
+import {
+  calendarMinutesPerRealSecond,
+  movementMinutesPerRealSecond,
+  SIMULATION_CONFIG,
+} from './simulationConfig';
 import { normalizeTicketDemandTuning, type TicketDemandTuning } from './demandTuning';
 import { blueprintCatalogCost, blueprintStampCharge, preserveLegacyScenerySlot, transformBlueprintItems, type BlueprintItem } from './blueprints';
 import {
@@ -124,6 +128,7 @@ import { stepAttractions } from './attractions/runtime';
 import {
   dropLegacyAttractionRecords,
   legacyAttractionSignature,
+  mergeLiveRecords,
   refreshAttractionProjections,
   refreshLegacyAttractionRecords,
 } from './attractions/projections';
@@ -884,6 +889,8 @@ export class GameState {
     this.tickAccumulator = 0
     this.lastNavRevision = -1
     this.lockstepReady = true
+    refreshLegacyAttractionRecords(this.state)
+    this.legacyRecordSignature = legacyAttractionSignature(this.state)
     this.refreshAfterNetworkApply()
     this.replayOptimisticCommands()
   }
@@ -962,10 +969,25 @@ export class GameState {
     visitors: Array<{ id: string; changes: Partial<Visitor> }> = [],
     removed: string[] = [],
   ): void {
+    const liveCourses = this.state.courses
+    const liveCoasters = this.state.coasters
     Object.assign(this.state, world)
-    if (world.attractions) refreshAttractionProjections(this.state)
+    if (world.attractions) {
+      refreshAttractionProjections(this.state)
+      // Courses/coasters are the edited truth, like camping overlays. An
+      // attractions-only delta must not drop a just-placed course the host
+      // still occupies but could not yet project (entrance-only tracks).
+      this.state.courses = world.courses
+        ? world.courses
+        : mergeLiveRecords(this.state.courses, liveCourses)
+      this.state.coasters = world.coasters
+        ? world.coasters
+        : mergeLiveRecords(this.state.coasters, liveCoasters)
+    }
     if (
       world.attractions ||
+      world.courses ||
+      world.coasters ||
       world.campingCells ||
       world.campInstallations ||
       world.stageForecourtCells ||
@@ -5562,12 +5584,12 @@ export class GameState {
 
   private toSimulationMinutes(realSeconds: number): number {
     const speed = SIMULATION_SPEED_MULTIPLIERS[this.state.speed] ?? 1
-    return (
-      realSeconds *
-      speed *
-      (SIMULATION_CONFIG.time.minutesPerDay /
-        SIMULATION_CONFIG.time.normalDayDurationSeconds)
-    )
+    return realSeconds * calendarMinutesPerRealSecond(speed)
+  }
+
+  private toMovementMinutes(realSeconds: number): number {
+    const speed = SIMULATION_SPEED_MULTIPLIERS[this.state.speed] ?? 1
+    return realSeconds * movementMinutesPerRealSecond(speed)
   }
 
   private stepFixed(): void {
@@ -5593,7 +5615,7 @@ export class GameState {
     const realSeconds = SIMULATION_CONFIG.time.tickSeconds
     const simulationSeconds =
       realSeconds * speed * SIMULATION_CONFIG.time.movementSimulationRate
-    this.updateCoasters(this.toSimulationMinutes(realSeconds), simulationSeconds)
+    this.updateCoasters(this.toMovementMinutes(realSeconds), simulationSeconds)
   }
 
   private simulateFixedStep(): void {
@@ -5607,8 +5629,9 @@ export class GameState {
     } else {
       this.ensurePedestrianNav(false)
     }
-    this.visitorBehavior.walkVisitors(this.toSimulationMinutes(realSeconds))
     const minutes = this.toSimulationMinutes(realSeconds)
+    const movementMinutes = this.toMovementMinutes(realSeconds)
+    this.visitorBehavior.walkVisitors(movementMinutes)
     this.state.minute += minutes
     this.simulatedMinutes += minutes
 
@@ -5638,9 +5661,9 @@ export class GameState {
     // Whatever route the ground disappeared by — a bulldozer, an area given up, a
     // multiplayer command — the dirt that was lying on it goes with it.
     this.clearStrandedGroundDirt()
-    this.updateLogistics(minutes)
+    this.updateLogistics(movementMinutes)
     this.updateAbandonedCamps(minutes)
-    this.updateStaff(minutes)
+    this.updateStaff(movementMinutes)
     this.atmosphereMinutes += minutes
     if (
       this.atmosphereMinutes >=
@@ -5657,8 +5680,8 @@ export class GameState {
       this.visitorCrowding.update(this.crowdingMinutes)
       this.crowdingMinutes = 0
     }
-    this.visitorSimulation.runTickPhase(minutes)
-    this.stepCourses(minutes)
+    this.visitorSimulation.runTickPhase(minutes, movementMinutes)
+    this.stepCourses(movementMinutes)
 
     if (this.simulatedMinutes >= SIMULATION_CONFIG.time.economyIntervalMinutes) {
       const hours = Math.floor(

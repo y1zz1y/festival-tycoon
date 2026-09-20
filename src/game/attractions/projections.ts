@@ -16,6 +16,18 @@ export function refreshAttractionProjections(state: GameSnapshot): void {
   // Projecting them here discarded player edits whenever any attraction changed.
 }
 
+/** Keep live coaster/course rows that an attractions-only projection dropped. */
+export function mergeLiveRecords<T extends { id: string }>(
+  projected: readonly T[],
+  live: readonly T[] | undefined,
+): T[] {
+  const byId = new Map(projected.map((item) => [item.id, item]))
+  for (const item of live ?? []) {
+    if (!byId.has(item.id)) byId.set(item.id, item)
+  }
+  return [...byId.values()]
+}
+
 export function projectCoasters(attractions: readonly Attraction[]): Coaster[] {
   return attractions.flatMap((attraction) => {
     if (
@@ -213,7 +225,7 @@ export function projectCourses(attractions: readonly Attraction[]): CourseAttrac
         })
       })
     }
-    if (attraction.access.entrance) {
+    if (attraction.access.entrance && attraction.runtime.courseKind !== 'waterSlide') {
       pieces.push({
         id: `${attraction.id}-entrance`,
         kind: 'entrance',

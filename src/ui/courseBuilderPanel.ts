@@ -117,7 +117,9 @@ export function courseBuilderStatus(state: CourseBuilderState): string {
   if (!state.course) {
     return state.kind === 'paintball'
       ? 'Klicke oder ziehe, um das Spielfeld zu markieren.'
-      : 'Klicke auf das Gelände, um den Eingang zu setzen.'
+      : state.kind === 'waterSlide'
+        ? 'Klicke auf das Gelände, um die erste Leiter zu setzen.'
+        : 'Klicke auf das Gelände, um den Eingang zu setzen.'
   }
   const issue = validateCourse(state.course)
   if (issue) return issue

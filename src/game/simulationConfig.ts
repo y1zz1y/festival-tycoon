@@ -12,7 +12,17 @@ export const SIMULATION_CONFIG = {
   time: {
     speedMultipliers: [0, 1, 3, 8],
     movementSimulationRate: 1,
-    normalDayDurationSeconds: 10 * 60,
+    /**
+     * Real seconds for one calendar day at 1×. Doubling this (from 10 min)
+     * makes a game minute last twice as many 100 ms ticks so festivals last
+     * longer in wall time without changing tiles-per-tick movement.
+     */
+    normalDayDurationSeconds: 20 * 60,
+    /**
+     * Historical 10-minute day used only for walking, queues, vehicles and
+     * ride animation. Keep this at 10 * 60 when slowing the calendar.
+     */
+    movementDayDurationSeconds: 10 * 60,
     startMinute: 8 * 60,
     minutesPerDay: 24 * 60,
     economyIntervalMinutes: 60,
@@ -943,7 +953,30 @@ export const SIMULATION_CONFIG = {
       pool: 12,
       treeToTree: 6,
       paintball: 10,
+      waterSlide: 6,
     },
   },
 } as const
+
+/** Game minutes in one real second at the given speed index multiplier (calendar). */
+export function calendarMinutesPerRealSecond(speed = 1): number {
+  return (
+    speed *
+    (SIMULATION_CONFIG.time.minutesPerDay /
+      SIMULATION_CONFIG.time.normalDayDurationSeconds)
+  )
+}
+
+/**
+ * Movement-scaled minutes in one real second. Stays on the historical 10-minute
+ * day so visitor/vehicle/ride travel per tick does not slow with the calendar.
+ */
+export function movementMinutesPerRealSecond(speed = 1): number {
+  return (
+    speed *
+    SIMULATION_CONFIG.time.movementSimulationRate *
+    (SIMULATION_CONFIG.time.minutesPerDay /
+      SIMULATION_CONFIG.time.movementDayDurationSeconds)
+  )
+}
 

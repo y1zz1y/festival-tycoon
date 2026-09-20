@@ -30,6 +30,7 @@ export function testSnapshotModules(): void {
   legacy.entryPrice = 77
   legacy.courses = [
     createSeededCourse('legacy-pool', 'pool', 2, 2),
+    createSeededCourse('legacy-slide', 'waterSlide', 10, 2),
     createEmptyCourse('invalid-course', 'mudmasters'),
   ]
   const migrated = migrateSnapshot(legacy)
@@ -38,6 +39,7 @@ export function testSnapshotModules(): void {
   assert.equal(migrated.campingTicketPrice, 77)
   assert.ok(migrated.attractions.some((attraction) => attraction.definitionId === 'swimArea'))
   assert.ok(migrated.attractions.some((attraction) => attraction.definitionId === 'waterSlide'))
+  assert.ok(migrated.courses.some((course) => course.kind === 'waterSlide' && course.id === 'legacy-slide'))
   assert.ok(migrated.migrationReport?.removedAttractionIds.includes('invalid-course'))
 
   const throughStaticApi = GameState.fromJSON(JSON.stringify(legacy))

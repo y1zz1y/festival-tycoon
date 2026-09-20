@@ -7,8 +7,12 @@ Die Kurse verwenden die gemeinsame Attraktionsgrundlage aus
   Spannweiten mit Start- und Endpunkt sowie Start-/Endhöhe. Gäste bewegen sich
   interpoliert auf dieser Mittellinie.
 - **Fläche:** Paintball ist eine `area`-Attraktion mit Referenzen.
-  Schwimmbecken sind verbundene `swimArea`-Wasserflächen; Wasserrutschen sind
-  eigene Open-Exit-`track`-Attraktionen und müssen im Wasser landen.
+  Schwimmbecken sind verbundene `swimArea`-Wasserflächen. Benachbarte
+  `poolBasin`-Kacheln derselben Attraktion bilden eine zusammenhängende
+  Wasserfläche ohne Zwischenwände.
+- **Wasserrutsche:** eigene path-led `track`-Attraktion (`COURSE_KINDS.waterSlide`,
+  `editorMode: directionArrows`). Sie startet immer mit stapelbaren Leitern,
+  die Rutsche kommt danach, das Ende ist Auslauf/`poolBasin` — keine Leiter.
 
 Der Spieler baut Stück für Stück — kein Ein-Klick-Fertigpark.
 Achterbahnen bleiben in [`coaster.md`](coaster.md) / [`attractions.md`](attractions.md).
@@ -24,7 +28,7 @@ Achterbahnen bleiben in [`coaster.md`](coaster.md) / [`attractions.md`](attracti
 | Editor-Modus | `src/game/trackEditorMode.ts` | `editorMode: 'palette' \| 'directionArrows'` |
 | Typen, Katalog, Validierung, Tick | `src/game/courseAttractions.ts` | `appendCourseAreaCell`, `appendCoursePiece`, `courseTrackEnd`, `validateCourse`, `isCourseReadyToOperate`, `formatCourseInspect`, `stepCourses`, `COURSE_RIDER_THOUGHTS` |
 | Platzieren / Betrieb / Preis / Team | `src/game/GameState.ts` | `startCourseArea`, `addCourseAreaCells`, `removeCourseAreaCells`, `startCourse`, `addCoursePiece`, `undoCoursePiece`, `setCourseOperating`, `setCoursePrice`, `setCourseTeamSize`, `removeCourse` |
-| Balancing | `src/game/simulationConfig.ts` | `courses` (`paintballTeamSize*`, `slideLaunchSpeed`, `slideGravity`); Leerlauf `economy.pauseUpkeepMultiplier` |
+| Balancing | `src/game/simulationConfig.ts` | `courses` (`paintballTeamSize*`, `slideLaunchSpeed`, `slideGravity`, `capacity.waterSlide`); Leerlauf `economy.pauseUpkeepMultiplier` |
 | Abschlussbelohnung | `src/game/attractionFun.ts`, `src/game/attractions/runtime.ts`, `src/game/courseAttractions.ts` | `courses.funGain`, gemeinsame Runtime und Legacy-Projektion |
 | Unterhalt | `src/game/upkeep.ts` | `courseHourlyUpkeep` |
 | Commands | `src/net/protocol.ts`, `src/net/commands.ts`, `src/net/bind.ts` | atomare `startCourseArea`/`addCourseAreaCells`/`removeCourseAreaCells`; außerdem `startCourse`, `addCoursePiece`, `undoCoursePiece`, Betrieb/Preis/Team/Abriss |
@@ -35,7 +39,7 @@ Achterbahnen bleiben in [`coaster.md`](coaster.md) / [`attractions.md`](attracti
 | Baumenü | `src/game/buildMenu.ts`, `src/ui/buildCatalog.ts` | Gruppe *Kurse*, Tool `course` |
 | Klick / Fläche ziehen | `src/main.ts`, `src/input/pathToolController.ts`, `src/input/toolRouter.ts` | Endpunkte/Hindernisse klicken; Anlagenfläche ziehen |
 | Gäste | `src/game/visitorBehavior.ts` | `findReachableCourse`; Becken über `isCourseSwimCell` / `ensureSwimGoals` |
-| Darstellung | `src/view/CourseView.ts` | zusammengeführte Spannweiten/Flächenränder, InstancedMesh für Fläche und Gegenstände, Landemarkierung; `addBridgeOrTreeObstacle` |
+| Darstellung | `src/view/CourseView.ts`, `src/view/courseBasinMesh.ts` | zusammengeführte Spannweiten/Flächenränder, InstancedMesh für Fläche und Gegenstände, Becken-Nachbar-Maske und greedy Wasserrechtecke, Landemarkierung; `addBridgeOrTreeObstacle` |
 | Tests | `tests/courseAttractions.ts` | `testCourseAttractions` |
 
 ## Konstruktion
@@ -71,12 +75,12 @@ umgekehrt. Gleiches Muster, eigene Regeln:
    Welt entscheidbar ist (Flächenkurse dürfen die Spanne nicht verlassen);
    `appendCoursePiece` bleibt die autoritative Prüfung.
 4. **Nächstes Stück**: `COURSE_SPECS[kind].editorMode` entscheidet die Chrome.
-   Path-led Kurse (`mudmasters`, `treeToTree`, `pool`) nutzen
-   `directionArrows`: am Anker erscheint dasselbe 4er-Richtungsraster wie bei
-   Wegen (`#course-direction-grid`). Nur legale, noch nicht bebaute
-   Nachbarn sind aktiv; ein Klick setzt `buildRotation` und ruft
-   `addCoursePiece` auf. Der große Knopf **Am Ende bauen** bleibt in diesem
-   Modus verborgen. Paintball bleibt `palette` (Fläche, kein Nachbar-Menü).
+  Path-led Kurse (`mudmasters`, `treeToTree`, `pool`, `waterSlide`) nutzen
+  `directionArrows`: am Anker erscheint dasselbe 4er-Richtungsraster wie bei
+  Wegen (`#course-direction-grid`). Nur legale, noch nicht bebaute
+  Nachbarn sind aktiv; ein Klick setzt `buildRotation` und ruft
+  `addCoursePiece` auf. Der große Knopf **Am Ende bauen** bleibt in diesem
+  Modus verborgen. Paintball bleibt `palette` (Fläche, kein Nachbar-Menü).
    Achterbahnen bleiben `palette` über `COASTER_CATALOG.editorMode`.
    Kartenklicks und Linienzüge bleiben zusätzlich erlaubt.
 5. **Rückgängig** entfernt genau das letzte Stück (`undoCoursePiece`); ohne
@@ -97,7 +101,7 @@ sind. **Fertig** prüft `validateCourse` und schließt den Editor; bei Erfolg
 beendet nur den Editor. Öffnen und Schließen sitzen **nicht** im Baumenü,
 sondern im Infofenster (`setCourseOperating`, host-autoritativ, bereits
 MP-gebunden). Ein Info-Klick auf einen gültigen Kurs (Mudmasters,
-Tree-to-Tree, Paintball, Schwimmbad) öffnet dasselbe Fenster; unfertige
+Tree-to-Tree, Paintball, Schwimmbad, Wasserrutsche) öffnet dasselbe Fenster; unfertige
 Anlagen gehen weiter in den Konstruktionseditor. **Konstruktion öffnen**
 im Infofenster kehrt zum Builder zurück.
 
@@ -110,12 +114,20 @@ im Infofenster kehrt zum Builder zurück.
   Sprung, Hangelstrecke) werden als verbundene Geometrie über die komplette
   Spanne gebaut. Mehrere Ebenen über den Ebenen-Regler.
 - **Schwimmbad:** zuerst zusammenhängende Anlagenfläche, dann Beckenelemente,
-  Eingang/Ausgang und Rutschen darin. Nur `poolBasin` ist Schwimmwasser; die
-  Fläche selbst ist Beckenumgang. Wasserrutschen sind echte Spannen. Am
-  letzten Rutschstück heben Gäste mit `slideLaunchSpeed`/`slideGravity` ab.
-  Das Bauoverlay markiert den berechneten Landepunkt grün/rot. Wasser =
-  sicher, Boden = `injured`; Sanitäter übernehmen über den normalen
-  Verletzten-Workflow.
+  Eingang/Ausgang darin. Nur `poolBasin` ist Schwimmwasser; die Fläche selbst
+  ist Beckenumgang. Orthogonal benachbarte Becken derselben Attraktion und
+  derselben Höhe teilen sich eine Wasserfläche (greedy Rechtecke, ein
+  InstancedMesh) und verlieren die Innenwände; der Außenrand bleibt der
+  Beckenrand. Dasselbe gilt für Wasserrutschen-Auslaufbecken.
+- **Wasserrutsche:** eigener Katalogeintrag und Editor. `startCourse` setzt
+  immer die erste Leiter. Weitere Leitern kommen **auf dieselbe Kachel**
+  (stapelbar, Höhe +1), nicht als Nachbar und nicht nach dem ersten
+  Rutschstück. Danach `waterSlide`-Spannen per Richtungspfeil; das Ende ist
+  `poolBasin`/Ausgang mit Wasser. Am letzten Rutschstück heben Gäste mit
+  `slideLaunchSpeed`/`slideGravity` ab, wenn kein verbundenes Becken folgt.
+  Wasser = sicher, Boden = `injured`; Sanitäter übernehmen über den normalen
+  Verletzten-Workflow. Alte Pool-Saves mit `waterSlide`-Stücken werden in
+  `normalizeCourses` auf eigene Kurse (`id-slide-N`) aufgeteilt.
 - **Tree-to-Tree:** Bäume sind frei platzierte Knoten. Leiter, Umrundung,
   Hängebrücke, Kletterhindernis, Seilschwung und Seilbahn enden auf einem
   Zielbaum und werden zwischen den Bäumen gespannt. Der verbindende Weg folgt
@@ -141,14 +153,21 @@ nicht der Spieler-Baupfad.
   und getickte Form; der kanonische Datensatz wird danach über
   `refreshLegacyAttractionRecords` nachgezogen, `removeCourse` räumt ihn über
   `dropLegacyAttractionRecords` ab (inklusive abgeleiteter
-  `-slide-`-Rutschen). `stepAttractions` überspringt Kurs-IDs, sonst laufen
-  Kurse doppelt. v30-Pool/Paintball werden einmalig konvertiert; nicht
-  eindeutig konvertierbare Anlagen stehen in
-  `migrationReport.removedAttractionIds`.
+  `-slide-`-Rutschen). `migrateCourse` schreibt auch Eingangs-only-Kurse
+  (leerer Graph, Access vom Eingang), sonst wirft ein Attractions-Delta den
+  Live-Kurs weg: Kachel bleibt beim Host belegt, der Client findet keine
+  Entity. `applyNetworkUpdate` behandelt `courses`/`coasters` wie Camping —
+  Live-Array gewinnt, eine Projektion merget fehlende IDs nach.
+  `stepAttractions` überspringt Kurs-IDs, sonst laufen Kurse doppelt.
+  v30-Pool/Paintball werden einmalig konvertiert; nicht eindeutig
+  konvertierbare Anlagen stehen in `migrationReport.removedAttractionIds`.
 - Host-autoritative Commands, keine Render-Mutation.
 - Verbundene Details werden in ein statisches Vertex-Color-Mesh
   zusammengeführt; Flächen und Punktobjekte bleiben instanziert. Die
   Geometrie wird nur bei einer Bausignaturänderung neu erstellt.
+  Für `poolBasin`-Ränder nutzt `courseBasinMesh` eine Kantenmaske: nur Kanten
+  ohne Nachbarbecken derselben Attraktion und Höhe werden gezeichnet. Wasser
+  wird je Attraktion in Rechtecke zusammengefasst, nicht Kachel für Kachel.
 - Jede gerichtete Strecke erzeugt deduplizierte Übergangsknoten an Start- und
   Endpunkten. Mudmasters nutzt Erd-/Holzpodeste, Tree-to-Tree runde
   Kronenplattformen mit Geländerpfosten und Schwimmbad rutschfeste
@@ -185,12 +204,18 @@ nicht der Spieler-Baupfad.
 `tests/courseAttractions.ts`: Legacy-Beispielgraph gültig, echte Mudmaster-
 und Tree-Spannweiten, Besucherbewegung zwischen Endpunkten, Flächenzwang,
 Betrieb erst nach Validierung, Paintball-Teamgröße, Becken als Schwimmzelle,
-Verletzung ohne Wasserlandung, Abschluss-Spaß sowie **Editor-Modus**
-(`mudmasters`/`treeToTree`/`pool` = `directionArrows`, Paintball = `palette`)
-und Pfeile nur in freien Nachbarrichtungen. Zusätzlich Infotext
-(`formatCourseInspect`) und `isCourseReadyToOperate` für alle Kursarten.
+Becken-Nachbar-Maske und greedy Wasserflächen, Verletzung ohne Wasserlandung,
+Abschluss-Spaß sowie **Editor-Modus**
+(`mudmasters`/`treeToTree`/`pool`/`waterSlide` = `directionArrows`,
+Paintball = `palette`) und Pfeile nur in freien Nachbarrichtungen.
+Wasserrutsche: Startleiter, Stapel, keine Leiter nach der Rutsche,
+Auslauf-Wasser, Infofenster. MP-Command-Roundtrip `startCourse` /
+`startCoaster` über `applyGameCommand` + `WorldUpdates`/`applyNetworkWorld`
+hält Occupancy und Entity nach Host-Ack und nach einem stale
+Attractions-Delta zusammen. Zusätzlich Infotext (`formatCourseInspect`) und
+`isCourseReadyToOperate` für alle Kursarten.
 `tests/uiModules.ts` prüft die Panel-Auswahl der Pfeile und das
-Inspect-Routing (unfertig → Builder, gültig → Infofenster).
+Inspect-Routing (unfertig → Builder, gültig → Infofenster, inkl. Wasserrutsche).
 `tests/coasterTypes.ts` hält alle Achterbahnen auf `palette`.
 
 ## Bei Änderungen dieses Dokuments

@@ -22,7 +22,10 @@ vollen Tages mit den aktuell berechenbaren Fixkosten.
 - Geldänderungen laufen über `bookFinance`; Darlehensauszahlung und Tilgung
   ändern Bargeld und Schuld, sind aber weder Einnahme noch Ausgabe.
 - Buchungen werden auf Cent gerundet und auf acht Festival-Ausgaben begrenzt.
-- Zinsen und laufende Kosten werden aus Simulationszeit berechnet.
+- Zinsen und laufende Kosten werden aus **Kalender**-Simulationszeit berechnet
+  (`economyIntervalMinutes` = 60 Spielminuten, `runEconomy` je voller Spielstunde).
+  Eine langsamere Uhr (`time.normalDayDurationSeconds`) verlängert den Spieltag
+  in Echtzeit, ändert aber nicht den Betrag pro Spieltag oder Spielstunde.
   Ist kein Festival **live** (`festivalIsLive`: gestartet, nicht Planung,
   nicht beendet, Zyklusphase `festival`), sitzen Stände, Fahrgeschäfte,
   Coaster und Kurse auf `economy.pauseUpkeepMultiplier` (**5 %** Leerlauf).

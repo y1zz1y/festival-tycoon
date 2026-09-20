@@ -4,23 +4,20 @@ Snapshot v31 speichert Attraktionen kanonisch in `attractions`. Die Registry
 parametrisiert drei Layouts:
 
 - `track`: Achterbahn-Loop, Shuttle, Mudmasters/Tree-to-Tree Start→Ende und
-  offene Wasserrutsche;
+  eigene offene Wasserrutsche (`waterSlide`, Leitern am Start);
 - `area`: Paintball, Schwimm-, Camping- und Partyfläche;
 - `scripted`: Karussell und stapelbarer Bungee-Turm.
 
-`coasters` und `courses` sind Laufzeitprojektionen: Baucommands ändern die
-kanonische Attraktion, `refreshAttractionProjections` schreibt die Arrays
-danach neu. Campingflächen und Bühnenvorplätze bleiben die **live**
-Ausweisungsarrays (`campingCells`, `campInstallations`,
-`stageForecourtCells`) — `designateCampingCell` /
-`designateCampingArea`, `designateStageForecourt` und `syncStageAudience`
-schreiben sie direkt. `refreshAttractionProjections` darf diese Arrays
-nicht verwerfen; sonst löscht jeder Achterbahn-/Kurs-Command die
-Ausweisung, `canPlace` gibt die Fläche frei und Mehrspieler-Deltas
-kommen ohne Overlay an. Die `camping`-/`partyArea`-Datensätze werden
-nachgezogen wie Coaster: `refreshLegacyAttractionRecords` nach
-Ausweisung, Laden (`migrateSnapshot` / `snapshotRepair`) und
-Netzwerk-Apply. Kursdetails: [`course-attractions.md`](course-attractions.md).
+`coasters` und `courses` sind die **editierte** Wahrheit ihrer Fachsysteme.
+`refreshAttractionProjections` darf sie auf dem MP-Client nicht
+wegwerfen, wenn ein Attractions-Delta den gerade gesetzten Kurs nicht
+trägt (Eingangs-only-Graph). `applyNetworkUpdate` merget Live-IDs nach
+und `refreshLegacyAttractionRecords` schreibt den kanonischen Datensatz
+zurück — Occupancy und Entity bleiben zusammen. Campingflächen und
+Bühnenvorplätze bleiben die **live** Ausweisungsarrays (`campingCells`,
+`campInstallations`, `stageForecourtCells`). `migrateCourse` erzeugt auch
+für einen nackten Eingang oder die erste Wasserrutschen-Leiter einen
+Datensatz. Kursdetails: [`course-attractions.md`](course-attractions.md).
 
 **Achterbahnen und Kurse sind Ausnahmen und gehören ihren Fachsystemen.** Sie
 werden über `state.coasters` / `state.courses` editiert und getickt
@@ -77,7 +74,7 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
   Startknoten abgeleitet, nie aus Arraypositionen.
 - Abschlussvalidierung prüft Topologie, eindeutige Reihenfolge, Zugänge und
   definitionsspezifische Regeln. Open-Exit-Wasserrutschen müssen in einer
-  `swimArea` landen.
+  `swimArea` oder im eigenen `poolBasin`-Auslauf landen.
 - Area-Referenzen sind Bestandteil der Attraktion und keine unabhängigen
   `PlacedBuilding`s. Registry-Allowlisten entscheiden, welche Referenz oder
   Besucherinstallation innerhalb einer Fläche stehen darf.

@@ -12,7 +12,7 @@ sind abgeleitete Darstellung desselben Zustands.
 | Detailverhalten, Bewegung, Ziele | `src/game/visitorBehavior.ts` | `VisitorBehaviorService`, `VisitorBehaviorContext`, `applyPurchaseOutcome`; Bewegung/Ankunft, Needs, Konzert, Shop, Camping, Baden (auch Schwimmbad-Becken), Müll und Laufzeit-Caches |
 | Typen, Spawn, Fassade | `src/game/types/entities.ts`, `src/game/visitorSpawning.ts`, `src/game/GameState.ts` | `Visitor`, `VisitorState`; Admission, Ankunftsgruppen und stabile Kompatibilitäts-Einstiege |
 | Stand-Queue-Spuren | `src/game/queueLanes.ts` | `queueStandOffset`, `stallQueueTileOffset` |
-| Need-/Alkohol-/Übelkeitswerte | `src/game/simulationConfig.ts` | `visitors`, `needs` (`interactionMinutes.stockout`), `alcohol`, `nausea` |
+| Need-/Alkohol-/Übelkeitswerte | `src/game/simulationConfig.ts` | `visitors`, `needs` (`interactionMinutes.stockout`), `alcohol`, `nausea`; Decay bleibt an der Kalender-Spielminute (`docs/simulation.md`) |
 | Festivallust / Gedränge | `src/game/visitorCrowdingSimulation.ts`, `src/game/simulationConfig.ts` | `Visitor.motivation`, Crowd-/Panikpass, `crowding.motivation*` |
 | Festival-Schlafrhythmus | `src/game/visitorSleep.ts`, `src/game/simulationConfig.ts` | `camping.sleepSchedule`, `sampleFestivalSleepRhythm`, `isMinuteInSleepWindow` |
 | Inventar (Zelt, Essen, Pyro, …) | `src/game/inventory.ts` | Inventarfelder und Verbrauch |
@@ -27,6 +27,11 @@ sind abgeleitete Darstellung desselben Zustands.
 
 ## Wichtige Regeln
 
+- Needs, Alkohol und Interaktionsdauern (`interactionRemaining`) rechnen in
+  Kalender-Spielminuten. Die langsamere Uhr macht den Spieltag echt länger;
+  der Verbrauch über denselben Kalendertag bleibt derselbe. Laufen, Queues
+  und Band-Akteure nutzen die getrennte Bewegungsminute, damit die Strecke
+  pro Tick gleich bleibt (`docs/simulation.md`).
 - Erscheinung aus stabilem Hash der **vollen** Visitor-ID ableiten, nicht aus
   Array-Index, Simulations-RNG oder Frame-Zeit.
 - Keine vollständigen Besucher-Scans innerhalb anderer Besucher-Schleifen.

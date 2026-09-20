@@ -118,11 +118,16 @@ Camp und Müll rekonstruiert.
   `syncStageAudience` baut bühnenzugehörige Vorplätze neu. Snapshot-
   Version bleibt 33.
   `courses` (Kurs-Attraktionen): fehlend = `[]` via `normalizeCourses`.
-  `CourseAttraction.areaCells` speichert die explizite Schwimmbad-/
-  Paintball-Fläche; fehlt sie, werden alte `poolBasin`-/`paintballField`-
-  Kacheln übernommen. Neue Streckenstücke speichern optional
-  `endX`/`endZ`/`endElevation`; fehlen diese Werte, bleibt das alte
-  kachelbasierte Routing aktiv.
+  Neues Kind `waterSlide` (eigene Strecke, startet mit Leitern).
+  `normalizeCourses` teilt Legacy-`waterSlide`-Stücke auf Pool-Kursen in
+  eigene Kurse (`{poolId}-slide-N`) auf. `CourseAttraction.areaCells`
+  speichert die explizite Schwimmbad-/Paintball-Fläche; fehlt sie, werden
+  alte `poolBasin`-/`paintballField`-Kacheln übernommen. Neue
+  Streckenstücke speichern optional `endX`/`endZ`/`endElevation`; fehlen
+  diese Werte, bleibt das alte kachelbasierte Routing aktiv. Laden
+  bevorzugt gespeicherte `courses`/`coasters`, falls vorhanden, statt
+  eine unvollständige Attraction-Projektion über die Live-Arrays zu
+  legen.
   Optionales `teamSize` nur bei Paintball (Default aus Config).
   `festival.headlinerPool` (5-Sterne-Angebot der Planung): fehlend = `[]`.
   `logistics.fireStations` und `RoadVehicle.kind === 'fireTruck'`; optionales

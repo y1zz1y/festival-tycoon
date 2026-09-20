@@ -255,8 +255,9 @@ export function testUiModules(): void {
     treeToTree: { x: 30, z: -4 },
     paintball: { x: 22, z: -12 },
     pool: { x: 30, z: -12 },
+    waterSlide: { x: 16, z: -16 },
   } as const
-  for (const kind of ['mudmasters', 'treeToTree', 'paintball', 'pool'] as const) {
+  for (const kind of ['mudmasters', 'treeToTree', 'paintball', 'pool', 'waterSlide'] as const) {
     const origin = inspectOrigins[kind]
     const seeded = createSeededCourse(`inspect-${kind}`, kind, origin.x, origin.z)
     ;(inspectPark.snapshot.courses as Array<typeof seeded>).push(seeded)

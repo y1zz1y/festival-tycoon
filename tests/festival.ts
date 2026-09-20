@@ -258,7 +258,7 @@ export function testFestival(fixture: (count?: number) => GameState): void {
   assert.deepEqual(client.snapshot.festival, f)
   const weekend = create()
   weekend.setSpeed(3)
-  for (let tick = 0; tick < 2500 && !weekend.snapshot.festival.finished; tick++) weekend.tick(0.1)
+  for (let tick = 0; tick < 5000 && !weekend.snapshot.festival.finished; tick++) weekend.tick(0.1)
   assert.equal(weekend.snapshot.festival.finished, true, 'complete weekend must reach its result through normal simulation ticks')
   assert.equal(weekend.snapshot.festival.reports.length, 3)
   assert.equal(weekend.snapshot.speed, 3)

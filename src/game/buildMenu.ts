@@ -224,10 +224,12 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
               kind === 'mudmasters'
                 ? 'Hindernisparcours'
                 : kind === 'pool'
-                  ? 'Becken und Rutschen'
+                  ? 'Becken mit Wasser'
                   : kind === 'treeToTree'
                     ? 'Bäume und Seilbahnen'
-                    : 'Spielfeld mit Teams'
+                    : kind === 'waterSlide'
+                      ? 'Leitern, Rutsche, Auslauf'
+                      : 'Spielfeld mit Teams'
             }`,
             { courseKind: kind },
           ),

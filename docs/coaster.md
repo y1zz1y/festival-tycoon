@@ -30,6 +30,8 @@ gegangen waren und erhalten bleiben müssen:
 - `state.coasters` bleibt die editierte Wahrheit; der kanonische
   `attractions`-Datensatz wird danach nachgezogen
   (`refreshLegacyAttractionRecords`), sonst verliert ein Save Bahnen.
+  Ein MP-Attractions-Delta darf `state.coasters` / `state.courses` nicht
+  verwerfen; Occupancy und Entity bleiben nach dem Host-Ack zusammen.
   `closed` wird dabei wie im Editor über `isCoasterCircuitClosed` bestimmt,
   nicht aus Graph-Knoten geraten.
 

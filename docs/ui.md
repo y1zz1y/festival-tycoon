@@ -45,7 +45,7 @@ Eingang/Ausgang.
 | Kartenklick-Werkzeugrouting | `src/input/toolRouter.ts`, `src/input/cellToolHandlers.ts` | Direkte Commands sowie typisierte Achterbahn-, Wegeditor- und Inspect-Routen |
 | Weg-/Straßen-Ziehcontroller | `src/input/pathToolController.ts` | `createPathToolController`; besitzt Ziehzustand, Linien-/Rechteckbildung und Ausführung |
 | Achterbahn-Baufenster | `src/ui/coasterBuilderPanel.ts` | `updateCoasterBuilderPanel`; stabile Palette und Ghost-/Auswahlvorschau |
-| Kurs-Baufenster | `src/ui/courseBuilderPanel.ts` | `renderCourseBuilderPanel`; `editorMode` schaltet Palette+**Am Ende bauen** gegen Weg-Richtungspfeile; atomare Werkzeuge **Anlagenfläche** und **Fläche entfernen** für Pool/Paintball, Endpunkt-Palette und Ebene für Mudmasters/Tree-to-Tree/Rutschen, Paintball-Teamgröße. Betrieb (Öffnen/Schließen) sitzt nicht hier, sondern im Infofenster |
+| Kurs-Baufenster | `src/ui/courseBuilderPanel.ts` | `renderCourseBuilderPanel`; `editorMode` schaltet Palette+**Am Ende bauen** gegen Weg-Richtungspfeile; atomare Werkzeuge **Anlagenfläche** und **Fläche entfernen** für Pool/Paintball, Endpunkt-Palette und Ebene für Mudmasters/Tree-to-Tree/Wasserrutsche, Paintball-Teamgröße. Wasserrutsche beginnt mit Leiter-Klick, Stapel auf derselben Kachel. Betrieb (Öffnen/Schließen) sitzt nicht hier, sondern im Infofenster |
 | Kontexthilfe | `src/ui/contextHelp.ts` | `contextHelpText`; verwendet das autoritative `PlacementPreviewResult` |
 | Nachfrage-Dialog | `src/ui/confirmDialog.ts` | `confirmAction` (`<dialog>`, wie Spielstand-Text); `rideDemolishPrompt` vor `removeCoaster` / `removeCourse` |
 | Baukatalog / stabile Statusanzeige | `src/ui/buildCatalog.ts` | `createBuildCatalog`, `catalogTileHtml` |

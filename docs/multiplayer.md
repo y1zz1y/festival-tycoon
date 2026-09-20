@@ -188,7 +188,12 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   `campingCells`, `campInstallations`, `stageForecourtCells`. Ein
   Attraction-Delta darf diese Overlay-Arrays auf dem Client nicht
   verwerfen; Host und Client ziehen die `camping`-/`partyArea`-
-  Datensätze nur nach.
+  Datensätze nur nach. Dasselbe gilt für `courses` und `coasters`:
+  ein Attractions-Delta ohne den gerade gesetzten Kurs darf die
+  Live-Zeile nicht löschen, sonst flackert die Anlage und die Kachel
+  bleibt belegt, ohne dass Inspect eine Entity findet.
+  `applyNetworkUpdate` merget die Live-IDs, `migrateCourse` schreibt
+  auch Eingangs-only-Kurse und die erste Wasserrutschen-Leiter.
   Fahrzeugpositionen und Routen behalten das bestehende optionale
   `RoadPosition.elevation` auch beim Laden/Normalisieren. Der Host berechnet
   Straßenbelegung und Vorfahrt pro Ebene; keine zusätzlichen Commands oder

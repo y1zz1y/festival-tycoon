@@ -62,7 +62,7 @@ export const ATTRACTION_DEFINITIONS: Record<string, AttractionDefinition> = {
     accessMode: 'queuedEntrance',
     topology: 'openExit',
     agentKind: 'slider',
-    pieceKinds: ['entrance', 'waterSlide', 'ladder'],
+    pieceKinds: ['ladder', 'waterSlide', 'poolBasin', 'exit'],
   },
   paintball: {
     id: 'paintball',

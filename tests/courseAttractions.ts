@@ -18,13 +18,27 @@ import {
   listCourseDirectionChoices,
   stepCourses,
   validateCourse,
+  type CoursePiece,
 } from '../src/game/courseAttractions'
+import { migrateCourse } from '../src/game/attractions/migration'
 import { GameState } from '../src/game/GameState'
+import { applyGameCommand } from '../src/net/commands'
+import { packWorld } from '../src/net/codec'
+import { WorldUpdates } from '../src/net/worldUpdates'
+import { handleInspectCell } from '../src/input/cellToolHandlers'
 import { normalizeScenarioSettings } from '../src/game/scenario'
 import { createBlankSnapshot } from '../src/game/snapshotBootstrap'
 import { estimateTicketDemand } from '../src/game/ticketDemand'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { CourseView } from '../src/view/CourseView'
+import {
+  BASIN_NEIGHBOR,
+  basinNeighborMask,
+  basinOuterEdges,
+  collectCourseBasinCells,
+  greedyBasinRects,
+  indexBasinCells,
+} from '../src/view/courseBasinMesh'
 import { Box3, Vector3 } from 'three'
 import { buildingHourlyUpkeep, festivalIsLive, festivalIsOnBreak } from '../src/game/upkeep'
 import { collectBuiltAtmosphereCells } from '../src/game/atmosphere'
@@ -95,7 +109,12 @@ export function testCourseAttractions(): void {
   assert.ok(new Set(mud.pieces.map((piece) => `${piece.x},${piece.z}`)).size > 6, 'mudmasters is a 2D parkour footprint')
   const pool = createSeededCourse('shape-pool', 'pool', 0, 0)
   assert.ok(pool.pieces.filter((piece) => piece.kind === 'poolBasin').length >= 4)
-  assert.ok(pool.pieces.some((piece) => piece.kind === 'waterSlide'))
+  assert.equal(pool.pieces.some((piece) => piece.kind === 'waterSlide'), false)
+  const waterPark = createSeededCourse('shape-slide', 'waterSlide', 8, 0)
+  assert.equal(waterPark.pieces[0]?.kind, 'ladder')
+  assert.ok(waterPark.pieces.some((piece) => piece.kind === 'waterSlide'))
+  assert.ok(waterPark.pieces.some((piece) => piece.kind === 'poolBasin'))
+  assert.equal(waterPark.pieces.at(-1)?.kind === 'ladder', false)
   const trees = createSeededCourse('shape-trees', 'treeToTree', 0, 0)
   assert.ok(trees.pieces.filter((piece) => piece.kind === 'tree').length >= 3)
   assert.ok(trees.pieces.some((piece) => piece.kind === 'hangingBridge'))
@@ -185,8 +204,7 @@ export function testCourseAttractions(): void {
   assert.ok(park.addCourseAreaCell(poolId, 7, -4).ok)
   assert.ok(park.addCoursePiece(poolId, 'poolBasin', 7, -4).ok)
   assert.ok(park.addCoursePiece(poolId, 'entrance', 6, -6).ok)
-  assert.ok(park.addCoursePiece(poolId, 'ladder', 7, -6, 2).ok)
-  assert.ok(park.addCoursePiece(poolId, 'waterSlide', 7, -5, 0).ok)
+  assert.ok(park.addCoursePiece(poolId, 'path', 7, -6).ok)
   assert.ok(park.addCoursePiece(poolId, 'exit', 6, -5).ok)
   assert.ok(isCourseSwimCell(park.snapshot.courses, 7, -4))
   assert.equal(validateCourse(park.getCourse(poolId)!), null)
@@ -245,6 +263,10 @@ export function testCourseAttractions(): void {
   assert.ok(
     (courseView as any).staticGroup.children.length <= 30,
     'course combinations stay merged/instanced instead of adding a draw call per detail',
+  )
+  assert.ok(
+    (courseView as { basinWaterMesh: { count: number } }).basinWaterMesh.count >= 1,
+    'pool basins share one instanced water surface',
   )
   assert.equal(
     (courseView as any).weaponMeshes.a.count + (courseView as any).weaponMeshes.b.count,
@@ -332,7 +354,7 @@ export function testCourseAttractions(): void {
   assert.equal(paintA.needs.fun, 10 + SIMULATION_CONFIG.courses.funGain)
   assert.equal(paintB.needs.fun, 10 + SIMULATION_CONFIG.courses.funGain)
 
-  const unsafe = createSeededCourse('unsafe-slide', 'pool', 20, 20)
+  const unsafe = createSeededCourse('unsafe-slide', 'waterSlide', 20, 20)
   const slide = unsafe.pieces.find((piece) => piece.kind === 'waterSlide')
   assert.ok(slide)
   const keepBasin = unsafe.pieces.find((piece) => piece.kind === 'poolBasin')
@@ -359,6 +381,9 @@ export function testCourseAttractions(): void {
   assert.ok(injured || fallen.state === 'injured', 'a waterslide without a basin injures the rider')
 
   testCourseEditorFollowsTheTrackEditor()
+  testWaterSlideIsItsOwnTrack()
+  testConnectedBasinMesh()
+  testCourseMultiplayerRoundtrip()
 }
 
 /**
@@ -425,6 +450,233 @@ function testCourseEditorFollowsTheTrackEditor(): void {
 
   assert.ok(park.removeCourse(pool.id).ok)
   assert.equal(park.getAttraction(pool.id), undefined, 'demolish drops the canonical record too')
+}
+
+function testWaterSlideIsItsOwnTrack(): void {
+  const park = new GameState(
+    createBlankSnapshot(normalizeScenarioSettings({ worldSize: 48, unevenness: 0, startingMoney: 80_000 })),
+  )
+  const started = park.startCourse('waterSlide', 2, 2)
+  assert.ok(started.ok && started.id, started.message)
+  const course = park.getCourse(started.id!)!
+  assert.equal(course.kind, 'waterSlide')
+  assert.equal(course.pieces[0]?.kind, 'ladder')
+  assert.ok(park.getCourseAt(2, 2))
+  assert.ok(park.getAttraction(course.id), 'the first ladder already writes the canonical record')
+  assert.equal(migrateCourse(course).some((entry) => entry.id === course.id), true)
+  assert.equal(courseEditorMode('waterSlide'), 'directionArrows')
+
+  assert.equal(describeCourseAppendIssue(course, 'ladder', 3, 2), 'Setze die nächste Leiter auf die bestehende, um höher zu kommen.')
+  assert.equal(describeCourseAppendIssue(course, 'ladder', 2, 2), null)
+  assert.ok(park.addCoursePiece(course.id, 'ladder', 2, 2).ok)
+  assert.equal(course.pieces.filter((piece) => piece.kind === 'ladder').length, 2)
+  assert.ok((course.pieces.at(-1)?.elevation ?? 0) > (course.pieces[0]?.elevation ?? 0))
+
+  const slide = courseNextBuildTarget(course, 'waterSlide', 1, 1)!
+  assert.ok(park.addCoursePiece(course.id, 'waterSlide', slide.x, slide.z, slide.elevation).ok)
+  assert.match(
+    describeCourseAppendIssue(course, 'ladder', 2, 2) ?? '',
+    /Start/,
+    'ladders are refused after the slide starts',
+  )
+  const basin = courseNextBuildTarget(course, 'poolBasin', 1, 0)!
+  assert.ok(park.addCoursePiece(course.id, 'poolBasin', basin.x, basin.z, 0).ok)
+  const exit = courseNextBuildTarget(course, 'exit', 1, 0)!
+  assert.ok(park.addCoursePiece(course.id, 'exit', exit.x, exit.z, 0).ok)
+  assert.equal(validateCourse(course), null)
+  assert.ok(isCourseSwimCell(park.snapshot.courses, basin.x, basin.z))
+  assert.ok(park.setCourseOperating(course.id, true).ok)
+
+  const view = new CourseView()
+  view.update([course], [], 1)
+  const water = (view as { basinWaterMesh: { count: number } }).basinWaterMesh
+  assert.ok(water.count >= 1, 'the runout basin uses the shared water instance batch')
+}
+
+function basinPieces(
+  id: string,
+  cells: readonly { x: number; z: number; elevation?: number }[],
+): { pieces: CoursePiece[] } {
+  return {
+    pieces: cells.map((cell, index) => ({
+      kind: 'poolBasin' as const,
+      id: `${id}-${index}`,
+      x: cell.x,
+      z: cell.z,
+      elevation: cell.elevation ?? 0,
+      rotation: 0,
+    })),
+  }
+}
+
+function testConnectedBasinMesh(): void {
+  const isolated = { x: 4, z: 7, elevation: 0 }
+  assert.equal(basinNeighborMask(isolated, indexBasinCells([isolated])), 0)
+  assert.deepEqual(basinOuterEdges(0), ['posX', 'negX', 'posZ', 'negZ'])
+
+  const pair = [
+    { x: 2, z: 3, elevation: 0 },
+    { x: 3, z: 3, elevation: 0 },
+  ]
+  const pairIndex = indexBasinCells(pair)
+  assert.equal(basinNeighborMask(pair[0]!, pairIndex), BASIN_NEIGHBOR.posX)
+  assert.equal(basinNeighborMask(pair[1]!, pairIndex), BASIN_NEIGHBOR.negX)
+  assert.deepEqual(basinOuterEdges(BASIN_NEIGHBOR.posX), ['negX', 'posZ', 'negZ'])
+  assert.deepEqual(greedyBasinRects(pair), [{ x: 2, z: 3, w: 2, d: 1, elevation: 0 }])
+
+  const square = [
+    { x: 0, z: 0, elevation: 0 },
+    { x: 1, z: 0, elevation: 0 },
+    { x: 0, z: 1, elevation: 0 },
+    { x: 1, z: 1, elevation: 0 },
+  ]
+  assert.deepEqual(greedyBasinRects(square), [{ x: 0, z: 0, w: 2, d: 2, elevation: 0 }])
+  const corner = { x: 0, z: 0, elevation: 0 }
+  assert.equal(
+    basinNeighborMask(corner, indexBasinCells(square)),
+    BASIN_NEIGHBOR.posX | BASIN_NEIGHBOR.posZ,
+  )
+
+  const stacked = [
+    { x: 5, z: 5, elevation: 0 },
+    { x: 6, z: 5, elevation: 1 },
+  ]
+  const stackedIndex = indexBasinCells(stacked)
+  assert.equal(basinNeighborMask(stacked[0]!, stackedIndex), 0)
+  assert.deepEqual(greedyBasinRects(stacked), [
+    { x: 5, z: 5, w: 1, d: 1, elevation: 0 },
+    { x: 6, z: 5, w: 1, d: 1, elevation: 1 },
+  ])
+
+  const elbow = [
+    { x: 1, z: 1, elevation: 0 },
+    { x: 2, z: 1, elevation: 0 },
+    { x: 3, z: 1, elevation: 0 },
+    { x: 1, z: 2, elevation: 0 },
+    { x: 2, z: 2, elevation: 0 },
+  ]
+  assert.deepEqual(greedyBasinRects(elbow), [
+    { x: 1, z: 1, w: 3, d: 1, elevation: 0 },
+    { x: 1, z: 2, w: 2, d: 1, elevation: 0 },
+  ])
+
+  const pool = basinPieces('pool-a', square)
+  const slide = basinPieces('slide-b', [
+    { x: 8, z: 0 },
+    { x: 9, z: 0 },
+  ])
+  const touchingOther = [
+    { x: 2, z: 0, elevation: 0 },
+    { x: 3, z: 0, elevation: 0 },
+  ]
+  assert.equal(collectCourseBasinCells(pool).length, 4)
+  assert.equal(greedyBasinRects(collectCourseBasinCells(pool)).length, 1)
+  assert.equal(greedyBasinRects(collectCourseBasinCells(slide)).length, 1)
+  assert.equal(
+    basinNeighborMask(touchingOther[0]!, indexBasinCells(touchingOther)),
+    BASIN_NEIGHBOR.posX,
+  )
+  assert.equal(
+    basinNeighborMask(touchingOther[0]!, indexBasinCells(square)) & BASIN_NEIGHBOR.negX,
+    BASIN_NEIGHBOR.negX,
+    'a mixed index would join a foreign neighbor',
+  )
+  assert.equal(
+    greedyBasinRects(collectCourseBasinCells(pool)).length +
+      greedyBasinRects(touchingOther).length,
+    2,
+    'each attraction keeps its own water rectangle even when tiles touch',
+  )
+
+  const view = new CourseView()
+  view.update(
+    [
+      { ...createEmptyCourse('pool-a', 'pool'), pieces: pool.pieces },
+      { ...createEmptyCourse('slide-b', 'waterSlide'), pieces: slide.pieces },
+    ],
+    [],
+    1,
+  )
+  const water = (view as { basinWaterMesh: { count: number } }).basinWaterMesh
+  assert.equal(water.count, 2, 'each attraction keeps one greedy water rectangle')
+  assert.ok(
+    (view as { staticGroup: { children: unknown[] } }).staticGroup.children.length <= 8,
+    'connected rims stay in the merged static mesh',
+  )
+}
+
+function inspectStub() {
+  const calls: string[] = []
+  return {
+    calls,
+    actions: {
+      openSweeper: (id: string) => calls.push(`sweeper:${id}`),
+      openVehicle: (id: string) => calls.push(`vehicle:${id}`),
+      openCoasterBuilder: (id: string) => calls.push(`coasterBuilder:${id}`),
+      openCoaster: (id: string) => calls.push(`coaster:${id}`),
+      openAccess: (id: string) => calls.push(`access:${id}`),
+      openRide: (id: string) => calls.push(`ride:${id}`),
+      openBuilding: (id: string) => calls.push(`building:${id}`),
+      openDepot: (id: string) => calls.push(`depot:${id}`),
+      openWasteDump: (x: number, z: number) => calls.push(`waste:${x}:${z}`),
+      openBackstage: (x: number, z: number) => calls.push(`backstage:${x}:${z}`),
+      openCourseBuilder: (id: string) => calls.push(`courseBuilder:${id}`),
+      openCourse: (id: string) => calls.push(`course:${id}`),
+      toast: (message: string) => calls.push(`toast:${message}`),
+    },
+  }
+}
+
+function testCourseMultiplayerRoundtrip(): void {
+  const host = new GameState(
+    createBlankSnapshot(normalizeScenarioSettings({ worldSize: 48, unevenness: 0, startingMoney: 120_000 })),
+  )
+  const courseResult = applyGameCommand(host, { type: 'startCourse', kind: 'mudmasters', x: 6, z: 4 })
+  assert.equal(courseResult.ok, true, courseResult.message)
+  const courseId = host.getCourseAt(6, 4)?.id
+  assert.ok(courseId)
+  assert.ok(host.getAttraction(courseId), 'host occupancy and attraction stay paired after place')
+
+  const coasterResult = applyGameCommand(host, { type: 'startCoaster', typeId: 'classicSteel', x: -8, z: 4 })
+  assert.equal(coasterResult.ok, true, coasterResult.message)
+  const coasterId = host.getCoasterAt(-8, 4)?.id
+  assert.ok(coasterId)
+
+  const slideResult = applyGameCommand(host, { type: 'startCourse', kind: 'waterSlide', x: 10, z: 6 })
+  assert.equal(slideResult.ok, true, slideResult.message)
+
+  const updates = new WorldUpdates()
+  const full = JSON.parse(updates.encode(packWorld(host.snapshot), true)) as {
+    world: Parameters<GameState['applyNetworkWorld']>[0]
+  }
+  const guest = new GameState()
+  guest.setTool('inspect')
+  guest.applyNetworkWorld(full.world)
+  assert.ok(guest.getCourseAt(6, 4), 'full sync keeps the course pickable')
+  assert.ok(guest.getAttraction(courseId))
+  assert.ok(guest.getCoasterAt(-8, 4))
+  assert.ok(guest.getCourseAt(10, 6))
+
+  const inspect = inspectStub()
+  assert.equal(handleInspectCell(guest, { x: 6, z: 4, localX: 0.5, localZ: 0.5 }, inspect.actions), true)
+  assert.ok(inspect.calls[0]?.startsWith('courseBuilder:'), inspect.calls.join(','))
+
+  const staleAttractions = host.snapshot.attractions.filter((attraction) => attraction.id !== courseId)
+  guest.applyNetworkUpdate({ attractions: structuredClone(staleAttractions) })
+  assert.ok(guest.getCourseAt(6, 4), 'a stale attractions delta must not wipe the live course')
+  assert.ok(guest.getCourse(courseId))
+  assert.ok(guest.getAttraction(courseId), 'refreshLegacy writes the live course back onto attractions')
+  assert.equal(guest.startCourse('mudmasters', 6, 4).ok, false, 'the host tile stays occupied')
+
+  const delta = JSON.parse(updates.encode(packWorld(host.snapshot))) as {
+    world: Parameters<GameState['applyNetworkUpdate']>[0]
+    visitors: Parameters<GameState['applyNetworkUpdate']>[1]
+    removed: string[]
+  }
+  guest.applyNetworkUpdate(delta.world, delta.visitors, delta.removed)
+  assert.ok(guest.getCourseAt(6, 4))
+  assert.ok(guest.getCoasterAt(-8, 4))
+  assert.ok(guest.getCourseAt(10, 6))
 }
 
 export function testPostRefactorBacklog(): void {
@@ -496,6 +748,7 @@ export function testPostRefactorBacklog(): void {
   assert.equal(courseEditorMode('mudmasters'), 'directionArrows')
   assert.equal(courseEditorMode('treeToTree'), 'directionArrows')
   assert.equal(courseEditorMode('pool'), 'directionArrows')
+  assert.equal(courseEditorMode('waterSlide'), 'directionArrows')
   assert.equal(courseEditorMode('paintball'), 'palette')
   assert.equal(COURSE_SPECS.mudmasters.editorMode, 'directionArrows')
   assert.equal(courseUsesDirectionArrows('paintball'), false)

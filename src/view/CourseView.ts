@@ -4,6 +4,7 @@ import {
   Matrix4,
   Mesh,
   MeshStandardMaterial,
+  PlaneGeometry,
   Quaternion,
   Vector3,
   type Object3D,
@@ -20,6 +21,7 @@ import {
 import type { Visitor } from '../game/types/entities'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { ModelKit } from './retroBuildings'
+import { addBasinRims, collectCourseBasinCells, greedyBasinRects } from './courseBasinMesh'
 import { disposeObject3D } from './disposeObject3D'
 
 const material = new MeshStandardMaterial({
@@ -35,6 +37,7 @@ const matrix = new Matrix4()
 const rotation = new Quaternion()
 const position = new Vector3()
 const axisY = new Vector3(0, 1, 0)
+const axisX = new Vector3(1, 0, 0)
 const scale = new Vector3(1, 1, 1)
 const forwardAxis = new Vector3(0, 0, 1)
 
@@ -235,9 +238,9 @@ function addConnectedPiece(
   } else {
     const deckColor =
       courseKind === 'treeToTree' ? 0x8b633f :
-      courseKind === 'pool' ? 0xd8d4c9 :
+      courseKind === 'pool' || courseKind === 'waterSlide' ? 0xd8d4c9 :
       0x8a6338
-    const width = courseKind === 'pool' ? 0.68 : 0.56
+    const width = courseKind === 'pool' || courseKind === 'waterSlide' ? 0.68 : 0.56
     kit.box(mid.x, mid.y, mid.z, width, 0.08, length, deckColor, q)
     if (courseKind === 'mudmasters') {
       kit.box(mid.x - width * 0.48, mid.y + 0.035, mid.z, 0.035, 0.07, length, 0x5b452f, q)
@@ -271,7 +274,7 @@ function addCourseTransitions(kit: ModelKit, course: CourseAttraction): number {
         const z = joint.z + Math.sin(angle) * 0.35
         kit.beam([x, joint.y, z], [x, joint.y + 0.48, z], 0.035, 0x5b422f)
       }
-    } else if (course.kind === 'pool') {
+    } else if (course.kind === 'pool' || course.kind === 'waterSlide') {
       kit.box(joint.x, joint.y, joint.z, 0.72, 0.07, 0.72, 0xd8d4c9)
       for (const offset of [-0.25, 0, 0.25]) {
         kit.box(joint.x + offset, joint.y + 0.04, joint.z, 0.025, 0.025, 0.62, 0xaeb9ba)
@@ -286,7 +289,7 @@ function addCourseTransitions(kit: ModelKit, course: CourseAttraction): number {
           [joint.x + dx, 0.05, joint.z + dz],
           [joint.x + dx, joint.y - 0.03, joint.z + dz],
           0.055,
-          course.kind === 'pool' ? 0x829498 : 0x65472f,
+          course.kind === 'pool' || course.kind === 'waterSlide' ? 0x829498 : 0x65472f,
         )
       }
     }
@@ -337,7 +340,7 @@ function addAreaBoundary(kit: ModelKit, course: CourseAttraction): number {
 }
 
 function addSlideLandingMarkers(kit: ModelKit, course: CourseAttraction): number {
-  if (course.kind !== 'pool' || course.operating) return 0
+  if ((course.kind !== 'pool' && course.kind !== 'waterSlide') || course.operating) return 0
   const track = courseTrackPieces(course)
   let count = 0
   for (let index = 0; index < track.length; index += 1) {
@@ -438,13 +441,7 @@ function buildPiece(kind: CoursePieceKind) {
     return k.finish()
   }
   if (kind === 'poolBasin') {
-    k.box(0, 0.07, 0, 0.98, 0.14, 0.98, 0xe4e0d8)
-    k.box(0, 0.055, 0, 0.82, 0.1, 0.82, 0x267aa8)
-    k.box(0, 0.115, 0, 0.74, 0.018, 0.74, 0x57b8da)
-    for (const offset of [-0.45, 0.45]) {
-      k.box(offset, 0.11, 0, 0.055, 0.16, 0.94, 0xf0ede6)
-      k.box(0, 0.11, offset, 0.94, 0.16, 0.055, 0xf0ede6)
-    }
+    k.box(0, 0.03, 0, 1, 0.06, 1, 0xc5d0d2)
     return k.finish()
   }
   if (kind === 'waterSlide') {
@@ -543,9 +540,22 @@ function buildPiece(kind: CoursePieceKind) {
   return k.finish()
 }
 
+const basinWaterGeometry = new PlaneGeometry(1, 1)
+const waterScale = new Vector3(1, 1, 1)
+basinWaterGeometry.userData.shared = true
+const basinWaterMaterial = new MeshStandardMaterial({
+  color: 0x2f7ca8,
+  roughness: 0.18,
+  metalness: 0.12,
+  transparent: true,
+  opacity: 0.72,
+})
+basinWaterMaterial.userData.shared = true
+
 export class CourseView {
   readonly group = new Group()
   private readonly staticGroup = new Group()
+  private basinWaterMesh = new InstancedMesh(basinWaterGeometry, basinWaterMaterial, 16)
   private readonly weaponMeshes = {
     a: new InstancedMesh(paintballWeaponGeometries.a, material, MAX_PAINTBALL_ACTORS),
     b: new InstancedMesh(paintballWeaponGeometries.b, material, MAX_PAINTBALL_ACTORS),
@@ -557,8 +567,12 @@ export class CourseView {
   private geometrySignature = ''
 
   constructor() {
+    this.basinWaterMesh.count = 0
+    this.basinWaterMesh.frustumCulled = false
+    this.basinWaterMesh.receiveShadow = true
     this.group.add(
       this.staticGroup,
+      this.basinWaterMesh,
       this.weaponMeshes.a,
       this.weaponMeshes.b,
       this.projectileMeshes.a,
@@ -589,6 +603,7 @@ export class CourseView {
     ).join('|')
     if (signature === this.geometrySignature) return
     this.geometrySignature = signature
+    this.syncBasinWater(courses)
     while (this.staticGroup.children.length) {
       const child = this.staticGroup.children[0]!
       this.staticGroup.remove(child)
@@ -600,6 +615,7 @@ export class CourseView {
     const byKind = new Map<CoursePieceKind, { x: number; y: number; z: number; rotation: number; courseId: string }[]>()
     for (const course of courses) {
       connectedPieceCount += addAreaBoundary(trackKit, course)
+      connectedPieceCount += addBasinRims(trackKit, collectCourseBasinCells(course))
       connectedPieceCount += addSlideLandingMarkers(trackKit, course)
       connectedPieceCount += addCourseTransitions(trackKit, course)
       if (course.kind === 'pool' || course.kind === 'paintball') {
@@ -677,6 +693,43 @@ export class CourseView {
       mesh.instanceMatrix.needsUpdate = true
       this.staticGroup.add(mesh)
     }
+  }
+
+  private syncBasinWater(courses: readonly CourseAttraction[]): void {
+    const rects: { x: number; y: number; z: number; w: number; d: number }[] = []
+    for (const course of courses) {
+      for (const rect of greedyBasinRects(collectCourseBasinCells(course))) {
+        rects.push({
+          x: rect.x + rect.w / 2,
+          y: rect.elevation + 0.12,
+          z: rect.z + rect.d / 2,
+          w: rect.w,
+          d: rect.d,
+        })
+      }
+    }
+    let water = this.basinWaterMesh
+    if (water.instanceMatrix.count < rects.length) {
+      this.group.remove(water)
+      water = new InstancedMesh(
+        basinWaterGeometry,
+        basinWaterMaterial,
+        Math.max(16, rects.length),
+      )
+      water.frustumCulled = false
+      water.receiveShadow = true
+      this.basinWaterMesh = water
+      this.group.add(water)
+    }
+    rects.forEach((rect, index) => {
+      rotation.setFromAxisAngle(axisX, -Math.PI / 2)
+      position.set(rect.x, rect.y, rect.z)
+      waterScale.set(rect.w, rect.d, 1)
+      matrix.compose(position, rotation, waterScale)
+      water.setMatrixAt(index, matrix)
+    })
+    water.count = rects.length
+    water.instanceMatrix.needsUpdate = true
   }
 
   private updatePaintballEffects(

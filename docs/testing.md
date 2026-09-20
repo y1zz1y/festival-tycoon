@@ -53,10 +53,11 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `tests/accounts.ts` | Registrierung, Sessions, Passwort-Hashes und Rate-Limit |
 | `tests/saves.ts` | kontoabhängige und öffentliche Server-Spielstände |
 | `tests/finance.ts` | Bücher, Kredite, vorbereitete Szenarien, Ziele, aufklappbare Kostenaufschlüsselung, Leerlauf-Unterhalt aktiv vs. inaktiv |
-| `tests/courseAttractions.ts` | Kurs-Konstruktion, Validierung, Einlass, Rutschverletzung, Leerlauf-Unterhalt, Ticketnachfrage, Sterne-Bands, `editorMode` (Weg-Pfeile vs Palette), freie Nachbarrichtungen, Infotext/Betrieb (`formatCourseInspect`, `isCourseReadyToOperate`) |
+| `tests/courseAttractions.ts` | Kurs-Konstruktion, Validierung, Einlass, Rutschverletzung, Leerlauf-Unterhalt, Ticketnachfrage, Sterne-Bands, `editorMode` (Weg-Pfeile vs Palette), freie Nachbarrichtungen, Infotext/Betrieb (`formatCourseInspect`, `isCourseReadyToOperate`), eigene Wasserrutsche (Startleiter/Stapel/Auslauf), Becken-Nachbar-Maske / greedy Wasserflächen, MP-Command-Roundtrip `startCourse`/`startCoaster` |
 | `tests/snapshotModules.ts` | Deterministischer Snapshot-Bootstrap, sichere Migration, delegierendes `GameState.fromJSON` |
 | `tests/ticketDemandTuning.ts` | Nachfrageformeln, Normalisierung, Live-Zustand und host-autoritativer Command |
 | `tests/simulationModules.ts` | Extraktionsgrenzen: Logistik/Visitor-Phasen, `RoadVehicleSimulation`, `VisitorBehaviorService`, `VisitorSpawning`, `VisitorCrowdingSimulation`, `CoasterSimulation`, `PlacementService` und `snapshotRepair`; faire Routingqueue und direkte Aufrufe außerhalb des Ticks |
+| `tests/simulationTime.ts` | Kalender vs. Bewegung: 8⅓ Ticks je Spielminute, unveränderte Wegstrecke pro Tick, Festivalphasen in Spielstunden / längere Tick-Slots |
 | `tests/uiModules.ts` | Extraktionsgrenzen: Command-Registry/Optimistic-Policy, Flächen-Preview/Execute, Weglinien-/Rechteckbildung, autoritative Kontexthilfe, differentielle Update-Gates, Archiv-Merge/Escaping, gemeinsame Geld-/Zeit-/HTML-Formatierung, Katalog-HTML, Abriss-Nachfrage-Text/`wouldBulldozeRemoveCoaster`, Kurs-Inspect-Routing und Kartenwerkzeuge weiterhin durch Multiplayer-Gate |
 | `tests/browserSaves.ts` | Gemeinsame Quota-Erkennung, lokaler Slot- und Schnellspeichern-Roundtrip (Besucher/Gebäude bleiben), Liste ohne `fromJSON`, gemockter Server-Client (HTML/401) |
 | `tests/unsavedWork.ts` | Ungespeicherte Arbeit: Bauen/Abreißen markiert sie, Speichern setzt zurück, reines Ticken zählt nicht, Fünf-Minuten-Grenze exakt, abgeschaltete Warnung lässt Abbruchwege durch |

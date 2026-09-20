@@ -2190,7 +2190,9 @@ function openCourseBuilder(courseId: string | null = null, kind?: CourseKind): v
       ? 'area'
       : existing.kind === 'treeToTree'
         ? 'tree'
-        : 'path'
+        : existing.kind === 'waterSlide'
+          ? 'ladder'
+          : 'path'
     : defaultCoursePiece(pendingCourseKind)
   courseBuildElevation =
     selectedCoursePiece === 'area' || selectedCoursePiece === 'areaErase'
@@ -2367,6 +2369,10 @@ function placeCourseAt(cell: CellPosition, quiet = false): { ok: boolean; messag
     if (pendingCourseKind === 'mudmasters' || pendingCourseKind === 'treeToTree') {
       selectedCoursePiece = 'path'
       courseBuildElevation = COURSE_PIECE_ELEVATION.path
+    }
+    if (pendingCourseKind === 'waterSlide') {
+      selectedCoursePiece = 'ladder'
+      courseBuildElevation = COURSE_PIECE_ELEVATION.ladder
     }
     if (!quiet) showToast(started.message)
     updateCourseBuilder()

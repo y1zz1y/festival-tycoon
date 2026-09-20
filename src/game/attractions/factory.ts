@@ -70,7 +70,7 @@ export function createAttraction(
       }
     }
     const courseKind = definitionId === 'waterSlide'
-      ? 'pool'
+      ? 'waterSlide'
       : definitionId.slice('course:'.length) as CourseKind
     return {
       ...base,
@@ -141,5 +141,6 @@ function defaultAttractionPrice(definitionId: string): number {
   }
   if (definitionId === 'paintball') return COURSE_SPECS.paintball.price
   if (definitionId === 'swimArea') return COURSE_SPECS.pool.price
+  if (definitionId === 'waterSlide') return COURSE_SPECS.waterSlide.price
   return 0
 }

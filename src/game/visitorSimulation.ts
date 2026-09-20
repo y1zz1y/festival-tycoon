@@ -45,12 +45,12 @@ export class VisitorSimulation {
     return this.pendingRouting
   }
 
-  runTickPhase(minutes: number): void {
-    this.context.updateVisitors(minutes)
-    this.context.updateFanIntrusion(minutes)
-    this.context.updateBandActors(minutes)
-    this.context.updateFacilityQueues(minutes)
-    this.context.updateVisitorFireworks(minutes)
+  runTickPhase(clockMinutes: number, movementMinutes = clockMinutes): void {
+    this.context.updateVisitors(clockMinutes)
+    this.context.updateFanIntrusion(clockMinutes)
+    this.context.updateBandActors(movementMinutes)
+    this.context.updateFacilityQueues(movementMinutes)
+    this.context.updateVisitorFireworks(clockMinutes)
     this.context.updateCoasters()
   }
 

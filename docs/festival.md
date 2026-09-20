@@ -19,10 +19,15 @@ hält die Simulationsuhr an, bis **Festival starten**.
 | Spielplan-UI | `src/musicPlanner.ts` | Band ziehen, Raster |
 | Festival-Fenster | `src/festivalUI.ts` | Tickets, Preise, Tagesplan, Auswertung, Ausbauten, **Park öffnen/schließen** (`setParkOpen`) |
 | HEADLINE Magazin | `src/game/headlineMagazine.ts`, `src/headlineMagazineUI.ts` | `buildHeadlineMagazine`, Overlay nach Festivalende |
-| Balancing | `src/game/simulationConfig.ts` | `visitors.festivalArrivals`, `economy.defaultEntryPrice`, `economy.defaultCampingTicketPrice` |
+| Balancing | `src/game/simulationConfig.ts` | `visitors.festivalArrivals`, `economy.defaultEntryPrice`, `economy.defaultCampingTicketPrice`; Kalenderlänge `time.normalDayDurationSeconds` (20 min Echtzeit/Spieltag, [`simulation.md`](simulation.md)) |
 
 ## Wichtige Regeln
 
+- Der Festival-Tagesplan, Band-Slots und Ticket-Anreisen hängen an der
+  Kalender-Spielminute (`state.minute` / `state.day`). Eine Spielstunde bleibt
+  60 Spielminuten; durch `time.normalDayDurationSeconds` dauert sie in Ticks
+  und Echtzeit doppelt so lang wie früher. Phasenlängen (`lead` / `festival` /
+  `break`) bleiben Spieltage. Siehe [`simulation.md`](simulation.md).
 - `FestivalAction` ist die einzige Mutations-API für Planung, Buchung,
   Tickets, Templates und Infrastructure-Aktionen.
 - Buchungen vor Start sind verbindlich; Gagen zählen zur Bilanz.
@@ -71,7 +76,8 @@ hält die Simulationsuhr an, bis **Festival starten**.
 
 ## Tests
 
-`tests/festival.ts` (Ablauf, Buchung, Lager, Ruf). `tests/musicPlanning.ts`.
+`tests/festival.ts` (Ablauf, Buchung, Lager, Ruf; Wochenende über normale Ticks).
+Kalender vs. Bewegung: `tests/simulationTime.ts`. `tests/musicPlanning.ts`.
 `tests/stageTickets.ts`. `tests/festivalAdditions.ts`.
 `tests/headlineMagazine.ts` (Magazin nur nach `finished`, mindestens ein
 Pro/Kontra, deterministisch, nicht mitten im Wochenende).
