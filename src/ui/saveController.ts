@@ -1,9 +1,9 @@
 import { makeDraggable, makeResizable } from '../dragPanel'
-import { deleteNamedSlotJson, readNamedSlotJson, readQuicksaveJson, writeNamedSlotJson, writeQuicksaveJson } from '../game/browserSaves'
+import { deleteNamedSlotJson, readNamedSlotJson, readQuicksaveJson, writeNamedSlotJson } from '../game/browserSaves'
 import { GameState } from '../game/GameState'
 import { decodeSaveText, encodeSaveText, serializeSnapshot, storageErrorMessage } from '../game/saveText'
 import { deleteServerSave, listServerSaves, loadServerSave, saveServerSave, shareServerSave } from '../game/serverSaves'
-import { AUTOSAVE_DEFAULT_MINUTES, AUTOSAVE_INTERVALS, AUTOSAVE_KEY, AUTOSAVE_NAME } from '../app/shell'
+import { AUTOSAVE_DEFAULT_MINUTES, AUTOSAVE_INTERVALS, AUTOSAVE_KEY, LEGACY_AUTOSAVE_NAME, QUICKSAVE_NAME } from '../app/shell'
 import { EMPTY_SAVE_ARCHIVE, composeSaveArchive, findSaveSlot as findArchiveSlot, offlineSaveArchive, saveArchiveHtml, saveAsArchiveHtml, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
 import { formatSaveTime } from './format'
 import { loadWithOverlay } from './loadingOverlay'
@@ -87,12 +87,28 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
       showToast(message)
     })
   }
+  /**
+   * The slot quick-saving and auto-saving share, as it stands in the archive.
+   * Looked up by name rather than remembered, so it still lines up after a
+   * reload, a sign-in, or the same game being played in another browser.
+   */
+  async function quicksaveSlot(): Promise<SaveSlotView | undefined> {
+    const archive = await fetchSaveSlots()
+    // An older game's autosave becomes this slot rather than being left beside
+    // it: writing into that id renames it, so the newest save stays the newest.
+    return archive.own.find((slot) => slot.name === QUICKSAVE_NAME)
+      ?? archive.own.find((slot) => slot.name === LEGACY_AUTOSAVE_NAME)
+  }
+
   async function persistQuicksave(): Promise<void> {
     try {
-      const json = serializeSnapshot(getGame().snapshot)
-      await writeQuicksaveJson(json)
-      markWorkSaved()
-      showToast('Spiel gespeichert')
+      const existing = await quicksaveSlot()
+      const message = await persistNamedSave(
+        QUICKSAVE_NAME,
+        existing?.id,
+        existing?.source ?? (saveArchive.onServer ? 'server' : 'browser'),
+      )
+      showToast(message)
     } catch (error) {
       showToast(storageErrorMessage(error, 'Schnellspeichern ist fehlgeschlagen'), true)
     }
@@ -103,13 +119,20 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
       showToast('Nur der Host kann einen Spielstand laden', true)
       return false
     }
-    const raw = await readQuicksaveJson()
-    const loaded = raw ? GameState.fromJSON(raw) : GameState.load()
+    const slot = await quicksaveSlot()
+    // Saves written before the two were merged still live in the old single
+    // slot; they are read as a fallback so nobody's last game disappears.
+    const loaded = slot
+      ? await readSaveSlot(slot)
+      : await (async () => {
+        const raw = await readQuicksaveJson()
+        return raw ? GameState.fromJSON(raw) : GameState.load()
+      })()
     if (!loaded) {
       showToast('Kein gültiger Spielstand gefunden', true)
       return false
     }
-    bindLoadedGame(loaded, 'Spielstand geladen')
+    bindLoadedGame(loaded, `„${QUICKSAVE_NAME}“ geladen`)
     return true
   }
   function showSaveSlots(archive: SaveArchiveView): void {
@@ -213,9 +236,9 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     if (autosaveRunning || isTitleOpen() || getMultiplayerMode() === 'client') return
     autosaveRunning = true
     try {
-      const archive = await fetchSaveSlots()
-      const existing = archive.own.find((slot) => slot.name === AUTOSAVE_NAME)
-      await persistNamedSave(AUTOSAVE_NAME, existing?.id, existing?.source ?? (archive.onServer ? 'server' : 'browser'))
+      const existing = await quicksaveSlot()
+      // The same slot quick-saving writes: one latest save, not two competing ones.
+      await persistNamedSave(QUICKSAVE_NAME, existing?.id, existing?.source ?? (saveArchive.onServer ? 'server' : 'browser'))
       showToast('Automatisch gespeichert')
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Automatisches Speichern fehlgeschlagen', true)

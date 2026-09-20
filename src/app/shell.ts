@@ -18,7 +18,17 @@ export const AUTOSAVE_INTERVALS = [
 export const AUTOSAVE_DEFAULT_MINUTES = 15
 export const AUTOSAVE_KEY = 'festival-autosave-minutes'
 /** The one slot the automatic save writes to, over and over. */
-export const AUTOSAVE_NAME = 'Autospeichern'
+/**
+ * The one slot that quick-saving and auto-saving share. They used to write to
+ * different places — a hidden single slot and a named archive entry — so the
+ * game had two "latest" saves and the player could not see either of them
+ * side by side. One named slot shows up in the archive like any other, with
+ * its day and its time on it.
+ */
+export const QUICKSAVE_NAME = 'Schnellspeichern'
+
+/** What the shared slot was called while only auto-saving wrote to it. */
+export const LEGACY_AUTOSAVE_NAME = 'Autospeichern'
 
 export function mountAppShell(app: HTMLDivElement): void {
   app.innerHTML = `
@@ -809,7 +819,6 @@ export function mountAppShell(app: HTMLDivElement): void {
         <nav class="title-menu" aria-label="Hauptmenü">
           <button type="button" data-title-menu="resume" disabled><span class="title-menu-label">Fortsetzen</span><span id="title-resume-meta" class="title-menu-meta">Noch nicht gespielt</span></button>
           <button type="button" data-title-menu="new" aria-haspopup="true"><span class="title-menu-label">Neues Spiel</span><span class="title-menu-meta">${SCENARIO_PRESETS.length + 1} Szenarien</span></button>
-          <button type="button" data-title-menu="quickload"><span class="title-menu-label">Schnell laden</span><span class="title-menu-meta">Letzter Einzelspielstand</span></button>
           <button type="button" data-title-menu="load"><span class="title-menu-label">Spielstand laden</span><span class="title-menu-meta">Archiv öffnen</span></button>
           <button type="button" data-title-menu="multiplayer" aria-haspopup="true"><span class="title-menu-label">Mehrspieler beitreten</span><span class="title-menu-meta">Offene Lobby oder Code</span></button>
           <button type="button" data-title-menu="settings"><span class="title-menu-label">Einstellungen</span><span class="title-menu-meta">Debug · Festivaldaten</span></button>

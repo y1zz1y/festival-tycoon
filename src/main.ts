@@ -4935,7 +4935,6 @@ const fetchSaveSlots = saveController.fetchSlots
 const findSaveSlot = saveController.findSlot
 const readSaveSlot = saveController.readSlot
 const bindLoadedGame = saveController.bindLoadedGame
-const tryQuickLoad = saveController.tryQuickLoad
 const formatSaveTime = saveController.formatSaveTime
 
 titleScreenController = mountTitleScreen({
@@ -4963,7 +4962,6 @@ titleScreenController = mountTitleScreen({
   },
   readMultiplayerName,
   setMultiplayerName,
-  tryQuickLoad,
   formatSaveTime,
 })
 toggleParkButton.addEventListener('click', () => {

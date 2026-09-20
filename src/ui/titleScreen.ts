@@ -38,7 +38,6 @@ export interface TitleScreenContext {
   joinMultiplayer(code: string, name: string, onError: (message: string) => void): void
   readMultiplayerName(): string
   setMultiplayerName(name: string): void
-  tryQuickLoad(): Promise<boolean>
   formatSaveTime(value: number): string
 }
 
@@ -54,7 +53,7 @@ export interface TitleScreenController {
 }
 
 export function mountTitleScreen(context: TitleScreenContext): TitleScreenController {
-  const { getGame, getMultiplayerMode, scenarioPanel, saveSlotsPanel, setScenarioPanelOpen, setSaveSlotsPanelOpen, fillScenarioForm, readScenarioForm, closePathEditor, isPathWindowOpen, hideVisitorPanel, bindGameState, showToast, fetchSaveSlots, findSaveSlot, isOwnSave, readSaveSlot, bindLoadedGame, joinMultiplayer, readMultiplayerName, setMultiplayerName, tryQuickLoad, formatSaveTime } = context
+  const { getGame, getMultiplayerMode, scenarioPanel, saveSlotsPanel, setScenarioPanelOpen, setSaveSlotsPanelOpen, fillScenarioForm, readScenarioForm, closePathEditor, isPathWindowOpen, hideVisitorPanel, bindGameState, showToast, fetchSaveSlots, findSaveSlot, isOwnSave, readSaveSlot, bindLoadedGame, joinMultiplayer, readMultiplayerName, setMultiplayerName, formatSaveTime } = context
   const requireElement = <T extends Element>(selector: string): T => {
     const element = document.querySelector<T>(selector)
     if (!element) throw new Error(`Ben?tigtes UI-Element fehlt: ${selector}`)
@@ -406,9 +405,6 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     if (menu) {
       if (menu.dataset.titleMenu === 'resume') void resumeLastGame()
       else if (menu.dataset.titleMenu === 'new') openTitleSubmenu(true)
-      else if (menu.dataset.titleMenu === 'quickload') {
-        void tryQuickLoad()
-      }
       else if (menu.dataset.titleMenu === 'load') void openTitleLoad()
       else if (menu.dataset.titleMenu === 'multiplayer') openTitleLobbies(true)
       else openAboveTitle(scenarioPanel, () => setScenarioPanelOpen(true))

@@ -60,12 +60,25 @@ Die UI-Zusammenführung in `ui/saveArchive.ts` verändert keine Snapshots:
 Server- und Browser-Slots behalten ihre Quelle, werden nur für Listen sortiert,
 und fremde Namen werden vor dem Einsetzen in HTML escaped.
 
-**Schnell speichern** / **Schnell laden** (Iconleiste → Spielstand, plus
-**Schnell laden** auf dem Titelbildschirm) nutzen den einzelnen
-`SAVE_KEY`-Slot (plus IndexedDB-Überlauf). Das ist nicht das
-benannte Archiv (`SAVE_SLOTS_KEY` / Server-Konto). Schnellstand und
-benannte Slots schreiben immer den vollen Snapshot — keine gekürzte
-Variante ohne Personen oder Objekte.
+**Schnell speichern**, **Schnell laden** (Iconleiste → Spielstand) und das
+**Autospeichern** teilen sich einen einzigen benannten Slot: `QUICKSAVE_NAME`
+(„Schnellspeichern"). Vorher schrieben sie an zwei verschiedene Stellen — das
+Schnellspeichern in den versteckten `SAVE_KEY`-Slot, das Autospeichern in einen
+Archiveintrag —, sodass es zwei „letzte" Stände gab und man keinen davon neben
+dem anderen sah. Jetzt steht er im Archiv wie jeder andere, mit Tag, Uhrzeit und
+Speicherzeitpunkt, und wird von dort geladen; der Knopf **Schnell laden** auf
+dem Titelbildschirm ist deshalb weg, **Fortsetzen** greift ohnehin auf denselben
+Stand.
+
+Der Slot wird über seinen Namen gesucht, nicht gemerkt — so trifft er auch nach
+einem Neuladen, einer Anmeldung oder in einem anderen Browser denselben
+Eintrag. Ein älteres Spiel mit einem Slot namens `LEGACY_AUTOSAVE_NAME`
+(„Autospeichern") wird übernommen und dabei umbenannt, statt daneben liegen zu
+bleiben; wer noch einen Stand im alten `SAVE_KEY` hat, kann ihn über **Schnell
+laden** weiterhin öffnen, solange es den neuen Slot noch nicht gibt.
+
+Schnellstand und benannte Slots schreiben immer den vollen Snapshot — keine
+gekürzte Variante ohne Personen oder Objekte.
 
 ## Wichtige Regeln
 
