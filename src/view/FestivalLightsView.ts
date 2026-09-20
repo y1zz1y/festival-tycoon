@@ -1,4 +1,4 @@
-import { groupForBudget, lightViewsDiffer, rankByView, type LightView } from './lightSelection'
+import { bucketSources, lightViewsDiffer, rankByView, stickyCell, type LightView, type SourceBucket } from './lightSelection'
 import { AdditiveBlending, Color, DataTexture, Group, InstancedMesh, LinearFilter, MeshBasicMaterial, PlaneGeometry, SphereGeometry, Matrix4, PointLight, SpotLight, Vector3 } from 'three'
 import type { GameSnapshot } from '../game/GameState'
 import { isFestivalOfferActive } from '../game/dayPlan'
@@ -19,6 +19,15 @@ export function nightStrength(minute: number): number {
  */
 export const FESTIVAL_LIGHT_BUDGET = 24
 export const FESTIVAL_SPOT_LIGHT_BUDGET = 10
+/** Below this the grid is finer than the lamps themselves and splitting stops. */
+const MIN_LIGHT_CELL = .5
+/**
+ * Lights kept in reserve when splitting a crowded cell. Filling the pool to the
+ * last slot meant a pan that changed the surplus by one kept splitting and
+ * re-joining the same cell, which is visible as flicker; holding a few back
+ * cut that by six times and costs at most three lights of the twenty-four.
+ */
+export const SPLIT_MARGIN = 3
 export const WARM_LIGHT_COLOR = 0xffca82
 export const DAYLIGHT_LIGHT_COLOR = 0xf4f8ff
 export const WARM_LIGHT_DISTANCE = 3.5
@@ -84,6 +93,10 @@ export class FestivalLightsView {
   private appliedProjection = new Matrix4()
   private view: LightView | null = null
   private viewApplied = false
+  /** The grid the sources are gathered on; sticky, so a pan does not re-cut it. */
+  private cell = .5
+  /** Which pool light serves which bucket, so a light stays where it is. */
+  private slotOf = new Map<string, number>()
   private geometry = new SphereGeometry(1, 6, 4)
   private material = new MeshBasicMaterial({ color: 0xffffff })
   private scratchColor = new Color()
@@ -237,26 +250,105 @@ export class FestivalLightsView {
     }
     const points = ranked.filter(entry => !assignedSpots.has(entry.source)).map(entry => entry.source)
     const view = this.view
-    const visible = view ? points.filter(source => view.frustum.containsPoint(source.position)) : points
-    // While what is on screen fits the pool, every source keeps its own light and
-    // the leftovers go to sources just outside the view, as before. Only once
-    // there are more on screen than lights to give — a zoomed-out view of a
-    // built-up park — do neighbours share one, because handing the lights to the
-    // ones nearest the middle lit a clump and left the rest of the park dark.
-    const groups: LightSource[][] = visible.length <= this.pool.length
-      ? points.map(source => [source])
-      : groupForBudget(visible.map(source => source.position), visible.map(source => source.spec.color), this.pool.length)
-        .map(indices => indices.map(index => visible[index]!))
+    const inView = (position: Vector3): boolean => !view || view.frustum.containsPoint(position)
+    /**
+     * A cell counts as on screen when any lamp in it is, not when its middle
+     * happens to be. At a coarse grid the edge of the view cuts through cells,
+     * and judging them by their centre left the lamps on the near side of that
+     * cut with no light at all.
+     */
+    const bucketInView = (bucket: SourceBucket): boolean =>
+      inView(bucket.centre) || bucket.indices.some(index => inView(positions[index]!))
+    const positions = points.map(source => source.position)
+    const colors = points.map(source => source.spec.color)
+    // How coarse to gather at follows the view, and sticks: see stickyCell.
+    this.cell = stickyCell(
+      this.cell,
+      (cell) => bucketSources(positions, colors, cell).filter(bucketInView).length,
+      this.pool.length,
+    )
+    // Buckets cover every source, not just the ones on screen, so a bucket holds
+    // the same lamps however the camera moves. Only the choice of which ones get
+    // a light follows the view: what is on screen first, nearest the middle
+    // first, the rest after it so lamps just off the edge are lit as well.
+    const focus = this.focus
+    const byView = (a: SourceBucket, b: SourceBucket): number => {
+      const seen = Number(bucketInView(b)) - Number(bucketInView(a))
+      if (seen !== 0) return seen
+      const byDistance = a.centre.distanceToSquared(focus) - b.centre.distanceToSquared(focus)
+      return byDistance || (a.key < b.key ? -1 : 1)
+    }
+    const buckets = bucketSources(positions, colors, this.cell).sort(byView)
+    const offScreen = buckets.filter(bucket => !bucketInView(bucket))
+    const chosen = buckets.filter(bucketInView).slice(0, this.pool.length)
+    // Whatever the view leaves over goes into the crowded cells on screen rather
+    // than to lamps nobody is looking at: the fullest one is replaced by its own
+    // quarters, which are cells of the same world grid and so just as stable.
+    for (let step = 0; step < this.pool.length; step++) {
+      const spare = this.pool.length - chosen.length
+      if (spare <= 0) break
+      let fullest = -1
+      for (let i = 0; i < chosen.length; i++) {
+        const bucket = chosen[i]!
+        if (bucket.indices.length < 2 || bucket.cell <= MIN_LIGHT_CELL) continue
+        if (fullest < 0 || bucket.indices.length > chosen[fullest]!.indices.length) fullest = i
+      }
+      if (fullest < 0) break
+      const target = chosen[fullest]!
+      const parts = bucketSources(
+        target.indices.map(index => positions[index]!),
+        target.indices.map(index => colors[index]!),
+        target.cell / 2,
+      ).map(part => ({ ...part, indices: part.indices.map(index => target.indices[index]!) }))
+      if (parts.length < 2) {
+        target.cell /= 2
+        continue
+      }
+      // A margin, so a pan that changes the surplus by one does not keep
+      // splitting and re-joining the same cell every other frame.
+      if (parts.length - 1 > spare - SPLIT_MARGIN) break
+      chosen.splice(fullest, 1, ...parts)
+    }
+    // Anything still free goes to lamps just off the edge, so they are already
+    // lit when the camera reaches them.
+    chosen.push(...offScreen.slice(0, Math.max(0, this.pool.length - chosen.length)))
+
+    // Each light stays with the bucket it was serving. Handing slot i to rank i
+    // meant every light swapped lamps as the ranking shifted under a moving
+    // camera, which is what the flickering was: lights leaping from lamp to lamp
+    // several times a second.
+    const taken = new Array<boolean>(this.pool.length).fill(false)
+    const slots = new Map<string, number>()
+    const waiting: SourceBucket[] = []
+    for (const bucket of chosen) {
+      const held = this.slotOf.get(bucket.key)
+      if (held === undefined || taken[held]) waiting.push(bucket)
+      else { taken[held] = true; slots.set(bucket.key, held) }
+    }
+    let cursor = 0
+    for (const bucket of waiting) {
+      while (cursor < taken.length && taken[cursor]) cursor++
+      if (cursor >= taken.length) break
+      taken[cursor] = true
+      slots.set(bucket.key, cursor)
+    }
+    this.slotOf = slots
+
+    const bySlot = new Map<number, SourceBucket>()
+    for (const bucket of chosen) {
+      const slot = slots.get(bucket.key)
+      if (slot !== undefined) bySlot.set(slot, bucket)
+    }
     this.pool.forEach((light, i) => {
-      const group = groups[i]
-      if (!group || group.length === 0) {
+      const bucket = bySlot.get(i)
+      if (!bucket) {
         light.intensity = 0
         light.color.setHex(WARM_LIGHT_COLOR)
         light.distance = WARM_LIGHT_DISTANCE
         light.decay = 1.6
         return
       }
-      this.applyGroup(light, group)
+      this.applyGroup(light, bucket.indices.map(index => points[index]!))
     })
   }
 

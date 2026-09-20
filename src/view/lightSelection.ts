@@ -45,80 +45,69 @@ export function lightViewsDiffer(a: Matrix4, b: Matrix4, epsilon = 1e-4): boolea
   return false
 }
 
+export type SourceBucket = {
+  /** Stable across frames: the same lamps always land under the same name. */
+  key: string
+  indices: number[]
+  centre: Vector3
+  /** The grid size this bucket was cut at, so it can be cut finer later. */
+  cell: number
+}
+
 /**
- * Gathers sources onto a grid coarse enough that the groups fit the budget.
+ * Gathers sources onto a fixed world grid.
  *
- * Zoomed out there are more lamps on screen than there are real lights to give
- * out, and handing the lights to the ones nearest the middle of the view lit a
- * clump in the centre while the rest of the park stayed dark. Neighbouring
- * lamps are a few pixels apart at that distance, so a group of them reads as
- * one light — and one light per group covers the whole park instead of a patch
- * of it.
+ * The grid is in world space and covers every source, not just the ones on
+ * screen, so a bucket holds the same lamps however the camera moves. That is
+ * what stops the lights from reshuffling during a pan: only which buckets are
+ * *chosen* changes, never what a bucket is.
  *
- * The grid is in world space and the cell size only ever doubles, so groups do
- * not shift as the camera pans and do not flicker between frames. `keys`
- * separates sources that must not be mixed, such as a white balloon among warm
- * lamps.
+ * `keys` separates sources that must not be mixed, such as a white balloon
+ * among warm lamps.
  */
-export function groupForBudget(
+export function bucketSources(
   positions: readonly Vector3[],
   keys: readonly number[],
+  cell: number,
+): SourceBucket[] {
+  const buckets = new Map<string, SourceBucket>()
+  for (let i = 0; i < positions.length; i++) {
+    const position = positions[i]!
+    // The cell size belongs in the name: a coarse cell and a fine one can sit on
+    // the same grid coordinates, and sharing a name made them share a light.
+    const key = `${cell}:${keys[i]}:${Math.floor(position.x / cell)}:${Math.floor(position.z / cell)}`
+    const existing = buckets.get(key)
+    if (existing) {
+      existing.indices.push(i)
+      existing.centre.add(position)
+    } else {
+      buckets.set(key, { key, indices: [i], centre: position.clone(), cell })
+    }
+  }
+  for (const bucket of buckets.values()) bucket.centre.divideScalar(bucket.indices.length)
+  return [...buckets.values()]
+}
+
+/**
+ * The grid size to gather at: fine enough that each lamp keeps its own light
+ * where the budget allows, coarse enough that a zoomed-out view still covers
+ * the whole park.
+ *
+ * It sticks. Recomputing it from whatever happens to be on screen made it flip
+ * back and forth on the boundary while panning, and every flip re-cut every
+ * bucket. It only doubles once the view is genuinely over budget, and only
+ * halves once the finer grid is comfortably under it.
+ */
+export function stickyCell(
+  current: number,
+  visibleAt: (cell: number) => number,
   budget: number,
-  baseCell = 1,
-): number[][] {
-  if (budget <= 0 || positions.length === 0) return []
-  const bucket = (indices: readonly number[], cell: number): number[][] => {
-    const buckets = new Map<string, number[]>()
-    for (const i of indices) {
-      const position = positions[i]!
-      const key = `${keys[i]}:${Math.floor(position.x / cell)}:${Math.floor(position.z / cell)}`
-      const existing = buckets.get(key)
-      if (existing) existing.push(i)
-      else buckets.set(key, [i])
-    }
-    return [...buckets.values()]
-  }
-
-  const all = positions.map((_, index) => index)
-  // Coarsen until the groups fit. The step guard is only there so a
-  // pathological scene cannot spin here.
-  let cell = baseCell
-  let groups = bucket(all, cell).map(indices => ({ cell, indices }))
-  for (let step = 0; step < 24 && groups.length > budget; step++) {
-    cell *= 2
-    groups = bucket(all, cell).map(indices => ({ cell, indices }))
-  }
-  if (groups.length > budget) return []
-
-  // Then spend whatever the budget still has on the crowded groups, splitting
-  // the biggest one at a time. Leaving lights idle would light the park more
-  // coarsely than the hardware allows.
-  const settled = new Set<(typeof groups)[number]>()
-  for (let step = 0; step < budget * 4 && groups.length < budget; step++) {
-    let biggest = -1
-    for (let i = 0; i < groups.length; i++) {
-      const group = groups[i]!
-      if (group.indices.length < 2 || group.cell <= .125 || settled.has(group)) continue
-      if (biggest < 0 || group.indices.length > groups[biggest]!.indices.length) biggest = i
-    }
-    if (biggest < 0) break
-    const target = groups[biggest]!
-    const finer = target.cell / 2
-    const parts = bucket(target.indices, finer)
-    if (parts.length < 2) {
-      // Sources too close together to come apart at this size: try again finer
-      // rather than giving up on them.
-      target.cell = finer
-      continue
-    }
-    // A split that does not fit is set aside; a smaller group may still have room.
-    if (groups.length - 1 + parts.length > budget) {
-      settled.add(target)
-      continue
-    }
-    groups.splice(biggest, 1, ...parts.map(indices => ({ cell: finer, indices })))
-  }
-  return groups.map(group => group.indices)
+  minimum = .5,
+): number {
+  let cell = Math.max(minimum, current)
+  for (let step = 0; step < 24 && visibleAt(cell) > budget; step++) cell *= 2
+  for (let step = 0; step < 24 && cell > minimum && visibleAt(cell / 2) <= budget * .7; step++) cell /= 2
+  return cell
 }
 
 /**

@@ -3,7 +3,7 @@ import { Group, InstancedMesh, Mesh, Vector3, OrthographicCamera } from 'three'
 import { GameState } from '../src/game/GameState'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { createRetroBuilding, batchRetroBuildings, DETAILED_BUILDINGS } from '../src/view/retroBuildings'
-import { DAYLIGHT_LIGHT_COLOR, DAYLIGHT_LIGHT_DISTANCE, FESTIVAL_LIGHT_BUDGET, FestivalLightsView } from '../src/view/FestivalLightsView'
+import { DAYLIGHT_LIGHT_COLOR, DAYLIGHT_LIGHT_DISTANCE, FESTIVAL_LIGHT_BUDGET, FestivalLightsView, SPLIT_MARGIN } from '../src/view/FestivalLightsView'
 import { lightViewOf } from '../src/view/lightSelection'
 import { createAttractionAccess } from '../src/view/attractionAccess'
 import { createCoasterCar } from '../src/view/coasterCars'
@@ -336,7 +336,13 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   festivalLights.setView(lightViewOf(corner, new Vector3(39, 0, 11)))
   const lit = originalLights.filter(light => light.intensity > 0)
   assert.equal(lit.length, FESTIVAL_LIGHT_BUDGET, 'every real light is in use where there is plenty to light')
-  assert.ok(lit.every(light => Math.abs(light.position.x - 39) <= 4 && Math.abs(light.position.z - 11) <= 4), 'and every one of them lights a source inside the view')
+  // Just outside counts: leftover lights go to lamps at the edge so they are
+  // already lit when the camera reaches them. What must not happen is a light
+  // being handed to the far side of the park while the view has lamps to spare.
+  assert.ok(
+    lit.every(light => Math.abs(light.position.x - 39) <= 7 && Math.abs(light.position.z - 11) <= 7),
+    'and every one of them lights the view or its immediate edge',
+  )
   // Zooming brings other lamps on screen without moving the point the camera looks
   // at, so the selection has to follow the zoom as well as the vantage point.
   const sentinel = originalLights[0]!
@@ -347,10 +353,11 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
   zoomedOut.position.set(39, 20, 11); zoomedOut.lookAt(39, 0, 11); zoomedOut.updateMatrixWorld()
   festivalLights.setView(lightViewOf(zoomedOut, new Vector3(39, 0, 11)))
   assert.notEqual(sentinel.intensity, -1, 'zooming re-serves the lights even from the same spot')
-  assert.equal(
-    originalLights.filter(light => light.intensity > 0).length,
-    FESTIVAL_LIGHT_BUDGET,
-    'and the whole pool stays in use',
+  // All but the reserve: a few lights are deliberately left free so splitting a
+  // crowded cell does not toggle on and off while the camera moves.
+  assert.ok(
+    originalLights.filter(light => light.intensity > 0).length >= FESTIVAL_LIGHT_BUDGET - SPLIT_MARGIN,
+    'and all but the reserve stays in use',
   )
   // The point of following the zoom: a view with far more lamps on it than there
   // are lights must still light all of them. Handing the lights to the ones
@@ -365,6 +372,28 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
     const dark = onScreen.filter(source => !shining.some(light =>
       Math.hypot(light.position.x - source.position.x, light.position.z - source.position.z) <= light.distance))
     assert.deepEqual(dark, [], 'every lamp on screen stands in the reach of some light')
+  }
+  // Panning must not make the lights swap lamps. Each one used to be handed
+  // whatever ranked in its slot that frame, so a moving camera had them leaping
+  // from lamp to lamp several times a second — the flickering at night.
+  {
+    const pan = (z: number): Array<{ on: boolean; x: number; z: number }> => {
+      const camera = new OrthographicCamera(-12, 12, 12, -12, 0.1, 100)
+      camera.position.set(20, 20, z); camera.lookAt(20, 0, z); camera.updateMatrixWorld()
+      festivalLights.setView(lightViewOf(camera, new Vector3(20, 0, z)))
+      return originalLights.map(light => ({ on: light.intensity > 0, x: light.position.x, z: light.position.z }))
+    }
+    let previous = pan(0)
+    let jumped = 0
+    for (let step = 1; step <= 40; step++) {
+      const now = pan(step * 0.25)
+      for (let i = 0; i < now.length; i++) {
+        const before = previous[i]!, after = now[i]!
+        if (before.on && after.on && Math.hypot(before.x - after.x, before.z - after.z) > 1.5) jumped++
+      }
+      previous = now
+    }
+    assert.ok(jumped <= 40, `lights stay with their lamps while the camera moves (${jumped} jumps over 40 frames)`)
   }
   const balloonLights = new FestivalLightsView()
   lightSnapshot.buildings = [{
