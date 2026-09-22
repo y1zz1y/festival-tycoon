@@ -3718,6 +3718,7 @@ multiplayer.onStatus = (status) => {
   renderMultiplayerStatus(status)
   keepAwake.refresh()
   multiplayerChat.setConnected(status.connected)
+  syncChatOpenButton()
   if (status.connected) joinErrorSink = null
   // Joining from the title screen only leaves it once the room has answered, so a
   // code that goes nowhere keeps the player where they can try the next one.
@@ -3749,9 +3750,22 @@ const multiplayerChatDisplayToggle = requireElement<HTMLInputElement>('#multipla
 try {
   multiplayerChatDisplayToggle.checked = window.localStorage.getItem(CHAT_DISPLAY_KEY) !== 'off'
 } catch { /* blocked storage: keep chat visible */ }
+const multiplayerChatOpenButton = requireElement<HTMLButtonElement>('#multiplayer-chat-open')
+// The window can be put away with its × and reopened with Enter; this button is
+// the way back for anyone who does not know that. It only means something while
+// chat is switched on, and only does something once a session is connected.
+function syncChatOpenButton(): void {
+  multiplayerChatOpenButton.hidden = !multiplayerChatDisplayToggle.checked
+  multiplayerChatOpenButton.disabled = !multiplayer.status.connected
+}
+multiplayerChatOpenButton.addEventListener('click', () => {
+  multiplayerChat.open()
+})
 multiplayerChat.setDisplayEnabled(multiplayerChatDisplayToggle.checked)
+syncChatOpenButton()
 multiplayerChatDisplayToggle.addEventListener('change', () => {
   multiplayerChat.setDisplayEnabled(multiplayerChatDisplayToggle.checked)
+  syncChatOpenButton()
 })
 const joinFromUrl = new URLSearchParams(window.location.search).get('join')
 if (joinFromUrl) {
@@ -4936,11 +4950,14 @@ window.addEventListener('keydown', (event) => {
     buildNextPathSegment()
     return
   }
-  // Multiplayer chat: Enter opens/focuses compose when not building a path segment.
-  if (event.key === 'Enter' && multiplayer.status.connected && !event.altKey && !event.ctrlKey && !event.metaKey) {
-    event.preventDefault()
-    multiplayerChat.openCompose()
-    return
+  // Multiplayer chat: Enter opens the chat window and focuses its input when not
+  // building a path segment. It declines when chat is off or the session is solo,
+  // and then Enter stays with whatever else claims it.
+  if (event.key === 'Enter' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    if (multiplayerChat.open()) {
+      event.preventDefault()
+      return
+    }
   }
   if (event.key === 'Backspace' && pathEditorActive) {
     event.preventDefault()

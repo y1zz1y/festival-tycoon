@@ -414,6 +414,24 @@ button {
   gap: 10px;
 }
 
+/* "Chat anzeigen" and the button that brings a closed chat window back stand on
+   one line: the switch decides whether chat exists at all, the button is only
+   there while it does. */
+.multiplayer-chat-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.multiplayer-chat-setting .scenario-check {
+  min-width: 0;
+}
+
+.multiplayer-chat-setting button[hidden] {
+  display: none;
+}
+
 .save-as-panel {
   position: absolute;
   top: 84px;
@@ -1175,6 +1193,8 @@ body.title-open .festival-management,
 body.title-open .headline-magazine,
 body.title-open .supply-planner,
 body.title-open .multiplayer-panel,
+body.title-open .dropdown-menu-panel,
+body.title-open .debug-menu-panel,
 body.title-open .mobile-controls,
 body.title-open .mobile-menu-toggle,
 body.title-open #app-install-hint {
@@ -1555,10 +1575,14 @@ body.title-open #app-install-hint {
    clamped to the viewport, because the button can end up on any wrapped row
    of .game-actions depending on available width. position: fixed keeps the
    math viewport-relative. */
+/* A menu dropped from the top bar always covers the windows underneath it -
+   above every game window (the highest is .staff-details at 45) and below the
+   title screen (60), so a menu is never half-hidden behind a panel that happens
+   to sit under the toolbar. */
 .debug-menu-panel,
 .dropdown-menu-panel {
   position: fixed;
-  z-index: 30;
+  z-index: 50;
   display: none;
   width: 250px;
   max-width: calc(100vw - 16px);
@@ -1677,6 +1701,8 @@ body.title-open #app-install-hint {
 .staff-details button,
 .scenario-panel button,
 .save-slots-panel button,
+.multiplayer-chat-setting button,
+.mp-chat-compose button,
 .terrain-planner button {
   color: #ecf5f0;
   background: rgba(255, 255, 255, 0.07);
@@ -1698,6 +1724,8 @@ body.title-open #app-install-hint {
 .staff-details button:hover,
 .scenario-panel button:hover,
 .save-slots-panel button:hover,
+.multiplayer-chat-setting button:hover,
+.mp-chat-compose button:hover,
 .terrain-planner button:hover {
   background: #3f715b;
 }
@@ -5305,126 +5333,141 @@ input[type='range']:disabled {
   overflow-y: auto;
 }
 
-/* Multiplayer live chat: transparent log bottom-left, above the status strip. */
+/* Multiplayer live chat: a real window in the bottom-left corner, above the
+   status strip. It is mounted from multiplayerChat.ts and only rendered while a
+   session is connected and "Chat anzeigen" is on - closing it with the × parks
+   it until the next message. Same beveled .panel face, header and resize grip as
+   every other window; the log inside is an IRC transcript. */
 .mp-chat {
   position: absolute;
   left: 12px;
   bottom: calc(var(--status-overlay-gap, 6px) + 72px);
-  z-index: 26;
-  width: min(340px, calc(100vw - 24px));
+  z-index: 27;
+  width: min(360px, calc(100vw - 24px));
+  height: min(280px, 38vh);
+  min-width: 240px;
+  padding: 6px;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 6px;
-  pointer-events: none;
 }
 
-.mp-chat.mp-chat-quiet {
-  width: auto;
-}
-
-.mp-chat-log {
-  max-height: min(220px, 28vh);
-  overflow-y: auto;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(18, 28, 22, 0.42);
-  border: 1px solid rgba(203, 193, 139, 0.18);
-  color: #e8e6d4;
-  font-size: 12px;
-  line-height: 1.35;
-  pointer-events: auto;
-  scrollbar-width: thin;
-}
-
-.mp-chat-log[hidden] {
+.mp-chat[hidden] {
   display: none;
 }
 
+/* The transcript: a sunken field, monospaced and left-aligned like an IRC
+   client, wrapping long lines under a hanging indent so the nick column stays
+   readable. */
+.mp-chat-log {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding: 5px 7px;
+  background: #1c2f2a;
+  border: 1px solid #152a27;
+  border-top-color: #101f1c;
+  border-left-color: #101f1c;
+  box-shadow: inset 1px 1px #14272070;
+  color: #dbe7df;
+  font: 11px/1.45 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  scrollbar-width: thin;
+}
+
 .mp-chat-row {
-  display: grid;
-  grid-template-columns: 22px 1fr;
-  gap: 6px;
-  align-items: start;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
+  padding-left: 12px;
+  text-indent: -12px;
 }
 
 .mp-chat-row:last-child {
   margin-bottom: 0;
 }
 
-.mp-chat-jump,
-.mp-chat-jump-spacer {
-  width: 22px;
-  height: 22px;
+.mp-chat-time {
+  margin-right: 4px;
+  color: #7d9689;
+}
+
+.mp-chat-nick {
+  margin-right: 4px;
+  font-weight: 700;
+}
+
+/* IRC nick colours, picked per speaker by hash in multiplayerChat.ts. All eight
+   hold up against the sunken field behind them. */
+.mp-chat-nick-0 { color: #8fd3a6; }
+.mp-chat-nick-1 { color: #f0d27a; }
+.mp-chat-nick-2 { color: #8ec8e8; }
+.mp-chat-nick-3 { color: #e9a4a4; }
+.mp-chat-nick-4 { color: #c7b0e8; }
+.mp-chat-nick-5 { color: #7fd6cd; }
+.mp-chat-nick-6 { color: #e8b489; }
+.mp-chat-nick-7 { color: #bdd884; }
+
+/* A bare map ping has no words, so it is written as an IRC action line. */
+.mp-chat-row-action .mp-chat-text {
+  color: #a9bdb2;
+  font-style: italic;
+}
+
+.mp-chat-jump {
+  margin-left: 4px;
   padding: 0;
   border: 0;
   background: transparent;
   color: #f0d27a;
   cursor: pointer;
-  font-size: 14px;
-  line-height: 22px;
+  font-size: 11px;
+  line-height: 1;
+  vertical-align: baseline;
 }
 
 .mp-chat-jump:hover {
   filter: brightness(1.2);
 }
 
-.mp-chat-body {
-  display: grid;
-  gap: 1px;
-  min-width: 0;
-}
-
-.mp-chat-body strong {
-  font-size: 11px;
-  color: #c9e0d2;
-  font-weight: 600;
-}
-
-.mp-chat-body span {
-  word-break: break-word;
-  white-space: pre-wrap;
-}
-
 .mp-chat-compose {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 6px;
-  align-items: center;
-  pointer-events: auto;
-  padding: 6px;
-  border-radius: 10px;
-  background: rgba(18, 28, 22, 0.72);
-  border: 1px solid rgba(203, 193, 139, 0.28);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: stretch;
 }
 
-.mp-chat-compose[hidden] {
-  display: none;
-}
-
+/* Face, border and hover come from the shared overlay-button rule that the
+   toolbar and every panel use (.mp-chat-compose button is named in it), and the
+   bevel from .panel button. Only the metrics belong here. */
 .mp-chat-ping,
 .mp-chat-send {
-  border: 1px solid rgba(203, 193, 139, 0.35);
-  border-radius: 8px;
-  background: rgba(40, 58, 48, 0.9);
-  color: #e8e6d4;
-  padding: 6px 10px;
-  cursor: pointer;
-  font: inherit;
+  padding: 5px 9px;
+  font-size: 11px;
+  line-height: 1;
 }
 
-.mp-chat-ping.active {
-  background: rgba(180, 120, 40, 0.85);
-  border-color: #f0d27a;
+/* Square, because it holds one glyph and toggles rather than reads. */
+.mp-chat-ping {
+  width: 28px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+
+/* Armed: pressed in, like every other toggled control in the game. */
+.mp-chat-ping.active,
+.mp-chat-ping.active:hover {
+  background: #3f715b;
+  box-shadow: inset 1px 1px #203c30;
+  border-top-color: #203c30;
+  border-left-color: #203c30;
 }
 
 .mp-chat-input {
   min-width: 0;
-  border: 1px solid rgba(203, 193, 139, 0.28);
-  border-radius: 8px;
-  background: rgba(10, 16, 12, 0.55);
-  color: #e8e6d4;
-  padding: 6px 8px;
+  padding: 5px 7px;
+  color: #edf7f1;
+  background: #29463a;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   font: inherit;
+  font-size: 12px;
 }
 
 .mp-ping-overlay {

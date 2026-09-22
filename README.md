@@ -297,12 +297,19 @@ Zustand übertragen. WebSocket-Kompression und eine Sendepuffergrenze am Host re
 Übertragungsaufwand und Rückstau. Alle Teilnehmer müssen dieselbe Spielversion verwenden.
 Der Host muss geöffnet bleiben; eine automatische Host-Übernahme ist nicht enthalten.
 
-**Live-Chat:** Mit **Enter** öffnest du die Chat-Eingabe (unten links). Nachrichten
-erscheinen im transparenten Log. Unter Mehrspieler kannst du **Chat anzeigen**
-abschalten — dann bleibt nur das Log unsichtbar, Senden geht weiter. Der
-**Ping**-Button markiert einen Punkt auf der Karte für alle Spieler (10 Sekunden);
-außerhalb des sichtbaren Bereichs zeigt ein Pfeil am Bildschirmrand die Richtung.
-📍 in der Nachricht springt die Kamera zum Ping.
+**Live-Chat:** Der Chat ist ein eigenes Fenster unten links, das nur im
+Mehrspieler und nur bei eingeschaltetem **Chat anzeigen** erscheint. Es lässt sich
+wie jedes andere Fenster verschieben und in der Größe ändern. Die Nachrichten
+stehen im IRC-Stil untereinander: `[HH:MM] <Name> Text`, jeder Name in seiner
+eigenen Farbe. Unten sitzen das Eingabefeld und der **Senden**-Button; **Enter**
+öffnet das Fenster und setzt den Cursor ins Feld, **Enter** im Feld sendet,
+**Esc** gibt die Tastatur wieder ans Spiel zurück. Das **×** legt das Fenster
+weg — die nächste eingehende Nachricht holt es von selbst zurück, und unter
+Mehrspieler steht neben **Chat anzeigen** der Knopf **Chat öffnen**. Schaltest du
+**Chat anzeigen** ab, gibt es keinen Chat mehr, auch nicht bei neuen Nachrichten.
+Der **Ping**-Button markiert einen Punkt auf der Karte für alle Spieler
+(10 Sekunden); außerhalb des sichtbaren Bereichs zeigt ein Pfeil am
+Bildschirmrand die Richtung. 📍 in der Nachricht springt die Kamera zum Ping.
 
 Die 3D-Ansicht nutzt eine auf maximal 1440 × 810 Bildpunkte begrenzte Pixelrasterung
 (auch bei Full HD und 4K), helleres Tageslicht und weiterhin die

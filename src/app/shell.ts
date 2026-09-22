@@ -85,25 +85,30 @@ export function mountAppShell(app: HTMLDivElement): void {
         <button id="toggle-debug-menu" type="button" title="Debug" aria-label="Debug" aria-expanded="false">🐞</button>
         <button id="toggle-scenario" class="scenario-toggle" type="button" title="Einstellungen" aria-label="Einstellungen" aria-expanded="false">⚙️</button>
       </div>
-      <div id="staff-menu-panel" class="dropdown-menu-panel panel">
-        ${STAFF_ROLES.map((role) => `<button data-staff-role="${role}">${STAFF_DEFINITIONS[role].icon} ${STAFF_DEFINITIONS[role].name}</button>`).join('')}
-      </div>
-      <div id="debug-menu-panel" class="debug-menu-panel panel">
-        <button id="debug-money" title="Debug-Geld hinzufügen">💰 +100.000 €</button>
-        <button id="debug-clear-waste" title="Müll, Erbrochenes und verlassene Campinggegenstände sofort entfernen">🧹 Müll & alte Gegenstände entfernen</button>
-        <button id="debug-remove-cars" title="Besucherautos entfernen">🚗 Autos entfernen & Gäste heimschicken</button>
-        <button id="debug-demand-tuning" title="Zahlungs- und Teilnahmebereitschaft einstellen">🎟️ Nachfrage-Tuning</button>
-      </div>
-      <div id="save-menu-panel" class="dropdown-menu-panel panel">
-        <button id="save">💾 Schnell speichern</button>
-        <button id="load" title="Den schnellen Einzelspielstand laden">📂 Schnell laden</button>
-        <button id="save-as" title="Spielstand benennen oder einen vorhandenen überschreiben">💾 Speichern unter …</button>
-        <button id="save-slots" title="Gespeicherte Spielstände öffnen und verwalten">📂 Spielstand laden</button>
-        <button id="copy-save" title="Spielstand als Base64 kopieren">⧉ Als Text kopieren</button>
-        <button id="paste-save" title="Base64-Spielstand einfügen">📋 Text einfügen</button>
-        <button id="open-title-screen" title="Die Partie verlassen und zum Startbildschirm gehen">🏠 Zum Startbildschirm zurück</button>
-      </div>
     </nav>
+    <!-- The three toolbar dropdowns are siblings of the toolbar, not children of it:
+         .rct-toolbar carries a z-index and so opens a stacking context, which would
+         pin any menu inside it underneath the game windows no matter what z-index the
+         menu itself asks for. Out here their own z-index counts. They are positioned
+         from their button's live rect in main.ts, so the move costs them nothing. -->
+    <div id="staff-menu-panel" class="dropdown-menu-panel panel">
+      ${STAFF_ROLES.map((role) => `<button data-staff-role="${role}">${STAFF_DEFINITIONS[role].icon} ${STAFF_DEFINITIONS[role].name}</button>`).join('')}
+    </div>
+    <div id="debug-menu-panel" class="debug-menu-panel panel">
+      <button id="debug-money" title="Debug-Geld hinzufügen">💰 +100.000 €</button>
+      <button id="debug-clear-waste" title="Müll, Erbrochenes und verlassene Campinggegenstände sofort entfernen">🧹 Müll & alte Gegenstände entfernen</button>
+      <button id="debug-remove-cars" title="Besucherautos entfernen">🚗 Autos entfernen & Gäste heimschicken</button>
+      <button id="debug-demand-tuning" title="Zahlungs- und Teilnahmebereitschaft einstellen">🎟️ Nachfrage-Tuning</button>
+    </div>
+    <div id="save-menu-panel" class="dropdown-menu-panel panel">
+      <button id="save">💾 Schnell speichern</button>
+      <button id="load" title="Den schnellen Einzelspielstand laden">📂 Schnell laden</button>
+      <button id="save-as" title="Spielstand benennen oder einen vorhandenen überschreiben">💾 Speichern unter …</button>
+      <button id="save-slots" title="Gespeicherte Spielstände öffnen und verwalten">📂 Spielstand laden</button>
+      <button id="copy-save" title="Spielstand als Base64 kopieren">⧉ Als Text kopieren</button>
+      <button id="paste-save" title="Base64-Spielstand einfügen">📋 Text einfügen</button>
+      <button id="open-title-screen" title="Die Partie verlassen und zum Startbildschirm gehen">🏠 Zum Startbildschirm zurück</button>
+    </div>
     <aside id="demand-debug-panel" class="demand-debug-panel panel" hidden>
       <div class="panel-header">
         <span class="panel-drag-line" aria-hidden="true"></span>
@@ -165,7 +170,10 @@ export function mountAppShell(app: HTMLDivElement): void {
         <input id="multiplayer-name" type="text" maxlength="24" placeholder="Dein Name" />
       </label>
       <label class="scenario-check" id="multiplayer-public-field"><input id="multiplayer-public" type="checkbox" /><span>Öffentliche Lobby</span></label>
-      <label class="scenario-check" id="multiplayer-chat-display-field"><input id="multiplayer-chat-display" type="checkbox" checked /><span>Chat anzeigen</span></label>
+      <div class="multiplayer-chat-setting">
+        <label class="scenario-check" id="multiplayer-chat-display-field"><input id="multiplayer-chat-display" type="checkbox" checked /><span>Chat anzeigen</span></label>
+        <button id="multiplayer-chat-open" type="button" title="Das Chatfenster wieder einblenden">Chat öffnen</button>
+      </div>
       <div class="multiplayer-actions" id="multiplayer-connect-actions">
         <button id="multiplayer-host" type="button">Spiel hosten</button>
       </div>

@@ -63,7 +63,9 @@ export function mountMobileUI(actions: {
     if (!compact.matches || !(event.target instanceof Element)) return
     const button = event.target.closest('button')
     if (!button) return
-    if (button.closest('.game-actions, .rct-toolbar') && !button.matches('[aria-haspopup=true], #toggle-save-menu, #toggle-debug-menu')) setMenu(false)
+    // The toolbar dropdowns hang outside .rct-toolbar (see shell.ts), so they are
+    // named here as well - picking an entry out of one still closes the mobile menu.
+    if (button.closest('.game-actions, .rct-toolbar, .dropdown-menu-panel, .debug-menu-panel') && !button.matches('[aria-haspopup=true], #toggle-save-menu, #toggle-debug-menu')) setMenu(false)
     if (button.matches('[data-tool], [data-way-build], [data-bulldoze-size], [data-area-draw]')) {
       setPan(false)
       if (button.closest('.build-menu')) {

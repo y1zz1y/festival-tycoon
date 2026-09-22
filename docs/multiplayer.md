@@ -46,12 +46,21 @@ sondern ein Aussetzer.
   kein Snapshot-Feld. Client sendet `{ t: 'chat', text, ping? }`; der Server
   säubert Text (max. 200 Zeichen) und Ping-Koordinaten und broadcastet
   `{ t: 'chat', id, from, name, text, ping? }` an alle Sitze im Raum
-  (inkl. Absender). Steuerung: **Enter** öffnet/fokussiert die Eingabe
-  (Weg-Stückbau behält Enter solange der Pfadeditor aktiv ist); **Esc**
-  schließt die Eingabe. Das Log liegt unten links, transparent und
-  scrollbar. Unter Mehrspieler → **Chat anzeigen** (`localStorage`
-  `festival-mp-chat-display`) blendet nur HUD/Log aus — Senden bleibt
-  möglich. Bei offener Eingabe aktiviert der Ping-Button einen Kartenmarker;
+  (inkl. Absender). Der Chat ist ein eigenes Fenster unten links
+  (`.mp-chat.panel`, Panel-Header mit ×, `makeDraggable` + `makeResizable`).
+  Sichtbarkeit: **nur** wenn die Sitzung verbunden **und** **Chat anzeigen**
+  eingeschaltet ist; das × setzt ein sitzungsweites `userClosed`, das die
+  nächste eingehende Nachricht wieder aufhebt (ohne den Fokus zu stehlen) —
+  ebenso **Enter**, der Knopf **Chat öffnen** neben der Einstellung und das
+  Wiedereinschalten von **Chat anzeigen**. **Chat anzeigen** aus heißt kein
+  Chat, auch kein Senden (`localStorage` `festival-mp-chat-display`).
+  Das Log ist eine IRC-Transkription: `[HH:MM] <Name> Text` je Zeile,
+  hängender Einzug beim Umbruch, Nickfarbe deterministisch aus dem Namen
+  (`.mp-chat-nick-0…7`); eine reine Ping-Nachricht wird zur Aktionszeile
+  `* Name markiert …`. Steuerung: **Enter** öffnet/fokussiert das Fenster
+  (Weg-Stückbau behält Enter solange der Pfadeditor aktiv ist), **Enter** im
+  Feld sendet (explizit, nicht über implizites Form-Submit), **Esc** gibt den
+  Fokus zurück ans Spiel. Der Ping-Button aktiviert einen Kartenmarker;
   Absenden (auch leere Nachricht) schickt den Ping mit. Position: Cursor-
   Weltpunkt auf dem Terrain, sonst Kamera-Look-at / Walk-Position. Marker
   und Randpfeil (außerhalb des sichtbaren Bereichs) leben 10 Sekunden auf
@@ -146,7 +155,7 @@ Was auf einem offen erreichbaren Server sonst noch gilt:
 | Lobby-Liste ohne Session | `src/net/lobbies.ts` | `fetchLobbies`, `multiplayerSocketUrl` |
 | Beitreten vom Titlescreen | `src/ui/titleScreen.ts` | `openTitleLobbies`, `joinLobby` |
 | UI-Bindung | `src/net/bind.ts` | `enableMultiplayerCommands` |
-| Live-Chat / Map-Ping | `server/chatProtocol.ts`, `src/net/chatProtocol.ts`, `src/ui/multiplayerChat.ts`, `src/net/session.ts` | Sanitize/Relay in `server/`; Client re-exportiert + UI-Helfer; Enter öffnet Eingabe; Ping TTL 10 s |
+| Live-Chat / Map-Ping | `server/chatProtocol.ts`, `src/net/chatProtocol.ts`, `src/ui/multiplayerChat.ts`, `src/net/session.ts` | Sanitize/Relay in `server/`; Client re-exportiert + UI-Helfer; Fenster unten links, IRC-Log; Enter öffnet/sendet; Ping TTL 10 s |
 | Host-Turns, Optimistic | `src/game/GameState.ts` | `gate`, `receiveTurn`, `applyNetworkWorld` |
 | Server-Räume | `server/rooms.ts` | `attachMultiplayer` |
 | WebSocket-Plugin | `server/wsPlugin.ts` | Kompression, Puffergrenze |

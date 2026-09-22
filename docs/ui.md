@@ -74,7 +74,7 @@ Eingang/Ausgang.
 | Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | |
 | Ziehbare Fenster | `src/dragPanel.ts` | |
 | Fokus / Texteingabe | `src/uiFocus.ts` | `isTextEntryTarget` |
-| Mehrspieler-Chat / Map-Ping | `src/ui/multiplayerChat.ts`, `src/net/chatProtocol.ts` (Sanitize: `server/chatProtocol.ts`) | Enter öffnet Eingabe; Log unten links; Ping-Overlay + Randpfeil; Option „Chat anzeigen“ |
+| Mehrspieler-Chat / Map-Ping | `src/ui/multiplayerChat.ts`, `src/net/chatProtocol.ts` (Sanitize: `server/chatProtocol.ts`) | Eigenes Fenster unten links (ziehbar, größenveränderlich); IRC-Log; Enter öffnet/sendet; Ping-Overlay + Randpfeil; Option „Chat anzeigen“ + Knopf „Chat öffnen“ |
 | PWA / Manifest | `public/`, `tests/installableApp.mjs` | kein Leisten-Button; Safari-Anleitung im Root-`README.md` |
 | Update-Hinweis | `src/updateNotice.ts` | |
 | Globales Styling | `src/style.css` | Shared Checkbox-/Range-Styling; Range-Thumb nutzt `--range-accent` |
@@ -116,15 +116,26 @@ Eingang/Ausgang.
   links neben Mehrspieler öffnet die letzten Einträge. Keine
   Sim-Mutation, kein neues Command. Auf Mobile sitzt die Leiste über
   den Touch-Steuerungen.
-  Im Mehrspieler öffnet **Enter** den Live-Chat (unten links, transparentes
-  Log); **Esc** schließt die Eingabe. Weg-Stückbau behält Enter, solange der
-  Pfadeditor aktiv ist. Texteingabe-Fokus blockiert weiterhin Bau-Hotkeys.
-  Der Ping-Button an der Eingabe markiert den Cursor-Weltpunkt (sonst
-  Kamera-Zentrum) für alle Spieler 10 s; außerhalb des sichtbaren Bereichs
-  erscheint ein Randpfeil. 📍 in der Nachricht springt die Kamera dorthin.
-  Mehrspieler → **Chat anzeigen** blendet nur das Log aus (`localStorage`
-  `festival-mp-chat-display`); Senden bleibt möglich. Details:
-  [multiplayer.md](multiplayer.md).
+  Im Mehrspieler ist der Live-Chat ein eigenes Fenster unten links
+  (`.mp-chat.panel`): Panel-Header mit ×, `makeDraggable` + `makeResizable`,
+  darunter das Log und eine feste Eingabezeile aus Ping-Schalter, Feld und
+  **Senden**. Das Fenster existiert nur, solange die Sitzung verbunden **und**
+  **Chat anzeigen** eingeschaltet ist; das × merkt sich ein sitzungsweites
+  `userClosed`, das eine eingehende Nachricht, **Enter**, der Knopf
+  **Chat öffnen** oder das Wiedereinschalten von **Chat anzeigen** aufhebt —
+  eine eingehende Nachricht holt das Fenster zurück, ohne den Fokus zu nehmen.
+  Das Log liest sich wie ein IRC-Mitschnitt: `[HH:MM] <Name> Text` je Zeile mit
+  hängendem Einzug, Nickfarbe deterministisch aus dem Namen; eine reine
+  Ping-Nachricht wird zur Aktionszeile. Es folgt dem unteren Rand nur, wenn es
+  schon unten stand. **Enter** öffnet das Fenster und fokussiert das Feld,
+  **Enter** im Feld sendet (eigener Handler, kein implizites Form-Submit),
+  **Esc** gibt den Fokus zurück ans Spiel. Weg-Stückbau behält Enter, solange
+  der Pfadeditor aktiv ist. Texteingabe-Fokus blockiert weiterhin Bau-Hotkeys.
+  Der Ping-Button markiert den Cursor-Weltpunkt (sonst Kamera-Zentrum) für alle
+  Spieler 10 s; außerhalb des sichtbaren Bereichs erscheint ein Randpfeil. 📍 in
+  der Nachricht springt die Kamera dorthin. Mehrspieler → **Chat anzeigen** aus
+  heißt kein Chatfenster und kein Senden (`localStorage`
+  `festival-mp-chat-display`). Details: [multiplayer.md](multiplayer.md).
   Oben rechts sitzt eine RCT-Iconleiste in vier Gruppen: **Bauen** (Abriss,
   Gelände, Kopieren, Deko, Wege, Attraktionen, Autostraßen, Logistik),   **Verwalten**
   (Festival, Bühnenwerkstatt, Logistikverwaltung für Bestellungen/Träger,
@@ -136,7 +147,15 @@ Eingang/Ausgang.
   das schließt den letzten Bau, Stempel, Parkplatz oder Weg. **Park schließen** sitzt in der
   Festivalverwaltung, nicht mehr in der Leiste. **Ton stumm** (🔊/🔇) und
   Einstellungen → **Ton stumm** teilen `localStorage` (`festival-audio-muted`),
-  nicht den Spielstand; siehe [audio.md](audio.md). Das Speicher-Dropdown hält
+  nicht den Spielstand; siehe [audio.md](audio.md). Die drei Leisten-Dropdowns
+  (Personal, Debug, Speichern) stehen im Markup **neben** `.rct-toolbar`, nicht
+  darin: die Leiste trägt selbst einen `z-index` und öffnet damit einen
+  Stacking-Context, in dem ein Menü unter jedem Fenster landen würde. Als
+  Geschwister zählt ihr eigener `z-index: 50` — über allen Spielfenstern
+  (höchstes: `.staff-details` mit 45), unter dem Titelbildschirm (60).
+  Positioniert werden sie aus dem Live-Rect ihres Knopfes
+  (`positionDropdownPanel`), die Verschachtelung ist ihnen also gleichgültig.
+  Das Speicher-Dropdown hält
   **Schnell speichern** / **Schnell laden** für den einzelnen
   `SAVE_KEY`-Slot (voller Snapshot inkl. Besucher und Gebäude; IndexedDB
   wenn `localStorage` nicht reicht) neben benannten Ständen, Base64-Export
