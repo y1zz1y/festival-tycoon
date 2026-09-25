@@ -15,11 +15,11 @@ import { QUEUE_CARDINALS, isStallQueueKind, queueStandOffset as computeQueueStan
 import { groundInfo, groundKey, roadGroundLimit } from './ground';
 import { BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY, saveSlotDataKey } from './catalog';
 import { serializeSnapshot, storageErrorMessage } from './saveText';
-import { bookFinance, financeEdition, financeForecast, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance';
+import { bookFinance, financeEdition, financeForecast, financePeriodTotal, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance';
 import { financeCostBreakdown, type FinanceBreakdown } from './financeBreakdown';
 import { snapshotHourlyBuildingUpkeep } from './upkeep';
-import { updateScenarioProgress } from './scenarioGoals';
-import { createFestivalManagement, festivalAction, updateFestival, activeBookings, cleanerCarryFactor, staffSpeedFactor, showIssue } from './festivalManagement';
+import { isEditionOverdue, recordEditionResult, updateInsolvency, updateScenarioProgress } from './scenarioGoals';
+import { createFestivalManagement, editionSatisfaction, festivalAction, festivalReputation, updateFestival, activeBookings, cleanerCarryFactor, staffSpeedFactor, showIssue } from './festivalManagement';
 import type { Booking, FestivalAction } from './festivalManagement';
 import { createScenarioEntrance, createScenarioRoadEntry, normalizeScenarioSettings } from './scenario';
 import type { ScenarioSettings } from './scenario';
@@ -3124,6 +3124,47 @@ export class GameState {
    * What the park is worth on paper: everything standing on it, at what it cost to
    * build. The bank lends against this, and the overview shows it next to the debt.
    */
+  /**
+   * Once a day: goals, insolvency and an edition that is overdue. A scenario that
+   * is decided pauses the game so its end screen is seen; an overdue edition pauses
+   * it by opening the planning, which stops the clock until someone starts it.
+   */
+  private updateScenarioDay(): void {
+    const parkValue = this.parkValue()
+    const byGoals = updateScenarioProgress(this.state, financeEdition(this.state), { parkValue })
+    const byDebt = updateInsolvency(this.state, loanLimit(parkValue))
+    if (byGoals || byDebt) {
+      this.state.speed = 0
+      return
+    }
+    if (!isEditionOverdue(this.state)) return
+    if (!festivalAction(this.state, { type: 'prepare' }).ok) return
+    this.state.scenarioProgress.dueReminderDay = this.state.day
+    this.atmosphereMinutes = 999
+    this.worldRevision++
+  }
+
+  /** The edition has just ended: keep what it achieved and judge the edition goals on it. */
+  private recordFinishedEdition(): void {
+    const f = this.state.festival
+    const period = this.state.finance.periods.find((entry) => entry.edition === f.edition)
+    const decided = recordEditionResult(
+      this.state,
+      {
+        edition: f.edition,
+        endDay: this.state.day,
+        admissions: f.admissions,
+        satisfaction: Math.round(editionSatisfaction(this.state)),
+        reputation: Math.round(festivalReputation(f)),
+        profit: Math.round(period ? financePeriodTotal(period) : 0),
+      },
+      this.state.dayPlan.breakDays,
+      financeEdition(this.state),
+      { parkValue: this.parkValue() },
+    )
+    if (decided) this.state.speed = 0
+  }
+
   parkValue(): number {
     const buildings = this.state.buildings.reduce(
       (total, item) =>
@@ -3191,7 +3232,7 @@ export class GameState {
     if (payment <= 0) return { ok: false, message: 'Nicht genug Geld für eine Tilgung' }
     finance.loan = Math.round((finance.loan - payment) * 100) / 100
     this.state.money -= payment
-    updateScenarioProgress(this.state, financeEdition(this.state))
+    if (updateScenarioProgress(this.state, financeEdition(this.state), { parkValue: this.parkValue() })) this.state.speed = 0
     this.emit()
     return {
       ok: true,
@@ -5639,7 +5680,7 @@ export class GameState {
       this.state.minute -= SIMULATION_CONFIG.time.minutesPerDay
       this.state.day += 1
       rollFinanceDay(this.state.finance)
-      updateScenarioProgress(this.state, financeEdition(this.state))
+      this.updateScenarioDay()
       if (
         getFestivalCycleStatus(this.state.dayPlan, this.state.day)
           .cycleDay === 0
@@ -5650,7 +5691,9 @@ export class GameState {
     this.evaluateAccessSignals()
     this.visitorBehavior.enforceDayPlan()
     this.syncBandSupply()
+    const editionWasOver = this.state.festival.finished
     updateFestival(this.state)
+    if (!editionWasOver && this.state.festival.enabled && this.state.festival.finished) this.recordFinishedEdition()
     updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, true, undefined, true), (a, b) => this.canCarrierStep(a, b))
 
     this.visitorSpawning.update(minutes)

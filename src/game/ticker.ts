@@ -5,8 +5,19 @@ import {
   parkWasteDumpFill,
   type WasteDumpCell,
 } from './waste'
+import type { ScenarioGoal } from './scenario'
+import { goalName, insolvencyDaysLeft, type GoalStatus, type ScenarioProgress } from './scenarioGoals'
 
-export type TickerKind = 'fire' | 'panic' | 'dumpFull' | 'medical'
+export type TickerKind =
+  | 'fire'
+  | 'panic'
+  | 'dumpFull'
+  | 'medical'
+  | 'goalDone'
+  | 'goalFailed'
+  | 'goalDeadline'
+  | 'insolvency'
+  | 'editionDue'
 
 export type TickerSeverity = 'info' | 'warning' | 'alert'
 
@@ -45,6 +56,9 @@ export type TickerSource = {
     roadVehicles?: readonly { passengerIds?: readonly string[] }[]
   }
   wasteDumpCells: readonly WasteDumpCell[]
+  scenario?: { goals: readonly ScenarioGoal[] }
+  scenarioProgress?: Pick<ScenarioProgress, 'status' | 'insolventDays' | 'dueReminderDay'>
+  festival?: { edition: number; enabled: boolean; finished: boolean }
 }
 
 export type TickerWatchState = {
@@ -55,6 +69,16 @@ export type TickerWatchState = {
   dumpOver: boolean
   lastDumpWarnClock: number
   knownInjuredIds: Set<string>
+  /**
+   * The scenario as last seen. Null until the first look, which only takes note:
+   * a goal reached before a save was loaded is no news.
+   */
+  scenario: {
+    status: GoalStatus[]
+    runningEdition: number
+    insolventDays: number
+    dueReminderDay: number | null
+  } | null
 }
 
 export function createTickerWatchState(): TickerWatchState {
@@ -66,6 +90,7 @@ export function createTickerWatchState(): TickerWatchState {
     dumpOver: false,
     lastDumpWarnClock: Number.NEGATIVE_INFINITY,
     knownInjuredIds: new Set(),
+    scenario: null,
   }
 }
 
@@ -83,7 +108,8 @@ function tickerItem(
   subjects?: readonly string[],
 ): TickerItem {
   return {
-    id: `${kind}:${source.simTick}:${position?.x ?? 'x'}:${position?.z ?? 'z'}`,
+    // Two goals can be decided in the same tick, so the first subject is part of the id.
+    id: `${kind}:${source.simTick}:${position?.x ?? 'x'}:${position?.z ?? 'z'}:${subjects?.[0] ?? ''}`,
     kind,
     severity,
     title,
@@ -133,7 +159,10 @@ export function pruneResolvedTicker(
     if (item.kind === 'medical') return anySubject(injured)
     if (item.kind === 'fire') return anySubject(fires)
     if (item.kind === 'panic') return panicking
-    return dumpOver
+    if (item.kind === 'insolvency') return (source.scenarioProgress?.insolventDays ?? 0) > 0
+    // Goals and due days are news, not conditions: they stay until the list is full.
+    if (item.kind === 'dumpFull') return dumpOver
+    return true
   }
   return history.filter(stillOpen)
 }
@@ -295,6 +324,59 @@ export function observeTickerEvents(
   }
   watch.knownInjuredIds = new Set(injured.map((visitor) => visitor.id))
 
+  items.push(...observeScenarioEvents(source, watch))
+  return items
+}
+
+/**
+ * Goals reached or missed, the last edition before a deadline, insolvency and an
+ * overdue edition. All of it is read off the snapshot the host sends, so every
+ * player gets the same messages.
+ */
+function observeScenarioEvents(source: TickerSource, watch: TickerWatchState): TickerItem[] {
+  const goals = source.scenario?.goals ?? []
+  const progress = source.scenarioProgress
+  const festival = source.festival
+  if (!progress || !festival) return []
+  const runningEdition = festival.enabled && !festival.finished ? festival.edition : 0
+  const now = {
+    status: [...progress.status],
+    runningEdition,
+    insolventDays: progress.insolventDays,
+    dueReminderDay: progress.dueReminderDay,
+  }
+  const before = watch.scenario
+  watch.scenario = now
+  if (!before) return []
+  const items: TickerItem[] = []
+  goals.forEach((goal, index) => {
+    if (before.status[index] === now.status[index]) return
+    if (now.status[index] === 'done') {
+      items.push(tickerItem('goalDone', source, 'Ziel erreicht', goalName(goal), undefined, 'info', [`goal:${index}`]))
+    } else if (now.status[index] === 'failed') {
+      items.push(tickerItem('goalFailed', source, 'Ziel verpasst', `${goalName(goal)} bis zur ${goal.edition}. Ausgabe`, undefined, 'alert', [`goal:${index}`]))
+    }
+  })
+  if (runningEdition > 0 && runningEdition !== before.runningEdition) {
+    const last = goals.filter((goal, index) => goal.edition === runningEdition && now.status[index] === 'open')
+    if (last.length > 0) {
+      items.push(tickerItem('goalDeadline', source, 'Letzte Ausgabe für ein Ziel', `Ausgabe ${runningEdition} entscheidet: ${last.map(goalName).join(' · ')}`, undefined, 'warning'))
+    }
+  }
+  if (now.insolventDays > before.insolventDays) {
+    const left = insolvencyDaysLeft(now)
+    const scenario = goals.length > 0
+    if (now.insolventDays === 1) {
+      items.push(tickerItem('insolvency', source, 'Zahlungsunfähig', scenario
+        ? `Das Konto ist im Minus und der Kreditrahmen deckt es nicht. Noch ${left} Tage, dann ist das Szenario verloren.`
+        : 'Das Konto ist im Minus und der Kreditrahmen deckt es nicht. Im freien Spiel geht es weiter, aber die Kosten laufen.', undefined, 'warning'))
+    } else if (scenario && left === 1) {
+      items.push(tickerItem('insolvency', source, 'Letzter Tag vor der Pleite', 'Bis morgen muss das Konto gedeckt sein, sonst ist das Szenario verloren.', undefined, 'alert'))
+    }
+  }
+  if (now.dueReminderDay !== null && now.dueReminderDay !== before.dueReminderDay) {
+    items.push(tickerItem('editionDue', source, 'Stichtag erreicht', 'Die nächste Ausgabe ist fällig. Die Planung ist geöffnet und die Zeit angehalten.', undefined, 'warning'))
+  }
   return items
 }
 
@@ -313,11 +395,20 @@ export function formatTickerClock(item: Pick<TickerItem, 'day' | 'minute'>): str
   return `Tag ${item.day} · ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }
 
+const TICKER_ICONS: Record<TickerKind, string> = {
+  fire: '🔥',
+  panic: '😱',
+  dumpFull: '🗑️',
+  medical: '🚑',
+  goalDone: '🏆',
+  goalFailed: '⛔',
+  goalDeadline: '⏳',
+  insolvency: '💸',
+  editionDue: '📅',
+}
+
 export function tickerKindIcon(kind: TickerKind): string {
-  if (kind === 'fire') return '🔥'
-  if (kind === 'panic') return '😱'
-  if (kind === 'dumpFull') return '🗑️'
-  return '🚑'
+  return TICKER_ICONS[kind]
 }
 
 export function pickTickerDisplay(items: readonly TickerItem[]): TickerItem | null {

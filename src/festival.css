@@ -1,6 +1,8 @@
 .festival-management[hidden], .festival-management [hidden] { display: none !important; }
 .festival-management {
-  position: absolute; z-index: 60; top: 100px; left: 50%; transform: translateX(-50%);
+  /* Above every other window (the highest is .staff-details at 45), below the toolbar
+     dropdowns (50), which always stay on top. */
+  position: absolute; z-index: 46; top: 100px; left: 50%; transform: translateX(-50%);
   width: min(1040px, calc(100vw - 24px)); max-height: calc(100dvh - 116px);
   overflow-y: auto; padding: 8px 18px 18px; color: #e7eee1; font-size: 12px;
 }

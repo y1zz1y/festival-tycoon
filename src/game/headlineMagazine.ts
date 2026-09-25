@@ -1,5 +1,5 @@
 import type { GameSnapshot } from './GameState'
-import { BANDS } from './festivalManagement'
+import { BANDS, editionSatisfaction, festivalReputation } from './festivalManagement'
 import { isWasteBin } from './decorationWalls'
 import { isSealedWasteContainer } from './waste'
 import { SIMULATION_CONFIG } from './simulationConfig'
@@ -53,16 +53,12 @@ export function buildHeadlineMagazine(s: Readonly<GameSnapshot>): HeadlineMagazi
   const firstDay = f.startDay + lead
   const lastDay = firstDay + s.dayPlan.festivalDays - 1
   const reports = f.reports.filter((report) => report.day >= firstDay)
-  const satisfaction = reports.length
-    ? reports.reduce((sum, report) => sum + report.satisfaction, 0) / reports.length
-    : f.metrics.samples
-      ? f.metrics.satisfaction / f.metrics.samples
-      : 50
+  const satisfaction = editionSatisfaction(s)
   const balance = f.reports.reduce((sum, report) => sum + report.balance, 0)
   const concerts = reports.reduce((sum, report) => sum + report.concerts, 0)
   const stockouts = reports.reduce((sum, report) => sum + report.stockouts, 0)
   const weatherImpact = reports.reduce((sum, report) => sum + report.weatherImpact, 0)
-  const reputation = (f.reputation.music + f.reputation.atmosphere + f.reputation.comfort + f.reputation.organization) / 4
+  const reputation = festivalReputation(f)
   const guestGoal = f.admissions >= f.goals.guests
   const satGoal = satisfaction >= f.goals.satisfaction
   const profitGoal = balance >= f.goals.profit

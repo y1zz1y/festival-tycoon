@@ -10,7 +10,9 @@
   .band-card, .show-booking { touch-action: pan-x pan-y; }
 }
 @media (max-width: 900px), (pointer: coarse) {
-  :root { --mobile-bottom: calc(116px + env(safe-area-inset-bottom)); }
+  /* Everything a window may not cover from below: the touch bar (60 + 64 px) and the
+     one-line status strip above it. */
+  :root { --mobile-bottom: calc(164px + env(safe-area-inset-bottom)); }
   html, body, #app, .game-shell { height: 100dvh; overscroll-behavior: none; }
   .topbar { top: env(safe-area-inset-top, 0px); left: env(safe-area-inset-left, 0px); right: env(safe-area-inset-right, 0px); max-width: none; min-height: 0; padding: 5px 8px; gap: 4px; z-index: 80; }
   .rct-toolbar { position: fixed; top: calc(52px + env(safe-area-inset-top, 0px)); left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); overflow-x: auto; gap: 6px; z-index: 79; }
@@ -39,7 +41,11 @@
   .time-controls button { min-width: 38px; min-height: 44px; }
   .performance-indicator { bottom: max(5px, env(safe-area-inset-bottom)); left: max(6px, env(safe-area-inset-left)); max-width: calc(100vw - 178px); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8px; z-index: 70; }
   /* Too narrow for a corner box: the overview runs as one scrollable strip above the touch controls. */
-  .status-overlay { left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); bottom: calc(104px + env(safe-area-inset-bottom)); max-width: none; padding: 3px 8px; border-radius: 0; z-index: 70; }
+  .status-overlay { left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); bottom: calc(128px + env(safe-area-inset-bottom)); max-width: none; padding: 3px 8px; border-radius: 0; z-index: 70; }
+  /* One line that scrolls sideways, not the desktop's grid of four per row: three
+     wrapped rows ran into the touch bar below. */
+  .status-overlay .stats { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 14px; }
+  .status-overlay .stats > span, .status-overlay .stats .status-date { flex-shrink: 0; white-space: nowrap; }
   .help { display: none; }
   .crowding-panel { display: none; }
   .game-shell .crowding-panel.mobile-visible { display: block; top: auto; bottom: var(--mobile-bottom); right: 6px; left: auto; max-height: calc(100dvh - var(--topbar-gap-top, 90px) - var(--mobile-bottom)); overflow: auto; z-index: 71; width: 220px; }
@@ -91,7 +97,7 @@
    strip drops to just above the time controls, and the overlay readout, which only
    the bar's "Ansichten" could open here, stands top right as on a wide screen. */
 @media (max-width: 900px) and (pointer: fine) {
-  :root { --mobile-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  :root { --mobile-bottom: calc(96px + env(safe-area-inset-bottom)); }
   .mobile-controls { display: none; }
   .status-overlay { bottom: calc(60px + env(safe-area-inset-bottom)); }
   .crowding-panel { display: block; top: var(--topbar-gap-top, 90px); bottom: auto; left: auto; right: 6px; width: 144px; }

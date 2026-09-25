@@ -1,7 +1,7 @@
 import { ENVIRONMENTS, type Environment } from '../game/environments'
 import type { GameState } from '../game/GameState'
 import { SCENARIO_WORLD_SIZES, normalizeScenarioSettings, type ScenarioSettings } from '../game/scenario'
-import { goalName } from '../game/scenarioGoals'
+import { goalName, scenarioSummary as goalTally } from '../game/scenarioGoals'
 import { scenarioPreset } from '../game/scenarioPresets'
 
 export function createScenarioFormController(getGame: () => GameState) {
@@ -21,6 +21,28 @@ export function createScenarioFormController(getGame: () => GameState) {
   const scenarioBeautyValue = document.querySelector<HTMLElement>('#scenario-beauty-value')!
   const scenarioAggressionValue = document.querySelector<HTMLElement>('#scenario-aggression-value')!
   const scenarioMoneyValue = document.querySelector<HTMLElement>('#scenario-money-value')!
+  const goalRows = [...document.querySelectorAll<HTMLElement>('[data-goal-row]')]
+
+  /** The goals free play asks of itself; empty rows and nonsense are dropped by the normalizer. */
+  function readGoals(): unknown[] {
+    return goalRows.flatMap((row) => {
+      const kind = row.querySelector<HTMLSelectElement>('[data-goal-kind]')!.value
+      if (!kind) return []
+      const edition = Number(row.querySelector<HTMLInputElement>('[data-goal-edition]')!.value)
+      const target = Number(row.querySelector<HTMLInputElement>('[data-goal-target]')!.value)
+      return [kind === 'loanFree' ? { kind, edition } : { kind, target, edition }]
+    })
+  }
+
+  function fillGoals(goals: ScenarioSettings['goals']): void {
+    goalRows.forEach((row, index) => {
+      const goal = goals[index]
+      row.querySelector<HTMLSelectElement>('[data-goal-kind]')!.value = goal && goal.kind !== 'guests' ? goal.kind : ''
+      row.querySelector<HTMLInputElement>('[data-goal-target]')!.value = goal && 'target' in goal ? String(goal.target) : ''
+      row.querySelector<HTMLInputElement>('[data-goal-edition]')!.value = String(goal?.edition ?? 3)
+    })
+  }
+
   function read(): ScenarioSettings {
     const worldSize = Number(scenarioWorldSize.value)
     return normalizeScenarioSettings({
@@ -36,6 +58,7 @@ export function createScenarioFormController(getGame: () => GameState) {
       )
         ? (worldSize as (typeof SCENARIO_WORLD_SIZES)[number])
         : 48,
+      goals: readGoals() as ScenarioSettings['goals'],
     })
   }
   
@@ -48,6 +71,7 @@ export function createScenarioFormController(getGame: () => GameState) {
     scenarioAggression.value = String(Math.round(settings.aggressiveShare * 100))
     scenarioMoney.value = String(settings.startingMoney)
     scenarioWorldSize.value = String(settings.worldSize)
+    fillGoals(settings.goals)
     updateLabels()
   }
   
@@ -72,7 +96,13 @@ export function createScenarioFormController(getGame: () => GameState) {
       ['Startkapital', `${settings.startingMoney.toLocaleString('de-DE')} €`],
     ]
     if (settings.startingLoan > 0) rows.push(['Startdarlehen', `${settings.startingLoan.toLocaleString('de-DE')} €`])
-    if (goals.length) rows.push(['Ziele', goals.map((goal) => `${goalName(goal)} bis zur ${goal.edition}. Ausgabe`).join(' · ')])
+    if (goals.length) {
+      const progress = getGame().snapshot.scenarioProgress
+      const outcome = progress.outcome.state
+      rows.push(['Ziele', goals.map((goal) => `${goalName(goal)} bis zur ${goal.edition}. Ausgabe`).join(' · ')])
+      rows.push(['Stand', outcome === 'won' ? 'Geschafft' : outcome === 'lost' ? 'Gescheitert' : `${goalTally(getGame().snapshot).done} von ${goals.length} Zielen erreicht`])
+      if (outcome === 'running' && progress.nextEditionDue !== null) rows.push(['Nächste Ausgabe', `fällig ab Tag ${progress.nextEditionDue}`])
+    }
     scenarioSummary.innerHTML = rows
       .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
       .join('')

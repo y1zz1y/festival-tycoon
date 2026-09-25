@@ -15,7 +15,7 @@ import { clampWasteDumpStored, clampSealedContainerStored, isSealedWasteContaine
 import { normalizePower } from './power'
 import { hashStringSeed, visitorLooksFemale, type DeterministicRng } from './rng'
 import { normalizeScenarioSettings } from './scenario'
-import { createScenarioProgress } from './scenarioGoals'
+import { normalizeScenarioProgress } from './scenarioGoals'
 import { DEFAULT_SECURITY_CONFIG } from './security'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import { defaultShirtSettings, normalizeShirtColor, normalizeShirtStyle, normalizeWornShirt } from './shopGoods'
@@ -110,7 +110,7 @@ export function repairSnapshotEntities(context: SnapshotRepairContext): number {
   state.finance.today ??= {}
   state.finance.previousDay ??= {}
   state.scenario = normalizeScenarioSettings(state.scenario)
-  state.scenarioProgress ??= createScenarioProgress(state.scenario.goals)
+  state.scenarioProgress = normalizeScenarioProgress(state.scenarioProgress, state)
   state.terrain = normalizeTerrain(state.terrain)
   state.power = normalizePower(state.power)
   context.rebuildTerrainCache()

@@ -203,5 +203,11 @@ export function mountFestivalUI(
     const success = f.admissions >= f.goals.guests && average >= f.goals.satisfaction && balance >= f.goals.profit
     put('[data-reports]', `${f.finished ? `<article class="festival-result"><h3>${success ? 'Wochenendziele erreicht!' : 'Wochenende abgeschlossen – hier liegt euer nächstes Verbesserungspotenzial'}</h3><p>${f.admissions}/${f.goals.guests} Anreisen · Zufriedenheit ${Math.round(average)}/${f.goals.satisfaction}% · Bilanz ${money(balance)}</p><p>Mit dem behaltenen Gelände, den Ausbauten und eurem Ruf könnt ihr die nächste Ausgabe planen.</p><p><button type="button" data-magazine-open>HEADLINE Magazin aufschlagen</button></p></article>` : ''}${f.reports.map(r => `<article class="festival-booking"><div><h3>Tag ${r.day}${r.day === f.startDay ? ' · Vorbereitung' : ''}</h3><p>${r.guests} Anreisen · Zufriedenheit ${Math.round(r.satisfaction)}% · Tagesbilanz ${money(r.balance)}</p><p>${Math.round(r.concerts)} Besucher-Konzertminuten · ${r.stockouts} gescheiterte Käufe · Wetterbelastung ${Math.round(r.weatherImpact)}</p><small>${r.stockouts ? 'Mehr Vorräte und frühere Lieferungen helfen gegen Ausverkäufe. ' : ''}${r.weatherImpact > 100 ? 'Überdachung und Trinkwasser verbessern den Wetterschutz. ' : ''}${r.satisfaction < 65 ? 'Bedürfnisse, Ruhe und Erreichbarkeit prüfen.' : 'Die Gäste waren überwiegend zufrieden.'}</small></div></article>`).join('') || '<p class="festival-empty">Die erste Abrechnung erscheint nach Mitternacht. Das Festival endet nach den geplanten Festivaltagen.</p>'}`)
   }
-  return { update: render }
+  /** Opens the window on its overview, where the next edition is planned and started. */
+  const openPlanning = (): void => {
+    panel.hidden = false
+    open.setAttribute('aria-expanded', 'true')
+    panel.querySelector<HTMLButtonElement>('[data-tab="overview"]')?.click()
+  }
+  return { update: render, openPlanning, isMagazineOpen: () => magazine.isOpen() }
 }

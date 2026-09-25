@@ -899,6 +899,24 @@ export const SIMULATION_CONFIG = {
     incidentRepeatMinutes: 15,
     historyLimit: 24,
   },
+  scenario: {
+    /** Days after the start by which a scenario with goals expects its first edition. */
+    firstEditionDays: 7,
+    /**
+     * Days a park may stay insolvent (below zero with no credit left to cover it)
+     * before a scenario with goals is lost. Free play only warns.
+     */
+    insolvencyGraceDays: 3,
+    /** The first weekend's targets when a scenario brings none of its own. */
+    weekendGoals: { guests: 150, satisfaction: 65, profit: 0 },
+    /** How those targets grow with every further edition. */
+    weekendGoalGrowth: {
+      guestsFactor: 1.3,
+      satisfactionStep: 2,
+      satisfactionCap: 80,
+      profitStep: 5_000,
+    },
+  },
   queues: {
     // Stall queues only: half the tile width is the wait lane, half the return lane.
     stallLaneOffset: 0.22,

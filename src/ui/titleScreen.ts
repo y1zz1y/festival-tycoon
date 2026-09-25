@@ -3,12 +3,15 @@ import { confirmDiscardingWork, markWorkSaved } from './unsavedWork'
 import { GameState } from '../game/GameState'
 import { normalizeScenarioSettings } from '../game/scenario'
 import type { ScenarioSettings } from '../game/scenario'
-import { scenarioPreset } from '../game/scenarioPresets'
+import { scenarioPreset, type ScenarioPreset } from '../game/scenarioPresets'
+import { ENVIRONMENTS } from '../game/environments'
+import { goalName } from '../game/scenarioGoals'
+import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { mountTitleCrowd } from '../titleCrowd'
 import { isTextEntryTarget } from '../uiFocus'
 import { fetchLobbies } from '../net/lobbies'
 import type { NetLobby } from '../net/protocol'
-import { escapeHtml } from './format'
+import { escapeHtml, formatMoney } from './format'
 import { saveProgressText, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
 
 export interface TitleScreenContext {
@@ -50,6 +53,36 @@ export interface TitleScreenController {
     source: 'server' | 'browser'
     name: string
   }): void
+  /** Starts a new game on these settings, as picking it on the title screen does. */
+  startScenario(settings: ScenarioSettings, message: string): void
+  /** Back to the title screen, after asking about unsaved work. */
+  leaveToTitle(): void
+}
+
+/**
+ * The briefing a prepared scenario shows before it starts: its story, what it hands
+ * you and what it wants. Everything here comes from the preset, so it can be read
+ * before a single tile exists.
+ */
+function briefingMarkup(preset: ScenarioPreset): string {
+  const settings = preset.settings
+  const rows: [string, string][] = [
+    ['Umgebung', ENVIRONMENTS[settings.environment].name],
+    ['Kartengröße', `${settings.worldSize} × ${settings.worldSize}`],
+    ['Startkapital', formatMoney(settings.startingMoney)],
+  ]
+  if (settings.startingLoan > 0) rows.push(['Startdarlehen', formatMoney(settings.startingLoan)])
+  if (settings.goals.length > 0) {
+    rows.push(['Erste Ausgabe', `bis Tag ${1 + (settings.firstEditionDays ?? SIMULATION_CONFIG.scenario.firstEditionDays)}`])
+  }
+  const goals = settings.goals
+    .map((goal) => `<li class="scenario-goal scenario-goal-open"><span aria-hidden="true">○</span><span>${escapeHtml(goalName(goal))} <small>bis zur ${goal.edition}. Ausgabe</small></span></li>`)
+    .join('')
+  return `<p>${escapeHtml(preset.detail)}</p>
+    <dl class="scenario-summary">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
+    <h3 class="scenario-heading">Ziele</h3>
+    <ul class="scenario-goal-list">${goals}</ul>
+    <p class="scenario-hint">Geschafft, wenn alle Ziele erreicht sind. Gescheitert, wenn ein Ziel bis zu seiner Ausgabe fehlt oder das Konto zu lange ungedeckt im Minus bleibt.</p>`
 }
 
 export function mountTitleScreen(context: TitleScreenContext): TitleScreenController {
@@ -92,6 +125,10 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     open()
   }
   const titleFreeplayMask = requireElement<HTMLElement>('#title-freeplay-mask')
+  const titleBriefingMask = requireElement<HTMLElement>('#title-briefing-mask')
+  const titleBriefing = requireElement<HTMLElement>('#title-briefing')
+  const titleBriefingName = requireElement<HTMLElement>('#title-briefing-name')
+  let briefingPreset: ScenarioPreset | null = null
   const titleSubmenu = requireElement<HTMLElement>('#title-submenu')
   const titleLoadMask = requireElement<HTMLElement>('#title-load-mask')
   const titleLoadRows = requireElement<HTMLElement>('#title-load-rows')
@@ -224,6 +261,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   let titleSelection = 0
   function titleEntries(): HTMLButtonElement[] {
     if (!titleFreeplayMask.hidden) return [...titleFreeplayMask.querySelectorAll<HTMLButtonElement>('.title-freeplay-actions button')]
+    if (!titleBriefingMask.hidden) return [...titleBriefingMask.querySelectorAll<HTMLButtonElement>('.title-freeplay-actions button')]
     if (!titleLoadMask.hidden) return [...titleLoadRows.querySelectorAll<HTMLButtonElement>('[data-title-load-slot]')]
     if (!titleLobbyMask.hidden) return [...titleLobbyMask.querySelectorAll<HTMLButtonElement>('#title-lobby-join, #title-lobby-refresh, [data-title-lobby]')]
     return (titleSubmenu.hidden ? titleMenuButtons : titleRowButtons).filter((entry) => !entry.disabled)
@@ -351,7 +389,24 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   }
   function openTitleSubmenu(open: boolean): void {
     titleSubmenu.hidden = !open
-    if (!open) titleFreeplayMask.hidden = true
+    if (!open) {
+      titleFreeplayMask.hidden = true
+      titleBriefingMask.hidden = true
+    }
+    markTitleSelection(0)
+  }
+  /**
+   * A prepared scenario briefs you first, on its own plate like free play: the list
+   * steps aside and comes back when you leave.
+   */
+  function openTitleBriefing(preset: ScenarioPreset | null): void {
+    briefingPreset = preset
+    titleBriefingMask.hidden = !preset
+    titleSubmenu.hidden = Boolean(preset)
+    if (preset) {
+      titleBriefingName.textContent = preset.name
+      titleBriefing.innerHTML = briefingMarkup(preset)
+    }
     markTitleSelection(0)
   }
   /**
@@ -392,6 +447,16 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
       return
     }
     if (target.closest('[data-title-freeplay-close]')) { openTitleFreeplay(false); return }
+    if (target.closest('[data-title-briefing-close]')) { openTitleBriefing(null); return }
+    if (target.closest('#title-briefing-start')) {
+      if (!briefingPreset) return
+      if (getMultiplayerMode() === 'client') {
+        showToast('Nur der Host kann ein neues Szenario starten', true)
+        return
+      }
+      startFestival(normalizeScenarioSettings({ ...briefingPreset.settings, preset: briefingPreset.id }), `${briefingPreset.name} gestartet`)
+      return
+    }
     if (target.closest('[data-title-back]')) { openTitleSubmenu(false); return }
     if (target.closest('[data-title-load-close]')) { closeTitleLoad(); return }
     if (target.closest('[data-title-lobby-close]')) { openTitleLobbies(false); return }
@@ -429,7 +494,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
       openTitleFreeplay(true)
       return
     }
-    startFestival(normalizeScenarioSettings({ ...preset.settings, preset: preset.id }), `${preset.name} gestartet`)
+    openTitleBriefing(preset)
   })
   window.addEventListener('keydown', (event) => {
     if (!titleScreenOpen() || !scenarioPanel.hidden || !saveSlotsPanel.hidden) return
@@ -439,7 +504,8 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     }
     if (isTextEntryTarget(event.target) || isTextEntryTarget(document.activeElement)) return
     if (event.key === 'Escape' || event.key === 'Backspace') {
-      if (!titleFreeplayMask.hidden) { event.preventDefault(); openTitleFreeplay(false) }
+      if (!titleBriefingMask.hidden) { event.preventDefault(); openTitleBriefing(null) }
+      else if (!titleFreeplayMask.hidden) { event.preventDefault(); openTitleFreeplay(false) }
       else if (!titleLoadMask.hidden) { event.preventDefault(); closeTitleLoad() }
       else if (!titleLobbyMask.hidden) { event.preventDefault(); openTitleLobbies(false) }
       else if (!titleSubmenu.hidden) { event.preventDefault(); openTitleSubmenu(false) }
@@ -459,11 +525,12 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     setTitleScreenOpen(false)
     showToast(message)
   }
-  requireElement<HTMLButtonElement>('#open-title-screen').addEventListener('click', () => {
+  function leaveToTitle(): void {
     if (!confirmDiscardingWork('Zum Titelbildschirm zurückkehren?')) return
     setScenarioPanelOpen(false)
     setTitleScreenOpen(true)
-  })
+  }
+  requireElement<HTMLButtonElement>('#open-title-screen').addEventListener('click', leaveToTitle)
   
   requireElement<HTMLButtonElement>('#start-scenario').addEventListener('click', () => {
     if (getMultiplayerMode() === 'client') {
@@ -479,5 +546,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     setOpen: setTitleScreenOpen,
     syncAccountBar,
     rememberLastSave,
+    startScenario: startFestival,
+    leaveToTitle,
   }
 }

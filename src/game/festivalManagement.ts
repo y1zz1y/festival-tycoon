@@ -12,6 +12,7 @@ import { SIMULATION_CONFIG } from './simulationConfig'
 import { applyFamilyFestivalBedtime } from './visitorSleep'
 import { CONCERT_TOPLESS_CROWD_THOUGHT, CONCERT_TOPLESS_THOUGHT } from './visitorThoughts'
 import { createTicketDemandTuning, type TicketDemandTuning } from './demandTuning'
+import type { WeekendGoals } from './scenario'
 
 export const AUDIENCES = ['music', 'party', 'family', 'comfort', 'camping'] as const
 export type Audience = typeof AUDIENCES[number]
@@ -329,6 +330,7 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
     if(f.enabled&&!f.finished)return fail('Das laufende Festival zuerst abschließen')
     if(f.planning&&!f.finished)return {ok:true,message:'Die Festivalplanung ist bereits geöffnet'}
     f.enabled=false;f.finished=false;f.planning=true;f.bookings=[];f.startDay=s.day;s.parkOpen=false;s.speed=0
+    f.goals = weekendGoals(f.edition + 1, s.scenario.festivalGoals)
     let offerSeed = hashStringSeed(`headliners:${f.seed}:${f.edition}`)
     const offerRng = { next: () => {
       offerSeed = (Math.imul(offerSeed, 1664525) + 1013904223) >>> 0
@@ -347,6 +349,7 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
     else f.bookings.forEach(b=>b.day+=s.day-plannedStart)
     f.playedMusic={}
     f.planning = false; f.enabled = true; f.finished = false; f.edition++; f.startDay = s.day;
+    f.goals = weekendGoals(f.edition, s.scenario.festivalGoals)
     f.reportDay = s.day; f.openingMoney = s.money+f.bookings.reduce((sum,b)=>sum+b.fee,0); f.reports = [];
     f.metrics = metrics(); f.admissions = 0; f.lastUpdate = now; f.seed = s.rngState;
     s.dayPlan.cycleStartDay = s.day;
@@ -418,6 +421,41 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
   }
   return fail('Unbekannte Festivalaktion')
 }
+/**
+ * How content the guests were over the festival days of the current edition: the
+ * mean of the day reports from the first festival day on, lead days left out. The
+ * HEADLINE Magazin and the scenario goals judge an edition by this same number.
+ */
+export function editionSatisfaction(s: Readonly<GameSnapshot>): number {
+  const f = s.festival
+  const firstDay = f.startDay + s.dayPlan.leadDays
+  const reports = f.reports.filter((report) => report.day >= firstDay)
+  if (reports.length) return reports.reduce((sum, report) => sum + report.satisfaction, 0) / reports.length
+  return f.metrics.samples ? f.metrics.satisfaction / f.metrics.samples : 50
+}
+
+/** The festival's standing as one number: the mean of its four reputation values. */
+export function festivalReputation(f: Readonly<FestivalManagement>): number {
+  const r = f.reputation
+  return (r.music + r.atmosphere + r.comfort + r.organization) / 4
+}
+
+/**
+ * The targets of one festival weekend. The first comes from the scenario or the
+ * config; every further edition asks for more guests, a little more satisfaction
+ * and a larger profit, so the weekend goals keep meaning something after the third.
+ */
+export function weekendGoals(edition: number, base?: WeekendGoals): WeekendGoals {
+  const first = base ?? SIMULATION_CONFIG.scenario.weekendGoals
+  const growth = SIMULATION_CONFIG.scenario.weekendGoalGrowth
+  const steps = Math.max(0, Math.floor(edition) - 1)
+  return {
+    guests: Math.round(first.guests * growth.guestsFactor ** steps / 10) * 10,
+    satisfaction: Math.min(Math.max(first.satisfaction, growth.satisfactionCap), first.satisfaction + growth.satisfactionStep * steps),
+    profit: first.profit + growth.profitStep * steps,
+  }
+}
+
 export function recordDay(s: GameSnapshot): void {
   const f = s.festival, m = f.metrics
   const satisfaction = m.samples ? m.satisfaction / m.samples : 50

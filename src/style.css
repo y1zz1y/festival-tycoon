@@ -307,7 +307,7 @@ button {
 
 /* The only reading long enough to run out of room: it takes the last two columns
    of the lower line and wraps inside them instead of pushing past the panel's edge. */
-.status-overlay .stats span:last-child {
+.status-overlay .stats .status-date {
   grid-column: span 2;
   white-space: normal;
 }
@@ -667,6 +667,7 @@ button {
 .title-submenu-rows button,
 .title-submenu [data-title-back],
 .title-submenu [data-title-freeplay-close],
+.title-submenu [data-title-briefing-close],
 .title-submenu [data-title-load-close],
 .title-submenu [data-title-lobby-close] {
   border-style: solid;
@@ -937,6 +938,7 @@ button {
 
 .title-submenu [data-title-back],
 .title-submenu [data-title-freeplay-close],
+.title-submenu [data-title-briefing-close],
 .title-submenu [data-title-load-close],
 .title-submenu [data-title-lobby-close] {
   align-self: flex-start;
@@ -952,6 +954,7 @@ button {
 
 .title-submenu [data-title-back]:hover,
 .title-submenu [data-title-freeplay-close]:hover,
+.title-submenu [data-title-briefing-close]:hover,
 .title-submenu [data-title-load-close]:hover,
 .title-submenu [data-title-lobby-close]:hover {
   background: var(--ts-500);
@@ -1122,7 +1125,8 @@ button {
   gap: 12px;
 }
 
-.title-freeplay-actions #start-scenario {
+.title-freeplay-actions #start-scenario,
+.title-freeplay-actions #title-briefing-start {
   /* The button used to be the full width of a settings panel; beside its own "back"
      button it is as wide as its label. */
   width: auto;
@@ -1431,7 +1435,7 @@ body.title-open #app-install-hint {
   margin-top: 12px;
 }
 
-.finance-goal-list {
+.scenario-goal-list {
   margin: 6px 0 0;
   padding: 0;
   list-style: none;
@@ -1439,7 +1443,7 @@ body.title-open #app-install-hint {
   gap: 4px;
 }
 
-.finance-goal {
+.scenario-goal {
   display: grid;
   grid-template-columns: 16px 1fr;
   gap: 6px;
@@ -1447,16 +1451,18 @@ body.title-open #app-install-hint {
   font-size: 12px;
 }
 
-.finance-goal small {
+.scenario-goal small {
   display: block;
   color: #9eb6ac;
   font-size: 10px;
 }
 
-.finance-goal-done > span:first-child { color: #9fe3ac; }
-.finance-goal-failed > span:first-child { color: #f08b7e; }
-.finance-goal-failed { color: #c9a9a3; }
-.finance-goal-open > span:first-child { color: #e1bc65; }
+.scenario-goal-done > span:first-child { color: #9fe3ac; }
+.scenario-goal-failed > span:first-child { color: #f08b7e; }
+.scenario-goal-failed { color: #c9a9a3; }
+.scenario-goal-open > span:first-child { color: #e1bc65; }
+
+#finance-scenario-end { margin-top: 8px; }
 
 /* The money readout doubles as the way into the books. */
 .status-money {
@@ -1703,6 +1709,8 @@ body.title-open #app-install-hint {
 .save-slots-panel button,
 .multiplayer-chat-setting button,
 .mp-chat-compose button,
+.scenario-due-actions button,
+#finance-scenario-end,
 .terrain-planner button {
   color: #ecf5f0;
   background: rgba(255, 255, 255, 0.07);
@@ -1726,6 +1734,8 @@ body.title-open #app-install-hint {
 .save-slots-panel button:hover,
 .multiplayer-chat-setting button:hover,
 .mp-chat-compose button:hover,
+.scenario-due-actions button:hover,
+#finance-scenario-end:hover,
 .terrain-planner button:hover {
   background: #3f715b;
 }
@@ -5535,3 +5545,68 @@ body.title-open .mp-ping-overlay {
   display: none !important;
 }
 
+
+/* The goal count in the status bar. Only a scenario with goals shows it; once the
+   scenario is decided it says so in the colour of the verdict. */
+#scenario-goals-stat[hidden] { display: none; }
+#scenario-goals-stat[data-outcome='won'] strong { color: #9fe3ac; }
+#scenario-goals-stat[data-outcome='lost'] strong { color: #f08b7e; }
+
+/* The interim overview when an edition falls due. It opens over the festival
+   window (46), which the same moment switches to its planning, and stays below
+   the toolbar dropdowns (50). */
+.scenario-due {
+  position: fixed;
+  top: var(--topbar-gap-top, 100px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 48;
+  width: min(460px, calc(100vw - 24px));
+  max-height: calc(100dvh - var(--topbar-gap-top, 100px) - 16px);
+  overflow-y: auto;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+.scenario-due[hidden] { display: none; }
+.scenario-due-body { display: grid; gap: 10px; }
+.scenario-due-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px 12px;
+}
+.scenario-due-facts dt { color: #9eb6ac; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+.scenario-due-facts dd { margin: 0; color: #edf7f1; font-variant-numeric: tabular-nums; }
+.scenario-due .scenario-editions th,
+.scenario-due .scenario-editions td { border-bottom-color: rgba(255, 255, 255, 0.12); }
+.scenario-due .scenario-editions thead th { color: #9eb6ac; }
+.scenario-due-actions { display: flex; justify-content: flex-end; }
+
+/* The briefing before a prepared scenario starts: what it is, what it gives you and
+   what it wants, in the same sunken plate as the free-play form. */
+.title-briefing p { margin: 0; line-height: 1.45; }
+.title-briefing .scenario-summary div { grid-template-columns: 150px 1fr; }
+.title-briefing .scenario-goal-list { margin: 0; }
+.title-briefing .scenario-goal { font-size: 13px; }
+
+/* Free play's optional goals: kind, target and deadline edition per row. */
+.scenario-goal-editor {
+  margin: 4px 0 0;
+  padding: 8px 0 0;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  gap: 6px;
+}
+.scenario-goal-editor legend { padding: 0; font-size: 12px; color: var(--ts-gold, #efcf86); }
+.scenario-goal-head,
+.scenario-goal-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 90px;
+  gap: 6px;
+  align-items: center;
+}
+.scenario-goal-head { font-size: 10px; color: #9eb6ac; text-transform: uppercase; letter-spacing: 0.06em; }
+.scenario-goal-row select,
+.scenario-goal-row input { min-width: 0; }

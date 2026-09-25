@@ -10,6 +10,7 @@ import { setupDemandDebugUI } from './ui/demandDebugUI'
 import './style.css'
 import { mountFestivalUI } from './festivalUI'
 import { mountTickerUI } from './tickerUI'
+import { goalListMarkup, mountScenarioStatus } from './ui/scenarioStatus'
 import { mountMultiplayerChat, CHAT_DISPLAY_KEY } from './ui/multiplayerChat'
 import { SUPPLIES, WEATHER_ICONS, WEATHER_NAMES, formatTemperature, temperatureAt } from './game/festivalManagement'
 import type { Supply } from './game/festivalManagement'
@@ -30,9 +31,8 @@ import {
 } from './game/blueprintLibrary'
 import { type FinanceCategory } from './game/finance'
 import { applyFinanceBreakdownToggle, formatLedgerEuro, renderFinanceLedger, toggleFinanceCategory } from './ui/financePanel'
-import { goalName, goalProgressText } from './game/scenarioGoals'
 import { refreshAccount } from './accounts'
-import { installUnsavedWorkGuard, setUnsavedWarnings, trackUnsavedWork } from './ui/unsavedWork'
+import { confirmDiscardingWork, installUnsavedWorkGuard, setUnsavedWarnings, trackUnsavedWork } from './ui/unsavedWork'
 import { inviteLink } from './net/lobbies'
 import { isWakeLockSupported, keepScreenAwake } from './ui/wakeLock'
 import { actionForEvent, HOTKEYS, hotkeyBindings, hotkeyLabel, isBindableCode, loadHotkeys, resetHotkeys, setHotkey, type HotkeyAction } from './ui/hotkeys'
@@ -636,6 +636,19 @@ const visitorPanelController = mountVisitorPanel({
 const tickerUI = mountTickerUI({
   focusWorld: (x, z) => view.focusWorldPosition(x, z),
 })
+const scenarioStatus = mountScenarioStatus({
+  parkValue: () => game.parkValue(),
+  isMagazineOpen: () => festivalUI.isMagazineOpen(),
+  openFinance: () => openFinancePanel(true),
+  openPlanning: () => festivalUI.openPlanning(),
+  resume: () => game.setSpeed(1),
+  restart: (settings) => {
+    if (!confirmDiscardingWork('Das Szenario neu starten?')) return
+    titleScreenController.startScenario(settings, 'Szenario neu gestartet')
+  },
+  toTitle: () => titleScreenController.leaveToTitle(),
+  isClient: () => multiplayer.status.mode === 'client',
+})
 const multiplayerChat = mountMultiplayerChat({
   sendChat: (text, ping) => multiplayer.sendChat(text, ping),
   view: {
@@ -804,6 +817,7 @@ function bindGameState(nextGame: GameState): void {
   multiplayer.attach(game)
   view.invalidate()
   tickerUI.reset()
+  scenarioStatus.reset()
   unsubscribe = game.subscribe((snapshot) => {
     const stageTool = document.querySelector<HTMLElement>('[data-tool="stage"] em')
     const template = snapshot.festival.stageTemplates?.find(t=>t.name===snapshot.festival.selectedStageTemplate)
@@ -814,6 +828,7 @@ function bindGameState(nextGame: GameState): void {
     supplyPlanner.update(snapshot)
     staffDetails.update(snapshot)
     tickerUI.update(snapshot)
+    scenarioStatus.update(snapshot)
     money.textContent = formatMoney(snapshot.money)
     guests.textContent = snapshot.guests.toLocaleString('de-DE')
     reputation.textContent = `${snapshot.reputation}%`
@@ -3387,6 +3402,8 @@ const financeTotals = requireElement<HTMLElement>('#finance-totals')
 const financeLoanAmount = requireElement<HTMLInputElement>('#finance-loan-amount')
 const financeLoanStatus = requireElement<HTMLElement>('#finance-loan-status')
 const financeGoals = requireElement<HTMLElement>('#finance-goals')
+const financeScenarioEnd = requireElement<HTMLButtonElement>('#finance-scenario-end')
+financeScenarioEnd.addEventListener('click', () => scenarioStatus.openEndScreen())
 const financeGoalList = requireElement<HTMLElement>('#finance-goal-list')
 makeDraggable(financePanel.querySelector<HTMLElement>('.panel-header')!, financePanel)
 const euro = (value: number): string => formatLedgerEuro(value)
@@ -3422,13 +3439,8 @@ function updateFinancePanel(force = false): void {
     : `Kein Darlehen · bis zu ${euro(overview.loanLimit)} möglich · ${(overview.interestPerDay * 100).toFixed(1)} % Zinsen pro Tag`
   const goals = snapshot.scenario.goals
   financeGoals.hidden = goals.length === 0
-  financeGoalList.innerHTML = goals
-    .map((goal, index) => {
-      const status = snapshot.scenarioProgress.status[index] ?? 'open'
-      const mark = status === 'done' ? '✔' : status === 'failed' ? '✘' : '○'
-      return `<li class="finance-goal finance-goal-${status}"><span>${mark}</span><span>${goalName(goal)} <small>bis zur ${goal.edition}. Ausgabe · ${goalProgressText(goal, snapshot)}</small></span></li>`
-    })
-    .join('')
+  financeGoalList.innerHTML = goalListMarkup(snapshot, game.parkValue())
+  financeScenarioEnd.hidden = snapshot.scenarioProgress.outcome.state === 'running'
 }
 const openFinancePanel = (open: boolean): void => {
   setPanelOpen(financePanel, financeToggle, open, () => updateFinancePanel(true))

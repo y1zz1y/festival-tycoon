@@ -2,7 +2,7 @@ import { createAccessControlSnapshot } from './accessControl'
 import { emptyBandSupplySnapshot } from './bandSupply'
 import { createComplaintSnapshot } from './complaints'
 import { createDefaultDayPlan } from './dayPlan'
-import { createFestivalManagement } from './festivalManagement'
+import { createFestivalManagement, weekendGoals } from './festivalManagement'
 import { createFinanceState } from './finance'
 import { createDefaultLogisticsSnapshot } from './logistics'
 import { DeterministicRng, hashStringSeed } from './rng'
@@ -12,7 +12,7 @@ import {
   createScenarioRoadEntry,
   normalizeScenarioSettings,
 } from './scenario'
-import { createScenarioProgress } from './scenarioGoals'
+import { createScenarioProgress, firstEditionDue } from './scenarioGoals'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import { createEmptyTerrain, DEFAULT_WATER_LEVEL, generateTerrain, scatterWildTrees } from './terrain'
 import { createEmptyPower } from './power'
@@ -27,7 +27,7 @@ export function createBlankSnapshot(
   const settings = normalizeScenarioSettings(scenario)
   const entrance = createScenarioEntrance(settings.worldSize)
   return {
-    festival: createFestivalManagement(),
+    festival: { ...createFestivalManagement(), goals: weekendGoals(1, settings.festivalGoals) },
     version: 33,
     multiplayerCode: '',
     waterLevel: DEFAULT_WATER_LEVEL,
@@ -37,7 +37,7 @@ export function createBlankSnapshot(
     ),
     money: settings.startingMoney,
     finance: createFinanceState(settings.startingLoan),
-    scenarioProgress: createScenarioProgress(settings.goals),
+    scenarioProgress: createScenarioProgress(settings.goals, firstEditionDue(settings, 1)),
     entryPrice: SIMULATION_CONFIG.economy.defaultEntryPrice,
     campingTicketPrice: SIMULATION_CONFIG.economy.defaultCampingTicketPrice,
     parkOpen: true,

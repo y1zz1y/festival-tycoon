@@ -37,7 +37,7 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
       partyAffinity: .7,
       beautyAffinity: .35,
       carArrivalShare: .35,
-      goals: [{ kind: 'guests', target: 600, edition: 3 }],
+      goals: [{ kind: 'admissions', target: 600, edition: 3 }],
     },
   ),
   preset(
@@ -54,10 +54,9 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
       beautyAffinity: .8,
       goals: [
         { kind: 'loanFree', edition: 3 },
-        { kind: 'guests', target: 900, edition: 3 },
+        { kind: 'admissions', target: 900, edition: 3 },
       ],
     },
-    '0,99 €',
   ),
   preset(
     'rock-am-ring',
@@ -73,7 +72,7 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
       beautyAffinity: .45,
       carArrivalShare: .9,
       aggressiveShare: .35,
-      goals: [{ kind: 'guests', target: 700, edition: 2 }],
+      goals: [{ kind: 'admissions', target: 700, edition: 2 }],
     },
   ),
   preset(

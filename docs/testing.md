@@ -62,6 +62,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `tests/browserSaves.ts` | Gemeinsame Quota-Erkennung, lokaler Slot- und Schnellspeichern-Roundtrip (Besucher/Gebäude bleiben), Liste ohne `fromJSON`, gemockter Server-Client (HTML/401) |
 | `tests/unsavedWork.ts` | Ungespeicherte Arbeit: Bauen/Abreißen markiert sie, Speichern setzt zurück, reines Ticken zählt nicht, Fünf-Minuten-Grenze exakt, abgeschaltete Warnung lässt Abbruchwege durch |
 | `tests/wakeLock.ts` | Bildschirmsperre: nur bei laufender Sitzung, kein Doppel-Lock, Freigabe beim Verbergen und Rückholen beim Sichtbarwerden, vom Browser abgeworfener Lock wird neu geholt, Sitzungsende während laufender Anfrage, Verweigerung und fehlende API |
+| `tests/scenarioOutcome.ts` | Szenario-Ausgang: Ausgabeziele mit Serien, Sieg/Niederlage, Insolvenzfrist, Stichtag mit Pause + Planung, mitwachsende Wochenendziele, Ticker-Meldungen zu Zielen, Gesamtnote |
 | `tests/multiplayerChat.ts` | Chat-Sanitizing, Ping-TTL, Edge-Arrow-Projektion; Roundtrip in `regression.ts` |
 | `tests/hotkeys.ts` | Tastenbelegung: Standardbelegung kollisionsfrei, Numpad zählt als Ziffernreihe, eine Taste gehört einer Aktion (der vorherige Halter wird frei), reservierte Tasten gesperrt, Beschriftungen, Speichern/Laden inkl. kaputtem Eintrag |
 | `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, endliche Festivalmodell-Bounds/Picking, Lights, Achterbahnwagen, Logistik-Modelle |

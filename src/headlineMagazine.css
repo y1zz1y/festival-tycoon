@@ -266,3 +266,37 @@
 @media (prefers-reduced-motion: reduce) {
   .headline-magazine { scroll-behavior: auto; }
 }
+
+/* The scenario's end screen is a special issue of the same magazine: the spread,
+   masthead, stamp and score box above, with the goals and the editions in the
+   columns. A lost scenario prints its masthead in black. */
+.scenario-end-lost { background: #231910; }
+.scenario-end .scenario-goal-list { margin: 0; }
+.scenario-end .scenario-goal { font-size: 14px; }
+.scenario-end .scenario-goal small { color: #6b5a44; font-size: 12px; }
+.scenario-end .scenario-goal-done > span:first-child { color: #2d5a38; }
+.scenario-end .scenario-goal-failed > span:first-child { color: #8b1616; }
+.scenario-end .scenario-goal-failed { color: #6b5a44; }
+.scenario-end .scenario-goal-open > span:first-child { color: #8a6a1c; }
+.scenario-end .headline-magazine-footer { justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.scenario-end .headline-magazine-footer span { font-style: italic; }
+.scenario-editions {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.scenario-editions th,
+.scenario-editions td {
+  padding: 4px 6px;
+  border-bottom: 1px dotted #c9b089;
+  text-align: right;
+}
+.scenario-editions th:first-child { text-align: left; }
+.scenario-editions thead th {
+  font-family: Tahoma, Verdana, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.scenario-empty { margin: 0; font-style: italic; }

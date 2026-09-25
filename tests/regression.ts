@@ -55,6 +55,7 @@ import { testHeadlineMagazine } from './headlineMagazine'
 import { testBuildMenu } from './buildMenu'
 import { testPlacementPreview } from './placementPreview'
 import { testFinance } from './finance'
+import { testScenarioOutcome } from './scenarioOutcome'
 import { testCourseAttractions, testPostRefactorBacklog } from './courseAttractions'
 import { testVisitorSleep } from './visitorSleep'
 import { testQueueLanes } from './queueLanes'
@@ -114,6 +115,9 @@ test('placement height snaps to half-steps and reports the ground cell', () => {
 })
 test('books, loans, prepared scenarios and their goals', () => {
   testFinance()
+})
+test('scenario outcome: edition goals, win and loss, insolvency, due day, weekend goals', () => {
+  testScenarioOutcome()
 })
 test('course attractions and post-refactor backlog checks', () => {
   testCourseAttractions()

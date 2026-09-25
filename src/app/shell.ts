@@ -3,6 +3,19 @@ import { ENVIRONMENTS } from '../game/environments'
 import { SCENARIO_PRESETS } from '../game/scenarioPresets'
 import { SHIRT_STYLE_LABELS, SHIRT_STYLES } from '../game/shopGoods'
 import { STAFF_DEFINITIONS, STAFF_ROLES } from '../game/staff'
+import { SIMULATION_CONFIG } from '../game/simulationConfig'
+
+/** What free play can ask of itself. The peak crowd is left out: one full minute would do. */
+const FREEPLAY_GOAL_OPTIONS = [
+  ['', 'kein Ziel'],
+  ['admissions', 'Anreisen in einer Ausgabe'],
+  ['satisfaction', 'Zufriedenheit in einer Ausgabe (%)'],
+  ['reputation', 'Ruf am Ende einer Ausgabe'],
+  ['profit', 'Gewinn in einer Ausgabe (€)'],
+  ['money', 'Guthaben (€)'],
+  ['parkValue', 'Festivalwert (€)'],
+  ['loanFree', 'Darlehen getilgt'],
+].map(([value, label]) => `<option value="${value}">${label}</option>`).join('')
 
 
 /** How often the game saves by itself. Fifteen minutes unless the player says otherwise. */
@@ -50,7 +63,8 @@ export function mountAppShell(app: HTMLDivElement): void {
         <span>⚡ <strong id="power">0/0 kW</strong></span>
         <span>🗑️ <strong id="waste">0</strong></span>
         <span id="weather-stat"><span id="weather-icon" aria-hidden="true">☀️</span> <strong id="weather">Heiter</strong> <strong id="temperature">20 °C</strong></span>
-        <span>📅 <strong id="date">Tag 1 · 08:00</strong></span>
+        <span class="status-date">📅 <strong id="date">Tag 1 · 08:00</strong></span>
+        <span id="scenario-goals-stat" hidden><button id="open-scenario-goals" type="button" class="status-money" title="Ziele im Finanzfenster ansehen">🎯 <strong id="scenario-goals">0/0</strong></button></span>
       </div>
     </aside>
     <nav class="rct-toolbar" aria-label="Werkzeuge">
@@ -709,7 +723,8 @@ export function mountAppShell(app: HTMLDivElement): void {
       <dl id="finance-totals" class="finance-totals"></dl>
       <section id="finance-goals" class="finance-goals" hidden>
         <h3 class="scenario-heading">Ziele</h3>
-        <ul id="finance-goal-list" class="finance-goal-list"></ul>
+        <ul id="finance-goal-list" class="scenario-goal-list"></ul>
+        <button type="button" id="finance-scenario-end" hidden>Fazit ansehen</button>
       </section>
     </aside>
     <aside id="complaints-panel" class="complaints-panel panel" aria-label="Beschwerdemanagement">
@@ -930,6 +945,19 @@ export function mountAppShell(app: HTMLDivElement): void {
           <button type="button" data-title-back>Zurück</button>
         </div>
       </div>
+      <div id="title-briefing-mask" class="title-submenu" hidden>
+        <div class="title-submenu-card">
+          <div class="title-submenu-head">
+            <span id="title-briefing-name" class="title-submenu-title">Szenario</span>
+            <span class="title-submenu-kicker">Briefing</span>
+          </div>
+          <div id="title-briefing" class="title-freeplay title-briefing"></div>
+          <div class="title-freeplay-actions">
+            <button id="title-briefing-start" type="button">▶ Szenario starten</button>
+            <button type="button" data-title-briefing-close>Zurück</button>
+          </div>
+        </div>
+      </div>
       <div id="title-freeplay-mask" class="title-submenu" hidden>
         <div class="title-submenu-card">
           <div class="title-submenu-head">
@@ -975,6 +1003,16 @@ export function mountAppShell(app: HTMLDivElement): void {
           <option value="265">Riesig (265×265)</option>
         </select>
       </label>
+      <fieldset class="scenario-goal-editor">
+        <legend>Ziele (optional)</legend>
+        <p class="scenario-hint">Mit Zielen wird das freie Spiel zum Szenario: Es kann gewonnen und verloren werden, und die erste Ausgabe ist nach ${SIMULATION_CONFIG.scenario.firstEditionDays} Tagen fällig.</p>
+        <div class="scenario-goal-head" aria-hidden="true"><span>Ziel</span><span>Wert</span><span>bis Ausgabe</span></div>
+        ${[1, 2, 3, 4].map((n) => `<div class="scenario-goal-row" data-goal-row>
+          <select data-goal-kind aria-label="Ziel ${n}">${FREEPLAY_GOAL_OPTIONS}</select>
+          <input data-goal-target type="number" min="1" step="1" placeholder="Wert" aria-label="Zielwert ${n}" />
+          <input data-goal-edition type="number" min="1" max="20" step="1" value="3" aria-label="Frist von Ziel ${n}: bis zur Ausgabe" />
+        </div>`).join('')}
+      </fieldset>
           </div>
           <div class="title-freeplay-actions">
             <button id="start-scenario" type="button">▶ Freies Spiel starten</button>

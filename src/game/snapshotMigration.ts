@@ -14,7 +14,7 @@ import { createFinanceState } from './finance'
 import { normalizeLogisticsSnapshot } from './logistics'
 import { normalizePower } from './power'
 import { normalizeScenarioSettings } from './scenario'
-import { createScenarioProgress } from './scenarioGoals'
+import { normalizeScenarioProgress } from './scenarioGoals'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import { normalizeCourses } from './courseAttractions'
 import { createBlankSnapshot } from './snapshotBootstrap'
@@ -91,10 +91,10 @@ export function migrateSnapshot(
             previousDay: data.finance.previousDay ?? {},
           }
         : createFinanceState(),
-    scenarioProgress:
-      data.scenarioProgress && Array.isArray(data.scenarioProgress.status)
-        ? data.scenarioProgress
-        : createScenarioProgress(scenario.goals),
+    scenarioProgress: normalizeScenarioProgress(data.scenarioProgress, {
+      day: Number.isFinite(data.day) ? Number(data.day) : 1,
+      scenario,
+    }),
     stageForecourtCells,
     backstageCells: Array.isArray(data.backstageCells)
       ? data.backstageCells
