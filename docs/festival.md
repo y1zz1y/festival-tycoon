@@ -51,7 +51,11 @@ hält die Simulationsuhr an, bis **Festival starten**.
 - Musikbasis entwickelt sich einmalig nach der Ausgabe; ausgefallene Slots
   zählen nicht.
 - Neue Bands: `BANDS` plus Geschmack in `musicTaste.ts`. Keine geschützten
-  RCT-/Echtband-Inhalte. Sterne aus Reputation (`bandStarRating`); 5-Sterne
+  RCT-/Echtband-Inhalte. Die `id` ist der Schlüssel in Buchungen,
+  Band-Akteuren und `headlinerPool` und bleibt für immer; `name` ist nur
+  Anzeige und darf sich ändern (0.2.0 hat 17 Namen ersetzt, die aus den
+  Wörtern einer anderen Band bestanden). Kein Name soll aus denselben Wörtern
+  wie ein anderer bestehen. Sterne aus Reputation (`bandStarRating`); 5-Sterne
   nur aus `festival.headlinerPool` (Sim-RNG beim Vorbereiten). Planner-Tabs
   und Auto-Plan filtern nach Sternen und überschreiben keine bestehenden Slots.
   Ticket-Slider färben die erwartete Kaufbereitschaft (grün/gelb/rot über

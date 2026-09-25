@@ -67,7 +67,9 @@ speichern oder einen Spielstand als Text exportieren und in der App importieren.
 
 Auf schmalen Bildschirmen öffnet **Menü** die Verwaltung, die Iconleiste oben
 die Bau- und Verwaltungsgruppen, die Leiste unten Kameraaktionen. Die Leisten
-sind seitlich scrollbar.
+sind seitlich scrollbar. Die untere Touch-Leiste erscheint nur auf Touch-Geräten.
+Ein schmales Desktop-Fenster behält das kompakte Layout, wird aber mit Maus und
+Tastatur bedient; die Werte der Karten-Ansichten stehen dann oben rechts.
 Ein Tipp baut oder wählt aus; mit zwei Fingern verschiebt und zoomt man die Karte.
 **✋ Schieben** aktiviert das Verschieben mit einem Finger, auch bei gewähltem Bauwerkzeug.
 Im Info-Modus verschiebt Ziehen die Kamera; Flächenwerkzeuge zeichnen mit einem Finger.
@@ -348,7 +350,7 @@ Ziele sind 150 Anreisen,
 Gesamtbilanz einschließlich Vorbereitung. Anschließend kann eine weitere Ausgabe oder
 das freie Spiel folgen.
 
-- **Bands & Spielplan:** Acht fiktive Bands mit Gagen, Zielgruppen, Nachfragewirkung,
+- **Bands & Spielplan:** 52 fiktive Bands mit Gagen, Zielgruppen, Nachfragewirkung,
   Rufvoraussetzungen und Lautsprecheranforderungen. Jede Bühne benötigt Strom und einen
   erreichbaren Bühnenvorplatz. Zeiten von 08 bis 24 Uhr, 60/90/120 Minuten Auftritt und
   30 Minuten Umbauzeit; Stornierung vor Beginn erstattet die halbe Gage. Parallel laufende
@@ -608,15 +610,14 @@ Agenten- und Entwicklerdoku (wo welche Funktion liegt, Invarianten, welche Datei
 bei neuen Features nachzuziehen ist): **[docs/README.md](docs/README.md)**.
 Verbindliche Simulationsregeln: [AGENTS.md](AGENTS.md).
 
-## Sinnvolle nächste Ausbaustufen
+## Nächste Ausbaustufen
 
-1. Warteschlangen, Kapazitätsgrenzen und Servicequalität
-2. Besuchergruppen, Eigenschaften und differenzierte Vorlieben
-3. Bauflächen unterschiedlicher Größe und Gebäude-Rotation
-4. Geländeformung und weitere Zonentypen
-5. Personal, Forschung, Marketing und detaillierte Finanzen
-6. Szenarien, Ziele sowie versionierte Spielstände
-7. eigene Modelle, Sounds und Animationen
+1. Spielausgang: Szenarien gewinnen und verlieren, Endbildschirm, Insolvenz
+2. Rückmeldung zu Zielen, Briefing vor dem Start und mitwachsende Wochenendziele
+3. Die letzten Platzhaltermodelle (Weg, Bauzaun, Tisch, Beleuchtung, Tageslichtballon) im Hausstil und gebündelt
+4. Echte Klänge und Konzertmusik statt synthetischer Platzhalter
+5. Weitere Fahrgeschäfte, Durst und Hygiene, Headliner für alle Genres
+6. Fortschritt über Partien und eine Einführung für neue Spieler
 
 RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafiken, Sounds, Daten und sonstige geschützte Inhalte sollten nicht übernommen werden.
 
@@ -627,7 +628,7 @@ Neue Szenarien beginnen geschlossen in der Planung. Unter **Festival planen** le
 
 Unter **Logistik** in der Iconleiste einen **Anlieferungsplatz** neben einer Straße und mit Fußwegzugang bauen. Danach **Depots** an Fußwegen setzen. Das Paket-Icon in der Gruppe **Verwalten** öffnet die Logistikverwaltung für Bestellungen, Träger, **Buslinien** und **Bandversorgung**. Im Reiter **Buslinien** liegen ungenutzte Haltestellen links, die Fahrreihenfolge rechts — per Ziehen einreihen oder umsortieren (Pfeile bleiben als Extra). Die gelbe Linie auf der Karte trägt die Stoppnummern 1, 2, 3 …. **Automatisch sortieren** sucht die kürzeste Runde. Einer bestehenden Linie könnt ihr später **Bus hinzufügen** (Kosten wie ein neuer Bus, Start am Depot). Ein Bus nimmt bis zu 40 Gäste mit und holt Wartende an der Haltestelle ab, auch wenn sie schon länger stehen oder etwas weiter in der Schlange / gegenüber der Straße warten. Krankenwagen kauft und verkauft ihr in der Übersicht; ohne Einsatz fahren sie zur Garage zurück.
 
-**Bandversorgung:** Unter **Logistik → Bandversorgung** **Backstage ausweisen** (oder im Paket-Fenster den Reiter **Bandversorgung**) und die Fläche an eine Bühne malen (zusammenhängende Nachbarfelder). Getrennte Flächen bleiben markiert, zählen aber nicht. Mehrere verbundene Bühnen teilen sich Attraktivität, Verpflegung und Drauf. Bands spielen auch ohne Backstage, der Auftritt ist dann schwächer. Imbiss und Getränkestand in der Nähe (bis 12 Felder) verbessern die Verpflegung; Deko auf aktivem Backstage hebt die Attraktivität. Fans, die sich auf das Backstage mogeln, senken sie. **Parkplatz für den Tourbus** nur auf Backstage und an einer Straße: ein Platz je Bus-Band des Tages, sonst nicht die volle Attraktivität. Headliner kommen morgens (~08:00) mit einem eigenen Tourbus auf den Parkplatz und fahren abends (~23:00 oder nach dem letzten Set) wieder. Kleinere Bands (Draw unter 30) und Bands ohne freien Platz kommen zu Fuß über den **Personaleingang**. Die Musiker hängen zwischen den Sets auf dem verbundenen Backstage rum und tragen dieselben Outfits wie auf der Bühne. Ein Klick auf Backstage öffnet das Infofenster mit allen Werten inklusive Show-Qualität und Trinkgeld. Mindestbestände (in 20er-Schritten) und Trägerzahl stellt ihr dort im Reiter **Waren & Träger** oder im Infofenster des Lagers ein. Bestellungen kosten Warenpreis plus 45 € Fracht. Lastwagen liefern zum Anlieferungsplatz; Träger holen dort Waren physisch ab und bringen sie ins Depot. Depots versorgen Stände automatisch bis zum Zielbestand von 40 Einheiten. Als **Zwischenlager** freigegebene Depots geben zusätzlich Ware an andere Depots ab. Träger kosten einmalig 120 € und anschließend 0,04 €/Spielminute.
+**Bandversorgung:** Unter **Logistik → Bandversorgung** **Backstage ausweisen** (oder im Paket-Fenster den Reiter **Bandversorgung**) und die Fläche an eine Bühne malen (zusammenhängende Nachbarfelder). Getrennte Flächen bleiben markiert, zählen aber nicht. Mehrere verbundene Bühnen teilen sich Attraktivität, Verpflegung und Drauf. Bands spielen auch ohne Backstage, der Auftritt ist dann schwächer. Imbiss und Getränkestand in der Nähe (bis 12 Felder) verbessern die Verpflegung; Deko auf aktivem Backstage hebt die Attraktivität. Fans, die sich auf das Backstage mogeln, senken sie. **Parkplatz für den Tourbus** nur auf Backstage und an einer Straße: ein Platz je Bus-Band des Tages, sonst nicht die volle Attraktivität. Headliner kommen morgens (~08:00) mit einem eigenen Tourbus auf den Parkplatz und fahren abends (~23:00 oder nach dem letzten Set) wieder. Kleinere Bands (Draw unter 30) und Bands ohne freien Platz kommen zu Fuß über den **Personaleingang**. Die Musiker hängen zwischen den Sets auf dem verbundenen Backstage rum und tragen dieselben Outfits wie auf der Bühne. Auf einer **Backstage-Couch** setzen sie sich hin, am **Bandkühlschrank** holen sie sich zwischen den Auftritten etwas. Beides ist Verhalten und ändert die Werte des Backstage nicht. Das **Backstage-Klo** wird derzeit noch von niemandem benutzt. Ein Klick auf Backstage öffnet das Infofenster mit allen Werten inklusive Show-Qualität und Trinkgeld. Mindestbestände (in 20er-Schritten) und Trägerzahl stellt ihr dort im Reiter **Waren & Träger** oder im Infofenster des Lagers ein. Bestellungen kosten Warenpreis plus 45 € Fracht. Lastwagen liefern zum Anlieferungsplatz; Träger holen dort Waren physisch ab und bringen sie ins Depot. Depots versorgen Stände automatisch bis zum Zielbestand von 40 Einheiten. Als **Zwischenlager** freigegebene Depots geben zusätzlich Ware an andere Depots ab. Träger kosten einmalig 120 € und anschließend 0,04 €/Spielminute.
 
 Käufer gehen nach dem Einkauf vom Tresen weg. Stände zeigen ihren Vorrat als farbigen Balken und als Zahl im Infofenster. An Mülleimern liegt der Füllstand als grobe Zahl Kartons am Boden (leer keine, voll vier). Ist der nächste Eimer voll oder nicht benutzbar, lassen Gäste den Müll auf dem Weg fallen und gehen weiter; freie Eimer in der Nähe werden weiter benutzt. Ein Klick auf eine Müllablage öffnet das Infofenster mit Füllstand, Kapazität und freiem Platz der **gesamten zusammenhängenden Fläche**. Ablagen lassen sich nicht überfüllen. **Versiegelte Müllcontainer** (Logistik → Müll, 80 Beutel) nehmen den Müll der Reinigung auf, wenn sie näher als die Ablage sind; volle Container werden übersprungen. Sie stinken und senken die Attraktivität weniger als offene Haufen. Müllwagen halten auf der Nachbarstraße und leeren sie nur auf einer Straße; ohne Wagen unterwegs schleppt idle Reinigung zur Ablage. Müllfahrzeuge zeigen im Infofenster die geladene Müllmenge statt Insassen. Unten am Bildrand erscheint ein **Meldungs-Ticker** bei Feuer, Massenpanik und wenn alle Müllflächen über 90 % voll sind; **Hin** springt zur Stelle. Die letzten Meldungen öffnet der Button **Meldungen** links neben Mehrspieler. Reinigungskräfte bringen gesammelten Bodenmüll zuerst zum nächsten erreichbaren Mülleimer; volle Eimer leeren sie vorrangig und bringen den Inhalt zur Müllablage. Haben sie keinen Bodenmüll, keine Kotze und keinen vollen Eimer, leeren sie auch teilweise gefüllte Eimer (ab einem Viertel), statt herumzustehen. Müllwagen übernehmen die weitere Abfuhr. Saugreiniger vom Betriebshof fahren auf Wegen und Bühnenvorplätzen, dürfen den Personaleingang wie Personal nutzen, halten vor Besuchern und entladen an der Müllablage; Eimer lassen sie stehen. In der Personalverwaltung erscheinen sie unter **Reinigungskraft** als Saugroboter und bekommen dieselben Einsatzgebiete wie Reinigungskräfte. Alte Müllträger beenden vorhandene Ladungen und werden anschließend aus dem Logistiksystem entfernt.
 

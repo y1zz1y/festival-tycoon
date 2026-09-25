@@ -81,6 +81,7 @@ import {
   Raycaster,
   Scene,
   SphereGeometry,
+  SRGBColorSpace,
   Sprite,
   SpriteMaterial,
   TubeGeometry,
@@ -3753,6 +3754,7 @@ export class WorldView {
       context.fillText(`+${amount.toLocaleString('de-DE')} €`, 128, 48)
     }
     const texture = new CanvasTexture(canvas)
+    texture.colorSpace = SRGBColorSpace
     this.cashTextures.set(amount, texture)
     return texture
   }
@@ -3783,6 +3785,7 @@ export class WorldView {
       context.fillText(icons[emotion] ?? icons.neutral!, 64, 66)
     }
     const texture = new CanvasTexture(canvas)
+    texture.colorSpace = SRGBColorSpace
     this.emotionTextures.set(emotion, texture)
     return texture
   }

@@ -71,7 +71,7 @@ Eingang/Ausgang.
 | Werkstatt-Orientierung | `src/view/orientationGizmo.ts` | `createOrientationGizmo`, `OrientationGizmo` |
 | Titelbild-Publikum | `src/titleCrowd.ts` | `mountTitleCrowd`, `TitleCrowd.setRunning`, `TitleCrowd.dispose` |
 | Personaldetails | `src/staffDetailsUI.ts` | Infofenster, Bereiche; Saugroboter wie Reinigung; 3×3-Zonen per Klick/Ziehen |
-| Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | |
+| Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | Kompaktes Layout bei `max-width: 900px` oder `pointer: coarse`; die Touch-Leiste `.mobile-controls` nur bei Touch. `(max-width: 900px) and (pointer: fine)` blendet sie aus, setzt `--mobile-bottom` und den Statusstreifen tiefer und zeigt `.crowding-panel` oben rechts, weil sonst nur „Ansichten“ der Leiste es öffnet |
 | Ziehbare Fenster | `src/dragPanel.ts` | |
 | Fokus / Texteingabe | `src/uiFocus.ts` | `isTextEntryTarget` |
 | Mehrspieler-Chat / Map-Ping | `src/ui/multiplayerChat.ts`, `src/net/chatProtocol.ts` (Sanitize: `server/chatProtocol.ts`) | Eigenes Fenster unten links (ziehbar, größenveränderlich); IRC-Log; Enter öffnet/sendet; Ping-Overlay + Randpfeil; Option „Chat anzeigen“ + Knopf „Chat öffnen“ |

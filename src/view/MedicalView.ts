@@ -5,6 +5,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   PlaneGeometry,
+  SRGBColorSpace,
   Sprite,
   SpriteMaterial,
 } from 'three'
@@ -78,7 +79,9 @@ export class MedicalView {
     context.fillStyle = '#24547a'
     context.textAlign = 'center'
     context.fillText(text, 64, 40)
-    const sprite = new Sprite(new SpriteMaterial({ map: new CanvasTexture(canvas), transparent: true }))
+    const texture = new CanvasTexture(canvas)
+    texture.colorSpace = SRGBColorSpace
+    const sprite = new Sprite(new SpriteMaterial({ map: texture, transparent: true }))
     sprite.scale.set(0.42, 0.21, 1)
     return sprite
   }

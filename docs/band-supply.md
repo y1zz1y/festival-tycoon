@@ -358,7 +358,21 @@ satisfaction = clamp(
 showQuality  = lerp(bareShowQuality, maxShowQuality, satisfaction / 100)
 ```
 
-Comfort / Privacy / Facilities are **out of scope** for v1.
+Comfort / Privacy / Facilities are **out of scope** for v1: no backstage
+furniture enters these stats. `dedicatedCatering` is fixed at `0`, and the
+furniture below has `appeal: 0` and is not scenery, so `decoScore` skips it.
+
+### Backstage furniture (behaviour only)
+
+| Kind | What it does today | Where |
+| --- | --- | --- |
+| `backstageCouch2` / `backstageCouch3` | One seat per covered field on an **active** component. Off-stage band members sit there instead of milling about; `assignBackstageSeats` keeps two members off one cushion. | `GameState.backstageSeatCells`, `assignBackstageSeats`; `BACKSTAGE_COUCH_KINDS` |
+| `bandFridge` | Walkable fields around it are stops band members visit between sets. | `GameState.backstageFridgeStops` |
+| `backstageToilet` | **No user yet.** Buildable (1.000 €, upkeep 14), rendered and solid for pedestrians, but visitors only seek `toilet` and band actors never route to it. | `catalog.ts`, `simulationConfig.ts` `economy.buildings.backstageToilet` |
+
+None of the three changes attractiveness, catering, satisfaction or show
+quality. Giving them an effect (for example fridge → `dedicatedCatering`,
+toilet → a band need) is open work, not a regression.
 
 ### Bare stage (playable, worse)
 

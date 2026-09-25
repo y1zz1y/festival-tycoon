@@ -12,6 +12,7 @@ import {
   MeshStandardMaterial,
   PlaneGeometry,
   Quaternion,
+  SRGBColorSpace,
   Sprite,
   SpriteMaterial,
   Vector3,
@@ -77,9 +78,11 @@ function createSleepSprite(): Sprite {
     context.strokeText('ZZZ', 64, 32)
     context.fillText('ZZZ', 64, 32)
   }
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
   const sprite = new Sprite(
     new SpriteMaterial({
-      map: new CanvasTexture(canvas),
+      map: texture,
       transparent: true,
       depthTest: false,
     }),
@@ -377,9 +380,11 @@ export class CampingView {
     context.font = '42px sans-serif'
     context.textAlign = 'center'
     context.fillText('♫', 48, 46)
+    const texture = new CanvasTexture(notes)
+    texture.colorSpace = SRGBColorSpace
     const sprite = new Sprite(
       new SpriteMaterial({
-        map: new CanvasTexture(notes),
+        map: texture,
         transparent: true,
         depthWrite: false,
       }),
