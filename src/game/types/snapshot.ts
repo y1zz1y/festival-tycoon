@@ -35,7 +35,7 @@ export type SimTurn = {
 
 export type GameSnapshot = {
   festival: FestivalManagement
-  version: 33
+  version: 34
   /**
    * The room code this game hosts under. It belongs to the save, not to the
    * session, so the same world always has the same code and players can keep

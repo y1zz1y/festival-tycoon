@@ -1518,7 +1518,10 @@ body.title-open #app-install-hint {
   font-size: 10px;
 }
 
-.scenario-field select {
+/* Free play's goal rows are form fields too, and look like the map size above them. */
+.scenario-field select,
+.scenario-goal-row select,
+.scenario-goal-row input {
   width: 100%;
   padding: 7px 8px;
   color: #edf7f1;

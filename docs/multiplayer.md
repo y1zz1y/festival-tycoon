@@ -42,6 +42,14 @@ sondern ein Aussetzer.
   Pong beantwortet der Netzwerk-Stack des Browsers, nicht JavaScript, eine
   gedrosselte Seite hält die Verbindung also von allein. Fehlt die API
   (Firefox) oder wird sie verweigert, passiert nichts weiter.
+- **Szenario-Fortschritt:** Nur der Host rechnet Ziele, Ausgang, Insolvenz und
+  Stichtag. `scenarioProgress` (v34: `editions`, `outcome`, `insolventDays`,
+  `nextEditionDue`, `dueReminderDay`) ist ein normales Welt-Feld und geht als
+  Ganzes im Delta mit, sobald es sich ändert. Kein neuer `GameCommand`: Der
+  Stichtag ruft `festivalAction('prepare')` im Host-Tick auf, der Endbildschirm
+  nutzt `setSpeed`. Clients öffnen Endbildschirm und Stichtag-Übersicht, wenn
+  sich `outcome.state` bzw. `dueReminderDay` ändert, zeigen aber nur „Schließen“.
+  Details: [scenarios.md](scenarios.md).
 - **Live-Chat und Map-Ping:** Ephemere UI-Ereignisse, kein `GameCommand` und
   kein Snapshot-Feld. Client sendet `{ t: 'chat', text, ping? }`; der Server
   säubert Text (max. 200 Zeichen) und Ping-Koordinaten und broadcastet

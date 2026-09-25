@@ -22,6 +22,7 @@ feature you touch. Keep detailed file maps and feature history in topic docs.
 | Waste, incidents, panic | `docs/incidents.md` |
 | Festival weekend, bands, tickets | `docs/festival.md` |
 | Finance, ledger, loans | `docs/finance.md` |
+| Scenarios, goals, win/loss, due day | `docs/scenarios.md` |
 | Accounts, sessions, authentication | `docs/accounts.md` |
 | Stage workshop / shows | `docs/stages.md` |
 | Coasters, rides, queues | `docs/attractions.md` |

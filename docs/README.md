@@ -59,6 +59,7 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | Müll, Vorfälle, Feuerwerk, Panik | [incidents.md](incidents.md) | Incidents, Waste-Dumps, Ticker, Bubbles |
 | Festivalwochenende, Bands, Tickets | [festival.md](festival.md) | Buchungen, Wetter, Ruf, Tagesplan |
 | Finanzen, Buchungen, Darlehen | [finance.md](finance.md) | Ledger, Prognose, Kreditrahmen |
+| Szenarien, Ziele, Spielausgang | [scenarios.md](scenarios.md) | Zielarten, Frist, Sieg/Niederlage, Insolvenz, Stichtag, Briefing, Endbildschirm |
 | Konten, Sessions, Authentifizierung | [accounts.md](accounts.md) | Konto-API, Cookies, Rate-Limit |
 | Bühnenwerkstatt, Show, Publikum | [stages.md](stages.md) | Designs, Vorlagen, Zuschauerflächen |
 | Achterbahn, Karussell, Bungee | [attractions.md](attractions.md) | Queues, Ride-Zugang, Betrieb |

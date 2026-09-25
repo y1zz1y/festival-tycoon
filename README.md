@@ -345,10 +345,26 @@ Der Rest des aktuellen Tages dient der Vorbereitung; darauf folgen zwei Festival
 Nach deren Ende erscheint automatisch das **HEADLINE Magazin**: ein Heft mit
 Note, Zitat und Pro-/Kontra-Spalten zum Wochenende. Schließen mit
 **Weiter / Schließen**; erneut unter **Festival planen → Abrechnung & Ruf**.
-Ziele sind 150 Anreisen,
-65 % durchschnittliche Zufriedenheit an den Festivaltagen und eine nichtnegative
-Gesamtbilanz einschließlich Vorbereitung. Anschließend kann eine weitere Ausgabe oder
-das freie Spiel folgen.
+Die erste Ausgabe verlangt 150 Anreisen, 65 % durchschnittliche Zufriedenheit an
+den Festivaltagen und eine nichtnegative Gesamtbilanz einschließlich Vorbereitung.
+Jede weitere Ausgabe verlangt mehr: mehr Gäste, etwas mehr Zufriedenheit (bis 80 %)
+und einen wachsenden Gewinn. Anschließend kann eine weitere Ausgabe oder das freie
+Spiel folgen.
+
+**Szenarien:** Vor jedem vorbereiteten Szenario steht ein **Briefing** mit
+Gelände, Startgeld, Darlehen, Stichtag der ersten Ausgabe und Zielen. Ziele messen
+entweder den Park (Guthaben, Festivalwert, getilgtes Darlehen) oder eine beendete
+Ausgabe (Anreisen, Zufriedenheit, Ruf, Gewinn), jeweils bis zu einer bestimmten
+Ausgabe. Die Statusleiste zeigt mit 🎯 den Stand, der Ticker meldet erreichte und
+verpasste Ziele und die letzte Ausgabe vor einer Frist.
+Ein Szenario ist **geschafft**, wenn alle Ziele erreicht sind, und **gescheitert**,
+wenn ein Ziel seine Ausgabe verpasst oder das Konto länger als drei Tage im Minus bleibt,
+ohne dass der Kreditrahmen es deckt. Dann hält das Spiel an und zeigt das Fazit als
+Sonderausgabe des HEADLINE Magazins. Nach einem Sieg geht es mit **Weiterspielen**
+als freies Spiel weiter. Ist die nächste Ausgabe fällig und läuft keine, hält das
+Spiel am **Stichtag** an, öffnet die Planung und zeigt eine Zwischenübersicht.
+Im freien Spiel lassen sich bis zu vier eigene Ziele setzen; ohne Ziele gibt es
+keinen Stichtag und kein Ende, ein ungedecktes Minus wird nur gemeldet.
 
 - **Bands & Spielplan:** 52 fiktive Bands mit Gagen, Zielgruppen, Nachfragewirkung,
   Rufvoraussetzungen und Lautsprecheranforderungen. Jede Bühne benötigt Strom und einen

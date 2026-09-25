@@ -67,6 +67,14 @@ hält die Simulationsuhr an, bis **Festival starten**.
   lesen ausschließlich `festival.demandTuning` mit normalisiertem Fallback auf
   `SIMULATION_CONFIG.ticketDemand`. Das Debugfenster wertet Entwürfe live aus;
   erst **Übernehmen** sendet die vollständige Konfiguration an den Host.
+- Wochenendziele (`festival.goals`) wachsen mit der Ausgabe: `weekendGoals`
+  setzt sie in `prepare` für die nächste und in `start` für die laufende
+  Ausgabe, ausgehend von `scenario.festivalGoals` oder
+  `SIMULATION_CONFIG.scenario.weekendGoals`, gesteigert nach
+  `scenario.weekendGoalGrowth` (Gäste ×1,3, Zufriedenheit +2 bis 80, Gewinn
+  +5.000 € je Ausgabe). `editionSatisfaction` und `festivalReputation` sind die
+  gemeinsame Messung von Magazin und Szenario-Ausgabezielen
+  ([scenarios.md](scenarios.md)).
 - Nach dem letzten Festivaltag (`festival.finished`) öffnet einmal pro Ausgabe
   das **HEADLINE Magazin** (`buildHeadlineMagazine`). Es rechnet nur aus
   vorhandenen Snapshot-Feldern (Tagesberichte, Ruf, Anreisen, Bilanz,

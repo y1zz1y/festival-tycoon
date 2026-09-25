@@ -14,7 +14,7 @@ vollen Tages mit den aktuell berechenbaren Fixkosten.
 | Aufschlüsselung der Kostenzeilen | `src/game/financeBreakdown.ts` | `financeCostBreakdown` |
 | Leerlauf-/Bühnen-/Kurs-Unterhalt | `src/game/upkeep.ts` | `buildingHourlyUpkeep`, `coasterHourlyUpkeep`, `courseHourlyUpkeep`, `festivalIsLive`, `venueUpkeepIdle` |
 | Finanzfenster | `src/main.ts`, `src/ui/financePanel.ts` | `updateFinancePanel`, `renderFinanceLedger` |
-| Szenario-Finanzziele | `src/game/scenarioGoals.ts` | `updateScenarioProgress` |
+| Szenario-Finanzziele, Insolvenz | `src/game/scenarioGoals.ts` | `updateScenarioProgress`, `updateInsolvency`, `isInsolvent` (Guthaben unter null, das der freie Kreditrahmen `loanLimit` nicht deckt); Regeln in [scenarios.md](scenarios.md) |
 | Regressionen | `tests/finance.ts` | `testFinance` |
 
 ## Wichtige Invarianten

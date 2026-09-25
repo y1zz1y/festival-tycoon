@@ -37,7 +37,8 @@ Eingang/Ausgang.
 | Bau-Undo-Stack | `src/game/buildUndo.ts`, `src/game/GameState.ts` | `undoLastBuild`, Marker/Diff, max. 40 Einträge, nicht im Snapshot |
 | Festival-Preise / Bandplaner | `src/festivalUI.ts`, `src/musicPlanner.ts`, `src/festival.css` | Ticket-Slider + Schätzung; Kaufbereitschaft über `--range-accent` (Thumb/Track); Sterne-Tabs und Auto-Plan-Filter |
 | Stabile App-Shell / DOM-Vertrag | `src/app/shell.ts` | `mountAppShell`; vollständiges statisches Markup und Autosave-Konstanten |
-| Titel, Szenario und Saves | `src/ui/titleScreen.ts`, `src/ui/scenarioScreen.ts`, `src/ui/saveController.ts` | Controller mit injiziertem `GameState`-/Multiplayer-/Lade-Kontext |
+| Titel, Szenario und Saves | `src/ui/titleScreen.ts`, `src/ui/scenarioScreen.ts`, `src/ui/saveController.ts` | Controller mit injiziertem `GameState`-/Multiplayer-/Lade-Kontext; Briefing vor Presets (`openTitleBriefing`), Zielzeilen im freien Spiel (`readGoals`/`fillGoals`) |
+| Szenario-Oberfläche | `src/ui/scenarioStatus.ts` | Zielanzeige `#scenario-goals-stat` in der Statusleiste, Endbildschirm als HEADLINE-Sonderausgabe, Stichtag-Übersicht; öffnen nur bei Änderung von `outcome.state`/`dueReminderDay`. Regeln: [scenarios.md](scenarios.md) |
 | Objekt- und Besucheranzeige | `src/ui/entityPanel.ts`, `src/ui/visitorPanel.ts` | Vollständige Objektpanel-Orchestrierung, Achterbahn-Telemetrie, Kurs-/Paintball-/Pool-Betrieb sowie zustandsbehaftete Besucher-Inspektion |
 | UI-Formatierung | `src/ui/format.ts` | HTML-Escaping, Geld-, Uhrzeit- und Speicherzeitformat |
 | Finanz-Ledger | `src/ui/financePanel.ts` | `renderFinanceLedger`, aufklappbare Kostenzeilen |
@@ -71,7 +72,7 @@ Eingang/Ausgang.
 | Werkstatt-Orientierung | `src/view/orientationGizmo.ts` | `createOrientationGizmo`, `OrientationGizmo` |
 | Titelbild-Publikum | `src/titleCrowd.ts` | `mountTitleCrowd`, `TitleCrowd.setRunning`, `TitleCrowd.dispose` |
 | Personaldetails | `src/staffDetailsUI.ts` | Infofenster, Bereiche; Saugroboter wie Reinigung; 3×3-Zonen per Klick/Ziehen |
-| Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | Kompaktes Layout bei `max-width: 900px` oder `pointer: coarse`; die Touch-Leiste `.mobile-controls` nur bei Touch. `(max-width: 900px) and (pointer: fine)` blendet sie aus, setzt `--mobile-bottom` und den Statusstreifen tiefer und zeigt `.crowding-panel` oben rechts, weil sonst nur „Ansichten“ der Leiste es öffnet |
+| Mobile Leisten | `src/mobileUI.ts`, `src/mobile.css` | Kompaktes Layout bei `max-width: 900px` oder `pointer: coarse`; die Touch-Leiste `.mobile-controls` nur bei Touch. `(max-width: 900px) and (pointer: fine)` blendet sie aus, setzt `--mobile-bottom` und den Statusstreifen tiefer und zeigt `.crowding-panel` oben rechts, weil sonst nur „Ansichten“ der Leiste es öffnet. Der Statusstreifen ist im Schmal-Layout eine seitlich scrollbare Zeile (nicht das Desktop-Raster) und sitzt über der 64 px hohen Touch-Leiste; `--mobile-bottom` reicht bis über ihn |
 | Ziehbare Fenster | `src/dragPanel.ts` | |
 | Fokus / Texteingabe | `src/uiFocus.ts` | `isTextEntryTarget` |
 | Mehrspieler-Chat / Map-Ping | `src/ui/multiplayerChat.ts`, `src/net/chatProtocol.ts` (Sanitize: `server/chatProtocol.ts`) | Eigenes Fenster unten links (ziehbar, größenveränderlich); IRC-Log; Enter öffnet/sendet; Ping-Overlay + Randpfeil; Option „Chat anzeigen“ + Knopf „Chat öffnen“ |
@@ -151,8 +152,11 @@ Eingang/Ausgang.
   (Personal, Debug, Speichern) stehen im Markup **neben** `.rct-toolbar`, nicht
   darin: die Leiste trägt selbst einen `z-index` und öffnet damit einen
   Stacking-Context, in dem ein Menü unter jedem Fenster landen würde. Als
-  Geschwister zählt ihr eigener `z-index: 50` — über allen Spielfenstern
-  (höchstes: `.staff-details` mit 45), unter dem Titelbildschirm (60).
+  Geschwister zählt ihr eigener `z-index: 50` — über allen Spielfenstern,
+  unter dem Titelbildschirm (60). Die Spielfenster enden darunter:
+  `.staff-details` 45, Festivalfenster (`src/festival.css`) 46,
+  Stichtag-Übersicht `.scenario-due` 48. Magazin und Endbildschirm sind
+  modale Overlays (90).
   Positioniert werden sie aus dem Live-Rect ihres Knopfes
   (`positionDropdownPanel`), die Verschachtelung ist ihnen also gleichgültig.
   Das Speicher-Dropdown hält

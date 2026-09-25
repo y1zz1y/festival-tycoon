@@ -28,7 +28,7 @@ export function createBlankSnapshot(
   const entrance = createScenarioEntrance(settings.worldSize)
   return {
     festival: { ...createFestivalManagement(), goals: weekendGoals(1, settings.festivalGoals) },
-    version: 33,
+    version: 34,
     multiplayerCode: '',
     waterLevel: DEFAULT_WATER_LEVEL,
     simTick: 0,

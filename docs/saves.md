@@ -1,7 +1,7 @@
 # Spielstände und Versionierung
 
 `GameSnapshot.version` in `src/game/types/snapshot.ts` ist die kanonische
-Schema-Version. Aktuelle Snapshot-Version: **33**. `npm run test:docs` gleicht
+Schema-Version. Aktuelle Snapshot-Version: **34**. `npm run test:docs` gleicht
 diesen dokumentierten Wert mit Typ, Bootstrap und Migration ab. Die sichtbare
 Spielversion kommt aus `package.json`. Feature-/Fix-Batches erhöhen den
 Patch (`npm version patch --no-git-tag-version`) und halten das Lockfile synchron.
@@ -22,6 +22,7 @@ Patch (`npm version patch --no-git-tag-version`) und halten das Lockfile synchro
 | Katalog-Keys | `src/game/catalog.ts` | `SAVE_KEY`, `SAVE_SLOTS_KEY`, `saveSlotDataKey` |
 | Server-Slots | `server/saveSlots.ts` | SQLite `saves`-Tabelle in `data/accounts.db` |
 | Szenario-Defaults | `src/game/scenario.ts` | `normalizeScenarioSettings` |
+| Szenario-Fortschritt | `src/game/scenarioGoals.ts` | `normalizeScenarioProgress` (Migration und Reparatur, idempotent) |
 | Bühnen-Migration | `src/game/stageDesign.ts` | `migrateStageDesign` |
 | Logistics-Normalize | `src/game/logistics.ts` | `normalizeLogisticsSnapshot` |
 | Ampeln / Schranken | `src/game/accessControl.ts` | `normalizeAccessControls`, `accessControls` |
@@ -96,6 +97,14 @@ Camp und Müll rekonstruiert.
   bewusst **nicht** über die Leitung (`packWorld` nimmt ihn heraus wie
   `selectedTool`): Ein Gast behält seinen eigenen, sonst würde er später mit dem
   Code eines fremden Raums hosten wollen.
+  v34 erweitert `scenarioProgress` um `editions` (Ergebnis jeder beendeten
+  Ausgabe), `outcome` (`running`/`won`/`lost` mit Grund und Tag),
+  `insolventDays`, `nextEditionDue` und `dueReminderDay`; `scenario` bekommt die
+  optionalen `firstEditionDays` und `festivalGoals`, `ScenarioGoal` die Arten
+  `admissions`, `satisfaction`, `reputation`, `profit`, `parkValue` und das
+  optionale `streak`. v33-Stände behalten ihre Zielmarken, der Ausgang ist
+  `running`, und ein fehlender Stichtag wird vom Ladetag aus gezählt
+  ([scenarios.md](scenarios.md)).
   v33 ergänzt optional `StageDesign.forecourtDepth` (1–24 Felder).
   v32 und ältere Bühnen ohne Wert behalten über `stageForecourtDepth`
   den bisherigen Vorplatz von zwei Bühnenbreiten.

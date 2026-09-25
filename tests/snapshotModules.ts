@@ -12,7 +12,7 @@ import { defaultStageDesign } from '../src/game/stageDesign'
 
 export function testSnapshotModules(): void {
   const blank = createBlankSnapshot()
-  assert.equal(blank.version, 33)
+  assert.equal(blank.version, 34)
   assert.equal(blank.buildings[0]?.id, ENTRANCE_PATH_ID)
   assert.equal(blank.parkOpen, true)
 
@@ -35,7 +35,7 @@ export function testSnapshotModules(): void {
   ]
   const migrated = migrateSnapshot(legacy)
   assert.ok(migrated)
-  assert.equal(migrated.version, 33)
+  assert.equal(migrated.version, 34)
   assert.equal(migrated.campingTicketPrice, 77)
   assert.ok(migrated.attractions.some((attraction) => attraction.definitionId === 'swimArea'))
   assert.ok(migrated.attractions.some((attraction) => attraction.definitionId === 'waterSlide'))
@@ -44,7 +44,7 @@ export function testSnapshotModules(): void {
 
   const throughStaticApi = GameState.fromJSON(JSON.stringify(legacy))
   assert.ok(throughStaticApi)
-  assert.equal(throughStaticApi.snapshot.version, 33)
+  assert.equal(throughStaticApi.snapshot.version, 34)
   assert.equal(throughStaticApi.snapshot.campingTicketPrice, 77)
 
   const v31 = structuredClone(blank) as GameSnapshot & { version: number }
@@ -52,7 +52,7 @@ export function testSnapshotModules(): void {
   delete (v31.festival as Partial<typeof v31.festival>).demandTuning
   const demandMigrated = migrateSnapshot(v31)
   assert.ok(demandMigrated)
-  assert.equal(demandMigrated.version, 33)
+  assert.equal(demandMigrated.version, 34)
   assert.deepEqual(demandMigrated.festival.demandTuning, createTicketDemandTuning())
 
   const v32 = structuredClone(blank) as GameSnapshot & { version: number }
@@ -62,9 +62,24 @@ export function testSnapshotModules(): void {
   v32.festival.stageTemplates = [legacyStage]
   const forecourtMigrated = migrateSnapshot(v32)
   assert.ok(forecourtMigrated)
-  assert.equal(forecourtMigrated.version, 33)
+  assert.equal(forecourtMigrated.version, 34)
   assert.equal(
     forecourtMigrated.festival.stageTemplates?.[0]?.forecourtDepth,
     (legacyStage.tileWidth ?? 1) * 2,
   )
+
+  // v34: a v33 scenario keeps its goal marks and gains results, outcome and a due day.
+  const v33 = structuredClone(blank) as GameSnapshot & { version: number }
+  v33.version = 33
+  v33.day = 20
+  v33.scenario = { ...v33.scenario, goals: [{ kind: 'guests', target: 300, edition: 2 }] }
+  ;(v33 as { scenarioProgress: unknown }).scenarioProgress = { peakGuests: 310, status: ['done'] }
+  const scenarioMigrated = migrateSnapshot(v33)
+  assert.ok(scenarioMigrated)
+  assert.equal(scenarioMigrated.version, 34)
+  assert.deepEqual(scenarioMigrated.scenarioProgress.status, ['done'], 'reached goals stay reached')
+  assert.equal(scenarioMigrated.scenarioProgress.peakGuests, 310)
+  assert.deepEqual(scenarioMigrated.scenarioProgress.outcome, { state: 'running' })
+  assert.deepEqual(scenarioMigrated.scenarioProgress.editions, [])
+  assert.ok((scenarioMigrated.scenarioProgress.nextEditionDue ?? 0) > 20, 'an old scenario is not stopped on the spot')
 }

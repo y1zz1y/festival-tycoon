@@ -57,7 +57,7 @@ export function migrateSnapshot(
   const migrated: GameSnapshot = {
     ...createBlankSnapshot(),
     ...data,
-    version: 33,
+    version: 34,
     festival: {
       ...createBlankSnapshot().festival,
       ...data.festival,
