@@ -20,6 +20,11 @@ export type DecorationLightSpec = {
   needsPower?: boolean
   /** Flatten the instanced bulb (daylight balloon). */
   flatBulb?: boolean
+  /**
+   * Radius of an additive glow shell around the emitter, for a light whose whole
+   * body shines (the daylight balloon's envelope) rather than one small bulb.
+   */
+  shellRadius?: number
   /** Offset the emitter along the building facing (floods). */
   forward?: number
 }
@@ -58,6 +63,7 @@ export const DECORATION_LIGHTS = {
     needsPower: true,
     focusWeight: 0.4,
     flatBulb: true,
+    shellRadius: 0.57,
   },
   lanternPole: { ...WARM, color: 0xffd58a, height: 1.1 },
   stringLights: { ...WARM, color: 0xffe2a1, height: 1.23 },

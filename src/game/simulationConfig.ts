@@ -478,7 +478,6 @@ export const SIMULATION_CONFIG = {
     minimumAmbientIntensity: 0.35,
     maximumAmbientIntensity: 1.65,
     maximumSunIntensity: 2.4,
-    nightLightEmissiveIntensity: 1.8,
   },
   inventory: {
     tent: { spawnProbability: 0.68, detectionDifficulty: 0.05 },

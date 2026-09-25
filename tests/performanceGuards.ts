@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
-import { Group, InstancedMesh, Mesh, Vector3, OrthographicCamera } from 'three'
+import { readFileSync, readdirSync } from 'node:fs'
+import { BoxGeometry, Group, InstancedMesh, Mesh, MeshStandardMaterial, Vector3, OrthographicCamera } from 'three'
 import { GameState } from '../src/game/GameState'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
+import { BUILDING_KINDS } from '../src/game/catalog'
 import { createRetroBuilding, batchRetroBuildings, DETAILED_BUILDINGS } from '../src/view/retroBuildings'
 import { DAYLIGHT_LIGHT_COLOR, DAYLIGHT_LIGHT_DISTANCE, FESTIVAL_LIGHT_BUDGET, FestivalLightsView, SPLIT_MARGIN } from '../src/view/FestivalLightsView'
 import { lightViewOf } from '../src/view/lightSelection'
@@ -199,6 +201,8 @@ export function testPerformanceGuards(fixture: (count?: number) => GameState): v
     assert.equal((batch.userData.buildingIds as string[]).length, 2, 'batch keeps picking IDs')
     assert.ok(batch.boundingSphere!.containsPoint(new Vector3(3, 2, -1)))
   }
+  testModelCoverageAndBatching()
+  testMaterialBudget()
   const lightGame = fixture(1), lightSnapshot = lightGame.snapshot
   const accessModels = new Group()
   for (const theme of ['carousel', 'bungee', 'coaster'] as const) for (const kind of ['entrance', 'exit'] as const) {
@@ -448,4 +452,83 @@ function testLocalParkingClaims(fixture: (count?: number) => GameState): void {
   logistics.parkingCells = [{ x: 257, z: -18, occupiedBy: null }]
   assert.equal(internal.getAdjacentParkingCells({ x: 0, z: -18 }).length, 0,
     'packed-coordinate collisions must not produce distant candidates')
+}
+
+/**
+ * Every catalog kind is drawn by a batched model: a house model, a logistics model or,
+ * for paths, the shared deck. The old flat-colour fallback made a mesh and a material
+ * per placed fence, lamp and path tile and doubled the render time of festivalmittel.
+ */
+function testModelCoverageAndBatching(): void {
+  const modelled = new Set<string>([...DETAILED_BUILDINGS, ...LOGISTICS_FACILITY_KINDS, 'path'])
+  assert.deepEqual(BUILDING_KINDS.filter((kind) => !modelled.has(kind)), [], 'every building kind has a batched model')
+
+  // Textured decks and roads bring their own shared material: the batch is per geometry
+  // and material, and a mesh deep inside a model still carries its building's id.
+  const shared = new BoxGeometry(1, 0.08, 1)
+  const plank = new MeshStandardMaterial({ color: 0xc9b48a }), queue = new MeshStandardMaterial({ color: 0x4f8870 })
+  const source = new Group()
+  for (let i = 0; i < 200; i++) {
+    const model = new Group(), surface = new Group()
+    const deck = new Mesh(shared, i % 2 ? plank : queue)
+    deck.userData.retroStatic = true
+    deck.userData.flatSurface = true
+    surface.add(deck)
+    model.add(surface)
+    model.userData.buildingId = `path-${i}`
+    model.position.set(i, 0, 0)
+    source.add(model)
+  }
+  const batches = batchRetroBuildings(source).children as InstancedMesh[]
+  assert.equal(batches.length, 2, '200 path tiles in two looks are two batches')
+  assert.deepEqual(batches.map((batch) => batch.count).sort(), [100, 100])
+  assert.ok(batches.every((batch) => !batch.castShadow && batch.receiveShadow), 'decks receive shadows but cast none')
+  assert.ok(batches.every((batch) => (batch.userData.buildingIds as string[]).every((id) => id?.startsWith('path-'))), 'nested decks keep their picking ids')
+}
+
+/**
+ * The materials world objects are made with. Shared ones live in src/view/materials.ts;
+ * the counts here are ceilings for everything else, so no view grows a material per
+ * object again unnoticed. Lower a ceiling when a file gets cheaper, never raise it
+ * without a batching reason in docs/rendering.md.
+ */
+const MATERIAL_CEILINGS: Record<string, number> = {
+  'WorldView.ts': 24,
+  'CampingView.ts': 9,
+  'StaffView.ts': 8,
+  'LogisticsView.ts': 8,
+  'AccessControlView.ts': 7,
+  'pixelPeople.ts': 5,
+  'carrierModels.ts': 5,
+  'stageModel.ts': 3,
+  'WasteView.ts': 3,
+  'stageBand.ts': 2,
+  'souvenirMeshes.ts': 2,
+  'materials.ts': 2,
+  'logisticsModels.ts': 2,
+  'campingModels.ts': 2,
+  'bungee.ts': 2,
+  'bandMemberMesh.ts': 2,
+  'SupplyChainView.ts': 2,
+  'IncidentView.ts': 2,
+  'CourseView.ts': 2,
+  'wayTextures.ts': 1,
+  'wayStructures.ts': 1,
+  'terrainSurface.ts': 1,
+  'supports.ts': 1,
+  'coasterTrack.ts': 1,
+  'coasterSpecials.ts': 1,
+  'coasterCars.ts': 1,
+  'attractionAccess.ts': 1,
+  'PowerView.ts': 1,
+  'ForecourtView.ts': 1,
+  'BackstageView.ts': 1,
+  'AttractionView.ts': 1,
+}
+
+function testMaterialBudget(): void {
+  for (const file of readdirSync('src/view').filter((name) => name.endsWith('.ts'))) {
+    const count = readFileSync(`src/view/${file}`, 'utf8').split('new MeshStandardMaterial(').length - 1
+    assert.ok(count <= (MATERIAL_CEILINGS[file] ?? 0), `${file}: ${count} material constructors, ceiling ${MATERIAL_CEILINGS[file] ?? 0}; use src/view/materials.ts`)
+  }
 }

@@ -87,6 +87,14 @@ export class FestivalLightsView {
   private glows: InstancedMesh | null = null
   private glowGeometry = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2)
   private glowMaterial = new MeshBasicMaterial({ color: 0xffffff, map: glowTexture(), transparent: true, blending: AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })
+  /**
+   * Glow shells for lights whose whole body shines (spec.shellRadius): one additive
+   * batch over the static model, so a balloon lights up at night without a material
+   * of its own. Only powered, switched-on sources are here at all.
+   */
+  private shells: InstancedMesh | null = null
+  private shellGeometry = new SphereGeometry(1, 14, 10)
+  private shellMaterial = new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false })
   private sources: LightSource[] = []
   private focus = new Vector3()
   /** The projection the current light assignment was made for. */
@@ -212,8 +220,30 @@ export class FestivalLightsView {
     this.glows!.count = sources.length; this.glows!.instanceMatrix.needsUpdate = true
     if (this.glows!.instanceColor) this.glows!.instanceColor.needsUpdate = true
     this.glowMaterial.opacity = .06 + this.night * .22
+    this.updateShells(sources)
     this.sources = sources
     this.updateLocalLights()
+  }
+  private updateShells(sources: readonly LightSource[]): void {
+    const shining = sources.filter((source) => source.spec.shellRadius)
+    if (!this.shells || this.shells.instanceMatrix.count < shining.length) {
+      if (this.shells) { this.group.remove(this.shells); this.shells.dispose() }
+      this.shells = new InstancedMesh(this.shellGeometry, this.shellMaterial, Math.max(8, shining.length))
+      this.shells.frustumCulled = false
+      this.group.add(this.shells)
+    }
+    const matrix = new Matrix4()
+    shining.forEach((source, i) => {
+      const radius = source.spec.shellRadius!
+      matrix.makeScale(radius, radius * (source.spec.flatBulb ? .9 : 1), radius)
+      matrix.setPosition(source.position.x, source.position.y - .05, source.position.z)
+      this.shells!.setMatrixAt(i, matrix)
+      this.shells!.setColorAt(i, this.scratchColor.setHex(source.spec.color))
+    })
+    this.shells.count = shining.length
+    this.shells.instanceMatrix.needsUpdate = true
+    if (this.shells.instanceColor) this.shells.instanceColor.needsUpdate = true
+    this.shellMaterial.opacity = this.night * .5
   }
   /** The camera's view for this frame; the real lights go to the sources inside it. */
   setView(view: LightView): void {

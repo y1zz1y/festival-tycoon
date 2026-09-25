@@ -37,7 +37,8 @@ import { AccessControlView } from './AccessControlView'
 import { CourseView } from './CourseView'
 import { AttractionView } from './AttractionView'
 import { createRoadDirectionArrowGeometry } from './roadDirectionArrow'
-import { wayTexture } from './wayTextures'
+import { wayDeckGeometry, wayDeckMaterial } from './wayTextures'
+import { ICON_IDS, iconTexture, type IconId } from './spriteAtlas'
 import type { WayType } from '../game/wayTypes'
 import { wayInfo } from '../game/wayTypes'
 import { groundRectangle } from '../game/ground'
@@ -313,6 +314,33 @@ const WALK_BLOCKED_KINDS = new Set<string>([
   'videoWall', 'laserShow', 'fireworkBattery', 'tourBusParking',
 ])
 export type PersonPreviewMode = 'map' | 'front'
+
+/**
+ * Queue barriers: rails, dividers and direction arrows. One material each and one
+ * box per size, shared by every queue tile and marked static, so a long queue is a
+ * few instanced batches rather than a mesh and a material per rail.
+ */
+const QUEUE_RAIL_MATERIAL = new MeshStandardMaterial({ color: 0xe8ddbd, roughness: 0.75 })
+QUEUE_RAIL_MATERIAL.userData.shared = true
+const QUEUE_ARROW_MATERIAL = new MeshStandardMaterial({ color: 0xffdc58, emissive: 0x4b3a00 })
+QUEUE_ARROW_MATERIAL.userData.shared = true
+const QUEUE_ARROW_GEOMETRY = new ConeGeometry(0.09, 0.24, 3)
+QUEUE_ARROW_GEOMETRY.userData.shared = true
+const queueBoxes = new Map<string, BoxGeometry>()
+function queueBox(width: number, height: number, depth: number): BoxGeometry {
+  const key = `${width}:${height}:${depth.toFixed(4)}`
+  const cached = queueBoxes.get(key)
+  if (cached) return cached
+  const geometry = new BoxGeometry(width, height, depth)
+  geometry.userData.shared = true
+  queueBoxes.set(key, geometry)
+  return geometry
+}
+function queuePart(geometry: BufferGeometry, material: MeshStandardMaterial): Mesh {
+  const mesh = new Mesh(geometry, material)
+  mesh.userData.retroStatic = true
+  return mesh
+}
 /**
  * The little window on one person in the info panels. It is drawn by the game's own
  * renderer — a corner of the main canvas is rendered from the preview camera and
@@ -345,8 +373,8 @@ export class WorldView {
   /** Set when the ground itself changed: then every model has to be placed afresh. */
   private buildingModelsStale = true
   private shadersWarmed = false
-  /** What the scene held when its shaders were last compiled ahead of time. */
-  private warmedPopulation = ''
+  /** Per moving population, its size when its shaders were last compiled ahead of time. */
+  private warmedPopulation: string[] = []
   private rideGates = new Group()
   private rideGatePreview = Object.assign(new Group(), {visible:false})
 
@@ -410,17 +438,6 @@ export class WorldView {
   private buildings = new Group()
   private facadeReveal: FacadeReveal | null = null
   private staticBuildingBatches = new Group()
-  private treeTrunkGeometry = new CylinderGeometry(0.1, 0.14, 0.8, 8)
-  private treeCrownGeometry = new ConeGeometry(0.52, 1.25, 9)
-  private treeTrunkMaterial = new MeshStandardMaterial({ color: 0x795437 })
-  private treeCrownMaterial = new MeshStandardMaterial({
-    color: 0x438344,
-    roughness: 0.95,
-  })
-  private hedgeMaterial = new MeshStandardMaterial({
-    color: 0x3f7b42,
-    roughness: 1,
-  })
   private landMaterial = new MeshStandardMaterial({
     color: 0x8b8680,
     map: createEarthTexture(),
@@ -445,8 +462,6 @@ export class WorldView {
     depthWrite: false,
   })
   private soundWaveGroups: Group[] = []
-  private nightLightMaterials: MeshStandardMaterial[] = []
-  private nightLightBuildingIds: string[] = []
   private readonly stageLightPool: SpotLight[] = []
   /** Where the camera looks this frame — what decides which sources get the real lights. */
   private readonly lightView: LightView = emptyLightView()
@@ -509,7 +524,6 @@ export class WorldView {
   private emotionInstances = new Map<string, InstancedMesh>()
   private emotionPose = new Object3D()
   private visitorHandcarts: Group[] = []
-  private emotionTextures = new Map<string, CanvasTexture>()
   private cashTextures = new Map<number, CanvasTexture>()
   private visitorBodyGeometry = createPersonGeometry('body')
   private visitorFemaleBodyGeometry = createPersonGeometry('femaleBody')
@@ -1065,12 +1079,21 @@ export class WorldView {
     // first thing to draw them is the preview in their info panel, and that click
     // stalls for the compile. Compiling whenever the population has changed — after
     // the crowd and crew views have put the new figures into the scene — moves it to
-    // a moment nobody is waiting on; for everything already compiled it is a walk.
-    const population = `${snapshot.staff.length}:${snapshot.visitors.length > 0}:${snapshot.logistics.roadVehicles.length}:${snapshot.festival.infrastructure.routes.length}:${snapshot.coasters.length}`
-    if (population !== this.warmedPopulation) {
-      this.warmedPopulation = population
-      this.renderer.compile(this.scene, this.camera)
-    }
+    // a moment nobody is waiting on. Only the group whose population changed is
+    // compiled, against the scene's lights: a whole-scene compile walks every
+    // material and cost ~120 ms each time a vehicle arrived or left at 8×.
+    const population: [string, Object3D][] = [
+      [`${snapshot.staff.length}`, this.staffView.group],
+      [`${snapshot.visitors.length > 0}`, this.visitors],
+      [`${snapshot.logistics.roadVehicles.length}`, this.logisticsView.getVehiclePickRoot()],
+      [`${snapshot.festival.infrastructure.routes.length}`, this.supplyChainView.group],
+      [`${snapshot.coasters.length}`, this.coasterTrains],
+    ]
+    population.forEach(([count, group], index) => {
+      if (this.warmedPopulation[index] === count) return
+      this.warmedPopulation[index] = count
+      this.renderer.compile(group, this.camera, this.scene)
+    })
     this.renderPersonPreview(this.staffPreview, snapshot)
     this.renderPersonPreview(this.visitorPreview, snapshot)
     this.updateCashEffects(snapshot.cashEffects)
@@ -1226,11 +1249,6 @@ export class WorldView {
 
   private markSharedResources(): void {
     const shared = [
-      this.treeTrunkGeometry,
-      this.treeCrownGeometry,
-      this.treeTrunkMaterial,
-      this.treeCrownMaterial,
-      this.hedgeMaterial,
       this.landMaterial,
       this.waterGeometry,
       this.waterMaterial,
@@ -2393,18 +2411,11 @@ export class WorldView {
     // The lists the frame reads every tick are drawn from the models that are there
     // now, in the order the site lists them.
     this.soundWaveGroups = []
-    this.nightLightMaterials = []
-    this.nightLightBuildingIds = []
     for (const item of items) {
       const model = this.buildingModels.get(item.id)?.model
       if (!model) continue
       const soundWaves = model.userData.soundWaves as Group | undefined
       if (soundWaves) this.soundWaveGroups.push(soundWaves)
-      const nightLightMaterial = model.userData.nightLightMaterial as MeshStandardMaterial | undefined
-      if (nightLightMaterial) {
-        this.nightLightMaterials.push(nightLightMaterial)
-        this.nightLightBuildingIds.push(item.id)
-      }
     }
     this.staticBuildingBatches = batchRetroBuildings(this.buildings)
     this.buildings.add(this.staticBuildingBatches)
@@ -2449,318 +2460,43 @@ export class WorldView {
       }
       return detailed
     }
+    if (kind === 'path') return this.createPathModel(pathType, pathSlope, surfaceColor, wayType, onRoad)
+    // Every other kind has a house model or a logistics model; tests/performanceGuards.ts
+    // keeps it that way. An empty group is what an unmodelled kind would get.
+    return new Group()
+  }
+
+  /**
+   * A path tile: a deck of the shared material for its surface and the shared box for
+   * its shape, marked static so every tile that looks alike lands in one instanced
+   * batch. Queue tiles are green and keep their own barriers (addQueueBarriers).
+   */
+  private createPathModel(
+    pathType: 'normal' | 'queue',
+    pathSlope: number,
+    surfaceColor: number | undefined,
+    wayType: WayType | undefined,
+    onRoad: boolean,
+  ): Group {
     const group = new Group()
-    const definition = BUILDINGS[kind]
-    const material = new MeshStandardMaterial({ color: surfaceColor ?? definition.color, roughness: 0.7 })
-    const darkMaterial = new MeshStandardMaterial({
-      color: new Color(definition.color).multiplyScalar(0.7),
-      roughness: 0.75,
-    })
-
-    if (kind === 'path') {
-      const pathMaterial =
-        pathType === 'queue'
-          ? new MeshStandardMaterial({ color: 0x4f8870, roughness: 0.8 })
-          : material
-      pathMaterial.map = wayTexture(wayType ?? 'footPaved')
-      const surface = new Group()
-      const crossing = onRoad && pathType !== 'queue'
-      const pathLength = Math.hypot(1, pathSlope)
-      const path = new Mesh(
-        new BoxGeometry(crossing ? 0.42 : 1, crossing ? 0.04 : 0.08, pathLength),
-        pathMaterial,
+    const queue = pathType === 'queue'
+    const material = wayDeckMaterial(wayType ?? 'footPaved', queue ? 0x4f8870 : surfaceColor ?? BUILDINGS.path.color, queue ? 0.8 : 0.7)
+    const crossing = onRoad && !queue
+    const deck = new Mesh(wayDeckGeometry(crossing ? 0.42 : 1, crossing ? 0.04 : 0.08, Math.hypot(1, pathSlope)), material)
+    deck.position.y = crossing ? 0.03 : 0.04
+    deck.receiveShadow = true
+    deck.userData.retroStatic = true
+    deck.userData.flatSurface = true
+    const surface = new Group()
+    surface.add(deck)
+    if (pathSlope !== 0) {
+      surface.position.set(0, -pathSlope / 2, 0)
+      surface.quaternion.setFromUnitVectors(
+        new Vector3(0, 0, 1),
+        new Vector3(0, pathSlope, 1).normalize(),
       )
-      path.position.y = crossing ? 0.03 : 0.04
-      path.receiveShadow = true
-      surface.add(path)
-      if (pathSlope !== 0) {
-        surface.position.set(0, -pathSlope / 2, 0)
-        surface.quaternion.setFromUnitVectors(
-          new Vector3(0, 0, 1),
-          new Vector3(0, pathSlope, 1).normalize(),
-        )
-      }
-      group.add(surface)
-      return group
     }
-
-    if (kind === 'tree') {
-      const trunk = new Mesh(this.treeTrunkGeometry, this.treeTrunkMaterial)
-      const crown = new Mesh(this.treeCrownGeometry, this.treeCrownMaterial)
-      trunk.position.y = 0.4
-      crown.position.y = 1.22
-      group.add(trunk, crown)
-    } else if (kind === 'hedge') {
-      const hedge = new Mesh(
-        new BoxGeometry(0.88, 0.52, 0.32),
-        this.hedgeMaterial,
-      )
-      hedge.position.y = 0.26
-      group.add(hedge)
-    } else if (kind === 'fence') {
-      const fence = new Group()
-      const metal = new MeshStandardMaterial({ color: 0x4a4d52, roughness: 0.55 })
-      const orange = new MeshStandardMaterial({ color: 0xe67a22, roughness: 0.7 })
-      const white = new MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.65 })
-      ;[-0.4, 0.4].forEach((x) => {
-        const post = new Mesh(new BoxGeometry(0.055, 1.08, 0.055), metal)
-        post.position.set(x, 0.54, 0)
-        fence.add(post)
-      })
-      ;[0.18, 0.4, 0.62, 0.84].forEach((y, index) => {
-        const slat = new Mesh(
-          new BoxGeometry(0.86, 0.16, 0.03),
-          index % 2 === 0 ? orange : white,
-        )
-        slat.position.set(0, y, 0)
-        fence.add(slat)
-      })
-      const foot = new Mesh(new BoxGeometry(0.9, 0.06, 0.08), metal)
-      foot.position.y = 0.03
-      fence.add(foot)
-      fence.position.z = 0.42
-      group.add(fence)
-    } else if (isWasteBin(kind)) {
-      const can = new Mesh(
-        new CylinderGeometry(0.11, 0.13, 0.38, 10),
-        new MeshStandardMaterial({ color: 0x3f4a3a, roughness: 0.7 }),
-      )
-      const rim = new Mesh(
-        new CylinderGeometry(0.13, 0.13, 0.04, 10),
-        new MeshStandardMaterial({ color: 0x2a3226, roughness: 0.6 }),
-      )
-      can.position.y = 0.22
-      rim.position.y = 0.42
-      group.add(can, rim)
-    } else if (kind === 'bench') {
-      const bench = new Group()
-      const wood = new MeshStandardMaterial({ color: 0x98643c, roughness: 0.85 })
-      const seat = new Mesh(new BoxGeometry(0.62, 0.07, 0.2), wood)
-      const back = new Mesh(new BoxGeometry(0.62, 0.26, 0.06), wood)
-      const legs = new Mesh(new BoxGeometry(0.5, 0.22, 0.06), darkMaterial)
-      seat.position.y = 0.28
-      back.position.set(0, 0.42, -0.1)
-      legs.position.y = 0.13
-      bench.position.z = 0.34
-      bench.add(seat, back, legs)
-      group.add(bench)
-    } else if (kind === 'table') {
-      const table = new Group()
-      const wood = new MeshStandardMaterial({ color: 0xb07a48, roughness: 0.8 })
-      const top = new Mesh(new BoxGeometry(0.7, 0.06, 0.7), wood)
-      const pedestal = new Mesh(new BoxGeometry(0.12, 0.38, 0.12), darkMaterial)
-      top.position.y = 0.48
-      pedestal.position.y = 0.22
-      table.add(top, pedestal)
-      group.add(table)
-    } else if (kind === 'lighting') {
-      const pole = new Mesh(new CylinderGeometry(0.035, 0.055, 1.45, 8), darkMaterial)
-      const lampMaterial = new MeshStandardMaterial({
-        color: 0xffe79a,
-        emissive: 0x9a761d,
-        emissiveIntensity: 0.2,
-      })
-      const lamp = new Mesh(
-        new SphereGeometry(0.16, 10, 8),
-        lampMaterial,
-      )
-      pole.position.y = 0.72
-      lamp.position.y = 1.5
-      group.add(pole, lamp)
-      group.userData.nightLightMaterial = lampMaterial
-    } else if (kind === 'lightBalloon') {
-      const ballast = new Mesh(new BoxGeometry(0.3, 0.16, 0.24), darkMaterial)
-      ballast.position.y = 0.09
-      const crate = new Mesh(
-        new BoxGeometry(0.18, 0.12, 0.16),
-        new MeshStandardMaterial({ color: 0x3d4a55, roughness: 0.7 }),
-      )
-      crate.position.set(0.18, 0.07, 0.1)
-      const balloonMaterial = new MeshStandardMaterial({
-        color: 0xf4f7ff,
-        emissive: 0xc8d4ee,
-        emissiveIntensity: 0.15,
-        roughness: 0.42,
-      })
-      const balloon = new Mesh(new SphereGeometry(0.54, 14, 10), balloonMaterial)
-      balloon.position.y = 2.35
-      balloon.scale.set(1, 0.9, 1)
-      const ring = new Mesh(new CylinderGeometry(0.15, 0.15, 0.05, 10), darkMaterial)
-      ring.position.y = 1.84
-      const ropeMaterial = new MeshStandardMaterial({ color: 0xcfc8b8, roughness: 0.85 })
-      ;[0, (Math.PI * 2) / 3, (Math.PI * 4) / 3].forEach((angle) => {
-        const rope = new Mesh(new CylinderGeometry(0.012, 0.012, 1.88, 5), ropeMaterial)
-        rope.position.set(Math.sin(angle) * 0.2, 0.96, Math.cos(angle) * 0.2)
-        rope.rotation.z = Math.sin(angle) * 0.14
-        rope.rotation.x = -Math.cos(angle) * 0.14
-        group.add(rope)
-      })
-      group.add(ballast, crate, balloon, ring)
-      group.userData.nightLightMaterial = balloonMaterial
-    } else if (kind === 'generator' || kind === 'backupGenerator') {
-      const body = new Mesh(
-        new BoxGeometry(0.72, 0.42, 0.52),
-        new MeshStandardMaterial({ color: kind === 'generator' ? 0xd4a017 : 0x8a7020 }),
-      )
-      const tank = new Mesh(
-        new CylinderGeometry(0.16, 0.16, 0.38, 10),
-        darkMaterial,
-      )
-      body.position.y = 0.24
-      tank.position.set(0.28, 0.28, 0)
-      tank.rotation.z = Math.PI / 2
-      group.add(body, tank)
-    } else if (kind === 'foh') {
-      const desk = new Mesh(new BoxGeometry(0.82, 0.28, 0.48), darkMaterial)
-      const canopy = new Mesh(new BoxGeometry(0.9, 0.06, 0.7), material)
-      desk.position.y = 0.42
-      canopy.position.y = 1.12
-      group.add(desk, canopy)
-    } else if (kind === 'delayTower') {
-      const mast = new Mesh(new CylinderGeometry(0.05, 0.08, 2.1, 8), darkMaterial)
-      const stack = new Mesh(new BoxGeometry(0.42, 0.7, 0.28), material)
-      mast.position.y = 1.05
-      stack.position.set(0, 1.55, 0.08)
-      group.add(mast, stack)
-    } else if (kind === 'videoWall') {
-      const frame = new Mesh(new BoxGeometry(0.92, 1.55, 0.12), darkMaterial)
-      const screen = new Mesh(
-        new BoxGeometry(0.82, 1.28, 0.04),
-        new MeshStandardMaterial({
-          color: 0x4aa3ff,
-          emissive: 0x1a4d8f,
-          emissiveIntensity: 0.7,
-        }),
-      )
-      frame.position.y = 0.9
-      screen.position.set(0, 0.9, 0.06)
-      group.add(frame, screen)
-    } else if (kind === 'laserShow') {
-      const base = new Mesh(new CylinderGeometry(0.22, 0.28, 0.22, 10), darkMaterial)
-      const head = new Mesh(
-        new SphereGeometry(0.16, 10, 8),
-        new MeshStandardMaterial({
-          color: 0x2ee6a6,
-          emissive: 0x0b5c44,
-          emissiveIntensity: 0.8,
-        }),
-      )
-      base.position.y = 0.12
-      head.position.y = 0.42
-      group.add(base, head)
-    } else if (kind === 'fireworkBattery') {
-      const crate = new Mesh(new BoxGeometry(0.7, 0.28, 0.48), material)
-      crate.position.y = 0.16
-      group.add(crate)
-      ;[-0.16, 0, 0.16].forEach((x) => {
-        const tube = new Mesh(new CylinderGeometry(0.05, 0.05, 0.42, 8), darkMaterial)
-        tube.position.set(x, 0.45, 0)
-        group.add(tube)
-      })
-    } else if (kind === 'stage') {
-      const platform = new Mesh(new BoxGeometry(0.94, 0.28, 0.82), darkMaterial)
-      const backdrop = new Mesh(new BoxGeometry(0.94, 1.55, 0.12), material)
-      platform.position.y = 0.14
-      backdrop.position.set(0, 1.02, -0.35)
-      group.add(platform, backdrop)
-    } else if (kind === 'directionalSpeaker' || kind === 'omniSpeaker') {
-      const stand = new Mesh(
-        new CylinderGeometry(0.035, 0.06, 0.72, 7),
-        darkMaterial,
-      )
-      stand.position.y = 0.36
-      group.add(stand)
-      const angles = kind === 'omniSpeaker' ? [0, Math.PI / 2, Math.PI, -Math.PI / 2] : [0]
-      angles.forEach((angle) => {
-        const speaker = new Mesh(
-          new BoxGeometry(0.28, 0.42, 0.22),
-          new MeshStandardMaterial({ color: 0x24262c, roughness: 0.7 }),
-        )
-        speaker.position.set(Math.sin(angle) * 0.16, 0.9, Math.cos(angle) * 0.16)
-        speaker.rotation.y = angle
-        group.add(speaker)
-      })
-      const soundWaves = this.createSoundWaves(kind === 'omniSpeaker')
-      group.add(soundWaves)
-      group.userData.soundWaves = soundWaves
-    } else if (kind === 'securityGate') {
-      const postGeometry = new BoxGeometry(0.12, 1.05, 0.12)
-      const left = new Mesh(postGeometry, darkMaterial)
-      const right = new Mesh(postGeometry, darkMaterial)
-      const top = new Mesh(new BoxGeometry(0.88, 0.14, 0.14), material)
-      const scanner = new Mesh(
-        new BoxGeometry(0.58, 0.08, 0.08),
-        new MeshStandardMaterial({ color: 0x63d6e8, emissive: 0x184b58 }),
-      )
-      left.position.set(-0.38, 0.53, 0)
-      right.position.set(0.38, 0.53, 0)
-      top.position.y = 1.03
-      scanner.position.set(0, 0.62, 0)
-      group.add(left, right, top, scanner)
-    } else if (kind === 'ride') {
-      const base = new Mesh(new CylinderGeometry(0.43, 0.48, 0.16, 16), darkMaterial)
-      const roof = new Mesh(new CylinderGeometry(0.06, 0.48, 0.28, 12), material)
-      const mast = new Mesh(new CylinderGeometry(0.045, 0.06, 1.1, 8), darkMaterial)
-      base.position.y = 0.08
-      mast.position.y = 0.65
-      roof.position.y = 1.18
-      group.add(base, mast, roof)
-    } else {
-      const body = new Mesh(new BoxGeometry(0.76, 0.72, 0.76), material)
-      const roof = new Mesh(new BoxGeometry(0.9, 0.14, 0.9), darkMaterial)
-      body.position.y = 0.36
-      roof.position.y = 0.79
-      group.add(body, roof)
-
-      if (kind === 'food' || kind === 'alcohol' || kind === 'mascot' || kind === 'shirt') {
-        const counterMaterial = new MeshStandardMaterial({ color: 0xfff4d6 })
-        for (const [x, z, yaw] of [
-          [0, 0.43, 0],
-          [0, -0.43, 0],
-          [0.43, 0, Math.PI / 2],
-          [-0.43, 0, Math.PI / 2],
-        ] as const) {
-          const counter = new Mesh(new BoxGeometry(0.58, 0.22, 0.12), counterMaterial)
-          counter.position.set(x, 0.35, z)
-          counter.rotation.y = yaw
-          group.add(counter)
-        }
-      }
-      if (kind === 'alcohol') {
-        const keg = new Mesh(
-          new CylinderGeometry(0.16, 0.16, 0.3, 10),
-          new MeshStandardMaterial({ color: 0x8a5b32, roughness: 0.85 }),
-        )
-        const cup = new Mesh(
-          new CylinderGeometry(0.055, 0.045, 0.15, 8),
-          new MeshStandardMaterial({
-            color: 0xf2c14e,
-            transparent: true,
-            opacity: 0.85,
-          }),
-        )
-        keg.rotation.z = Math.PI / 2
-        keg.position.set(-0.18, 0.58, 0.28)
-        cup.position.set(0.2, 0.57, 0.34)
-        group.add(keg, cup)
-      }
-    }
-
-    if (['food', 'toilet', 'ride', 'alcohol', 'mascot', 'shirt', 'securityGate'].includes(kind)) {
-      const arrow = new Mesh(
-        new ConeGeometry(0.13, 0.32, 3),
-        new MeshStandardMaterial({ color: 0xffe052, emissive: 0x6b5200 }),
-      )
-      arrow.position.set(0, 0.32, 0.62)
-      arrow.rotation.x = Math.PI / 2
-      group.add(arrow)
-    }
-    group.traverse((object) => {
-      if (object instanceof Mesh) {
-        object.castShadow = true
-        object.receiveShadow = true
-      }
-    })
+    group.add(surface)
     return group
   }
 
@@ -2877,20 +2613,6 @@ export class WorldView {
     this.sunLight.color
       .copy(this.twilightSunColor)
       .lerp(this.noonSunColor, Math.min(1, daylight * 1.5))
-    const powered = new Set(snapshot.power.poweredBuildingIds)
-    const lightsActive = isFestivalOfferActive(
-      snapshot.dayPlan,
-      'lights',
-      snapshot.minute,
-      snapshot.day,
-    )
-    this.nightLightMaterials.forEach((material, index) => {
-      const hasPower = powered.has(this.nightLightBuildingIds[index] ?? '')
-      material.emissiveIntensity =
-        lightsActive && hasPower
-          ? 0.15 + (1 - daylight) * config.nightLightEmissiveIntensity
-          : 0.03
-    })
   }
 
   private isShowPerforming(snapshot: Readonly<GameSnapshot>): boolean {
@@ -2945,17 +2667,13 @@ export class WorldView {
     path: PlacedBuilding,
     items: readonly PlacedBuilding[],
   ): void {
-    const material = new MeshStandardMaterial({ color: 0xe8ddbd, roughness: 0.75 })
-    const arrowMaterial = new MeshStandardMaterial({
-      color: 0xffdc58,
-      emissive: 0x4b3a00,
-    })
+    const material = QUEUE_RAIL_MATERIAL
 
     if (path.pathSlope) {
       const rails = new Group()
       const length = Math.hypot(1, path.pathSlope) - 0.1
-      const left = new Mesh(new BoxGeometry(0.055, 0.18, length), material)
-      const right = left.clone()
+      const left = queuePart(queueBox(0.055, 0.18, length), material)
+      const right = queuePart(queueBox(0.055, 0.18, length), material)
       left.position.set(-0.42, 0.16, 0)
       right.position.set(0.42, 0.16, 0)
       rails.position.set(0, -path.pathSlope / 2, 0)
@@ -2966,7 +2684,7 @@ export class WorldView {
       group.add(rails)
       rails.add(left, right)
       if (path.queueSplit) {
-        const divider = new Mesh(new BoxGeometry(0.04, 0.16, length), material)
+        const divider = queuePart(queueBox(0.04, 0.16, length), material)
         divider.position.set(0, 0.16, 0)
         rails.add(divider)
       }
@@ -2995,10 +2713,7 @@ export class WorldView {
       for (let direction = 0; direction < 4; direction += 1) {
         if (openings.has(direction)) continue
         const alongX = direction === 0 || direction === 2
-        const wall = new Mesh(
-          new BoxGeometry(alongX ? 0.88 : 0.055, 0.18, alongX ? 0.055 : 0.88),
-          material,
-        )
+        const wall = queuePart(queueBox(alongX ? 0.88 : 0.055, 0.18, alongX ? 0.055 : 0.88), material)
         wall.position.set(
           direction === 1 ? 0.44 : direction === 3 ? -0.44 : 0,
           0.16,
@@ -3008,10 +2723,7 @@ export class WorldView {
       }
       if (path.queueSplit && path.queueDirection !== undefined) {
         const alongZ = path.queueDirection === 0 || path.queueDirection === 2
-        const divider = new Mesh(
-          new BoxGeometry(alongZ ? 0.04 : 0.88, 0.16, alongZ ? 0.88 : 0.04),
-          material,
-        )
+        const divider = queuePart(queueBox(alongZ ? 0.04 : 0.88, 0.16, alongZ ? 0.88 : 0.04), material)
         divider.position.set(0, 0.16, 0)
         group.add(divider)
       }
@@ -3023,7 +2735,7 @@ export class WorldView {
       const heading = headingSteps * (Math.PI / 2)
       const arrowY = path.pathSlope ? -path.pathSlope / 2 + 0.15 : 0.12
       const placeArrow = (lane: 'inbound' | 'outbound') => {
-        const arrow = new Mesh(new ConeGeometry(0.09, 0.24, 3), arrowMaterial)
+        const arrow = queuePart(QUEUE_ARROW_GEOMETRY, QUEUE_ARROW_MATERIAL)
         const shift = path.queueSplit
           ? stallQueueLaneOffset(queueDirectionVector(headingSteps), lane)
           : { x: 0, z: 0 }
@@ -3759,35 +3471,9 @@ export class WorldView {
     return texture
   }
 
+  /** The pixel symbol for a mood, the same on every system (see spriteAtlas.ts). */
   private getEmotionTexture(emotion: string): CanvasTexture {
-    const cached = this.emotionTextures.get(emotion)
-    if (cached) return cached
-    const icons: Record<string, string> = {
-      neutral: '😐',
-      happy: '🙂',
-      sad: '😢',
-      angry: '😠',
-      excited: '🤩',
-      sleeping: '💤',
-      talking: '💬',
-      dancing: '🎶',
-      crushed: '😣',
-      panic: '😱',
-    }
-    const canvas = document.createElement('canvas')
-    canvas.width = 128
-    canvas.height = 128
-    const context = canvas.getContext('2d')
-    if (context) {
-      context.font = '86px "Segoe UI Emoji", sans-serif'
-      context.textAlign = 'center'
-      context.textBaseline = 'middle'
-      context.fillText(icons[emotion] ?? icons.neutral!, 64, 66)
-    }
-    const texture = new CanvasTexture(canvas)
-    texture.colorSpace = SRGBColorSpace
-    this.emotionTextures.set(emotion, texture)
-    return texture
+    return iconTexture((ICON_IDS as readonly string[]).includes(emotion) ? emotion as IconId : 'neutral')
   }
 
   private updateCashEffects(effects: readonly CashEffect[]): void {

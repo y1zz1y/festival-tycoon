@@ -3,7 +3,6 @@ import { campingBoundary, campingGrassTexture } from './campingGround'
 import { CAMP_COLORS, campRotation, campSeed, createCampModel } from './campingModels'
 import {
   BoxGeometry,
-  CanvasTexture,
   CylinderGeometry,
   Group,
   InstancedMesh,
@@ -12,14 +11,12 @@ import {
   MeshStandardMaterial,
   PlaneGeometry,
   Quaternion,
-  SRGBColorSpace,
-  Sprite,
-  SpriteMaterial,
   Vector3,
 } from 'three'
 import type { GameSnapshot } from '../game/GameState'
 import { getTerrainHeight } from '../game/terrain'
 import { disposeChildren, disposeObject3D } from './disposeObject3D'
+import { IconBillboards } from './spriteAtlas'
 
 let handcartTemplate: Group | undefined
 
@@ -63,34 +60,6 @@ export function createHandcartModel(): Group {
   return cart.clone(true)
 }
 
-function createSleepSprite(): Sprite {
-  const canvas = document.createElement('canvas')
-  canvas.width = 128
-  canvas.height = 64
-  const context = canvas.getContext('2d')
-  if (context) {
-    context.font = 'bold 42px sans-serif'
-    context.textAlign = 'center'
-    context.textBaseline = 'middle'
-    context.fillStyle = '#eef7ff'
-    context.strokeStyle = '#284056'
-    context.lineWidth = 6
-    context.strokeText('ZZZ', 64, 32)
-    context.fillText('ZZZ', 64, 32)
-  }
-  const texture = new CanvasTexture(canvas)
-  texture.colorSpace = SRGBColorSpace
-  const sprite = new Sprite(
-    new SpriteMaterial({
-      map: texture,
-      transparent: true,
-      depthTest: false,
-    }),
-  )
-  sprite.scale.set(0.65, 0.32, 0.32)
-  return sprite
-}
-
 const VISIBLE_CAMP_PHASES = new Set([
   'ready',
   'returning',
@@ -124,11 +93,18 @@ export class CampingView {
   private readonly tilePosition = new Vector3()
   private readonly tileScale = new Vector3(1, 1, 1)
 
+  /**
+   * Sleep and music symbols: one billboard batch each for the whole site, instead of
+   * a canvas, a texture and a sprite material per sleeping camper or music box.
+   */
+  private readonly sleepSymbols = new IconBillboards('zzz', 0.34)
+  private readonly musicSymbols = new IconBillboards('notes', 0.3)
+
   constructor() {
     this.tileGeometry.userData.shared = true
     this.tileMaterial.userData.shared = true
     this.batchedProps.add(this.propBatcher.group)
-    this.group.add(this.props, this.batchedProps)
+    this.group.add(this.props, this.batchedProps, this.sleepSymbols.mesh, this.musicSymbols.mesh)
   }
 
   invalidate(): void {
@@ -243,6 +219,8 @@ export class CampingView {
 
   private rebuildProps(snapshot: Readonly<GameSnapshot>): void {
     const active = new Set<string>()
+    const sleepers: Vector3[] = []
+    const music: Vector3[] = []
     const needsUpdate = (key: string, stamp: string): boolean => {
       active.add(key)
       const existing = this.propModels.get(key)
@@ -259,7 +237,17 @@ export class CampingView {
       }
       const key = `visitor:${visitor.id}`
       const height = getTerrainHeight(snapshot.terrain, visitor.campsite.x, visitor.campsite.z)
-      const stamp = `${visitor.campsite.x}:${visitor.campsite.z}:${height}:${visitor.color}:${visitor.campingPhase === 'resting'}`
+      if (visitor.campingPhase === 'resting') {
+        // The same spot the symbol had as a child of the turned campsite: 0.08 along
+        // the tent's own x, 0.86 up.
+        const turn = campRotation(visitor.id)
+        sleepers.push(new Vector3(
+          visitor.campsite.x + 0.5 + Math.cos(turn) * 0.08,
+          height + 0.02 + 0.86,
+          visitor.campsite.z + 0.5 - Math.sin(turn) * 0.08,
+        ))
+      }
+      const stamp = `${visitor.campsite.x}:${visitor.campsite.z}:${height}:${visitor.color}`
       if (!needsUpdate(key, stamp)) return
       const campsite = new Group()
       campsite.position.set(
@@ -275,11 +263,6 @@ export class CampingView {
       parkedCart.position.set(0.34, 0.07, -0.24)
       parkedCart.rotation.y = -0.7
       campsite.add(tent, parkedCart)
-      if (visitor.campingPhase === 'resting') {
-        const sleep = createSleepSprite()
-        sleep.position.set(0.08, 0.86, 0)
-        campsite.add(sleep)
-      }
       this.props.add(campsite)
       this.propModels.set(key, { stamp, model: campsite })
     })
@@ -288,6 +271,13 @@ export class CampingView {
       const color = installation.fabricColor ?? (installation.kind === 'tent' ? 0x8a6a4a : CAMP_COLORS[(campSeed(appearanceId) >>> 4) % CAMP_COLORS.length]!)
       const decay = installation.decay ?? 0
       const key = `installation:${installation.id}`
+      if (installation.kind === 'musicBox') {
+        music.push(new Vector3(
+          installation.cell.x + 0.5,
+          getTerrainHeight(snapshot.terrain, installation.cell.x, installation.cell.z) + 0.02 + 0.55,
+          installation.cell.z + 0.5,
+        ))
+      }
       const stamp = `${installation.cell.x}:${installation.cell.z}:${getTerrainHeight(snapshot.terrain, installation.cell.x, installation.cell.z)}:${installation.kind}:${installation.contributorIds.length}:${appearanceId}:${color}:${Math.round(decay)}`
       if (!needsUpdate(key, stamp)) return
       const model =
@@ -323,6 +313,8 @@ export class CampingView {
       this.propModels.delete(key)
     }
     this.propBatcher.update(this.props)
+    this.sleepSymbols.setPositions(sleepers)
+    this.musicSymbols.setPositions(music)
   }
 
   private createAbandonedTentModel(color: number, decay: number, id: string): Group {
@@ -373,25 +365,6 @@ export class CampingView {
       speaker.position.set(x, 0.16, 0.126)
       group.add(speaker)
     })
-    const notes = document.createElement('canvas')
-    notes.width = 96
-    notes.height = 64
-    const context = notes.getContext('2d')!
-    context.font = '42px sans-serif'
-    context.textAlign = 'center'
-    context.fillText('♫', 48, 46)
-    const texture = new CanvasTexture(notes)
-    texture.colorSpace = SRGBColorSpace
-    const sprite = new Sprite(
-      new SpriteMaterial({
-        map: texture,
-        transparent: true,
-        depthWrite: false,
-      }),
-    )
-    sprite.scale.set(0.45, 0.3, 1)
-    sprite.position.set(0, 0.55, 0)
-    group.add(sprite)
     return group
   }
 }

@@ -22,7 +22,7 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 | Sicherheitsschleusen | `src/game/security.ts` | `SecuritySystem`, `SecurityGateConfig` |
 | Müllziele für Reinigung | `src/game/waste.ts` | nächster Eimer / versiegelter Container / Ablage; `wasteDropGoals` |
 | Personal-UI | `src/staffDetailsUI.ts` | Infofenster, Bereich zuweisen |
-| Darstellung | `src/view/StaffView.ts`, `src/view/MedicalView.ts` | Uniformen, Liegen |
+| Darstellung | `src/view/StaffView.ts`, `src/view/MedicalView.ts` | Uniformen; Sanität als drei InstancedMeshes (Kachel, Liege, Patient) plus Schlafsymbol-Billboard, siehe [rendering.md](rendering.md) |
 | Depot-Träger (keine Rolle) | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts` | Gästefigur + Warnweste/Mütze + Handkarren |
 | Balancing | `src/game/simulationConfig.ts` | `staff` (`roles.cleaner.speed`, `cleanerWorkMinutes`, `cleanerLitterWorkMinutes`, `cleanerBinWorkMinutes`), `medical`, `security`, `waste.cleanerIdleEmptyFill`, `waste.cleanerCarrySpeedMultiplier` |
 
