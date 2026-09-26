@@ -17,6 +17,7 @@ import type { PedestrianNeighborOptions } from './pedestrianNavigation'
 import type { ActionResult, GameSnapshot } from './types/snapshot'
 import { isSideTurn as isLogisticsSideTurn, resumeVehicleAfterIncident as resumeLogisticsVehicleAfterIncident, roadRouteIsConnected as logisticsRoadRouteIsConnected, vehicleDirection, type LogisticsTickState } from './logisticsSimulation'
 import type { WasteDumpCell } from './waste'
+import { pinInjuredVisitor } from './medical'
 
 export type RoadVehicleSimulationContext = {
   state: GameSnapshot
@@ -435,8 +436,7 @@ export class RoadVehicleSimulation {
             return
           }
           victim.needs.energy = 0
-          victim.state = 'injured'
-          victim.route = []
+          pinInjuredVisitor(victim)
           victim.streakingMinutes = 0
           victim.toplessMinutes = 0
           victim.injuryVehicleId = vehicle.id

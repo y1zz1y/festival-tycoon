@@ -73,7 +73,9 @@ Kanten-Slots der neuen Arten: `glowTape`, `chainFence`, `trackCurb`, `occultBann
   (`pedestrianBarrierOccupancy` in `scenery.ts`).
 - Statische Details: ein gemergtes Vertex-Color-Mesh je Art, Instancing
   über `batchRetroBuildings`. Kein Material/Draw-Call pro Zahnrad, Eiszapfen,
-  Farnblatt oder Glühbirne. Arktis/Steampunk unterscheiden sich über Farben
+  Farnblatt oder Glühbirne. Gemalter Untergrund mischt denselben
+  Instanzfarben-Film ein wie bei Buden (`weatheringRgb`), kein Extra-Material.
+  Arktis/Steampunk unterscheiden sich über Farben
   und Silhouette; echtes Licht kommt aus dem geteilten Festival-Light-Pool.
 - Jede Art in Kategorie **Licht** hat einen Deskriptor in
   `decorationLights.ts` (Farbe, Emitterhöhe, Reichweite, Punkt oder Kegel).

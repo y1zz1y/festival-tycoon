@@ -16,6 +16,7 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 | Arbeitszonen | `src/game/staffZones.ts` | `isInAnyZone`, `zoneCellRange`, `setAssignedWorkZones`, `staffZonePaintStroke` |
 | Saugroboter in der Personal-UI | `src/game/staff.ts`, `src/staffDetailsUI.ts`, `src/main.ts` | `sweeperStaffName`, Reinigungs-Tab |
 | Krankenfelder, Betten | `src/game/medical.ts`, `src/game/GameState.ts` | `MedicalSystem`, `normalizeMedicalCell`, `allowsMedicalOverlay`, `MEDICAL_BEDS_PER_CELL`; Abriss über `clearDesignatedOccupancyAt` |
+| Angefahren / Liegenbleiben | `src/game/medical.ts`, `src/game/visitorBehavior.ts` | `pinInjuredVisitor` — `injured` bleibt, bis Sanitäter/Krankenwagen aufnimmt |
 | Verletzten-Zuweisung | `src/game/staffSimulation.ts`, `src/game/GameState.ts` | `assignNearestFreeMedics`; Krankenwagen `dispatchIdleAmbulances` |
 | Krankenwagen-Rückfahrt / Verkauf | `src/game/GameState.ts` | `returnIdleAmbulancesToGarage`, `sellAmbulance`, `sellAmbulanceVehicle`; `RoadVehicle.pendingSale` |
 | Personaleingang | `src/game/supplyChain.ts`, `src/game/accessControl.ts` | `staffGate`, `staffGateWorldPosition`, `gateEdgeWorldPosition`, `staffGateBlocksVisitor` |
@@ -50,6 +51,9 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
   `pendingSale` bis zur Ankunft. Kein unsterbliches Fahrzeug auf der Straße.
   Wer noch in einem Fahrzeug sitzt (`passengerIds`, `vehicle-arrival`,
   `bus-riding`), ist kein Patient auf der Straße.
+  Ein angefahrener Gast bleibt `injured` und liegt, bis dieser Sanitäter
+  oder Krankenwagen ihn aufnimmt; Needs, Panik und Zielwahl stellen ihn
+  nicht wieder auf. Die Verletzten-Meldung kommt einmal pro Vorfall.
 - Sanitäter wählen das über die **Wegstrecke** nächstgelegene freie Bett,
   nicht das euklidisch nächste.
 - Abriss eines Krankenfelds entfernt die Liegen, gibt Bettreservierungen
@@ -126,6 +130,7 @@ genutzten Eimern; Krankenfeld-Abriss, Dach über Liegen, abgewiesenes
 nächsten freien Sanitäter bzw. Krankenwagen — näherer Idle vor fernem,
 kein Diebstahl eines tragenden Sanitäters, unerreichbarer Näherer wird
 übersprungen, Insassen im Auto werden nicht als Verletzte zugewiesen,
+angefahrene Gäste bleiben `injured` bis zur Aufnahme,
 idle Krankenwagen fährt zur Garage, Verkauf löscht am Depot sofort und
 nach Rückfahrt), `tests/sealedWasteContainer.ts` (nähere Container vor Ablage, volle übersprungen, idle Container→Ablage auch ohne Wagen, voller Eimer zuerst, Müllwagen vom Depot leert Straßen-Container), `tests/accessControl.ts` (`gateEdgeWorldPosition`, `staffGateBlocksVisitor`),
 `tests/festivalAdditions.ts`, `tests/performanceGuards.ts` (keine nested

@@ -155,7 +155,10 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   (Zufahrt, sonst Eingang); niemand bleibt in der Bucht stehen.
   Bis dahin zählen Insassen (`passengerIds`) nicht als Fußgänger auf
   der Fahrbahn: sie laufen nicht, belegen die Straße nicht, werden
-  nicht verletzt und ziehen keinen Sanitäter/Ticker. Nach dem
+  nicht verletzt und ziehen keinen Sanitäter/Ticker.
+  Ein angefahrener Fußgänger bleibt `injured` und liegt, bis Sanitäter
+  oder Krankenwagen ihn aufnehmen; Needs/Panik stellen ihn nicht wieder
+  auf. Das Auto wartet auf der Zelle, die Ticker-Meldung kommt einmal. Nach dem
   Einparken steigen Anreise-Insassen trotzdem aus (`placeVisitorOnDisembarkCell`
   auf die Fuß-Zelle, dann Zielwahl, dann `keepDisembarkRouteOnFoot`).
   Parkbuchten ohne Weg (`NAV_PARKING` ohne `NAV_PATH`) sind keine
@@ -393,6 +396,7 @@ Aussteigen auf den angrenzenden Fußweg bzw. Zufahrts-Fallback,
 laufen ohne Parkbucht-Jitter zum Ziel, Zebrastreifen neben der Bucht,
 Abreise nur im eigenen Anreiseauto (5er/6er-Gruppe steigt vollständig wieder ein, tote/fremde IDs blockieren nicht),
 Insassen erst nach dem Aussteigen aktiv / verletzbar,
+angefahrene Gäste bleiben liegen bis zur Aufnahme,
 Debug Autos entfernen löscht Wagen und Belegung).
 `tests/accessControl.ts` (Ampel/Schranke, Slots, Tageszeit, Festivalphase, Zeitplan, Sensor, Halt vor Rot,
 opportunistisches Parken inkl. Einbahn-Nebenbucht, Trennlinie,

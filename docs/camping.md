@@ -19,7 +19,7 @@ Multi-Goal-Suche, kein A* pro Objekt.
 | Schlaffenster / Chronotyp | `src/game/visitorSleep.ts` | `sampleFestivalSleepRhythm`, `isMinuteInSleepWindow` |
 | Ticket-Kontingente | `src/game/festivalManagement.ts` | `tickets`, Camping-Kapazität |
 | Modelle / Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts` | 14 Camping-Batches |
-| Boden / Rand | `src/view/campingGround.ts` | Gras-Instancing, Curb-Flood-Fill |
+| Boden / Rand | `src/view/campingGround.ts`, `src/view/coverOverlay.ts` | Steinrahmen (`AreaEdgeBatch`), Curb-Flood-Fill |
 | Szene | `src/view/CampingView.ts` | Platzierung der Installationen |
 
 ## Wichtige Regeln
@@ -33,8 +33,12 @@ Multi-Goal-Suche, kein A* pro Objekt.
 - Legacy-Zelte ohne Appearance behalten den braunen Fallback.
 - Debug-Müllräumung darf aktive Camp-Objekte und Feuer-Incidents nicht
   zerstören (`GameState.clearWasteForDebug`).
-- Camping-Gras teilt eine Textur und instanzierte Kacheln. Den
-  Außenkanten-Flood-Fill nur bei Flächenedits neu bauen.
+- Campingflächen haben **keinen** vollflächigen Pad-Mesh. Der Innenbereich
+  bleibt offen, damit der echte Terrain-Cover durchscheint. Nur der
+  Steinrahmen (`AreaEdgeBatch`, ein Instanz-Batch) markiert die
+  Außenkante; Flood-Fill nur bei Flächenedits neu bauen. Camp-Props
+  bekommen denselben Cover-Film wie Gebäude (`weatheringRgb` auf der
+  Instanzfarbe).
 - `CampingView` hält `CampMeshBatcher` dauerhaft: kleine Phasen-/Farb-/Alterungs-
   Änderungen aktualisieren Instanzdaten statt alle GPU-Batches neu zu erzeugen.
   Kapazität wächst in Zweierpotenzen, Instanzpuffer werden beim Ersetzen freigegeben.
@@ -64,6 +68,7 @@ Multi-Goal-Suche, kein A* pro Objekt.
 
 `tests/performanceGuards.ts` (eine Route für 335 Ziele, belegte Sitze).
 `tests/campingModels.ts` (Batches, Vertices, stabile IDs).
+`tests/coverOverlay.ts` (offener Innenbereich, ein Steinrahmen-Batch).
 Schlafziel Zelt vs. nächtliches Wachbleiben: `tests/visitorSleep.ts`.
 Abreise durch umgebende Camping-Ausweisungen: `tests/regression.ts`.
 Placement, Save/Load und MP-Roundtrip gegen Attraction-Deltas:

@@ -24,7 +24,7 @@ import { CONCERT_TOPLESS_CROWD_THOUGHT, CONCERT_TOPLESS_THOUGHT } from './visito
 import { createSeededRng } from './pathfinding';
 import { PEDESTRIAN_NAV_FLAGS, PedestrianNavigation, type PedestrianNeighborOptions } from './pedestrianNavigation';
 import { DeterministicRng, hashStringSeed } from './rng';
-import { MedicalSystem } from './medical';
+import { MedicalSystem, pinInjuredVisitor } from './medical';
 import type { MedicalCell } from './medical';
 import { IncidentSystem } from './incidents';
 import type { GroundIncidentKind } from './incidents';
@@ -265,6 +265,10 @@ export class VisitorBehaviorService {
 
     this.context.state.visitors.forEach((visitor) => {
       if (this.context.isVisitorSeatedInVehicle(visitor, seatedPassengers)) return
+      if (visitor.state === 'injured') {
+        pinInjuredVisitor(visitor)
+        return
+      }
       visitor.alcoholLevel = Math.max(
         0,
         visitor.alcoholLevel -
@@ -738,8 +742,7 @@ export class VisitorBehaviorService {
         visitor.state === 'queuing' ||
         visitor.state === 'riding' ||
         visitor.state === 'bus-riding' ||
-        visitor.state === 'vehicle-arrival' ||
-        visitor.state === 'injured'
+        visitor.state === 'vehicle-arrival'
       ) {
         return
       }
@@ -1203,6 +1206,13 @@ export class VisitorBehaviorService {
   }
 
   chooseNextVisitorAction(visitor: Visitor): void {
+    if (
+      visitor.state === 'injured' ||
+      visitor.state === 'medical' ||
+      visitor.state === 'medical-transport'
+    ) {
+      return
+    }
     if (visitor.streakingMinutes > 0) {
       this.continueStreakingRun(visitor)
       return
@@ -3671,7 +3681,10 @@ export class VisitorBehaviorService {
       visitor.needs.energy <= config.passOutEnergyThreshold &&
       !visitor.campsite &&
       visitor.state !== 'riding' &&
-      visitor.state !== 'camping'
+      visitor.state !== 'camping' &&
+      visitor.state !== 'injured' &&
+      visitor.state !== 'medical' &&
+      visitor.state !== 'medical-transport'
     ) {
       this.context.removeVisitorFromCoasterQueues(visitor.id)
       visitor.streakingMinutes = 0

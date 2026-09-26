@@ -1,4 +1,4 @@
-import { BufferGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial } from 'three'
+import { BufferGeometry, Color, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Object3D } from 'three'
 import { disposeChildren, disposeObject3D } from './disposeObject3D'
 
 /** One-shot wrapper for previews and asset tests. */
@@ -13,6 +13,7 @@ export class CampMeshBatcher {
   readonly group = new Group()
   private readonly batches = new Map<string, InstancedMesh>()
   private readonly geometryKeys = new WeakMap<BufferGeometry, string>()
+  private readonly scratchColor = new Color()
 
   clear(): void {
     disposeChildren(this.group)
@@ -62,7 +63,7 @@ export class CampMeshBatcher {
         const part = parts[index]!
         transform.multiplyMatrices(inverse, part.matrixWorld)
         batch.setMatrixAt(index, transform)
-        batch.setColorAt(index, (part.material as MeshStandardMaterial).color)
+        batch.setColorAt(index, weatheredCampColor(part, this.scratchColor))
       }
       batch.count = parts.length
       batch.instanceMatrix.needsUpdate = true
@@ -77,4 +78,20 @@ export class CampMeshBatcher {
       this.batches.delete(key)
     }
   }
+}
+
+function weatheredCampColor(part: Mesh, color: Color): Color {
+  color.copy((part.material as MeshStandardMaterial).color)
+  let node: Object3D | null = part
+  while (node) {
+    const weather = node.userData.coverWeather as { r: number; g: number; b: number } | undefined
+    if (weather) {
+      color.r *= weather.r
+      color.g *= weather.g
+      color.b *= weather.b
+      break
+    }
+    node = node.parent
+  }
+  return color
 }

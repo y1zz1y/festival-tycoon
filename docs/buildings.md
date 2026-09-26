@@ -19,7 +19,7 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 | Bühnen-Grundfläche | `src/game/stageDesign.ts` | `buildingFootprint`, `occupiesBuildingCell` |
 | Bühnenstandort | `src/game/stageSite.ts` | `stageSiteIssue` |
 | Ride-Eingang/Ausgang | `src/game/GameState.ts` | `setRideAccess`, `canPlaceRideAccess` |
-| Retro-Gebäude-Batches | `src/view/retroBuildings.ts` | `batchRetroBuildings` |
+| Retro-Gebäude-Batches | `src/view/retroBuildings.ts` | `batchRetroBuildings` (optional Cover-`instanceColor`) |
 | Stützen / Säulen | `src/game/supportOccupancy.ts`, `src/view/supports.ts` | nur im unbesetzten Freiraum unter angehobenen Objekten |
 | Logistik-Gebäude / Fahrzeuge | `src/view/logisticsModels.ts` | `createLogisticsFacility`, `createSupplyStructure`, `createRoadVehicleModel` (Besucherautos: `VISITOR_CAR_COLORS` über Fahrzeug-ID) |
 | Bude: alle Seiten | `src/game/shopAccess.ts` | `isShopServiceKind` (Imbiss, Getränke, Maskottchen, Shirt) |

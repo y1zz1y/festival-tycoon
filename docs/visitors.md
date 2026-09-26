@@ -8,7 +8,8 @@ sind abgeleitete Darstellung desselben Zustands.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Tick-Phase, Entscheidungsqueue | `src/game/visitorSimulation.ts` | `VisitorSimulation`, `VisitorSimulationContext`, `runTickPhase`, `flushDecisions` |
+| Tick-Phase, Entscheidungsqueue | `src/game/visitorSimulation.ts` | `VisitorSimulation`, `VisitorSimulationContext`, `runTickPhase`, `flushDecisions`; `injured`/`medical` überspringen die Queue |
+| Angefahren / Liegenbleiben | `src/game/medical.ts`, `src/game/visitorBehavior.ts` | `pinInjuredVisitor`; `updateVisitors` lässt `injured` liegen |
 | Detailverhalten, Bewegung, Ziele | `src/game/visitorBehavior.ts` | `VisitorBehaviorService`, `VisitorBehaviorContext`, `applyPurchaseOutcome`; Bewegung/Ankunft, Needs, Konzert, Shop, Camping, Baden (auch Schwimmbad-Becken), Müll und Laufzeit-Caches |
 | Typen, Spawn, Fassade | `src/game/types/entities.ts`, `src/game/visitorSpawning.ts`, `src/game/GameState.ts` | `Visitor`, `VisitorState`; Admission, Ankunftsgruppen und stabile Kompatibilitäts-Einstiege |
 | Stand-Queue-Spuren | `src/game/queueLanes.ts` | `queueStandOffset`, `stallQueueTileOffset` |
@@ -91,6 +92,12 @@ sind abgeleitete Darstellung desselben Zustands.
   — auch 5 oder 6 Personen (`visitorCarCapacity` 6). Verletzte halten
   den Wagen; nach der Behandlung zurück zum eigenen Auto. Tote IDs und
   fremde Claims werden aus dem Manifest gestrichen.
+  Wer auf dem Fußweg angefahren wird (`state === 'injured'`), bleibt
+  liegen, bis ein Sanitäter oder Krankenwagen ihn aufnimmt
+  (`medical-transport` / `medical`). Needs-Tick, Panik, Abreise,
+  Entscheidungsqueue und Alkohol-K.O. dürfen den Gast nicht wieder
+  aufstehen lassen; die Pose bleibt liegend. Die Ticker-Meldung kommt
+  einmal pro Vorfall, nicht bei jedem Pose-Wechsel.
   Zufahrt und Bucht bleiben gültige Türen.
   Eine im Auto gesetzte Verletzung gilt erst auf dem Fußweg.
   Debug **Autos entfernen** löscht die Wagen zuerst, setzt Insassen auf
@@ -216,7 +223,8 @@ Festival-Anreisen, Live-Show-Festivallust und vordere Konzertplätze
 gegen Apron-Zellen und gedrehte Bühnen. Queue-Reihenfolge, kontinuierliches Nachrücken,
 Queue-Rückweg, geteilte Stand-Spuren, leere Stände, Aussteigen auf den
 Nachbarweg, Insassen steigen nach dem Parken aus und bleiben zu Fuß
-(keine Verletzung/Belegung vor dem Aussteigen), Abreise wartet im Auto
+(keine Verletzung/Belegung vor dem Aussteigen), angefahrene Gäste bleiben
+`injured` bis zur Sanitäteraufnahme (kein Stehen/Liegen-Toggle), Abreise wartet im Auto
 nur im eigenen Anreiseauto (5er/6er steigen vollständig wieder ein), voller Nachbar-Eimer
 ergibt Bodenmüll statt Stillstand, leerer Eimer wird weiter benutzt:
 `tests/operations.ts` (inkl. leerer Bus holt lang wartende Gäste,

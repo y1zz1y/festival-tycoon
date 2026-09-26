@@ -14,6 +14,14 @@ import { applyGameCommand } from '../src/net/commands'
 import { encodeSaveText, decodeSaveText } from '../src/game/saveText'
 import { terrainMaterialAt } from '../src/view/terrainSurface'
 import { TERRAIN_COVER_TOOLS } from '../src/game/catalog'
+import {
+  COVER_WEATHERING,
+  majorityOverlayCover,
+  majorityPaintedCover,
+  overlayCoverAt,
+  paintedCoverAt,
+  weatheringRgb,
+} from '../src/game/groundCoverLook'
 
 export function testGroundCover(fixture: (count?: number) => GameState): void {
   assert.deepEqual(
@@ -133,5 +141,33 @@ export function testGroundCover(fixture: (count?: number) => GameState): void {
   assert.equal(host.snapshot.festival.infrastructure.ground['2,4']?.cover, 'rock')
   assert.equal(terrainMaterialAt(host.snapshot, 2, 4), 'rock')
   assert.equal(GROUND_COVERS.field.material, 'field')
-  console.log('PASS ground covers: paint, area, save roundtrip, migration and commands')
+
+  const look = fixture(0)
+  look.snapshot.scenario.environment = 'desert'
+  assert.equal(paintedCoverAt(look.snapshot, 1, 1), undefined, 'legacy cells have no painted cover')
+  assert.equal(overlayCoverAt(look.snapshot, 1, 1), 'sand', 'desert overlay uses the environment substrate')
+  look.snapshot.scenario.environment = 'grassland'
+  assert.equal(overlayCoverAt(look.snapshot, 2, 2), 'grass')
+  look.paintGroundCover(2, 2, 'snow')
+  assert.equal(paintedCoverAt(look.snapshot, 2, 2), 'snow')
+  assert.equal(overlayCoverAt(look.snapshot, 2, 2), 'snow', 'painted cover wins over the substrate')
+  look.paintGroundCover(3, 2, 'sand')
+  look.paintGroundCover(4, 2, 'sand')
+  assert.equal(
+    majorityPaintedCover(look.snapshot, [{ x: 2, z: 2 }, { x: 3, z: 2 }, { x: 4, z: 2 }, { x: 5, z: 2 }]),
+    'sand',
+    'footprint majority ignores unpainted tiles',
+  )
+  assert.equal(majorityPaintedCover(look.snapshot, [{ x: 8, z: 8 }]), undefined)
+  assert.equal(
+    majorityOverlayCover(look.snapshot, [{ x: 2, z: 2 }, { x: 3, z: 2 }]),
+    'sand',
+  )
+  const bare = weatheringRgb('grass')
+  assert.deepEqual(bare, { r: 1, g: 1, b: 1 }, 'grass does not film objects')
+  const snowFilm = weatheringRgb('snow')
+  assert.ok(snowFilm.r > 0.85 && snowFilm.g > 0.85 && snowFilm.b > 0.85, 'snow dust is a light wash')
+  assert.ok(COVER_WEATHERING.sand.mix > 0 && COVER_WEATHERING.salt.mix > 0 && COVER_WEATHERING.earth.mix > 0)
+  assert.ok(COVER_WEATHERING.asphalt.mix > 0 && COVER_WEATHERING.asphalt.mix < COVER_WEATHERING.snow.mix)
+  console.log('PASS ground covers: paint, area, save roundtrip, migration, commands and overlay lookup')
 }

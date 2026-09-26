@@ -1,21 +1,17 @@
 import { CampMeshBatcher } from './batchCampMeshes'
-import { campingBoundary, campingGrassTexture } from './campingGround'
+import { AreaEdgeBatch } from './coverOverlay'
+import { paintedCoverAt, weatheringRgb } from '../game/groundCoverLook'
 import { CAMP_COLORS, campRotation, campSeed, createCampModel } from './campingModels'
 import {
   BoxGeometry,
   CanvasTexture,
   CylinderGeometry,
   Group,
-  InstancedMesh,
-  Matrix4,
   Mesh,
   MeshStandardMaterial,
-  PlaneGeometry,
-  Quaternion,
   SRGBColorSpace,
   Sprite,
   SpriteMaterial,
-  Vector3,
 } from 'three'
 import type { GameSnapshot } from '../game/GameState'
 import { getTerrainHeight } from '../game/terrain'
@@ -107,34 +103,18 @@ export class CampingView {
   private tileFingerprint = ''
   private camperFingerprint = ''
   private installationFingerprint = ''
-  private tiles: InstancedMesh | null = null
-  private boundary: InstancedMesh | null = null
-  private readonly tileGeometry = new PlaneGeometry(1, 1)
-  private readonly tileMaterial = new MeshStandardMaterial({
-    color: 0xffffff,
-    map: campingGrassTexture(),
-    roughness: 1,
-    depthWrite: true,
-  })
-  private readonly tileRotation = new Quaternion().setFromAxisAngle(
-    new Vector3(1, 0, 0),
-    -Math.PI / 2,
-  )
-  private readonly tileMatrix = new Matrix4()
-  private readonly tilePosition = new Vector3()
-  private readonly tileScale = new Vector3(1, 1, 1)
+  private readonly edges = new AreaEdgeBatch()
 
   constructor() {
-    this.tileGeometry.userData.shared = true
-    this.tileMaterial.userData.shared = true
     this.batchedProps.add(this.propBatcher.group)
-    this.group.add(this.props, this.batchedProps)
+    this.group.add(this.props, this.batchedProps, this.edges.group)
   }
 
   invalidate(): void {
     disposeChildren(this.props)
     this.propBatcher.clear()
     this.propModels.clear()
+    this.edges.clear()
     this.tileFingerprint = ''
     this.camperFingerprint = ''
     this.installationFingerprint = ''
@@ -174,7 +154,7 @@ export class CampingView {
         : visitor.campingPhase === 'resting'
           ? 'resting'
           : 'visible'
-      fingerprint += `${visitor.id}:${visitor.campsite.x}:${visitor.campsite.z}:${visualPhase}:${visitor.color}|`
+      fingerprint += `${visitor.id}:${visitor.campsite.x}:${visitor.campsite.z}:${visualPhase}:${visitor.color}:${paintedCoverAt(snapshot, visitor.campsite.x, visitor.campsite.z) ?? ''}|`
     }
     return fingerprint
   }
@@ -182,63 +162,17 @@ export class CampingView {
   private createInstallationFingerprint(snapshot: Readonly<GameSnapshot>): string {
     let fingerprint = ''
     for (const installation of snapshot.campInstallations) {
-      fingerprint += `${installation.id}:${installation.cell.x}:${installation.cell.z}:${installation.kind}:${installation.contributorIds.length}:${installation.appearanceId}:${installation.fabricColor}:${Math.round(installation.decay ?? 0)}|`
+      fingerprint += `${installation.id}:${installation.cell.x}:${installation.cell.z}:${installation.kind}:${installation.contributorIds.length}:${installation.appearanceId}:${installation.fabricColor}:${Math.round(installation.decay ?? 0)}:${paintedCoverAt(snapshot, installation.cell.x, installation.cell.z) ?? ''}|`
     }
     return fingerprint
   }
 
-  private nextTileCapacity(needed: number): number {
-    return Math.max(16, 2 ** Math.ceil(Math.log2(Math.max(needed, 1))))
-  }
-
   private updateTiles(snapshot: Readonly<GameSnapshot>): void {
-    const cells = snapshot.campingCells
-    if (this.boundary) { this.group.remove(this.boundary); disposeObject3D(this.boundary); this.boundary = null }
-    const edges = campingBoundary(cells)
-    if (edges.length) {
-      const border = new InstancedMesh(new BoxGeometry(.34, .07, .065), new MeshStandardMaterial({ color: 0xc4bba0, roughness: 1 }), edges.length * 2)
-      const matrix = new Matrix4()
-      let at = 0
-      for (const edge of edges) for (const offset of [-.28, .28]) {
-        const angle = edge.direction * Math.PI / 2
-        matrix.makeRotationY(angle)
-        matrix.setPosition(edge.x + .5 + Math.sin(angle) * .47 + Math.cos(angle) * offset, getTerrainHeight(snapshot.terrain, edge.x, edge.z) + .045, edge.z + .5 + Math.cos(angle) * .47 - Math.sin(angle) * offset)
-        border.setMatrixAt(at++, matrix)
-      }
-      border.frustumCulled = false; this.boundary = border; this.group.add(border)
-    }
-    if (cells.length === 0) {
-      if (this.tiles) this.tiles.count = 0
-      return
-    }
-    let tiles = this.tiles
-    if (!tiles || tiles.instanceMatrix.count < cells.length) {
-      if (tiles) { this.group.remove(tiles); tiles.dispose() }
-      tiles = new InstancedMesh(
-        this.tileGeometry,
-        this.tileMaterial,
-        this.nextTileCapacity(cells.length),
-      )
-      tiles.frustumCulled = false
-      this.tiles = tiles
-      this.group.add(tiles)
-    }
-    for (let index = 0; index < cells.length; index += 1) {
-      const cell = cells[index]!
-      this.tilePosition.set(
-        cell.x + 0.5,
-        getTerrainHeight(snapshot.terrain, cell.x, cell.z) + 0.018,
-        cell.z + 0.5,
-      )
-      this.tileMatrix.compose(
-        this.tilePosition,
-        this.tileRotation,
-        this.tileScale,
-      )
-      tiles.setMatrixAt(index, this.tileMatrix)
-    }
-    tiles.count = cells.length
-    tiles.instanceMatrix.needsUpdate = true
+    this.edges.update(snapshot.campingCells.map((cell) => ({
+      x: cell.x,
+      z: cell.z,
+      y: getTerrainHeight(snapshot.terrain, cell.x, cell.z),
+    })))
   }
 
   private rebuildProps(snapshot: Readonly<GameSnapshot>): void {
@@ -259,7 +193,7 @@ export class CampingView {
       }
       const key = `visitor:${visitor.id}`
       const height = getTerrainHeight(snapshot.terrain, visitor.campsite.x, visitor.campsite.z)
-      const stamp = `${visitor.campsite.x}:${visitor.campsite.z}:${height}:${visitor.color}:${visitor.campingPhase === 'resting'}`
+      const stamp = `${visitor.campsite.x}:${visitor.campsite.z}:${height}:${visitor.color}:${visitor.campingPhase === 'resting'}:${paintedCoverAt(snapshot, visitor.campsite.x, visitor.campsite.z) ?? ''}`
       if (!needsUpdate(key, stamp)) return
       const campsite = new Group()
       campsite.position.set(
@@ -275,6 +209,7 @@ export class CampingView {
       parkedCart.position.set(0.34, 0.07, -0.24)
       parkedCart.rotation.y = -0.7
       campsite.add(tent, parkedCart)
+      applyCoverWeather(campsite, snapshot, visitor.campsite.x, visitor.campsite.z)
       if (visitor.campingPhase === 'resting') {
         const sleep = createSleepSprite()
         sleep.position.set(0.08, 0.86, 0)
@@ -288,7 +223,7 @@ export class CampingView {
       const color = installation.fabricColor ?? (installation.kind === 'tent' ? 0x8a6a4a : CAMP_COLORS[(campSeed(appearanceId) >>> 4) % CAMP_COLORS.length]!)
       const decay = installation.decay ?? 0
       const key = `installation:${installation.id}`
-      const stamp = `${installation.cell.x}:${installation.cell.z}:${getTerrainHeight(snapshot.terrain, installation.cell.x, installation.cell.z)}:${installation.kind}:${installation.contributorIds.length}:${appearanceId}:${color}:${Math.round(decay)}`
+      const stamp = `${installation.cell.x}:${installation.cell.z}:${getTerrainHeight(snapshot.terrain, installation.cell.x, installation.cell.z)}:${installation.kind}:${installation.contributorIds.length}:${appearanceId}:${color}:${Math.round(decay)}:${paintedCoverAt(snapshot, installation.cell.x, installation.cell.z) ?? ''}`
       if (!needsUpdate(key, stamp)) return
       const model =
         installation.kind === 'tent'
@@ -313,6 +248,7 @@ export class CampingView {
         model.rotation.z += wear * 0.28
         model.scale.setScalar(1 - wear * 0.18)
       }
+      applyCoverWeather(model, snapshot, installation.cell.x, installation.cell.z)
       this.props.add(model)
       this.propModels.set(key, { stamp, model })
     })
@@ -394,4 +330,9 @@ export class CampingView {
     group.add(sprite)
     return group
   }
+}
+
+function applyCoverWeather(model: Group, snapshot: Readonly<GameSnapshot>, x: number, z: number): void {
+  const cover = paintedCoverAt(snapshot, x, z)
+  if (cover) model.userData.coverWeather = weatheringRgb(cover)
 }

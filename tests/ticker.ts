@@ -180,6 +180,14 @@ export function testTickerAndWasteCaps(): void {
   )
   assert.equal(onFootInjured.length, 1, 'an injured guest on foot is still reported')
   assert.equal(onFootInjured[0]!.kind, 'medical')
+  const stillDown = observeTickerEvents(
+    source({
+      visitors: [{ id: 'on-path', x: 2.5, z: -16.5, state: 'injured' }],
+      logistics: { roadVehicles: [{ passengerIds: [] }] },
+    }),
+    seatedWatch,
+  )
+  assert.equal(stillDown.length, 0, 'the same downed guest does not raise another medical ticker')
 
   const history = appendTickerHistory([], [...crossing, ...fire])
   assert.equal(history[0]!.kind, 'dumpFull')

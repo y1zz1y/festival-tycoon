@@ -98,7 +98,11 @@ halbe Höhenstufe. Hänge bleiben höchstens 0,5 hoch, der Rest wird zur
 Steinklippe. **Glätten** zieht die Fläche auf die Höhe unter dem ersten
 Klick. Gemalte Untergründe ändern nur das Aussehen — außer bei Rasen, Sand,
 Acker, brauner Erde und Salzpfanne, die dieselben Schritttempi wie der natürliche
-Wiesen-, Sand-, Acker-, Lehm- bzw. Sandboden nutzen. Asphalt bleibt optisch. Der Wasserspiegel liegt eine
+Wiesen-, Sand-, Acker-, Lehm- bzw. Sandboden nutzen. Asphalt bleibt optisch.
+Gebäude und Deko auf gemaltem Schnee, Sand, Salz, Erde oder Asphalt wirken
+leicht überstäubt; Campingflächen und Bühnenvorplätze bleiben innen offen,
+damit der echte Untergrund durchscheint — nur ein Steinrahmen markiert die
+Fläche. Der Wasserspiegel liegt eine
 halbe Stufe unter Ebene 0 und liegt
 auch auf den abfallenden Uferhängen. Gäste mit wenig Spaß laufen zum
 erreichbaren Wasser und baden dort. Angehobene Gebäude und Deko bekommen
@@ -486,6 +490,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Bandplaner in 1–5-Sterne-Tabs; 5-Sterne-Headliner nur selten im Lostopf
 - Sanitäter wählen für Transporte stets das über die Wegstrecke nächstgelegene freie Krankenbett
 - Bei Verletzten rückt immer der nächste freie Sanitäter oder Krankenwagen aus; wer schon einen Patienten hat, bleibt bei ihm
+- Angefahrene Gäste bleiben liegen, bis Sanitäter oder Krankenwagen sie aufnehmen; die Verletzten-Meldung erscheint einmal pro Vorfall
 - Idle-Krankenwagen fahren zur Garage zurück statt auf der Straße zu warten; **RTW verkaufen** in der Logistikübersicht oder im Infofenster (sofort an der Garage, sonst nach der Rückfahrt)
 - deutlich erkennbare Personalmodelle mit rollenabhängigen Uniformen und Mützen
 - Träger (Transportkräfte) in derselben Figurenqualität wie Besucher, mit gelber Warnweste und Handkarren

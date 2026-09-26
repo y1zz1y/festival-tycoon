@@ -92,7 +92,11 @@ export class VisitorCrowdingSimulation {
         return
       }
       visitor.crowding = result.visitorValues.get(visitor.id) ?? 0
-      if (visitor.state === 'medical' || visitor.state === 'medical-transport') {
+      if (
+        visitor.state === 'medical' ||
+        visitor.state === 'medical-transport' ||
+        visitor.state === 'injured'
+      ) {
         visitor.motivation = Math.min(
           100,
           visitor.motivation + minutes * config.medicalMotivationRecoveryPerMinute,
@@ -346,6 +350,16 @@ export class VisitorCrowdingSimulation {
     })
     context.state.visitors.forEach((visitor) => {
       if (!visitor.isPanicking) return
+      if (
+        visitor.state === 'injured' ||
+        visitor.state === 'medical' ||
+        visitor.state === 'medical-transport'
+      ) {
+        visitor.isPanicking = false
+        visitor.panicRecoverMinutes = 0
+        visitor.route = []
+        return
+      }
       const alcohol = visitor.alcoholLevel
       visitor.needs.hunger = Math.max(
         0,

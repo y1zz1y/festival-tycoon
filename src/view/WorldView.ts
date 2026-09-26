@@ -8,7 +8,8 @@ import { isSealedWasteContainer } from '../game/waste'
 import { wallSpec, isFacade } from '../game/decorationWalls'
 import { updateStageBand } from './stageBand'
 import { isScenery, isEdgeScenery, scenerySlot, sceneryTransform } from '../game/scenery'
-import { createRetroBuilding, batchRetroBuildings } from './retroBuildings'
+import { createRetroBuilding, batchRetroBuildings, type CoverInstanceTint } from './retroBuildings'
+import { majorityPaintedCover, paintedCoverAt, weatheringRgb } from '../game/groundCoverLook'
 import {
   createLogisticsFacility,
   createSupplyStructure,
@@ -28,7 +29,7 @@ import { createAttractionAccess } from './attractionAccess'
 import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
 import { createStageModel, animateStageModel, updateStageLightPool } from './stageModel'
-import { stageApronCells, stagePhase, stageSize, buildingSize, occupiesBuildingCell, fohDeskRole, MAX_STAGE_FORECOURT_DEPTH, STAGE_TILE_DETAIL } from '../game/stageDesign'
+import { stageApronCells, stagePhase, stageSize, buildingSize, buildingFootprint, occupiesBuildingCell, fohDeskRole, MAX_STAGE_FORECOURT_DEPTH, STAGE_TILE_DETAIL } from '../game/stageDesign'
 import { activeBookings, showIssue } from '../game/festivalManagement'
 import { createEarthTexture, createTerrainBase, createTerrainMaterial, createTerrainSurface } from './terrainSurface'
 import { TerrainShape, terrainPads } from './terrainShape'
@@ -912,7 +913,7 @@ export class WorldView {
       this.cachedFootwayFingerprint = JSON.stringify(Object.entries(snapshot.festival.infrastructure.ground).filter(([, g]) => g.footway).map(([k, g]) => [k, g.footway]))
       this.groundSurfaceFingerprint = JSON.stringify(Object.entries(snapshot.festival.infrastructure.ground).filter(([, g]) => g.compacted || g.surface || g.cover).map(([k, g]) => [k, g.compacted, g.surface, g.cover]))
     }
-    const fingerprint = dataChanged ? this.buildingFingerprintOf(snapshot.buildings) + this.cachedFootwayFingerprint + JSON.stringify(snapshot.logistics.roadCells.map(r => [r.x,r.z,r.elevation,r.roadSlope,r.roadSlopeDirection])) : this.buildingFingerprint
+    const fingerprint = dataChanged ? this.buildingFingerprintOf(snapshot.buildings) + this.cachedFootwayFingerprint + this.groundSurfaceFingerprint + JSON.stringify(snapshot.logistics.roadCells.map(r => [r.x,r.z,r.elevation,r.roadSlope,r.roadSlopeDirection])) : this.buildingFingerprint
 
     this.currentSnapshot = snapshot
     this.syncInterpolation(snapshot, renderAlpha)
@@ -975,7 +976,7 @@ export class WorldView {
     if (dataChanged) this.pathFlowView.update(snapshot.buildings)
     this.incidentView.update(snapshot.incidents)
     this.staffView.update(snapshot.staff, this.renderAlpha, snapshot.simTick, this.actorTerrainHeight)
-    if (dataChanged) this.forecourtView.update(snapshot.stageForecourtCells)
+    if (dataChanged) this.forecourtView.update(snapshot, snapshot.stageForecourtCells)
     if (dataChanged) {
       this.backstageView.update(
         snapshot.backstageCells ?? [],
@@ -2277,7 +2278,8 @@ export class WorldView {
       gate.userData.buildingId=item.id
       this.rideGates.add(gate)
     }
-    this.rideGates.add(batchRetroBuildings(this.rideGates))
+    const coverTint = this.coverTintFor(items)
+    this.rideGates.add(batchRetroBuildings(this.rideGates, coverTint))
     if (this.buildingModelsStale) {
       disposeChildren(this.buildings)
       this.buildingModels.clear()
@@ -2408,7 +2410,7 @@ export class WorldView {
         this.nightLightBuildingIds.push(item.id)
       }
     }
-    this.staticBuildingBatches = batchRetroBuildings(this.buildings)
+    this.staticBuildingBatches = batchRetroBuildings(this.buildings, coverTint)
     this.buildings.add(this.staticBuildingBatches)
     for (const batch of this.staticBuildingBatches.children) {
       if (!(batch instanceof Mesh) || !batch.userData.facade) continue
@@ -2416,6 +2418,23 @@ export class WorldView {
       batch.material = this.facadeReveal.material
     }
     this.facadeReveal?.setTarget(null)
+  }
+
+  private coverTintFor(items: readonly PlacedBuilding[]): CoverInstanceTint {
+    const tints = new Map<string, { r: number; g: number; b: number }>()
+    const snapshot = this.currentSnapshot
+    if (snapshot) {
+      for (const item of items) {
+        const cover = majorityPaintedCover(snapshot, buildingFootprint(item))
+        if (cover) tints.set(item.id, weatheringRgb(cover))
+      }
+    }
+    return (buildingId, x, z) => {
+      if (buildingId && tints.has(buildingId)) return tints.get(buildingId)
+      if (!snapshot) return undefined
+      const cover = paintedCoverAt(snapshot, Math.floor(x), Math.floor(z))
+      return cover ? weatheringRgb(cover) : undefined
+    }
   }
 
   private pathSharesRoadGrade(item: PlacedBuilding): boolean {
@@ -3361,9 +3380,12 @@ export class WorldView {
         visitor.state === 'bench-resting'
       const swimming =
         visitor.state === 'swimming' && visitor.route.length === 0
+      const downed =
+        visitor.state === 'sleeping' ||
+        visitor.state === 'injured' ||
+        visitor.state === 'medical-transport'
       const moving =
-        visitor.state !== 'sleeping' &&
-        (visitor.route.length > 0 || courseRiders.has(visitor.id))
+        !downed && (visitor.route.length > 0 || courseRiders.has(visitor.id))
       const dx = visitor.x - this.cameraTarget.x
       const dz = visitor.z - this.cameraTarget.z
       const distance = Math.hypot(dx, dz)
@@ -3377,7 +3399,8 @@ export class WorldView {
       const appearance = personStyle(seed)
       this.visitorSkinColor.setHex(appearance.skin)
       this.visitorPantsColor.setHex(appearance.trousers)
-      const fleeing = visitor.isPanicking || visitor.state === 'panicking'
+      const fleeing =
+        !downed && (visitor.isPanicking || visitor.state === 'panicking')
       const pace = fleeing
         ? 2.2
         : streaking
@@ -3390,7 +3413,7 @@ export class WorldView {
               ? 1.25
               : 1
       const phase = now * 0.009 * pace + seed
-      const dancing = visitor.isDancing && !sitting && !swimming
+      const dancing = visitor.isDancing && !sitting && !swimming && !downed
       const dance = dancing
         ? visitorDancePose(
             visitorDancePhase((this.currentSnapshot?.simTick ?? 0) + this.renderAlpha, seed),
@@ -3473,8 +3496,8 @@ export class WorldView {
             : z - Math.sin(visitor.facing) * wobble
       const displayY =
         this.actorTerrainHeight(displayX, displayZ, y) +
-        (visitor.state === 'sleeping' ? 0.12 : swimming ? -0.28 : sitting ? -0.02 : 0.04 + bob) +
-        jump
+        (downed ? 0.12 : swimming ? -0.28 : sitting ? -0.02 : 0.04 + bob) +
+        (downed ? 0 : jump)
       const scaleY =
         swimming ? 0.72 : sitting ? 0.84 : visitor.emotion === 'sad' && visitor.state !== 'sleeping' ? 0.92 : 1
       const stageFacing =
@@ -3498,18 +3521,15 @@ export class WorldView {
                 visitor.route[0].z + visitor.tileOffsetZ - visitor.z,
               )
             : visitor.facing
-      const tilt =
-        visitor.state === 'sleeping' ||
-        visitor.state === 'injured' ||
-        visitor.state === 'medical-transport'
-          ? Math.PI / 2
-          : detailed
-            ? Math.sin(phase * 0.5) * 0.16 * intoxication
-            : 0
+      const tilt = downed
+        ? Math.PI / 2
+        : detailed
+          ? Math.sin(phase * 0.5) * 0.16 * intoxication
+          : 0
       const strength =
         fleeing ? 1.2 : visitor.emotion === 'angry' ? 0.9 : visitor.emotion === 'sad' ? 0.32 : 0.65
       const limbSwing =
-        visitor.state === 'sleeping' || visitor.state === 'medical-transport'
+        downed
           ? 0
           : sitting || swimming
             ? Math.PI * 0.42

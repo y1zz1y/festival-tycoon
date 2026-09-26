@@ -15,6 +15,8 @@ ist von Wegbelägen getrennt.
 | Szenario, Weltgröße, Eingang | `src/game/scenario.ts` | `ScenarioSettings`, `SCENARIO_WORLD_SIZES` |
 | Umgebungen (Acker, Wüste, …) | `src/game/environments.ts` | `ENVIRONMENTS` |
 | Bodenzellen und Vorbereitung | `src/game/ground.ts` | `groundInfo`, `prepareGround`, `prepareGroundArea`, `GROUND_COVERS`, `paintGroundCover`, `paintGroundCoverArea`, `normalizeGroundCells` |
+| Cover-Lookup / Objektfilm | `src/game/groundCoverLook.ts` | `paintedCoverAt`, `overlayCoverAt`, `majorityPaintedCover`, `weatheringRgb` |
+| Camping-/Vorplatz-Rahmen | `src/view/coverOverlay.ts` | `AreaEdgeBatch` — ein Steinrahmen, Innenbereich offen |
 | OSM/DEM-Import, Skizzen | `src/game/terrainImport.ts`, `scripts/import-terrain.mjs`, `scripts/import-terrain-entry.ts` | `classifyOsmTags`, `sketchBurningMan`, `sketchRockAmRing`, `draftToScenarioFile`; CLI `npm run import-terrain` |
 | Fußweg-/Straßenbeläge | `src/game/wayTypes.ts` | `WAY_TYPES`, `wayInfo`, `wayIssue` |
 | Weg- und Straßenrampen | `src/game/wayElevation.ts` | Halbstufen `0.5`, `MAX_PATH_ELEVATION` 6, Autodach `MAX_ROAD_RAISE` 1; `planLockedOriginRamp` / Shift-Ausgang; Fußkanten `wayEdgeHeights` / `canStepPedestrianHeight` |
@@ -67,6 +69,13 @@ ist von Wegbelägen getrennt.
   löscht Drain/Verdichten/Belag, behält aber den gemalten Cover.
   Rendering: Cover gewinnt gegen natürlichen Boden und Verdichten, nicht
   gegen Wasser/Schlamm oder Park-Asphalt; ein Atlas, ein Draw-Call.
+  Objekte (Gebäude/Deko/Camp-Props) im bestehenden Instanz-Batch bekommen
+  einen leichten Vertex-/Instanzfarben-Film aus `weatheringRgb` — Schnee-
+  Staub, Sandfilm, Salz, Erde, Stein/Felsen, Asphalt; Rasen bleibt
+  unbehandelt. Kein Material je Objekt. Campingflächen und Bühnenvorplätze
+  bekommen keinen zweiten Boden-Mesh: der Innenbereich bleibt offen, nur
+  ein Steinrahmen (`AreaEdgeBatch`) markiert die Fläche. Der echte
+  Terrain-Cover darunter bleibt sichtbar.
   Navigation: nur Cover mit bestehendem Substrat ändern Tempo/Nässe
   (Rasen→`grass`, Sand→`sand`, Acker→`field`, braune Erde→`clay`,
   Salzpfanne→`sand`). Stein, Schnee, Felsen und Asphalt sind rein optisch.
@@ -99,7 +108,10 @@ gemalter Cover überschreibt die natürliche Atlaszeile).
 Klippe nach 0,5 Hang, Wasser am Uferhang, Schwimmen, Nav-Invalidierung,
 Stützen nur im Freiraum, Fußweg 0→0,5 ja / 0→1 Klippe nein). `tests/environments.ts`.
 `tests/groundCover.ts` (Palette, Paint, Fläche, Save-Roundtrip, Migration
-unbekannter Cover, Höhenedit behält Cover, Command `paintGroundCover`).
+unbekannter Cover, Höhenedit behält Cover, Command `paintGroundCover`,
+Overlay-Lookup und Mehrheit, Verwitterungsfarben).
+`tests/coverOverlay.ts` (Camping/Vorplatz: offener Innenbereich, ein
+Steinrahmen-Batch, Gebäude-Instanzfilm).
 `tests/terrainImport.ts` (OSM-Tag-Mapping, Burning-Man- und Nürburgring-Skizzen,
 Drop-in-Dateien `public/scenarios/burning-man.json` und
 `public/scenarios/rock-am-ring-strecke.json`).
@@ -166,3 +178,22 @@ CLI: `npm run import-terrain` (`scripts/import-terrain.mjs`). Agent-Skill:
 Sand-Tempo) und `asphalt` (Rennstrecke, optisch). Testdaten: Burning Man
 (Hufeisen + Playastrecke) und Rock am Ring (Nordschleifen-Andeutung + GP-Oval).
 Szenario-Export legt Ground unter `world.festival.infrastructure.ground` ab.
+
+## Untergrund-Film und Flächen (0.2.9)
+
+Gemalter Cover färbt nicht nur den Boden. `groundCoverLook.ts` liefert das
+Look-up: gemaltes `cover`, sonst Umgebungssubstrat. Gebäude und Themen-Deko
+mischen `weatheringRgb` in die vorhandene Instanzfarbe (`batchRetroBuildings`);
+Camping-Props dasselbe im `CampMeshBatcher`. Camping- und Vorplatz-Pads
+teilten in 0.2.9 noch `CoverTileBatch` und die Atlaszeile des Looks. Das
+lag als Vollfläche über dem Terrain und wirkte auf Grasland weiter wie
+grüne Kacheln. Alte Saves ohne `cover` behalten den bisherigen Objektlook
+(kein Film).
+
+## Offene Camping- und Vorplatzflächen (0.2.10)
+
+Ausgewiesene Camping- und Vorplatzflächen haben keinen vollflächigen
+Pad-Mesh mehr. Der Innenbereich bleibt transparent, der echte
+Terrain-Cover scheint durch. Nur ein gemeinsamer Steinrahmen
+(`AreaEdgeBatch`) markiert die Außenkante — ein Instanz-Batch, kein Mesh
+je Kachel. Vorplatz analog.

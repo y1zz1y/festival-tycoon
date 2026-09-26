@@ -1388,8 +1388,14 @@ export function createRetroBuilding(kind: BuildingKind, variant?: string): Group
   return group
 }
 
+export type CoverInstanceTint = (
+  buildingId: string | undefined,
+  x: number,
+  z: number,
+) => { r: number; g: number; b: number } | undefined
+
 /** Shared geometry lets hundreds of identical assets draw once per kind. */
-export function batchRetroBuildings(source: Group): Group {
+export function batchRetroBuildings(source: Group, tint?: CoverInstanceTint): Group {
   source.updateWorldMatrix(true, true)
   const inverse = source.matrixWorld.clone().invert()
   const buckets = new Map<BufferGeometry, Mesh[]>()
@@ -1399,14 +1405,22 @@ export function batchRetroBuildings(source: Group): Group {
     bucket.push(object); buckets.set(object.geometry, bucket)
     object.visible = false
   })
-  const group = new Group(), matrix = new Matrix4()
+  const group = new Group(), matrix = new Matrix4(), color = new Color(), world = new Vector3()
   for (const [geometry, meshes] of buckets) {
     const batch = new InstancedMesh(geometry, material, meshes.length)
     batch.userData.facade = meshes[0]!.userData.facade === true
     batch.userData.buildingIds = meshes.map(mesh => mesh.parent?.userData.buildingId)
-    meshes.forEach((mesh, i) => batch.setMatrixAt(i, matrix.multiplyMatrices(inverse, mesh.matrixWorld)))
+    meshes.forEach((mesh, i) => {
+      batch.setMatrixAt(i, matrix.multiplyMatrices(inverse, mesh.matrixWorld))
+      mesh.getWorldPosition(world)
+      const rgb = tint?.(mesh.parent?.userData.buildingId as string | undefined, world.x, world.z)
+      if (rgb) color.setRGB(rgb.r, rgb.g, rgb.b)
+      else color.setRGB(1, 1, 1)
+      batch.setColorAt(i, color)
+    })
     batch.castShadow = batch.receiveShadow = true
     batch.computeBoundingSphere()
+    if (batch.instanceColor) batch.instanceColor.needsUpdate = true
     group.add(batch)
   }
   return group

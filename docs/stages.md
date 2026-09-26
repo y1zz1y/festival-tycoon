@@ -21,7 +21,7 @@ gelten Footprint, Strom, Vorplatz und Buchungen.
 | Modelle, Show, Lichtpool | `src/view/stageModel.ts` | `createStageModel`, `animateStageModel`; gemeinsame Facing-Helfer `orientedBox` / `orientedForwardCylinder` / `tintVertexColors` für Laser, Sparks, Fog, Screen |
 | Picking der Teile | `src/view/stagePicking.ts` | |
 | Pixel-Musiker | `src/view/stageBand.ts`, `src/view/bandMemberMesh.ts`, `src/game/bandLooks.ts` | nur visuell, kein Audio; dieselbe Costume-ID und dasselbe Mesh wie Backstage-`bandActors` |
-| Vorplatz-View | `src/view/ForecourtView.ts` | |
+| Vorplatz-View | `src/view/ForecourtView.ts`, `src/view/coverOverlay.ts` | Steinrahmen (`AreaEdgeBatch`), Innenbereich offen |
 | Laser | `src/view/LaserView.ts` | begrenzte dynamische Effekte |
 
 ## Wichtige Regeln
@@ -31,7 +31,8 @@ gelten Footprint, Strom, Vorplatz und Buchungen.
 - Die Werkstatt speichert `StageDesign.forecourtDepth` (1–24 Felder).
   `stageForecourtDepth` übernimmt bei älteren Designs weiterhin zwei
   Bühnenbreiten. Werkstatt und Karten-Bauvorschau zeigen dieselbe gewählte
-  Fläche; die Kartenansicht nutzt dafür genau einen Instanz-Batch.
+  Fläche; die Kartenansicht nutzt `AreaEdgeBatch` (ein Steinrahmen um die
+  ausgewiesene Fläche, Innenbereich offen, kein Grün- oder Cover-Pad).
   `syncStageAudience` schreibt die Bühnen-Aprons nach `stageForecourtCells`;
   manuelle Ausweisungen ohne `stageId` bleiben erhalten. Das Array ist die
   live Quelle: Attraction-Commands dürfen es nicht aus `partyArea`
@@ -83,7 +84,8 @@ vordere Konzertplätze inkl. Fallback wenn die erste Reihe voll ist,
 Einlass vor Slotstart, Live-Show-Festivallust,
 Oberteil-Ereignis). Licht-Stabilität: `tests/performanceGuards.ts`.
 Placement-Sperre, Preview, Save/Load und MP gegen Attraction-Deltas:
-`tests/attractionFoundation.ts`.
+`tests/attractionFoundation.ts`. Vorplatz-Rahmen ohne Vollflächen-Pad:
+`tests/coverOverlay.ts`.
 
 Bandversorgung skaliert Show-Spaß, Festivallust und Trinkgeld (`sales`)
 über `showQuality` der verbundenen Backstage-Komponente; ohne Backstage

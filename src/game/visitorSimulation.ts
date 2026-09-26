@@ -94,6 +94,15 @@ export class VisitorSimulation {
   }
 
   decideNext(visitor: Visitor): void {
+    if (
+      visitor.state === 'injured' ||
+      visitor.state === 'medical' ||
+      visitor.state === 'medical-transport'
+    ) {
+      this.awaitingDecision.delete(visitor.id)
+      this.pendingRouting.delete(visitor.id)
+      return
+    }
     if (this.context.isProcessingStep() && !this.context.takeDecision(visitor.id)) {
       this.queueDecision(visitor)
       return
@@ -113,6 +122,14 @@ export class VisitorSimulation {
       const visitor = this.context.getVisitor(visitorId)
       const routing = this.pendingRouting.get(visitorId)
       this.pendingRouting.delete(visitorId)
+      if (
+        visitor &&
+        (visitor.state === 'injured' ||
+          visitor.state === 'medical' ||
+          visitor.state === 'medical-transport')
+      ) {
+        continue
+      }
       if (visitor && routing) {
         if (routing === 'departure') this.context.beginDeparture(visitor)
         else if (routing === 'exit') this.context.ensureExitRoute(visitor)

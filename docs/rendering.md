@@ -26,11 +26,12 @@ erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
 | Pixel-Personen | `src/view/pixelPeople.ts` | 6 Visitor-Batches + Accessoires |
 | Tanzpose | `src/view/visitorDance.ts` | reine Limb-Zahlen aus `simTick + renderAlpha`; `WorldView` und `src/titleCrowd.ts` teilen dieselbe Pose |
 | Souvenir-Props | `src/view/souvenirMeshes.ts` | 1 Maskottchen- + 4 Shirt-Schnitt-Batches, Instanzfarbe |
-| Gebäude-Instancing | `src/view/retroBuildings.ts` | ein gemergtes Vertex-Color-Mesh je `DETAILED_BUILDINGS`-Art inkl. aller `SCENERY_KINDS`; Themen-Deko über `buildThemedScenery` (Familien + Vertexfarben); Instanz-`buildingIds` für Picking |
+| Gebäude-Instancing | `src/view/retroBuildings.ts` | ein gemergtes Vertex-Color-Mesh je `DETAILED_BUILDINGS`-Art inkl. aller `SCENERY_KINDS`; Themen-Deko über `buildThemedScenery` (Familien + Vertexfarben); Instanz-`buildingIds` für Picking; optionaler Cover-Film über `instanceColor` (`weatheringRgb`) |
 | Festivaltechnik | `src/view/retroBuildings.ts`, `src/view/FestivalEquipmentView.ts` | Bühne, PA, Generatoren, FOH, Delay-Tower, LED-Wand, Laser und Feuerwerk als gemergte statische Modelle; LED-Leuchtflächen in einem dynamischen Instanz-Batch |
 | Show-Effekte | `src/view/LaserView.ts`, `src/view/FireworksView.ts` | Laser teilen Geometrie/Material je Farbe; Feuerwerk nutzt geteilte Raketen-/Partikelgeometrie und einen Burst-Instanzbatch je Effekt |
-| Camping-Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts` | 14 Camping-Batches |
+| Camping-Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts`, `src/view/coverOverlay.ts` | 14 Camping-Batches; Fläche nur Steinrahmen (`AreaEdgeBatch`) |
 | Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call, zwei Dreiecke je Kachel; Atlaszeilen inkl. `stone`/`rock`/`snow`/`earth`/`salt`/`asphalt`; Parkfelder als Atlas-`parking` |
+| Flächenrahmen | `src/view/coverOverlay.ts`, `src/game/groundCoverLook.ts` | Camping und Vorplatz: offener Innenbereich, ein Steinrahmen-Batch; Objektfilm nur Instanzfarbe |
 | Objektstützen | `src/game/supportOccupancy.ts`, `src/view/supports.ts` | geteilter Zylinder; nur bei Luft unter dem Objekt |
 | Lichter | `src/view/FestivalLightsView.ts` | fester Pool (8 PointLights, 4 SpotLights); Deko-Lampenfarben aus `decorationLights.ts` |
 | Auflösungscaps | `src/view/renderResolution.ts` | max. 1440×810 intern |
@@ -96,6 +97,8 @@ Snapshot nicht autoritativ schreiben.
   `visitorDancePose` liefert nur Winkel/Offsets; Phase kommt aus Simulationszeit
   plus ID-Seed, nicht aus `performance.now()`. Kein Skelett oder Material pro
   Gast. Die Menge desynchronisiert über Phase und drei Hände-hoch-Armstile.
+  `injured`, `sleeping` und `medical-transport` liegen fest (Tilt π/2, keine
+  Flucht- oder Tanzpose), bis die Simulation den Zustand wechselt.
 - Sechs Visitor-Instance-Batches bleiben die Picking-Ziele. Accessoires in
   zusätzlichen kompakten Batches, unabhängig von der Population.
   Abriss/Info wählen zuerst das nächste Mesh mit `buildingId` /
@@ -128,7 +131,7 @@ Snapshot nicht autoritativ schreiben.
 
 `tests/performanceGuards.ts`, `tests/pixelPeople.ts`, `tests/visitorDance.ts`,
 `tests/carrierModels.ts`,
-`tests/campingModels.ts`, `tests/terrainSurface.ts`, `tests/picking.ts`. Messungen: `docs/performance.md`.
+`tests/campingModels.ts`, `tests/coverOverlay.ts`, `tests/terrainSurface.ts`, `tests/picking.ts`. Messungen: `docs/performance.md`.
 
 ## Bei Änderungen dieses Dokument
 

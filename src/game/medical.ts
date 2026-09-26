@@ -1,5 +1,6 @@
 import { roofSpec, wallSpec } from './decorationWalls'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import type { Visitor } from './types/entities'
 
 export const MEDICAL_BEDS_PER_CELL = SIMULATION_CONFIG.medical.bedsPerCell
 
@@ -34,6 +35,18 @@ export function medicalCellIsVacant(cell: MedicalCell): boolean {
 /** Overhead cover and edge facades share a tile with treatment spots. */
 export function allowsMedicalOverlay(kind: string): boolean {
   return kind === 'fence' || Boolean(roofSpec(kind)) || Boolean(wallSpec(kind))
+}
+
+/** Run-over / downed guests stay on the ground until medic or ambulance pickup. */
+export function pinInjuredVisitor(visitor: Visitor): void {
+  visitor.state = 'injured'
+  visitor.route = []
+  visitor.targetId = null
+  visitor.isPanicking = false
+  visitor.panicRecoverMinutes = 0
+  visitor.isDancing = false
+  visitor.isConversing = false
+  visitor.concertId = null
 }
 
 export class MedicalSystem {

@@ -1157,6 +1157,27 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   assert.equal(crashed.state,'driving','once the guest is off the road the car continues')
   assert.equal(crashed.route[0]?.z,-18,'it uses the route it already had')
 
+  Object.assign(victim, {
+    state: 'injured',
+    isPanicking: true,
+    panicRecoverMinutes: 0,
+    isDancing: true,
+    concertId: 'show-1',
+    targetId: 'food-1',
+    thought: 'Ich wurde von einem Fahrzeug angefahren!',
+    injuryVehicleId: 'crash-car',
+    route: [{ x: 5, z: -14, elevation: 0 }],
+  })
+  victim.needs.energy = 0
+  crash.visitorsAwaitingDecision.add(victim.id)
+  for (let n = 0; n < 12; n += 1) {
+    crash.tick(0.1)
+    assert.equal(victim.state, 'injured', 'a run-over guest stays down until medic recovery')
+  }
+  assert.equal(victim.isPanicking, false, 'panic does not stand a downed guest back up')
+  assert.equal(victim.route.length, 0, 'a downed guest does not keep a walk route')
+  assert.equal(victim.targetId, null, 'needs and decisions do not give a downed guest a new target')
+
   const ambulanceDispatch=fixture(0), ambulanceState=ambulanceDispatch.snapshot as GameSnapshot
   ambulanceDispatch.addDebugMoney()
   const ambulanceEdge=-ambulanceState.scenario.worldSize/2

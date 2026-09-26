@@ -1319,6 +1319,13 @@ export class GameState {
   }
 
   private beginVisitorDeparture(visitor: Visitor): void {
+    if (
+      visitor.state === 'injured' ||
+      visitor.state === 'medical' ||
+      visitor.state === 'medical-transport'
+    ) {
+      return
+    }
     if (this.isVisitorInDepartureVehicle(visitor)) return
     if (visitor.pendingWaste > 0 && visitor.state === 'seeking' && visitor.route.length > 0 &&
         visitor.targetId && this.state.buildings.some(building => building.id === visitor.targetId && (isWasteBin(building.kind) || isSealedWasteContainer(building.kind)))) return
@@ -1328,6 +1335,13 @@ export class GameState {
   }
 
   private deferVisitorDeparture(visitor: Visitor): void {
+    if (
+      visitor.state === 'injured' ||
+      visitor.state === 'medical' ||
+      visitor.state === 'medical-transport'
+    ) {
+      return
+    }
     if (this.isVisitorInDepartureVehicle(visitor)) return
     // Closing from a UI/network command must not search for the entire crowd
     // outside the tick budget, including while the simulation is paused.

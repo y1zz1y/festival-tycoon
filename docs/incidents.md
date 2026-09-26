@@ -100,6 +100,10 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
   `waste.dumpFullRatio` (90 % der **gesamten** Ablagekapazität) und neue
   Verletzte. Wiederholungen nur beim Schwellenwechsel bzw. nach
   `ticker.dumpFullRepeatMinutes` / `ticker.incidentRepeatMinutes`.
+  Eine angefahrene Person löst die Verletzten-Meldung **einmal** aus;
+  solange sie `injured` bleibt, gibt es keine zweite Meldung. Sie steht
+  nicht von allein wieder auf (Needs, Panik, Pathfinding) — erst
+  Sanitäter oder Krankenwagen nehmen sie auf.
   Die Leiste sitzt unten; bei Position gibt es **Hin**. Verlauf über
   **Meldungen** links neben Mehrspieler. Nur UI-Zustand, keine Sim-Mutation.
 - Personentore mit `openInEmergency` (Default an) gehen bei Panik oder
@@ -121,7 +125,8 @@ Batch-Grenze, zusammenhängende Ablage-Füllstände, Müllwagen-Ladung
 statt Insassen).
 `tests/ticker.ts` (Müllwagen 90, Ablage 180, kein Overflow, Ticker bei
 >90 % aller Ablagen, Feuer/Panik mit Sprungziel, keine Meldung für
-verletzte Insassen noch im Fahrzeug).
+verletzte Insassen noch im Fahrzeug, dieselbe liegende Person kein
+Ticker-Spam).
 `tests/sealedWasteContainer.ts` (Kapazität 80, nähere Container vor
 Ablage, volle Container übersprungen, versiegelte Attraktivitätsstrafe
 schwächer als offene Ablage, Müllwagen vom Depot zielt Straßen-Container
