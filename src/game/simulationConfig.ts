@@ -594,6 +594,14 @@ export const SIMULATION_CONFIG = {
     /** Local work radius around the cleaner when skipping a distant priority job. */
     cleanerLocalWorkTiles: 4,
     medicNauseaThreshold: 85,
+    /** Path searches for new staff jobs this tick; movement and work timers always run. */
+    jobDecisionsPerTick: 8,
+    /** Unreachable jobs retry at most this many times before a local step. */
+    maxJobPathAttempts: 2,
+    /** Idle staff stand at their post; a one-tile path patrol is this many ticks apart. */
+    idlePatrolTicks: 80,
+    /** After a failed job search, wait this many ticks before pathfinding again. */
+    idleSearchRetryTicks: 12,
   },
   medical: {
     bedsPerCell: 3,

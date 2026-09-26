@@ -137,6 +137,8 @@ import { StaffView } from './StaffView'
 import { MedicalView } from './MedicalView'
 import { IncidentView } from './IncidentView'
 import { PathFlowView } from './PathFlowView'
+import { PathGraphView } from './PathGraphView'
+import type { PedestrianGraphEdge } from '../game/pedestrianNavigation'
 import { AtmosphereView } from './AtmosphereView'
 import { ForecourtView } from './ForecourtView'
 import {
@@ -498,6 +500,7 @@ export class WorldView {
   private wasteView = new WasteView()
   private incidentView = new IncidentView()
   private pathFlowView = new PathFlowView()
+  private pathGraphView = new PathGraphView()
   private attractivenessView = new AtmosphereView(0.3, true)
   private partyMoodView = new AtmosphereView(0.82, false)
   private forecourtView = new ForecourtView()
@@ -899,6 +902,7 @@ export class WorldView {
       this.medicalView.group,
       this.wasteView.group,
       this.pathFlowView.group,
+      this.pathGraphView.group,
       this.incidentView.group,
       this.staffView.group,
       this.forecourtView.group,
@@ -1300,6 +1304,7 @@ export class WorldView {
     this.medicalView.invalidate()
     this.wasteView.invalidate()
     this.pathFlowView.invalidate()
+    this.pathGraphView.invalidate()
     this.incidentView.invalidate()
     this.staffView.invalidate()
     this.forecourtView.invalidate()
@@ -1362,6 +1367,17 @@ export class WorldView {
 
   setPartyMoodOverlayVisible(visible: boolean): void {
     this.partyMoodView.setVisible(visible)
+  }
+
+  setPathGraphOverlay(
+    overlay: { edges: readonly PedestrianGraphEdge[]; revision: string } | null,
+  ): void {
+    if (!overlay) {
+      this.pathGraphView.setVisible(false)
+      return
+    }
+    this.pathGraphView.setVisible(true)
+    this.pathGraphView.update(overlay.edges, overlay.revision)
   }
 
   showStaffArea(area: {minX:number;maxX:number;minZ:number;maxZ:number} | null): void {

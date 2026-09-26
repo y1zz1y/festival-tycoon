@@ -19,6 +19,7 @@ export type VisitorSimulationContext = {
   updateFacilityQueues: (minutes: number) => void
   updateVisitorFireworks: (minutes: number) => void
   updateCoasters: () => void
+  measurePhase?: <T>(id: string, work: () => T) => T
 }
 
 /**
@@ -46,12 +47,13 @@ export class VisitorSimulation {
   }
 
   runTickPhase(clockMinutes: number, movementMinutes = clockMinutes): void {
-    this.context.updateVisitors(clockMinutes)
-    this.context.updateFanIntrusion(clockMinutes)
-    this.context.updateBandActors(movementMinutes)
-    this.context.updateFacilityQueues(movementMinutes)
-    this.context.updateVisitorFireworks(clockMinutes)
-    this.context.updateCoasters()
+    const measure = this.context.measurePhase ?? ((_id, work) => work())
+    measure('visitors', () => this.context.updateVisitors(clockMinutes))
+    measure('concert', () => this.context.updateFanIntrusion(clockMinutes))
+    measure('concert', () => this.context.updateBandActors(movementMinutes))
+    measure('queues', () => this.context.updateFacilityQueues(movementMinutes))
+    measure('concert', () => this.context.updateVisitorFireworks(clockMinutes))
+    measure('attractions', () => this.context.updateCoasters())
   }
 
   isAwaiting(visitorId: string): boolean {

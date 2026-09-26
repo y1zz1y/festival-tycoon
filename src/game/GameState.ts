@@ -56,7 +56,8 @@ import { abandonVisitorCamp, CampingSystem, decayUnclaimedInstallations, isColle
 import type { CampingCell } from './camping';
 import { getItemQuantity } from './inventory';
 import { FireworksSystem } from './fireworks';
-import { PedestrianNavigation, isPedestrianSolidKind, type PedestrianNeighborOptions } from './pedestrianNavigation';
+import { PedestrianNavigation, isPedestrianSolidKind, type PedestrianGraphEdge, type PedestrianNeighborOptions } from './pedestrianNavigation';
+import { SimulationProfiler, type SimulationPhaseTimings } from './simulationProfiler';
 import { updateLogisticsSimulation, type LogisticsTickState } from './logisticsSimulation';
 import { RoadVehicleSimulation } from './roadVehicleSimulation';
 import { DeterministicRng, hashStringSeed, rollsBungeeNude } from './rng';
@@ -96,7 +97,7 @@ import { AtmosphereSystem, collectBuiltAtmosphereCells } from './atmosphere';
 import { FestivalAreaSystem } from './festivalAreas';
 import type { StageForecourtCell } from './festivalAreas';
 import { acceptWasteAtDump, acceptWasteAtSealedContainer, designateWasteDumps, emptySealedContainerStored, isSealedWasteContainer, wasteTipCapacity, wasteTipProcessingPerMinute } from './waste';
-import type { SealedWasteContainerInfo, WasteDumpCell } from './waste';
+import type { SealedWasteContainerInfo, WasteBinInfo, WasteDumpCell } from './waste';
 import { backstageCellKey, bandSupplyAt, bandSupplyForStage, buildBandSupplyGraph, collectBandSupplySnapshot, designateBackstageAreas, isBackstageCouchKind, isBandSupplyKind, isFanIntrusionEligible, showQualityForStage, type BackstageCell, type BandSupplyComponent, type BandSupplyStats } from './bandSupply';
 import { bandActorShouldPerform, createBandActor, createTourBusVehicle, idleWanderReady, isBandOnSiteMinute, nextWanderDelay, placeActorOnCell, planBandPresence, stepBandActor, type BandActor, type PlannedBandPresence } from './bandActors';
 import { bandCostumeId, bandRoles } from './bandLooks';
@@ -272,6 +273,8 @@ export class GameState {
   get pedestrianPathCache() {
     return this.pedestrianNavigation.pathCacheView()
   }
+  private readonly simulationProfiler = new SimulationProfiler()
+  private pathGraphDebugEnabled = false
   private accessSignalRevision = 0
   private accessEmergency = false
   private closedTrafficEdges = new Set<string>()
@@ -362,6 +365,7 @@ export class GameState {
       updateFacilityQueues: (minutes) => this.updateFacilityQueues(minutes),
       updateVisitorFireworks: (minutes) => this.updateVisitorFireworks(minutes),
       updateCoasters: () => this.updateCoastersForCurrentTick(),
+      measurePhase: (id, work) => this.simulationProfiler.measure(id, work),
     })
     this.state.selectedTool = 'inspect'
     this.state.festival ??= createFestivalManagement()
@@ -1869,17 +1873,25 @@ export class GameState {
   }
 
   private listSealedWasteContainers(): SealedWasteContainerInfo[] {
-    const reachable = this.collectGarbageTruckReachableRoadKeys()
+    const containers = this.state.buildings.filter((building) =>
+      isSealedWasteContainer(building.kind),
+    )
+    if (containers.length === 0) return []
+    const needsReachability = containers.some((building) => (building.wasteFill ?? 0) > 0)
+    const reachable = needsReachability
+      ? this.collectGarbageTruckReachableRoadKeys()
+      : new Set<string>()
     const truckEnRouteIds = new Set<string>()
-    for (const vehicle of this.state.logistics.roadVehicles) {
-      if (vehicle.kind !== 'garbageTruck' || vehicle.state === 'idle') continue
-      const target = vehicle.target
-      if (target?.kind === 'sealedWasteContainer') {
-        truckEnRouteIds.add(target.buildingId)
+    if (needsReachability) {
+      for (const vehicle of this.state.logistics.roadVehicles) {
+        if (vehicle.kind !== 'garbageTruck' || vehicle.state === 'idle') continue
+        const target = vehicle.target
+        if (target?.kind === 'sealedWasteContainer') {
+          truckEnRouteIds.add(target.buildingId)
+        }
       }
     }
-    return this.state.buildings
-      .filter((building) => isSealedWasteContainer(building.kind))
+    return containers
       .map((building) => {
         const road = this.getRoadCellAt(building.x, building.z, building.elevation)
         const onRoad = Boolean(road)
@@ -3341,6 +3353,27 @@ export class GameState {
         ? `${payment.toLocaleString('de-DE')} € getilgt · noch ${Math.round(finance.loan).toLocaleString('de-DE')} € offen`
         : `${payment.toLocaleString('de-DE')} € getilgt · Darlehen vollständig zurückgezahlt`,
     }
+  }
+
+  setSimulationPhaseProfiling(enabled: boolean): void {
+    this.simulationProfiler.enabled = enabled
+    if (!enabled) this.simulationProfiler.consume()
+  }
+
+  consumeSimulationPhaseTimings(): SimulationPhaseTimings | null {
+    return this.simulationProfiler.consume()
+  }
+
+  setPathGraphDebugEnabled(enabled: boolean): void {
+    this.pathGraphDebugEnabled = enabled
+  }
+
+  debugPathGraph(): { edges: readonly PedestrianGraphEdge[]; revision: string } {
+    if (!this.pathGraphDebugEnabled) return { edges: [], revision: '' }
+    const revalidate = this.lastNavRevision !== this.worldRevision
+    this.ensurePedestrianNav(revalidate)
+    if (revalidate) this.lastNavRevision = this.worldRevision
+    return this.pedestrianNavigation.debugPathGraph()
   }
 
   addDebugMoney(): ActionResult {
@@ -5784,7 +5817,7 @@ export class GameState {
     // Festival planning freezes guests, economy and the weekend clock, but
     // Testfahrt still has to move trains — new scenarios start in planning.
     if (this.state.festival.planning) {
-      this.updateCoastersForCurrentTick()
+      this.simulationProfiler.measure('attractions', () => this.updateCoastersForCurrentTick())
       return
     }
     this.processingSimulationStep = true
@@ -5810,15 +5843,17 @@ export class GameState {
     const realSeconds = SIMULATION_CONFIG.time.tickSeconds
     const wetBucket = Math.floor(this.state.festival.wetness / 20)
     if (wetBucket !== this.groundWetBucket) { this.groundWetBucket = wetBucket; this.worldRevision++ }
-    if (this.worldRevision !== this.lastNavRevision) {
-      this.lastNavRevision = this.worldRevision
-      this.ensurePedestrianNav(true)
-    } else {
-      this.ensurePedestrianNav(false)
-    }
+    this.simulationProfiler.measure('nav', () => {
+      if (this.worldRevision !== this.lastNavRevision) {
+        this.lastNavRevision = this.worldRevision
+        this.ensurePedestrianNav(true)
+      } else {
+        this.ensurePedestrianNav(false)
+      }
+    })
     const minutes = this.toSimulationMinutes(realSeconds)
     const movementMinutes = this.toMovementMinutes(realSeconds)
-    this.visitorBehavior.walkVisitors(movementMinutes)
+    this.simulationProfiler.measure('walk', () => this.visitorBehavior.walkVisitors(movementMinutes))
     this.state.minute += minutes
     this.simulatedMinutes += minutes
 
@@ -5834,32 +5869,38 @@ export class GameState {
         this.rotateComplaintSession()
       }
     }
-    this.evaluateAccessSignals()
-    this.visitorBehavior.enforceDayPlan()
-    this.syncBandSupply()
-    const editionWasOver = this.state.festival.finished
-    updateFestival(this.state)
-    this.updateStormHazards()
-    if (!editionWasOver && this.state.festival.enabled && this.state.festival.finished) this.recordFinishedEdition()
-    updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, true, undefined, true), (a, b) => this.canCarrierStep(a, b))
+    this.simulationProfiler.measure('festival', () => {
+      this.evaluateAccessSignals()
+      this.visitorBehavior.enforceDayPlan()
+      this.syncBandSupply()
+      const editionWasOver = this.state.festival.finished
+      updateFestival(this.state)
+      this.updateStormHazards()
+      if (!editionWasOver && this.state.festival.enabled && this.state.festival.finished) this.recordFinishedEdition()
+    })
+    this.simulationProfiler.measure('supply', () => {
+      updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, true, undefined, true), (a, b) => this.canCarrierStep(a, b))
+    })
 
-    this.visitorSpawning.update(minutes)
+    this.simulationProfiler.measure('spawn', () => this.visitorSpawning.update(minutes))
 
     this.state.incidents.forEach((incident) => {
       incident.ageMinutes += minutes
     })
     // Whatever route the ground disappeared by — a bulldozer, an area given up, a
     // multiplayer command — the dirt that was lying on it goes with it.
-    this.clearStrandedGroundDirt()
-    this.updateLogistics(movementMinutes)
-    this.updateAbandonedCamps(minutes)
-    this.updateStaff(movementMinutes)
+    this.simulationProfiler.measure('logistics', () => {
+      this.clearStrandedGroundDirt()
+      this.updateLogistics(movementMinutes)
+    })
+    this.simulationProfiler.measure('camps', () => this.updateAbandonedCamps(minutes))
+    this.simulationProfiler.measure('staff', () => this.updateStaff(movementMinutes))
     this.atmosphereMinutes += minutes
     if (
       this.atmosphereMinutes >=
       SIMULATION_CONFIG.atmosphere.updateIntervalMinutes
     ) {
-      this.updateAtmosphere()
+      this.simulationProfiler.measure('atmosphere', () => this.updateAtmosphere())
       this.atmosphereMinutes = 0
     }
     this.crowdingMinutes += minutes
@@ -5867,18 +5908,18 @@ export class GameState {
       this.crowdingMinutes >=
       SIMULATION_CONFIG.crowding.updateIntervalMinutes
     ) {
-      this.visitorCrowding.update(this.crowdingMinutes)
+      this.simulationProfiler.measure('crowding', () => this.visitorCrowding.update(this.crowdingMinutes))
       this.crowdingMinutes = 0
     }
     this.visitorSimulation.runTickPhase(minutes, movementMinutes)
-    this.stepCourses(movementMinutes)
+    this.simulationProfiler.measure('attractions', () => this.stepCourses(movementMinutes))
 
     if (this.simulatedMinutes >= SIMULATION_CONFIG.time.economyIntervalMinutes) {
       const hours = Math.floor(
         this.simulatedMinutes / SIMULATION_CONFIG.time.economyIntervalMinutes,
       )
       this.simulatedMinutes %= SIMULATION_CONFIG.time.economyIntervalMinutes
-      this.runEconomy(hours)
+      this.simulationProfiler.measure('economy', () => this.runEconomy(hours))
     }
 
     this.state.cashEffects.forEach((effect) => {
@@ -6594,6 +6635,9 @@ export class GameState {
   }
 
   private updateStaff(minutes: number): void {
+    const hasCleaner = this.state.staff.some((member) => member.role === 'cleaner')
+    const hasSecurity = this.state.staff.some((member) => member.role === 'security')
+    const hasFire = this.state.incidents.some((incident) => incident.kind === 'fire')
     this.staffSimulation.update(
       {
         staff: this.state.staff,
@@ -6602,31 +6646,17 @@ export class GameState {
           this.state.logistics.roadVehicles,
         ),
         incidents: this.state.incidents,
-        buildings: this.state.buildings,
+        buildings: hasFire ? this.state.buildings : undefined,
         medicalCells: this.state.medicalCells,
         wasteDumps: this.state.wasteDumpCells,
         cleanerCarry: {
           capacity: SIMULATION_CONFIG.waste.cleanerMaxCarry * cleanerCarryFactor(this.state.festival),
         },
         speedFactor: staffSpeedFactor(this.state.festival),
-        wasteBins: this.state.buildings
-          .filter((building) => isWasteBin(building.kind))
-          .map((building) => ({
-            id: building.id,
-            x: building.x,
-            z: building.z,
-            elevation: building.elevation,
-            stored: building.wasteFill ?? 0,
-          })),
-        sealedContainers: this.listSealedWasteContainers(),
-        securityGates: this.state.buildings
-          .filter((building) => building.kind === 'securityGate')
-          .map((building) => ({
-            id: building.id,
-            x: building.x,
-            z: building.z,
-            elevation: building.elevation,
-          })),
+        wasteBins: hasCleaner ? this.listStaffWasteBins() : [],
+        sealedContainers: hasCleaner ? this.listSealedWasteContainers() : [],
+        securityGates: hasSecurity ? this.listSecurityGates() : [],
+        simTick: this.state.simTick,
         findPath: (start, goals, allowGround) =>
           this.findPath(start, goals, false, true, allowGround, false, true, undefined, true),
         pathNeighbors: (cell, allowGrass = true) =>
@@ -6696,7 +6726,7 @@ export class GameState {
           bin.wasteFill = (bin.wasteFill ?? 0) - taken
           return taken
         },
-        abandonedCamps: this.collectibleAbandonedCamps(),
+        abandonedCamps: hasCleaner ? this.collectibleAbandonedCamps() : [],
         removeAbandonedCamp: (id) => {
           const before = this.state.campInstallations.length
           this.state.campInstallations = this.state.campInstallations.filter(
@@ -6709,12 +6739,36 @@ export class GameState {
     )
   }
 
+  private listStaffWasteBins(): WasteBinInfo[] {
+    return this.state.buildings
+      .filter((building) => isWasteBin(building.kind))
+      .map((building) => ({
+        id: building.id,
+        x: building.x,
+        z: building.z,
+        elevation: building.elevation,
+        stored: building.wasteFill ?? 0,
+      }))
+  }
+
+  private listSecurityGates(): Array<{ id: string; x: number; z: number; elevation: number }> {
+    return this.state.buildings
+      .filter((building) => building.kind === 'securityGate')
+      .map((building) => ({
+        id: building.id,
+        x: building.x,
+        z: building.z,
+        elevation: building.elevation,
+      }))
+  }
+
   private collectibleAbandonedCamps(): Array<{
     id: string
     x: number
     z: number
     elevation: number
   }> {
+    if (this.state.campInstallations.length === 0) return []
     const living = new Set(this.state.visitors.map((visitor) => visitor.id))
     return this.state.campInstallations
       .filter((installation) => isCollectibleCamp(installation, living))
@@ -7408,6 +7462,28 @@ export class GameState {
     maxVisited?: number,
     allowStaff = false,
     allowBackstage = false,
+  ): Cell[] | null {
+    if (!this.simulationProfiler.enabled) return this.executeFindPath(
+      start, goals, allowQueue, allowCamping, allowMedical,
+      ignoreDirectionalRestrictions, allowFestival, maxVisited, allowStaff, allowBackstage,
+    )
+    return this.simulationProfiler.measureInclusive('pathfinding', () => this.executeFindPath(
+      start, goals, allowQueue, allowCamping, allowMedical,
+      ignoreDirectionalRestrictions, allowFestival, maxVisited, allowStaff, allowBackstage,
+    ))
+  }
+
+  private executeFindPath(
+    start: Cell,
+    goals: Cell[],
+    allowQueue: boolean,
+    allowCamping: boolean,
+    allowMedical: boolean,
+    ignoreDirectionalRestrictions: boolean,
+    allowFestival: boolean,
+    maxVisited: number | undefined,
+    allowStaff: boolean,
+    allowBackstage: boolean,
   ): Cell[] | null {
     const revalidate = this.lastNavRevision !== this.worldRevision
     const result = this.pedestrianNavigation.findPath(start, goals, {

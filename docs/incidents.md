@@ -15,7 +15,7 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
 | Feuerwerk (Sim) | `src/game/fireworks.ts` | `FireworksSystem` |
 | Blasen / Panik-Chancen | `src/game/visitorBubbles.ts` | `spontaneousPanicChance`, `panicSpreadChance` |
 | Crowding | `src/game/crowding.ts` | Dichte für Panik und Tempo |
-| Personal-Reaktion | `src/game/staffSimulation.ts` | Cleaner, Firefighter (`fireApproachGoals`: Brandkachel, 4-Nachbarn, bei Gebäude der Footprint); Verletzte: nächster freier Sanitäter (`assignNearestFreeMedics`) |
+| Personal-Reaktion | `src/game/staffSimulation.ts` | Cleaner, Firefighter (`fireApproachGoals` / `isOnFireApproach`: Brandkachel, 4-Nachbarn, Vorplatz wie Outdoor, bei Gebäude der Footprint); Verletzte: nächster freier Sanitäter (`assignNearestFreeMedics`), Nachbar ohne A* |
 | Krankenwagen bei Verletzung | `src/game/GameState.ts` | `dispatchIdleAmbulances` — nächster freier Wagen, nicht der erste in der Liste |
 | Views | `src/view/IncidentView.ts`, `src/view/WasteView.ts`, `src/view/FireworksView.ts`, `src/view/PanicView.ts` | nur Darstellung; Eimer-Füllstand als grobe Kartonzahl um den Eimer |
 | Balancing | `src/game/simulationConfig.ts` | `incidents`, `nausea`, `waste` (carry/idle thresholds), `fireworks`; Reinigungs-Tempo in `staff.roles.cleaner.speed`, `staff.cleanerWorkMinutes`, `staff.cleanerLitterWorkMinutes`, `staff.cleanerBinWorkMinutes` |
@@ -23,11 +23,14 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
 ## Wichtige Regeln
 
 - Incidents nicht über die Karte ausbreiten, sofern nicht ausdrücklich
-  implementiert (Feuer bleibt lokal). Fuß-Feuerwehr löscht von der
-  Brandkachel oder einem begehbaren 4-Nachbarn (`CARDINAL_OFFSETS` wie
-  versiegelte Container). Liegt der Brand auf einem Gebäude-Footprint
-  oder berührt ihn, reicht Angrenzen an das Gebäude; der Footprint-Index
-  entsteht einmal pro Staff-Pass.
+  implementiert (Feuer bleibt lokal). Ohne Feuer, Litter/Kotze oder
+  leerebare Eimer sucht das Personal keine Ziele und bleibt am Posten;
+  Details in [staff.md](staff.md). Fuß-Feuerwehr löscht von der
+  Brandkachel oder einem 4-Nachbarn (`CARDINAL_OFFSETS` wie
+  versiegelte Container), auch auf `stageForecourtCells`. Liegt der Brand
+  auf einem Gebäude-Footprint oder berührt ihn, reicht Angrenzen an das
+  Gebäude; der Footprint-Index entsteht einmal pro Staff-Pass. Wer schon
+  daneben steht, braucht keine Wegsuche.
 - Saugreiniger räumen `litter` und `vomit` auf Wegen und Bühnenvorplätzen;
   sie fahren auf den Vorplatz, statt am Wegrand zu halten, und dürfen
   Personaleingänge wie Personal queren, um Schmutz, Ablage oder Depot zu
@@ -122,8 +125,8 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
 (Eimer-Priorität: voll vor halbvoll/Litter, idle leert halbvolle Eimer,
 Litter vor kaum gefüllten Eimern; voller Nachbar-Eimer: Gäste lassen
 Müll fallen statt stehen zu bleiben, leerer Eimer wird benutzt;
-Feuerwehr löscht Brand auf bebautem Feld vom Nachbarn und am Footprint
-angrenzend; Verletzte an den nächsten freien
+Feuerwehr löscht Brand auf bebautem Feld vom Nachbarn, am Footprint
+angrenzend und auf dem Bühnenvorplatz vom Nachbarn; Verletzte an den nächsten freien
 Sanitäter bzw. Krankenwagen).
 Festival-Zusätze: `tests/festivalAdditions.ts` (Eimer-Kartonzahl und
 Batch-Grenze, zusammenhängende Ablage-Füllstände, Müllwagen-Ladung
@@ -145,7 +148,7 @@ liefert an die Ablage).
 Aktualisieren, wenn Incident-Arten, Müllkapazitäten, Ticker-Regeln, Eimer-Darstellung,
 Reinigungs-Eimer-Priorität, Reinigungs-Tempo (`staff.roles.cleaner.speed` und
 Work-Minutes), Gäste-Müll-bei-vollem-Eimer, Verletzten-Zuweisung, Feuerwehr-Löschreichweite
-(Nachbar / Gebäude-Footprint), Panikformeln oder Pyro-Trigger ändern.
+(Nachbar / Gebäude-Footprint / Vorplatz), Panikformeln oder Pyro-Trigger ändern.
 Bühnen-Pyro zusätzlich in `docs/stages.md`. Sanitäter/Krankenwagen in `docs/staff.md`.
 
 ## Feuerwehr an Gebäuden (0.2.12)
@@ -154,7 +157,9 @@ Fuß-Feuerwehr muss die Brandkachel nicht betreten. `fireApproachGoals` in
 `staffSimulation.ts` sucht die Kachel plus 4-Nachbarn in einer Multi-Goal-
 Wegsuche. Sitzt der Brand auf einem Footprint oder berührt ihn, zählen
 alle Nachbarn des Gebäudes. Der Index kommt einmal pro Staff-Pass aus
-`context.buildings`.
+`context.buildings`. Vorplatz-Brände nutzen dieselben Outdoor-Ziele;
+ein schon erreichter Nachbar startet die Löscharbeit ohne A*
+(`isOnFireApproach`, 0.2.15).
 
 ## Themen-Mülleimer (0.1.126)
 

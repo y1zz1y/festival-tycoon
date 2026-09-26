@@ -45,8 +45,31 @@ import {
   formatSaveTime,
   formatTime,
 } from '../src/ui/format'
+import { formatPerformanceHud, formatSimulationPhaseLines } from '../src/app/performanceHud'
 
 export function testUiModules(): void {
+  assert.equal(
+    formatPerformanceHud({
+      versionLabel: 'v0.2.13',
+      fps: 60,
+      tps: 10,
+      simMs: 5.2,
+      viewMs: 2.1,
+      renderMs: 3.4,
+    }),
+    'v0.2.13\nFPS 60 · TPS 10.0\nSim 5.2 · Szene 2.1 · Render 3.4 ms',
+  )
+  assert.deepEqual(
+    formatSimulationPhaseLines({
+      exclusive: { visitors: 1.8, staff: 0.4, logistics: 0.7 },
+      inclusive: { pathfinding: 0.9 },
+    }, 5.2),
+    [
+      'Besucher 1.80 (35%) · Logistik 0.70 (13%)',
+      'Personal 0.40 (8%)',
+      'Wegsuche 0.90 inkl.',
+    ],
+  )
   assert.equal(escapeHtml(`<Festival & "Fans">`), '&lt;Festival &amp; &quot;Fans&quot;&gt;')
   assert.equal(formatMoney(1234.9), '1.234 €')
   assert.equal(formatTime(8 * 60 + 5), '08:05')

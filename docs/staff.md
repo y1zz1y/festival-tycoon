@@ -11,7 +11,7 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Rollen, Definitionen, Lohn | `src/game/staff.ts` | `STAFF_ROLES`, `STAFF_DEFINITIONS` |
-| Tick-Verhalten | `src/game/staffSimulation.ts` | `StaffSimulation`, `fireApproachGoals` |
+| Tick-Verhalten | `src/game/staffSimulation.ts` | `StaffSimulation`, `fireApproachGoals`, `isOnFireApproach` |
 | Einstellen / entlassen / platzieren | `src/game/GameState.ts` | `hireStaff`, `fireStaff`, `placeStaffAt` |
 | Arbeitszonen | `src/game/staffZones.ts` | `isInAnyZone`, `zoneCellRange`, `setAssignedWorkZones`, `staffZonePaintStroke` |
 | Saugroboter in der Personal-UI | `src/game/staff.ts`, `src/staffDetailsUI.ts`, `src/main.ts` | `sweeperStaffName`, Reinigungs-Tab |
@@ -25,7 +25,7 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 | Personal-UI | `src/staffDetailsUI.ts` | Infofenster, Bereich zuweisen |
 | Darstellung | `src/view/StaffView.ts`, `src/view/MedicalView.ts` | Uniformen; Sanität als drei InstancedMeshes (Kachel, Liege, Patient) plus Schlafsymbol-Billboard, siehe [rendering.md](rendering.md) |
 | Depot-Träger (keine Rolle) | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts` | Gästefigur + Warnweste/Mütze + Handkarren |
-| Balancing | `src/game/simulationConfig.ts` | `staff` (`roles.cleaner.speed`, `cleanerWorkMinutes`, `cleanerLitterWorkMinutes`, `cleanerBinWorkMinutes`), `medical`, `security`, `waste.cleanerIdleEmptyFill`, `waste.cleanerCarrySpeedMultiplier` |
+| Balancing | `src/game/simulationConfig.ts` | `staff` (`roles.cleaner.speed`, `cleanerWorkMinutes`, `cleanerLitterWorkMinutes`, `cleanerBinWorkMinutes`, `jobDecisionsPerTick`, `maxJobPathAttempts`, `idlePatrolTicks`, `idleSearchRetryTicks`), `medical`, `security`, `waste.cleanerIdleEmptyFill`, `waste.cleanerCarrySpeedMultiplier` |
 
 ## Wichtige Regeln
 
@@ -74,9 +74,12 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 - Priorität bleibt, aber ein höherer Job jenseits
   `staff.cleanerLocalWorkTiles` weicht lokaler Arbeit im nahen Umfeld.
   Feuerwehrwagen fahren große Brände an; Fuß-Feuerwehr löscht vor Ort
-  von der Brandkachel oder einem begehbaren 4-Nachbarn. Sitzt der Brand
+  von der Brandkachel oder einem 4-Nachbarn. Vorplatz-Brände
+  (`stageForecourtCells`) gelten wie andere Outdoor-Brände: daneben
+  setzen reicht, die Brandkachel muss kein Weg sein. Sitzt der Brand
   auf einem Gebäude-Footprint oder berührt ihn, reicht Angrenzen an das
   Gebäude (ein Footprint-Index einmal pro Staff-Pass, keine Extra-Scans).
+  Wer schon auf einem Löschstand steht, startet ohne A*.
 - Reinigungskräfte leeren Eimer in dieser Reihenfolge: volle Eimer
   (Füllstand ≥ `waste.binCapacity`) vor Bodenmüll, Kotze und verlassenen
   Camps; erst wenn nichts davon anliegt, leeren sie teilweise gefüllte
@@ -92,7 +95,24 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
   Saugroboter leeren keine Eimer und keine Container. Zugewiesene
   Einsatzgebiete gelten weiter.
 - Indizes für Incidents, Betten und Müll einmal pro Pass, nicht per Staff
-  die ganze Welt scannen.
+  die ganze Welt scannen. Ohne Feuer kein Gebäude-Footprint-Index. Ohne
+  Reinigungskräfte keine Eimer-/Container-/Camp-Listen (kein Straßen-BFS
+  für leere Container).   Ohne Arbeit für die Rolle keine Zielsuche:
+  Feuerwehr ohne Feuer, Reinigung ohne Litter/Kotze/Eimer/Camps/Container,
+  Sanitäter ohne Patienten (`injured` / liegend nach `pinInjuredVisitor`).
+  Idle-Skip gilt nicht, solange Feuer, Müll oder Patienten existieren.
+  Neue Wege zählen gegen `staff.jobDecisionsPerTick` (8); Bewegung,
+  Arbeitstimer und ein schon erreichter Nachbar-Stand laufen ohne Budget.
+  Unerreichbare Jobs höchstens `maxJobPathAttempts` (2), danach
+  `idleSearchRetryTicks` (12) Pause statt A* jede Tick.
+- Idle-Personal bleibt am Posten. Ein Schritt auf einen Wegnachbarn nur
+  alle `idlePatrolTicks` (80, gestaffelt nach ID). Keine A*-Route quer
+  über die Karte. Wer außerhalb der Zone steht, geht lokal auf das
+  Gebiet zu (Nachbarzelle näher am Zonenzentrum), ohne A*. Security am
+  Tor bleibt `stationed`.
+- Freie Betten wählt der Sanitäter mit **einer** Multi-Goal-Suche, nicht
+  einem A* je Bett. Auch der Weg zu Eimern mit Platz ist eine Multi-Goal-
+  Suche statt A* je Eimer.
 - Personaltore: `staffGate` in `supplyChain.ts` / Festival-Actions; Werkzeug
   im Baumenü unter Logistik. Neue Tore nutzen `staffGateDirection` (0–3,
   Ausgangskante der Baurichtung) und dieselbe Kantenlage wie Personentore
@@ -128,8 +148,9 @@ aktiven Block entfernt entlang des Strichs; `setStaffZone` ist idempotent;
 Saugroboter dieselbe Farbe), `tests/operations.ts` (Personaltor-Kante statt Vollfeld, bemalte Richtung für
 Gäste gesperrt, Staff und Saugroboter durch, Legacy-Mitte; Reinigung leert volle Eimer vor halbvollen und
 Bodenmüll, idle leert halbvolle Eimer in der Zone, Bodenmüll vor kaum
-genutzten Eimern; Feuerwehr löscht Brand auf bebautem Feld vom Nachbarn
-und am Footprint angrenzend; Krankenfeld-Abriss, Dach über Liegen, abgewiesenes
+genutzten Eimern; Feuerwehr löscht Brand auf bebautem Feld vom Nachbarn,
+am Footprint angrenzend und auf dem Bühnenvorplatz vom Nachbarn;
+Sanitäter nimmt Verletzte daneben auf; Krankenfeld-Abriss, Dach über Liegen, abgewiesenes
 Überbauen und Restbelegung; Verletzte an den
 nächsten freien Sanitäter bzw. Krankenwagen — näherer Idle vor fernem,
 kein Diebstahl eines tragenden Sanitäters, unerreichbarer Näherer wird
@@ -137,7 +158,11 @@ kein Diebstahl eines tragenden Sanitäters, unerreichbarer Näherer wird
 angefahrene Gäste bleiben `injured` bis zur Aufnahme,
 idle Krankenwagen fährt zur Garage, Verkauf löscht am Depot sofort und
 nach Rückfahrt), `tests/sealedWasteContainer.ts` (nähere Container vor Ablage, volle übersprungen, idle Container→Ablage auch ohne Wagen, voller Eimer zuerst, Müllwagen vom Depot leert Straßen-Container), `tests/accessControl.ts` (`gateEdgeWorldPosition`, `staffGateBlocksVisitor`),
-`tests/festivalAdditions.ts`, `tests/performanceGuards.ts` (keine nested
+`tests/festivalAdditions.ts`, `tests/staffIdle.ts` (ohne Arbeit kein
+`findPath`, Posten statt Map-Querung, Feuer/Eimer sofort, Vorplatz-Brand
+und Verletzter vom Nachbarn ohne A*, Zonenrückkehr
+ohne A*, Bettwahl eine Multi-Goal-Suche,
+Idle verbraucht kein Job-Budget), `tests/performanceGuards.ts` (keine nested
 Scans). Personalwege hängen an denselben Nav-Invarianten wie
 `docs/pathfinding.md`.
 
@@ -149,5 +174,7 @@ Verkauf, Gate-Verhalten, Krankenfeld-Platzierung (Dach-Overlay vs. Abriss),
 Träger-als-Personal-Zuweisung, Saugroboter-Einsatzgebiete,
 Reinigungs-Tempo (`roles.cleaner.speed`, Work-Minutes, Carry-Multiplier)
 oder Eimer-Leer-Priorität der Reinigung oder Container-Schlepp-Priorität
-oder Feuerwehr-Löschreichweite (Nachbar / Gebäude-Footprint) ändern.
+oder Feuerwehr-Löschreichweite (Nachbar / Gebäude-Footprint / Vorplatz)
+ändern, oder Idle-Posten / Job-Budget / Early-Out ohne Arbeit
+(Early-Out darf Feuer und Patienten nicht überspringen).
 Müll-/Brand-Ziele zusätzlich in `docs/incidents.md`.

@@ -1646,6 +1646,11 @@ body.title-open #app-install-hint {
   white-space: normal;
 }
 
+.debug-menu-panel .scenario-check {
+  color: #ecf5f0;
+  font-size: 11px;
+}
+
 /* Shared "draggable overlay header" building blocks: a grab-able bar
    (.panel-header) holding two dividing lines (.panel-drag-line) around a
    centered title (.panel-header-title) and a fixed close button

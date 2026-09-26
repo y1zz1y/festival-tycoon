@@ -652,6 +652,45 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   wideFighter.workMinutes=0
   staff.update(wideContext,.1)
   assert.equal(wideFires.length,0,'a firefighter adjacent to the building puts the footprint fire out')
+  const plazaBlaze=fixture(0)
+  plazaBlaze.addDebugMoney()
+  assert.ok(plazaBlaze.designateStageForecourt([{x:5,z:-18},{x:6,z:-18},{x:7,z:-18}]).ok)
+  plazaBlaze.snapshot.incidents.push({
+    id:'forecourt-fire',kind:'fire',x:5,z:-18,elevation:0,severity:2,ageMinutes:0,
+  })
+  assert.ok(plazaBlaze.hireStaff('firefighter').ok)
+  const plazaFighter=plazaBlaze.snapshot.staff.find(member=>member.role==='firefighter')!
+  assert.ok(plazaBlaze.placeStaffAt(plazaFighter.id,4,-18).ok)
+  for (let n=0;n<12;n+=1) {
+    plazaBlaze.tick(1)
+    if (plazaFighter.state==='working' && plazaFighter.workMinutes>0) plazaFighter.workMinutes=0
+    if (!plazaBlaze.snapshot.incidents.some(incident=>incident.id==='forecourt-fire')) break
+  }
+  assert.equal(
+    plazaBlaze.snapshot.incidents.some(incident=>incident.id==='forecourt-fire'),
+    false,
+    'a firefighter on a cardinal neighbour puts out a fire on the stage forecourt',
+  )
+  const rescue=fixture(0)
+  rescue.addDebugMoney()
+  assert.ok(rescue.designateMedicalArea([{x:8,z:-16}]).ok)
+  assert.ok(rescue.hireStaff('medic').ok)
+  const medic=rescue.snapshot.staff.find(member=>member.role==='medic')!
+  assert.ok(rescue.placeStaffAt(medic.id,3,-18).ok)
+  const downed=(rescue as any).spawnVisitorMember('day','hurt-guest','pedestrian',false)
+  assert.ok(downed)
+  Object.assign(downed,{
+    state:'injured',route:[],targetId:null,cellX:4,cellZ:-18,x:4.5,z:-17.5,cellElevation:0,
+    medicalCell:null,medicalSlot:null,rescueVehicleId:null,injuryVehicleId:null,
+  })
+  for (let n=0;n<16;n+=1) {
+    rescue.tick(1)
+    if (downed.state==='medical-transport' || downed.state==='medical') break
+  }
+  assert.ok(
+    downed.state==='medical-transport' || downed.state==='medical',
+    'a medic standing next to an injured guest picks them up',
+  )
   const picker=createStaffMember('priority-cleaner','cleaner',{x:0,z:0,elevation:0})
   const nearly={id:'near-bin',x:1,z:0,elevation:0,stored:4}
   const overflowing={id:'full-bin',x:8,z:0,elevation:0,stored:SIMULATION_CONFIG.waste.binCapacity}
@@ -766,7 +805,7 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   staff.update({
     ...medicContext,
     staff: [reachableFar, blockedNear],
-    visitors: [patientAt('fenced-guest', 2, 0)],
+    visitors: [patientAt('fenced-guest', 4, 0)],
     findPath: (start: { x: number }, goals: Array<{ x: number; z: number }>) =>
       start.x === 1 ? null : goals.map((goal) => ({ ...goal, elevation: 0 })),
   }, 0.1)

@@ -20,12 +20,13 @@ an der Kalender-Spielminute.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Tick-Orchestrierung | `src/game/GameState.ts`, `src/game/visitorSimulation.ts`, `src/game/visitorBehavior.ts` | `advanceOne`, `stepFixed`, `simulateFixedStep`; geordnete Phase in `VisitorSimulation`, Details in `VisitorBehaviorService` |
+| Sim-Phasen-Diagnose | `src/game/simulationProfiler.ts`, `src/app/performanceHud.ts` | `SimulationProfiler` (nur Diagnose); HUD-Zeilen unter 🐞 → **Sim-Anteile der Unteraufgaben** |
 | Besucher-Spawn / Crowd-Pass | `src/game/visitorSpawning.ts`, `src/game/visitorCrowdingSimulation.ts` | Intervall-Ankünfte; Gedränge, Motivation und Panik |
 | Achterbahn-Tick | `src/game/coasterSimulation.ts` | Queue, Dispatch, feste Physik-Substeps und Telemetrie |
 | Browser-Zeitgeber | `src/app/gameLoop.ts` | `startGameLoop`; RAF-Delta und 100-ms-Hidden-Tab-Hostheartbeat |
 | Fußgänger-Navigation | `src/game/pedestrianNavigation.ts` | `PedestrianNavigation` (Graph, Cache, A*) |
 | Logistik-Phase | `src/game/logisticsSimulation.ts`, `src/game/roadVehicleSimulation.ts` | `updateLogisticsSimulation`; feste Fahrzeugphase in `RoadVehicleSimulation.processLogisticsVehicles` |
-| Tick-/Speed-Werte | `src/game/simulationConfig.ts` | `time` (`normalDayDurationSeconds`, `movementDayDurationSeconds`, `calendarMinutesPerRealSecond`, `movementMinutesPerRealSecond`), `pathfinding.decisionsPerTick` |
+| Tick-/Speed-Werte | `src/game/simulationConfig.ts` | `time` (`normalDayDurationSeconds`, `movementDayDurationSeconds`, `calendarMinutesPerRealSecond`, `movementMinutesPerRealSecond`), `pathfinding.decisionsPerTick`, `staff.jobDecisionsPerTick` |
 | Deterministischer Zufall | `src/game/rng.ts` | `DeterministicRng`, `hashStringSeed` |
 | Tagesplan durchsetzen | `src/game/dayPlan.ts` | Angebote, Öffnungszeiten |
 | Festival-Tick | `src/game/festivalManagement.ts` | `updateFestival` |
@@ -69,9 +70,16 @@ Abreisen werden nach Laden aus Besucherzustand, Camp und Müll rekonstruiert.
   Die Kalenderlänge eines Tages setzt nur `normalDayDurationSeconds`.
 - Destination-Entscheidungen (inkl. direkte Ankunfts-/Interaktions-Callbacks)
   zählen gegen `decisionsPerTick`. Aufgeschobene Requests müssen fair leeren.
+  Personal-Zielsuchen haben ein eigenes Budget `staff.jobDecisionsPerTick`
+  und laufen vor der Besucherphase, damit sie das Gäste-Budget nicht
+  aufbrauchen. Ohne Aufgaben verbraucht Idle-Personal null Entscheidungen.
 - Dringende Zustandswechsel, Bewegung und Needs laufen **jeden** Tick weiter.
 - Deterministische Budgets zählen Arbeit / `simTick`, niemals Wanduhren.
-- Profiling-Uhren (`PROFILE_METHODS`) sind nur Diagnose.
+- Profiling-Uhren (`PROFILE_METHODS` und der optionale `SimulationProfiler`) sind nur Diagnose.
+  Die HUD-Option **Sim-Anteile der Unteraufgaben** schaltet exklusive Phasenuhren
+  (Nav, Bewegung, Besucher, Personal, Logistik, Konzert, Attraktionen, …) plus
+  inklusive Wegsuche; ausgeschaltet bleibt nur ein Boolean-Check, kein
+  `performance.now()` im Tick. Die Uhren steuern niemals Budgets oder Gameplay.
 - `speed === 0` hält `stepFixed` an. `festival.planning` hält Gäste, Wirtschaft
   und die Festivaluhr an, ruft aber weiter `updateCoastersForCurrentTick` auf,
   damit **Testfahrt** während der Planung (Startzustand neuer Szenarien) den
@@ -84,6 +92,8 @@ Frame-Partition und alle Tempostufen: `tests/regression.ts`.
 Kalender vs. Bewegung (2× Ticks je Spielminute, unveränderte Wegstrecke
 pro Tick, Festivalphasen in Spielstunden): `tests/simulationTime.ts`.
 Entscheidungsbudget und Queue-Drainage: `tests/performanceGuards.ts`.
+Phasen-Profiler (aus = keine Zeiten, an = exclusive/inclusive Struktur) und
+HUD-Format: `tests/simulationModules.ts`, `tests/uiModules.ts`.
 Last: `npm run test:performance -- rtest3 120` — siehe `docs/performance.md`.
 
 ## Bei Änderungen dieses Dokument
@@ -97,3 +107,7 @@ Auch `setParkOpen(false)` aus UI-/Netzwerk-Commands stellt Abreiseaufträge in
  dieselbe Queue, statt außerhalb eines Simulationsticks für die ganze Menge Wege
 zu suchen. In Pause werden die Zustände sofort aktualisiert und die Routen erst
 nach Fortsetzen unter dem normalen Budget geplant.
+
+Personal-Zielsuchen (`staff.jobDecisionsPerTick`) sind ein eigenes
+deterministisches Arbeitbudget und ändern die Besucher-`decisionsPerTick`
+nicht. Idle ohne Aufgaben verbraucht davon nichts.

@@ -91,10 +91,13 @@ Bandversorgung skaliert Show-Spaß, Festivallust und Trinkgeld (`sales`)
 über `showQuality` der verbundenen Backstage-Komponente; ohne Backstage
 bleibt der Auftritt legal, aber schwächer (~0.62 statt bis ~1.18).
 [`band-supply.md`](band-supply.md). Vorplatz (`stageForecourtCells`) ist
-nicht Backstage.
+nicht Backstage. Brände auf dem Vorplatz gelten für die Fuß-Feuerwehr
+wie Outdoor-Brände: ein 4-Nachbar reicht, siehe [staff.md](staff.md)
+und [incidents.md](incidents.md).
 
 ## Bei Änderungen dieses Dokument
 
-Aktualisieren, wenn Teile, Phasenregler, Footprint-Regeln, Template-Limits
-oder Show-Effekte ändern. Strombedarf in `docs/atmosphere.md`, Buchungen in
-`docs/festival.md`.
+Aktualisieren, wenn Teile, Phasenregler, Footprint-Regeln, Template-Limits,
+Vorplatz-Brände oder Show-Effekte ändern. Strombedarf in
+`docs/atmosphere.md`, Buchungen in `docs/festival.md`. Löschregeln:
+[staff.md](staff.md) / [incidents.md](incidents.md).

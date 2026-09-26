@@ -21,6 +21,28 @@ ignoriert und werden nicht als Repository-Fixtures verwendet.
 Registriert ist `festivalmittel` (Snapshot v32): 832 Besucher, 2.376 Gebäude
 und 34 Mitarbeitende, mit 120 Ticks als Standardlauf.
 
+## Idle-Personal ohne Aufgaben (0.2.14)
+
+Die HUD-Phase **Personal/Staff** konnte ~119 ms kosten, obwohl niemand
+einen Auftrag hatte. Ursache war nicht die Arbeit selbst, sondern der
+Idle-Tick: Gebäude-Footprint-Index über die ganze Welt, Eimer-/Tor-Scans,
+Straßen-BFS für versiegelte Container, `collectibleAbandonedCamps` über
+alle Camps und Gäste, und sobald eine Patrol-Kachel endete eine neue
+Zielsuche plus oft A* auf alle Zellen der Einsatzgebiete. Personal lief
+dabei dauernd ein Feld weiter und wirkte ziellos.
+
+Jetzt gilt: ohne Feuer/Litter/Patienten/Eimerarbeit keine Zielsuche;
+Gebäudeindex nur bei Feuer; Container-Straßen-BFS nur wenn etwas lagert;
+Idle bleibt am Posten (`idlePatrolTicks` 80) und sucht **keinen**
+Wander- oder Zonenrückkehr-A*; Rückkehr ins Gebiet ist ein lokaler
+Nachbarschritt. Job-Wege höchstens `jobDecisionsPerTick` 8, Feuerwehr
+zuerst. Der Idle-Skip gilt nicht, solange Feuer, Müll oder Patienten
+da sind; ein schon erreichter Nachbar (Vorplatz-Brand, Verletzter)
+startet ohne A*. Erwartet: Idle nahe 0–2 ms (Index-Early-Out), busy weiter
+proportional zu echten Einsätzen und dem Job-Budget, nicht zu
+Mitarbeiterzahl × Kartenscans. Strukturelle Guards in
+`tests/staffIdle.ts`.
+
 ## Konzert-Bandversorgung (0.1.194, 2026-09-19)
 
 Im unveränderten `festivalmittel`-Fixture wurde die Welt bei 8× bis vor den
@@ -183,6 +205,12 @@ Run `npm run test:performance -- rtest3 1200` for a longer simulation.
 In PowerShell, set `$env:PROFILE_METHODS='1'` for inclusive method timing;
 remove it with `Remove-Item Env:PROFILE_METHODS` for normal measurement.
 Method totals overlap and must not be added together.
+
+In the running game, 🐞 → **Sim-Anteile der Unteraufgaben** shows exclusive
+tick-phase milliseconds (and their share of the Sim line) plus inclusive
+pathfinding in the bottom-left HUD. Those clocks are the same diagnostic class
+as `PROFILE_METHODS` and never change gameplay. The overlay 🐞 → **Weggraph
+anzeigen** is render-only.
 
 The test advances real fixed 100 ms ticks without rendering or sleeping. It reports
 median/p95/max CPU time, actual ticks and final population, not browser FPS or TPS.

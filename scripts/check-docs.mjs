@@ -81,6 +81,9 @@ const primaryTopicByModule = {
   'src/game/visitorCrowdingSimulation.ts': 'visitors.md',
   'src/game/visitorSpawning.ts': 'visitors.md',
   'src/game/visitorSimulation.ts': 'visitors.md',
+  'src/game/simulationProfiler.ts': 'simulation.md',
+  'src/app/performanceHud.ts': 'ui.md',
+  'src/view/PathGraphView.ts': 'pathfinding.md',
 }
 for (const [modulePath, topic] of Object.entries(primaryTopicByModule)) {
   if (!await exists(modulePath)) failures.push(`critical module missing: ${modulePath}`)

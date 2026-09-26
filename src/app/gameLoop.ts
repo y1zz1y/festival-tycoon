@@ -1,5 +1,8 @@
 import type { AudioListenerPose } from '../game/audio'
+import type { PedestrianGraphEdge } from '../game/pedestrianNavigation'
+import type { SimulationPhaseTimings } from '../game/simulationProfiler'
 import type { GameSnapshot } from '../game/types/snapshot'
+import { formatPerformanceHud } from './performanceHud'
 
 export interface LoopGame {
   readonly snapshot: GameSnapshot
@@ -19,6 +22,9 @@ export interface LoopView {
   advanceWalk(deltaSeconds: number): void
   audioListenerPose(): AudioListenerPose
   render(): void
+  setPathGraphOverlay?(
+    overlay: { edges: readonly PedestrianGraphEdge[]; revision: string } | null,
+  ): void
 }
 
 export interface LoopAudio {
@@ -36,12 +42,23 @@ export type GameLoopDependencies = {
   isTitleOpen: () => boolean
   /** Optional HUD work after the frame is drawn (map-ping overlays, etc.). */
   afterRender?: () => void
+  readPhaseTimings?: () => SimulationPhaseTimings | null
+  getPathGraph?: () => { edges: readonly PedestrianGraphEdge[]; revision: string } | null
   now?: () => number
   requestFrame?: (callback: FrameRequestCallback) => number
 }
 
 export type GameLoop = {
   stop(): void
+}
+
+function addPhaseTotals(
+  totals: Map<string, number>,
+  sample: Readonly<Record<string, number>>,
+): void {
+  for (const [id, ms] of Object.entries(sample)) {
+    totals.set(id, (totals.get(id) ?? 0) + ms)
+  }
 }
 
 /**
@@ -57,6 +74,8 @@ export function startGameLoop(dependencies: GameLoopDependencies): GameLoop {
   let measuredSimulationMs = 0
   let measuredViewMs = 0
   let measuredRenderMs = 0
+  let measuredExclusive = new Map<string, number>()
+  let measuredInclusive = new Map<string, number>()
   let previousTime = now()
   let running = true
 
@@ -67,6 +86,8 @@ export function startGameLoop(dependencies: GameLoopDependencies): GameLoop {
     measuredSimulationMs = 0
     measuredViewMs = 0
     measuredRenderMs = 0
+    measuredExclusive = new Map()
+    measuredInclusive = new Map()
     previousTime = measurementStart
   }
   document.addEventListener('visibilitychange', resetMeasurements)
@@ -90,10 +111,17 @@ export function startGameLoop(dependencies: GameLoopDependencies): GameLoop {
     game.tick(deltaSeconds)
     measuredTicks += game.executedLogicTicks - ticksBefore
     dependencies.multiplayer.tick(deltaSeconds)
+    const phaseSample = dependencies.readPhaseTimings?.()
+    if (phaseSample) {
+      addPhaseTotals(measuredExclusive, phaseSample.exclusive)
+      addPhaseTotals(measuredInclusive, phaseSample.inclusive)
+    }
 
     const viewStart = now()
     measuredSimulationMs += viewStart - simulationStart
     dependencies.view.update(game.snapshot, game.renderAlpha, game.worldRevision)
+    const pathGraph = dependencies.getPathGraph?.() ?? null
+    dependencies.view.setPathGraphOverlay?.(pathGraph)
     dependencies.view.advanceWalk(deltaSeconds)
     dependencies.audio.updateListener(dependencies.view.audioListenerPose())
     if (!dependencies.isTitleOpen()) dependencies.audio.syncSnapshot(game.snapshot)
@@ -107,19 +135,34 @@ export function startGameLoop(dependencies: GameLoopDependencies): GameLoop {
 
     const elapsed = time - measurementStart
     if (elapsed < 1000) return
-    dependencies.performanceIndicator.textContent =
-      `${dependencies.versionLabel}\n` +
-      `FPS ${(measuredFrames * 1000 / elapsed).toFixed(0)} · ` +
-      `TPS ${(measuredTicks * 1000 / elapsed).toFixed(1)}\n` +
-      `Sim ${(measuredSimulationMs / measuredFrames).toFixed(1)} · ` +
-      `Szene ${(measuredViewMs / measuredFrames).toFixed(1)} · ` +
-      `Render ${(measuredRenderMs / measuredFrames).toFixed(1)} ms`
+    const frames = Math.max(1, measuredFrames)
+    const phases = measuredExclusive.size + measuredInclusive.size > 0
+      ? {
+          exclusive: Object.fromEntries(
+            [...measuredExclusive].map(([id, ms]) => [id, ms / frames]),
+          ),
+          inclusive: Object.fromEntries(
+            [...measuredInclusive].map(([id, ms]) => [id, ms / frames]),
+          ),
+        }
+      : null
+    dependencies.performanceIndicator.textContent = formatPerformanceHud({
+      versionLabel: dependencies.versionLabel,
+      fps: measuredFrames * 1000 / elapsed,
+      tps: measuredTicks * 1000 / elapsed,
+      simMs: measuredSimulationMs / frames,
+      viewMs: measuredViewMs / frames,
+      renderMs: measuredRenderMs / frames,
+      phases,
+    })
     measurementStart = time
     measuredFrames = 0
     measuredTicks = 0
     measuredSimulationMs = 0
     measuredViewMs = 0
     measuredRenderMs = 0
+    measuredExclusive = new Map()
+    measuredInclusive = new Map()
   }
   requestFrame(animate)
 

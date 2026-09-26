@@ -122,6 +122,8 @@ export function mountAppShell(app: HTMLDivElement): void {
       <button id="debug-clear-waste" title="Müll, Erbrochenes und verlassene Campinggegenstände sofort entfernen">🧹 Müll & alte Gegenstände entfernen</button>
       <button id="debug-remove-cars" title="Besucherautos entfernen">🚗 Autos entfernen & Gäste heimschicken</button>
       <button id="debug-demand-tuning" title="Zahlungs- und Teilnahmebereitschaft einstellen">🎟️ Nachfrage-Tuning</button>
+      <label class="scenario-check"><input id="debug-sim-phases" type="checkbox" /><span>Sim-Anteile der Unteraufgaben</span></label>
+      <label class="scenario-check"><input id="debug-path-graph" type="checkbox" /><span>Weggraph anzeigen</span></label>
     </div>
     <div id="save-menu-panel" class="dropdown-menu-panel panel">
       <button id="save">💾 Schnell speichern</button>

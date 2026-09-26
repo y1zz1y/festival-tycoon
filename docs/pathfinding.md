@@ -9,7 +9,8 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Generischer A* | `src/game/pathfinding.ts` | `findWeightedPath`, `createPathScratch` |
-| Fußgänger-Graph, Cache, `findPath` | `src/game/pedestrianNavigation.ts`, `src/game/GameState.ts` | `PedestrianNavigation`; kompatible Fassaden `ensurePedestrianNav`, `findPath`, `getPedestrianNeighbors`, `worldRevision` |
+| Fußgänger-Graph, Cache, `findPath` | `src/game/pedestrianNavigation.ts`, `src/game/GameState.ts` | `PedestrianNavigation`; kompatible Fassaden `ensurePedestrianNav`, `findPath`, `getPedestrianNeighbors`, `worldRevision`; Diagnose `debugPathGraph` |
+| Weggraph-Overlay | `src/view/PathGraphView.ts`, `src/view/WorldView.ts` | 🐞 → **Weggraph anzeigen**; eine `LineSegments`-Kante je Path-Path-Link, nicht in Static-Batches |
 | Hecke / Zaun / Wand im Fußgraphen | `src/game/scenery.ts` | `isPedestrianBarrierKind`, `pedestrianBarrierOccupancy` (`fenceMask` / `NAV_SOLID`) |
 | Crowd-Kosten und Belegung | `src/game/crowding.ts`, `src/game/visitorCrowdingSimulation.ts` | Crowd-Index; Kosten-, Motivations- und Panik-Orchestrierung |
 | Gerichtete Wege / Queues | `src/game/pathFlow.ts`, `src/game/queueLanes.ts`, `GameState.recalculateQueueDirections` | `allowsPathFlow`, Queue-Kette, Stand-Spuren |
@@ -84,6 +85,10 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
   Gedränge-Zuschläge. Das Modul kennt `GameState` nicht; ein schmaler Callback-
   Kontext liefert Weltabfragen, Kantenregeln und Revisionswerte. Die bisherigen
   privaten `GameState`-Methodensignaturen bleiben als Fassaden erhalten.
+  `debugPathGraph` liefert nur Kanten zwischen Wegknoten (Pfad-Flag oder
+  `toPath`); das Overlay in `PathGraphView` zeichnet sie als eine Cyan-
+  `LineSegments`-Gruppe oberhalb der Decks. Ausgeschaltet bleibt die Liste leer
+  und es wird kein Graph iteriert.
 - Camping-Ausweisungen sind keine Wände: Nach dem normalen Weg-Pass darf die
   Wegsuche ausgewiesenen Campingboden als Fallback queren. Wege bleiben durch
   ihre niedrigeren Oberflächenkosten bevorzugt; Gelände-, Gedränge- und
@@ -92,6 +97,9 @@ Multi-Goal-Suche, nicht in ein A* pro Zelt / Treffpunkt / Gebäude.
   wie normale Besucherziele, auch aus direkten Callbacks; siehe `simulation.md`.
 - Volle Wege-Scans nicht in Besucher-/Camp-/Staff-Schleifen nesten. Indizes
   einmal pro Pass bauen, Reservierungen inkrementell führen.
+  Idle-Personal startet kein A* fürs Herumlaufen oder die Zonenrückkehr;
+  Rückkehr ist ein lokaler Nachbarschritt. Sanitäter-Betten und
+  Reinigungs-Eimer mit Platz sind Multi-Goal, nicht ein A* je Ziel.
 - Terrain, Crowding, Staff-/Last-Penalties und Alternativrouten müssen
   funktionsfähig bleiben. Benchmarks nicht durch Einfrieren von Besuchern
   oder Abschalten von Effekten schönen.
@@ -161,6 +169,8 @@ Shortcuts, Rückwärtsgehen, Stand-Spuren, Saugroboter durch `staffOnly`).
 der hälftigen Stand-Spuren).
 Wasser für Gäste, Invalidierung nach Geländedit und Klippen-Nav: `tests/terrainLand.ts`.
 Die Modulgrenze und unveränderte Logistik-Phasenfolge: `tests/simulationModules.ts`.
+Weggraph-Flag (aus = keine Overlay-Daten, an = Kante zwischen benachbarten
+Wegkacheln): ebenfalls `tests/simulationModules.ts`.
 `tests/pedestrianBarriers.ts` (Hecke/Wand/Zaun sperren, Wandtür passierbar,
 Vollfeld vs. Kante, Nav-Invalidierung bei Setzen/Abriss).
 `tests/operations.ts` / `tests/accessControl.ts` (Personaleingang: bemalte

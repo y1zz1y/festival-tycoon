@@ -59,6 +59,11 @@ export type PedestrianNeighborOptions = {
   allowBackstage?: boolean
 }
 
+export type PedestrianGraphEdge = {
+  from: Cell
+  to: Cell
+}
+
 export type PedestrianPathOptions = {
   revalidate?: boolean
   allowQueue?: boolean
@@ -124,6 +129,8 @@ export class PedestrianNavigation {
   private readonly nodes = new Map<number, NavNode>()
   private navKey = ''
   private congestionCosts = new Map<number, number>()
+  private debugEdgeCache: PedestrianGraphEdge[] | null = null
+  private debugEdgeRevision = ''
 
   constructor(context: PedestrianNavigationContext) {
     this.context = context
@@ -133,6 +140,8 @@ export class PedestrianNavigation {
     this.nodes.clear()
     this.navKey = ''
     this.cache.clear()
+    this.debugEdgeCache = null
+    this.debugEdgeRevision = ''
   }
 
   clearPathCache(): void {
@@ -145,6 +154,30 @@ export class PedestrianNavigation {
 
   rebuildNow(): void {
     this.rebuild()
+  }
+
+  /**
+   * Path-to-path links from the live pedestrian graph. Cached until rebuild.
+   * Diagnostic overlay data only.
+   */
+  debugPathGraph(): { edges: readonly PedestrianGraphEdge[]; revision: string } {
+    this.ensure(true)
+    if (this.debugEdgeCache && this.debugEdgeRevision === this.navKey) {
+      return { edges: this.debugEdgeCache, revision: this.navKey }
+    }
+    const edges: PedestrianGraphEdge[] = []
+    for (const node of this.nodes.values()) {
+      if ((node.flags & PEDESTRIAN_NAV_FLAGS.path) === 0) continue
+      for (const link of node.links) {
+        const dest = link.node
+        if (node.packed >= dest.packed) continue
+        if ((dest.flags & PEDESTRIAN_NAV_FLAGS.path) === 0 && !link.toPath) continue
+        edges.push({ from: node.cell, to: dest.cell })
+      }
+    }
+    this.debugEdgeCache = edges
+    this.debugEdgeRevision = this.navKey
+    return { edges, revision: this.navKey }
   }
 
   hasNode(cell: Cell): boolean {
@@ -386,6 +419,8 @@ export class PedestrianNavigation {
     this.context.prepareGraph()
     this.nodes.clear()
     this.cache.clear()
+    this.debugEdgeCache = null
+    this.debugEdgeRevision = ''
     const half = this.context.worldSize() / 2
     const addNode = (x: number, z: number, elevation: number): void => {
       const packed = this.context.packCell({ x, z, elevation })

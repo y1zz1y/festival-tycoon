@@ -30,6 +30,7 @@ import { testOperations } from './operations'
 import { testBusPlanner } from './busPlanner'
 import { testSealedWasteContainer } from './sealedWasteContainer'
 import { testStaffZonePaint } from './staffZones'
+import { testStaffIdlePerformance } from './staffIdle'
 import { testAccessControl } from './accessControl'
 import { CampingView } from '../src/view/CampingView'
 import { Box3, Color, Quaternion, Vector3 } from 'three'
@@ -371,6 +372,9 @@ testOperations(fixture)
 testBusPlanner(fixture)
 testSealedWasteContainer(fixture)
 testStaffZonePaint(fixture)
+test('idle staff hold their post and skip empty job searches', () => {
+  testStaffIdlePerformance()
+})
 testShopGoods(fixture)
 testStageTickets(fixture)
 testStageInteraction(fixture)

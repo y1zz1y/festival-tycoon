@@ -19,6 +19,9 @@ import {
   repairSnapshotEntities,
 } from '../src/game/snapshotRepair'
 import type { Visitor } from '../src/game/types/entities'
+import { GameState } from '../src/game/GameState'
+import { normalizeScenarioSettings } from '../src/game/scenario'
+import { SimulationProfiler } from '../src/game/simulationProfiler'
 
 function vehicle(id: string): RoadVehicle {
   return {
@@ -181,4 +184,84 @@ export function testSimulationModules(): void {
   processing = false
   assert.equal(visitors.runRouting(guest, 'exit', () => visitorPhases.push('direct')), true)
   assert.equal(visitorPhases.at(-1), 'direct')
+
+  const measured: string[] = []
+  const profiled = new VisitorSimulation({
+    state: visitorState,
+    getVisitor: (id) => visitorState.visitors.find((visitor) => visitor.id === id),
+    isProcessingStep: () => true,
+    takeDecision: () => true,
+    beginDeparture: () => undefined,
+    ensureExitRoute: () => undefined,
+    routeWaste: () => undefined,
+    chooseNextAction: () => undefined,
+    updateVisitors: () => undefined,
+    updateFanIntrusion: () => undefined,
+    updateBandActors: () => undefined,
+    updateFacilityQueues: () => undefined,
+    updateVisitorFireworks: () => undefined,
+    updateCoasters: () => undefined,
+    measurePhase: (id, work) => {
+      measured.push(id)
+      return work()
+    },
+  })
+  profiled.runTickPhase(1)
+  assert.deepEqual(measured, [
+    'visitors', 'concert', 'concert', 'queues', 'concert', 'attractions',
+  ])
+
+  let clock = 0
+  const profiler = new SimulationProfiler(() => clock)
+  assert.equal(profiler.consume(), null)
+  profiler.measure('staff', () => {
+    clock += 4
+  })
+  assert.equal(profiler.consume(), null, 'disabled profiler never records timings')
+  profiler.enabled = true
+  profiler.measure('staff', () => {
+    clock += 4
+  })
+  profiler.measureInclusive('pathfinding', () => {
+    clock += 2
+  })
+  const sample = profiler.consume()
+  assert.deepEqual(sample, { exclusive: { staff: 4 }, inclusive: { pathfinding: 2 } })
+  assert.deepEqual(profiler.consume(), { exclusive: {}, inclusive: {} })
+  profiler.enabled = false
+  assert.equal(profiler.consume(), null)
+
+  const park = GameState.startNew(normalizeScenarioSettings({
+    worldSize: 32,
+    unevenness: 0,
+    startingMoney: 50_000,
+  }))
+  park.snapshot.festival.planning = false
+  park.setSpeed(1)
+  assert.equal(park.consumeSimulationPhaseTimings(), null)
+  park.setSimulationPhaseProfiling(true)
+  park.tick(0.1)
+  const tickTimings = park.consumeSimulationPhaseTimings()
+  assert.ok(tickTimings)
+  for (const id of ['nav', 'walk', 'festival', 'logistics', 'staff', 'visitors']) {
+    assert.equal(typeof tickTimings.exclusive[id], 'number', `tick records exclusive ${id}`)
+  }
+  park.setSimulationPhaseProfiling(false)
+  assert.equal(park.consumeSimulationPhaseTimings(), null)
+
+  assert.equal(park.debugPathGraph().edges.length, 0, 'path graph stays empty while the flag is off')
+  park.setPathGraphDebugEnabled(true)
+  assert.ok(park.placePathSegment(4, 4, 0).ok)
+  assert.ok(park.placePathSegment(5, 4, 0).ok)
+  const graph = park.debugPathGraph()
+  assert.ok(graph.revision.length > 0)
+  assert.ok(
+    graph.edges.some((edge) =>
+      (edge.from.x === 4 && edge.to.x === 5 && edge.from.z === 4 && edge.to.z === 4) ||
+      (edge.from.x === 5 && edge.to.x === 4 && edge.from.z === 4 && edge.to.z === 4),
+    ),
+    'adjacent path tiles form a debug graph edge',
+  )
+  park.setPathGraphDebugEnabled(false)
+  assert.equal(park.debugPathGraph().edges.length, 0)
 }

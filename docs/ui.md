@@ -43,7 +43,7 @@ Eingang/Ausgang.
 | Objekt- und Besucheranzeige | `src/ui/entityPanel.ts`, `src/ui/visitorPanel.ts` | Vollständige Objektpanel-Orchestrierung, Achterbahn-Telemetrie, Kurs-/Paintball-/Pool-Betrieb sowie zustandsbehaftete Besucher-Inspektion |
 | UI-Formatierung | `src/ui/format.ts` | HTML-Escaping, Geld-, Uhrzeit- und Speicherzeitformat |
 | Finanz-Ledger | `src/ui/financePanel.ts` | `renderFinanceLedger`, aufklappbare Kostenzeilen |
-| Render- und Hidden-Tab-Schleife | `src/app/gameLoop.ts` | `startGameLoop`; schmale Game/View/Audio-Schnittstellen |
+| Render- und Hidden-Tab-Schleife | `src/app/gameLoop.ts`, `src/app/performanceHud.ts` | `startGameLoop`; HUD-Text `formatPerformanceHud`; optionale Sim-Phasen und Weggraph |
 | Kartenklick-Werkzeugrouting | `src/input/toolRouter.ts`, `src/input/cellToolHandlers.ts` | Direkte Commands sowie typisierte Achterbahn-, Wegeditor- und Inspect-Routen |
 | Weg-/Straßen-Ziehcontroller | `src/input/pathToolController.ts` | `createPathToolController`; besitzt Ziehzustand, Linien-/Rechteckbildung und Ausführung |
 | Achterbahn-Baufenster | `src/ui/coasterBuilderPanel.ts` | `updateCoasterBuilderPanel`; stabile Palette und Ghost-/Auswahlvorschau |
@@ -180,6 +180,13 @@ Eingang/Ausgang.
   Akzeptanz, Teilnahme und Anreise. Die Vorschau zeigt aktuelle faire Preise,
   Akzeptanz, Teilnehmer und Erlös. **Standardwerte** füllt nur den Entwurf;
   **Übernehmen** sendet ihn atomar an den Host.
+  Im selben 🐞-Menü: **Sim-Anteile der Unteraufgaben** hängt exklusive
+  Tick-Phasen (ms und Anteil an Sim) plus inklusive Wegsuche an die
+  FPS-/Versionsliste unten links; **Weggraph anzeigen** legt Cyan-Kanten
+  des Fuß-Navgraphen auf gebaute Wege. Beide Flags liegen in `localStorage`
+  (`festival-debug-sim-phases`, `festival-debug-path-graph`), nicht im
+  Spielstand. Ohne den Debug-Schalter in den Einstellungen bleiben Profiler
+  und Overlay aus.
   Die Iconleiste ist etwa ein
   Viertel größer als die alten 32-px-Kacheln. Linke Baupaletten enden
   oberhalb der Debug-/Versionsanzeige unten links.
@@ -353,6 +360,8 @@ Infotexte für Müllwagen-Ladung und zusammenhängende Ablagen:
 `tests/festivalAdditions.ts`. Ticker und Müllkappen: `tests/ticker.ts`.
 Debug **Autos entfernen** (Autos weg, Belegung frei, Insassen zu Fuß):
 `tests/operations.ts`.
+HUD-Phasenformat und Debug-Flag-Struktur: `tests/uiModules.ts`,
+`tests/simulationModules.ts`.
 Abriss-Picking (Mesh vor Nachbar/Kachelmitte): `tests/picking.ts`.
 Achterbahn-Komplettabriss aus Infofenster/Command: `tests/festivalAdditions.ts`.
 Abriss-Nachfrage-Text und Trefferprüfung (Station ohne Gebäude-ID): `tests/uiModules.ts`.

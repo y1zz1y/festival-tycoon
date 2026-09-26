@@ -13,7 +13,7 @@ import {
   wasteDropGoals,
 } from './waste'
 import { SIMULATION_CONFIG } from './simulationConfig'
-import type { RngSource } from './rng'
+import { hashStringSeed, type RngSource } from './rng'
 import { isInAnyZone, zoneCellRange } from './staffZones'
 import { buildingFootprint, type StageDesign } from './stageDesign'
 import { CARDINAL_OFFSETS } from './shopAccess'
@@ -87,6 +87,10 @@ type StaffContext = {
   cleanerCarry?: { capacity: number }
   /** How much faster than on foot the crew moves — 1 until the festival buys them wheels. */
   speedFactor?: number
+  /** Authoritative sim tick; idle patrol/search cadence, never a wall clock. */
+  simTick?: number
+  /** Optional override for tests; default is `staff.jobDecisionsPerTick`. */
+  takeDecision?: () => boolean
 }
 const carryCapacity = (context: StaffContext): number =>
   context.cleanerCarry?.capacity ?? SIMULATION_CONFIG.waste.cleanerMaxCarry
@@ -143,7 +147,25 @@ function indexStaffBuildings(
   }
 }
 
-/** Fire tile plus walkable stand-off cells: 4-neighbours, or the whole footprint if it touches a building. */
+function sameStaffTile(
+  left: { x: number; z: number },
+  right: { x: number; z: number },
+): boolean {
+  return left.x === right.x && left.z === right.z
+}
+
+function staffManhattan(
+  left: { x: number; z: number },
+  right: { x: number; z: number },
+): number {
+  return Math.abs(left.x - right.x) + Math.abs(left.z - right.z)
+}
+
+/**
+ * Fire tile plus stand-off cells: 4-neighbours, or the whole footprint if it
+ * touches a building. Outdoor and stage-forecourt fires use the same set —
+ * the fire tile need not be a path; a cardinal neighbour is enough.
+ */
 export function fireApproachGoals(
   fire: Cell,
   built?: BuildingFootprintIndex,
@@ -169,9 +191,57 @@ export function fireApproachGoals(
   return goals
 }
 
+/** True when the crew already stands on the fire tile or a stand-off neighbour. */
+export function isOnFireApproach(
+  from: { x: number; z: number },
+  fire: Cell,
+  built?: BuildingFootprintIndex,
+): boolean {
+  return fireApproachGoals(fire, built).some((goal) => sameStaffTile(from, goal))
+}
+
+type StaffPassIndex = {
+  fires: GroundIncident[]
+  waste: GroundIncident[]
+  bins: WasteBinInfo[]
+  camps: Array<{ id: string; x: number; z: number; elevation: number }>
+  sealedHauls: SealedWasteContainerInfo[]
+  hasFire: boolean
+  hasCleanerWork: boolean
+  hasMedicWork: boolean
+}
+
+function zoneCenterCell(key: string, elevation: number): Cell {
+  const area = zoneCellRange(key)
+  return {
+    x: Math.floor((area.minX + area.maxX) / 2),
+    z: Math.floor((area.minZ + area.maxZ) / 2),
+    elevation,
+  }
+}
+
+function inMemberZones<T>(
+  items: readonly T[],
+  zones: string[] | undefined,
+  at: (item: T) => { x: number; z: number },
+): T[] {
+  if (!zones?.length) return [...items]
+  return items.filter((item) => isInAnyZone(zones, at(item).x, at(item).z))
+}
+
 export class StaffSimulation {
+  private readonly nextIdlePatrolTick = new Map<string, number>()
+  private readonly nextJobSearchTick = new Map<string, number>()
+  private readonly assignedThisPass = new Set<string>()
+  private takeDecision: () => boolean = () => true
+
   update(context: StaffContext, minutes: number): void {
-    const built = indexStaffBuildings(context.buildings)
+    this.pruneRuntimeMaps(context.staff)
+    this.assignedThisPass.clear()
+    const takeDecision = this.createTickBudget(context)
+    this.takeDecision = takeDecision
+    const index = this.buildPassIndex(context)
+    const built = index.hasFire ? indexStaffBuildings(context.buildings) : undefined
     this.assignSecurity(context)
     const claimed = new Set(
       context.staff.map((member) => member.targetId).filter((id): id is string => Boolean(id)),
@@ -182,98 +252,245 @@ export class StaffSimulation {
       )
       if (incident) claimed.add(this.incidentFieldKey(incident))
     })
-    this.assignNearestFreeMedics(context, claimed)
-    context.staff.forEach((member) => {
-      if (member.role === 'security' && member.assignedBuildingId) return
-      if (member.state === 'working' && !member.targetId) {
-        member.state = member.carryingWaste > 0 ? 'carrying' : 'patrolling'
-        member.workMinutes = 0
+    if (index.hasMedicWork) this.assignNearestFreeMedics(context, claimed, takeDecision)
+    const seekRank = (role: StaffMember['role']) =>
+      role === 'firefighter' ? 0 : role === 'medic' ? 1 : role === 'cleaner' ? 2 : 3
+    context.staff
+      .map((member, order) => ({ member, order }))
+      .sort((left, right) => seekRank(left.member.role) - seekRank(right.member.role) || left.order - right.order)
+      .forEach(({ member }) => {
+        this.advanceMember(member, context, minutes, claimed, built, index, takeDecision)
+      })
+  }
+
+  private createTickBudget(context: StaffContext): () => boolean {
+    if (context.takeDecision) return context.takeDecision
+    let remaining = SIMULATION_CONFIG.staff.jobDecisionsPerTick
+    return () => {
+      if (remaining <= 0) return false
+      remaining -= 1
+      return true
+    }
+  }
+
+  private pruneRuntimeMaps(staff: readonly StaffMember[]): void {
+    const live = new Set(staff.map((member) => member.id))
+    for (const id of this.nextIdlePatrolTick.keys()) {
+      if (!live.has(id)) this.nextIdlePatrolTick.delete(id)
+    }
+    for (const id of this.nextJobSearchTick.keys()) {
+      if (!live.has(id)) this.nextJobSearchTick.delete(id)
+    }
+  }
+
+  private buildPassIndex(context: StaffContext): StaffPassIndex {
+    const idleEmptyFill = SIMULATION_CONFIG.waste.cleanerIdleEmptyFill
+    const fires = context.incidents.filter((incident) => incident.kind === 'fire')
+    const waste = context.incidents.filter(
+      (incident) => incident.kind === 'litter' || incident.kind === 'vomit',
+    )
+    const bins = context.wasteBins.filter((bin) => bin.stored >= idleEmptyFill)
+    const camps = context.abandonedCamps ?? []
+    const sealedHauls = (context.sealedContainers ?? []).filter((container) =>
+      sealedContainerAllowsManualHaul(container),
+    )
+    const claimed = new Set(
+      context.staff.map((member) => member.targetId).filter((id): id is string => Boolean(id)),
+    )
+    const patients = context.visitors.filter((visitor) =>
+      this.visitorNeedsMedic(visitor, claimed, context.seatedPassengerIds),
+    )
+    return {
+      fires,
+      waste,
+      bins,
+      camps,
+      sealedHauls,
+      hasFire: fires.length > 0,
+      hasCleanerWork:
+        waste.length > 0 || bins.length > 0 || camps.length > 0 || sealedHauls.length > 0,
+      hasMedicWork: patients.length > 0,
+    }
+  }
+
+  private advanceMember(
+    member: StaffMember,
+    context: StaffContext,
+    minutes: number,
+    claimed: Set<string>,
+    built: BuildingFootprintIndex | undefined,
+    index: StaffPassIndex,
+    takeDecision: () => boolean,
+  ): void {
+    if (member.role === 'security' && member.assignedBuildingId) return
+    if (member.state === 'working' && !member.targetId) {
+      member.state = member.carryingWaste > 0 ? 'carrying' : 'patrolling'
+      member.workMinutes = 0
+    }
+    if (member.state === 'working') {
+      member.workMinutes -= minutes
+      if (member.workMinutes <= 0 && member.targetId) {
+        this.finishWork(member, context)
       }
-      if (member.state === 'working') {
-        member.workMinutes -= minutes
-        if (member.workMinutes <= 0 && member.targetId) {
-          this.finishWork(member, context)
+      return
+    }
+    if (
+      member.role === 'cleaner' &&
+      member.state === 'carrying' &&
+      !cartIsFull(member, context) &&
+      index.waste.length > 0
+    ) {
+      member.targetId = null
+      member.route = []
+      member.state = 'patrolling'
+    }
+    if (member.route.length > 0) {
+      this.move(member, minutes * this.staffSpeed(member) * (context.speedFactor ?? 1))
+      if (member.role === 'medic' && member.state === 'carrying') {
+        const patient = context.visitors.find((visitor) => visitor.id === member.targetId)
+        if (patient) {
+          patient.x = member.x
+          patient.y = member.y + 0.12
+          patient.z = member.z
+          patient.cellX = member.cellX
+          patient.cellZ = member.cellZ
+          patient.cellElevation = member.cellElevation
         }
-        return
       }
-      if (
-        member.role === 'cleaner' &&
-        member.state === 'carrying' &&
-        !cartIsFull(member, context) &&
-        context.incidents.some(
-          (incident) => incident.kind === 'litter' || incident.kind === 'vomit',
-        )
-      ) {
-        member.targetId = null
-        member.route = []
-        member.state = 'patrolling'
-      }
-      if (member.route.length > 0) {
-        this.move(member, minutes * this.staffSpeed(member) * (context.speedFactor ?? 1))
-        if (member.role === 'medic' && member.state === 'carrying') {
-          const patient = context.visitors.find((visitor) => visitor.id === member.targetId)
-          if (patient) {
-            patient.x = member.x
-            patient.y = member.y + 0.12
-            patient.z = member.z
-            patient.cellX = member.cellX
-            patient.cellZ = member.cellZ
-            patient.cellElevation = member.cellElevation
-          }
-        }
-        if (member.route.length > 0) return
-      }
-      if (member.targetId) {
-        this.finishArrival(member, context)
-        return
-      }
-      // A full cart goes away; a half-full one carries on collecting with the search below.
-      if (member.role === 'cleaner' && cartIsFull(member, context)) {
-        if (this.sendCleanerToDump(member, context)) return
-        member.state = 'carrying'
-        this.patrol(member, context)
-        return
-      }
-      const zones = member.workZones
-      const inside = (x: number, z: number) => isInAnyZone(zones, x, z)
-      const workContext = zones?.length ? { ...context, visitors: context.visitors.filter(v => inside(v.cellX, v.cellZ)), incidents: context.incidents.filter(p => inside(p.x, p.z)), wasteBins: context.wasteBins.filter(p => inside(p.x, p.z)), sealedContainers: context.sealedContainers?.filter(p => inside(p.x, p.z)), abandonedCamps: context.abandonedCamps?.filter(p => inside(p.x, p.z)) } : context
-      // An inaccessible job must not pin a worker in place. Bound path searches
-      // per decision, then patrol so the next search starts from a new position.
-      const excluded = new Set(claimed)
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const target = this.findTarget(member, workContext, excluded)
-        if (!target) break
-        const route = this.routeToStaffTarget(member, target, context, built)
-        if (!route) {
-          excluded.add(target.id)
-          continue
-        }
-        member.targetId = target.id
-        member.state = 'responding'
-        member.route = route
-        claimed.add(target.id)
-        if (member.role === 'cleaner' || member.role === 'firefighter') {
-          claimed.add(
-            `${target.kind ?? (member.role === 'cleaner' ? 'vomit' : 'fire')}:${target.cell.x}:${target.cell.z}:${target.cell.elevation}`,
-          )
-        }
-        return
-      }
-      // Nothing left to pick up, so whatever is on board is taken away now rather
-      // than riding along until the next piece of litter turns up.
-      const looseWasteRemains =
-        member.role === 'cleaner' &&
-        workContext.incidents.some(
-          (incident) => incident.kind === 'litter' || incident.kind === 'vomit',
-        )
+      if (member.route.length > 0) return
+    }
+    if (member.targetId) {
+      if (this.assignedThisPass.has(member.id)) return
+      this.finishArrival(member, context)
+      return
+    }
+    if (member.role === 'cleaner' && cartIsFull(member, context)) {
+      if (this.sendCleanerToDump(member, context, takeDecision)) return
+      member.state = 'carrying'
+      this.holdOrPatrol(member, context, takeDecision, true)
+      return
+    }
+    if (!this.roleHasOpenWork(member, index)) {
       if (
         member.role === 'cleaner' &&
         member.carryingWaste > 0 &&
-        !looseWasteRemains &&
-        this.sendCleanerToDump(member, context)
-      ) return
-      this.patrol(member, context)
-    })
+        index.waste.length === 0 &&
+        this.sendCleanerToDump(member, context, takeDecision)
+      ) {
+        return
+      }
+      this.holdOrPatrol(member, context, takeDecision, false)
+      return
+    }
+    const tick = context.simTick ?? 0
+    const retryAt = this.nextJobSearchTick.get(member.id)
+    if (retryAt !== undefined && tick < retryAt) {
+      this.holdOrPatrol(member, context, takeDecision, false)
+      return
+    }
+    const workContext = this.sliceWorkContext(member, context)
+    if (!this.sliceHasWork(member, workContext)) {
+      this.holdOrPatrol(member, context, takeDecision, false)
+      return
+    }
+    const assigned = this.tryAssignJob(member, workContext, context, claimed, built, takeDecision)
+    if (assigned === 'assigned') return
+    if (assigned === 'blocked') {
+      this.nextJobSearchTick.set(member.id, tick + SIMULATION_CONFIG.staff.idleSearchRetryTicks)
+    }
+    if (
+      member.role === 'cleaner' &&
+      member.carryingWaste > 0 &&
+      workContext.incidents.every(
+        (incident) => incident.kind !== 'litter' && incident.kind !== 'vomit',
+      ) &&
+      this.sendCleanerToDump(member, context, takeDecision)
+    ) {
+      return
+    }
+    this.holdOrPatrol(member, context, takeDecision, true)
+  }
+
+  private roleHasOpenWork(member: StaffMember, index: StaffPassIndex): boolean {
+    if (member.role === 'firefighter') return index.hasFire
+    if (member.role === 'cleaner') return index.hasCleanerWork
+    if (member.role === 'medic') return index.hasMedicWork
+    return false
+  }
+
+  private sliceHasWork(member: StaffMember, workContext: StaffContext): boolean {
+    if (member.role === 'firefighter') {
+      return workContext.incidents.some((incident) => incident.kind === 'fire')
+    }
+    if (member.role === 'medic') {
+      return workContext.visitors.some((visitor) =>
+        this.visitorNeedsMedic(visitor, new Set(), workContext.seatedPassengerIds),
+      )
+    }
+    if (member.role !== 'cleaner') return false
+    const idleEmptyFill = SIMULATION_CONFIG.waste.cleanerIdleEmptyFill
+    return (
+      workContext.incidents.some(
+        (incident) => incident.kind === 'litter' || incident.kind === 'vomit',
+      ) ||
+      workContext.wasteBins.some((bin) => bin.stored >= idleEmptyFill) ||
+      (workContext.abandonedCamps?.length ?? 0) > 0 ||
+      (workContext.sealedContainers ?? []).some((container) =>
+        sealedContainerAllowsManualHaul(container),
+      )
+    )
+  }
+
+  private sliceWorkContext(member: StaffMember, context: StaffContext): StaffContext {
+    const zones = member.workZones
+    if (!zones?.length) return context
+    return {
+      ...context,
+      visitors: inMemberZones(context.visitors, zones, (visitor) => ({
+        x: visitor.cellX,
+        z: visitor.cellZ,
+      })),
+      incidents: inMemberZones(context.incidents, zones, (incident) => incident),
+      wasteBins: inMemberZones(context.wasteBins, zones, (bin) => bin),
+      sealedContainers: inMemberZones(context.sealedContainers ?? [], zones, (container) => container),
+      abandonedCamps: inMemberZones(context.abandonedCamps ?? [], zones, (camp) => camp),
+    }
+  }
+
+  private tryAssignJob(
+    member: StaffMember,
+    workContext: StaffContext,
+    context: StaffContext,
+    claimed: Set<string>,
+    built: BuildingFootprintIndex | undefined,
+    takeDecision: () => boolean,
+  ): 'assigned' | 'none' | 'blocked' | 'budget' {
+    const excluded = new Set(claimed)
+    const maxAttempts = SIMULATION_CONFIG.staff.maxJobPathAttempts
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const target = this.findTarget(member, workContext, excluded)
+      if (!target) return attempt === 0 ? 'none' : 'blocked'
+      const arrived = this.alreadyAtStaffTarget(member, target, built)
+      if (!arrived && !takeDecision()) return 'budget'
+      const route = arrived ? [] : this.routeToStaffTarget(member, target, context, built)
+      if (!route) {
+        excluded.add(target.id)
+        continue
+      }
+      member.targetId = target.id
+      member.state = 'responding'
+      member.route = route
+      this.assignedThisPass.add(member.id)
+      claimed.add(target.id)
+      if (member.role === 'cleaner' || member.role === 'firefighter') {
+        claimed.add(
+          `${target.kind ?? (member.role === 'cleaner' ? 'vomit' : 'fire')}:${target.cell.x}:${target.cell.z}:${target.cell.elevation}`,
+        )
+      }
+      this.nextJobSearchTick.delete(member.id)
+      return 'assigned'
+    }
+    return 'blocked'
   }
 
   private assignSecurity(context: StaffContext): void {
@@ -300,7 +517,11 @@ export class StaffSimulation {
     })
   }
 
-  private assignNearestFreeMedics(context: StaffContext, claimed: Set<string>): void {
+  private assignNearestFreeMedics(
+    context: StaffContext,
+    claimed: Set<string>,
+    takeDecision: () => boolean = () => true,
+  ): void {
     const medics = context.staff.filter((member) => this.medicIsFree(member))
     if (medics.length === 0) return
     const patients = context.visitors.filter((visitor) =>
@@ -328,21 +549,22 @@ export class StaffSimulation {
     const usedPatients = new Set<string>()
     for (const pair of pairs) {
       if (usedMedics.has(pair.medic.id) || usedPatients.has(pair.patient.id)) continue
-      const route = context.findPath(
-        this.staffCell(pair.medic),
-        [
-          {
-            x: pair.patient.cellX,
-            z: pair.patient.cellZ,
-            elevation: pair.patient.cellElevation,
-          },
-        ],
-        true,
-      )
+      const here = this.staffCell(pair.medic)
+      const patientCell = {
+        x: pair.patient.cellX,
+        z: pair.patient.cellZ,
+        elevation: pair.patient.cellElevation,
+      }
+      const beside = staffManhattan(here, patientCell) <= 1
+      if (!beside && !takeDecision()) break
+      const route = beside
+        ? []
+        : context.findPath(here, [patientCell], true)
       if (!route) continue
       pair.medic.targetId = pair.patient.id
       pair.medic.state = 'responding'
       pair.medic.route = route
+      this.assignedThisPass.add(pair.medic.id)
       claimed.add(pair.patient.id)
       usedMedics.add(pair.medic.id)
       usedPatients.add(pair.patient.id)
@@ -414,6 +636,7 @@ export class StaffSimulation {
             id: patient.id,
             cell: { x: patient.cellX, z: patient.cellZ, elevation: patient.cellElevation },
             allowMedical: true,
+            kind: 'patient',
           }
         : null
     }
@@ -550,22 +773,25 @@ export class StaffSimulation {
       const patient = context.visitors.find((visitor) => visitor.id === member.targetId)
       if (!patient) return this.reset(member)
       if (member.state === 'responding') {
-        const nearest = context.medicalCells
-          .filter((cell) =>
-            cell.occupants.some((occupant) => occupant === null),
-          )
-          .map((cell) => ({
-            cell,
-            route: context.findPath(this.staffCell(member), [cell], true),
-          }))
-          .filter(
-            (
-              candidate,
-            ): candidate is { cell: MedicalCell; route: Cell[] } =>
-              candidate.route !== null,
-          )
-          .sort((left, right) => left.route.length - right.route.length)[0]
-        if (!nearest) return this.reset(member)
+        const freeBeds = context.medicalCells.filter((cell) =>
+          cell.occupants.some((occupant) => occupant === null),
+        )
+        if (freeBeds.length === 0) return this.reset(member)
+        const route = context.findPath(this.staffCell(member), freeBeds, true)
+        if (!route) return this.reset(member)
+        const last = route.at(-1)
+        const nearest = {
+          cell:
+            (last &&
+              freeBeds.find(
+                (cell) =>
+                  cell.x === last.x &&
+                  cell.z === last.z &&
+                  Math.abs(cell.elevation - last.elevation) < 0.01,
+              )) ||
+            freeBeds[0]!,
+          route,
+        }
         const bed = context.reserveBed(patient.id, nearest.cell)
         if (!bed) return this.reset(member)
         member.medicalCell = bed.cell
@@ -746,49 +972,52 @@ export class StaffSimulation {
     const binsHaveRoom = context.wasteBins.some(
       (bin) => bin.stored < SIMULATION_CONFIG.waste.binCapacity,
     )
-    if (cartIsFull(member, context) && binsHaveRoom && !member.wasteFromBin && this.sendCleanerToDump(member, context)) {
+    if (cartIsFull(member, context) && binsHaveRoom && !member.wasteFromBin && this.sendCleanerToDump(member, context, this.takeDecision)) {
       return
     }
     if (!cartIsFull(member, context)) {
       const claimed = new Set(
         context.staff.map((worker) => worker.targetId).filter((id): id is string => Boolean(id)),
       )
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const next = this.findTarget(member, context, claimed)
-        if (!next) break
-        const route = this.routeToStaffTarget(member, next, context)
-        if (!route) {
-          claimed.add(next.id)
-          continue
-        }
-        member.targetId = next.id
-        member.state = 'responding'
-        member.route = route
-        return
-      }
+      if (this.tryAssignJob(member, context, context, claimed, undefined, this.takeDecision) === 'assigned') return
       if (
         context.incidents.some(
           (incident) => incident.kind === 'litter' || incident.kind === 'vomit',
         )
       ) {
-        this.patrol(member, context)
+        this.holdOrPatrol(member, context, this.takeDecision, true)
         return
       }
     }
-    if (!this.sendCleanerToDump(member, context)) {
+    if (!this.sendCleanerToDump(member, context, this.takeDecision)) {
       member.state = 'carrying'
     }
   }
 
-  private sendCleanerToDump(member: StaffMember, context: StaffContext): boolean {
+  private sendCleanerToDump(
+    member: StaffMember,
+    context: StaffContext,
+    takeDecision: () => boolean = () => true,
+  ): boolean {
+    if (!takeDecision()) return false
     if (!member.wasteFromBin && !member.wasteFromSealedContainer && context.fillBin) {
       const bins = context.wasteBins.filter(bin => bin.stored < SIMULATION_CONFIG.waste.binCapacity)
-        .sort((a, b) => Math.abs(a.x-member.cellX)+Math.abs(a.z-member.cellZ)-Math.abs(b.x-member.cellX)-Math.abs(b.z-member.cellZ))
-      for (const bin of bins) {
-        const route = context.findPath(this.staffCell(member), [bin], true)
-        if (!route) continue
-        member.targetId = `deposit-bin:${bin.id}`; member.route = route; member.state = 'carrying'
-        return true
+      if (bins.length > 0) {
+        const route = context.findPath(
+          this.staffCell(member),
+          bins.map((bin) => ({ x: bin.x, z: bin.z, elevation: bin.elevation })),
+          true,
+        )
+        if (route?.length) {
+          const last = route.at(-1)!
+          const bin =
+            bins.find((candidate) => candidate.x === last.x && candidate.z === last.z) ??
+            bins[0]!
+          member.targetId = `deposit-bin:${bin.id}`
+          member.route = route
+          member.state = 'carrying'
+          return true
+        }
       }
     }
     const containers = member.wasteFromSealedContainer
@@ -852,38 +1081,88 @@ export class StaffSimulation {
     )
   }
 
-  private patrol(member: StaffMember, context: StaffContext): void {
+  private holdOrPatrol(
+    member: StaffMember,
+    context: StaffContext,
+    _takeDecision: () => boolean,
+    stepNow: boolean,
+  ): void {
+    if (member.route.length > 0) return
+    const zones = member.workZones
+    const here = this.staffCell(member)
+    const tick = context.simTick ?? 0
+    if (zones?.length && !isInAnyZone(zones, here.x, here.z)) {
+      const next = this.stepTowardZone(member, context)
+      if (next) member.route = [next]
+      this.markIdle(member)
+      return
+    }
+    if (!stepNow) {
+      const due = this.nextIdlePatrolTick.get(member.id)
+      if (due === undefined) {
+        this.nextIdlePatrolTick.set(
+          member.id,
+          tick + 1 + (hashStringSeed(member.id) % SIMULATION_CONFIG.staff.idlePatrolTicks),
+        )
+        this.markIdle(member)
+        return
+      }
+      if (tick < due) {
+        this.markIdle(member)
+        return
+      }
+    }
+    this.nextIdlePatrolTick.set(member.id, tick + SIMULATION_CONFIG.staff.idlePatrolTicks)
+    this.stepLocalPatrol(member, context)
+  }
+
+  private markIdle(member: StaffMember): void {
+    if (member.role !== 'cleaner' || member.carryingWaste <= 0) {
+      member.state = 'patrolling'
+    }
+  }
+
+  private stepTowardZone(member: StaffMember, context: StaffContext): Cell | undefined {
+    const zones = member.workZones
+    if (!zones?.length) return undefined
+    const here = this.staffCell(member)
+    const anchors = zones.map((key) => zoneCenterCell(key, here.elevation))
+    const distance = (cell: Cell) =>
+      Math.min(...anchors.map((anchor) => Math.abs(anchor.x - cell.x) + Math.abs(anchor.z - cell.z)))
+    const hereDistance = distance(here)
+    const closer = (cell: Cell) => distance(cell) < hereDistance
+    let candidates = context.pathNeighbors(here, false).filter(closer)
+    const onPath = context.hasPath?.(here) ?? false
+    if (onPath && context.hasPath) {
+      candidates = candidates.filter((cell) => context.hasPath!(cell))
+    } else if (context.isRoadAt) {
+      const offRoad = candidates.filter((cell) => !context.isRoadAt!(cell.x, cell.z))
+      if (offRoad.length) candidates = offRoad
+    }
+    if (!candidates.length && !onPath) {
+      candidates = context.pathNeighbors(here, true).filter(closer)
+    }
+    return context.rng.pick(candidates)
+  }
+
+  private stepLocalPatrol(member: StaffMember, context: StaffContext): void {
     const zones = member.workZones
     const here = this.staffCell(member)
     // On patrol the crew keeps to paths and the areas laid out for people. Only someone
     // set down on open grass, with no path next to them, may cross grass to reach one.
-    let neighbors = context.pathNeighbors(here, false).filter(p => isInAnyZone(zones, p.x, p.z))
+    let neighbors = context.pathNeighbors(here, false).filter((cell) => isInAnyZone(zones, cell.x, cell.z))
     const onPath = context.hasPath?.(here) ?? false
     if (onPath && context.hasPath) neighbors = neighbors.filter((cell) => context.hasPath!(cell))
     else if (context.isRoadAt) {
-      // Off the footpath network — standing on camping ground, a forecourt, or the
-      // roadway itself — a patrol still leaves the road to the traffic where it can:
-      // only once every other paved neighbour is a dead end does it step onto one.
       const offRoad = neighbors.filter((cell) => !context.isRoadAt!(cell.x, cell.z))
       if (offRoad.length) neighbors = offRoad
     }
     if (!neighbors.length && !onPath) {
-      neighbors = context.pathNeighbors(here, true).filter(p => isInAnyZone(zones, p.x, p.z))
-    }
-    if (zones?.length && !neighbors.length) {
-      const goals: Cell[] = []
-      for (const key of zones) {
-        const area = zoneCellRange(key)
-        for (let z = area.minZ; z <= area.maxZ; z++) for (let x = area.minX; x <= area.maxX; x++) goals.push({x,z,elevation:member.cellElevation})
-      }
-      member.route = context.findPath(this.staffCell(member), goals) ?? []
-      return
+      neighbors = context.pathNeighbors(here, true).filter((cell) => isInAnyZone(zones, cell.x, cell.z))
     }
     const next = context.rng.pick(neighbors)
     if (next) member.route = [next]
-    if (member.role !== 'cleaner' || member.carryingWaste <= 0) {
-      member.state = 'patrolling'
-    }
+    this.markIdle(member)
   }
 
   private staffSpeed(member: StaffMember): number {
@@ -931,6 +1210,19 @@ export class StaffSimulation {
     return { x: member.cellX, z: member.cellZ, elevation: member.cellElevation }
   }
 
+  private alreadyAtStaffTarget(
+    member: StaffMember,
+    target: { cell: Cell; kind?: string },
+    built?: BuildingFootprintIndex,
+  ): boolean {
+    const start = this.staffCell(member)
+    if (target.kind === 'fire') return isOnFireApproach(start, target.cell, built)
+    if (target.kind === 'patient' || member.role === 'medic') {
+      return staffManhattan(start, target.cell) <= 1
+    }
+    return sameStaffTile(start, target.cell)
+  }
+
   private routeToStaffTarget(
     member: StaffMember,
     target: { cell: Cell; allowMedical?: boolean; kind?: string },
@@ -938,6 +1230,7 @@ export class StaffSimulation {
     built?: BuildingFootprintIndex,
   ): Cell[] | null {
     const start = this.staffCell(member)
+    if (this.alreadyAtStaffTarget(member, target, built)) return []
     if (target.kind === 'fire') {
       return context.findPath(
         start,

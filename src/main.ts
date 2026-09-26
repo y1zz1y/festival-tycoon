@@ -5132,7 +5132,7 @@ const performanceIndicator = document.createElement('div')
 const versionLabel = `v${__APP_VERSION__} · Build ${__BUILD_ID__} UTC`
 performanceIndicator.className = 'performance-indicator'
 performanceIndicator.textContent = `${versionLabel}\nFPS — · TPS —`
-performanceIndicator.title = 'Bilder und lokal ausgeführte Logik-Ticks pro realer Sekunde. In Pause und auf Multiplayer-Clients laufen keine lokalen Logik-Ticks.'
+performanceIndicator.title = 'Bilder und lokal ausgeführte Logik-Ticks pro realer Sekunde. Unteraufgaben-Anteile nur mit 🐞 → Sim-Anteile. In Pause und auf Multiplayer-Clients laufen keine lokalen Logik-Ticks.'
 document.body.append(performanceIndicator)
 // Bottom-left is a stack: the overview overlay sits on the floor, the debug line rides above it,
 // and anything anchored to the bottom edge (the build menu) clears both.
@@ -5249,24 +5249,54 @@ stockBarsToggle.addEventListener('change', () => {
 })
 
 const DEBUG_TOOLS_KEY = 'festival-debug-tools'
+const DEBUG_SIM_PHASES_KEY = 'festival-debug-sim-phases'
+const DEBUG_PATH_GRAPH_KEY = 'festival-debug-path-graph'
 const debugToolsToggle = requireElement<HTMLInputElement>('#setting-debug-tools')
+const debugSimPhasesToggle = requireElement<HTMLInputElement>('#debug-sim-phases')
+const debugPathGraphToggle = requireElement<HTMLInputElement>('#debug-path-graph')
+const applySimPhaseHud = (enabled: boolean): void => {
+  game.setSimulationPhaseProfiling(enabled)
+}
+const applyPathGraphOverlay = (enabled: boolean): void => {
+  game.setPathGraphDebugEnabled(enabled)
+  if (!enabled) view.setPathGraphOverlay(null)
+}
 const applyDebugTools = (shown: boolean): void => {
   performanceIndicator.hidden = !shown
   debugMenuToggle.hidden = !shown
   if (!shown) {
     closeDebugMenu()
     demandDebugUI.close()
+    applySimPhaseHud(false)
+    applyPathGraphOverlay(false)
+  } else {
+    applySimPhaseHud(debugSimPhasesToggle.checked)
+    applyPathGraphOverlay(debugPathGraphToggle.checked)
   }
   syncDebugViewGap()
 }
 try {
   debugToolsToggle.checked = window.localStorage.getItem(DEBUG_TOOLS_KEY) !== 'off'
+  debugSimPhasesToggle.checked = window.localStorage.getItem(DEBUG_SIM_PHASES_KEY) === 'on'
+  debugPathGraphToggle.checked = window.localStorage.getItem(DEBUG_PATH_GRAPH_KEY) === 'on'
 } catch { /* private mode or blocked storage: fall back to showing them */ }
 applyDebugTools(debugToolsToggle.checked)
 debugToolsToggle.addEventListener('change', () => {
   applyDebugTools(debugToolsToggle.checked)
   try {
     window.localStorage.setItem(DEBUG_TOOLS_KEY, debugToolsToggle.checked ? 'on' : 'off')
+  } catch { /* the setting simply does not survive a reload then */ }
+})
+debugSimPhasesToggle.addEventListener('change', () => {
+  applySimPhaseHud(debugToolsToggle.checked && debugSimPhasesToggle.checked)
+  try {
+    window.localStorage.setItem(DEBUG_SIM_PHASES_KEY, debugSimPhasesToggle.checked ? 'on' : 'off')
+  } catch { /* the setting simply does not survive a reload then */ }
+})
+debugPathGraphToggle.addEventListener('change', () => {
+  applyPathGraphOverlay(debugToolsToggle.checked && debugPathGraphToggle.checked)
+  try {
+    window.localStorage.setItem(DEBUG_PATH_GRAPH_KEY, debugPathGraphToggle.checked ? 'on' : 'off')
   } catch { /* the setting simply does not survive a reload then */ }
 })
 startGameLoop({
@@ -5278,6 +5308,12 @@ startGameLoop({
   versionLabel,
   isTitleOpen: () => document.body.classList.contains('title-open'),
   afterRender: () => multiplayerChat.updateOverlay(),
+  readPhaseTimings: () => game.consumeSimulationPhaseTimings(),
+  getPathGraph: () => (
+    debugToolsToggle.checked && debugPathGraphToggle.checked
+      ? game.debugPathGraph()
+      : null
+  ),
 })
 
 // The game opens on its title screen. Last thing in the module, so everything it can
