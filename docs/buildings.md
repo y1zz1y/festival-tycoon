@@ -183,3 +183,16 @@ Unter Deko/Thema/Wände, frei drehbar und mit Schrägdächern kombinierbar.
 Bänke sind auf beiden Wegen an einer freien Außenkante zulässig; sonst bleibt
 die Platzierung abgewiesen. Eimer berücksichtigen die aktuelle `buildRotation`
 als bevorzugte freie Kante, damit **R** ihre sichtbare Front steuert.
+
+## Trinkwasserstelle, Duschen und Fahrgeschäfts-Typen (0.2.10)
+
+- `waterPoint` (Trinkwasserstelle, 300 €, kostenlos für Gäste) und `shower`
+  (Duschen, 900 €, 3 €) stehen unter Stände. Beide sind Warteschlangen-Stände
+  mit Wasservorrat (`shopSupplyKind` → `water`, `perGuestSupply`), fest für
+  Fußgänger, und haben Hausstil-Modelle in `retroBuildings.ts`.
+- Neue Fahrgeschäfte sind **keine** neuen `BuildingKind`s, sondern
+  `rideType`-Werte des `ride`: Kettenkarussell, Freefall-Turm, Riesenrad,
+  Autoscooter, Schiffschaukel ([attractions.md](attractions.md)). Ihre
+  Grundfläche kommt aus `buildingSize` (`RIDE_FOOTPRINTS` in
+  `src/game/stageDesign.ts`), damit Belegung, Kollision, Picking und
+  Wegeblockade für alle Felder gelten.

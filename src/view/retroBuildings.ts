@@ -70,6 +70,7 @@ export const DETAILED_BUILDINGS: readonly BuildingKind[] = [
   'omniSpeaker', 'generator', 'backupGenerator', 'foh', 'delayTower',
   'videoWall', 'laserShow', 'fireworkBattery', 'securityGate', 'ride',
   'bandFridge', 'backstageCouch2', 'backstageCouch3', 'backstageToilet',
+  'waterPoint', 'shower',
   ...SCENERY_KINDS,
 ]
 
@@ -1052,6 +1053,42 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
         k.box(x, .6, .3, .05, .02, .04, cream)
       }
     }
+  } else if (kind === 'waterPoint') {
+    // Drinking water: a concrete plinth, a steel trough with three taps and a blue
+    // sign with a drop, so it reads as water from above and in the menu.
+    k.box(0, .04, 0, .8, .08, .56, 0x9a9d99)
+    k.box(0, .28, 0, .7, .06, .34, 0xb9c2c6)
+    k.box(0, .2, 0, .66, .12, .3, 0x8e999e)
+    for (const x of [-.3, .3]) k.box(x, .16, 0, .05, .24, .26, 0x6f7a80)
+    k.box(0, .52, -.14, .07, .5, .07, 0x7d878c)
+    k.box(0, .74, -.14, .62, .05, .06, 0x7d878c)
+    for (const x of [-.22, 0, .22]) {
+      k.box(x, .69, -.1, .035, .08, .07, 0xd4dadd)
+      k.box(x, .72, -.14, .06, .03, .03, 0x2f6fdb)
+    }
+    k.box(0, .96, -.14, .34, .3, .03, 0x2f6fdb)
+    k.box(0, .95, -.12, .09, .13, .01, 0xf4f8fb)
+    k.box(0, 1.02, -.12, .04, .05, .01, 0xf4f8fb)
+    k.box(0, .315, 0, .6, .01, .24, 0x6fb6e8)
+  } else if (kind === 'shower') {
+    // A shower block: a turquoise container with two doors, a tank on the roof and a
+    // pipe with two heads over a slatted floor in front.
+    k.box(0, .045, 0, .86, .09, .8, 0x6f6a64)
+    k.box(0, .6, -.06, .82, 1.02, .6, 0x6cc4d8)
+    k.box(0, .13, -.06, .86, .1, .64, 0x3f8ea3)
+    for (const x of [-.2, .2]) {
+      k.box(x, .56, .245, .32, .86, .02, 0xe8f4f6)
+      k.box(x + .11, .56, .26, .03, .08, .02, 0x2f3a3f)
+    }
+    k.box(0, .56, .25, .03, .9, .02, 0x3f8ea3)
+    k.box(0, 1.14, -.06, .86, .06, .64, 0xdfe6e8)
+    k.cylinder(-.18, 1.3, -.1, .16, .26, 0x9aa7ad, .16, 10)
+    k.box(0, 1.02, .3, .7, .035, .035, 0xb9c2c6)
+    for (const x of [-.2, .2]) {
+      k.box(x, .98, .34, .03, .08, .03, 0xb9c2c6)
+      k.cylinder(x, .93, .34, .06, .03, 0xd4dadd, .03, 8)
+    }
+    for (const x of [-.3, -.15, 0, .15, .3]) k.box(x, .1, .34, .1, .02, .14, 0x8a6b4a)
   } else if (kind === 'toilet' || kind === 'backstageToilet') {
     portableToilet(k, kind === 'toilet' ? BLUE_CABIN : GOLD_CABIN)
     if (kind === 'backstageToilet') {

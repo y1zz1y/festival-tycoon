@@ -281,3 +281,15 @@ die alte Karte. **Auflösung:** Faktor auf das logische Pixelraster von
 `effectCount(24, 6)` Funken, gleichmäßig über den ganzen Ausbruch verteilt;
 Laser zeichnen `effectCount(4)` der vier Strahlfarben; die Schallwellen-Ringe
 über Lautsprechern entfallen unter 1/2. Die Zahl der Lichter ändert sich nie.
+
+## Flat-Ride-Modelle (0.2.10)
+
+`src/view/flatRideModels.ts` baut je Fahrgeschäftstyp eine statische Basis und
+wenige bewegte Teile (Rotor, Gondeln, Wagen, Schiff) aus `ModelKit`-Geometrie mit
+`HOUSE_MATERIAL`. Die Geometrie je Teil ist einmal pro Typ gebaut und geteilt
+(`userData.shared`), die Materialzahl bleibt null neue Konstruktoren. Die Modelle
+sind nicht `retroStatic`, weil sie sich bewegen. `WorldView.update` animiert sie
+mit der interpolierten Festivalzeit (`showTime / 2`, Minuten) und nur mit
+Fahrgästen; die Bauvorschau zeigt das halbtransparente Modell auf der ganzen
+Grundfläche. Trinkwasserstelle und Duschen sind statische Hausstil-Rezepte in
+`retroBuildings.ts`.

@@ -53,7 +53,7 @@ export function testScenarioEditor(): void {
   assert.ok(rows.some((row) => row.id === 'flutlichtwiese' && row.detail.includes('nasser Acker')))
   assert.equal(scenarioFileEntry('flutlichtwiese')?.name, 'Flutlichtwiese')
   assert.equal(listedScenarioFiles()[0]?.id, 'flutlichtwiese')
-  assert.equal(SCENARIO_PRESETS.length, 4, 'built-in presets stay in the catalog')
+  assert.equal(SCENARIO_PRESETS.length, 8, 'built-in presets stay in the catalog')
 
   const started = GameState.startFromScenarioFile(file)
   const play = started.snapshot

@@ -1,3 +1,4 @@
+import type { FlatRideType } from '../game/flatRides'
 import type { WayType } from '../game/wayTypes'
 import type { AttractionConstructionRequest } from '../game/attractions/construction'
 import type { AttractionOperationMode } from '../game/attractions/types'
@@ -55,6 +56,7 @@ export type GameCommandAction =
     }
   | { type: 'setRideAccess'; buildingId: string; accessType: 'entrance' | 'exit'; x: number; z: number }
   | { type: 'placeBungee'; x: number; z: number; height: number }
+  | { type: 'placeRide'; rideType: FlatRideType; x: number; z: number }
   | { type: 'setBungeeHeight'; id: string; height: number }
   | { type: 'festival'; action: FestivalAction }
   | { type: 'loan'; action: { type: 'borrow' | 'repay'; amount: number } }

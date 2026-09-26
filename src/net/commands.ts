@@ -17,6 +17,7 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.configureAttraction(command.attractionId, command)
     case 'setRideAccess': return game.setRideAccess(command.buildingId, command.accessType, command.x, command.z)
     case 'placeBungee': return game.placeBungee(command.x, command.z, command.height)
+    case 'placeRide': return game.placeRide(command.rideType, command.x, command.z)
     case 'setBungeeHeight': return game.setBungeeHeight(command.id, command.height)
     case 'festival':
       return game.manageFestival(command.action)

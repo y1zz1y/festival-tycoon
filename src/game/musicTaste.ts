@@ -9,6 +9,7 @@ export const GENRES = [
 export type MusicGenre=typeof GENRES[number]['id']
 export type MusicMix=Record<MusicGenre,number>
 const bandGenres:Record<string,MusicGenre>={
+  hollowoak:'folk',starlight:'pop',goldenhour:'soul',gravemarch:'metal',
   meadow:'indie',lantern:'indie',paper:'indie',aurora:'indie',
   meadow2:'indie',lantern2:'indie',paper2:'indie',nova:'indie',
   brass:'pop',sugar:'pop',firefly:'pop',confetti:'pop',

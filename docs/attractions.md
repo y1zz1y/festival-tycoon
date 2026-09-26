@@ -177,3 +177,38 @@ Aktualisieren, wenn Dispatch-Modi, Gate-Regeln, Join-Glättung,
 Physik-Caches, Testfahrt/Planung oder Abriss ändern. Track-Kinds, Anschlussregeln, Typ-Katalog
 und Bau-UI: [`coaster.md`](coaster.md). Neue Attraktionsgebäude auch in
 `docs/buildings.md`.
+
+## Flat Rides (0.2.10)
+
+Kettenkarussell (`chainSwing`, 3×3), Freefall-Turm (`freefall`, 2×2),
+Riesenrad (`ferrisWheel`, 3×1), Autoscooter (`bumperCars`, 3×2) und
+Schiffschaukel (`swingShip`, 3×1) sind `rideType`s des `ride`, wie der
+Bungee-Turm. Sie nutzen damit dieselbe Warteschlange, Tore, Tagesplan-Angebot
+„Fahrgeschäfte“, Strom, Audio und Speicherung.
+
+| Aufgabe | Datei | Einstieg |
+| --- | --- | --- |
+| Typen, Namen, Werte je Typ | `src/game/flatRides.ts` | `FLAT_RIDE_TYPES`, `rideProfile` |
+| Balancing | `src/game/simulationConfig.ts` | `rides.<typ>`: Kosten, Unterhalt, Kapazität, Fahrtdauer, Spaß, Energie, Übelkeit, Preis |
+| Grundfläche | `src/game/stageDesign.ts` | `RIDE_FOOTPRINTS`, `buildingSize` |
+| Bauen, Tore | `src/game/GameState.ts` | `placeRide`, `canPlaceRide`, `canPlaceRideAccess` |
+| Modelle, Animation | `src/view/flatRideModels.ts` | `createFlatRideModel`, `animateFlatRide` |
+
+- **Bauen:** `placeRide(type, x, z)` prüft jedes Feld der Grundfläche wie ein
+  Karussell (entwässert, verdichtet, gepflastert; alle Felder auf gleicher
+  Höhe) und bucht die Kosten des Typs statt der des Karussells. Ein Befehl
+  `placeRide` im Mehrspieler (optimistisch).
+- **Tore** dürfen neben jedem Feld der Grundfläche stehen, nie darauf; sie
+  drehen sich zum nächsten Feld.
+- **Betrieb:** `rideProfile` liefert Kapazität, Fahrtdauer, Spaß, Energie,
+  Übelkeit (für `addRideNausea`), Gedanke, Preis und Unterhalt; Karussell und
+  Bungee laufen über denselben Weg. Parkwert und Finanzaufschlüsselung nutzen die
+  Typkosten.
+- **Darstellung:** statische Basis plus wenige bewegte Teile mit geteilter
+  Geometrie und Hausmaterial, nicht gebündelt, weil animiert. Bewegung aus der
+  interpolierten Simulationszeit, nur solange jemand fährt; Fahrgäste sind
+  dann im Fahrgeschäft und in der Menge ausgeblendet. Pausiert das Spiel, steht
+  alles still.
+- Unbekannte `rideType`s aus fremden Ständen werden beim Laden zum Karussell.
+
+Test: `tests/flatRides.ts`.

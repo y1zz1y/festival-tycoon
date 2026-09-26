@@ -62,6 +62,8 @@ export const SIMULATION_CONFIG = {
       path: { cost: 10, upkeep: 0, capacity: 0, appeal: 0, defaultPrice: 0 },
       food: { cost: 350, upkeep: 12, capacity: 4, appeal: 3, defaultPrice: 12 },
       toilet: { cost: 250, upkeep: 8, capacity: 6, appeal: 1, defaultPrice: 2 },
+      waterPoint: { cost: 300, upkeep: 4, capacity: 4, appeal: 1, defaultPrice: 0 },
+      shower: { cost: 900, upkeep: 16, capacity: 2, appeal: 1, defaultPrice: 3 },
       ride: { cost: 1200, upkeep: 35, capacity: 12, appeal: 14, defaultPrice: 18 },
       alcohol: { cost: 500, upkeep: 16, capacity: 4, appeal: 5, defaultPrice: 9 },
       mascot: { cost: 380, upkeep: 10, capacity: 4, appeal: 4, defaultPrice: 16 },
@@ -203,6 +205,11 @@ export const SIMULATION_CONFIG = {
       funRandomRange: 30,
       energyMinimum: 80,
       energyRandomRange: 20,
+      /** Hash-seeded from the visitor id, so spawning draws no extra random numbers. */
+      thirstMinimum: 70,
+      thirstRandomRange: 25,
+      hygieneMinimum: 90,
+      hygieneRandomRange: 10,
     },
     movement: {
       baseMultiplier: 2.6924,
@@ -229,6 +236,9 @@ export const SIMULATION_CONFIG = {
       seekFoodBelow: 62,
       seekFunBelow: 68,
       seekAlcoholDesire: 65,
+      seekDrinkBelow: 55,
+      /** Campers only: below this they look for a shower. */
+      seekShowerBelow: 55,
       maximumAlcoholForPurchase: 82,
       minimumEnergyForAlcohol: 20,
       seekSouvenirFunBelow: 86,
@@ -245,6 +255,11 @@ export const SIMULATION_CONFIG = {
     funDecayPerMinute: 0.032,
     baseEnergyDecayPerMinute: 0.045,
     alcoholEnergyDecayPerMinute: 0.08,
+    thirstDecayPerMinute: 0.05,
+    /** Thirst rises this much faster outside in heat (not while sheltered in a tent). */
+    heatThirstMultiplier: 2.4,
+    /** Only campers get less fresh; day guests shower at home. */
+    hygieneDecayPerMinute: 0.03,
     interactionMinutes: {
       food: 10,
       toilet: 10,
@@ -252,10 +267,19 @@ export const SIMULATION_CONFIG = {
       alcohol: 8,
       mascot: 7,
       shirt: 8,
+      waterPoint: 2,
+      shower: 12,
       vomiting: 6,
       stockout: 1.2,
     },
     toilet: { toilet: 100 },
+    /**
+     * Thirst: a water point refills it for free (one unit of water each); a thirsty guest
+     * without a wish for alcohol buys a soft drink at the drink stand at a share of its
+     * price and drinks it on the spot; an alcoholic drink quenches a little.
+     */
+    drink: { waterPointThirst: 100, softDrinkThirst: 100, softDrinkPriceShare: 0.6, softDrinkToiletCost: 5, alcoholThirstGain: 30 },
+    shower: { hygiene: 100 },
     /** Awarded after the timed carousel/bungee interaction actually finishes. */
     ride: { funGain: 35, energyCost: 8 },
     stationaryConsumption: {
@@ -271,6 +295,18 @@ export const SIMULATION_CONFIG = {
       cooldownMinimumMinutes: 18,
       cooldownRandomMinutes: 24,
     },
+  },
+  /**
+   * Flat rides: ride types of the `ride` building (src/game/flatRides.ts). Cost and
+   * upkeep replace the carousel's; minutes, fun, energy and nausea intensity apply per
+   * guest and ride. Footprints live in src/game/stageDesign.ts.
+   */
+  rides: {
+    chainSwing: { cost: 2600, upkeep: 50, capacity: 16, minutes: 14, funGain: 38, energyCost: 6, nausea: 70, defaultPrice: 20 },
+    freefall: { cost: 4800, upkeep: 90, capacity: 8, minutes: 8, funGain: 55, energyCost: 12, nausea: 130, defaultPrice: 28 },
+    ferrisWheel: { cost: 5200, upkeep: 85, capacity: 24, minutes: 20, funGain: 32, energyCost: 2, nausea: 20, defaultPrice: 16 },
+    bumperCars: { cost: 3800, upkeep: 70, capacity: 12, minutes: 10, funGain: 40, energyCost: 8, nausea: 45, defaultPrice: 18 },
+    swingShip: { cost: 3400, upkeep: 60, capacity: 20, minutes: 10, funGain: 45, energyCost: 8, nausea: 115, defaultPrice: 22 },
   },
   souvenirs: {
     holdMascotChance: 0.45,
@@ -859,6 +895,17 @@ export const SIMULATION_CONFIG = {
     fanLingerMinutes: 4,
     /** How long a band member stays put between trips off the couch. */
     couchRestMinutes: 25,
+    /**
+     * Backstage furniture on active tiles. The fridge is the band's own catering; couch
+     * seats and a toilet that has water count as comfort (attractiveness).
+     */
+    cateringPerFridge: 24,
+    fridgesCounted: 2,
+    comfortPerCouchSeat: 4,
+    couchComfortCap: 24,
+    suppliedToiletComfort: 12,
+    /** Every third break a musician on a couch goes to a stocked backstage toilet. */
+    toiletVisitMinutes: 6,
     /** And how long they hang around the fridge before going back to sit down. */
     fridgeVisitMinutes: 8,
   },

@@ -580,6 +580,12 @@ wie bei Achterbahnen, nicht im Baumenü.
 - Q / E: Kamera um 90 Grad drehen
 - 🔊 in der Sitzungsleiste oder Einstellungen → **Ton stumm**: Ton aus (bleibt lokal gespeichert)
 - Einstellungen → **Ton**: Regler für Gesamt, Musik, Effekte und Umgebung. In der Nähe einer **spielenden Bühne** läuft Musik im Genre der Band in der Schleife, leiser mit der Entfernung zur Kamera; auf dem Titelbildschirm läuft die Titelmusik. Jubel, Schreie und Fahrzeuge nur gelegentlich bei echten Ereignissen. Alle Klänge und Stücke sind CC0 (Quellen in `docs/audio.md`), Synth nur als Rückfall.
+- **Fahrgeschäfte** (Attraktionen → Fahrgeschäfte): neben Karussell und Bungee-Turm auch Kettenkarussell, Freefall-Turm, Riesenrad, Autoscooter und Schiffschaukel. Jedes braucht gepflasterten Boden auf seiner ganzen Fläche und Ein- und Ausgang direkt neben einem seiner Felder; jedes hat eigene Fahrtdauer, eigenen Spaß und eigene Übelkeit.
+- **Durst:** Gäste werden durstig, bei Hitze viel schneller. Sie trinken an der **Trinkwasserstelle** (kostenlos, braucht Wasser von den Trägern) oder kaufen am Getränkestand eine Limo, wenn sie keine Lust auf Bier haben.
+- **Hygiene:** Camper brauchen nach etwa einem Tag eine **Dusche** (braucht Wasser). Ungeduschte Camper sind schlechter gelaunt.
+- **Backstage-Möbel wirken:** Couches und ein Klo mit Wasser machen das Backstage attraktiver, der Bandkühlschrank verpflegt die Band; zwischen den Sets gehen Musiker aufs Klo.
+- **Headliner** sind die 5-Sterne-Bands; jedes Genre hat mindestens einen.
+- Neue Szenarien: Wackelstein Open Air, Kutschella, Glastonbauer und Verschmelzung.
 - Einstellungen → **Grafik**: Schatten (Aus/Normal/Hoch), Auflösung (Niedrig/Standard/Hoch), Effekte (Niedrig/Mittel/Hoch) und Oberflächengröße (90–130 %). Gilt nur für dieses Gerät.
 - **Finanzen** in der Sitzungsleiste: Ausgaben und Einnahmen je Festivalausgabe. Ein Klick auf **Betriebskosten**, **Personal**, **Gagen** oder **Kreditzinsen** klappt die aktuelle Aufschlüsselung auf (Stände, Attraktionen, Bühnen, Löhne, Darlehen, Buchungen); ein weiterer Klick schließt sie. Mehrere Zeilen können gleichzeitig offen sein.
 - R: Gebäude, Deko oder Kopiervorlage um 90 Grad drehen
@@ -647,12 +653,9 @@ Verbindliche Simulationsregeln: [AGENTS.md](AGENTS.md).
 
 ## Nächste Ausbaustufen
 
-1. Spielausgang: Szenarien gewinnen und verlieren, Endbildschirm, Insolvenz
-2. Rückmeldung zu Zielen, Briefing vor dem Start und mitwachsende Wochenendziele
-3. Die letzten Platzhaltermodelle (Weg, Bauzaun, Tisch, Beleuchtung, Tageslichtballon) im Hausstil und gebündelt
-4. Echte Klänge und Konzertmusik statt synthetischer Platzhalter
-5. Weitere Fahrgeschäfte, Durst und Hygiene, Headliner für alle Genres
-6. Fortschritt über Partien und eine Einführung für neue Spieler
+1. Fortschritt über Partien und eine Einführung für neue Spieler
+2. Personal, Träger und Fahrzeuge gebündelt zeichnen
+3. Technik vor 1.0 festziehen
 
 RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafiken, Sounds, Daten und sonstige geschützte Inhalte sollten nicht übernommen werden.
 

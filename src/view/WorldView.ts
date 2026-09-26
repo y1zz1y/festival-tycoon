@@ -28,7 +28,7 @@ import { createAttractionAccess } from './attractionAccess'
 import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
 import { createStageModel, animateStageModel, updateStageLightPool } from './stageModel'
-import { stageApronCells, stagePhase, stageSize, buildingSize, occupiesBuildingCell, fohDeskRole, MAX_STAGE_FORECOURT_DEPTH, STAGE_TILE_DETAIL } from '../game/stageDesign'
+import { stageApronCells, stagePhase, stageSize, buildingFootprint, buildingSize, occupiesBuildingCell, fohDeskRole, MAX_STAGE_FORECOURT_DEPTH, STAGE_TILE_DETAIL } from '../game/stageDesign'
 import { activeBookings, showIssue } from '../game/festivalManagement'
 import { createEarthTexture, createTerrainBase, createTerrainMaterial, createTerrainSurface } from './terrainSurface'
 import { TerrainShape, terrainPads } from './terrainShape'
@@ -45,6 +45,8 @@ import { groundRectangle } from '../game/ground'
 import { groundInfo } from '../game/ground'
 import { SupplyChainView } from './SupplyChainView'
 import { scenePixelRatio } from './renderResolution'
+import { animateFlatRide, createFlatRideModel } from './flatRideModels'
+import { isFlatRideType, type FlatRideType } from '../game/flatRides'
 import { effectShare, setEffectShare } from './effectDensity'
 import { isTextEntryTarget } from '../uiFocus'
 import { isProjectedOnScreen } from '../net/chatProtocol'
@@ -311,7 +313,7 @@ const WALK_SPEED = 2.8
 const WALK_RUN_SPEED = 5.6
 const WALK_LOOK_SENSITIVITY = 0.0024
 const WALK_BLOCKED_KINDS = new Set<string>([
-  'food', 'toilet', 'ride', 'alcohol', 'mascot', 'shirt', 'securityGate', 'tree', 'hedge', 'shrub', 'rock', 'statue',
+  'food', 'toilet', 'waterPoint', 'shower', 'ride', 'alcohol', 'mascot', 'shirt', 'securityGate', 'tree', 'hedge', 'shrub', 'rock', 'statue',
   'picnicTable', 'parasol', 'fence', 'stage', 'directionalSpeaker', 'omniSpeaker', 'ambulanceGarage',
   'busStop', 'busDepot', 'wasteDepot', 'specialDepot', 'generator', 'backupGenerator', 'foh', 'delayTower',
   'videoWall', 'laserShow', 'fireworkBattery', 'tourBusParking',
@@ -400,6 +402,10 @@ export class WorldView {
   private bungeeRiders = new Set<string>()
   private bungeeOccupants = new Map<string, string>()
   bungeePreviewHeight: number | null = null
+  /** The flat ride being placed from the build menu, for its ghost. */
+  ridePreviewType: FlatRideType | null = null
+  /** Flat ride id to the guests on it right now; rebuilt when the snapshot changes. */
+  private flatRideRiders = new Map<string, string[]>()
   private canvas: HTMLCanvasElement
   private renderer: WebGLRenderer
   private scene = new Scene()
@@ -1056,6 +1062,26 @@ export class WorldView {
       for (const b of snapshot.buildings) if (b.rideType === 'bungee' && b.bungeeVisitorId) this.bungeeOccupants.set(b.id, b.bungeeVisitorId)
     }
     this.bungeeRiders.clear()
+    if (dataChanged) {
+      // Flat ride guests are on the ride, not standing at its entrance: hide them and
+      // let the ride move while anyone is on it.
+      this.flatRideRiders.clear()
+      const flatRideIds = new Set(snapshot.buildings.filter((b) => isFlatRideType(b.rideType)).map((b) => b.id))
+      if (flatRideIds.size > 0) {
+        for (const visitor of snapshot.visitors) {
+          if (visitor.state !== 'using' || !visitor.targetId || !flatRideIds.has(visitor.targetId)) continue
+          const riders = this.flatRideRiders.get(visitor.targetId)
+          if (riders) riders.push(visitor.id)
+          else this.flatRideRiders.set(visitor.targetId, [visitor.id])
+        }
+      }
+    }
+    const rideMinutes = (this.previousShowTime + (this.currentShowTime - this.previousShowTime) * this.renderAlpha) / 2
+    for (const model of this.buildings.children) if (model.userData.flatRide) {
+      const riders = this.flatRideRiders.get(model.userData.buildingId) ?? []
+      for (const id of riders) this.bungeeRiders.add(id)
+      animateFlatRide(model, rideMinutes, riders.length > 0 && !this.logisticsMode)
+    }
     for (const model of this.buildings.children) if (model.userData.bungee) {
       const rider = this.trainVisitorsById.get(this.bungeeOccupants.get(model.userData.buildingId) ?? '')
       const active = rider?.state === 'using' && rider.targetId === model.userData.buildingId
@@ -2236,6 +2262,7 @@ export class WorldView {
       hash = Math.imul(hash, 33) + item.rotation
       hash = Math.imul(hash, 33) + (item.decorationSlot ?? -1)
       hash = Math.imul(hash, 33) + (item.bungeeHeight ?? 0)
+    hash = Math.imul(hash, 33) + (item.rideType ? item.rideType.length * 7 + item.rideType.charCodeAt(0) : 0)
       for (const gate of [item.rideEntrance,item.rideExit]) {
         hash=Math.imul(hash,33)+(gate ? 1 : 0)
         if (gate) {hash=Math.imul(hash,33)+gate.x;hash=Math.imul(hash,33)+gate.z;hash=Math.imul(hash,33)+gate.y}
@@ -2315,7 +2342,7 @@ export class WorldView {
       const access=item[type==='entrance'?'rideEntrance':'rideExit']
       if (!access) continue
       const gate=this.createCoasterAccess(access,type,item.rideType==='bungee'?'bungee':'carousel')
-      gate.rotation.y=Math.atan2(item.x-access.x,item.z-access.z)
+      const facing=buildingFootprint(item).find(cell=>Math.abs(cell.x-access.x)+Math.abs(cell.z-access.z)===1)??item; gate.rotation.y=Math.atan2(facing.x-access.x,facing.z-access.z)
       gate.userData.buildingId=item.id
       this.rideGates.add(gate)
     }
@@ -2369,7 +2396,7 @@ export class WorldView {
         this.buildings.remove(existing.model)
         disposeObject3D(existing.model)
       }
-      const model = item.rideType === 'bungee' ? createBungeeModel(item.bungeeHeight ?? 20) : item.stageDesign
+      const model = item.rideType === 'bungee' ? createBungeeModel(item.bungeeHeight ?? 20) : isFlatRideType(item.rideType) ? createFlatRideModel(item.rideType) : item.stageDesign
         ? createStageModel(item.stageDesign)
         : this.createBuildingModel(
         item.kind,
@@ -4090,6 +4117,22 @@ export class WorldView {
 
     const tool = this.currentSnapshot.selectedTool
     this.updateStageForecourtPreview(tool, this.hoveredCell)
+    if (tool === 'ride' && this.ridePreviewType !== null) {
+      const cell = this.hoveredCell, type = this.ridePreviewType, key = `flatRide:${type}`
+      if (this.sceneryPreviewKind !== key) {
+        disposeChildren(this.sceneryPreview); this.sceneryPreviewKind = key
+        const model = createFlatRideModel(type)
+        model.traverse(o => { if (o instanceof Mesh) { const m = (o.material as MeshStandardMaterial).clone(); m.userData = {}; m.transparent = true; m.opacity = .6; m.depthWrite = false; o.material = m; o.castShadow = false } })
+        this.sceneryPreview.add(model)
+      }
+      const size = buildingSize({ kind: 'ride', rotation: this.currentSnapshot.buildRotation, rideType: type })
+      this.sceneryPreview.visible = true
+      this.sceneryPreview.scale.setScalar(1)
+      this.sceneryPreview.position.set(cell.x + size.width / 2, this.currentSnapshot.buildElevation + getTerrainHeight(this.currentSnapshot.terrain, cell.x, cell.z), cell.z + size.depth / 2)
+      this.sceneryPreview.rotation.y = this.currentSnapshot.buildRotation * Math.PI / 2
+      this.preview.visible = this.previewArrow.visible = false
+      return
+    }
     if (tool === 'ride' && this.bungeePreviewHeight !== null) {
       const cell = this.hoveredCell, key = `bungee:${this.bungeePreviewHeight}`
       if (this.sceneryPreviewKind !== key) {

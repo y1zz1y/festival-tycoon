@@ -442,3 +442,10 @@ Anschlüssen offen. Fahrregeln und Netztopologie ändern sich nicht.
 Eine Bank darf als dekoratives Wegmöbel auf einer Autostraßenlage gleicher Höhe
 stehen. Ihre Kante muss nach außen zeigen; angrenzende Straßen bleiben frei.
 Die Straßenlogik, Fahrzeugwege und Deck-Geometrie ändern sich nicht.
+
+## Wasser je Gast (0.2.10)
+
+Wasser (`water`) beliefern Träger bisher für Toiletten, das Backstage-Klo und
+das Trinkwasser-Upgrade. Trinkwasserstellen und Duschen verbrauchen eine Einheit
+je Gast (`usesWaterPerGuest`, `perGuestSupply`) und sind ohne Vorrat kein Ziel.
+Musiker verbrauchen am Backstage-Klo eine Einheit je Besuch.

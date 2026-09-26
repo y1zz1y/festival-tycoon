@@ -8,6 +8,7 @@ import { sampleBiasedPreference, type ScenarioSettings } from './scenario'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import type { Cell, Visitor } from './types/entities'
 import type { GameSnapshot } from './types/snapshot'
+import { initialThirstAndHygiene } from './visitorNeeds'
 
 export const FEMALE_VISITOR_NAMES = [
   'Mia', 'Emma', 'Lea', 'Lina', 'Sofia', 'Mila', 'Nina', 'Marie',
@@ -242,6 +243,7 @@ export class VisitorSpawning {
         toilet: initialNeeds.toiletMinimum + rng.next() * initialNeeds.toiletRandomRange,
         fun: initialNeeds.funMinimum + rng.next() * initialNeeds.funRandomRange,
         energy: initialNeeds.energyMinimum + rng.next() * initialNeeds.energyRandomRange,
+        ...initialThirstAndHygiene(id),
       },
       route: [],
       targetId: null,

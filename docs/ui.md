@@ -465,3 +465,15 @@ Bildschirmmessung setzt (`getBoundingClientRect`, `clientX`), rechnet deshalb mi
 `--debug-view-gap`, das Personal-Detailfenster und das Menü im Bühneneditor. Neue
 Stellen dieser Art brauchen dasselbe. Nach einem Wechsel misst `onUiScale` die
 Leisten neu und löst ein `resize` aus.
+
+## Phase 4 in der Oberfläche (0.2.10)
+
+- Baumenü Attraktionen → Fahrgeschäfte: Kettenkarussell, Freefall-Turm,
+  Riesenrad, Autoscooter, Schiffschaukel (`BuildMenuItem.rideType`, Kachel
+  `data-ride-type`). `main.ts` hält den gewählten Typ in `rideBuildType`, die
+  Vorschau in `view.ridePreviewType`; `toolRouter` baut mit `placeRide`.
+- Stände: Trinkwasserstelle und Duschen.
+- Besucherfenster: Balken „Durst gestillt“, „Hygiene“ nur bei Campern.
+- Bandplaner: „· Headliner“ steht bei 5-Sterne-Bands (`bandGenreLabel`).
+- Backstage-Info: Möbel-Anteil der Attraktivität und Couchplätze /
+  Kühlschränke / Klo mit Wasser.

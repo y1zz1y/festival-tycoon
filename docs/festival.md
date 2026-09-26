@@ -56,7 +56,15 @@ hält die Simulationsuhr an, bis **Festival starten**.
   Anzeige und darf sich ändern (0.2.0 hat 17 Namen ersetzt, die aus den
   Wörtern einer anderen Band bestanden). Kein Name soll aus denselben Wörtern
   wie ein anderer bestehen. Sterne aus Reputation (`bandStarRating`); 5-Sterne
-  nur aus `festival.headlinerPool` (Sim-RNG beim Vorbereiten). Planner-Tabs
+  nur aus `festival.headlinerPool` (Sim-RNG beim Vorbereiten). **Headliner heißt
+  5 Sterne** (`isHeadlinerBand`); das Genre trägt keinen Zusatz mehr, die
+  Anzeige „· Headliner“ kommt aus `bandGenreLabel`, damit Genre-Prüfungen wie
+  DJ-Acts (`bandLooks.ts`) das reine Genre sehen. Jedes der acht Genres hat
+  mindestens einen Headliner (0.2.10: Hollow Oak Revival Folk, Starlight
+  Syndicate Pop, Golden Hour Revue Soul, Gravemarch Legion Metal; dazu Lunar
+  Dispatch Dance). Die 24 `x2`-Bands sind keine 3-%-Kopien ihrer `x` mehr:
+  andere Zugkraft (mindestens 3), dazu anderes Publikum, andere Stufe oder
+  andere Boxen. `tests/musicPlanning.ts` prüft das. Planner-Tabs
   und Auto-Plan filtern nach Sternen und überschreiben keine bestehenden Slots.
   Ticket-Slider färben die erwartete Kaufbereitschaft (grün/gelb/rot über
   CSS-Variable `--range-accent` am Range-Thumb und -Track; natives

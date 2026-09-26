@@ -1,3 +1,4 @@
+import type { FlatRideType } from './flatRides'
 import { MAX_PATH_ELEVATION, WAY_ELEVATION_STEP, snapWayElevation } from './wayElevation'
 import type { BlueprintItem } from './blueprints'
 import type { BuildingKind, Tool } from './catalog'
@@ -20,6 +21,8 @@ export type PlacementPreviewRequest =
       decorationSlot?: number
       preserveLegacySlot?: boolean
       bungeeHeight?: number
+      /** A flat ride (src/game/flatRides.ts): checked and ghosted with its whole footprint. */
+      rideType?: FlatRideType
     }
   | {
       type: 'tool'

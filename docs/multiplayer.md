@@ -355,3 +355,10 @@ Bauhöhe lokal; nächste Baucommands übertragen den bestehenden Höhenkontext.
 
 30 Dachwand-Kinds verwenden bestehende place-/Dekolinien-Commands und
 Host-Prüfungen für Kanten, Höhe und Dach-Koexistenz. Keine neuen Commands/Felder.
+
+## Flat Rides (0.2.10)
+
+Neuer Befehl `{ type: 'placeRide', rideType, x, z }` (optimistisch), verdrahtet
+in `protocol.ts`, `bind.ts`, `commands.ts` und `commandRegistry.ts`. Die
+Baurichtung reist wie bei jedem Bau im Befehlskontext mit. Durst und Hygiene
+sind Felder von `needs` und gehen mit dessen Rundung (`WIRE_DIGITS_NESTED`).

@@ -1,3 +1,4 @@
+import type { FlatRideType } from '../flatRides'
 import { BUILDING_GHOST_MODES, BUILDINGS } from '../catalog'
 import type { BuildingKind } from '../catalog'
 import { bookFinance } from '../finance'
@@ -29,6 +30,7 @@ export type PlacementPreviewContext = {
     z: number,
   ) => ActionResult
   canPlaceBungee: (x: number, z: number, height: number) => ActionResult
+  canPlaceRide: (rideType: FlatRideType, x: number, z: number) => ActionResult
   canPlace: (
     kind: BuildingKind,
     x: number,
@@ -77,6 +79,8 @@ export function previewPlacementCommand(
     const result =
       request.kind === 'ride' && request.bungeeHeight !== undefined
         ? context.canPlaceBungee(request.x, request.z, request.bungeeHeight)
+        : request.kind === 'ride' && request.rideType
+          ? context.canPlaceRide(request.rideType, request.x, request.z)
         : context.canPlace(
             request.kind,
             request.x,
@@ -84,7 +88,9 @@ export function previewPlacementCommand(
             request.decorationSlot,
             request.preserveLegacySlot,
           )
-    const footprint = placementFootprint(context.state, request.kind)
+    const footprint = request.kind === 'ride' && request.rideType
+      ? buildingSize({ kind: 'ride', rotation: context.state.buildRotation, rideType: request.rideType })
+      : placementFootprint(context.state, request.kind)
     const renderMode: GhostRenderMode = isScenery(request.kind)
       ? 'scenery'
       : BUILDING_GHOST_MODES[request.kind]

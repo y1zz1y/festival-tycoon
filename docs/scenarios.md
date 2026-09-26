@@ -163,3 +163,20 @@ Balancingwerte, die Felder von `ScenarioProgress`, das Dateiformat, der
 Szenarien-Ordner oder die Szenario-Oberfläche sich ändern. Neue Felder
 zusätzlich in [saves.md](saves.md) und [multiplayer.md](multiplayer.md),
 Spielerregeln im Root-`README.md`.
+
+## Presets (0.2.10)
+
+Acht eingebaute Presets in `SCENARIO_PRESETS`. Zu Woodstock, Tomorrowland, Rock
+am Ring und Hurricane kamen vier, die sich an echte Festivals anlehnen, deren
+Namen aber verballhornen und die bisher ungenutzten Ziele und Umgebungen
+nutzen:
+
+| Preset | Umgebung | Ziele |
+| --- | --- | --- |
+| Wackelstein Open Air | Acker, 64 | Ruf 60 und 500 Anreisen bis Ausgabe 3 |
+| Kutschella | Wüste, 64, Kredit | 12.000 € Gewinn in 2 Ausgaben hintereinander bis Ausgabe 4 |
+| Glastonbauer | Acker, 80 | Zufriedenheit 75 % in 2 Ausgaben hintereinander, 800 Anreisen bis Ausgabe 4 |
+| Verschmelzung | Stadt (Beton), 64, Kredit | Festivalwert 120.000 € und schuldenfrei bis Ausgabe 4 |
+
+`tests/finance.ts` und `tests/scenarioEditor.ts` zählen die Presets; jedes muss
+seine Ziele unverändert durch `normalizeGoals` bringen.

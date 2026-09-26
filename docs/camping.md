@@ -75,3 +75,11 @@ Visuelle Fixture: `tests/camping-preview.html`.
 Aktualisieren, wenn Phasen, Installationsarten, Gathering-Suche, Ticketbindung
 oder Batch-Grenzen ändern. Neue Camp-Props in Simulation **und**
 `campingModels` / `docs/rendering.md` eintragen.
+
+## Hygiene und Duschen (0.2.10)
+
+Camper werden mit der Zeit weniger frisch (`needs.hygieneDecayPerMinute`, nur
+für `isCamper`). Unter `decisions.seekShowerBelow` suchen sie eine Dusche
+(`shower`), die Wasser von den Trägern braucht. Ungeduschte Camper sind
+schlechter gelaunt; Hygiene zählt für sie in Laune und Zufriedenheit. Details
+in [visitors.md](visitors.md).

@@ -297,3 +297,12 @@ nutzen beim Rendern ebenfalls den Randversatz. Regressionen in decoration.ts.
 
 `wall<Style>SlopeLeft/SlopeRight/RoofEnd` verwenden vorhandene Rotation,
 Kanten-Slots und elevation; kein neues Feld und keine Migration bestehender Teile.
+
+## Durst, Hygiene und Fahrgeschäfts-Typen (0.2.10)
+
+Kein Versionsbump (34). Optionale Felder mit Standard:
+`visitor.needs.thirst` fehlend = 80, `visitor.needs.hygiene` fehlend = 100
+(`ensureThirstAndHygiene` in `snapshotRepair`). `building.rideType` kennt
+zusätzlich `chainSwing`, `freefall`, `ferrisWheel`, `bumperCars`, `swingShip`;
+ein unbekannter Wert wird gelöscht (Karussell), ein fehlender Preis kommt aus
+`rideProfile`.

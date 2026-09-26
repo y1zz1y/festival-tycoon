@@ -23,7 +23,7 @@ export const PEDESTRIAN_NAV_FLAGS = {
 } as const
 
 const SOLID_KINDS = new Set<BuildingKind>([
-  'food', 'toilet', 'ride', 'alcohol', 'tree', 'hedge', 'stage',
+  'food', 'toilet', 'waterPoint', 'shower', 'ride', 'alcohol', 'tree', 'hedge', 'stage',
   'directionalSpeaker', 'omniSpeaker', 'ambulanceGarage', 'busDepot',
   'wasteDepot', 'specialDepot', 'generator', 'backupGenerator', 'foh',
   'delayTower', 'videoWall', 'laserShow', 'fireworkBattery', 'tourBusParking',

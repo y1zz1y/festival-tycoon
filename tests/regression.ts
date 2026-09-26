@@ -73,6 +73,8 @@ import { testBlueprints, testBlueprintLibraryRoundtrip, testBlueprintParkingCopy
 import { testBuildUndo } from './buildUndo'
 import { testFestivalAudio, testFestivalAudioAssets } from './audio'
 import { testPlayerSettings } from './playerSettings'
+import { testVisitorNeeds } from './visitorNeeds'
+import { testFlatRides } from './flatRides'
 import { testSnapshotModules } from './snapshotModules'
 import { testSimulationModules } from './simulationModules'
 import { testSimulationTime } from './simulationTime'
@@ -358,6 +360,8 @@ test('festival sleep rhythm, tents and circadian energy', () => {
   testVisitorSleep(fixture)
 })
 testMusicPlanning(fixture)
+testVisitorNeeds(fixture)
+testFlatRides(fixture)
 testOperations(fixture)
 testBusPlanner(fixture)
 testSealedWasteContainer(fixture)

@@ -1,11 +1,24 @@
 import assert from 'node:assert/strict'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
-import { BANDS, createFestivalManagement, festivalTime, updateFestival } from '../src/game/festivalManagement'
+import { BANDS, bandGenreLabel, createFestivalManagement, festivalTime, isHeadlinerBand, updateFestival } from '../src/game/festivalManagement'
 import { GENRES, bandGenre, genreAffinity, expectedMusicMix, normalizeMusic, musicTaste, evolveMusicAudience } from '../src/game/musicTaste'
 import { WorldUpdates } from '../src/net/worldUpdates'
 import { packWorld } from '../src/net/codec'
 export function testMusicPlanning(fixture:(count?:number)=>GameState){
   assert.equal(GENRES.length,8);assert.equal(new Set(BANDS.map(b=>bandGenre(b.id))).size,8)
+  // Band catalog: every genre has a headliner, a headliner is a five-star band, no name is
+  // another's words reshuffled, and a twin (x / x2) is a real alternative, not a 3 % copy.
+  for(const genre of GENRES)assert.ok(BANDS.some(b=>bandGenre(b.id)===genre.id&&isHeadlinerBand(b)),`${genre.id} has a headliner`)
+  assert.ok(BANDS.every(b=>!b.genre.includes('Headliner')),'the headliner mark is derived, never part of the genre')
+  assert.equal(bandGenreLabel(BANDS.find(b=>b.id==='eclipse')!),'Electro · Headliner')
+  assert.equal(bandGenreLabel(BANDS.find(b=>b.id==='orbit')!),'Dance')
+  const words=(name:string)=>name.toLowerCase().replace(/[^a-z ]/g,'').split(' ').filter(Boolean).sort().join(' ')
+  assert.equal(new Set(BANDS.map(b=>words(b.name))).size,BANDS.length,'no band name uses the same words as another')
+  assert.equal(new Set(BANDS.map(b=>b.id)).size,BANDS.length)
+  for(const twin of BANDS.filter(b=>b.id.endsWith('2'))){
+    const base=BANDS.find(b=>b.id===twin.id.slice(0,-1))!
+    assert.ok(Math.abs(twin.draw-base.draw)>=3&&(twin.audience!==base.audience||twin.reputation!==base.reputation||twin.speakers!==base.speakers),`${twin.id} differs from ${base.id}`)
+  }
   const legacy=createFestivalManagement();assert.deepEqual(Object.values(expectedMusicMix(legacy)),Array(8).fill(.125))
   assert.equal(genreAffinity('folk','electro'),0);assert.equal(genreAffinity('folk','indie'),.7)
   for(const genre of GENRES)assert.equal(genreAffinity(genre.id,genre.id),1)

@@ -1,5 +1,6 @@
 import type { GameSnapshot } from './GameState'
-import { BANDS, editionSatisfaction, festivalReputation } from './festivalManagement'
+import { BANDS, editionSatisfaction, festivalReputation, isHeadlinerBand } from './festivalManagement'
+import { moodNeedAverage } from './visitorNeeds'
 import { isWasteBin } from './decorationWalls'
 import { isSealedWasteContainer } from './waste'
 import { SIMULATION_CONFIG } from './simulationConfig'
@@ -149,10 +150,7 @@ function collectSiteStats(
     ? visitors.reduce((sum, visitor) => sum + visitor.motivation, 0) / visitors.length
     : satisfaction
   const happiness = visitors.length
-    ? visitors.reduce((sum, visitor) => {
-      const needs = visitor.needs
-      return sum + (needs.fun + needs.energy + needs.hunger + needs.toilet) / 4
-    }, 0) / visitors.length
+    ? visitors.reduce((sum, visitor) => sum + moodNeedAverage(visitor), 0) / visitors.length
     : satisfaction
   const dumpStored = s.wasteDumpCells.reduce((sum, cell) => sum + cell.stored, 0)
   const dumpCap = s.wasteDumpCells.length * SIMULATION_CONFIG.waste.dumpCapacity
@@ -169,7 +167,7 @@ function collectSiteStats(
     .map((booking) => BANDS.find((band) => band.id === booking.bandId))
     .filter((band): band is (typeof BANDS)[number] => Boolean(band))
   const headliner = booked
-    .filter((band) => band.genre.includes('Headliner') || band.draw >= 80)
+    .filter((band) => isHeadlinerBand(band) || band.draw >= 80)
     .sort((left, right) => right.draw - left.draw || left.id.localeCompare(right.id))[0]
   const stageIds = new Set(s.festival.bookings.map((booking) => booking.stageId))
   const qualities = [...stageIds].map((id) => s.bandSupply.showQualityByStageId[id] ?? BARE_SHOW)

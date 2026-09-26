@@ -557,6 +557,8 @@ export function mountAppShell(app: HTMLDivElement): void {
       <div class="needs">
         <div><label><span>🍔 Sättigung</span><b id="hunger-value">0%</b></label><i><u id="hunger-bar"></u></i></div>
         <div><label><span>🚻 Toilette</span><b id="toilet-value">0%</b></label><i><u id="toilet-bar"></u></i></div>
+            <div><label><span>🚰 Durst gestillt</span><b id="thirst-value">0%</b></label><i><u id="thirst-bar"></u></i></div>
+            <div id="hygiene-row"><label><span>🚿 Hygiene</span><b id="hygiene-value">0%</b></label><i><u id="hygiene-bar"></u></i></div>
         <div><label><span>🎉 Spaß</span><b id="fun-value">0%</b></label><i><u id="fun-bar"></u></i></div>
         <div><label><span>⚡ Energie</span><b id="energy-value">0%</b></label><i><u id="energy-bar"></u></i></div>
         <div><label><span>🍺 Alkoholpegel</span><b id="alcohol-value">0%</b></label><i><u id="alcohol-bar"></u></i></div>

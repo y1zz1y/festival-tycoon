@@ -1,3 +1,4 @@
+import { rideProfile } from './flatRides'
 /**
  * Current-cost line items for the finance ledger. The books only store
  * category totals; this derives the stand / ride / wage / loan pieces from
@@ -26,7 +27,7 @@ import {
   venueUpkeepIdle,
 } from './upkeep'
 
-const BOOTH_KINDS = new Set<BuildingKind>(['food', 'alcohol', 'shirt', 'mascot', 'toilet'])
+const BOOTH_KINDS = new Set<BuildingKind>(['food', 'alcohol', 'shirt', 'mascot', 'toilet', 'waterPoint', 'shower'])
 
 export const FINANCE_BREAKDOWN_SECTION_NAMES = {
   stands: 'Stände',
@@ -110,7 +111,7 @@ function sectionFromHourly(
 
 function buildingLabel(building: Pick<PlacedBuilding, 'kind' | 'rideType' | 'stageDesign'>): string {
   if (building.kind === 'stage') return building.stageDesign?.name || BUILDINGS.stage.name
-  if (building.rideType === 'bungee') return 'Bungee-Turm'
+  if (building.kind === 'ride') return rideProfile(building).name
   return BUILDINGS[building.kind].name
 }
 
@@ -125,7 +126,7 @@ function upkeepSectionId(
 
 function buildingItemId(building: PlacedBuilding, hourly: number): string {
   if (building.kind === 'stage') return `stage:${building.id}`
-  if (building.rideType === 'bungee') return `bungee:${hourly}`
+  if (building.rideType) return `${building.rideType}:${hourly}`
   return `${building.kind}:${hourly}`
 }
 

@@ -4,8 +4,9 @@ import { scenerySlot } from './game/scenery'
 import { makeDraggable, makeResizable } from './dragPanel'
 import { toUiPx, uiScale } from './ui/uiScale'
 import { installPlayerSettings } from './ui/playerSettingsPanel'
+import { isFlatRideType, rideProfile, type FlatRideType } from './game/flatRides'
 import { mountStageEditor } from './stageEditor'
-import { stageStats } from './game/stageDesign'
+import { buildingFootprint, stageStats } from './game/stageDesign'
 import { mountStaffDetails } from './staffDetailsUI'
 import { mountLogisticsUI } from './logisticsUI'
 import { setupDemandDebugUI } from './ui/demandDebugUI'
@@ -931,6 +932,7 @@ function bindGameState(nextGame: GameState): void {
         snapshot.speed,
         selectedCoasterTypeId(),
         view.bungeePreviewHeight,
+        view.ridePreviewType,
       ]),
       () => {
         document.querySelectorAll<HTMLElement>('[data-tool]').forEach((button) => {
@@ -939,7 +941,7 @@ function bindGameState(nextGame: GameState): void {
             'active',
             button.dataset.tool === snapshot.selectedTool &&
               typeMatch &&
-              (snapshot.selectedTool !== 'ride' || (button.dataset.bungee === 'true') === (view.bungeePreviewHeight !== null)),
+              (snapshot.selectedTool !== 'ride' || ((button.dataset.bungee === 'true') === (view.bungeePreviewHeight !== null) && (button.dataset.rideType ?? null) === view.ridePreviewType)),
           )
         })
         if (!buildCatalogStatus.hidden) buildCatalog.syncSelection()
@@ -1576,6 +1578,8 @@ function updateVisitorOverview(force = false): void {
 }
 
 let bungeeBuildMode = false
+/** The flat ride chosen in the build menu, while the ride tool builds that type. */
+let rideBuildType: FlatRideType | null = null
 let pendingCourseKind: CourseKind | undefined
 requireElement<HTMLInputElement>('#bungee-height').addEventListener('input', e => {
   if (bungeeBuildMode) view.bungeePreviewHeight = Math.max(4, Math.min(200, Number((e.target as HTMLInputElement).value) || 20))
@@ -1672,6 +1676,7 @@ function applyRoutedCellTool(cell: CellPosition): void {
     backstageEraseMode,
     bungeeBuildMode,
     bungeeHeight: Number(requireElement<HTMLInputElement>('#bungee-height').value),
+    rideType: rideBuildType ?? undefined,
     courseKind: pendingCourseKind,
   })
   if (!routed.handled || !routed.result) return
@@ -2650,6 +2655,7 @@ function placementPreviewAt(cell: CellPosition | null): PlacementPreviewResult |
         kind === 'ride' && bungeeBuildMode
           ? Number(requireElement<HTMLInputElement>('#bungee-height').value)
           : undefined,
+      rideType: kind === 'ride' && rideBuildType ? rideBuildType : undefined,
     })
   }
   if (tool === 'inspect') return null
@@ -2703,7 +2709,7 @@ function openRideBuilder(id: string): void {
   if (pathWindowOpen) closePathEditor()
   closeEntityPanel(); closeBuildMenu(); supplyPlanner.releaseTool()
   hideVisitorPanel()
-  activeRideId=id; bungeeBuildMode=false; view.bungeePreviewHeight=null
+  activeRideId=id; bungeeBuildMode=false; view.bungeePreviewHeight=null; rideBuildType=null; view.ridePreviewType=null
   requireElement<HTMLInputElement>('#ride-target-height').value=String(ride.bungeeHeight ?? 20)
   const panel=requireElement<HTMLElement>('#ride-builder')
   panel.hidden=false; panel.classList.add('visible')
@@ -2715,7 +2721,7 @@ function updateRideBuilder(): void {
   if (!activeRideId) return
   const ride=game.snapshot.buildings.find(b=>b.id===activeRideId && b.kind==='ride')
   if (!ride) { closeRideBuilder(false); return }
-  requireElement('#ride-builder-name').textContent=ride.rideType==='bungee'?'Bungee-Turm bauen':'Karussell bauen'
+  requireElement('#ride-builder-name').textContent=`${rideProfile(ride).name} bauen`
   requireElement('#ride-builder-status').textContent=game.getRideAccessIssue(ride) ?? 'Ein- und Ausgang angeschlossen. Konstruktion vollständig.'
   for (const type of ['entrance','exit'] as const) {
     const access=ride[type==='entrance'?'rideEntrance':'rideExit']
@@ -2752,7 +2758,7 @@ function updateRideAccessPreview(cell: CellPosition | null): void {
   const target=rideAccessPlacement && game.snapshot.buildings.find(b=>b.id===rideAccessPlacement!.id)
   if (!cell || !target || !rideAccessPlacement) {view.setRideAccessPreview(null);return}
   const result=game.canPlaceRideAccess(target.id,rideAccessPlacement.type,cell.x,cell.z)
-  view.setRideAccessPreview({x:cell.x,y:target.elevation,z:cell.z,type:rideAccessPlacement.type,theme:target.rideType==='bungee'?'bungee':'carousel',valid:result.ok,rotation:Math.atan2(target.x-cell.x,target.z-cell.z)})
+  view.setRideAccessPreview({x:cell.x,y:target.elevation,z:cell.z,type:rideAccessPlacement.type,theme:target.rideType==='bungee'?'bungee':'carousel',valid:result.ok,rotation:(()=>{const facing=buildingFootprint(target).find(c=>Math.abs(c.x-cell.x)+Math.abs(c.z-cell.z)===1)??target;return Math.atan2(facing.x-cell.x,facing.z-cell.z)})()})
 }
 function startRideAccessPlacement(id:string,type:'entrance'|'exit'): void {
   if (activeRideId!==id) openRideBuilder(id)
@@ -3279,6 +3285,8 @@ function activateBuildTool(button: HTMLButtonElement): void {
   closeRideBuilder(false)
   pendingCourseKind = button.dataset.courseKind as CourseKind | undefined
   bungeeBuildMode = button.dataset.bungee === 'true'
+  rideBuildType = isFlatRideType(button.dataset.rideType) ? button.dataset.rideType : null
+  view.ridePreviewType = rideBuildType
   view.bungeePreviewHeight = bungeeBuildMode
     ? Math.max(4, Math.min(200, Number(requireElement<HTMLInputElement>('#bungee-height').value) || 20))
     : null

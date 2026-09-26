@@ -12,6 +12,7 @@ import { SIMULATION_CONFIG } from './simulationConfig'
 import { applyFamilyFestivalBedtime } from './visitorSleep'
 import { CONCERT_TOPLESS_CROWD_THOUGHT, CONCERT_TOPLESS_THOUGHT } from './visitorThoughts'
 import { createTicketDemandTuning, type TicketDemandTuning } from './demandTuning'
+import { moodNeedAverage } from './visitorNeeds'
 import type { WeekendGoals } from './scenario'
 
 export const AUDIENCES = ['music', 'party', 'family', 'comfort', 'camping'] as const
@@ -36,40 +37,44 @@ export const BANDS = [
   { id: 'static', name: 'Static Parade', genre: 'Rock', audience: 'music', fee: 1400, draw: 60, speakers: 2, reputation: 40 },
   { id: 'rivet', name: 'Rivet Radio', genre: 'Rock', audience: 'music', fee: 780, draw: 36, speakers: 1, reputation: 10 },
   { id: 'wildcard', name: 'Wildcard Weekend', genre: 'Rock', audience: 'music', fee: 2100, draw: 84, speakers: 3, reputation: 60 },
-  { id: 'orbit', name: 'Midnight Orbit', genre: 'Dance · Headliner', audience: 'party', fee: 2200, draw: 85, speakers: 2, reputation: 55 },
+  { id: 'orbit', name: 'Midnight Orbit', genre: 'Dance', audience: 'party', fee: 2200, draw: 85, speakers: 2, reputation: 55 },
   { id: 'glitter', name: 'Glitter Transit', genre: 'Dance', audience: 'party', fee: 1250, draw: 54, speakers: 2, reputation: 25 },
   { id: 'discoball', name: 'Disco Ballistics', genre: 'Dance', audience: 'party', fee: 1850, draw: 74, speakers: 3, reputation: 50 },
   { id: 'iron', name: 'Iron Daisies', genre: 'Metal', audience: 'music', fee: 650, draw: 28, speakers: 0, reputation: 0 },
   { id: 'anvil', name: 'Anvil Arcade', genre: 'Metal', audience: 'music', fee: 1080, draw: 48, speakers: 2, reputation: 20 },
   { id: 'thunder', name: 'Thunder Meadow', genre: 'Metal', audience: 'music', fee: 1700, draw: 70, speakers: 3, reputation: 45 },
   { id: 'confetti', name: 'Confetti Club', genre: 'Pop', audience: 'party', fee: 500, draw: 22, speakers: 0, reputation: 0 },
-  { id: 'aurora', name: 'Aurora Avenue', genre: 'Indie · Headliner', audience: 'music', fee: 2800, draw: 100, speakers: 3, reputation: 65 },
-  { id: 'meadow2', name: 'Pollen Notes', genre: 'Indie', audience: 'music', fee: 420, draw: 19, speakers: 0, reputation: 0 },
-  { id: 'lantern2', name: 'Glass Picnic', genre: 'Indie', audience: 'music', fee: 640, draw: 31, speakers: 1, reputation: 10 },
-  { id: 'brass2', name: 'Tin Parade', genre: 'Brass & Pop', audience: 'family', fee: 520, draw: 24, speakers: 0, reputation: 0 },
-  { id: 'sugar2', name: 'Candy Relay', genre: 'Pop', audience: 'party', fee: 780, draw: 36, speakers: 1, reputation: 15 },
-  { id: 'campfire2', name: 'Ember Atlas', genre: 'Folk', audience: 'camping', fee: 380, draw: 17, speakers: 0, reputation: 0 },
-  { id: 'cedar2', name: 'Pine Letters', genre: 'Folk', audience: 'camping', fee: 690, draw: 30, speakers: 1, reputation: 10 },
-  { id: 'velvet2', name: 'Velour Weather', genre: 'Soul', audience: 'comfort', fee: 680, draw: 29, speakers: 1, reputation: 0 },
-  { id: 'neon2', name: 'Pixel Harvest', genre: 'Electro', audience: 'party', fee: 900, draw: 39, speakers: 1, reputation: 0 },
-  { id: 'rivet2', name: 'Crowbar Sonnet', genre: 'Rock', audience: 'music', fee: 740, draw: 34, speakers: 1, reputation: 10 },
-  { id: 'iron2', name: 'Rust Cathedral', genre: 'Metal', audience: 'music', fee: 620, draw: 27, speakers: 0, reputation: 0 },
-  { id: 'paper2', name: 'Orbit Paper', genre: 'Indie', audience: 'music', fee: 1080, draw: 50, speakers: 2, reputation: 30 },
-  { id: 'firefly2', name: 'Bubblegum Radar', genre: 'Pop', audience: 'family', fee: 1180, draw: 56, speakers: 2, reputation: 35 },
-  { id: 'harbor2', name: 'Driftwood Almanac', genre: 'Folk', audience: 'comfort', fee: 1100, draw: 48, speakers: 2, reputation: 30 },
-  { id: 'amber2', name: 'Marigold Rooms', genre: 'Soul', audience: 'comfort', fee: 1020, draw: 44, speakers: 1, reputation: 20 },
-  { id: 'voltage2', name: 'Cathode Garden', genre: 'Electro', audience: 'party', fee: 1280, draw: 60, speakers: 2, reputation: 35 },
-  { id: 'glitter2', name: 'Strobe Cartel', genre: 'Dance', audience: 'party', fee: 1200, draw: 52, speakers: 2, reputation: 25 },
-  { id: 'anvil2', name: 'Obsidian Tractor', genre: 'Metal', audience: 'music', fee: 1040, draw: 46, speakers: 2, reputation: 20 },
-  { id: 'static2', name: 'Asphalt Tulips', genre: 'Rock', audience: 'music', fee: 1360, draw: 58, speakers: 2, reputation: 40 },
-  { id: 'lowtide2', name: 'Silk Receiver', genre: 'Soul', audience: 'comfort', fee: 1500, draw: 66, speakers: 2, reputation: 45 },
-  { id: 'thunder2', name: 'Granite Howl', genre: 'Metal', audience: 'music', fee: 1660, draw: 68, speakers: 3, reputation: 45 },
-  { id: 'discoball2', name: 'Mirror Motion', genre: 'Dance', audience: 'party', fee: 1800, draw: 72, speakers: 3, reputation: 50 },
-  { id: 'synth2', name: 'Modular Monsoon', genre: 'Electro', audience: 'party', fee: 1900, draw: 78, speakers: 3, reputation: 55 },
-  { id: 'orbit2', name: 'Lunar Dispatch', genre: 'Dance · Headliner', audience: 'party', fee: 2150, draw: 84, speakers: 2, reputation: 55 },
-  { id: 'wildcard2', name: 'Jukebox Mutiny', genre: 'Rock', audience: 'music', fee: 2050, draw: 82, speakers: 3, reputation: 60 },
-  { id: 'nova', name: 'Nova Canopy', genre: 'Indie · Headliner', audience: 'music', fee: 3000, draw: 98, speakers: 3, reputation: 65 },
-  { id: 'eclipse', name: 'Eclipse Circuit', genre: 'Electro · Headliner', audience: 'party', fee: 3100, draw: 99, speakers: 3, reputation: 65 },
+  { id: 'aurora', name: 'Aurora Avenue', genre: 'Indie', audience: 'music', fee: 2800, draw: 100, speakers: 3, reputation: 65 },
+  { id: 'meadow2', name: 'Pollen Notes', genre: 'Indie', audience: 'comfort', fee: 380, draw: 16, speakers: 0, reputation: 0 },
+  { id: 'lantern2', name: 'Glass Picnic', genre: 'Indie', audience: 'family', fee: 760, draw: 30, speakers: 1, reputation: 15 },
+  { id: 'brass2', name: 'Tin Parade', genre: 'Brass & Pop', audience: 'party', fee: 620, draw: 29, speakers: 1, reputation: 5 },
+  { id: 'sugar2', name: 'Candy Relay', genre: 'Pop', audience: 'family', fee: 690, draw: 33, speakers: 1, reputation: 10 },
+  { id: 'campfire2', name: 'Ember Atlas', genre: 'Folk', audience: 'camping', fee: 470, draw: 23, speakers: 0, reputation: 5 },
+  { id: 'cedar2', name: 'Pine Letters', genre: 'Folk', audience: 'comfort', fee: 640, draw: 26, speakers: 1, reputation: 10 },
+  { id: 'velvet2', name: 'Velour Weather', genre: 'Soul', audience: 'party', fee: 780, draw: 35, speakers: 1, reputation: 5 },
+  { id: 'neon2', name: 'Pixel Harvest', genre: 'Electro', audience: 'party', fee: 1100, draw: 47, speakers: 2, reputation: 15 },
+  { id: 'rivet2', name: 'Crowbar Sonnet', genre: 'Rock', audience: 'party', fee: 880, draw: 41, speakers: 1, reputation: 15 },
+  { id: 'iron2', name: 'Rust Cathedral', genre: 'Metal', audience: 'music', fee: 560, draw: 23, speakers: 1, reputation: 0 },
+  { id: 'paper2', name: 'Orbit Paper', genre: 'Indie', audience: 'music', fee: 1280, draw: 58, speakers: 2, reputation: 35 },
+  { id: 'firefly2', name: 'Bubblegum Radar', genre: 'Pop', audience: 'party', fee: 1420, draw: 63, speakers: 2, reputation: 40 },
+  { id: 'harbor2', name: 'Driftwood Almanac', genre: 'Folk', audience: 'camping', fee: 960, draw: 42, speakers: 1, reputation: 25 },
+  { id: 'amber2', name: 'Marigold Rooms', genre: 'Soul', audience: 'comfort', fee: 1220, draw: 53, speakers: 2, reputation: 30 },
+  { id: 'voltage2', name: 'Cathode Garden', genre: 'Electro', audience: 'music', fee: 1140, draw: 54, speakers: 2, reputation: 30 },
+  { id: 'glitter2', name: 'Strobe Cartel', genre: 'Dance', audience: 'party', fee: 1460, draw: 61, speakers: 2, reputation: 35 },
+  { id: 'anvil2', name: 'Obsidian Tractor', genre: 'Metal', audience: 'music', fee: 1260, draw: 55, speakers: 2, reputation: 30 },
+  { id: 'static2', name: 'Asphalt Tulips', genre: 'Rock', audience: 'comfort', fee: 1180, draw: 51, speakers: 2, reputation: 30 },
+  { id: 'lowtide2', name: 'Silk Receiver', genre: 'Soul', audience: 'party', fee: 1720, draw: 73, speakers: 3, reputation: 50 },
+  { id: 'thunder2', name: 'Granite Howl', genre: 'Metal', audience: 'music', fee: 1920, draw: 77, speakers: 3, reputation: 50 },
+  { id: 'discoball2', name: 'Mirror Motion', genre: 'Dance', audience: 'party', fee: 1640, draw: 67, speakers: 2, reputation: 45 },
+  { id: 'synth2', name: 'Modular Monsoon', genre: 'Electro', audience: 'music', fee: 1760, draw: 74, speakers: 3, reputation: 50 },
+  { id: 'orbit2', name: 'Lunar Dispatch', genre: 'Dance', audience: 'party', fee: 2450, draw: 90, speakers: 3, reputation: 60 },
+  { id: 'wildcard2', name: 'Jukebox Mutiny', genre: 'Rock', audience: 'party', fee: 1880, draw: 78, speakers: 3, reputation: 55 },
+  { id: 'nova', name: 'Nova Canopy', genre: 'Indie', audience: 'music', fee: 3000, draw: 98, speakers: 3, reputation: 65 },
+  { id: 'eclipse', name: 'Eclipse Circuit', genre: 'Electro', audience: 'party', fee: 3100, draw: 99, speakers: 3, reputation: 65 },
+  { id: 'hollowoak', name: 'Hollow Oak Revival', genre: 'Folk', audience: 'camping', fee: 2350, draw: 88, speakers: 3, reputation: 60 },
+  { id: 'starlight', name: 'Starlight Syndicate', genre: 'Pop', audience: 'party', fee: 2700, draw: 96, speakers: 3, reputation: 62 },
+  { id: 'goldenhour', name: 'Golden Hour Revue', genre: 'Soul', audience: 'comfort', fee: 2500, draw: 90, speakers: 3, reputation: 60 },
+  { id: 'gravemarch', name: 'Gravemarch Legion', genre: 'Metal', audience: 'music', fee: 2600, draw: 92, speakers: 3, reputation: 62 },
 ] as const
 
 export type BandStar = 1 | 2 | 3 | 4 | 5
@@ -92,6 +97,20 @@ export function bandPriceWillingness(band: { draw: number; reputation: number })
 
 export function isFiveStarBand(band: { reputation: number }): boolean {
   return bandStarRating(band) === 5
+}
+
+/**
+ * A headliner is a five-star band: it needs the music reputation and an offer from the
+ * headliner pool. The mark is derived from the stars, never written into the genre, so
+ * genre checks (DJ acts, costumes) see the plain genre.
+ */
+export function isHeadlinerBand(band: { reputation: number }): boolean {
+  return isFiveStarBand(band)
+}
+
+/** Genre as shown on a band card: the genre, plus "Headliner" for five-star bands. */
+export function bandGenreLabel(band: { genre: string; reputation: number }): string {
+  return isHeadlinerBand(band) ? `${band.genre} · Headliner` : band.genre
 }
 
 export function rollFiveStarOffers(
@@ -512,7 +531,7 @@ export function updateFestival(s: GameSnapshot): void {
     const sheltered = visitor.state === 'camping' && visitor.campingPhase === 'resting'
     if (!sheltered && (f.weather === 'rain' || f.weather === 'heat')) {
       weatherImpact = minutes * 0.12 * (1 - cover)
-      if (f.weather === 'heat' && f.upgrades.water && s.buildings.some(b => b.kind === 'toilet' && Math.hypot(b.x - visitor.x, b.z - visitor.z) <= 3 && consumeLocal(s, b.id, 'water'))) { /* Water is dispensed locally at supplied sanitation points. */ }
+      if (f.weather === 'heat' && f.upgrades.water && s.buildings.some(b => b.kind === 'toilet' && Math.hypot(b.x - visitor.x, b.z - visitor.z) <= 3 && consumeLocal(s, b.id, 'water'))) { visitor.needs.thirst = Math.min(100, (visitor.needs.thirst ?? 100) + 20) /* Water is dispensed locally at supplied sanitation points. */ }
       else { visitor.needs.energy = clamp(visitor.needs.energy - weatherImpact); visitor.needs.fun = clamp(visitor.needs.fun - weatherImpact) }
     }
     for (const show of shows) {
@@ -548,7 +567,7 @@ export function updateFestival(s: GameSnapshot): void {
         visitor.thought = 'Meine Lieblingsbands spielen gleichzeitig – ich verpasse einen Auftritt.'
       }
     }
-    happiness += (visitor.needs.fun + visitor.needs.energy + visitor.needs.hunger + visitor.needs.toilet) / 4
+    happiness += moodNeedAverage(visitor)
     f.metrics.weatherImpact += weatherImpact
   }
   if (s.visitors.length) { f.metrics.satisfaction += happiness * minutes; f.metrics.samples += s.visitors.length * minutes }
