@@ -254,8 +254,9 @@ Gemessen mit `tests/render-performance.html` und festivalmittel sind Draw-Calls 
   keinen Schatten. Die Gebäude-ID für das Anklicken wird über alle Vorfahren
   gesucht (`owningBuildingId`), damit verschachtelte Teile sie behalten.
 - **Materialpalette.** `src/view/materials.ts` hält das Hausmaterial
-  (`HOUSE_MATERIAL`) und geteilte Overlays (`overlayMaterial`); `shared()`
-  markiert, was `disposeObject3D` nicht entsorgen darf. `MATERIAL_CEILINGS` in
+  (`HOUSE_MATERIAL`), geteilte Overlays (`overlayMaterial`) und den
+  Flächenrahmen (`AREA_EDGE_MATERIAL`); `shared()` markiert, was
+  `disposeObject3D` nicht entsorgen darf. `MATERIAL_CEILINGS` in
   `tests/performanceGuards.ts` begrenzt `new MeshStandardMaterial(` je Datei auf den
   heutigen Stand; eine Obergrenze wird nur gesenkt.
 - **Symbole.** `src/view/spriteAtlas.ts` zeichnet Gefühle, Schlaf, Noten und

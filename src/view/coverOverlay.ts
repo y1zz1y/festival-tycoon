@@ -1,6 +1,7 @@
-import { BoxGeometry, Group, InstancedMesh, Matrix4, MeshStandardMaterial } from 'three'
+import { BoxGeometry, Group, InstancedMesh, Matrix4 } from 'three'
 import { campingBoundary } from './campingGround'
 import { disposeObject3D } from './disposeObject3D'
+import { AREA_EDGE_MATERIAL } from './materials'
 
 export type AreaEdgeCell = { x: number; z: number; y: number }
 
@@ -8,8 +9,6 @@ export const AREA_EDGE_COLOR = 0xc4bba0
 
 const curbGeometry = new BoxGeometry(0.34, 0.07, 0.065)
 curbGeometry.userData.shared = true
-const curbMaterial = new MeshStandardMaterial({ color: AREA_EDGE_COLOR, roughness: 1 })
-curbMaterial.userData.shared = true
 
 function nextCapacity(needed: number): number {
   return Math.max(16, 2 ** Math.ceil(Math.log2(Math.max(needed, 1))))
@@ -39,7 +38,7 @@ export class AreaEdgeBatch {
     }
     if (!this.batch || this.batch.instanceMatrix.count < count) {
       this.clear()
-      this.batch = new InstancedMesh(curbGeometry, curbMaterial, nextCapacity(count))
+      this.batch = new InstancedMesh(curbGeometry, AREA_EDGE_MATERIAL, nextCapacity(count))
       this.batch.frustumCulled = false
       this.batch.userData.areaEdge = true
       this.group.add(this.batch)

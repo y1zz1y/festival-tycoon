@@ -20,6 +20,7 @@ function padPlanes(root: Group): InstancedMesh[] {
   const found: InstancedMesh[] = []
   root.traverse((object) => {
     if (!(object instanceof InstancedMesh)) return
+    if (object.userData.iconBillboard) return
     if (object.geometry instanceof PlaneGeometry || object.userData.coverLook) found.push(object)
   })
   return found

@@ -17,13 +17,25 @@ export function shared<T extends Material>(material: T): T {
 /** The house style: vertex colours from ModelKit, a matte finish, a hint of metal. */
 export const HOUSE_MATERIAL = shared(new MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: .05 }))
 
-const overlays = new Map<string, MeshStandardMaterial>()
-/** A translucent marking on the ground (a medical area, a designated field). */
-export function overlayMaterial(color: number, opacity: number): MeshStandardMaterial {
-  const key = `${color}:${opacity}`
-  const cached = overlays.get(key)
+const palette = new Map<string, MeshStandardMaterial>()
+function cachedStandard(key: string, params: ConstructorParameters<typeof MeshStandardMaterial>[0]): MeshStandardMaterial {
+  const cached = palette.get(key)
   if (cached) return cached
-  const material = shared(new MeshStandardMaterial({ color, transparent: true, opacity, roughness: .9, depthWrite: false }))
-  overlays.set(key, material)
+  const material = shared(new MeshStandardMaterial(params))
+  palette.set(key, material)
   return material
 }
+
+/** A translucent marking on the ground (a medical area, a designated field). */
+export function overlayMaterial(color: number, opacity: number): MeshStandardMaterial {
+  return cachedStandard(`overlay:${color}:${opacity}`, {
+    color,
+    transparent: true,
+    opacity,
+    roughness: .9,
+    depthWrite: false,
+  })
+}
+
+/** Stone curb for camping and forecourt area edges (`AreaEdgeBatch`). */
+export const AREA_EDGE_MATERIAL = cachedStandard('area-edge', { color: 0xc4bba0, roughness: 1 })

@@ -176,6 +176,7 @@ export class IconBillboards {
     mesh.frustumCulled = false
     mesh.renderOrder = 100
     mesh.raycast = () => undefined
+    mesh.userData.iconBillboard = true
     return mesh
   }
 
