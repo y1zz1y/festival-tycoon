@@ -103,7 +103,7 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
   Kristallstele, Willkommensbogen) und themische Sätze (Wüste, Wald, Neon,
   Industrie, Tropen, Mystik, Zirkus, Alpin, Arktis, Steampunk). Kanten-Slots
   teilen Banner/Wimpel/Hecke/`prayerFlags`/`picketFence`/`ropeFence`/`streamers`
-  plus `glowTape`, `chainFence`, `occultBanner`, `carnivalBulbs`, `iceFence`,
+  plus `glowTape`, `chainFence`, `trackCurb`, `occultBanner`, `carnivalBulbs`, `iceFence`,
   `pipeRail`.   `lightBalloon` ist ein Vollfeld wie `lighting` (Wege bleiben
   begehbar), braucht Strom und das Tagesplan-Angebot Lampen. Jede
   `Deko → Licht`-Art (Fackel, Diskokugel, Irrlicht, Polarlicht, …) speist

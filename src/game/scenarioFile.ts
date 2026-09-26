@@ -7,6 +7,7 @@ import {
   type ScenarioSettings,
 } from './scenario'
 import type { ScenarioPreset } from './scenarioPresets'
+import { normalizeGroundCells } from './ground'
 import { createInitialSnapshot, createBlankSnapshot } from './snapshotBootstrap'
 import { migrateSnapshot } from './snapshotMigration'
 import type { GameSnapshot } from './types/snapshot'
@@ -133,6 +134,12 @@ export function captureScenarioWorld(snapshot: GameSnapshot): Partial<GameSnapsh
     const value = snapshot[key]
     if (value !== undefined) (world as Record<string, unknown>)[key] = structuredClone(value)
   }
+  const ground = snapshot.festival.infrastructure?.ground
+  if (ground && Object.keys(ground).length > 0) {
+    world.festival = {
+      infrastructure: { ground: structuredClone(ground) },
+    } as GameSnapshot['festival']
+  }
   return world
 }
 
@@ -216,12 +223,23 @@ export function createSnapshotFromScenarioFile(file: ScenarioFile): GameSnapshot
   })
   delete settings.authoring
   if (!file.world) return applyPlayableStart(createInitialSnapshot(settings), file)
+  const importedGround = file.world.festival?.infrastructure?.ground
+  const worldRest = { ...file.world }
+  delete worldRest.festival
   const merged = migrateSnapshot({
     ...createBlankSnapshot(settings),
-    ...file.world,
+    ...worldRest,
     scenario: settings,
   })
-  return applyPlayableStart(merged ?? createInitialSnapshot(settings), file)
+  const snapshot = applyPlayableStart(merged ?? createInitialSnapshot(settings), file)
+  if (importedGround) {
+    snapshot.festival.infrastructure.ground = {
+      ...snapshot.festival.infrastructure.ground,
+      ...structuredClone(importedGround),
+    }
+    normalizeGroundCells(snapshot.festival.infrastructure.ground)
+  }
+  return snapshot
 }
 
 export function createAuthoringSettings(partial?: Partial<ScenarioSettings>): ScenarioSettings {

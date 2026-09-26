@@ -15,6 +15,7 @@ ist von Wegbelägen getrennt.
 | Szenario, Weltgröße, Eingang | `src/game/scenario.ts` | `ScenarioSettings`, `SCENARIO_WORLD_SIZES` |
 | Umgebungen (Acker, Wüste, …) | `src/game/environments.ts` | `ENVIRONMENTS` |
 | Bodenzellen und Vorbereitung | `src/game/ground.ts` | `groundInfo`, `prepareGround`, `prepareGroundArea`, `GROUND_COVERS`, `paintGroundCover`, `paintGroundCoverArea`, `normalizeGroundCells` |
+| OSM/DEM-Import, Skizzen | `src/game/terrainImport.ts`, `scripts/import-terrain.mjs`, `scripts/import-terrain-entry.ts` | `classifyOsmTags`, `sketchBurningMan`, `sketchRockAmRing`, `draftToScenarioFile`; CLI `npm run import-terrain` |
 | Fußweg-/Straßenbeläge | `src/game/wayTypes.ts` | `WAY_TYPES`, `wayInfo`, `wayIssue` |
 | Weg- und Straßenrampen | `src/game/wayElevation.ts` | Halbstufen `0.5`, `MAX_PATH_ELEVATION` 6, Autodach `MAX_ROAD_RAISE` 1; `planLockedOriginRamp` / Shift-Ausgang; Fußkanten `wayEdgeHeights` / `canStepPedestrianHeight` |
 | Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/view/WorldView.ts` | Gebäude/Deko/Achterbahn-Start rasten auf 0.5; gelbe Bodenkachel-Markierung unter dem Zeiger |
@@ -57,8 +58,8 @@ ist von Wegbelägen getrennt.
 - Mesh nur nach Terrain-, Environment-, Surface-/Compaction-, Cover-, Parkplatz- oder
   Footprint-Änderungen neu bauen. Regen ändert einen Material-Tint, nicht
   die Geometrie.
-- Optische Untergründe (`GroundCell.cover`: Rasen, Sand, Stein, Acker, Schnee,
-  Felsen, braune Erde) werden im Gelände-Reiter als Palette gestrichen
+-   Optische Untergründe (`GroundCell.cover`: Rasen, Sand, Stein, Acker, Schnee,
+  Felsen, braune Erde, Salzpfanne, Asphalt) werden im Gelände-Reiter als Palette gestrichen
   (Klick oder Rechteck, wie Anheben/Senken). Sie leben auf derselben
   Ground-Zelle wie Wege und Bodenarbeiten, nicht in einem zweiten System.
   Alte Saves ohne `cover` behalten den umgebungsbasierten `substrate`.
@@ -67,8 +68,9 @@ ist von Wegbelägen getrennt.
   Rendering: Cover gewinnt gegen natürlichen Boden und Verdichten, nicht
   gegen Wasser/Schlamm oder Park-Asphalt; ein Atlas, ein Draw-Call.
   Navigation: nur Cover mit bestehendem Substrat ändern Tempo/Nässe
-  (Rasen→`grass`, Sand→`sand`, Acker→`field`, braune Erde→`clay`).
-  Stein, Schnee und Felsen sind rein optisch. Kein neuer Balancing-Schlüssel.
+  (Rasen→`grass`, Sand→`sand`, Acker→`field`, braune Erde→`clay`,
+  Salzpfanne→`sand`). Stein, Schnee, Felsen und Asphalt sind rein optisch.
+  Kein neuer Balancing-Schlüssel.
 - Gebäude, Wege und ausgewiesene Flächen behalten flache Pads.
 - Ausgewiesene Parkplätze (`logistics.parkingCells`) nutzen im Atlas die
   Asphalt-Zeile `parking` (grau, Stellplatzmarkierung). Nur diese Felder,
@@ -98,6 +100,9 @@ Klippe nach 0,5 Hang, Wasser am Uferhang, Schwimmen, Nav-Invalidierung,
 Stützen nur im Freiraum, Fußweg 0→0,5 ja / 0→1 Klippe nein). `tests/environments.ts`.
 `tests/groundCover.ts` (Palette, Paint, Fläche, Save-Roundtrip, Migration
 unbekannter Cover, Höhenedit behält Cover, Command `paintGroundCover`).
+`tests/terrainImport.ts` (OSM-Tag-Mapping, Burning-Man- und Nürburgring-Skizzen,
+Drop-in-Dateien `public/scenarios/burning-man.json` und
+`public/scenarios/rock-am-ring-strecke.json`).
 `tests/operations.ts` (Parkplatz-Abriss gibt die Kachel frei).
 `tests/supplyChain.ts` (Bodenarbeiten).
 `tests/wayElevation.ts` (Halbstufen-Rampen, beide Way-Typen, Autodach, Save-Migration,
@@ -151,3 +156,13 @@ Schnee, Felsen, braune Erde. Speicherung als optionales `cover` an
 `festival.infrastructure.ground`. Commands `paintGroundCover` /
 `paintGroundCoverArea`. Atlaszeilen `stone`, `rock`, `snow`, `earth` im
 bestehenden Boden-Mesh.
+
+## Gelände-Import und Festival-Skizzen (0.2.8)
+
+Kein Google-Maps-/Earth-Download. Legal: OpenStreetMap (Wege, Wasser, landuse),
+öffentliche DEMs (SRTM über Open-Topo-Data), Nutzer-Upload, oder Offline-Skizze.
+CLI: `npm run import-terrain` (`scripts/import-terrain.mjs`). Agent-Skill:
+`.cursor/skills/festival-terrain-import/SKILL.md`. Neue Cover `salt` (Playa,
+Sand-Tempo) und `asphalt` (Rennstrecke, optisch). Testdaten: Burning Man
+(Hufeisen + Playastrecke) und Rock am Ring (Nordschleifen-Andeutung + GP-Oval).
+Szenario-Export legt Ground unter `world.festival.infrastructure.ground` ab.

@@ -92,13 +92,13 @@ Stadtfläche bleibt ebenfalls über Wasserniveau. Eingang und Straßenzufahrt
 bleiben bei jedem Wert eingeebnet.
 Im Reiter **Gelände** gibt es **Feld anheben**, **Feld senken**,
 **Glätten** und die **Untergrund**-Palette: Rasen, Sand, Stein, Acker,
-Schnee, Felsen und braune Erde. Ziehen markiert ein Rechteck; Anheben
+Schnee, Felsen, braune Erde, Salzpfanne und Asphalt. Ziehen markiert ein Rechteck; Anheben
 und Senken ändern um eine
 halbe Höhenstufe. Hänge bleiben höchstens 0,5 hoch, der Rest wird zur
 Steinklippe. **Glätten** zieht die Fläche auf die Höhe unter dem ersten
 Klick. Gemalte Untergründe ändern nur das Aussehen — außer bei Rasen, Sand,
-Acker und brauner Erde, die dieselben Schritttempi wie der natürliche
-Wiesen-, Sand-, Acker- bzw. Lehmboden nutzen. Der Wasserspiegel liegt eine
+Acker, brauner Erde und Salzpfanne, die dieselben Schritttempi wie der natürliche
+Wiesen-, Sand-, Acker-, Lehm- bzw. Sandboden nutzen. Asphalt bleibt optisch. Der Wasserspiegel liegt eine
 halbe Stufe unter Ebene 0 und liegt
 auch auf den abfallenden Uferhängen. Gäste mit wenig Spaß laufen zum
 erreichbaren Wasser und baden dort. Angehobene Gebäude und Deko bekommen
@@ -363,6 +363,10 @@ Beschreibung, Startgeld, Schulden, Publikumswerte, Ticket-Mix und Nachfrage.
 `public/scenarios/` (bzw. nach dem Build in `dist/scenarios/`), erscheint sie
 unter **Neues Spiel** mit Beschreibungstext. Eingebaute Szenarien bleiben
 unverändert.
+
+Zusätzliche Drop-in-Gelände (Black Rock City, Nürburgring-Skizze) erscheinen
+unter **Neues Spiel**, sobald sie im Szenarien-Ordner liegen. Autoren erzeugen
+sie aus OpenStreetMap und öffentlichen Höhendaten — nicht aus Google-Maps-Kacheln.
 
 **Szenarien:** Vor jedem vorbereiteten Szenario steht ein **Briefing** mit
 Gelände, Startgeld, Darlehen, Stichtag der ersten Ausgabe und Zielen. Ziele messen

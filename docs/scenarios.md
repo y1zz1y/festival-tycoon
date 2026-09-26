@@ -13,6 +13,7 @@ Finanzen ([finance.md](finance.md)).
 | Aufgabe | Vollständiger Pfad | Einstieg / Symbol |
 | --- | --- | --- |
 | Szenario-Einstellungen, Zielarten | `src/game/scenario.ts` | `ScenarioSettings`, `ScenarioGoal`, `PARK_GOAL_KINDS`, `EDITION_GOAL_KINDS`, `normalizeScenarioSettings` |
+| Gelände-Import → Szenario-Datei | `src/game/terrainImport.ts`, `scripts/import-terrain.mjs`, `scripts/import-terrain-entry.ts` | Skizze oder OSM+DEM nach `public/scenarios/*.json` |
 | Vorbereitete Szenarien | `src/game/scenarioPresets.ts` | `SCENARIO_PRESETS`, `scenarioPreset`, `setExtraScenarioPresets` |
 | Drop-in-Dateien, Editor-Export | `src/game/scenarioFile.ts` | `ScenarioFile`, `parseScenarioFile`, `exportScenarioFile`, `createSnapshotFromScenarioFile` |
 | Katalog (eingebaut + Dateien) | `src/game/scenarioCatalog.ts` | `listedScenarioPresets`, `mergeScenarioCatalog`, `fetchFileScenarios` |
@@ -27,7 +28,7 @@ Finanzen ([finance.md](finance.md)).
 | Briefing, Szenariostart | `src/ui/titleScreen.ts` | `briefingMarkup`, `openTitleBriefing`, `startScenario`, `leaveToTitle` |
 | Ziele im freien Spiel, Zusammenfassung | `src/ui/scenarioScreen.ts` | `readGoals`, `fillGoals`, `updateSummary` |
 | Balancing | `src/game/simulationConfig.ts` | `scenario.firstEditionDays`, `scenario.insolvencyGraceDays`, `scenario.weekendGoals`, `scenario.weekendGoalGrowth` |
-| Tests | `tests/scenarioOutcome.ts`, `tests/scenarioEditor.ts` | `testScenarioOutcome`, `testScenarioEditor` |
+| Tests | `tests/scenarioOutcome.ts`, `tests/scenarioEditor.ts`, `tests/terrainImport.ts` | `testScenarioOutcome`, `testScenarioEditor`, Import-Skizzen und Drop-ins |
 
 ## Datenfluss und Zuständigkeit
 
@@ -84,6 +85,16 @@ greift also nur, wenn die Uhr ohne Ausgabe läuft.
 | `tickets` | nein | Startkontingent Tag / Camping |
 | `demandTuning` | nein | `TicketDemandTuning`; der Editor setzt die Basisgäste Tag/Camping |
 | `world` | nein | gebackene Anlage; fehlt sie, gilt `GameState.startNew` |
+
+**Gelände in `world`.** `captureScenarioWorld` schreibt neben Terrain und Gebäuden
+den gemalten Untergrund nach `world.festival.infrastructure.ground` (nur der
+Ground-Slice, nicht das ganze Festival). `createSnapshotFromScenarioFile` merged
+diesen Slice nach der Migration, damit Tickets und Planung vom Start kommen.
+Ohne Ground erzeugt der Start wie bisher nur Höhen und Gebäude. Import-CLI:
+`npm run import-terrain`. Testdateien `public/scenarios/burning-man.json` und
+`public/scenarios/rock-am-ring-strecke.json` (eigene IDs, das Preset
+`rock-am-ring` bleibt). Agent-Ableitung aus Referenzkarten:
+`.cursor/skills/festival-terrain-import/SKILL.md`. Kein Ingame-Import-Command.
 
 **Drop-in-Dateien.** Ein Szenario ist dieselbe `ScenarioPreset`-Form
 (`id`, `name`, `detail`, `settings`) plus optionale Ticket- und Nachfragewerte

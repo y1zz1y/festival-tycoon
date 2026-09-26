@@ -12,6 +12,7 @@ import { testBandSupply } from './bandSupply'
 import { testTerrainSurface } from './terrainSurface'
 import { testTerrainLand } from './terrainLand'
 import { testGroundCover } from './groundCover'
+import { testTerrainImport } from './terrainImport'
 import { testScenery } from './scenery'
 import { testPedestrianBarriers } from './pedestrianBarriers'
 import { testDecorationThemes, testThemedDecorationPlacement, testDecorationLampLights } from './decoration'
@@ -192,6 +193,7 @@ testRideAccess(fixture)
 testTerrainSurface(fixture)
 testTerrainLand(fixture)
 testGroundCover(fixture)
+testTerrainImport()
 
 test('Base64 saves preserve Unicode and full worlds without overwriting local saves', () => {
   const original = fixture(2)

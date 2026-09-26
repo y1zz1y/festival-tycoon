@@ -31,7 +31,7 @@ Netzwerk-Clients mutieren die Welt nicht lokal dauerhaft; der Host entscheidet.
 | Befehls- und Delta-Typen | `src/net/protocol.ts` | `GameCommand`, Snapshots |
 | Command-Metadaten | `src/net/commandRegistry.ts` | vollständige Optimistic-Klassifikation |
 | UI-Bootstrap / Systemverkabelung | `src/main.ts` | Controller erzeugen, Event-Binding, Tool-Leiste; Szenario-Editor-Fenster |
-| Szenario-Dateien / Editor | `src/game/scenarioFile.ts`, `src/game/scenarioCatalog.ts` | Drop-in-JSON, Katalog, Authoring-Start |
+| Szenario-Dateien / Editor | `src/game/scenarioFile.ts`, `src/game/scenarioCatalog.ts`, `src/game/terrainImport.ts` | Drop-in-JSON, Katalog, Authoring-Start, OSM/Skizzen-Import |
 | App-Schleife | `src/app/gameLoop.ts` | Renderframes und Hidden-Tab-Hosttick über injizierte Schnittstellen |
 | Eingaberouting | `src/input/toolRouter.ts` | Direkte Zellwerkzeuge über die öffentliche `GameState`-Fassade |
 | UI-Controller / Differential-Updates | `src/ui/*.ts` | Baukatalog, Spielstandarchiv, Fingerprint-Gates |

@@ -89,6 +89,7 @@ export function testScenarioEditor(): void {
   const refused = broke.place('statue', 2, 2, 0)
   assert.equal(refused.ok, false, 'a normal game still needs money')
 
+  editor.paintGroundCover(4, 5, 'salt')
   const exported = exportScenarioFile(editor.snapshot, {
     name: 'Exportwiese',
     detail: 'Aus dem Editor, mit Statue.',
@@ -105,11 +106,13 @@ export function testScenarioEditor(): void {
   assert.equal(roundTrip.name, 'Exportwiese')
   assert.equal(roundTrip.detail, 'Aus dem Editor, mit Statue.')
   assert.ok(roundTrip.world?.buildings?.some((building) => building.kind === 'statue'))
+  assert.equal(roundTrip.world?.festival?.infrastructure?.ground['4,5']?.cover, 'salt')
   const fromExport = GameState.startFromScenarioFile(roundTrip)
   assert.equal(fromExport.snapshot.money, 18_000)
   assert.equal(fromExport.snapshot.finance.loan, 7_500)
   assert.equal(fromExport.snapshot.scenario.authoring, undefined)
   assert.ok(fromExport.snapshot.buildings.some((building) => building.kind === 'statue'))
+  assert.equal(fromExport.snapshot.festival.infrastructure.ground['4,5']?.cover, 'salt')
   assert.equal(createSnapshotFromScenarioFile(roundTrip).festival.tickets?.day, 40)
 
   registerFileScenarios([])

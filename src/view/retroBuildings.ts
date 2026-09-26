@@ -428,6 +428,12 @@ function buildThemedScenery(kind: BuildingKind, k: ModelKit): boolean {
     }
     return true
   }
+  if (kind === 'trackCurb') {
+    for (let n = 0; n < 6; n++) {
+      k.box(-.42 + n * .16, .1, 0, .15, .2, .16, n % 2 ? 0xc43d55 : 0xf4f0e6)
+    }
+    return true
+  }
   if (kind === 'occultBanner') {
     for (const x of [-.4, .4]) { k.box(x, .64, 0, .04, 1.24, .06, 0x4a3558); k.box(x, .03, 0, .12, .06, .2, ink) }
     k.box(0, 1.18, 0, .82, .04, .06, timber)

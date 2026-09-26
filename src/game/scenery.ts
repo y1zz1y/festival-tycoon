@@ -15,7 +15,7 @@ export const SCENERY_KINDS = [
   'desertPalm', 'dustLantern', 'playaTotem', 'tumbleweed',
   'forestFern', 'mossLog', 'foxfireLamp', 'woodlandIdol',
   'neonPlant', 'neonArch', 'uvSpeaker', 'glowTape',
-  'scrapPlanter', 'palletBench', 'workLamp', 'chainFence',
+  'scrapPlanter', 'palletBench', 'workLamp', 'chainFence', 'trackCurb',
   'palmTree', 'tikiStool', 'tikiMask', 'coconutPile',
   'altarTable', 'spiritLantern', 'runeStone', 'occultBanner',
   'circusStool', 'carnivalBulbs', 'miniBigTop', 'popcornCart',
@@ -27,7 +27,7 @@ export function isScenery(kind: string): boolean { return (SCENERY_KINDS as read
 const EDGE_SCENERY_KINDS = [
   ...WALL_KINDS,
   'hedge', 'banner', 'bunting', 'stringLights', 'prayerFlags', 'picketFence', 'ropeFence', 'streamers',
-  'glowTape', 'chainFence', 'occultBanner', 'carnivalBulbs', 'iceFence', 'pipeRail',
+  'glowTape', 'chainFence', 'trackCurb', 'occultBanner', 'carnivalBulbs', 'iceFence', 'pipeRail',
 ] as const
 export function isEdgeScenery(kind: string): boolean { return (EDGE_SCENERY_KINDS as readonly string[]).includes(kind) }
 

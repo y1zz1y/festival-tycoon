@@ -19,7 +19,7 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
   // of their own: opening the tab is what puts the site into planning.
   const groundPanel = document.createElement('section'); groundPanel.className = 'terrain-planner'
   groundPanel.setAttribute('aria-label', 'Gelände planen')
-  groundPanel.innerHTML = `<p class="terrain-planner-intro">Solange dieser Reiter offen ist, sind die Besucher ausgeblendet und ihr bereitet den Untergrund vor. Die Untergrundfarben (Rasen, Sand, Stein, Acker, Schnee, Felsen, braune Erde) stehen in der Palette darüber; Entwässern, Verdichten, Schotter und Pflaster bleiben hier.</p>
+  groundPanel.innerHTML = `<p class="terrain-planner-intro">Solange dieser Reiter offen ist, sind die Besucher ausgeblendet und ihr bereitet den Untergrund vor. Die Untergrundfarben (Rasen, Sand, Stein, Acker, Schnee, Felsen, braune Erde, Salzpfanne, Asphalt) stehen in der Palette darüber; Entwässern, Verdichten, Schotter und Pflaster bleiben hier.</p>
     <nav class="supply-tools"><button data-tool="inspect" aria-pressed="false">Feld prüfen</button>${Object.entries(GROUND_WORK).map(([key, work]) => `<button data-tool="${key}">${work.name} · ${work.cost} €</button>`).join('')}</nav>
     <p data-hint aria-live="polite">Oben ein Werkzeug wählen und auf dem Gelände ein Rechteck aufziehen.</p><div data-cell class="supply-card">Boden erkennen: Furchen = Acker · rötliche Flecken = Lehm · Körnung = Kies · Grasbüschel = Wiese · Rippeln = Sand · Fugen = Pflaster.<br>Verdichteter Boden ist geglättet. Türkise Markierung: entwässert. Über ein Feld fahren für Tragfähigkeit und Ausbau.</div>`
   const groundSlot = document.querySelector<HTMLElement>('#terrain-planner-slot')!

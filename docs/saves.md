@@ -200,7 +200,7 @@ Camp und Müll rekonstruiert.
   Eckhöhen; fehlend werden sie sichtbar aus den Kachelhöhen abgeleitet
   (`tileVisualCorner`). `editTerrainArea` ist nur ein Command, kein neues
   Snapshot-Feld. Optionales `festival.infrastructure.ground[].cover`
-  (`grass`/`sand`/`stone`/`field`/`snow`/`rock`/`earth`) speichert gemalte
+  (`grass`/`sand`/`stone`/`field`/`snow`/`rock`/`earth`/`salt`/`asphalt`) speichert gemalte
   Untergründe; fehlend bleibt der umgebungsbasierte `substrate`. Unbekannte
   Werte werden beim Laden entfernt (`normalizeGroundCells`). Keine
   Snapshot-Versionserhöhung. `paintGroundCover` / `paintGroundCoverArea`

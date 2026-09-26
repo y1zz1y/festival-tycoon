@@ -15,6 +15,8 @@ export const GROUND_COVERS = {
   snow: { name: 'Schnee', material: 'snow' },
   rock: { name: 'Felsen', material: 'rock' },
   earth: { name: 'Braune Erde', material: 'earth', substrate: 'clay' },
+  salt: { name: 'Salzpfanne', material: 'salt', substrate: 'sand' },
+  asphalt: { name: 'Asphalt', material: 'asphalt' },
 } as const
 export type GroundCover = keyof typeof GROUND_COVERS
 export type GroundCell = {
@@ -33,15 +35,19 @@ export const GROUND_COVER_IDS = Object.keys(GROUND_COVERS) as GroundCover[]
 export function isGroundCover(value: unknown): value is GroundCover {
   return typeof value === 'string' && value in GROUND_COVERS
 }
+const COVER_FROM_TOOL: Record<string, GroundCover> = {
+  terrainCoverGrass: 'grass',
+  terrainCoverSand: 'sand',
+  terrainCoverStone: 'stone',
+  terrainCoverField: 'field',
+  terrainCoverSnow: 'snow',
+  terrainCoverRock: 'rock',
+  terrainCoverEarth: 'earth',
+  terrainCoverSalt: 'salt',
+  terrainCoverAsphalt: 'asphalt',
+}
 export function groundCoverFromTool(tool: string): GroundCover | null {
-  if (tool === 'terrainCoverGrass') return 'grass'
-  if (tool === 'terrainCoverSand') return 'sand'
-  if (tool === 'terrainCoverStone') return 'stone'
-  if (tool === 'terrainCoverField') return 'field'
-  if (tool === 'terrainCoverSnow') return 'snow'
-  if (tool === 'terrainCoverRock') return 'rock'
-  if (tool === 'terrainCoverEarth') return 'earth'
-  return null
+  return COVER_FROM_TOOL[tool] ?? null
 }
 export function normalizeGroundCells(ground: Record<string, GroundCell>): Record<string, GroundCell> {
   for (const cell of Object.values(ground)) {

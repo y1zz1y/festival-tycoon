@@ -260,7 +260,7 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   `editTerrainArea` (`cells`, `mode`, optionales `originHeight` für Glätten).
   Optische Untergründe: `paintGroundCover` (`x`, `z`, `cover`) und
   `paintGroundCoverArea` (`cells`, `cover`); `cover` ist einer von
-  `grass`/`sand`/`stone`/`field`/`snow`/`rock`/`earth`. Optimistic wie
+  `grass`/`sand`/`stone`/`field`/`snow`/`rock`/`earth`/`salt`/`asphalt`. Optimistic wie
   die übrigen Geländebefehle, host-autoritativ. Snapshot-Feld
   `festival.infrastructure.ground[].cover` kommt mit der Welt; fehlend
   bleibt der umgebungsbasierte Boden.

@@ -18,7 +18,7 @@ import { TERRAIN_COVER_TOOLS } from '../src/game/catalog'
 export function testGroundCover(fixture: (count?: number) => GameState): void {
   assert.deepEqual(
     [...GROUND_COVER_IDS],
-    ['grass', 'sand', 'stone', 'field', 'snow', 'rock', 'earth'],
+    ['grass', 'sand', 'stone', 'field', 'snow', 'rock', 'earth', 'salt', 'asphalt'],
   )
   assert.deepEqual([...TERRAIN_COVER_TOOLS], [
     'terrainCoverGrass',
@@ -28,6 +28,8 @@ export function testGroundCover(fixture: (count?: number) => GameState): void {
     'terrainCoverSnow',
     'terrainCoverRock',
     'terrainCoverEarth',
+    'terrainCoverSalt',
+    'terrainCoverAsphalt',
   ])
   assert.equal(groundCoverFromTool('terrainCoverGrass'), 'grass')
   assert.equal(groundCoverFromTool('terrainRaise'), null)
@@ -60,6 +62,19 @@ export function testGroundCover(fixture: (count?: number) => GameState): void {
   assert.ok(earth.ok)
   assert.equal(groundInfo(game.snapshot, 6, 4).type, 'clay', 'brown earth reuses clay costs')
   assert.equal(terrainMaterialAt(game.snapshot, 6, 4), 'earth')
+
+  const salt = game.paintGroundCover(3, 5, 'salt')
+  assert.ok(salt.ok)
+  assert.equal(groundInfo(game.snapshot, 3, 5).type, 'sand', 'playa reuses sand costs')
+  assert.equal(terrainMaterialAt(game.snapshot, 3, 5), 'salt')
+  const tarmac = game.paintGroundCover(3, 6, 'asphalt')
+  assert.ok(tarmac.ok)
+  assert.equal(terrainMaterialAt(game.snapshot, 3, 6), 'asphalt')
+  assert.equal(
+    groundInfo(game.snapshot, 3, 6).type,
+    groundInfo({ ...game.snapshot, festival: { ...game.snapshot.festival, infrastructure: { ...game.snapshot.festival.infrastructure, ground: {} } } }, 3, 6).type,
+    'asphalt is visual-only and keeps the natural substrate',
+  )
 
   const area = game.paintGroundCoverArea([{ x: 7, z: 4 }, { x: 8, z: 4 }, { x: 7, z: 4 }], 'stone')
   assert.ok(area.ok)

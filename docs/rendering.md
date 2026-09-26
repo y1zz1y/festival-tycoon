@@ -30,7 +30,7 @@ erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
 | Festivaltechnik | `src/view/retroBuildings.ts`, `src/view/FestivalEquipmentView.ts` | Bühne, PA, Generatoren, FOH, Delay-Tower, LED-Wand, Laser und Feuerwerk als gemergte statische Modelle; LED-Leuchtflächen in einem dynamischen Instanz-Batch |
 | Show-Effekte | `src/view/LaserView.ts`, `src/view/FireworksView.ts` | Laser teilen Geometrie/Material je Farbe; Feuerwerk nutzt geteilte Raketen-/Partikelgeometrie und einen Burst-Instanzbatch je Effekt |
 | Camping-Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts` | 14 Camping-Batches |
-| Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call, zwei Dreiecke je Kachel; Atlaszeilen inkl. `stone`/`rock`/`snow`/`earth`; Parkfelder als Atlas-`parking` |
+| Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call, zwei Dreiecke je Kachel; Atlaszeilen inkl. `stone`/`rock`/`snow`/`earth`/`salt`/`asphalt`; Parkfelder als Atlas-`parking` |
 | Objektstützen | `src/game/supportOccupancy.ts`, `src/view/supports.ts` | geteilter Zylinder; nur bei Luft unter dem Objekt |
 | Lichter | `src/view/FestivalLightsView.ts` | fester Pool (8 PointLights, 4 SpotLights); Deko-Lampenfarben aus `decorationLights.ts` |
 | Auflösungscaps | `src/view/renderResolution.ts` | max. 1440×810 intern |

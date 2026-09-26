@@ -630,6 +630,7 @@ export const SIMULATION_CONFIG = {
       palletBench: { beauty: 5, party: 1, range: 2 },
       workLamp: { beauty: 6, party: 2, range: 2 },
       chainFence: { beauty: 2, party: 0, range: 1 },
+      trackCurb: { beauty: 3, party: 1, range: 1 },
       palmTree: { beauty: 10, party: 0, range: 3 },
       tikiStool: { beauty: 5, party: 1, range: 2 },
       tikiMask: { beauty: 11, party: 2, range: 3 },

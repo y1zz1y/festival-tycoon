@@ -15,7 +15,7 @@ feature you touch. Keep detailed file maps and feature history in topic docs.
 | Buildings, catalog, scenery | `docs/buildings.md` |
 | Copy / build library | `docs/blueprints.md` |
 | Themed decoration / Deko tab | `docs/decoration.md` |
-| Terrain, ground, way types | `docs/terrain.md` |
+| Terrain, ground, way types, OSM import | `docs/terrain.md` |
 | Roads, depots, freight, lights | `docs/logistics.md` |
 | Band supply / backstage / tour bus | `docs/band-supply.md` |
 | Staff, medical, security | `docs/staff.md` |

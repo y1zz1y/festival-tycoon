@@ -65,7 +65,7 @@ Eingang/Ausgang.
 | Festival-Verwaltung | `src/festivalUI.ts`, `src/festival.css` | Tickets, Plan, **Park öffnen/schließen** (`setParkOpen`) |
 | HEADLINE Magazin | `src/headlineMagazineUI.ts`, `src/headlineMagazine.css`, `src/game/headlineMagazine.ts` | Vollbild-Heft nach `festival.finished`; Weiter/Schließen; erneut unter Abrechnung & Ruf |
 | Bandplan | `src/musicPlanner.ts` | |
-| Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css`, `src/game/buildMenu.ts` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold. Gelände-Reiter: Feld anheben/senken, Glätten (Fläche) plus Untergrund-Palette (Rasen, Sand, Stein, Acker, Schnee, Felsen, braune Erde) |
+| Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css`, `src/game/buildMenu.ts` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold. Gelände-Reiter: Feld anheben/senken, Glätten (Fläche) plus Untergrund-Palette (Rasen, Sand, Stein, Acker, Schnee, Felsen, braune Erde, Salzpfanne, Asphalt) |
 | Buslinien-Planer | `src/main.ts`, `src/game/busPlanner.ts`, `src/view/LogisticsView.ts` | Zwei Spalten ohne Duplikate, DnD, `sortBusLineStops`, nummerierte `setBusPlannerRoute`; Klick auf Haltestelle in der Karte |
 | Shift-Rampen-Ausgang | `src/main.ts`, `src/game/wayElevation.ts` | `lockShiftElevationOrigin`, `planLockedOriginRamp` |
 | Bauvorschau / Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/game/GameState.ts`, `src/view/WorldView.ts` | `PlacementPreviewRequest/Result` und `previewPlacement` liefern gemeinsame Gültigkeit/Meldung; Halbstufen `snapBuildElevation`; `groundTileMarker`; Werkzeug `stageForecourt` nutzt dieselbe Dry-Run-Prüfung wie die Ausweisung |

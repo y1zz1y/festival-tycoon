@@ -4,7 +4,7 @@ import { GROUND_COVERS, groundInfo } from '../game/ground'
 import { getTerrainHeight, getWaterLevel, isMudHeight, isWaterHeight } from '../game/terrain'
 import { TerrainShape } from './terrainShape'
 
-export const TERRAIN_MATERIALS = ['field', 'clay', 'gravel', 'sand', 'grass', 'stone', 'rock', 'snow', 'earth', 'paved', 'compact', 'mud', 'parking'] as const
+export const TERRAIN_MATERIALS = ['field', 'clay', 'gravel', 'sand', 'grass', 'stone', 'rock', 'snow', 'earth', 'salt', 'asphalt', 'paved', 'compact', 'mud', 'parking'] as const
 export type TerrainMaterial = typeof TERRAIN_MATERIALS[number]
 const PALETTE: Record<TerrainMaterial, number[]> = {
   field: [0x99915e, 0x887b51, 0xa89b6a, 0x7f8755],
@@ -16,6 +16,8 @@ const PALETTE: Record<TerrainMaterial, number[]> = {
   rock: [0x6b6358, 0x534c43, 0x7a7166, 0x4a453e],
   snow: [0xe8eef2, 0xd4dce2, 0xf5f8fa, 0xc8d2da],
   earth: [0x6b4a2e, 0x5a3d26, 0x7d5636, 0x4e3420],
+  salt: [0xe4ddd0, 0xd4cdc0, 0xf2ece2, 0xc8c2b6],
+  asphalt: [0x3a3d42, 0x2c2f34, 0x4a4e54, 0xd8d6ce],
   paved: [0xaca99b, 0x85877c, 0xbab7a9, 0xa19f91],
   compact: [0xa29473, 0x928365, 0xb0a180, 0x9a8c70],
   mud: [0x766149, 0x67543f, 0x806b51, 0x70624d],
@@ -97,6 +99,13 @@ export function createTerrainAtlas(): DataTexture {
         } else if (kind === 'earth') {
           if (y % 14 === 3 && n > .2) tone = 1
           if (hash(Math.floor(x / 4) + variant * 13, Math.floor(y / 4)) > .84) tone = 3
+        } else if (kind === 'salt') {
+          if (hash(Math.floor(x / 8) + variant * 5, Math.floor(y / 7)) > .82) tone = 1
+          if ((x + y) % 23 === 0 && n > .4) tone = 3
+        } else if (kind === 'asphalt') {
+          if (y % 28 === 12 && x % 10 > 2) tone = 3
+          else if (n > .9) tone = 2
+          else if (n < .12) tone = 1
         }
         const rgb = PALETTE[kind][tone]!
         const at = ((row * TILE + y) * WIDTH + variant * TILE + x) * 4

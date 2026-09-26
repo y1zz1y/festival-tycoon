@@ -100,8 +100,8 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/placementPreview.ts` | Bauhöhe/Bodenkachel; autoritative Preview-Matrix für Gebäude, Slots, Haltestelle, Bandversorgung, Medizin/Dächer, Depots, Blueprint und Ride-Zugang; jede Anfrage bleibt mutationsfrei |
 | `tests/terrainSurface.ts` | Gelände-Mesh (zwei Dreiecke je Kachel), Pads, Parkplatz-Asphalt nur auf Parkfeldern, gemalter Cover |
 | `tests/terrainLand.ts` | Drei Geländewerkzeuge, Stufe 0,5, Fläche auf Starthöhe, Klippe nach 0,5, Wasser am Uferhang, Baden, Nav nach Edit, Stützen nur im Freiraum, Fußweg land-0→0,5 ja / land-0→1 nein |
-| `tests/groundCover.ts` | Untergrund-Palette: Paint, Fläche, Save-Roundtrip, Migration unbekannter Cover, Höhenedit behält Cover, MP-Commands |
-| `tests/groundCover.ts` | Bodenbelag-Anstrich, Substrate nur wo vorhanden, Save/Migration |
+| `tests/groundCover.ts` | Untergrund-Palette inkl. Salzpfanne/Asphalt: Paint, Fläche, Save-Roundtrip, Migration unbekannter Cover, Höhenedit behält Cover, MP-Commands |
+| `tests/terrainImport.ts` | OSM-Tag-Mapping, Burning-Man-/Nürburgring-Skizzen, Drop-in-Szenarien mit Ground-Slice |
 | `tests/environments.ts` | Umgebungen |
 | `tests/wayElevation.ts` | Halbstufen-Rampen für Fußweg und Straße, Autodach 1.0, Legacy-Höhe 1 bleibt 1.0, Shift-Ausgang bleibt beim Rampenstreichen, Fußweg auf Autostraße behält die Straße, gestapelte Autostraße / Brücke, ein Straßenfeld übermalen löscht keine Nachbarn, Klippe 0→1 blockiert, 0,5-Hang und Weg-Rampe begehbar, Bewegung ohne Y-Warp |
 | `tests/pixelPeople.ts` | Personen-Batches |
