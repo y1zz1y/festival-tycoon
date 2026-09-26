@@ -6,10 +6,50 @@ import { AUDIENCES, AUDIENCE_NAMES, SUPPLIES, TIERED_UPGRADES, UPGRADES, upgrade
 import type { FestivalAction, Supply, TieredUpgrade, Upgrade } from './game/festivalManagement'
 import { mountHeadlineMagazine } from './headlineMagazineUI'
 import { estimateTicketDemand } from './game/ticketDemand'
+import { clockText, stormAt, type StormPhase, type StormPlan } from './game/storm'
+import { SPONSOR_CONDITION_TEXT, type SponsorContract } from './game/sponsors'
+import { SIMULATION_CONFIG } from './game/simulationConfig'
 
 const money = (n: number) => `${Math.round(n).toLocaleString('de-DE')} €`
 const clock = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(Math.floor(n % 60)).padStart(2, '0')}`
 const meter = (label: string, n: number) => `<label class="festival-meter">${label}<strong>${Math.round(n)}%</strong><progress max="100" value="${n}"></progress></label>`
+
+/** One line about the storm that matters now. */
+function stormLine(storm: { phase: StormPhase; storm?: StormPlan }, sheltered?: boolean): string {
+  if (!storm.storm) return ''
+  const window = `${clockText(storm.storm.start)}–${clockText(storm.storm.end)}`
+  if (storm.phase === 'warning') return `Unwetterwarnung: Gewitter ${window}${sheltered ? ' · Schutz angeordnet' : ''}`
+  return `Gewitter über dem Gelände bis ${clockText(storm.storm.end)}${sheltered ? ' · Schutz angeordnet' : ''}`
+}
+
+/** Wetter & Vorsorge: the storm now, the order to take shelter, and the edition's storms. */
+function stormPaneMarkup(s: Readonly<GameSnapshot>): string {
+  const f = s.festival
+  const storm = stormAt(f, s.day, s.minute)
+  const planned = (f.enabled && !f.finished ? f.storms ?? [] : []).filter((entry) => entry.day * 1440 + entry.end > s.day * 1440 + s.minute)
+  const stats = f.stormStats
+  const now = storm.phase === 'none'
+    ? '<p>Gerade droht kein Unwetter.</p>'
+    : `<p class="festival-storm-line">⛈️ ${stormLine(storm, f.shelterOrder)}</p><button type="button" data-shelter ${f.shelterOrder ? 'disabled' : ''}>${f.shelterOrder ? 'Schutz angeordnet' : 'Schutz anordnen'}</button>`
+  const warned = planned.filter((entry) => entry.day === s.day || entry.day === s.day + 1)
+  return `<article><h3>Unwetter</h3>${now}<p>Ein Gewitter wird ${SIMULATION_CONFIG.storm.warningMinutes} Minuten vorher angekündigt. Solange es tobt, ruhen alle Auftritte; wer im Freien bleibt, wird nass, müde und kann stürzen. „Schutz anordnen“ pausiert die Auftritte sofort und senkt das Risiko deutlich. Ohne Sturmsicherung kann ein Blitz Bühne, Lichtmasten oder Türme in Brand setzen.</p>${warned.length ? `<p>Vorhersage: ${warned.map((entry) => `Tag ${entry.day} ${clockText(entry.start)}–${clockText(entry.end)}`).join(' · ')}</p>` : ''}${stats ? `<p>Überstanden: ${stats.weathered} · ohne Verletzte: ${stats.calm}</p>` : ''}</article>`
+}
+
+function sponsorCard(contract: SponsorContract, action: string): string {
+  const condition = SPONSOR_CONDITION_TEXT[contract.condition](contract.target)
+  const state = contract.status === 'fulfilled' ? '✔ erfüllt, Bonus gezahlt' : contract.status === 'failed' ? '✘ verfehlt, Vorschuss zurück' : contract.status === 'signed' ? 'Unterschrieben' : ''
+  return `<article><h3>${contract.sponsor}</h3><p>Bedingung: ${condition}</p><p>Vorschuss ${contract.advance.toLocaleString('de-DE')} € · Bonus ${contract.bonus.toLocaleString('de-DE')} €</p>${state ? `<p><strong>${state}</strong></p>` : ''}${action}</article>`
+}
+
+/** Sponsoren: signed contracts and, before the start, the offers for this edition. */
+function sponsorPaneMarkup(s: Readonly<GameSnapshot>): string {
+  const f = s.festival
+  const canSign = !(f.enabled && !f.finished)
+  const signed = (f.sponsors ?? []).map((contract) => sponsorCard(contract, ''))
+  const offers = canSign ? (f.sponsorOffers ?? []).map((contract) => sponsorCard(contract, `<button type="button" data-sponsor="${contract.id}">Unterschreiben</button>`)) : []
+  if (!signed.length && !offers.length) return `<p class="festival-empty">${canSign ? 'Neue Angebote kommen, sobald die nächste Ausgabe geplant wird.' : 'Für diese Ausgabe wurde kein Sponsor verpflichtet.'}</p>`
+  return [...signed, ...offers].join('')
+}
 
 export function mountFestivalUI(
   getGame: () => GameState,
@@ -30,7 +70,7 @@ export function mountFestivalUI(
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-labelledby', 'festival-title')
   panel.innerHTML = `<div class="festival-chrome"><header class="festival-heading panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 id="festival-title" class="panel-header-title">Das Festivalwochenende</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Festivalverwaltung schließen">×</button></header>
     <div class="festival-status" aria-live="polite"></div>
-    <nav class="festival-tabs" aria-label="Festivalbereiche">${[['overview', 'Übersicht'], ['dayplan', 'Tagesplan'], ['lineup', 'Bands & Spielplan'], ['supply', 'Lager & Lieferungen'], ['prepare', 'Wetter & Vorsorge'], ['upgrades', 'Upgrades'], ['reports', 'Abrechnung & Ruf']].map(([id, label]) => `<button data-tab="${id}" aria-pressed="${id === 'overview'}">${label}</button>`).join('')}</nav></div>
+    <nav class="festival-tabs" aria-label="Festivalbereiche">${[['overview', 'Übersicht'], ['dayplan', 'Tagesplan'], ['lineup', 'Bands & Spielplan'], ['supply', 'Lager & Lieferungen'], ['prepare', 'Wetter & Vorsorge'], ['sponsors', 'Sponsoren'], ['upgrades', 'Upgrades'], ['reports', 'Abrechnung & Ruf']].map(([id, label]) => `<button data-tab="${id}" aria-pressed="${id === 'overview'}">${label}</button>`).join('')}</nav></div>
     <section data-pane="overview"><div class="festival-intro"><h3>Ein Gelände. Ein Wochenende. Euer Publikum.</h3><p>Vorlauf und Festivaltage legt ihr im Reiter Tagesplan fest. Erst mit dem Start läuft die Festivalzeit. Bucht ein Programm, versorgt eure Gäste und entscheidet, welche Reserven ihr euch leisten könnt. Das vorhandene Gelände und Budget werden übernommen.</p><button data-action="start">Festival starten</button><button data-action="sandbox">Freies Spiel fortsetzen</button></div><div class="festival-park-gate"><h3>Gelände öffnen und schließen</h3><p>Im freien Spiel schließt ihr das Gelände für neue Gäste. Wer schon da ist, reist ab. Während der Festivalplanung und nach dem Wochenende steuert das Festival den Zugang selbst.</p><button type="button" data-park-toggle>Park schließen</button></div><form data-ticket-prices class="festival-form festival-price-sliders"><label>Preis Tagesticket<input name="dayTicketPrice" type="range" min="20" max="250" step="5" value="120"><output data-day-price>120 €</output></label><label>Preis Campingticket<input name="campTicketPrice" type="range" min="40" max="500" step="5" value="260"><output data-camp-price>260 €</output></label><p data-ticket-estimate></p><button>Preise übernehmen</button></form><form data-tickets class="festival-form"><label>Tagestickets je Festivaltag<input name="dayTickets" type="number" min="0" max="100000" value="150" required></label><label>Campingtickets für die gesamte Ausgabe<input name="campTickets" type="number" min="0" max="100000" value="0" required></label><button>Kontingente übernehmen</button></form><p data-camping-summary></p><div data-music-overview></div><div data-summary></div></section>
     <section data-pane="dayplan" hidden>
       <p>Vorlauf, Festivaltage und Angebotszeiten gelten für das ganze Gelände. Tagesgäste dürfen nur im eingestellten Fenster bleiben.</p>
@@ -57,7 +97,8 @@ export function mountFestivalUI(
       <details><summary>Besucherbasis & Genreverteilung vergleichen</summary><div data-lineup-mix></div></details><div data-music-planner></div></section>
     <section data-pane="supply" hidden><p>Waren werden am Kartenrand angeliefert und per Lastwagen zur Anlieferung gebracht. Träger versorgen Depots und Stände automatisch. Anlieferung, Depots und Personaltore baut ihr im Baumenü unter Logistik; Mindestbestände und Träger stellt ihr im Infofenster oder im Reiter Waren & Träger ein. Jede Lieferung kostet zusätzlich 45 €.</p><div data-stock class="festival-grid"></div>
       <form data-order class="festival-form"><label>Ware<select name="kind">${Object.entries(SUPPLIES).map(([key, item]) => `<option value="${key}">${item.name} · ${item.price.toLocaleString('de-DE')} €/Einheit</option>`).join('')}</select></label><label>Menge<input name="quantity" type="number" min="50" max="2000" step="50" value="200" required></label><label>Versandfenster<select name="delay"><option value="0">Jetzt</option><option value="360">In 6 Stunden</option><option value="720">In 12 Stunden</option></select></label><button type="submit">Kostenpflichtig bestellen</button></form><div data-deliveries></div></section>
-    <section data-pane="prepare" hidden><div data-forecast class="festival-grid"></div><p>Die Sechs-Stunden-Vorhersage zeigt Wetterrisiken; einzelne Stunden können milder ausfallen. Regen weicht unbefestigte Flächen auf; befestigte Wege bleiben schnell. Ohne Sturmsicherung ruhen Auftritte bei starkem Wind — die Sturmsicherung und die übrigen Schutzmaßnahmen richtet ihr im Reiter Upgrades ein.</p></section>
+    <section data-pane="prepare" hidden><div data-storm class="festival-storm"></div><div data-forecast class="festival-grid"></div><p>Die Sechs-Stunden-Vorhersage zeigt Wetterrisiken; einzelne Stunden können milder ausfallen. Regen weicht unbefestigte Flächen auf; befestigte Wege bleiben schnell. Ohne Sturmsicherung ruhen Auftritte bei starkem Wind — die Sturmsicherung und die übrigen Schutzmaßnahmen richtet ihr im Reiter Upgrades ein.</p></section>
+    <section data-pane="sponsors" hidden><p>Sponsoren zahlen beim Unterschreiben einen Vorschuss. Hält die Ausgabe, was der Vertrag verlangt, folgt am Ende der Bonus; sonst geht der Vorschuss zurück. Unterschrieben wird vor dem Festivalstart, höchstens zwei Verträge je Ausgabe.</p><div data-sponsors class="festival-grid"></div></section>
     <section data-pane="upgrades" hidden><p>Einmal bezahlt, bleiben Schutzmaßnahmen dem Gelände erhalten: sie gelten festivalweit und auch für alle weiteren Ausgaben. Bezahlt wird sofort aus der Kasse.</p><div data-upgrades class="festival-grid"></div></section>
     <section data-pane="reports" hidden><div data-reputation class="festival-grid"></div><p>Musikruf öffnet den Zugang zu größeren Bands. Atmosphäre, Komfort und Organisation beeinflussen die erwarteten Zielgruppen und die Nachfrage. Die Tagesbilanz enthält sämtliche Einnahmen und Ausgaben des Spiels.</p><div data-reports></div></section>`
   shell.append(panel)
@@ -88,6 +129,8 @@ export function mountFestivalUI(
     }
     if (button.dataset.action) execute({ type: button.dataset.action === 'start'&&getGame().snapshot.festival.finished?'prepare':button.dataset.action as 'start' | 'sandbox' })
     if (button.dataset.cancel) execute({ type: 'cancel', id: button.dataset.cancel })
+    if (button.dataset.sponsor) execute({ type: 'sponsor', id: button.dataset.sponsor })
+    if (button.hasAttribute('data-shelter')) execute({ type: 'shelter' })
     if (button.dataset.upgrade) execute({ type: 'upgrade', kind: button.dataset.upgrade as Upgrade })
     if (button.dataset.upgradeStep) execute({ type: 'upgradeStep', kind: button.dataset.upgradeStep as TieredUpgrade })
   })
@@ -131,6 +174,8 @@ export function mountFestivalUI(
     const f = s.festival
     magazine.update(s)
     weather.dataset.weather = f.enabled && !f.finished ? f.weather : 'sun'
+    const storm = stormAt(f, s.day, s.minute)
+    weather.dataset.storm = storm.phase
     if (f.reports.length > reportCount) { reportCount = f.reports.length; toast('Neue Festival-Tagesabrechnung verfügbar') }
     else reportCount = f.reports.length
     // Icon-only, like every other button in the toolbar — the state goes into the tooltip.
@@ -176,9 +221,11 @@ export function mountFestivalUI(
     put('[data-lineup-mix]',musicOverview(s))
     musicPlanner.render(s)
     const mix = audienceMix(f)
-    put('[data-summary]', `<div class="festival-grid"><article><h3>Ziele dieses Wochenendes</h3><p>${f.admissions} / ${f.goals.guests} Anreisen</p><p>Zufriedenheit ≥ ${f.goals.satisfaction}% · Gesamtbilanz ≥ ${money(f.goals.profit)}</p><p>Vorbereitung: Tag ${f.startDay}<br>Festival: Tag ${f.startDay + s.dayPlan.leadDays} bis ${f.startDay + s.dayPlan.leadDays + s.dayPlan.festivalDays - 1}</p></article><article><h3>Erwartetes Publikum</h3>${AUDIENCES.map(key => meter(AUDIENCE_NAMES[key], mix[key] * 100)).join('')}</article><article><h3>Worauf ihr achten solltet</h3><p>${!s.buildings.some(b => b.kind === 'stage') ? 'Baut eine Bühne mit Stromversorgung und Bühnenvorplatz.' : !f.bookings.length ? 'Noch kein Programm gebucht: Ohne Bands bleibt die Nachfrage gering.' : `${f.bookings.length} Auftritte gebucht. Technische Anforderungen und Tagesplan prüfen.`}</p><p>Aktuell: <span class="weather-icon" aria-hidden="true">${WEATHER_ICONS[f.weather]}</span>${WEATHER_NAMES[f.weather]} · ${formatTemperature(temperatureAt(f, s.day, s.minute / 60, f.weather))} · Bodennässe ${Math.round(f.wetness)}%</p><p>${f.supplies.food < 100 || f.supplies.drinks < 100 ? 'Vorräte werden knapp – Nachschub bestellen.' : 'Lieferungen frühzeitig vor großen Auftritten einplanen.'}</p></article></div>`)
+    put('[data-summary]', `<div class="festival-grid"><article><h3>Ziele dieses Wochenendes</h3><p>${f.admissions} / ${f.goals.guests} Anreisen</p><p>Zufriedenheit ≥ ${f.goals.satisfaction}% · Gesamtbilanz ≥ ${money(f.goals.profit)}</p><p>Vorbereitung: Tag ${f.startDay}<br>Festival: Tag ${f.startDay + s.dayPlan.leadDays} bis ${f.startDay + s.dayPlan.leadDays + s.dayPlan.festivalDays - 1}</p></article><article><h3>Erwartetes Publikum</h3>${AUDIENCES.map(key => meter(AUDIENCE_NAMES[key], mix[key] * 100)).join('')}</article><article><h3>Worauf ihr achten solltet</h3><p>${!s.buildings.some(b => b.kind === 'stage') ? 'Baut eine Bühne mit Stromversorgung und Bühnenvorplatz.' : !f.bookings.length ? 'Noch kein Programm gebucht: Ohne Bands bleibt die Nachfrage gering.' : `${f.bookings.length} Auftritte gebucht. Technische Anforderungen und Tagesplan prüfen.`}</p>${storm.phase !== 'none' ? `<p class="festival-storm-line">⛈️ ${stormLine(storm, f.shelterOrder)}</p>` : ''}<p>Aktuell: <span class="weather-icon" aria-hidden="true">${WEATHER_ICONS[f.weather]}</span>${WEATHER_NAMES[f.weather]} · ${formatTemperature(temperatureAt(f, s.day, s.minute / 60, f.weather))} · Bodennässe ${Math.round(f.wetness)}%</p><p>${f.supplies.food < 100 || f.supplies.drinks < 100 ? 'Vorräte werden knapp – Nachschub bestellen.' : 'Lieferungen frühzeitig vor großen Auftritten einplanen.'}</p></article></div>`)
     put('[data-stock]', Object.entries(SUPPLIES).map(([key, item]) => `<article><h3>${item.name}</h3><strong class="festival-number">${Math.floor(f.infrastructure.depots.reduce((n, d) => n + d.stock[key as Supply], 0))}</strong><small>Einheiten in Depots</small></article>`).join(''))
     put('[data-deliveries]', `<p>${f.infrastructure.depots.length} Depots · ${f.infrastructure.trucks.length} Lastwagen · ${f.infrastructure.routes.length} Träger. Bestellungen hier gehen an das erste Depot.</p>${f.deliveries.map(d => `<article class="festival-booking"><strong>${d.quantity} × ${SUPPLIES[d.kind].name}</strong><span>${festivalTime(s) < d.due ? `Versand ab Tag ${Math.floor(d.due / 1440)} · ${clock(d.due % 1440)}` : f.infrastructure.trucks.some(t => t.deliveryId === d.id && t.z < -s.scenario.worldSize / 2) ? 'Wartet auf freie Einfahrt am Kartenrand' : f.infrastructure.trucks.some(t => t.deliveryId === d.id) ? 'Lastwagen fährt zum Depot' : d.remaining > 0 ? `Anfahrt zum Kartenrand · ${Math.ceil(d.remaining)} Minuten` : 'Wartet auf freie Zufahrt zum Depot'}</span></article>`).join('') || '<p>Keine Lieferungen unterwegs.</p>'}`)
+    put('[data-storm]', stormPaneMarkup(s))
+    put('[data-sponsors]', sponsorPaneMarkup(s))
     // Each six-hour slot reads as a row: the hours on the left, the weather on the right
     // with its own sign in front of the name, so a day can be skimmed without reading it.
     put('[data-forecast]', [0, 1, 2].map(offset => `<article><h3>Tag ${s.day + offset}</h3>${[0, 6, 12, 18].map(hour => {

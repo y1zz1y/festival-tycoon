@@ -293,3 +293,13 @@ mit der interpolierten Festivalzeit (`showTime / 2`, Minuten) und nur mit
 Fahrgästen; die Bauvorschau zeigt das halbtransparente Modell auf der ganzen
 Grundfläche. Trinkwasserstelle und Duschen sind statische Hausstil-Rezepte in
 `retroBuildings.ts`.
+
+## Unwetter (0.2.11)
+
+`WorldView.applyStormLight` legt jedes Bild auf die Tag-Nacht-Werte
+(`updateDayNight` merkt sich die Basis) eine Verdunkelung von Himmel, Umgebungs-
+und Sonnenlicht, in der Warnstunde ansteigend. Blitze sind kurze Helligkeitsstöße
+nach einem festen Muster der Simulationszeit; die Zahl der Lichter bleibt gleich.
+`src/view/RainView.ts` zeichnet Regen als einen InstancedMesh-Batch um den
+Blickpunkt, ausgedünnt durch die Effektdichte; Regen fällt mit der Simulationszeit
+und steht bei Pause. Das Wetter-Overlay (`festival.css`) hat `data-storm`.

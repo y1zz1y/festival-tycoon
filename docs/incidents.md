@@ -154,3 +154,11 @@ Fahrzeugziel `sealedWasteContainer` (`buildingId`, x, z) in
 `docs/multiplayer.md` / `docs/saves.md`. Der Wagen hält auf einer
 Nachbarstraße; eine Ablage-Zufahrt auf der Containerkachel stiehlt
 das Ziel nicht.
+
+## Unwetter (0.2.11)
+
+Gewitter verletzen Gäste im Freien (`state = 'injured'`, Gedanke „Im Sturm bin
+ich gestürzt!“), die dann wie jede Verletzung von der Sanität geholt werden, und
+Blitze legen ohne Sturmsicherung ein Feuer (`addGroundIncident('fire', …, 2)`),
+das Ticker, Tore und Feuerwehr wie jedes Feuer behandeln. Regeln in
+[festival.md](festival.md).

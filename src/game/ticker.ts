@@ -7,6 +7,7 @@ import {
 } from './waste'
 import type { ScenarioGoal } from './scenario'
 import { goalName, insolvencyDaysLeft, type GoalStatus, type ScenarioProgress } from './scenarioGoals'
+import { clockText, stormAt, type StormPhase, type StormPlan } from './storm'
 
 export type TickerKind =
   | 'fire'
@@ -18,6 +19,7 @@ export type TickerKind =
   | 'goalDeadline'
   | 'insolvency'
   | 'editionDue'
+  | 'storm'
 
 export type TickerSeverity = 'info' | 'warning' | 'alert'
 
@@ -58,7 +60,7 @@ export type TickerSource = {
   wasteDumpCells: readonly WasteDumpCell[]
   scenario?: { goals: readonly ScenarioGoal[] }
   scenarioProgress?: Pick<ScenarioProgress, 'status' | 'insolventDays' | 'dueReminderDay'>
-  festival?: { edition: number; enabled: boolean; finished: boolean }
+  festival?: { edition: number; enabled: boolean; finished: boolean; storms?: StormPlan[]; shelterOrder?: boolean }
 }
 
 export type TickerWatchState = {
@@ -69,6 +71,8 @@ export type TickerWatchState = {
   dumpOver: boolean
   lastDumpWarnClock: number
   knownInjuredIds: Set<string>
+  /** The storm phase last seen, so a warning and the storm itself are announced once. */
+  stormPhase: StormPhase
   /**
    * The scenario as last seen. Null until the first look, which only takes note:
    * a goal reached before a save was loaded is no news.
@@ -90,6 +94,7 @@ export function createTickerWatchState(): TickerWatchState {
     dumpOver: false,
     lastDumpWarnClock: Number.NEGATIVE_INFINITY,
     knownInjuredIds: new Set(),
+    stormPhase: 'none',
     scenario: null,
   }
 }
@@ -162,6 +167,8 @@ export function pruneResolvedTicker(
     if (item.kind === 'insolvency') return (source.scenarioProgress?.insolventDays ?? 0) > 0
     // Goals and due days are news, not conditions: they stay until the list is full.
     if (item.kind === 'dumpFull') return dumpOver
+    // A storm message stays while that storm is still ahead or raging.
+    if (item.kind === 'storm') return source.festival ? stormAt(source.festival, source.day, source.minute).phase !== 'none' : false
     return true
   }
   return history.filter(stillOpen)
@@ -191,6 +198,16 @@ export function observeTickerEvents(
   const items: TickerItem[] = []
   const clock = tickerSimClock(source)
   const repeat = SIMULATION_CONFIG.ticker.incidentRepeatMinutes
+
+  // Storms: the warning when one is announced, then again when it breaks.
+  const storm = source.festival ? stormAt(source.festival, source.day, source.minute) : { phase: 'none' as const }
+  if (storm.phase !== watch.stormPhase && storm.phase !== 'none' && 'storm' in storm && storm.storm) {
+    const window = `${clockText(storm.storm.start)}–${clockText(storm.storm.end)}`
+    items.push(storm.phase === 'warning'
+      ? tickerItem('storm', source, 'Unwetterwarnung', `Gewitter erwartet ${window}. Im Festivalfenster unter „Wetter & Vorsorge“ Schutz anordnen.`, undefined, 'warning')
+      : tickerItem('storm', source, 'Gewitter', `Das Unwetter ist da, alle Auftritte ruhen bis ${clockText(storm.storm.end)}.${source.festival?.shelterOrder ? '' : ' Wer im Freien bleibt, kann stürzen.'}`, undefined, 'alert'))
+  }
+  watch.stormPhase = storm.phase
 
   const fires = source.incidents.filter((incident) => incident.kind === 'fire')
   const fireIds = new Set(fires.map((fire) => fire.id))
@@ -405,6 +422,7 @@ const TICKER_ICONS: Record<TickerKind, string> = {
   goalDeadline: '⏳',
   insolvency: '💸',
   editionDue: '📅',
+  storm: '⛈️',
 }
 
 export function tickerKindIcon(kind: TickerKind): string {

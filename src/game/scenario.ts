@@ -1,3 +1,4 @@
+import { isDifficulty, type Difficulty } from './difficulty'
 import { ENVIRONMENTS } from './environments'
 import type { Environment } from './environments'
 import { STARTING_MONEY, WORLD_SIZE } from './catalog'
@@ -69,6 +70,8 @@ export type ScenarioSettings = {
    * not booked. Omitted in playable games so a JSON round trip stays key-for-key.
    */
   authoring?: boolean
+  /** Leicht or Schwer (src/game/difficulty.ts); omitted for Normal. */
+  difficulty?: Difficulty
 }
 
 export const DEFAULT_SCENARIO: ScenarioSettings = {
@@ -207,6 +210,7 @@ export function normalizeScenarioSettings(
       ? { detail: source.detail.trim().slice(0, 800) }
       : {}),
     ...(source?.authoring === true ? { authoring: true } : {}),
+    ...(isDifficulty(source?.difficulty) && source.difficulty !== 'normal' ? { difficulty: source.difficulty } : {}),
   }
 }
 

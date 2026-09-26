@@ -1,3 +1,4 @@
+import { DIFFICULTIES, DIFFICULTY_NAMES } from '../game/difficulty'
 import { BUILD_CATEGORIES, buildCategoryById } from '../game/buildMenu'
 import { ENVIRONMENTS } from '../game/environments'
 import { SCENARIO_PRESETS } from '../game/scenarioPresets'
@@ -5,6 +6,9 @@ import { SHIRT_STYLE_LABELS, SHIRT_STYLES } from '../game/shopGoods'
 import { STAFF_DEFINITIONS, STAFF_ROLES } from '../game/staff'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { EFFECT_OPTIONS, RESOLUTION_OPTIONS, SHADOW_OPTIONS, UI_SCALE_OPTIONS, VOLUME_CHANNELS } from './playerSettings'
+
+const difficultyOptions = (): string =>
+  DIFFICULTIES.map((difficulty) => `<option value="${difficulty}"${difficulty === 'normal' ? ' selected' : ''}>${DIFFICULTY_NAMES[difficulty]}</option>`).join('')
 
 const options = (list: readonly { value: string; label: string }[]): string =>
   list.map((option) => `<option value="${option.value}">${option.label}</option>`).join('')
@@ -910,6 +914,7 @@ export function mountAppShell(app: HTMLDivElement): void {
           <button type="button" data-title-menu="new" aria-haspopup="true"><span class="title-menu-label">Neues Spiel</span><span id="title-new-meta" class="title-menu-meta">${SCENARIO_PRESETS.length + 1} Szenarien</span></button>
           <button type="button" data-title-menu="editor"><span class="title-menu-label">Szenario-Editor</span><span class="title-menu-meta">Frei bauen und exportieren</span></button>
           <button type="button" data-title-menu="load"><span class="title-menu-label">Spielstand laden</span><span class="title-menu-meta">Archiv öffnen</span></button>
+          <button type="button" data-title-menu="achievements"><span class="title-menu-label">Erfolge</span><span id="title-achievements-meta" class="title-menu-meta">Noch keine</span></button>
           <button type="button" data-title-menu="multiplayer" aria-haspopup="true"><span class="title-menu-label">Mehrspieler beitreten</span><span class="title-menu-meta">Offene Lobby oder Code</span></button>
           <button type="button" data-title-menu="settings"><span class="title-menu-label">Einstellungen</span><span class="title-menu-meta">Debug · Festivaldaten</span></button>
         </nav>
@@ -958,6 +963,17 @@ export function mountAppShell(app: HTMLDivElement): void {
           <button type="button" data-title-lobby-close>Zurück</button>
         </div>
       </div>
+      <div id="title-achievements-mask" class="title-submenu" hidden>
+        <div class="title-submenu-card">
+          <div class="title-submenu-head">
+            <span class="title-submenu-title">Erfolge</span>
+            <span id="title-achievements-kicker" class="title-submenu-kicker">Über alle Partien</span>
+          </div>
+          <div id="title-achievements-rows" class="title-submenu-rows title-achievement-rows"></div>
+          <p class="scenario-hint">Erfolge und geschaffte Szenarien bleiben in diesem Browser und, wenn du angemeldet bist, in deinem Konto. Spiele mit Debug-Geld zählen nicht.</p>
+          <button type="button" data-title-achievements-close>Zurück</button>
+        </div>
+      </div>
       <div id="title-load-mask" class="title-submenu" hidden>
         <div class="title-submenu-card">
           <div class="title-submenu-head">
@@ -989,6 +1005,7 @@ export function mountAppShell(app: HTMLDivElement): void {
           </div>
           <div id="title-briefing" class="title-freeplay title-briefing"></div>
           <div class="title-freeplay-actions">
+            <label class="scenario-field title-briefing-difficulty"><span>Schwierigkeit</span><select id="title-briefing-difficulty">${difficultyOptions()}</select></label>
             <button id="title-briefing-start" type="button">▶ Szenario starten</button>
             <button type="button" data-title-briefing-close>Zurück</button>
           </div>
@@ -1028,6 +1045,11 @@ export function mountAppShell(app: HTMLDivElement): void {
       <label class="scenario-field">
         <span>Startgeld <b id="scenario-money-value">10.000 €</b></span>
         <input id="scenario-money" type="range" min="5000" max="250000" step="5000" value="10000" />
+      </label>
+      <label class="scenario-field">
+        <span>Schwierigkeit</span>
+        <select id="scenario-difficulty">${difficultyOptions()}</select>
+        <small>Startgeld, laufende Kosten, Andrang, Gästebudget, Bedürfnisse und Unwetter</small>
       </label>
       <label class="scenario-field">
         <span>Kartengröße</span>

@@ -477,3 +477,15 @@ Leisten neu und löst ein `resize` aus.
 - Bandplaner: „· Headliner“ steht bei 5-Sterne-Bands (`bandGenreLabel`).
 - Backstage-Info: Möbel-Anteil der Attraktivität und Couchplätze /
   Kühlschränke / Klo mit Wasser.
+
+## Phase 5 in der Oberfläche (0.2.11)
+
+- Titelbildschirm: Menüpunkt **Erfolge** (Übersicht mit Datum), Häkchen und
+  Sterne an geschafften Szenarien, „N geschafft“ unter Neues Spiel
+  ([progress.md](progress.md)).
+- Schwierigkeit: Auswahl im freien Spiel (`#scenario-difficulty`) und im
+  Briefing (`#title-briefing-difficulty`).
+- Erste Schritte: Checkliste oben rechts (`.tutorial-checklist`, z-index 21,
+  unter rechten Infofenstern), einklappbar zu „📋 Erste Schritte“.
+- Festivalfenster: Reiter **Sponsoren** (Angebote, Unterschreiben, Status) und
+  unter „Wetter & Vorsorge“ die Unwetterlage mit **Schutz anordnen**.

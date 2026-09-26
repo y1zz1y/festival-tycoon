@@ -580,6 +580,11 @@ wie bei Achterbahnen, nicht im Baumenü.
 - Q / E: Kamera um 90 Grad drehen
 - 🔊 in der Sitzungsleiste oder Einstellungen → **Ton stumm**: Ton aus (bleibt lokal gespeichert)
 - Einstellungen → **Ton**: Regler für Gesamt, Musik, Effekte und Umgebung. In der Nähe einer **spielenden Bühne** läuft Musik im Genre der Band in der Schleife, leiser mit der Entfernung zur Kamera; auf dem Titelbildschirm läuft die Titelmusik. Jubel, Schreie und Fahrzeuge nur gelegentlich bei echten Ereignissen. Alle Klänge und Stücke sind CC0 (Quellen in `docs/audio.md`), Synth nur als Rückfall.
+- **Erste Schritte:** Das Szenario ganz oben in „Neues Spiel“ führt mit einer Checkliste durch den ersten Aufbau; jeder Schritt hakt sich selbst ab.
+- **Schwierigkeit** (Leicht/Normal/Schwer) beim Start wählen: ändert Startgeld, laufende Kosten, Andrang, Gästebudget, Bedürfnisse und Unwetterhäufigkeit, nicht aber die Baupreise.
+- **Fortschritt und Erfolge:** Geschaffte Szenarien bekommen im Titelbildschirm ein Häkchen mit Bestnote; unter „Erfolge“ stehen zwölf Auszeichnungen. Gespeichert im Browser und, angemeldet, im Konto. Spiele mit Debug-Geld zählen nicht.
+- **Unwetter:** Gewitter werden eine Stunde vorher angekündigt (Ticker, Festivalfenster → Wetter & Vorsorge). Während des Gewitters ruhen die Auftritte, Gäste im Freien werden nass und können stürzen; ohne Sturmsicherung können Blitze Feuer legen. „Schutz anordnen“ pausiert die Auftritte sofort und senkt das Risiko.
+- **Sponsoren** (Festivalfenster → Sponsoren): vor dem Start bis zu zwei Verträge unterschreiben, Vorschuss sofort, Bonus bei erfüllter Bedingung, sonst geht der Vorschuss zurück.
 - **Fahrgeschäfte** (Attraktionen → Fahrgeschäfte): neben Karussell und Bungee-Turm auch Kettenkarussell, Freefall-Turm, Riesenrad, Autoscooter und Schiffschaukel. Jedes braucht gepflasterten Boden auf seiner ganzen Fläche und Ein- und Ausgang direkt neben einem seiner Felder; jedes hat eigene Fahrtdauer, eigenen Spaß und eigene Übelkeit.
 - **Durst:** Gäste werden durstig, bei Hitze viel schneller. Sie trinken an der **Trinkwasserstelle** (kostenlos, braucht Wasser von den Trägern) oder kaufen am Getränkestand eine Limo, wenn sie keine Lust auf Bier haben.
 - **Hygiene:** Camper brauchen nach etwa einem Tag eine **Dusche** (braucht Wasser). Ungeduschte Camper sind schlechter gelaunt.
@@ -653,9 +658,8 @@ Verbindliche Simulationsregeln: [AGENTS.md](AGENTS.md).
 
 ## Nächste Ausbaustufen
 
-1. Fortschritt über Partien und eine Einführung für neue Spieler
-2. Personal, Träger und Fahrzeuge gebündelt zeichnen
-3. Technik vor 1.0 festziehen
+1. Personal, Träger und Fahrzeuge gebündelt zeichnen
+2. Technik vor 1.0 festziehen
 
 RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafiken, Sounds, Daten und sonstige geschützte Inhalte sollten nicht übernommen werden.
 

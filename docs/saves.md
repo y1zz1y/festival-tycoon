@@ -306,3 +306,13 @@ Kein Versionsbump (34). Optionale Felder mit Standard:
 zusätzlich `chainSwing`, `freefall`, `ferrisWheel`, `bumperCars`, `swingShip`;
 ein unbekannter Wert wird gelöscht (Karussell), ein fehlender Preis kommt aus
 `rideProfile`.
+
+## Phase 5 (0.2.11)
+
+Kein Versionsbump (34); alles optional mit Standard:
+- `scenario.difficulty` (`easy` | `hard`, fehlt bei Normal),
+- `festival.storms`, `shelterOrder`, `stormLive`, `stormInjuries`, `stormStats`
+  (fehlend = keine Unwetter / nichts gezählt),
+- `festival.sponsorOffers`, `sponsors`, `sponsorsFulfilled` (fehlend = keine),
+- `debugAssisted` (Debug-Geld genutzt; fehlend = nein).
+Fortschritt und Erfolge liegen nicht im Spielstand ([progress.md](progress.md)).

@@ -180,3 +180,22 @@ nutzen:
 
 `tests/finance.ts` und `tests/scenarioEditor.ts` zählen die Presets; jedes muss
 seine Ziele unverändert durch `normalizeGoals` bringen.
+
+## Schwierigkeitsgrade und Einstieg (0.2.11)
+
+**Schwierigkeit** (`src/game/difficulty.ts`, Config `difficulty`):
+`ScenarioSettings.difficulty` ist `easy` oder `hard`, bei Normal fehlt das Feld.
+`difficultyProfile` liefert Faktoren für Startgeld (nach dem Geländeseed, das
+Gelände bleibt gleich), laufende Kosten (`hourlyRunningCosts` und
+Finanzaufschlüsselung), Ticketnachfrage (`purchaseWillingness`), Gästebudget,
+Bedürfnisverfall (`decayNeeds`) und Unwetterhäufigkeit. Baupreise bleiben, damit
+jeder angezeigte Preis stimmt. Wählbar im freien Spiel und im Briefing jedes
+Presets; Drop-in-Dateien starten auf Normal.
+
+**Erste Schritte** (`src/game/tutorial.ts`, Preset `einstieg`): kleines flaches
+Feld ohne Ziele und ohne Frist. `tutorialSteps` liest fünf Schritte aus dem
+Snapshot (Weg mit `TUTORIAL_PATH_FIELDS` Feldern vom Eingang, Bühne mit Strom,
+Imbiss und Toilette, Buchung, Start). `src/ui/tutorialChecklist.ts` zeigt sie oben
+rechts, nur in diesem Preset, einklappbar; der nächste offene Schritt zeigt seinen
+Hinweis. Kein eigenes Snapshot-Feld. Das Preset steht vorn in
+`SCENARIO_PRESETS`, zählt aber nicht für den Erfolg „Tourneeprofi“.

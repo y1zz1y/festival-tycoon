@@ -1,3 +1,6 @@
+import { planStorms, stormAt, stormExposure, type StormPlan } from './storm'
+import { rollSponsorOffers, settleSponsors, signSponsor, type SponsorContract } from './sponsors'
+import { difficultyProfile } from './difficulty'
 import { autoLineupDuration, planAutoLineup } from './autoLineup'
 import { bookFinance, canAfford, type FinanceCategory } from './finance'
 import { GENRES, bandGenre, musicTaste, musicAppeal, evolveMusicAudience, type MusicMix } from './musicTaste'
@@ -197,10 +200,25 @@ export type FestivalManagement = {
   lastUpdate: number; admissions: number; goals: { guests: number; satisfaction: number; profit: number };
   headlinerPool?: string[];
   demandTuning: TicketDemandTuning;
+  /** Storms planned for this edition's festival days (src/game/storm.ts). */
+  storms?: StormPlan[];
+  /** Shelter ordered by the player for the current or coming storm. */
+  shelterOrder?: boolean;
+  /** Guests hurt by the current storm, and totals over the game. */
+  stormInjuries?: number;
+  stormStats?: { weathered: number; calm: number };
+  /** Whether a storm was raging at the last festival minute, to see it start and end. */
+  stormLive?: boolean;
+  /** Sponsor offers for the coming edition and contracts signed for it (src/game/sponsors.ts). */
+  sponsorOffers?: SponsorContract[];
+  sponsors?: SponsorContract[];
+  sponsorsFulfilled?: number;
 }
 export type FestivalAction = InfrastructureAction
   | { type: 'wayArea'; from: { x: number; z: number }; to: { x: number; z: number }; kind: WayType }
   | { type: 'stageTemplate'; name: string | null }
+  | { type: 'sponsor'; id: string }
+  | { type: 'shelter' }
   | { type: 'stageDesign'; design: StageDesign; stageId?: string; saveTemplate?: boolean; selectForBuild?: boolean }
   | { type: 'tickets'; day: number; camping: number }
   | { type: 'start' }
@@ -306,6 +324,10 @@ export function showIssue(s: Readonly<GameSnapshot>, booking: Booking, atMinute 
     stageDistance(stage,b) <= 10 && s.power.poweredBuildingIds.includes(b.id)).length
   if (speakers + (stage.stageDesign ? stageStats(stage.stageDesign).speakers : 0) < band.speakers) return `${band.speakers} aktive Lautsprecher im Umkreis von 10 Feldern nötig`
   if (s.festival.weather === 'wind' && !s.festival.upgrades.rigging) return 'Starker Wind: Sturmsicherung fehlt'
+  // Storms are a now-thing: a show planned for later is not blocked by today's forecast.
+  const storm = atMinute === s.minute ? stormAt(s.festival, s.day, s.minute) : { phase: 'none' as const }
+  if (storm.phase === 'active') return 'Unwetter: Auftritte unterbrochen'
+  if (storm.phase === 'warning' && s.festival.shelterOrder) return 'Schutz angeordnet: Auftritte pausiert'
   return null
 }
 export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionResult {
@@ -356,6 +378,8 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
       return offerSeed / 0x100000000
     } }
     f.headlinerPool = rollFiveStarOffers(f.reputation.music, offerRng, new Set())
+    f.sponsorOffers = rollSponsorOffers(`${f.seed}:${s.rngState}`, f.edition + 1)
+    f.sponsors = []
     return {ok:true,message:'Nächste Ausgabe planen – die Besucherbasis bleibt erhalten'}
   }
   if (action.type === 'start') {
@@ -372,8 +396,20 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
     f.reportDay = s.day; f.openingMoney = s.money+f.bookings.reduce((sum,b)=>sum+b.fee,0); f.reports = [];
     f.metrics = metrics(); f.admissions = 0; f.lastUpdate = now; f.seed = s.rngState;
     s.dayPlan.cycleStartDay = s.day;
+    // Storms for this edition's festival days, from the seed that was just fixed.
+    f.storms = planStorms(f.seed, s.day + s.dayPlan.leadDays, s.dayPlan.festivalDays, difficultyProfile(s.scenario).stormChance)
+    f.shelterOrder = false; f.stormInjuries = 0
+    f.sponsorOffers = []
     s.parkOpen = true; s.speed = 1;
     return { ok: true, message: 'Festivalzeit gestartet. Vorlauf und Ablauf richten sich nach eurer Tagesplanung.' }
+  }
+  if (action.type === 'sponsor') return signSponsor(s, action.id)
+  if (action.type === 'shelter') {
+    const storm = stormAt(f, s.day, s.minute)
+    if (storm.phase === 'none') return fail('Gerade droht kein Unwetter')
+    if (f.shelterOrder) return fail('Schutz ist bereits angeordnet')
+    f.shelterOrder = true
+    return { ok: true, message: 'Schutz angeordnet: Auftritte pausieren, Gäste suchen Deckung' }
   }
   if(f.finished)return fail('Zuerst die nächste Ausgabe vorbereiten')
   if (action.type === 'book'||action.type==='moveBooking') {
@@ -506,8 +542,21 @@ export function updateFestival(s: GameSnapshot): void {
   if (minutes < 1) return
   f.lastUpdate = now
   if (s.day !== f.reportDay) recordDay(s)
-  if (s.day >= f.startDay + s.dayPlan.leadDays + s.dayPlan.festivalDays) { evolveMusicAudience(f); f.finished = true; s.parkOpen = false; return }
+  if (s.day >= f.startDay + s.dayPlan.leadDays + s.dayPlan.festivalDays) {
+    // Sponsors are paid or repaid before the edition is marked finished, so the money
+    // lands in this edition's finance column.
+    settleSponsors(s, {
+      admissions: f.admissions,
+      satisfaction: editionSatisfaction(s),
+      banners: s.buildings.filter((building) => building.kind === 'banner').length,
+      headliner: f.bookings.some((booking) => { const band = BANDS.find((entry) => entry.id === booking.bandId); return Boolean(band && isHeadlinerBand(band)) }),
+    })
+    evolveMusicAudience(f); f.finished = true; s.parkOpen = false; return
+  }
   f.weather = weatherAt(f, s.day, s.minute / 60)
+  const storm = stormAt(f, s.day, s.minute)
+  if (storm.phase === 'active') f.weather = 'rain'
+  trackStormLifecycle(f, storm.phase)
   f.wetness = clamp(f.wetness + minutes * (f.weather === 'rain' ? 0.5 : -0.2))
   const shows = activeBookings(s).filter(b => !showIssue(s, b)).map(b => {
     const stage=s.buildings.find(x=>x.id===b.stageId)!, design=stage.stageDesign
@@ -529,7 +578,14 @@ export function updateFestival(s: GameSnapshot): void {
     visitor.musicTaste??=musicTaste(visitor.id,f)
     let weatherImpact = 0
     const sheltered = visitor.state === 'camping' && visitor.campingPhase === 'resting'
-    if (!sheltered && (f.weather === 'rain' || f.weather === 'heat')) {
+    if (storm.phase === 'active') {
+      const exposure = stormExposure(visitor, Boolean(f.shelterOrder)) * (1 - cover)
+      visitor.needs.energy = clamp(visitor.needs.energy - minutes * SIMULATION_CONFIG.storm.drainPerMinute * exposure)
+      visitor.needs.fun = clamp(visitor.needs.fun - minutes * SIMULATION_CONFIG.storm.drainPerMinute * exposure)
+      weatherImpact += minutes * SIMULATION_CONFIG.storm.impactPerMinute * exposure
+      if (exposure > 0 && visitor.state !== 'partying') visitor.thought = f.shelterOrder ? 'Unwetter! Wir warten unter dem Vordach.' : 'Unwetter! Ich werde klatschnass.'
+    }
+    if (!sheltered && storm.phase !== 'active' && (f.weather === 'rain' || f.weather === 'heat')) {
       weatherImpact = minutes * 0.12 * (1 - cover)
       if (f.weather === 'heat' && f.upgrades.water && s.buildings.some(b => b.kind === 'toilet' && Math.hypot(b.x - visitor.x, b.z - visitor.z) <= 3 && consumeLocal(s, b.id, 'water'))) { visitor.needs.thirst = Math.min(100, (visitor.needs.thirst ?? 100) + 20) /* Water is dispensed locally at supplied sanitation points. */ }
       else { visitor.needs.energy = clamp(visitor.needs.energy - weatherImpact); visitor.needs.fun = clamp(visitor.needs.fun - weatherImpact) }
@@ -573,5 +629,23 @@ export function updateFestival(s: GameSnapshot): void {
   if (s.visitors.length) { f.metrics.satisfaction += happiness * minutes; f.metrics.samples += s.visitors.length * minutes }
 }
 
+
+/**
+ * Keeps the storm bookkeeping in step with the plan: a storm that starts resets its
+ * injury count; one that ends counts as weathered, as calm if nobody was hurt, and
+ * lifts a shelter order.
+ */
+function trackStormLifecycle(f: FestivalManagement, phase: 'none' | 'warning' | 'active'): void {
+  const raging = phase === 'active'
+  if (raging && f.stormInjuries === undefined) f.stormInjuries = 0
+  const wasRaging = (f.stormLive ?? false)
+  if (raging && !wasRaging) f.stormInjuries = 0
+  if (!raging && wasRaging) {
+    const stats = f.stormStats ?? { weathered: 0, calm: 0 }
+    f.stormStats = { weathered: stats.weathered + 1, calm: stats.calm + ((f.stormInjuries ?? 0) === 0 ? 1 : 0) }
+    if (phase === 'none') f.shelterOrder = false
+  }
+  f.stormLive = raging
+}
 
 export function bookingHoursOpen(s:Readonly<GameSnapshot>,start:number,duration:number){for(let minute=start;minute<start+duration;minute+=Math.min(60-minute%60,start+duration-minute)){if(!s.dayPlan.offers.stages[Math.floor(minute/60)%24])return false}return true}

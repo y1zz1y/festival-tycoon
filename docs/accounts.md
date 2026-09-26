@@ -36,3 +36,10 @@ prüft Eigentum und öffentliche Leserechte.
 
 Aktualisieren, wenn Endpunkte, Cookie-/Hashing-Regeln, Schema, Autorisierung
 oder die Kopplung an Server-Saves geändert werden.
+
+## Fortschritt im Konto (0.2.11)
+
+`GET /api/progress` und `PUT /api/progress` (`server/progress.ts`) halten je
+Konto einen JSON-Datensatz mit geschafften Szenarien und Erfolgen (Tabelle
+`progress`, Fremdschlüssel auf `users`, 64 KB Grenze). Nur mit Session; `PUT`
+mergt best-of mit dem Gespeicherten. Details: [progress.md](progress.md).

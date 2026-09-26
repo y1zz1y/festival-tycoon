@@ -1,3 +1,5 @@
+import { difficultyProfile } from './difficulty'
+import { rollSponsorOffers } from './sponsors'
 import { createAccessControlSnapshot } from './accessControl'
 import { emptyBandSupplySnapshot } from './bandSupply'
 import { createComplaintSnapshot } from './complaints'
@@ -27,7 +29,11 @@ export function createBlankSnapshot(
   const settings = normalizeScenarioSettings(scenario)
   const entrance = createScenarioEntrance(settings.worldSize)
   return {
-    festival: { ...createFestivalManagement(), goals: weekendGoals(1, settings.festivalGoals) },
+    festival: {
+      ...createFestivalManagement(),
+      goals: weekendGoals(1, settings.festivalGoals),
+      sponsorOffers: rollSponsorOffers(`${settings.preset ?? 'frei'}:${settings.worldSize}:${settings.startingMoney}`, 1),
+    },
     version: 34,
     multiplayerCode: '',
     waterLevel: DEFAULT_WATER_LEVEL,
@@ -35,7 +41,8 @@ export function createBlankSnapshot(
     rngState: hashStringSeed(
       `festival-${settings.worldSize}-${settings.startingMoney}`,
     ),
-    money: settings.startingMoney,
+    // Difficulty scales the purse after the terrain seed above was taken from it.
+    money: Math.round(settings.startingMoney * difficultyProfile(settings).money),
     finance: createFinanceState(settings.startingLoan),
     scenarioProgress: createScenarioProgress(settings.goals, firstEditionDue(settings, 1)),
     entryPrice: SIMULATION_CONFIG.economy.defaultEntryPrice,

@@ -1,3 +1,4 @@
+import { DIFFICULTY_NAMES, isDifficulty } from '../game/difficulty'
 import { currentAccount, registerAccount, signIn, signOut } from '../accounts'
 import { confirmDiscardingWork, markWorkSaved } from './unsavedWork'
 import { GameState } from '../game/GameState'
@@ -18,6 +19,8 @@ import { isTextEntryTarget } from '../uiFocus'
 import { fetchLobbies } from '../net/lobbies'
 import type { NetLobby } from '../net/protocol'
 import { escapeHtml, formatMoney } from './format'
+import { ACHIEVEMENTS, type ProgressRecords } from '../game/progress'
+import { achievementRowsMarkup, scenarioBadgeMarkup } from './titleProgress'
 import { saveProgressText, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
 
 export interface TitleScreenContext {
@@ -49,6 +52,10 @@ export interface TitleScreenContext {
   readMultiplayerName(): string
   setMultiplayerName(name: string): void
   formatSaveTime(value: number): string
+  /** Won scenarios, best grades and achievements, for the list and the Erfolge plate. */
+  progressRecords(): ProgressRecords
+  /** Someone just signed in or registered: their account's progress can be merged now. */
+  onSignedIn(): void
 }
 
 export interface TitleScreenController {
@@ -64,6 +71,8 @@ export interface TitleScreenController {
   startScenario(settings: ScenarioSettings, message: string): void
   /** Back to the title screen, after asking about unsaved work. */
   leaveToTitle(): void
+  /** Redraws what shows progress (badges, Erfolge) after records changed. */
+  refreshProgress(): void
 }
 
 /**
@@ -87,9 +96,11 @@ function briefingMarkup(preset: ScenarioPreset): string {
     .join('')
   return `<p>${escapeHtml(preset.detail)}</p>
     <dl class="scenario-summary">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
-    <h3 class="scenario-heading">Ziele</h3>
+    ${settings.goals.length > 0
+      ? `<h3 class="scenario-heading">Ziele</h3>
     <ul class="scenario-goal-list">${goals}</ul>
     <p class="scenario-hint">Geschafft, wenn alle Ziele erreicht sind. Gescheitert, wenn ein Ziel bis zu seiner Ausgabe fehlt oder das Konto zu lange ungedeckt im Minus bleibt.</p>`
+      : '<p class="scenario-hint">Ohne Ziele und ohne Frist: Eine Checkliste oben rechts zeigt, was als Nächstes zu tun ist, und hakt jeden Schritt selbst ab.</p>'}`
 }
 
 export function mountTitleScreen(context: TitleScreenContext): TitleScreenController {
@@ -203,6 +214,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
       accountMessage.textContent = result.message
       if (!result.ok) return
       syncAccountBar()
+      context.onSignedIn()
       setAccountMaskOpen(false)
       showToast(result.message)
     }
@@ -266,9 +278,25 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   function renderScenarioCatalog(): void {
     const presets = listedScenarioPresets()
     const freePlay = `<button type="button" data-title-scenario="" aria-haspopup="true"><span class="title-row-text"><span class="title-row-label">Freies Spiel</span><span class="title-row-meta">Gelände, Publikum und Startkapital selbst festlegen — ohne Vorgaben und ohne Ziele.</span></span><span class="title-row-value">frei</span></button>`
-    const rows = presets.map((entry) => `<button type="button" data-title-scenario="${escapeHtml(entry.id)}"${entry.price ? ` data-title-locked="${escapeHtml(entry.price)}" aria-disabled="true"` : ''}><span class="title-row-text"><span class="title-row-label">${escapeHtml(entry.name)}</span><span class="title-row-meta">${escapeHtml(entry.detail)}</span></span><span class="title-row-value">${entry.price ? `<span class="title-row-lock" aria-hidden="true">🔒</span>${escapeHtml(entry.price)}` : `${entry.settings.worldSize} × ${entry.settings.worldSize}`}</span></button>`).join('')
+    const records = context.progressRecords()
+    const rows = presets.map((entry) => `<button type="button" data-title-scenario="${escapeHtml(entry.id)}"${entry.price ? ` data-title-locked="${escapeHtml(entry.price)}" aria-disabled="true"` : ''}><span class="title-row-text"><span class="title-row-label">${escapeHtml(entry.name)}${scenarioBadgeMarkup(records.scenarios[entry.id])}</span><span class="title-row-meta">${escapeHtml(entry.detail)}</span></span><span class="title-row-value">${entry.price ? `<span class="title-row-lock" aria-hidden="true">🔒</span>${escapeHtml(entry.price)}` : `${entry.settings.worldSize} × ${entry.settings.worldSize}`}</span></button>`).join('')
     titleScenarioRows.innerHTML = `${freePlay}${rows}`
-    titleNewMeta.textContent = `${presets.length + 1} Szenarien`
+    const won = presets.filter((entry) => records.scenarios[entry.id]?.won).length
+    titleNewMeta.textContent = won > 0 ? `${presets.length + 1} Szenarien · ${won} geschafft` : `${presets.length + 1} Szenarien`
+    renderAchievementMeta()
+  }
+
+  const titleAchievementsMask = requireElement<HTMLElement>('#title-achievements-mask')
+  const titleAchievementsRows = requireElement<HTMLElement>('#title-achievements-rows')
+  const titleAchievementsMeta = requireElement<HTMLElement>('#title-achievements-meta')
+  function renderAchievementMeta(): void {
+    const unlocked = Object.keys(context.progressRecords().achievements).length
+    titleAchievementsMeta.textContent = unlocked > 0 ? `${unlocked} von ${ACHIEVEMENTS.length}` : 'Noch keine'
+  }
+  function openTitleAchievements(open: boolean): void {
+    titleAchievementsMask.hidden = !open
+    if (open) titleAchievementsRows.innerHTML = achievementRowsMarkup(context.progressRecords())
+    renderAchievementMeta()
   }
 
   async function refreshScenarioCatalog(): Promise<void> {
@@ -488,6 +516,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     if (target.closest('#title-lobby-join')) { joinLobby(titleLobbyCode.value); return }
     const lobby = target.closest<HTMLButtonElement>('[data-title-lobby]')
     if (lobby) { joinLobby(lobby.dataset.titleLobby!); return }
+    if (target.closest('[data-title-achievements-close]')) { openTitleAchievements(false); return }
     const slot = target.closest<HTMLButtonElement>('[data-title-load-slot]')
     if (slot) { void loadTitleSlot(slot.dataset.titleLoadSlot!); return }
     const menu = target.closest<HTMLButtonElement>('[data-title-menu]')
@@ -506,6 +535,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
         setEditorPanelOpen(true)
       }
       else if (menu.dataset.titleMenu === 'load') void openTitleLoad()
+      else if (menu.dataset.titleMenu === 'achievements') openTitleAchievements(true)
       else if (menu.dataset.titleMenu === 'multiplayer') openTitleLobbies(true)
       else openAboveTitle(scenarioPanel, () => setScenarioPanelOpen(true))
       return
@@ -542,6 +572,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
       if (!titleBriefingMask.hidden) { event.preventDefault(); openTitleBriefing(null) }
       else if (!titleFreeplayMask.hidden) { event.preventDefault(); openTitleFreeplay(false) }
       else if (!titleLoadMask.hidden) { event.preventDefault(); closeTitleLoad() }
+      else if (!titleAchievementsMask.hidden) { event.preventDefault(); openTitleAchievements(false) }
       else if (!titleLobbyMask.hidden) { event.preventDefault(); openTitleLobbies(false) }
       else if (!titleSubmenu.hidden) { event.preventDefault(); openTitleSubmenu(false) }
       return
@@ -569,12 +600,14 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
       startGame(GameState.startFromScenarioFile(file), `${preset.name} gestartet`)
       return
     }
+    const chosen = document.querySelector<HTMLSelectElement>('#title-briefing-difficulty')?.value
     startFestival(normalizeScenarioSettings({
       ...preset.settings,
       preset: preset.id,
       title: preset.name,
       detail: preset.detail,
-    }), `${preset.name} gestartet`)
+      difficulty: isDifficulty(chosen) ? chosen : 'normal',
+    }), `${preset.name} gestartet${chosen && chosen !== 'normal' && isDifficulty(chosen) ? ` · ${DIFFICULTY_NAMES[chosen]}` : ''}`)
   }
   function leaveToTitle(): void {
     if (!confirmDiscardingWork('Zum Titelbildschirm zurückkehren?')) return
@@ -599,5 +632,10 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     rememberLastSave,
     startScenario: startFestival,
     leaveToTitle,
+    refreshProgress: () => {
+      renderScenarioCatalog()
+      markTitleSelection(titleSelection)
+      if (!titleAchievementsMask.hidden) openTitleAchievements(true)
+    },
   }
 }

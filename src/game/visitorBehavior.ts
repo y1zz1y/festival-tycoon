@@ -8,6 +8,7 @@ import { isShopServiceKind } from './shopAccess';
 import { defaultShirtSettings, normalizeShirtColor, normalizeShirtStyle, perGuestSupply, souvenirPurchaseThought, souvenirSeekThought } from './shopGoods';
 import { isCamper, moodNeedValues } from './visitorNeeds';
 import { rideProfile } from './flatRides';
+import { difficultyProfile } from './difficulty';
 import { isStallQueueKind } from './queueLanes';
 import { buildingEfficiency } from './ground';
 import { BUILDINGS } from './catalog';
@@ -3555,6 +3556,8 @@ export class VisitorBehaviorService {
 
   decayNeeds(visitor: Visitor, minutes: number): void {
     const config = SIMULATION_CONFIG.needs
+    // Difficulty: needs run down faster on Schwer, slower on Leicht.
+    minutes *= difficultyProfile(this.context.state.scenario).needDecay
     visitor.needs.hunger = Math.max(
       0,
       visitor.needs.hunger - minutes * config.hungerDecayPerMinute,

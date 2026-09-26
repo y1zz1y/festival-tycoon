@@ -335,6 +335,16 @@ export class FestivalAudio {
       const local = t % every
       return Math.sin(2 * Math.PI * freq * t) * Math.exp(-local * 7) * 0.16
     }
+    // Storm sounds are synthesized only: a low rolling rumble with a crack at the front,
+    // and a steady hiss of rain.
+    this.buffers.set(
+      'thunder',
+      make(2.6, (_i, t) => (noise(t, 61) * (0.7 * Math.exp(-t * 9) + 0.5 * Math.exp(-t * 1.1)) + Math.sin(2 * Math.PI * 38 * t) * 0.35 * Math.exp(-t * 1.3)) * (0.6 + 0.4 * Math.sin(2 * Math.PI * 1.7 * t))),
+    )
+    this.buffers.set(
+      'rain',
+      make(2.4, (_i, t) => noise(t * 3.1, 67) * 0.3 * (0.85 + 0.15 * Math.sin(2 * Math.PI * 0.5 * t))),
+    )
     const sketches: Record<string, AudioBuffer> = {}
     sketches.acoustic = make(2, (_i, t) => pluck([262, 294, 330, 392][Math.floor(t * 2) % 4] ?? 262, t, 0.5) + Math.sin(2 * Math.PI * 131 * t) * 0.04)
     sketches.rock = make(2, (_i, t) => {

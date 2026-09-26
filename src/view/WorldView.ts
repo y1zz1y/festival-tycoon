@@ -46,6 +46,9 @@ import { groundInfo } from '../game/ground'
 import { SupplyChainView } from './SupplyChainView'
 import { scenePixelRatio } from './renderResolution'
 import { animateFlatRide, createFlatRideModel } from './flatRideModels'
+import { RainView } from './RainView'
+import { stormAt } from '../game/storm'
+import { hashStringSeed } from '../game/rng'
 import { isFlatRideType, type FlatRideType } from '../game/flatRides'
 import { effectShare, setEffectShare } from './effectDensity'
 import { isTextEntryTarget } from '../uiFocus'
@@ -402,6 +405,12 @@ export class WorldView {
   private bungeeRiders = new Set<string>()
   private bungeeOccupants = new Map<string, string>()
   bungeePreviewHeight: number | null = null
+  private baseAmbientIntensity = 0
+  private baseSunIntensity = 0
+  private readonly baseSkyColor = new Color()
+  private readonly stormSkyColor = new Color(0x39414d)
+  private readonly flashSkyColor = new Color(0xe8ecf5)
+  private readonly rainView = new RainView()
   /** The flat ride being placed from the build menu, for its ghost. */
   ridePreviewType: FlatRideType | null = null
   /** Flat ride id to the guests on it right now; rebuilt when the snapshot changes. */
@@ -883,6 +892,7 @@ export class WorldView {
       this.blueprintPreview,
       this.campingView.group,
       this.fireworksView.group,
+      this.rainView.group,
       this.crowdingView.group,
       this.panicView.group,
       this.medicalView.group,
@@ -976,6 +986,7 @@ export class WorldView {
       this.renderer.shadowMap.needsUpdate = true
     }
     this.updateDayNight(snapshot)
+    this.applyStormLight(snapshot, (this.previousShowTime + (this.currentShowTime - this.previousShowTime) * this.renderAlpha) / 2)
     const stageBookings = new Map(activeBookings(snapshot).map(b=>[b.stageId,b]))
     for (const model of this.buildings.children) {
       if(!model.userData.isStage)continue
@@ -2668,6 +2679,33 @@ export class WorldView {
     this.sunLight.color
       .copy(this.twilightSunColor)
       .lerp(this.noonSunColor, Math.min(1, daylight * 1.5))
+    this.baseAmbientIntensity = this.ambientLight.intensity
+    this.baseSunIntensity = this.sunLight.intensity
+    this.baseSkyColor.copy(this.skyColor)
+  }
+
+  /**
+   * A storm darkens the sky and the light on top of the time of day, every frame, and
+   * lightning flashes on a fixed pattern of simulated time: the light count never
+   * changes, only intensities do. The warning hour brings the clouds in gradually.
+   */
+  private applyStormLight(snapshot: Readonly<GameSnapshot>, minutes: number): void {
+    const storm = stormAt(snapshot.festival, snapshot.day, snapshot.minute)
+    let level = 0
+    if (storm.phase === 'active') level = 1
+    else if (storm.phase === 'warning' && storm.storm) {
+      const until = storm.storm.start - snapshot.minute
+      level = 0.45 * (1 - Math.max(0, Math.min(1, until / SIMULATION_CONFIG.storm.warningMinutes)))
+    }
+    const beat = Math.floor(minutes * 3)
+    const flash = storm.phase === 'active' && hashStringSeed(`flash:${beat}`) % 9 === 0 && minutes * 3 - beat < 0.07
+    this.ambientLight.intensity = this.baseAmbientIntensity * (1 - 0.45 * level) * (flash ? 3.2 : 1)
+    this.sunLight.intensity = this.baseSunIntensity * (1 - 0.75 * level)
+    this.skyColor.copy(this.baseSkyColor).lerp(this.stormSkyColor, 0.65 * level)
+    if (flash) this.skyColor.lerp(this.flashSkyColor, 0.55)
+    this.scene.background = this.skyColor
+    const raining = level >= 1 || snapshot.festival.enabled && !snapshot.festival.finished && snapshot.festival.weather === 'rain'
+    this.rainView.update(this.cameraTarget, minutes, this.logisticsMode ? 0 : level >= 1 ? 1 : raining ? 0.35 : 0)
   }
 
   private isShowPerforming(snapshot: Readonly<GameSnapshot>): boolean {

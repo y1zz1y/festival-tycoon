@@ -197,3 +197,12 @@ Genre hat seine eigene Musikdatei; unbekannte Genres spielen als Indie.
 Aktualisieren bei neuen Zonen/Cues, anderen Pools, neuen oder ersetzten
 Dateien (Quellentabelle und `scripts/build-audio.py`) oder geändertem Loader. Snapshot-Felder wären zusätzlich
 `docs/multiplayer.md` und `docs/saves.md`.
+
+## Unwetter (0.2.11)
+
+`AudioWorld.stormActive` / `raining` aus `audioWorldFromSnapshot`. Bei Regen und
+Gewitter läuft eine Umgebung `rain` am Listener (lauter im Gewitter), im Gewitter
+kommt `thunder` als One-Shot (`cooldownTicks.thunder`, `cueChance.thunder`). Beide
+Klänge sind nur synthetisch (`prepareBuffers`), ohne Datei in `AUDIO_ASSETS`.
+Während des Gewitters (und bei angeordnetem Schutz in der Warnung) schweigen die
+Bühnen (`performingStagesFromFestival`).

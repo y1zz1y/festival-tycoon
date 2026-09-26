@@ -2,6 +2,7 @@ import type { Plugin, ViteDevServer } from 'vite'
 import { WebSocketServer } from 'ws'
 import { attachMultiplayer, localJoinHost } from './rooms.ts'
 import { handleSaveRequest } from './saveSlots.ts'
+import { handleProgressRequest } from './progress.ts'
 import { handleAccountRequest } from './accounts.ts'
 import { handleScenarioRequest } from './scenarios.ts'
 
@@ -30,6 +31,7 @@ async function handleApi(request: Parameters<typeof handleSaveRequest>[0], respo
   return (
     (await handleAccountRequest(request, response)) ||
     (await handleSaveRequest(request, response)) ||
+    (await handleProgressRequest(request, response)) ||
     (await handleScenarioRequest(request, response))
   )
 }

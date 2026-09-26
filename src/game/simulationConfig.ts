@@ -297,6 +297,46 @@ export const SIMULATION_CONFIG = {
     },
   },
   /**
+   * Storms (src/game/storm.ts): chance per festival day, window, length, warning,
+   * how hard they hit guests in the open, how much an order to take shelter helps,
+   * and when lightning strikes (a tall structure catches fire without Sturmsicherung).
+   */
+  storm: {
+    chancePerDay: 0.2,
+    earliestHour: 13,
+    latestHour: 21,
+    minimumMinutes: 45,
+    durationStepMinutes: 15,
+    warningMinutes: 60,
+    drainPerMinute: 0.45,
+    impactPerMinute: 0.6,
+    injuryChancePerMinute: 0.0003,
+    shelterOrderProtection: 0.9,
+    lightningAfterMinutes: [12, 38],
+  },
+  /** Sponsors (src/game/sponsors.ts): offers per edition, advance, bonus and targets. */
+  sponsors: {
+    offers: 3,
+    maximumSigned: 2,
+    advanceBase: 900,
+    advancePerEdition: 250,
+    bonusFactor: 2.4,
+    admissionsBase: 250,
+    admissionsPerEdition: 150,
+    satisfactionBase: 62,
+    satisfactionPerEdition: 3,
+    bannersBase: 2,
+  },
+  /**
+   * Difficulty factors (src/game/difficulty.ts): starting money, running costs, ticket
+   * demand, guest budgets, how fast needs drop and how often storms come. Normal is 1.
+   */
+  difficulty: {
+    easy: { money: 1.5, runningCosts: 0.8, demand: 1.15, budget: 1.2, needDecay: 0.85, stormChance: 0.6 },
+    normal: { money: 1, runningCosts: 1, demand: 1, budget: 1, needDecay: 1, stormChance: 1 },
+    hard: { money: 0.7, runningCosts: 1.2, demand: 0.85, budget: 0.85, needDecay: 1.15, stormChance: 1.4 },
+  },
+  /**
    * Flat rides: ride types of the `ride` building (src/game/flatRides.ts). Cost and
    * upkeep replace the carousel's; minutes, fun, energy and nausea intensity apply per
    * guest and ride. Footprints live in src/game/stageDesign.ts.
@@ -1003,6 +1043,7 @@ export const SIMULATION_CONFIG = {
       wasteTruck: 80,
       incident: 30,
       uiClick: 2,
+      thunder: 90,
     },
     /** Failed rolls still consume the cooldown so sparse cues stay occasional. */
     cueChance: {
@@ -1016,6 +1057,7 @@ export const SIMULATION_CONFIG = {
       wasteTruck: 1,
       incident: 1,
       uiClick: 1,
+      thunder: 0.45,
     },
   },
   courses: {

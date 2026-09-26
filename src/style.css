@@ -5645,3 +5645,71 @@ body.title-open .mp-ping-overlay {
 .scenario-goal-head { font-size: 10px; color: #9eb6ac; text-transform: uppercase; letter-spacing: 0.06em; }
 .scenario-goal-row select,
 .scenario-goal-row input { min-width: 0; }
+
+/* Progress on the title screen: a won scenario's tick and stars, and the Erfolge plate. */
+.title-row-badge {
+  margin-left: 10px;
+  padding: 1px 7px;
+  color: #1f2a22;
+  background: #9fe3ac;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  vertical-align: middle;
+}
+
+.title-achievement {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.title-achievement-icon {
+  font-size: 22px;
+  width: 30px;
+  text-align: center;
+}
+
+.title-achievement[data-state='locked'] {
+  opacity: 0.5;
+}
+
+/* First-steps checklist (A9): top right, under panels that open on the right (z 22). */
+.tutorial-checklist {
+  position: fixed;
+  top: var(--topbar-gap-top, 96px);
+  right: 6px;
+  z-index: 21;
+  width: 290px;
+  padding-bottom: 10px;
+}
+
+.tutorial-steps {
+  display: grid;
+  gap: 4px;
+  margin: 8px 12px 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.tutorial-next {
+  margin: 4px 12px 0;
+}
+
+.tutorial-reopen {
+  position: fixed;
+  top: var(--topbar-gap-top, 96px);
+  right: 6px;
+  z-index: 21;
+}
+
+body.title-open .tutorial-checklist,
+body.title-open .tutorial-reopen {
+  display: none;
+}
+

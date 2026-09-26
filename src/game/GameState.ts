@@ -61,6 +61,8 @@ import { updateLogisticsSimulation, type LogisticsTickState } from './logisticsS
 import { RoadVehicleSimulation } from './roadVehicleSimulation';
 import { DeterministicRng, hashStringSeed, rollsBungeeNude } from './rng';
 import { isFlatRideType, rideProfile, type FlatRideType } from './flatRides';
+import { lightningMinutes, stormAt, stormExposure } from './storm';
+import { difficultyProfile } from './difficulty';
 import { applyGameCommand } from '../net/commands';
 import { isOptimisticCommand } from '../net/commandRegistry';
 import { allowsPathFlow, normalizeFlowDirection } from './pathFlow';
@@ -3188,6 +3190,47 @@ export class GameState {
     this.worldRevision++
   }
 
+  /** Festival minute the storm hazards were last rolled for (runtime only). */
+  private lastStormMinute = -1
+
+  /**
+   * While a storm rages: guests out in the open can fall and get hurt (sim RNG, once
+   * per festival minute), and at the storm's lightning minutes a tall structure catches
+   * fire unless the Sturmsicherung is bought. Guests in tents, vehicles or on their way
+   * out are safe; a shelter order cuts the risk for the rest.
+   */
+  private updateStormHazards(): void {
+    const f = this.state.festival
+    const storm = stormAt(f, this.state.day, this.state.minute)
+    const now = this.state.day * 1440 + this.state.minute
+    if (storm.phase !== 'active' || !storm.storm) {
+      this.lastStormMinute = -1
+      return
+    }
+    if (now === this.lastStormMinute) return
+    const minutes = this.lastStormMinute < 0 ? 1 : Math.min(10, now - this.lastStormMinute)
+    this.lastStormMinute = now
+    const chance = SIMULATION_CONFIG.storm.injuryChancePerMinute * minutes
+    for (const visitor of this.state.visitors) {
+      const exposure = stormExposure(visitor, Boolean(f.shelterOrder))
+      if (exposure <= 0 || this.rng.next() >= chance * exposure) continue
+      visitor.state = 'injured'
+      visitor.targetId = null
+      visitor.route = []
+      visitor.thought = 'Im Sturm bin ich gestürzt!'
+      f.stormInjuries = (f.stormInjuries ?? 0) + 1
+    }
+    if (f.upgrades.rigging) return
+    for (const after of lightningMinutes(storm.storm)) {
+      const at = storm.storm.day * 1440 + storm.storm.start + after
+      if (at <= now - minutes || at > now) continue
+      const tall = this.state.buildings.filter((building) => ['stage', 'delayTower', 'lighting', 'lightBalloon', 'videoWall'].includes(building.kind))
+      if (tall.length === 0) continue
+      const target = tall[hashStringSeed(`${f.seed}:lightning:${at}`) % tall.length]!
+      this.addGroundIncident('fire', { x: target.x, z: target.z, elevation: target.elevation }, 2)
+    }
+  }
+
   /** The edition has just ended: keep what it achieved and judge the edition goals on it. */
   private recordFinishedEdition(): void {
     const f = this.state.festival
@@ -3291,6 +3334,8 @@ export class GameState {
     // Deliberately not booked: a debug purse is not income, and the finance table
     // should keep adding up to what the park actually earned.
     this.state.money += amount
+    // A game helped along like this no longer counts for progress and achievements.
+    this.state.debugAssisted = true
     this.state.cashEffects.push({
       id: this.nextId('debug-cash'),
       amount,
@@ -5780,6 +5825,7 @@ export class GameState {
     this.syncBandSupply()
     const editionWasOver = this.state.festival.finished
     updateFestival(this.state)
+    this.updateStormHazards()
     if (!editionWasOver && this.state.festival.enabled && this.state.festival.finished) this.recordFinishedEdition()
     updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, true, undefined, true), (a, b) => this.canCarrierStep(a, b))
 
@@ -7495,10 +7541,12 @@ export class GameState {
       (total, member) => total + STAFF_DEFINITIONS[member.role].hourlyWage,
       0,
     )
+    // Difficulty scales everything that runs by the hour; prices the player reads stay.
+    const factor = difficultyProfile(this.state.scenario).runningCosts
     return {
-      upkeep: upkeep + (this.state.power.backupActive ? SIMULATION_CONFIG.power.backupFuelPerHour : 0),
+      upkeep: (upkeep + (this.state.power.backupActive ? SIMULATION_CONFIG.power.backupFuelPerHour : 0)) * factor,
       // Carriers are paid by the minute while they walk, not by the hour like the rest.
-      staff: staff + this.state.festival.infrastructure.routes.length * CARRIER_WAGE_PER_MINUTE * 60,
+      staff: (staff + this.state.festival.infrastructure.routes.length * CARRIER_WAGE_PER_MINUTE * 60) * factor,
     }
   }
 

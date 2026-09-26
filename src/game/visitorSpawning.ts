@@ -1,3 +1,4 @@
+import { difficultyProfile } from './difficulty'
 import { assignAudience, BANDS, bandVisitorDraw } from './festivalManagement'
 import { arrivalPriceMultiplier } from './ticketDemand'
 import { getFestivalCycleStatus, isDayVisitorAdmissionOpen } from './dayPlan'
@@ -257,7 +258,7 @@ export class VisitorSpawning {
       facing: 0,
       emotion: 'neutral',
       emotionMinutes: 0,
-      budget: SIMULATION_CONFIG.visitors.budget,
+      budget: Math.round(SIMULATION_CONFIG.visitors.budget * difficultyProfile(context.getScenario()).budget),
       alcoholLevel: 0,
       alcoholDisposition:
         rng.next() < context.getScenario().aggressiveShare ? 'aggressive' : 'calm',

@@ -20,6 +20,8 @@ import { escapeHtml, formatMoney } from './format'
  * player sees the same; only the host's buttons change anything.
  */
 export type ScenarioStatusOptions = {
+  /** Called once when the scenario goes from running to won or lost while being watched. */
+  onDecided?: (snapshot: Readonly<GameSnapshot>) => void
   parkValue: () => number
   isMagazineOpen: () => boolean
   openFinance: () => void
@@ -236,6 +238,7 @@ export function mountScenarioStatus(options: ScenarioStatusOptions): ScenarioSta
         if (before.outcome === 'running' && now.outcome !== 'running') {
           endPending = true
           closeDue()
+          options.onDecided?.(current)
         }
         if (now.dueReminderDay !== null && now.dueReminderDay !== before.dueReminderDay && now.outcome === 'running') {
           options.openPlanning()

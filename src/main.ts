@@ -4,6 +4,8 @@ import { scenerySlot } from './game/scenery'
 import { makeDraggable, makeResizable } from './dragPanel'
 import { toUiPx, uiScale } from './ui/uiScale'
 import { installPlayerSettings } from './ui/playerSettingsPanel'
+import { mountProgressTracker } from './ui/progressTracker'
+import { mountTutorialChecklist } from './ui/tutorialChecklist'
 import { isFlatRideType, rideProfile, type FlatRideType } from './game/flatRides'
 import { mountStageEditor } from './stageEditor'
 import { buildingFootprint, stageStats } from './game/stageDesign'
@@ -641,7 +643,15 @@ const visitorPanelController = mountVisitorPanel({
 const tickerUI = mountTickerUI({
   focusWorld: (x, z) => view.focusWorldPosition(x, z),
 })
+const progressTracker = mountProgressTracker({
+  isClient: () => multiplayer.status.mode === 'client',
+  showToast: (message) => showToast(message),
+  onChange: () => titleScreenController?.refreshProgress(),
+})
+let lastAchievementCheckTick = -Infinity
+const tutorialChecklist = mountTutorialChecklist()
 const scenarioStatus = mountScenarioStatus({
+  onDecided: (snapshot) => progressTracker.recordDecided(snapshot),
   parkValue: () => game.parkValue(),
   isMagazineOpen: () => festivalUI.isMagazineOpen(),
   openFinance: () => openFinancePanel(true),
@@ -849,6 +859,12 @@ function bindGameState(nextGame: GameState): void {
     staffDetails.update(snapshot)
     tickerUI.update(snapshot)
     scenarioStatus.update(snapshot)
+    tutorialChecklist.update(snapshot)
+    // Achievements are cheap to check but need not be checked every frame.
+    if (Math.abs(snapshot.simTick - lastAchievementCheckTick) >= 100) {
+      lastAchievementCheckTick = snapshot.simTick
+      progressTracker.checkAchievements(snapshot)
+    }
     money.textContent = editorMoneyLabel(Boolean(snapshot.scenario.authoring), snapshot.money)
     scenarioEditorToggle.hidden = !snapshot.scenario.authoring
     if (!snapshot.scenario.authoring && !scenarioEditorPanel.hidden) setEditorPanelOpen(false)
@@ -4717,6 +4733,8 @@ titleScreenController = mountTitleScreen({
   readMultiplayerName,
   setMultiplayerName,
   formatSaveTime,
+  progressRecords: () => progressTracker.records(),
+  onSignedIn: () => void progressTracker.sync(),
 })
 undoLastBuildButton.addEventListener('click', () => {
   const result = game.undoLastBuild()
@@ -5292,4 +5310,7 @@ void (async () => {
 
 // Who the session cookie belongs to. Asked once, after everything is wired, and the
 // account bar redraws itself when the answer arrives.
-void refreshAccount().then(() => titleScreenController.syncAccountBar())
+void refreshAccount().then(() => {
+  titleScreenController.syncAccountBar()
+  void progressTracker.sync()
+})

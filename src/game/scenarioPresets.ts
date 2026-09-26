@@ -24,6 +24,24 @@ const preset = (
 ): ScenarioPreset => ({ id, name, detail, price, settings: { ...DEFAULT_SCENARIO, ...settings } })
 
 export const SCENARIO_PRESETS: ScenarioPreset[] = [
+  // First steps (A9): no goals, no deadline; a checklist (src/game/tutorial.ts) leads
+  // through the first build instead.
+  preset(
+    'einstieg',
+    'Erste Schritte',
+    'Ein kleines, flaches Feld und genug Geld für den Anfang. Eine Checkliste führt durch den ersten Aufbau: Weg, Bühne mit Strom, Imbiss und Toilette, Band buchen, Festival starten.',
+    {
+      environment: 'farmland',
+      unevenness: .05,
+      worldSize: 32,
+      startingMoney: 30_000,
+      startingLoan: 0,
+      partyAffinity: .6,
+      beautyAffinity: .4,
+      carArrivalShare: .2,
+      goals: [],
+    },
+  ),
   preset(
     'woodstock',
     'Woodstock',

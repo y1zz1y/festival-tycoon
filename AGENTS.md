@@ -24,6 +24,7 @@ feature you touch. Keep detailed file maps and feature history in topic docs.
 | Finance, ledger, loans | `docs/finance.md` |
 | Scenarios, goals, win/loss, due day, editor | `docs/scenarios.md` |
 | Accounts, sessions, authentication | `docs/accounts.md` |
+| Progress across games, achievements | `docs/progress.md` |
 | Stage workshop / shows | `docs/stages.md` |
 | Coasters, rides, queues | `docs/attractions.md` |
 | Course attractions | `docs/course-attractions.md` |
