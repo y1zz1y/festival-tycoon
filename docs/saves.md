@@ -120,18 +120,30 @@ Camp und Müll rekonstruiert.
   widersprüchliche Schwellen werden beim Laden normalisiert.
   v31 führt `attractions: Attraction[]` und optional
   `migrationReport.removedAttractionIds` ein. `track`, `area` und `scripted`
-  sind die kanonischen Layouts. Der v30→v31-Lader konvertiert Achterbahnen,
-  Kurse, Camping-/Partyflächen und Rides einmalig. Pool wird in `swimArea`
-  plus eigenständige Wasserrutschen aufgeteilt; nicht sicher konvertierbare
-  Anlagen werden gemeldet und entfernt.
-  `coasters` und `courses` werden beim Laden aus `attractions`
-  projiziert. `campingCells`, `campInstallations` und
-  `stageForecourtCells` bleiben die gespeicherten Live-Arrays, wenn
-  sie im Stand stehen; nur fehlende Arrays fallen auf die
-  `camping`-/`partyArea`-Projektion zurück. Anschließend schreibt
-  `refreshLegacyAttractionRecords` die Overlay-Datensätze nach, und
-  `syncStageAudience` baut bühnenzugehörige Vorplätze neu. Snapshot-
-  Version bleibt 33.
+  sind die kanonischen Layouts. Der v30→v31-Lader (auch ein Stand mit leerem
+  `attractions`) konvertiert Achterbahnen, Kurse, Camping-/Partyflächen und
+  `ride`-Gebäude einmalig in Datensätze. Pool wird in `swimArea` plus
+  eigenständige Wasserrutschen aufgeteilt. `removedAttractionIds` **meldet**
+  Anlagen, die sich nicht in einen Datensatz konvertieren lassen (z. B. ein
+  Kurs ohne Stücke); entfernt wird nichts, die Live-Zeile bleibt unverändert in
+  `coasters`/`courses` und hat nur keinen Datensatz.
+  **Doppelmodell** (offizielle Regel:
+  [attractions.md → Doppelmodell](attractions.md#doppelmodell-offizielle-regel-bewusst-ohne-migration)):
+  `coasters` und `courses` sind die gespeicherte Wahrheit. Nur wenn eines
+  dieser Arrays im Stand fehlt oder leer ist (v31-Stände), wird es beim Laden
+  aus `attractions` projiziert; sonst gewinnen die gespeicherten Live-Zeilen.
+  `campingCells`, `campInstallations` und `stageForecourtCells` bleiben die
+  gespeicherten Live-Arrays, wenn sie im Stand stehen; nur fehlende Arrays
+  fallen auf die `camping`-/`partyArea`-Projektion zurück.
+  `refreshLegacyAttractionRecords` leitet die Datensätze in `migrateSnapshot`
+  und noch einmal in `repairSnapshotEntities` nach der Reparatur der
+  Live-Arrays ab. Dabei wird ein gemischter Stand repariert: ein Bahn- oder
+  Kurs-Datensatz ohne Live-Zeile und ein Ride-Datensatz ohne `ride`-Gebäude
+  werden verworfen, eine Live-Zeile ohne Datensatz bekommt einen. Kanonische
+  Datensätze aus `startAttraction` (`attraction-…`) bleiben unverändert.
+  `syncStageAudience` baut bühnenzugehörige Vorplätze neu. Aktuelle
+  Snapshot-Version ist 34; das Einfrieren des Doppelmodells ändert kein
+  Snapshot-Feld.
   `courses` (Kurs-Attraktionen): fehlend = `[]` via `normalizeCourses`.
   Neues Kind `waterSlide` (eigene Strecke, startet mit Leitern).
   `normalizeCourses` teilt Legacy-`waterSlide`-Stücke auf Pool-Kursen in

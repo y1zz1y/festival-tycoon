@@ -196,6 +196,13 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   Scripted-Segment. Bau/Abriss/Zugang sind optimistic; Betrieb, Preis und
   Einstellungen werden vom Host bestätigt. `commandRegistry.ts`,
   `commands.ts` und `bind.ts` behandeln alle Varianten exhaustiv.
+  Diese kanonischen Commands ändern nur kanonische Datensätze
+  (`startAttraction`-IDs). Eine Legacy-ID (Bahn, Kurs, `ride`-Gebäude,
+  Camping/Party) und jede Projektionsart (`coaster:*`, `course:*`,
+  `waterSlide`, `paintball`, `swimArea`, `camping`, `partyArea`) lehnt der
+  Host mit `ok: false` ab; Bahnen und Kurse laufen weiter über ihre eigenen
+  Commands. Doppelmodell:
+  [attractions.md → Doppelmodell](attractions.md#doppelmodell-offizielle-regel-bewusst-ohne-migration).
 - Neue persistente Weltfelder: Codec / `worldUpdates` und Join-Vollsync.
   Bühnenvorlagen und platzierte Bühnen übertragen ab v33 optional
   `StageDesign.forecourtDepth` (1–24). Der vorhandene
@@ -210,9 +217,13 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   Datensätze nur nach. Dasselbe gilt für `courses` und `coasters`:
   ein Attractions-Delta ohne den gerade gesetzten Kurs darf die
   Live-Zeile nicht löschen, sonst flackert die Anlage und die Kachel
-  bleibt belegt, ohne dass Inspect eine Entity findet.
-  `applyNetworkUpdate` merget die Live-IDs, `migrateCourse` schreibt
-  auch Eingangs-only-Kurse und die erste Wasserrutschen-Leiter.
+  bleibt belegt, ohne dass Inspect eine Entity findet. Ein Delta, das
+  `attractions` ohne `coasters`/`courses` trägt, ersetzt oder ändert
+  **keine** bestehende Client-Live-Zeile (Objekt und Preis bleiben);
+  `adoptMissingLiveRows` projiziert nur IDs, die der Client noch nicht
+  hat. Danach leitet `refreshLegacyAttractionRecords` die Datensätze aus
+  den Live-Arrays neu ab. `migrateCourse` schreibt auch Eingangs-only-Kurse
+  und die erste Wasserrutschen-Leiter.
   Fahrzeugpositionen und Routen behalten das bestehende optionale
   `RoadPosition.elevation` auch beim Laden/Normalisieren. Der Host berechnet
   Straßenbelegung und Vorfahrt pro Ebene; keine zusätzlichen Commands oder

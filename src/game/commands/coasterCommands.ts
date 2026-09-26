@@ -19,6 +19,8 @@ import type { ActionResult, GameSnapshot } from '../types/snapshot'
 export type CoasterCommandContext = {
   state: GameSnapshot
   nextId: (prefix: string) => string
+  /** Coaster ids share the coaster/course/attraction namespace of the dual model. */
+  nextAttractionId: (prefix: string) => string
   getPlaceElevation: (x: number, z: number) => number
   isInWorld: (x: number, z: number) => boolean
   canBuildTrackPiece: (
@@ -57,7 +59,7 @@ export function startCoasterCommand(
     return { ok: false, message: 'Nicht genug Geld' }
   }
 
-  const id = context.nextId('coaster')
+  const id = context.nextAttractionId('coaster')
   bookFinance(context.state, 'construction', -TRACK_PIECES.station.cost)
   context.state.coasters.push({
     id,

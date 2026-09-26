@@ -1,6 +1,7 @@
 import { SIMULATION_CONFIG } from '../simulationConfig'
 import { grantAttractionFun } from '../attractionFun'
 import type { Visitor } from '../types/entities'
+import { isLegacyAttractionId } from './dualModel'
 import { orderTrackFromStart, sampleTrackPoint } from './trackGraph'
 import type { Attraction, AttractionPoint } from './types'
 
@@ -12,9 +13,10 @@ export type AttractionRuntimeHooks = {
   injure: (visitor: Visitor, point: AttractionPoint) => void
   isWater: (x: number, z: number, elevation: number) => boolean
   /**
-   * Attractions that a dedicated system already drives this tick. Coasters run
-   * on `CoasterSimulation` (SI physics) and courses on `stepCourses`; stepping
-   * them here as well would admit and move the same guests twice.
+   * Attractions that a dedicated system already drives this tick
+   * (`legacyAttractionIds`). Coasters run on `CoasterSimulation` (SI physics),
+   * courses on `stepCourses` and rides on the building pipeline; stepping them
+   * here as well would admit and move the same guests twice.
    */
   legacyIds?: ReadonlySet<string>
 }
@@ -30,7 +32,7 @@ export function stepAttractions(
   const visitors = new Map(hooks.visitors.map((visitor) => [visitor.id, visitor]))
   attractions.forEach((attraction) => {
     if (attraction.operationMode === 'closed') return
-    if (hooks.legacyIds?.has(attraction.id)) return
+    if (isLegacyAttractionId(attraction.id, hooks.legacyIds)) return
     admitQueuedVisitors(attraction, visitors, hooks)
     if (attraction.layout.kind === 'track') {
       if (attraction.runtime.kind === 'course') {

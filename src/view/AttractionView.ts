@@ -9,6 +9,7 @@ import {
   Vector3,
   type Object3D,
 } from 'three'
+import { isLegacyAttractionId } from '../game/attractions/dualModel'
 import type { Attraction } from '../game/attractions/types'
 import { disposeObject3D } from './disposeObject3D'
 
@@ -30,8 +31,13 @@ export class AttractionView {
   readonly group = new Group()
   private signature = ''
 
+  /**
+   * Draws canonical records plus the camping/party overlay records. Coasters,
+   * courses and rides have their own views, so their projection records
+   * (`legacyAttractionIds`) are skipped here.
+   */
   update(attractions: readonly Attraction[], legacyIds: ReadonlySet<string> = new Set()): void {
-    const visible = attractions.filter((attraction) => !legacyIds.has(attraction.id))
+    const visible = attractions.filter((attraction) => !isLegacyAttractionId(attraction.id, legacyIds))
     const signature = JSON.stringify(visible.map((attraction) => [
       attraction.id,
       attraction.definitionId,

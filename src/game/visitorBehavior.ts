@@ -19,6 +19,7 @@ import type { Booking } from './festivalManagement';
 import type { BuildingKind } from './catalog';
 import type { Coaster } from './coasters';
 import type { Attraction } from './attractions/types';
+import { isLegacyAttractionId, legacyAttractionIds } from './attractions/dualModel';
 import { courseCapacityFor, courseEntrance, isCourseSwimCell, validateCourse, type CourseAttraction } from './courseAttractions';
 import { CampingSystem } from './camping';
 import type { CampingCell } from './camping';
@@ -3209,16 +3210,10 @@ export class VisitorBehaviorService {
     // Coasters, courses and rides keep their own finders, which know the ride
     // offer, queue capacity and the coaster a guest is avoiding. Their canonical
     // records must not be offered a second time here.
-    const legacyIds = new Set<string>([
-      ...(this.context.state.coasters ?? []).map((coaster) => coaster.id),
-      ...(this.context.state.courses ?? []).map((course) => course.id),
-      ...this.context.state.buildings
-        .filter((building) => building.kind === 'ride')
-        .map((building) => building.id),
-    ])
+    const legacyIds = legacyAttractionIds(this.context.state)
     const candidates = this.context.state.attractions
       .filter((attraction) =>
-        !legacyIds.has(attraction.id) &&
+        !isLegacyAttractionId(attraction.id, legacyIds) &&
         attraction.operationMode === 'open' &&
         attraction.access.mode === 'queuedEntrance' &&
         Boolean(attraction.access.entrance) &&

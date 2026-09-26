@@ -36,6 +36,7 @@ import { FestivalLightsView } from './FestivalLightsView'
 import { AccessControlView } from './AccessControlView'
 import { CourseView } from './CourseView'
 import { AttractionView } from './AttractionView'
+import { isLegacyAttractionId, legacyAttractionIds } from '../game/attractions/dualModel'
 import { createRoadDirectionArrowGeometry } from './roadDirectionArrow'
 import { wayDeckGeometry, wayDeckMaterial } from './wayTextures'
 import { ICON_IDS, iconTexture, type IconId } from './spriteAtlas'
@@ -505,6 +506,8 @@ export class WorldView {
   private logisticsView = new LogisticsView()
   private courseView = new CourseView()
   private attractionView = new AttractionView()
+  /** Rebuilt when the snapshot data changes, read by the per-frame rider set. */
+  private legacyRecordIds: ReadonlySet<string> = new Set()
   private accessControlView = new AccessControlView()
   private supplyChainView = new SupplyChainView()
   private logisticsMode = false
@@ -1027,14 +1030,8 @@ export class WorldView {
     if (dataChanged) this.logisticsView.setStructurePaths(snapshot.buildings.filter(b => b.kind === 'path').map(b => ({ x:b.x, z:b.z, elevation:b.elevation, slope:b.pathSlope ?? 0, direction:b.pathSlopeDirection ?? 0, road:false })))
     if (dataChanged) this.courseView.update(snapshot.courses ?? [], snapshot.visitors, snapshot.simTick)
     if (dataChanged) {
-      this.attractionView.update(
-        snapshot.attractions,
-        new Set([
-          ...snapshot.coasters.map((coaster) => coaster.id),
-          ...snapshot.courses.map((course) => course.id),
-          ...snapshot.buildings.filter((building) => building.kind === 'ride').map((building) => building.id),
-        ]),
-      )
+      this.legacyRecordIds = legacyAttractionIds(snapshot)
+      this.attractionView.update(snapshot.attractions, this.legacyRecordIds)
     }
     this.logisticsView.update(snapshot.logistics, (x, z) =>
       getTerrainHeight(snapshot.terrain, x, z),
@@ -3120,17 +3117,23 @@ export class WorldView {
     for (const vehicle of this.currentSnapshot?.logistics.roadVehicles ?? []) {
       for (const passengerId of vehicle.passengerIds) hiddenPassengers.add(passengerId)
     }
+    // Live course riders plus riders of canonical-only records. A projection
+    // record's riders are a stale copy of its course and would keep finished
+    // guests visible after they boarded a coaster or a ride.
+    const legacyIds = this.legacyRecordIds
     const courseRiders = new Set(
       [
         ...(this.currentSnapshot?.courses ?? []).flatMap((course) =>
           course.riders.map((rider) => rider.visitorId),
         ),
         ...(this.currentSnapshot?.attractions ?? []).flatMap((attraction) =>
-          attraction.runtime.kind === 'course'
-            ? attraction.runtime.riders.map((rider) => rider.visitorId)
-            : attraction.runtime.kind === 'scriptedRide'
-              ? attraction.runtime.occupantIds
-              : [],
+          isLegacyAttractionId(attraction.id, legacyIds)
+            ? []
+            : attraction.runtime.kind === 'course'
+              ? attraction.runtime.riders.map((rider) => rider.visitorId)
+              : attraction.runtime.kind === 'scriptedRide'
+                ? attraction.runtime.occupantIds
+                : [],
         ),
       ],
     )

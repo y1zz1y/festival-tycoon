@@ -1,3 +1,4 @@
+import { dropLegacyAttractionRecords } from './attractions/projections'
 import { BUILDINGS, type BuildingKind } from './catalog'
 import { isQueuedFacilityKind } from './shopGoods'
 import { bookFinance, canAfford } from './finance'
@@ -534,6 +535,9 @@ export class PlacementService {
       )
     }
     c.state.buildings = c.state.buildings.filter((item) => item.id !== building.id)
+    // A ride building may own a scripted record the v30 loader migrated; the
+    // signature gate does not watch buildings, so drop that projection here.
+    if (building.kind === 'ride') dropLegacyAttractionRecords(c.state, building.id)
     if (building.stageDesign) syncStageAudience(c.state)
     if (
       building.kind === 'path' ||

@@ -8,30 +8,130 @@ parametrisiert drei Layouts:
 - `area`: Paintball, Schwimm-, Camping- und Partyfläche;
 - `scripted`: Karussell und stapelbarer Bungee-Turm.
 
-`coasters` und `courses` sind die **editierte** Wahrheit ihrer Fachsysteme.
-`refreshAttractionProjections` darf sie auf dem MP-Client nicht
-wegwerfen, wenn ein Attractions-Delta den gerade gesetzten Kurs nicht
-trägt (Eingangs-only-Graph). `applyNetworkUpdate` merget Live-IDs nach
-und `refreshLegacyAttractionRecords` schreibt den kanonischen Datensatz
-zurück — Occupancy und Entity bleiben zusammen. Campingflächen und
-Bühnenvorplätze bleiben die **live** Ausweisungsarrays (`campingCells`,
-`campInstallations`, `stageForecourtCells`). `migrateCourse` erzeugt auch
-für einen nackten Eingang oder die erste Wasserrutschen-Leiter einen
-Datensatz. Kursdetails: [`course-attractions.md`](course-attractions.md).
-
-**Achterbahnen und Kurse sind Ausnahmen und gehören ihren Fachsystemen.** Sie
-werden über `state.coasters` / `state.courses` editiert und getickt
-(`CoasterSimulation`, `stepCourses`); ihr kanonischer `attractions`-Datensatz
-wird danach über `refreshLegacyAttractionRecords` nachgezogen, damit ein Save
-keine Bahn verliert. `stepAttractions` überspringt diese IDs
-(`legacyIds`), sonst würden sie doppelt simuliert. `removeCoaster` /
-`removeCourse` räumen den Datensatz über `dropLegacyAttractionRecords` ab.
-Der Sync hängt an einem billigen `legacyAttractionSignature`-Gate
-(inkl. Camping-/Vorplatzzellen) und läuft nicht auf jedem Tick.
-
 **Schienen-Editor / RCT2-Anschlussregeln:** [`coaster.md`](coaster.md).
 Gameplay, Queues und Fahrgeschäfte bleiben hier; der Track-Editor, die
 Stückkataloge und die Anschluss-State-Machine stehen dort.
+
+## Doppelmodell (offizielle Regel, bewusst ohne Migration)
+
+Das Doppelmodell ist eingefroren: keine Migration, kein neues Snapshot-Feld,
+Snapshot-Version bleibt 34. Die Invarianten-Tests in
+`tests/attractionFoundation.ts` (`assertDualModel`) halten es fest.
+
+**Wahrheit:** `state.coasters` (Achterbahnen) und `state.courses`
+(Mudmasters, Tree-to-Tree, Schwimmbad, Paintball, Wasserrutsche) sind die
+editierte und getickte Wahrheit (`CoasterSimulation`, `stepCourses`). Ebenso
+bleiben `campingCells`, `campInstallations`, `stageForecourtCells` und
+`ride`-Gebäude (Karussell, Bungee, Flat Rides) Live-Quellen. Der
+`attractions`-Datensatz mit derselben ID ist eine **abgeleitete Projektion**:
+Save- und MP-Spiegel, nie Quelle. `migrateCourse` erzeugt auch für einen
+nackten Eingang oder die erste Wasserrutschen-Leiter einen Datensatz.
+Kursdetails: [`course-attractions.md`](course-attractions.md).
+
+**Eine Legacy-ID-Regel:** `src/game/attractions/dualModel.ts` entscheidet als
+einzige Stelle, ob ein Datensatz einem Fachsystem gehört:
+`legacyAttractionIds` (Bahnen, Kurse, `ride`-Gebäude) zusammen mit
+`isLegacyAttractionId` (deckt auch `{poolId}-slide-N` ab). `stepAttractions`,
+`findReachableAttraction`, `recalculateQueueDirections`, `AttractionView` und
+die Fahrgast-Sichtbarkeit in `WorldView` (Set pro Datenänderung, nicht pro
+Frame) nutzen genau diese Funktionen. Kanonisch sind nur Datensätze aus
+`startAttraction` (IDs `attraction-…`, heute Karussell und Bungee als
+`scripted`); `isCanonicalAttractionRecord` prüft das an der Form des
+Datensatzes ohne Gebäude-Scan und ist, weil Waisen verworfen werden, das
+Gegenstück der Legacy-ID-Regel (Test: `assertDualModel`). Der
+Pro-Besucher-Pfad `removeVisitorFromCoasterQueues` nutzt diese Formprüfung.
+
+**Schreiben:** Nur `refreshLegacyAttractionRecords` erzeugt oder überschreibt
+Projektionsdatensätze, per `Object.assign` alle Felder. Derselbe Lauf entfernt
+Waisen (Bahn-/Kurs-Datensatz ohne Live-Zeile, vom Lader migrierter
+Ride-Datensatz ohne `ride`-Gebäude) und den Datensatz einer Live-Zeile, die
+nicht mehr projiziert (keine Kante, keine Fläche); Camping/Party werden
+komplett neu aufgebaut. `dropLegacyAttractionRecords` löscht sofort beim
+Abriss (`removeCoaster`, `removeCourse` samt `-slide-`, Undo bis leer, Abriss
+eines `ride`-Gebäudes in `placementService.ts`). Verboten:
+
+- ein Feld eines Projektionsdatensatzes schreiben (`name`, `layout`, `access`,
+  `operationMode`, `price`, `queue`, `runtime.*`). Es wiche bis zur nächsten
+  Auffrischung ab und würde dann still verworfen.
+- kanonische Commands auf Legacy-IDs oder Projektionsarten:
+  `constructAttraction`, `setAttractionOperation`, `setAttractionPrice`,
+  `configureAttraction` und `removeAttraction` lehnen mit `ok: false` und
+  deutscher Meldung ab. `startAttraction` baut kein `coaster:*`, `course:*`,
+  `waterSlide`, `paintball`, `swimArea`, `camping` oder `partyArea`; die
+  entstehen im Achterbahn- bzw. Kurs-Editor oder durch Ausweisen. Eine
+  Achterbahn ohne Stücke entsteht so nie.
+- die Rückprojektion (`projectCoasters` / `projectCourses`) über eine
+  bestehende Live-Zeile. Sie ist verlustbehaftet (Punkt-`pitch`/`bank`,
+  Kurs-Ein-/Ausgangs-IDs `{id}-entrance`, veraltete Queue und Rider). Erlaubt
+  nur (1) in `migrateSnapshot`, wenn ein Live-Array fehlt oder leer ist
+  (v31-Stände), und (2) über `adoptMissingLiveRows` auf dem MP-Client für
+  **fehlende** IDs. Eine vorhandene Live-Zeile gewinnt immer.
+
+**Lesen:** Laufzeitfelder eines Projektionsdatensatzes (`queue`,
+`runtime.train/riders/match/telemetry/occupantIds`) sind nur der Stand der
+letzten Auffrischung; `scrubQueue` und `stepCourses` ersetzen die Arrays jeden
+Tick. Niemand liest sie. Strukturfelder (`layout`, `access`, Modus, Preis)
+sind nach jeder Editoränderung frisch; Simulation, Besucherziele,
+Queue-Richtung und Rendering lesen trotzdem die Live-Arrays.
+
+**Auffrischen:** Host/offline in `emit('mutate')` hinter
+`legacyAttractionSignature`: ein 32-Bit-Hash (`Math.imul`, jeder Schritt eine
+Bijektion, also ändert jede einzelne Wertänderung das Ergebnis; nie
+`Infinity`/`NaN`, egal wie groß der Park ist). Er deckt Anzahl, IDs, Namen,
+Typ, Stück-IDs/-arten/-anker, Tor-Koordinaten, Modus als String (`open` ≠
+`test`), Preis, Dispatch, Kursstücke und -flächen, Campingzellen und
+-installationen sowie Vorplatzzellen samt `stageId` ab. Ein Wege-Flächenbau
+(`wayBatch`) prüft erst beim abschließenden `emit`. MP-Client: unbedingt in
+`applyNetworkWorld`/`applyNetworkUpdate`. Laden: in `migrateSnapshot` und noch
+einmal in `repairSnapshotEntities` nach der Reparatur der Live-Arrays
+(`normalizeCourses`, `repairCoaster` mit `queue ??= []`, `rideType`,
+Camp-Installationen). Kein Tick frischt auf.
+
+**IDs:** Achterbahnen, Kurse und kanonische Datensätze teilen einen
+Namensraum; keine ID wird doppelt vergeben. Achterbahnen und kanonische
+Datensätze nutzen `nextAttractionId` in `GameState` (`nextId` plus Überspringen
+belegter IDs, denn nach dem Laden setzt `idCounter` neu auf). Kurse nutzen
+`nextCourseId`: weiter `course-${simTick}-${n}` aus dem synchronisierten
+Zustand, beginnend bei `courses.length + 1`, und bei Belegung das nächste
+freie `n`. Das alte Schema ohne Prüfung wiederholte sich bei pausiertem Spiel
+(A, B starten, A abreißen, C starten); ein prozesslokaler Zähler würde
+dagegen auf Host und optimistischem MP-Client verschiedene IDs liefern, und
+die folgenden Kursstück-Commands des Clients fänden den Kurs nicht.
+
+**Save/MP:** Beide Formen werden gespeichert und übertragen. Laden bevorzugt
+die Live-Arrays und leitet die Datensätze neu ab; ein gemischter Stand wird
+dabei repariert (Waise weg, fehlender Datensatz neu), nie simuliert. Ein
+Attractions-only-Delta ändert keine bestehende Client-Live-Zeile.
+Ride-Datensätze entstehen nur im Lader (v30 oder leeres `attractions`) aus
+`ride`-Gebäuden, werden nicht aufgefrischt und verschwinden mit dem Gebäude.
+
+**Erweitern:** Ein bestehendes Live-System darf wachsen, der neue Fall läuft
+über die Projektion mit: ein neuer `rideType` des `ride`-Gebäudes (braucht
+nichts in `attractions`), ein neuer `CoasterTypeId` (bekommt automatisch
+`coaster:<typ>`) oder eine neue `CourseKind` (Definition `course:<kind>` in
+`ATTRACTION_DEFINITIONS`, Zuordnung in `migrateCourse`/`projectCourses`).
+**Neue Attraktionsarten** gehören dagegen ausschließlich ins kanonische
+Modell: Eintrag in `ATTRACTION_DEFINITIONS`, `createAttraction`,
+`resolveAttractionConstruction`, Laufzeit in `stepAttractions`, Darstellung
+in `AttractionView`, Commands `startAttraction`/`constructAttraction`/….
+Sie bekommen eine **eigene** `runtime.kind` (nicht `coaster`/`course`, sonst
+zieht die Projektion sie in die Live-Arrays und die Waisen-Regel entfernt
+sie), kein neues Live-Array und keinen Eintrag in der Legacy-ID-Menge.
+
+**Warum Achterbahnen und Kurse die Ausnahme bleiben:** Achterbahnen hängen an
+der RCT2-Anschluss-State-Machine auf `TrackPiece` (Start-/End-Anker,
+Punkt-Pitch/Bank), an `CoasterSimulation` (SI-Physik, Sample-Caches pro Bahn)
+und an eigenen MP-Commands. Kurse hängen an zwei Editoren (Palette/Weg-Pfeile),
+`stepCourses` (RNG-Verzweigung, Paintball-Match) und der Kachelbelegung. Der
+`TrackGraph` bildet das nicht verlustfrei ab. Eine Migration würde Saves,
+Mehrspieler und Editorverhalten riskieren; deshalb bleibt das Doppelmodell
+offiziell.
+
+**Bekannte Grenzen:** Camping- und Party-Datensätze zeichnet `AttractionView`
+weiter als flache Flächenboxen; sie folgen den Live-Arrays erst beim nächsten
+`emit('mutate')`, Zelte, die Gäste im Tick aufbauen, also verzögert. Ein
+32-Bit-Hash kann theoretisch kollidieren (≈ 1 : 4 Mrd. je Änderung); eine
+einzelne Wertänderung ab 1/1000 (Koordinate, Preis, Winkel) erkennt er immer.
 
 ## Wo finden
 
@@ -43,7 +143,8 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
 | Gemeinsamer Resolver / Abschluss | `src/game/attractions/construction.ts` | `resolveAttractionConstruction`, `validateAttractionCompletion` |
 | Betriebsstrategien | `src/game/attractions/runtime.ts` | Loop/Shuttle, Fußgänger, Slider, Scripted |
 | Spaßgutschrift bei Abschluss | `src/game/attractionFun.ts`, `src/game/simulationConfig.ts` | `grantAttractionFun`, `needs.ride.funGain`, `coasters.funGain`, `courses.funGain` |
-| v30→v31 / Projektionen | `src/game/attractions/migration.ts`, `src/game/attractions/projections.ts` | `migrateLegacyAttractions`, `refreshAttractionProjections` |
+| v30→v31 / Projektionen | `src/game/attractions/migration.ts`, `src/game/attractions/projections.ts` | `migrateLegacyAttractions`, `refreshLegacyAttractionRecords`, `legacyAttractionSignature`, `adoptMissingLiveRows` |
+| Doppelmodell: Legacy-IDs, Waisen | `src/game/attractions/dualModel.ts` | `legacyAttractionIds`, `isLegacyAttractionId`, `isCanonicalAttractionRecord`, `isProjectionDefinitionId`, `isOrphanProjectionRecord` |
 | Eigene Editoren (kein gemeinsames Panel) | `src/ui/coasterBuilderPanel.ts`, `src/ui/courseBuilderPanel.ts`, `src/main.ts` | Achterbahn: Palette, Pitch/Bank/Chain, offenes Ende; Kurse: Palette oder Weg-Pfeile laut `editorMode`. Betrieb für Kurse/Paintball/Pool im Infofenster `#course-options`, nicht im Builder |
 | Editor-Modus | `src/game/trackEditorMode.ts`, `src/game/coasterTypes.ts`, `src/game/courseAttractions.ts` | `editorMode: 'palette' \| 'directionArrows'` am Katalog; Default Achterbahn = Palette |
 | Autoritative Commands | `src/game/commands/attractionCommands.ts` | Start, Konstruktion, Betrieb, Preis, Konfiguration, Abriss |
@@ -165,7 +266,14 @@ Stückkataloge und die Anschluss-State-Machine stehen dort.
 
 `tests/rideAccess.ts` (beide Ride-Typen, Queues, Saves, Multiplayer).
 `tests/attractionFoundation.ts` (Abschlussgutschrift der gemeinsamen Track-,
-Area-, Coaster- und Scripted-Runtimes; keine Gutschrift beim Anstehen).
+Area-, Coaster- und Scripted-Runtimes; keine Gutschrift beim Anstehen;
+Doppelmodell: `assertDualModel` nach jedem Editorschritt für Bahn und Kurs,
+auch mit ≥ 300 Campingzellen, Signatur endlich und empfindlich für jede
+Änderungsklasse, eindeutige Kurs-IDs, keine Waisen nach Abriss/Undo/Ride-Abriss,
+keine Doppelsimulation, Queue-Richtung vom Live-Eingang, idempotente
+Save-Runde samt Reparatur eines gemischten Stands, MP-Vollsync/Deltas ohne
+Änderung bestehender Client-Live-Zeilen, Ablehnung von Legacy-IDs durch die
+kanonischen Commands, festgeschriebene Verluste der Rückprojektion).
 `tests/operations.ts` (Serpentinen-Kette, Rückweg, leerer Stand).
 `tests/festivalAdditions.ts` (1-Feld-Steigungen, flach↔steil-Übergang, Wagen-Mesh, Schienenjoin-Rundung / Pfadkontinuität, vollständiger Abriss inkl. Queue und Command, Physik-Untergrenzen `chainSpeed` / `stationLaunchSpeed` / `dragArea` / `maximumSpeed`).
 `tests/coasterTypes.ts` (Typ-Katalog, alle Typen spielbar, Anschlussregeln, Helix, Palette-Filter, Testfahrt während Planung, SI-Geschwindigkeitsuntergrenzen — Pflicht bei Editor-/Typ-Änderungen, siehe `coaster.md`).
@@ -174,7 +282,8 @@ Area-, Coaster- und Scripted-Runtimes; keine Gutschrift beim Anstehen).
 ## Bei Änderungen dieses Dokument
 
 Aktualisieren, wenn Dispatch-Modi, Gate-Regeln, Join-Glättung,
-Physik-Caches, Testfahrt/Planung oder Abriss ändern. Track-Kinds, Anschlussregeln, Typ-Katalog
+Physik-Caches, Testfahrt/Planung, Abriss oder das Doppelmodell (Signatur,
+Legacy-ID-Regel, Rückprojektion) ändern. Track-Kinds, Anschlussregeln, Typ-Katalog
 und Bau-UI: [`coaster.md`](coaster.md). Neue Attraktionsgebäude auch in
 `docs/buildings.md`.
 

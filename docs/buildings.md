@@ -46,7 +46,10 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
   `GameState.canPlace` die gemeinsame autoritative Prüfung für Vorschau und Bau.
   Weg-/Straßenhöhen, Kreuzungen, Rücknahme und die konkreten
   Gebäude-/Overlay-/Straßen-Abrissmutationen liegen in `PlacementService`;
-  `bulldozeCommand` behält Zielauswahl und Flächenorchestrierung.
+  `bulldozeCommand` behält Zielauswahl und Flächenorchestrierung. Der Abriss
+  eines `ride`-Gebäudes entfernt dort auch den vom Lader migrierten
+  `attractions`-Datensatz (`dropLegacyAttractionRecords`, Doppelmodell in
+  `docs/attractions.md`).
 - `BUILDING_GHOST_MODES` im Katalog bestimmt Modell- gegen Footprint-Vorschau.
   Deko verfeinert dies auf Slotmodelle; bestehende Modelle werden als
   transparente 3D-Geister wiederverwendet.

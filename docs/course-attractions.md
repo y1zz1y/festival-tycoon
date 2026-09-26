@@ -149,18 +149,31 @@ nicht der Spieler-Baupfad.
 
 ## Wichtige Invarianten
 
-- Snapshot v31 speichert Kurse in `attractions`. `courses` ist die editierte
-  und getickte Form; der kanonische Datensatz wird danach über
-  `refreshLegacyAttractionRecords` nachgezogen, `removeCourse` räumt ihn über
+- **Doppelmodell** (offizielle Regel:
+  [attractions.md → Doppelmodell](attractions.md#doppelmodell-offizielle-regel-bewusst-ohne-migration)):
+  `courses` ist die editierte und getickte Wahrheit, der `attractions`-
+  Datensatz eine Projektion. Er wird über `refreshLegacyAttractionRecords`
+  nachgezogen; `removeCourse` und Undo bis leer räumen ihn über
   `dropLegacyAttractionRecords` ab (inklusive abgeleiteter
-  `-slide-`-Rutschen). `migrateCourse` schreibt auch Eingangs-only-Kurse
-  (leerer Graph, Access vom Eingang), sonst wirft ein Attractions-Delta den
-  Live-Kurs weg: Kachel bleibt beim Host belegt, der Client findet keine
-  Entity. `applyNetworkUpdate` behandelt `courses`/`coasters` wie Camping —
-  Live-Array gewinnt, eine Projektion merget fehlende IDs nach.
-  `stepAttractions` überspringt Kurs-IDs, sonst laufen Kurse doppelt.
+  `-slide-`-Rutschen), und ein Kurs ohne projizierbare Fläche/Strecke
+  verliert ihn. `migrateCourse` schreibt auch Eingangs-only-Kurse (leerer
+  Graph, Access vom Eingang), sonst wirft ein Attractions-Delta den Live-Kurs
+  weg: Kachel bleibt beim Host belegt, der Client findet keine Entity.
+  `applyNetworkUpdate` behandelt `courses`/`coasters` wie Camping: die
+  bestehende Live-Zeile gewinnt immer, `adoptMissingLiveRows` ergänzt nur
+  fehlende IDs. Kanonische Commands (`startAttraction('paintball')` usw.)
+  lehnen Kurse ab. `stepAttractions` überspringt Kurs-IDs und
+  `{poolId}-slide-N` (`isLegacyAttractionId`), sonst laufen Kurse doppelt.
+  Kurs-IDs kommen aus `nextCourseId`: `course-${simTick}-${n}` aus dem
+  synchronisierten Zustand (Host und optimistischer Client rechnen dieselbe
+  ID), belegte IDs über Bahnen, Kurse und Datensätze werden übersprungen.
+  Früher wiederholte sich die ID bei Pause (A, B, A abreißen, C).
+  Eine neue `CourseKind` ist eine erlaubte Erweiterung: Definition
+  `course:<kind>` in `ATTRACTION_DEFINITIONS` und Zuordnung in
+  `migrateCourse`/`projectCourses` ergänzen.
   v30-Pool/Paintball werden einmalig konvertiert; nicht eindeutig
-  konvertierbare Anlagen stehen in `migrationReport.removedAttractionIds`.
+  konvertierbare Anlagen stehen in `migrationReport.removedAttractionIds`,
+  bleiben aber als Live-Zeile in `courses` (ohne Datensatz).
 - Host-autoritative Commands, keine Render-Mutation.
 - Verbundene Details werden in ein statisches Vertex-Color-Mesh
   zusammengeführt; Flächen und Punktobjekte bleiben instanziert. Die

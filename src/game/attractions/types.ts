@@ -157,8 +157,10 @@ export type Attraction = {
 }
 
 /**
- * Transitional input shapes are accepted only by the v30→v31 loader. They
- * never appear as top-level runtime snapshot arrays after migration.
+ * The live arrays the projection records are derived from. The v30→v31 loader
+ * converts them once, and they stay top-level runtime snapshot arrays after
+ * migration: coasters, courses, camping cells/installations and stage forecourts
+ * are the edited truth of the dual model (docs/attractions.md, "Doppelmodell").
  */
 export type LegacyAttractionInput = {
   coasters?: Coaster[]

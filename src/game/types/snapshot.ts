@@ -65,9 +65,15 @@ export type GameSnapshot = {
   migrationReport?: {
     removedAttractionIds: string[]
   }
-  /** @deprecated v31 runtime projection; removed after attraction-system cutover. */
+  /**
+   * Edited and ticked truth of every coaster (dual model, docs/attractions.md).
+   * The `attractions` record with the same id is a derived projection.
+   */
   coasters: Coaster[]
-  /** @deprecated v31 runtime projection; removed after attraction-system cutover. */
+  /**
+   * Edited and ticked truth of every course, pool, paintball field and water
+   * slide (dual model). The `attractions` record with the same id is derived.
+   */
   courses: CourseAttraction[]
   cashEffects: CashEffect[]
   fireworkEffects: FireworkEffect[]

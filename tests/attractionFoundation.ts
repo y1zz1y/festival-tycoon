@@ -15,17 +15,39 @@ import {
   validateTrackGraph,
 } from '../src/game/attractions/trackGraph'
 import type {
+  Attraction,
   TrackEdge,
   TrackGraph,
   TrackNode,
 } from '../src/game/attractions/types'
-import { GameState } from '../src/game/GameState'
+import {
+  CANONICAL_ATTRACTION_ID_PREFIX,
+  isCanonicalAttractionRecord,
+  isLegacyAttractionId,
+  legacyAttractionIds,
+} from '../src/game/attractions/dualModel'
+import {
+  migrateCamping,
+  migrateCoaster,
+  migrateCourse,
+  migratePartyAreas,
+} from '../src/game/attractions/migration'
+import {
+  legacyAttractionSignature,
+  projectCoasters,
+  projectCourses,
+} from '../src/game/attractions/projections'
+import { GameState, type GameSnapshot } from '../src/game/GameState'
+import { courseNextBuildTarget, createEmptyCourse, createSeededCourse } from '../src/game/courseAttractions'
+import { normalizeScenarioSettings } from '../src/game/scenario'
+import { createBlankSnapshot } from '../src/game/snapshotBootstrap'
 import { defaultStageDesign, stageDetailSize } from '../src/game/stageDesign'
 import { applyGameCommand } from '../src/net/commands'
 import { packWorld } from '../src/net/codec'
 import { WorldUpdates } from '../src/net/worldUpdates'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import type { Visitor } from '../src/game/types/entities'
+import type { ActionResult } from '../src/game/types/snapshot'
 
 export function testAttractionFoundation(): void {
   testTrackDeleteAndReconnect()
@@ -36,6 +58,7 @@ export function testAttractionFoundation(): void {
   testDedicatedSystemsKeepTheirAttractions()
   testAttractionCommands()
   testCampingAndForecourtStayLive()
+  testDualModel()
 }
 
 function testRuntimeFunRewards(): void {
@@ -142,42 +165,52 @@ function testDedicatedSystemsKeepTheirAttractions(): void {
 }
 
 function testAttractionCommands(): void {
-  const game = new GameState()
-  const started = applyGameCommand(game, {
+  const game = flatPark()
+  // Paintball is a course: its live row belongs to the course editor, so the
+  // canonical command refuses it instead of creating a record-only course.
+  const refused = applyGameCommand(game, {
     type: 'startAttraction',
     definitionId: 'paintball',
     x: 4,
     z: 4,
     rotation: 0,
   })
-  assert.equal(started.ok, true)
+  assert.equal(refused.ok, false, 'projection kinds are built in their own editors')
+  assert.equal(game.snapshot.courses.length, 0)
+  const started = applyGameCommand(game, {
+    type: 'startAttraction',
+    definitionId: 'bungee',
+    x: 4,
+    z: 4,
+    rotation: 0,
+  })
+  assert.equal(started.ok, true, started.message)
   assert.ok(started.placedId)
   const attractionId = started.placedId!
   const changed = applyGameCommand(game, {
     type: 'constructAttraction',
     request: {
-      kind: 'addAreaCells',
+      kind: 'addScriptedSegment',
       attractionId,
-      cells: [
-        { x: 4, z: 4, elevation: 0 },
-        { x: 5, z: 4, elevation: 0 },
-      ],
+      segmentKind: 'towerSegment',
     },
   })
-  assert.equal(changed.ok, true)
-  assert.equal(game.getAttraction(attractionId)?.layout.kind, 'area')
-  assert.equal(
-    game.getAttraction(attractionId)?.layout.kind === 'area'
-      ? game.getAttraction(attractionId)!.layout.cells.length
-      : 0,
-    2,
-  )
+  assert.equal(changed.ok, true, changed.message)
+  const tower = game.getAttraction(attractionId)
+  assert.equal(tower?.layout.kind, 'scripted')
+  assert.equal(tower?.layout.kind === 'scripted' ? tower.layout.segments.length : 0, 2)
+  const paintball = game.startCourseArea('paintball', [{ x: 8, z: 4 }, { x: 9, z: 4 }])
+  assert.ok(paintball.ok && paintball.id, paintball.message)
   const client = new GameState()
   client.applyNetworkUpdate({
     attractions: structuredClone(game.snapshot.attractions),
   })
-  assert.equal(client.snapshot.attractions.length, 1)
-  assert.equal(client.snapshot.courses.length, 1, 'network attraction deltas refresh runtime projections')
+  assert.equal(client.snapshot.attractions.length, game.snapshot.attractions.length)
+  assert.deepEqual(
+    client.snapshot.courses.map((course) => course.id),
+    [paintball.id],
+    'an attractions-only delta adopts the missing course, never a canonical record',
+  )
 }
 
 function testTrackDeleteAndReconnect(): void {
@@ -341,12 +374,12 @@ function testCampingAndForecourtStayLive(): void {
 
   const started = applyGameCommand(game, {
     type: 'startAttraction',
-    definitionId: 'paintball',
+    definitionId: 'bungee',
     x: 8,
     z: -8,
     rotation: 0,
   })
-  assert.ok(started.ok)
+  assert.ok(started.ok, started.message)
   assert.ok(game.getCampingCellAt(4, -10), 'attraction commands must not drop designated camping')
   assert.equal(game.canPlace('food', 4, -10).ok, false)
 
@@ -407,14 +440,14 @@ function testCampingAndForecourtStayLive(): void {
     false,
   )
 
-  applyGameCommand(game, {
+  assert.ok(applyGameCommand(game, {
     type: 'constructAttraction',
     request: {
-      kind: 'addAreaCells',
+      kind: 'addScriptedSegment',
       attractionId: started.placedId!,
-      cells: [{ x: 8, z: -8, elevation: 0 }],
+      segmentKind: 'towerSegment',
     },
-  })
+  }).ok)
   assert.equal(
     game.snapshot.stageForecourtCells.filter((cell) => cell.stageId === stage.id).length,
     owned.length,
@@ -440,4 +473,611 @@ function testCampingAndForecourtStayLive(): void {
   })
   assert.ok(forecourtGuest.getStageForecourtCellAt(3, -14), 'MP sync carries manual forecourt cells')
   assert.equal(forecourtGuest.canPlace('food', apron.x, apron.z).ok, false)
+}
+
+// ---------------------------------------------------------------------------
+// Attraction dual model (docs/attractions.md, "Doppelmodell"): coasters and
+// courses are the edited and ticked truth, `attractions` records with the same
+// id are a derived projection. These tests freeze that contract.
+// ---------------------------------------------------------------------------
+
+function testDualModel(): void {
+  testSignatureDetectsEveryEditClass()
+  testCoasterEditsKeepTheDualModel()
+  testSignatureSurvivesLargeParks()
+  testCourseEditsKeepTheDualModel()
+  testCourseIdsNeverCollide()
+  testProjectionRecordsNeverOutliveTheirOwner()
+  testNothingIsSimulatedTwice()
+  testQueueClaimsFollowTheLiveEntrance()
+  testSaveRoundTripKeepsTheDualModel()
+  testMultiplayerKeepsLiveRows()
+  testCanonicalCommandsRefuseLegacyIds()
+  testProjectionLossesArePinned()
+}
+
+const RECTANGLE_CIRCUIT = [
+  'curveRight2',
+  'straight',
+  'curveRight2',
+  'straight',
+  'curveRight2',
+  'straight',
+  'curveRight2',
+] as const
+
+function flatPark(): GameState {
+  const game = new GameState(
+    createBlankSnapshot(normalizeScenarioSettings({ worldSize: 48, unevenness: 0, startingMoney: 500_000 })),
+  )
+  game.addDebugMoney()
+  return game
+}
+
+function structuralJson(record: Attraction | null | undefined): string | undefined {
+  if (!record) return undefined
+  const { definitionId, name, layout, access, operationMode, price } = record
+  return JSON.stringify({ definitionId, name, layout, access, operationMode, price })
+}
+
+/**
+ * The frozen contract: unique ids; every coaster and course that projects has
+ * exactly one record equal to its projection (and none when it does not); no
+ * coaster/course record without its live owner; no migrated ride record without
+ * its building; camping/party records equal to the live overlays.
+ */
+function assertDualModel(game: GameState, label: string, options: { overlays?: boolean } = {}): void {
+  const state = game.snapshot
+  const liveIds = [...state.coasters.map((coaster) => coaster.id), ...state.courses.map((course) => course.id)]
+  assert.equal(new Set(liveIds).size, liveIds.length, `${label}: coaster and course ids are unique`)
+  const recordIds = state.attractions.map((record) => record.id)
+  assert.equal(new Set(recordIds).size, recordIds.length, `${label}: record ids are unique`)
+  const byId = new Map(state.attractions.map((record) => [record.id, record]))
+  for (const coaster of state.coasters) {
+    assert.equal(
+      structuralJson(byId.get(coaster.id)),
+      structuralJson(migrateCoaster(coaster)),
+      `${label}: record of coaster ${coaster.id} follows its live row`,
+    )
+  }
+  for (const course of state.courses) {
+    assert.equal(
+      structuralJson(byId.get(course.id)),
+      structuralJson(migrateCourse(course).find((entry) => entry.id === course.id)),
+      `${label}: record of course ${course.id} follows its live row`,
+    )
+  }
+  const legacyIds = legacyAttractionIds(state)
+  const rides = new Set(state.buildings.filter((building) => building.kind === 'ride').map((building) => building.id))
+  for (const record of state.attractions) {
+    if (record.runtime.kind === 'coaster' || record.runtime.kind === 'course') {
+      assert.ok(isLegacyAttractionId(record.id, legacyIds), `${label}: ${record.id} keeps its live owner`)
+    }
+    if (record.runtime.kind === 'scriptedRide' && !record.id.startsWith(CANONICAL_ATTRACTION_ID_PREFIX)) {
+      assert.ok(rides.has(record.id), `${label}: ride record ${record.id} keeps its building`)
+    }
+    if (record.definitionId !== 'camping' && record.definitionId !== 'partyArea') {
+      assert.equal(
+        isCanonicalAttractionRecord(record),
+        !isLegacyAttractionId(record.id, legacyIds),
+        `${label}: shape check and legacy-id rule agree on ${record.id}`,
+      )
+    }
+  }
+  if (options.overlays === false) return
+  assert.equal(
+    JSON.stringify(state.attractions.filter((record) => record.definitionId === 'camping')),
+    JSON.stringify(migrateCamping(state.campingCells, state.campInstallations) ?? []),
+    `${label}: camping record equals the live overlay`,
+  )
+  assert.equal(
+    JSON.stringify(state.attractions.filter((record) => record.definitionId === 'partyArea')),
+    JSON.stringify(migratePartyAreas(state.stageForecourtCells)),
+    `${label}: party records equal the live forecourt`,
+  )
+}
+
+function stepper(game: GameState, label: string): (name: string, result?: ActionResult | void) => void {
+  return (name, result) => {
+    if (result) assert.ok(result.ok, `${label} ${name}: ${result.message}`)
+    assertDualModel(game, `${label} ${name}`)
+  }
+}
+
+/**
+ * Start, append, undo, delete, close the loop, set and move the entrance, set
+ * the exit, open → test, price and dispatch, checking the contract after every
+ * command. Entrance move and open → test were invisible to the old signature.
+ */
+function buildCircuitCoaster(game: GameState, label: string): string {
+  const step = stepper(game, label)
+  const started = game.startCoaster('classicSteel', 10, -10)
+  step('start', started)
+  const id = started.id!
+  step('append curve', game.appendCoasterPiece(id, 'curveRight2', false))
+  step('append straight', game.appendCoasterPiece(id, 'straight', false))
+  step('append second curve', game.appendCoasterPiece(id, 'curveRight2', false))
+  step('undo', game.undoCoasterPiece(id))
+  step('delete', game.deleteCoasterPiece(id, 2))
+  for (const kind of RECTANGLE_CIRCUIT.slice(1)) step(`close with ${kind}`, game.appendCoasterPiece(id, kind, false))
+  assert.equal(game.getCoaster(id)!.closed, true, `${label}: the rectangle closes`)
+  step('entrance', game.setCoasterAccess(id, 'entrance', 11, -10))
+  step('move entrance', game.setCoasterAccess(id, 'entrance', 10, -11))
+  const entrance = game.getAttraction(id)?.access.entrance
+  assert.deepEqual([entrance?.x, entrance?.z], [10, -11], `${label}: a moved entrance reaches the record`)
+  step('exit', game.setCoasterAccess(id, 'exit', 9, -10))
+  step('open', game.setCoasterOperationMode(id, 'open'))
+  step('test', game.setCoasterOperationMode(id, 'test'))
+  assert.equal(game.getAttraction(id)?.operationMode, 'test', `${label}: open → test reaches the record`)
+  game.updateCoasterPrice(id, 7.5)
+  step('price')
+  game.updateCoasterSettings(id, 'timed', 2)
+  step('dispatch')
+  return id
+}
+
+function testCoasterEditsKeepTheDualModel(): void {
+  const game = flatPark()
+  const id = buildCircuitCoaster(game, 'coaster')
+  const tick = game.snapshot.simTick
+  for (let step = 0; step < 30; step += 1) game.tick(0.1)
+  assert.ok(game.snapshot.simTick > tick, 'the test run actually ticks')
+  // Ticks never refresh records; their structural fields must still match.
+  assertDualModel(game, 'coaster after ticks', { overlays: false })
+  assert.ok(game.bulldoze(10, -10).ok, 'bulldozing the station removes the coaster')
+  assert.equal(game.getCoaster(id), undefined)
+  assert.equal(game.getAttraction(id), undefined, 'bulldozing the station drops the record')
+  assertDualModel(game, 'coaster bulldozed')
+}
+
+/**
+ * The old float `*31` signature turned into ±Infinity after ~205 steps, so a
+ * park with a few hundred camping cells never refreshed a record again.
+ */
+function testSignatureSurvivesLargeParks(): void {
+  const game = flatPark()
+  const cells: Array<{ x: number; z: number }> = []
+  for (let x = -22; x < -2; x += 1) for (let z = 4; z < 20; z += 1) cells.push({ x, z })
+  assert.ok(applyGameCommand(game, { type: 'designateCampingArea', cells }).ok)
+  assert.ok(game.snapshot.campingCells.length >= 300, 'the park carries at least 300 camping cells')
+  assertDualModel(game, 'large park camping')
+  buildCircuitCoaster(game, 'large park coaster')
+  assert.ok(Number.isFinite(legacyAttractionSignature(game.snapshot)))
+}
+
+function testSignatureDetectsEveryEditClass(): void {
+  const game = flatPark()
+  const coasterId = game.startCoaster('classicSteel', 10, -10).id!
+  assert.ok(game.appendCoasterPiece(coasterId, 'curveRight2', false).ok)
+  assert.ok(game.setCoasterAccess(coasterId, 'entrance', 11, -10).ok)
+  assert.ok(game.setCoasterAccess(coasterId, 'exit', 10, -11).ok)
+  const mud = game.startCourse('mudmasters', 4, 6).id!
+  const next = courseNextBuildTarget(game.getCourse(mud)!, 'path', 1, 0)!
+  assert.ok(game.addCoursePiece(mud, 'path', next.x, next.z, next.elevation).ok)
+  assert.ok(game.startCourseArea('pool', [{ x: 12, z: 6 }, { x: 13, z: 6 }]).ok)
+  const base = structuredClone(game.snapshot) as GameSnapshot
+  base.coasters[0]!.operationMode = 'open'
+  base.campingCells = Array.from({ length: 1000 }, (_, index) => ({
+    x: index % 40 - 20,
+    z: 5 + Math.floor(index / 40),
+    elevation: 0,
+  }))
+  base.campInstallations = [{
+    id: 'tent-1',
+    kind: 'tent',
+    cell: { x: 1, z: 5, elevation: 0 },
+    ownerId: 'guest-1',
+    contributorIds: ['guest-1'],
+  }]
+  base.stageForecourtCells = Array.from({ length: 1000 }, (_, index) => ({
+    x: index % 40 - 20,
+    z: -5 - Math.floor(index / 40),
+    elevation: 0,
+    stageId: index < 500 ? 'stage-a' : 'stage-b',
+  }))
+  const signature = legacyAttractionSignature(base)
+  assert.ok(Number.isInteger(signature) && signature >= 0 && signature <= 0xffffffff, 'a finite 32-bit hash')
+  assert.equal(legacyAttractionSignature(structuredClone(base)), signature, 'the signature is deterministic')
+  const edits: Array<[string, (state: GameSnapshot) => void]> = [
+    ['coaster count', (state) => { state.coasters.pop() }],
+    ['coaster piece id', (state) => { state.coasters[0]!.pieces[1]!.id = 'renamed-piece' }],
+    ['coaster piece kind', (state) => { state.coasters[0]!.pieces[1]!.kind = 'straight' }],
+    ['coaster piece position', (state) => { state.coasters[0]!.pieces[1]!.end.x += 1 }],
+    ['coaster piece elevation', (state) => { state.coasters[0]!.pieces[1]!.start.elevation += 0.5 }],
+    ['entrance move', (state) => { state.coasters[0]!.entrance!.x += 1 }],
+    ['exit move', (state) => { state.coasters[0]!.exit!.z -= 1 }],
+    ['open → test', (state) => { state.coasters[0]!.operationMode = 'test' }],
+    ['coaster price', (state) => { state.coasters[0]!.ticketPrice += 0.5 }],
+    ['coaster name', (state) => { state.coasters[0]!.name += ' II' }],
+    ['coaster type', (state) => { state.coasters[0]!.typeId = 'wooden' }],
+    ['dispatch', (state) => { state.coasters[0]!.settings.dispatchIntervalMinutes += 1 }],
+    ['course count', (state) => { state.courses.pop() }],
+    ['course piece id', (state) => { state.courses[0]!.pieces[0]!.id = 'renamed-course-piece' }],
+    ['course piece kind', (state) => { state.courses[0]!.pieces[1]!.kind = 'climbWall' }],
+    ['course piece position', (state) => { state.courses[0]!.pieces[1]!.x += 1 }],
+    ['course area cell', (state) => { state.courses[1]!.areaCells[0]!.x -= 1 }],
+    ['course operating', (state) => { state.courses[0]!.operating = !state.courses[0]!.operating }],
+    ['course price', (state) => { state.courses[0]!.price += 1 }],
+    ['course team size', (state) => { state.courses[1]!.teamSize = 3 }],
+    ['course name', (state) => { state.courses[0]!.name += ' II' }],
+    ['camping cell', (state) => { state.campingCells[999]!.z += 1 }],
+    ['camping installation position', (state) => { state.campInstallations[0]!.cell.x += 1 }],
+    ['camping installation id', (state) => { state.campInstallations[0]!.id = 'tent-2' }],
+    ['forecourt cell', (state) => { state.stageForecourtCells[999]!.x += 1 }],
+    ['forecourt stage', (state) => { state.stageForecourtCells[10]!.stageId = 'stage-b' }],
+  ]
+  for (const [name, edit] of edits) {
+    const copy = structuredClone(base)
+    edit(copy)
+    const changed = legacyAttractionSignature(copy)
+    assert.ok(Number.isFinite(changed), `${name}: the signature stays finite`)
+    assert.notEqual(changed, signature, `${name} changes the signature`)
+  }
+}
+
+function testCourseEditsKeepTheDualModel(): void {
+  const game = flatPark()
+  const step = stepper(game, 'course')
+  const started = game.startCourse('mudmasters', 4, 6)
+  step('start', started)
+  const mud = started.id!
+  for (let index = 0; index < 2; index += 1) {
+    const next = courseNextBuildTarget(game.getCourse(mud)!, 'path', 1, 0)!
+    step(`path ${index + 1}`, game.addCoursePiece(mud, 'path', next.x, next.z, next.elevation))
+  }
+  step('undo', game.undoCoursePiece(mud))
+  const pool = game.startCourseArea('pool', [{ x: 12, z: 6 }, { x: 13, z: 6 }])
+  step('pool', pool)
+  step('pool cells', game.addCourseAreaCells(pool.id!, [{ x: 14, z: 6 }, { x: 12, z: 7 }]))
+  step('pool cell removed', game.removeCourseAreaCells(pool.id!, [{ x: 14, z: 6 }]))
+  step('pool entrance', game.addCoursePiece(pool.id!, 'entrance', 12, 6))
+  const paintball = game.startCourseArea('paintball', [
+    { x: 4, z: 12 },
+    { x: 5, z: 12 },
+    { x: 4, z: 13 },
+    { x: 5, z: 13 },
+  ])
+  step('paintball', paintball)
+  step('team size', game.setCourseTeamSize(paintball.id!, 3))
+  step('closed', game.setCourseOperating(mud, false))
+  step('price', game.setCoursePrice(mud, 9))
+  step('camping', applyGameCommand(game, { type: 'designateCampingArea', cells: [{ x: -6, z: 8 }, { x: -5, z: 8 }] }))
+  step('forecourt', applyGameCommand(game, { type: 'designateStageForecourt', cells: [{ x: 3, z: -14 }] }))
+  step('remove paintball', game.removeCourse(paintball.id!))
+  assert.equal(game.getAttraction(paintball.id!), undefined, 'removeCourse drops the record')
+}
+
+/** Ids used to be `course-${simTick}-${courses.length + 1}` and repeated while paused. */
+function testCourseIdsNeverCollide(): void {
+  const game = flatPark()
+  const a = game.startCourse('mudmasters', 2, 2).id!
+  const b = game.startCourse('mudmasters', 2, 8).id!
+  assert.ok(game.removeCourse(a).ok)
+  const c = game.startCourse('mudmasters', 2, 14).id!
+  assert.equal(new Set([a, b, c]).size, 3, 'start A, B, remove A, start C gives three ids')
+  assert.ok(game.removeCourse(b).ok)
+  assert.ok(game.getCourse(c), 'removing B leaves C alone')
+  assertDualModel(game, 'course ids')
+
+  const reloaded = GameState.fromJSON(JSON.stringify(game.snapshot))!
+  const d = reloaded.startCourse('mudmasters', 8, 14).id!
+  const coaster = reloaded.startCoaster('classicSteel', -10, -10).id!
+  assert.equal(new Set([c, d, coaster]).size, 3, 'a reload never hands out a taken id')
+  assertDualModel(reloaded, 'course ids after reload')
+
+  // Course ids derive from the synced state, not from a per-process counter:
+  // an optimistic client names the course like the host, so the follow-up
+  // piece commands it sends find the host's course.
+  const guest = new GameState()
+  guest.applyNetworkWorld(JSON.parse(new WorldUpdates().encode(packWorld(game.snapshot), true)).world)
+  const hostCourse = game.startCourse('mudmasters', 14, 14).id!
+  const guestCourse = guest.startCourse('mudmasters', 14, 14).id
+  assert.equal(guestCourse, hostCourse, 'host and optimistic client derive the same course id')
+}
+
+function placeRideBuilding(game: GameState, x: number, z: number): string {
+  for (const kind of ['drain', 'compact', 'pave'] as const) game.manageFestival({ type: 'ground', x, z, kind })
+  const placed = game.place('ride', x, z)
+  assert.ok(placed.ok, placed.message)
+  return game.snapshot.buildings.at(-1)!.id
+}
+
+/** Loads the park through the v30 path, which migrates `ride` buildings to scripted records. */
+function loadAsV30(game: GameState): GameState {
+  const legacy = JSON.parse(JSON.stringify(game.snapshot)) as GameSnapshot & { version: number }
+  legacy.version = 30
+  legacy.attractions = []
+  return GameState.fromJSON(JSON.stringify(legacy))!
+}
+
+function testProjectionRecordsNeverOutliveTheirOwner(): void {
+  const game = flatPark()
+  const mud = game.startCourse('mudmasters', 2, 2).id!
+  assert.ok(game.getAttraction(mud))
+  assert.ok(game.undoCoursePiece(mud).ok)
+  assert.equal(game.getCourse(mud), undefined)
+  assert.equal(game.getAttraction(mud), undefined, 'undo to empty drops the record')
+  assertDualModel(game, 'undo to empty')
+
+  const rideId = placeRideBuilding(game, 16, 10)
+  const migrated = loadAsV30(game)
+  assert.equal(migrated.getAttraction(rideId)?.definitionId, 'carousel', 'v30 loads migrate ride buildings')
+  assertDualModel(migrated, 'v30 ride')
+  const withoutBuilding = JSON.parse(JSON.stringify(migrated.snapshot)) as GameSnapshot
+  withoutBuilding.buildings = withoutBuilding.buildings.filter((building) => building.id !== rideId)
+  const repaired = GameState.fromJSON(JSON.stringify(withoutBuilding))!
+  assert.equal(repaired.getAttraction(rideId), undefined, 'a ride record without its building is dropped on load')
+  assertDualModel(repaired, 'ride record repaired')
+  assert.ok(migrated.bulldoze(16, 10, rideId).ok)
+  assert.equal(migrated.getAttraction(rideId), undefined, 'bulldozing the ride drops its migrated record')
+  assertDualModel(migrated, 'ride bulldozed')
+
+  const legacyPool = createSeededCourse('legacy-pool', 'pool', -12, -12)
+  legacyPool.pieces.push({ id: 'legacy-pool-ws', kind: 'waterSlide', x: -12, z: -8, elevation: 2, rotation: 0 })
+  const withPool = JSON.parse(JSON.stringify(game.snapshot)) as GameSnapshot
+  withPool.courses = [legacyPool]
+  const pools = GameState.fromJSON(JSON.stringify(withPool))!
+  assert.ok(pools.getCourse('legacy-pool-slide-1'), 'a legacy pool slide becomes its own course')
+  assertDualModel(pools, 'pool with slide')
+  assert.ok(pools.removeCourse('legacy-pool').ok)
+  assert.equal(pools.getAttraction('legacy-pool'), undefined)
+  assert.ok(pools.getAttraction('legacy-pool-slide-1'), 'the live slide course keeps its record')
+  assertDualModel(pools, 'pool removed')
+
+  const host = flatPark()
+  const course = host.startCourse('mudmasters', 2, 2).id!
+  const guest = new GameState()
+  guest.networkMode = 'client'
+  const full = JSON.parse(new WorldUpdates().encode(packWorld(host.snapshot), true)) as {
+    world: Parameters<GameState['applyNetworkWorld']>[0]
+  }
+  guest.applyNetworkWorld(full.world)
+  assert.ok(guest.getAttraction(course))
+  assert.ok(guest.removeCourse(course).ok)
+  assert.equal(guest.getAttraction(course), undefined, 'an optimistic client remove drops the record too')
+}
+
+/**
+ * One legacy-id rule for every reader. The GameState's own set must keep
+ * `stepAttractions` off every coaster, course, ride and pool-slide record.
+ */
+function testNothingIsSimulatedTwice(): void {
+  const game = flatPark()
+  const coasterId = buildCircuitCoaster(game, 'double simulation')
+  const courseId = game.startCourse('mudmasters', 4, 6).id!
+  const rideId = placeRideBuilding(game, 16, 10)
+  const bungee = game.startAttraction('bungee', -16, 16, 0)
+  assert.ok(bungee.ok && bungee.placedId, bungee.message)
+  const ids = legacyAttractionIds(game.snapshot)
+  for (const id of [coasterId, courseId, rideId, `${courseId}-slide-2`]) {
+    assert.ok(isLegacyAttractionId(id, ids), `${id} belongs to a dedicated system`)
+  }
+  assert.equal(isLegacyAttractionId(`${courseId}-slide-x`, ids), false, 'only numbered slides belong to a pool')
+  assert.equal(isLegacyAttractionId(bungee.placedId!, ids), false, 'canonical records are not legacy')
+
+  const world = structuredClone(game.snapshot) as GameSnapshot
+  world.attractions.push({ ...structuredClone(world.attractions.find((record) => record.id === courseId)!), id: `${courseId}-slide-2` })
+  const visitors = world.attractions.map((record) => {
+    record.operationMode = 'open'
+    const guest = runtimeVisitor(`guest-for-${record.id}`)
+    guest.state = 'queuing'
+    guest.targetId = record.id
+    record.queue = [guest.id]
+    return guest
+  })
+  stepAttractions(world.attractions, {
+    legacyIds: legacyAttractionIds(world),
+    visitors,
+    simTick: 1,
+    minutes: 0.1,
+    charge: () => true,
+    injure: () => undefined,
+    isWater: () => false,
+  })
+  const riding = visitors.filter((guest) => guest.state === 'riding').map((guest) => guest.targetId)
+  assert.deepEqual(riding, [bungee.placedId], 'only the canonical record admits guests')
+
+  for (let step = 0; step < 20; step += 1) {
+    game.tick(0.1)
+    const legacyIds = legacyAttractionIds(game.snapshot)
+    for (const record of game.snapshot.attractions) {
+      if (record.runtime.kind !== 'coaster' && record.runtime.kind !== 'course') continue
+      assert.ok(isLegacyAttractionId(record.id, legacyIds), `tick ${step}: ${record.id} stays with its live system`)
+    }
+  }
+}
+
+/** `recalculateQueueDirections` runs before `emit`; a lagging record must not claim queues. */
+function testQueueClaimsFollowTheLiveEntrance(): void {
+  const game = flatPark()
+  const started = game.startCoaster('classicSteel', 10, -10)
+  const id = started.id!
+  for (const kind of RECTANGLE_CIRCUIT) assert.ok(game.appendCoasterPiece(id, kind, false).ok)
+  assert.ok(game.setCoasterAccess(id, 'entrance', 11, -10).ok)
+  assert.ok(game.placePathSegment(12, -10, 0, 'queue').ok)
+  assert.notEqual(game.getPathAt(12, -10)?.queueDirection, undefined, 'the queue points at the entrance')
+  assert.ok(game.setCoasterAccess(id, 'entrance', 10, -11).ok)
+  assert.equal(
+    game.getPathAt(12, -10)?.queueDirection,
+    undefined,
+    'a queue next to the old entrance is released instead of claimed by the stale record',
+  )
+  assertDualModel(game, 'entrance moved')
+}
+
+function testSaveRoundTripKeepsTheDualModel(): void {
+  const game = flatPark()
+  const coasterId = buildCircuitCoaster(game, 'save')
+  const second = game.startCoaster('wooden', -10, 10).id!
+  const courseId = game.startCourse('mudmasters', 4, 6).id!
+  assert.ok(game.startCourseArea('pool', [{ x: 12, z: 6 }, { x: 13, z: 6 }]).ok)
+  assert.ok(applyGameCommand(game, { type: 'designateCampingArea', cells: [{ x: -6, z: 8 }, { x: -5, z: 8 }] }).ok)
+  assert.ok(applyGameCommand(game, { type: 'designateStageForecourt', cells: [{ x: 3, z: -14 }] }).ok)
+  const bungee = game.startAttraction('bungee', -16, 16, 0).placedId!
+
+  const first = GameState.fromJSON(JSON.stringify(game.snapshot))!
+  assertDualModel(first, 'first load')
+  const again = GameState.fromJSON(JSON.stringify(first.snapshot))!
+  assertDualModel(again, 'second load')
+  for (const key of ['coasters', 'courses', 'attractions'] as const) {
+    assert.equal(JSON.stringify(again.snapshot[key]), JSON.stringify(first.snapshot[key]), `a second round trip keeps ${key}`)
+  }
+  assert.ok(first.getCoaster(coasterId) && first.getAttraction(bungee))
+
+  const mixed = JSON.parse(JSON.stringify(game.snapshot)) as GameSnapshot
+  mixed.coasters = mixed.coasters.filter((coaster) => coaster.id !== second)
+  mixed.attractions = mixed.attractions.filter((record) => record.id !== courseId)
+  // The old canonical path left empty pools behind: a live row without cells
+  // plus a stale `swimArea` record (seen in the performance fixture).
+  const poolRecord = mixed.attractions.find((record) => record.definitionId === 'swimArea')!
+  mixed.courses.push(createEmptyCourse('attraction-0-999', 'pool'))
+  mixed.attractions.push({ ...structuredClone(poolRecord), id: 'attraction-0-999' })
+  const repaired = GameState.fromJSON(JSON.stringify(mixed))!
+  assert.equal(repaired.getAttraction(second), undefined, 'an orphaned coaster record is dropped on load')
+  assert.ok(repaired.getAttraction(courseId), 'a live course without a record gets one')
+  assert.ok(repaired.getCourse('attraction-0-999'), 'the empty pool stays a live row')
+  assert.equal(repaired.getAttraction('attraction-0-999'), undefined, 'a row that does not project loses its stale record')
+  assert.ok(repaired.getAttraction(bungee), 'canonical records survive the repair')
+  assertDualModel(repaired, 'mixed save repaired')
+  for (let step = 0; step < 10; step += 1) repaired.tick(0.1)
+  assert.equal(repaired.getAttraction(second), undefined, 'the orphan never comes back')
+  assertDualModel(repaired, 'mixed save after ticks', { overlays: false })
+
+  const legacy = JSON.parse(JSON.stringify(game.snapshot)) as GameSnapshot & { version: number }
+  legacy.version = 30
+  legacy.attractions = []
+  legacy.courses.push(createEmptyCourse('invalid-course', 'mudmasters'))
+  const migrated = GameState.fromJSON(JSON.stringify(legacy))!
+  assertDualModel(migrated, 'v30 load')
+  assert.ok(migrated.snapshot.migrationReport?.removedAttractionIds.includes('invalid-course'))
+  assert.ok(migrated.getCourse('invalid-course'), 'removedAttractionIds reports; the live row stays')
+  assert.equal(migrated.getAttraction('invalid-course'), undefined, 'a row that does not project has no record')
+}
+
+type WorldDelta = {
+  world: Parameters<GameState['applyNetworkUpdate']>[0]
+  visitors: Parameters<GameState['applyNetworkUpdate']>[1]
+  removed: string[]
+}
+
+function assertClientMatchesHost(host: GameState, guest: GameState, label: string): void {
+  assert.equal(JSON.stringify(guest.snapshot.coasters), JSON.stringify(host.snapshot.coasters), `${label}: coasters match`)
+  assert.equal(JSON.stringify(guest.snapshot.courses), JSON.stringify(host.snapshot.courses), `${label}: courses match`)
+  const hostRecords = new Map(host.snapshot.attractions.map((record) => [record.id, record]))
+  assert.equal(guest.snapshot.attractions.length, hostRecords.size, `${label}: record count matches`)
+  for (const record of guest.snapshot.attractions) {
+    assert.equal(structuralJson(record), structuralJson(hostRecords.get(record.id)), `${label}: record ${record.id} matches`)
+  }
+}
+
+function testMultiplayerKeepsLiveRows(): void {
+  const host = flatPark()
+  const coasterId = buildCircuitCoaster(host, 'mp host')
+  const courseId = host.startCourse('mudmasters', 4, 6).id!
+  const updates = new WorldUpdates()
+  const guest = new GameState()
+  guest.networkMode = 'client'
+  const full = JSON.parse(updates.encode(packWorld(host.snapshot), true)) as {
+    world: Parameters<GameState['applyNetworkWorld']>[0]
+  }
+  guest.applyNetworkWorld(full.world)
+  assertClientMatchesHost(host, guest, 'full sync')
+  const sync = (label: string): void => {
+    const delta = JSON.parse(updates.encode(packWorld(host.snapshot))) as WorldDelta
+    guest.applyNetworkUpdate(delta.world, delta.visitors, delta.removed)
+    assertClientMatchesHost(host, guest, label)
+  }
+  host.updateCoasterPrice(coasterId, 12)
+  sync('coaster price')
+  assert.ok(host.setCoasterAccess(coasterId, 'entrance', 11, -10).ok)
+  sync('entrance move')
+  assert.ok(host.setCoasterOperationMode(coasterId, 'open').ok)
+  assert.ok(host.setCoasterOperationMode(coasterId, 'test').ok)
+  sync('test mode')
+  assert.ok(host.setCoursePrice(courseId, 11).ok)
+  sync('course price')
+
+  const liveCoaster = guest.getCoaster(coasterId)!
+  const liveCourse = guest.getCourse(courseId)!
+  const liveJson = JSON.stringify([liveCoaster, liveCourse])
+  const doctored = structuredClone(host.snapshot.attractions) as Attraction[]
+  for (const record of doctored) {
+    if (record.id === coasterId || record.id === courseId) record.price = 1
+  }
+  guest.applyNetworkUpdate({ attractions: doctored })
+  assert.equal(guest.getCoaster(coasterId), liveCoaster, 'an attractions-only delta keeps the live coaster object')
+  assert.equal(guest.getCourse(courseId), liveCourse, 'an attractions-only delta keeps the live course object')
+  assert.equal(JSON.stringify([liveCoaster, liveCourse]), liveJson, 'and never edits it')
+  assert.equal(guest.getAttraction(coasterId)?.price, liveCoaster.ticketPrice, 'the record is derived from the live row again')
+
+  const paintball = host.startCourseArea('paintball', [{ x: 4, z: 12 }, { x: 5, z: 12 }]).id!
+  guest.applyNetworkUpdate({ attractions: structuredClone(host.snapshot.attractions) })
+  assert.ok(guest.getCourse(paintball), 'an attractions-only delta adopts a missing course id')
+  assert.equal(guest.getCoaster(coasterId), liveCoaster)
+  sync('after adoption')
+}
+
+function testCanonicalCommandsRefuseLegacyIds(): void {
+  const game = flatPark()
+  const coasterId = buildCircuitCoaster(game, 'canonical guard')
+  const courseId = game.startCourse('mudmasters', 4, 6).id!
+  assert.ok(applyGameCommand(game, { type: 'designateCampingArea', cells: [{ x: -6, z: 8 }] }).ok)
+  const liveBefore = JSON.stringify([game.snapshot.coasters, game.snapshot.courses])
+  const coaster = game.getCoaster(coasterId)
+  const course = game.getCourse(courseId)
+  for (const id of [coasterId, courseId, 'camping-area']) {
+    const results = [
+      game.setAttractionPrice(id, 1),
+      game.setAttractionOperation(id, 'closed'),
+      game.configureAttraction(id, { teamSize: 2, dispatchMode: 'full-only' }),
+      game.constructAttraction({ kind: 'setEntrance', attractionId: id, point: { x: 0, z: 0, elevation: 0 } }),
+      game.removeAttraction(id),
+    ]
+    for (const result of results) assert.equal(result.ok, false, `canonical commands refuse ${id}: ${result.message}`)
+  }
+  assert.equal(game.getCoaster(coasterId), coaster, 'the coaster object is untouched')
+  assert.equal(game.getCourse(courseId), course, 'the course object is untouched')
+  assert.equal(JSON.stringify([game.snapshot.coasters, game.snapshot.courses]), liveBefore)
+
+  const coasters = game.snapshot.coasters.length
+  for (const definitionId of ['coaster:classicSteel', 'course:mudmasters', 'paintball', 'swimArea', 'waterSlide', 'camping', 'partyArea']) {
+    assert.equal(game.startAttraction(definitionId, 0, 12, 0).ok, false, `${definitionId} is built in its own editor`)
+  }
+  assert.equal(game.snapshot.coasters.length, coasters, 'no zero-piece coaster appears')
+
+  const bungee = game.startAttraction('bungee', -16, 16, 0).placedId!
+  const canonical = [
+    game.constructAttraction({ kind: 'addScriptedSegment', attractionId: bungee, segmentKind: 'towerSegment' }),
+    game.setAttractionPrice(bungee, 4),
+    game.configureAttraction(bungee, { dispatchMode: 'timed' }),
+    game.removeAttraction(bungee),
+  ]
+  for (const result of canonical) assert.ok(result.ok, result.message)
+  assert.equal(game.getCoaster(coasterId), coaster, 'canonical commands keep every coaster object')
+  assert.equal(game.getCourse(courseId), course, 'canonical commands keep every course object')
+  assert.equal(JSON.stringify([game.snapshot.coasters, game.snapshot.courses]), liveBefore)
+  assertDualModel(game, 'after canonical commands')
+}
+
+/**
+ * Why the reverse projection is limited to loading v31 saves and adopting
+ * missing MP ids: it drops point pitch/bank and renames course gate pieces.
+ */
+function testProjectionLossesArePinned(): void {
+  const game = flatPark()
+  const coasterId = game.startCoaster('classicSteel', -10, -10).id!
+  assert.ok(game.appendCoasterPiece(coasterId, 'slopeGentleUp', true).ok)
+  const coaster = game.getCoaster(coasterId)!
+  assert.ok(coaster.pieces[1]!.points.some((point) => (point.pitch ?? 0) !== 0), 'live points carry pitch')
+  const projected = projectCoasters([migrateCoaster(coaster)!])[0]!
+  assert.ok(
+    projected.pieces[1]!.points.every((point) => point.pitch === undefined && point.bank === undefined),
+    'the reverse projection drops point pitch/bank',
+  )
+  const courseId = game.startCourse('mudmasters', 4, 6).id!
+  const course = game.getCourse(courseId)!
+  const liveEntrance = course.pieces.find((piece) => piece.kind === 'entrance')!.id
+  const projectedEntrance = projectCourses(migrateCourse(course))[0]!.pieces.find((piece) => piece.kind === 'entrance')!.id
+  assert.equal(projectedEntrance, `${courseId}-entrance`)
+  assert.notEqual(projectedEntrance, liveEntrance, 'the reverse projection renames the entrance piece')
 }

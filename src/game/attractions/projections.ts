@@ -1,6 +1,13 @@
-import { createCoasterTelemetry, isCoasterCircuitClosed, type Coaster, type TrackPiece } from '../coasters'
+import {
+  createCoasterTelemetry,
+  isCoasterCircuitClosed,
+  type Coaster,
+  type TrackAnchor,
+  type TrackPiece,
+} from '../coasters'
+import { hasLiveOwner, isOrphanProjectionRecord, liveOwnerIds } from './dualModel'
 import { migrateCamping, migrateCoaster, migrateCourse, migratePartyAreas } from './migration'
-import type { CampInstallation } from '../camping'
+import type { CampInstallation, CampingCell } from '../camping'
 import type {
   CourseAttraction,
   CoursePiece,
@@ -9,23 +16,30 @@ import type { StageForecourtCell } from '../festivalAreas'
 import type { Attraction } from './types'
 import type { GameSnapshot } from '../types/snapshot'
 
-export function refreshAttractionProjections(state: GameSnapshot): void {
-  state.coasters = projectCoasters(state.attractions)
-  state.courses = projectCourses(state.attractions)
-  // Camping overlays and stage forecourts stay the live designate/sync arrays.
-  // Projecting them here discarded player edits whenever any attraction changed.
-}
-
-/** Keep live coaster/course rows that an attractions-only projection dropped. */
-export function mergeLiveRecords<T extends { id: string }>(
-  projected: readonly T[],
-  live: readonly T[] | undefined,
-): T[] {
-  const byId = new Map(projected.map((item) => [item.id, item]))
-  for (const item of live ?? []) {
-    if (!byId.has(item.id)) byId.set(item.id, item)
-  }
-  return [...byId.values()]
+/**
+ * Reverse projection, records → live rows, only for ids the live arrays lack.
+ * `projectCoasters` / `projectCourses` are lossy (point pitch/bank, course
+ * entrance/exit piece ids, stale queue and riders), so an existing live row is
+ * never replaced or edited. The reverse direction is allowed in exactly two
+ * places: `migrateSnapshot` when a saved live array is missing or empty (v31
+ * saves) and here, on the MP client, for ids an attractions delta carries
+ * without their live row. `kinds` limits it to live keys the delta lacked.
+ */
+export function adoptMissingLiveRows(
+  state: GameSnapshot,
+  kinds: { coasters: boolean; courses: boolean } = { coasters: true, courses: true },
+): void {
+  if (!kinds.coasters && !kinds.courses) return
+  const owners = liveOwnerIds(state)
+  const missing = state.attractions.filter((record) =>
+    (record.runtime.kind === 'coaster' || record.runtime.kind === 'course') &&
+    !hasLiveOwner(record, owners),
+  )
+  if (missing.length === 0) return
+  const coasters = kinds.coasters ? projectCoasters(missing) : []
+  if (coasters.length > 0) state.coasters = [...(state.coasters ?? []), ...coasters]
+  const courses = kinds.courses ? projectCourses(missing) : []
+  if (courses.length > 0) state.courses = [...(state.courses ?? []), ...courses]
 }
 
 export function projectCoasters(attractions: readonly Attraction[]): Coaster[] {
@@ -108,38 +122,48 @@ export function projectCoasters(attractions: readonly Attraction[]): Coaster[] {
 }
 
 /**
- * Inverse of `refreshAttractionProjections`. Coasters, courses, camping overlays
- * and stage forecourts are edited through their live arrays; the canonical
- * `attractions` records are rebuilt from those so a save and MP stay in step.
- * Settings, train, telemetry and queue stay shared references, so tick mutations
- * land in both shapes. Records without a legacy owner are left alone — only
- * `removeCoaster` / `removeCourse` delete ride records.
+ * Derives the projection records from the live truth (docs/attractions.md,
+ * section "Doppelmodell"). Coasters, courses, camping overlays and stage
+ * forecourts are edited through their live arrays; their `attractions` records
+ * are rebuilt from those so a save and MP carry the same rides. Every field of
+ * such a record is overwritten (`Object.assign`). `queue` and `runtime.*` are
+ * only the state of this refresh, because `scrubQueue` / `stepCourses` replace
+ * the live arrays every tick, so nothing may read them. A live row that no
+ * longer projects (no edges, no cells) loses its record, orphaned coaster/course
+ * records and ride records whose `ride` building is gone are dropped, and
+ * camping/party records are rebuilt wholesale. Canonical-only records stay.
  */
 export function refreshLegacyAttractionRecords(state: GameSnapshot): void {
-  const byId = new Map(state.attractions.map((attraction) => [attraction.id, attraction]))
-  for (const coaster of state.coasters ?? []) {
-    const record = migrateCoaster(coaster)
-    if (!record) continue
-    const existing = byId.get(coaster.id)
-    if (existing) Object.assign(existing, record)
-    else state.attractions.push(record)
+  const owners = liveOwnerIds(state)
+  const records = state.attractions.filter((record) =>
+    record.definitionId !== 'camping' &&
+    record.definitionId !== 'partyArea' &&
+    !isOrphanProjectionRecord(record, owners),
+  )
+  const byId = new Map(records.map((record) => [record.id, record]))
+  const unprojectable = new Set<string>()
+  const upsert = (id: string, record: Attraction | null | undefined): void => {
+    const existing = byId.get(id)
+    if (!record) {
+      if (existing) unprojectable.add(id)
+      return
+    }
+    if (existing) {
+      Object.assign(existing, record)
+      return
+    }
+    records.push(record)
+    byId.set(id, record)
   }
+  for (const coaster of state.coasters ?? []) upsert(coaster.id, migrateCoaster(coaster))
   for (const course of state.courses ?? []) {
     // `migrateCourse` splits pool water slides into extra ids; only the record
     // that keeps the course id is canonical, so the sync stays idempotent.
-    const record = migrateCourse(course).find((entry) => entry.id === course.id)
-    if (!record) continue
-    const existing = byId.get(course.id)
-    if (existing) Object.assign(existing, record)
-    else state.attractions.push(record)
+    upsert(course.id, migrateCourse(course).find((entry) => entry.id === course.id))
   }
-  writeCampingAndPartyRecords(state)
-}
-
-function writeCampingAndPartyRecords(state: GameSnapshot): void {
-  state.attractions = state.attractions.filter((attraction) =>
-    attraction.definitionId !== 'camping' && attraction.definitionId !== 'partyArea',
-  )
+  state.attractions = unprojectable.size === 0
+    ? records
+    : records.filter((record) => !unprojectable.has(record.id))
   const camping = migrateCamping(state.campingCells ?? [], state.campInstallations ?? [])
   if (camping) state.attractions.push(...camping)
   state.attractions.push(...migratePartyAreas(state.stageForecourtCells ?? []))
@@ -152,40 +176,145 @@ export function dropLegacyAttractionRecords(state: GameSnapshot, ownerId: string
 }
 
 /**
- * Cheap change gate for `refreshLegacyAttractionRecords`. Every editor mutation
- * moves a piece, area, access, price or operation mode, so those are enough and
- * the check allocates nothing on the tick path.
+ * Change gate for `refreshLegacyAttractionRecords`, evaluated on every
+ * `emit('mutate')` (never per tick). A 32-bit hash over everything a projection
+ * record copies: counts, ids, names, types, piece ids/kinds/anchors, gate
+ * coordinates, operation mode, price, dispatch settings, course areas, camping
+ * cells and installations, forecourt cells with their stage. Each mixing step
+ * is a bijection on the running state, so changing a single value always
+ * changes the result, and the integer arithmetic can never saturate to
+ * Infinity or NaN however large the park grows. It allocates nothing.
  */
 export function legacyAttractionSignature(state: GameSnapshot): number {
-  let signature = (state.coasters?.length ?? 0) * 31 + (state.courses?.length ?? 0)
-  for (const coaster of state.coasters ?? []) {
-    signature = signature * 31 +
-      coaster.pieces.length * 7 +
-      (coaster.entrance ? 3 : 0) +
-      (coaster.exit ? 5 : 0) +
-      (coaster.closed ? 11 : 0) +
-      coaster.operationMode.length +
-      Math.round(coaster.ticketPrice * 100)
+  let hash = SIGNATURE_SEED
+  const coasters = state.coasters ?? []
+  hash = mix(hash, coasters.length)
+  for (const coaster of coasters) hash = mixCoaster(hash, coaster)
+  const courses = state.courses ?? []
+  hash = mix(hash, courses.length)
+  for (const course of courses) hash = mixCourse(hash, course)
+  hash = mixCamping(hash, state.campingCells ?? [], state.campInstallations ?? [])
+  hash = mixForecourt(hash, state.stageForecourtCells ?? [])
+  return hash >>> 0
+}
+
+const SIGNATURE_SEED = 0x811c9dc5
+const MISSING_VALUE = 0x7fffffff
+
+function mix(hash: number, word: number): number {
+  const mixed = Math.imul(hash ^ word, 0x5bd1e995)
+  return mixed ^ (mixed >>> 15)
+}
+
+/** Millimetre / milliradian resolution; `NaN` and `Infinity` fold to 0. */
+function mixNumber(hash: number, value: number | undefined): number {
+  return mix(hash, value === undefined ? MISSING_VALUE : Math.round(value * 1000))
+}
+
+function mixString(hash: number, value: string | undefined): number {
+  if (value === undefined) return mix(hash, MISSING_VALUE)
+  let next = mix(hash, value.length)
+  for (let index = 0; index < value.length; index += 1) next = mix(next, value.charCodeAt(index))
+  return next
+}
+
+function mixPoint(hash: number, point: { x: number; y: number; z: number } | null): number {
+  if (!point) return mix(hash, MISSING_VALUE)
+  return mixNumber(mixNumber(mixNumber(hash, point.x), point.y), point.z)
+}
+
+function mixAnchor(hash: number, anchor: TrackAnchor): number {
+  let next = mixNumber(hash, anchor.x)
+  next = mixNumber(next, anchor.z)
+  next = mixNumber(next, anchor.elevation)
+  next = mixNumber(next, anchor.heading)
+  next = mixNumber(next, anchor.pitch)
+  return mixNumber(next, anchor.bank)
+}
+
+function mixCoaster(hash: number, coaster: Coaster): number {
+  let next = mixString(hash, coaster.id)
+  next = mixString(next, coaster.typeId)
+  next = mixString(next, coaster.name)
+  next = mixString(next, coaster.operationMode)
+  next = mixNumber(next, coaster.ticketPrice)
+  next = mix(next, coaster.closed ? 1 : 0)
+  next = mixString(next, coaster.settings?.dispatchMode)
+  next = mixNumber(next, coaster.settings?.dispatchIntervalMinutes)
+  next = mixPoint(next, coaster.entrance)
+  next = mixPoint(next, coaster.exit)
+  next = mix(next, coaster.pieces.length)
+  for (const piece of coaster.pieces) {
+    next = mixString(next, piece.id)
+    next = mixString(next, piece.kind)
+    next = mix(next, piece.chainLift ? 1 : 0)
+    next = mixString(next, piece.transition)
+    next = mixAnchor(next, piece.start)
+    next = mixAnchor(next, piece.end)
+    next = mix(next, piece.points.length)
   }
-  for (const course of state.courses ?? []) {
-    signature = signature * 31 +
-      course.pieces.length * 7 +
-      course.areaCells.length * 3 +
-      (course.operating ? 13 : 0) +
-      (course.teamSize ?? 0) +
-      Math.round(course.price * 100)
+  return next
+}
+
+function mixCourse(hash: number, course: CourseAttraction): number {
+  let next = mixString(hash, course.id)
+  next = mixString(next, course.kind)
+  next = mixString(next, course.name)
+  next = mix(next, course.operating ? 1 : 0)
+  next = mixNumber(next, course.price)
+  next = mixNumber(next, course.teamSize)
+  next = mix(next, course.pieces.length)
+  for (const piece of course.pieces) {
+    next = mixString(next, piece.id)
+    next = mixString(next, piece.kind)
+    next = mixNumber(next, piece.x)
+    next = mixNumber(next, piece.z)
+    next = mixNumber(next, piece.elevation)
+    next = mix(next, piece.rotation)
+    next = mixNumber(next, piece.endX)
+    next = mixNumber(next, piece.endZ)
+    next = mixNumber(next, piece.endElevation)
   }
-  signature = signature * 31 +
-    (state.campingCells?.length ?? 0) +
-    (state.campInstallations?.length ?? 0) * 5 +
-    (state.stageForecourtCells?.length ?? 0) * 11
-  for (const cell of state.campingCells ?? []) {
-    signature = signature * 31 + cell.x + cell.z * 1024
+  next = mix(next, course.areaCells.length)
+  for (const cell of course.areaCells) next = mixNumber(mixNumber(next, cell.x), cell.z)
+  return next
+}
+
+function mixCamping(
+  hash: number,
+  cells: readonly CampingCell[],
+  installations: readonly CampInstallation[],
+): number {
+  let next = mix(hash, cells.length)
+  for (const cell of cells) next = mixCell(next, cell)
+  next = mix(next, installations.length)
+  for (const installation of installations) {
+    next = mixString(next, installation.id)
+    next = mixString(next, installation.kind)
+    next = mixCell(next, installation.cell)
   }
-  for (const cell of state.stageForecourtCells ?? []) {
-    signature = signature * 31 + cell.x + cell.z * 1024 + (cell.stageId ? 17 : 0)
+  return next
+}
+
+function mixForecourt(hash: number, cells: readonly StageForecourtCell[]): number {
+  let next = mix(hash, cells.length)
+  let stageId: string | undefined
+  for (let index = 0; index < cells.length; index += 1) {
+    const cell = cells[index]
+    next = mixCell(next, cell)
+    // Neighbouring cells usually share a stage; hash each run of ids once.
+    if (index > 0 && cell.stageId === stageId) {
+      next = mix(next, 0)
+      continue
+    }
+    stageId = cell.stageId
+    next = mixString(mix(next, 1), stageId)
   }
-  return signature
+  return next
+}
+
+function mixCell(hash: number, cell: { x: number; z: number; elevation: number }): number {
+  return mixNumber(mixNumber(mixNumber(hash, cell.x), cell.z), cell.elevation)
 }
 
 export function projectCourses(attractions: readonly Attraction[]): CourseAttraction[] {

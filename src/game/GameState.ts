@@ -131,12 +131,12 @@ import type { AttractionConstructionRequest } from './attractions/construction';
 import type { Attraction, AttractionOperationMode } from './attractions/types';
 import { stepAttractions } from './attractions/runtime';
 import {
+  adoptMissingLiveRows,
   dropLegacyAttractionRecords,
   legacyAttractionSignature,
-  mergeLiveRecords,
-  refreshAttractionProjections,
   refreshLegacyAttractionRecords,
 } from './attractions/projections';
+import { isCanonicalAttractionRecord, isLegacyAttractionId, legacyAttractionIds } from './attractions/dualModel';
 import { placeBuildingCommand, previewPlacementCommand } from './commands/placementCommands';
 import { bulldozeAreaCommand, bulldozeCommand } from './commands/bulldozeCommands';
 import type { ArrivalGroup, Direction, FindRoadRouteOptions, ParkingCell, ParkingDisembarkCandidate, RoadCell, RoadPosition, RoadGraph, RoadVehicle, SpeedLimit } from './logistics';
@@ -810,6 +810,41 @@ export class GameState {
     return `${prefix}-${this.state.simTick}-${this.idCounter}`
   }
 
+  /**
+   * Coaster, course and canonical attraction ids share one namespace: the dual
+   * model pairs a live row and its projection record by id. `nextId` alone can
+   * repeat after a load, which restores `idCounter` from entity counts, so ids
+   * that are already taken are skipped.
+   */
+  private nextAttractionId(prefix: string): string {
+    let id = this.nextId(prefix)
+    while (this.isAttractionIdTaken(id)) id = this.nextId(prefix)
+    return id
+  }
+
+  /**
+   * Course ids stay derived from the synced state (`simTick`, course count), so
+   * an optimistic MP client names a new course exactly like the host and its
+   * follow-up piece commands find it. Taken ids are skipped: the old plain
+   * `course-${simTick}-${courses.length + 1}` repeated while paused (start A,
+   * start B, remove A, start C) and paired one record with two courses.
+   */
+  private nextCourseId(): string {
+    let suffix = (this.state.courses ?? []).length + 1
+    let id = `course-${this.state.simTick}-${suffix}`
+    while (this.isAttractionIdTaken(id)) {
+      suffix += 1
+      id = `course-${this.state.simTick}-${suffix}`
+    }
+    return id
+  }
+
+  private isAttractionIdTaken(id: string): boolean {
+    return this.state.coasters.some((coaster) => coaster.id === id) ||
+      (this.state.courses ?? []).some((course) => course.id === id) ||
+      this.state.attractions.some((attraction) => attraction.id === id)
+  }
+
   private takeScheduledCommands(tick: number): GameCommand[] {
     const commands = this.scheduledCommands.get(tick) ?? []
     this.scheduledCommands.delete(tick)
@@ -987,20 +1022,12 @@ export class GameState {
     visitors: Array<{ id: string; changes: Partial<Visitor> }> = [],
     removed: string[] = [],
   ): void {
-    const liveCourses = this.state.courses
-    const liveCoasters = this.state.coasters
     Object.assign(this.state, world)
     if (world.attractions) {
-      refreshAttractionProjections(this.state)
-      // Courses/coasters are the edited truth, like camping overlays. An
-      // attractions-only delta must not drop a just-placed course the host
-      // still occupies but could not yet project (entrance-only tracks).
-      this.state.courses = world.courses
-        ? world.courses
-        : mergeLiveRecords(this.state.courses, liveCourses)
-      this.state.coasters = world.coasters
-        ? world.coasters
-        : mergeLiveRecords(this.state.coasters, liveCoasters)
+      // Coasters and courses are the edited truth, like camping overlays: an
+      // existing live row always wins over its projection record. Records only
+      // add rows for ids whose live key this delta did not carry.
+      adoptMissingLiveRows(this.state, { coasters: !world.coasters, courses: !world.courses })
     }
     if (
       world.attractions ||
@@ -2558,7 +2585,7 @@ export class GameState {
   private attractionCommandContext(): AttractionCommandContext {
     return {
       state: this.state,
-      nextId: (prefix) => this.nextId(prefix),
+      nextId: (prefix) => this.nextAttractionId(prefix),
       getPlaceElevation: (x, z) => this.getPlaceElevation(x, z),
       recalculateQueues: () => this.recalculateQueueDirections(),
       emit: () => this.emit(),
@@ -2626,6 +2653,7 @@ export class GameState {
     return {
       state: this.state,
       nextId: (prefix) => this.nextId(prefix),
+      nextAttractionId: (prefix) => this.nextAttractionId(prefix),
       getPlaceElevation: (x, z) => this.getPlaceElevation(x, z),
       isInWorld: (x, z) => this.isInWorld(x, z),
       canBuildTrackPiece: (piece, options) => this.canBuildTrackPiece(piece, options),
@@ -2681,7 +2709,7 @@ export class GameState {
     }
     const cost = courseStartCost(kind)
     if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für den Kurs.' }
-    const id = `course-${this.state.simTick}-${this.state.courses.length + 1}`
+    const id = this.nextCourseId()
     const course = createEmptyCourse(id, kind)
     const first = courseUsesArea(kind)
       ? appendCourseAreaCell(course, x, z)
@@ -2718,7 +2746,7 @@ export class GameState {
     const cost = courseStartCost(kind) + Math.max(0, unique.length - 1) * COURSE_PIECE_COST[areaKind]
     if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für diese Anlagenfläche.' }
     this.state.courses ??= []
-    const id = `course-${this.state.simTick}-${this.state.courses.length + 1}`
+    const id = this.nextCourseId()
     const course = createEmptyCourse(id, kind)
     const added = appendCourseAreaCells(course, unique)
     if (typeof added === 'string') return { ok: false, message: added }
@@ -7458,7 +7486,7 @@ export class GameState {
       },
     })
     stepAttractions(this.state.attractions, {
-      legacyIds: this.legacyAttractionIds(),
+      legacyIds: legacyAttractionIds(this.state),
       visitors: this.state.visitors,
       simTick: this.state.simTick,
       minutes,
@@ -7833,9 +7861,13 @@ export class GameState {
       }
     }
 
+    // Coasters, courses and rides claim their queues from the live rows below;
+    // their projection records may lag behind an entrance move.
+    const legacyIds = legacyAttractionIds(this.state)
     this.state.attractions.forEach((attraction) => {
       const entrance = attraction.access.entrance
       if (!entrance || attraction.access.mode !== 'queuedEntrance') return
+      if (isLegacyAttractionId(attraction.id, legacyIds)) return
       const access = { x: entrance.x, y: entrance.elevation, z: entrance.z }
       claimQueue(
         this.getAccessPathNeighbors(access)
@@ -8059,9 +8091,13 @@ export class GameState {
     this.state.courses.forEach((course) => {
       course.queue = course.queue.filter((queuedId) => queuedId !== visitorId)
     })
-    this.state.attractions.forEach((attraction) => {
+    // Only canonical records own their queue; a projection record's queue is a
+    // stale copy that the next refresh overwrites and must not be written.
+    // The shape check needs no building scan on this per-visitor path.
+    for (const attraction of this.state.attractions) {
+      if (!isCanonicalAttractionRecord(attraction) || !attraction.queue.includes(visitorId)) continue
       attraction.queue = attraction.queue.filter((queuedId) => queuedId !== visitorId)
-    })
+    }
     this.facilityQueues.forEach((queue) => {
       const index = queue.indexOf(visitorId)
       if (index >= 0) queue.splice(index, 1)
@@ -9629,7 +9665,9 @@ export class GameState {
     if (reason === 'mutate' && this.networkMode !== 'client') {
       this.worldRevision += 1
     this.editRevision += 1
-      this.syncLegacyAttractionRecords()
+      // A way-area batch emits per cell but never touches attractions; the
+      // closing emit after the batch syncs once.
+      if (!this.wayBatch) this.syncLegacyAttractionRecords()
     }
     if (!this.wayBatch) this.listeners.forEach((listener) => listener(this.state))
   }
@@ -9642,19 +9680,5 @@ export class GameState {
     refreshLegacyAttractionRecords(this.state)
   }
 
-  /**
-   * Attractions a dedicated system already drives: coasters run on
-   * `CoasterSimulation`, courses on `stepCourses` and rides on the building
-   * pipeline. `stepAttractions` must not admit or move those guests again.
-   */
-  private legacyAttractionIds(): ReadonlySet<string> {
-    const ids = new Set<string>()
-    for (const coaster of this.state.coasters ?? []) ids.add(coaster.id)
-    for (const course of this.state.courses ?? []) ids.add(course.id)
-    for (const building of this.state.buildings) {
-      if (building.kind === 'ride') ids.add(building.id)
-    }
-    return ids
-  }
 }
 

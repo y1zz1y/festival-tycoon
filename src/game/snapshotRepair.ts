@@ -94,7 +94,6 @@ export function normalizeSnapshotForRuntime(context: SnapshotRepairContext): voi
   )
   state.waterLevel = normalizeWaterLevel(state.waterLevel)
   syncStageAudience(state)
-  refreshLegacyAttractionRecords(state)
   state.attractiveness ??= { average: 0, maximum: 0, minimum: 0, cells: [] }
   state.partyMood ??= { average: 0, maximum: 0, minimum: 0, cells: [] }
   state.dayPlan = normalizeDayPlan(state.dayPlan)
@@ -169,6 +168,11 @@ export function repairSnapshotEntities(context: SnapshotRepairContext): number {
     }
   })
   migrateLegacyCampInstallations(state)
+  // Projection records are derived only now, from the repaired live rows
+  // (normalized courses, `queue ??= []`, resolved coaster types, known ride
+  // types, migrated camp installations). The same pass drops orphans of a
+  // mixed save, so they are repaired before anything could simulate them.
+  refreshLegacyAttractionRecords(state)
   state.visitors.forEach((visitor) => repairVisitor(visitor, context))
   state.staff.forEach((member) => {
     member.route ??= []

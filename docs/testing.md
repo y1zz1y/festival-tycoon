@@ -10,8 +10,27 @@ Performance-Arbeit zusätzlich wie in `docs/performance.md`.
 Wiederverbindung und erneute Start→End-Reihenfolge, Loop-/Shuttle-/
 Start-End-/Open-Exit-Validierung, Preview/Command-Parität, Area-Konnektivität,
 Referenz-Allowlisten, Wasserlandung und die gemeinsame Builder-Palette.
+Außerdem friert es das Doppelmodell ein (`testDualModel`, Regel in
+`docs/attractions.md`): `assertDualModel` (eindeutige IDs, jeder
+Bahn-/Kurs-Datensatz gleich seiner Projektion, keine Waisen, Camping/Party
+gleich den Live-Overlays) läuft nach jedem Schritt einer Bahn-Sequenz (Start,
+Anhängen, Undo, Löschen, Schließen, Eingang setzen/verschieben, Ausgang,
+`open` → `test`, Preis, Dispatch, Ticks, Stationsabriss), auch in einem Park mit
+≥ 300 Campingzellen, und einer Kurs-Sequenz (Stücke, Undo, Flächen, Eingang,
+Teamgröße, Betrieb, Preis, Camping, Vorplatz, Abriss).
+`testSignatureDetectsEveryEditClass` prüft, dass die Signatur bei 1000 Zellen
+endlich bleibt und auf jede Änderungsklasse reagiert. Weitere Tests: eindeutige
+Kurs-IDs auch bei Pause und nach dem Laden, dieselbe Kurs-ID auf Host und
+optimistischem Client; keine Waisen nach Undo bis leer,
+Pool-Abriss mit `-slide-`, Ride-Abriss und optimistischem Client-Abriss;
+eine Legacy-ID-Regel ohne Doppelsimulation; Queue-Richtung vom Live-Eingang;
+idempotente Save-Runde, Reparatur eines gemischten Stands und
+`removedAttractionIds`-Semantik; MP-Vollsync und Deltas mit identischen
+Live-Zeilen, Attractions-only-Delta ohne Änderung bestehender Client-Zeilen;
+Ablehnung von Legacy-IDs durch die kanonischen Commands; festgeschriebene
+Verluste der Rückprojektion.
 `tests/snapshotModules.ts` deckt v30→v31 einschließlich Pool-Aufteilung und
-gemeldeter Entfernung eines nicht konvertierbaren Kurses sowie v31→v32 mit
+gemeldeter (nicht entfernter) nicht konvertierbarer Kurse sowie v31→v32 mit
 Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 
 ## Kommandos
@@ -108,7 +127,7 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/visitorDance.ts` | Two-Step-Pose: gepflanzte Knie, Hände hoch, Phase je Gast |
 | `tests/carrierModels.ts` | Träger: geteilte Gästeteile, Warnweste, Karren |
 | `tests/campingModels.ts` | Zelt-/Pavillon-Batches |
-| `tests/attractionFoundation.ts` | Camping-/Vorplatz-Ausweisung bleibt nach Attraction-Commands, Save/Load und MP-Deltas; Placement-Sperre (Gebäude/Weg/Deko), Fence/Delay-Ausnahme, Forecourt-Preview |
+| `tests/attractionFoundation.ts` | Camping-/Vorplatz-Ausweisung bleibt nach Attraction-Commands, Save/Load und MP-Deltas; Placement-Sperre (Gebäude/Weg/Deko), Fence/Delay-Ausnahme, Forecourt-Preview; Doppelmodell-Invarianten (`assertDualModel`, Signatur, Waisen, IDs, Save/MP, kanonische Commands) |
 | `tests/mobileTouch.ts` | Touch-Kamera / Gesten |
 | `tests/audio.ts` | Kamera-Listener (Look-At, nicht Gäste), Range-Skip, One-Shot-Cap; Jubel nur bei Konzert-Kandidaten + Cooldown/Chance; Fahrzeuge nur Start/Halt/Pass-by; Musik looped solange Quelle + in Range, eine Schleife je Genre; Ogg-Pfade, `public/sfx/` und `public/music/` vorhanden, Loader-Fallback |
 | `tests/progress.ts` | Fortschritt: Best-of-Merge, lokaler Speicher, Konto-Endpunkt mit Anmeldung, Client-Abgleich und Offline-Rückfall |
