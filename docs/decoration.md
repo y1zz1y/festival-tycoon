@@ -56,11 +56,11 @@ dieselbe Kategorie-Reihenfolge.
 | Lampenlicht | `src/game/decorationLights.ts` | `DECORATION_LIGHTS` — Farbe, Höhe, Punkt/Kegel je Licht-Art |
 | Attraktivität | `src/game/simulationConfig.ts` | `atmosphere.sources` je Kind |
 
-Neue Stücke (44): Wüste 4, Wald 4, Neon 4, Industrie 4, Tropen 4, Mystik 4,
+Neue Stücke (45): Wüste 4, Wald 4, Neon 4, Industrie 5, Tropen 4, Mystik 4,
 Zirkus 4, Alpin 4, Arktis 6, Steampunk 6. Bestehende Arten wurden den
 passenden Themen zugeordnet, nicht verdoppelt.
 
-Kanten-Slots der neuen Arten: `glowTape`, `chainFence`, `occultBanner`,
+Kanten-Slots der neuen Arten: `glowTape`, `chainFence`, `trackCurb`, `occultBanner`,
 `carnivalBulbs`, `iceFence`, `pipeRail`. Vollfeld bleiben `bench`, `fence`,
 `lighting`, `lightBalloon` (Klassik).
 
@@ -198,3 +198,11 @@ Punkt- vs. Kegellicht stehen in `decorationLights.ts` und folgen dem Mesh
 Gasflamme, Natrium-Baustrahler). Glow und Birne sind Instanzfarben, die
 echten Lights ein fester Pool (8 Punkte, 4 Spots). Strom nur für Mastleuchte
 und Tageslichtballon. Kein neues Command oder Save-Feld.
+
+## Streckenbegrenzung und Festival-Umgebungen (0.2.8)
+
+`trackCurb` (rot-weiße Kerbs) sitzt unter **Industrie → Zaun** als Kanten-Deko.
+Zusammen mit den Covers `asphalt` und `salt` trägt das Rock am Ring und
+Burning Man, ohne ein neues Thema. Zentral noch fehlend für Wiedererkennbarkeit
+(nicht umgesetzt): Staumauer, Arena-Oval, Hafen/Kai, Reisfelder, Sakura-Lichtung.
+Quellen und Mapping: `.cursor/skills/festival-terrain-import/SKILL.md`.

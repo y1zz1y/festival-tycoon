@@ -15,14 +15,14 @@ feature you touch. Keep detailed file maps and feature history in topic docs.
 | Buildings, catalog, scenery | `docs/buildings.md` |
 | Copy / build library | `docs/blueprints.md` |
 | Themed decoration / Deko tab | `docs/decoration.md` |
-| Terrain, ground, way types | `docs/terrain.md` |
+| Terrain, ground, way types, OSM import | `docs/terrain.md` |
 | Roads, depots, freight, lights | `docs/logistics.md` |
 | Band supply / backstage / tour bus | `docs/band-supply.md` |
 | Staff, medical, security | `docs/staff.md` |
 | Waste, incidents, panic | `docs/incidents.md` |
 | Festival weekend, bands, tickets | `docs/festival.md` |
 | Finance, ledger, loans | `docs/finance.md` |
-| Scenarios, goals, win/loss, due day | `docs/scenarios.md` |
+| Scenarios, goals, win/loss, due day, editor | `docs/scenarios.md` |
 | Accounts, sessions, authentication | `docs/accounts.md` |
 | Stage workshop / shows | `docs/stages.md` |
 | Coasters, rides, queues | `docs/attractions.md` |

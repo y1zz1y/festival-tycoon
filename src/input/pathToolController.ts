@@ -1,4 +1,5 @@
-import { isCopyTool, isTerrainEditTool, type BuildingKind } from '../game/catalog'
+import { isCopyTool, isTerrainCoverTool, isTerrainEditTool, type BuildingKind } from '../game/catalog'
+import { groundCoverFromTool } from '../game/ground'
 import type { GameState } from '../game/GameState'
 import { isScenery, scenerySlot } from '../game/scenery'
 import { terrainToolMode } from '../game/terrain'
@@ -118,6 +119,7 @@ export function createPathToolController(services: PathDragServices, view: PathD
     AREA_TOOLS.has(tool) ||
     isCopyTool(tool as never) ||
     isTerrainEditTool(tool as never) ||
+    isTerrainCoverTool(tool) ||
     (tool === 'course' && services.coursePaintMode?.() === 'area')
   const cells = (tool: string): CellPosition[] =>
     areaMode(tool) ? rectangleCells(start!, end!) : connectedPathLine(start!, end!)
@@ -143,7 +145,7 @@ export function createPathToolController(services: PathDragServices, view: PathD
         sceneryDragSlot = scenerySlot(game.snapshot.selectedTool, cell.localX, cell.localZ, sceneryRotation) ?? 0
       } else sceneryDragSlot = null
       const tool = game.snapshot.selectedTool
-      elevation = GROUND_ELEVATION_TOOLS.has(tool) || isCopyTool(tool) || isTerrainEditTool(tool)
+      elevation = GROUND_ELEVATION_TOOLS.has(tool) || isCopyTool(tool) || isTerrainEditTool(tool) || isTerrainCoverTool(tool)
         ? 0
         : game.snapshot.buildElevation
       view.setPathDragPreview([cell], elevation)
@@ -217,6 +219,12 @@ export function createPathToolController(services: PathDragServices, view: PathD
         const mode = terrainToolMode(tool)
         if (mode) {
           const result = game.editTerrainArea(selectedCells, mode, terrainOriginHeight)
+          services.showToast(result.message, !result.ok)
+        }
+      } else if (isTerrainCoverTool(tool)) {
+        const cover = groundCoverFromTool(tool)
+        if (cover) {
+          const result = game.paintGroundCoverArea(selectedCells, cover)
           services.showToast(result.message, !result.ok)
         }
       } else if (tool === 'course' && services.placeCourseCells) {

@@ -50,6 +50,8 @@ sondern ein Aussetzer.
   nutzt `setSpeed`. Clients öffnen Endbildschirm und Stichtag-Übersicht, wenn
   sich `outcome.state` bzw. `dueReminderDay` ändert, zeigen aber nur „Schließen“.
   Details: [scenarios.md](scenarios.md).
+  Der **Szenario-Editor** ist lokales Authoring: kein neues `GameCommand`,
+  kein Host-Tick. Ein Client darf ihn nicht starten.
 - **Live-Chat und Map-Ping:** Ephemere UI-Ereignisse, kein `GameCommand` und
   kein Snapshot-Feld. Client sendet `{ t: 'chat', text, ping? }`; der Server
   säubert Text (max. 200 Zeichen) und Ping-Koordinaten und broadcastet
@@ -256,6 +258,12 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   `mode` kann weiter `raiseCorner` / `lowerCorner` / `water` / `smooth` /
   `flatten` sein (UI zeigt nur raise/lower/smooth). Flächen gehen über
   `editTerrainArea` (`cells`, `mode`, optionales `originHeight` für Glätten).
+  Optische Untergründe: `paintGroundCover` (`x`, `z`, `cover`) und
+  `paintGroundCoverArea` (`cells`, `cover`); `cover` ist einer von
+  `grass`/`sand`/`stone`/`field`/`snow`/`rock`/`earth`/`salt`/`asphalt`. Optimistic wie
+  die übrigen Geländebefehle, host-autoritativ. Snapshot-Feld
+  `festival.infrastructure.ground[].cover` kommt mit der Welt; fehlend
+  bleibt der umgebungsbasierte Boden.
   Snapshot `waterLevel` und optionale `terrain.corners` kommen mit der Welt.
   `placePath.slope` ist eine Zahl (neu ±0.5, Legacy ±1). Neue Commands
   `placeRoad` und `undoRoad` setzen Straßenrampen host-autoritativ.

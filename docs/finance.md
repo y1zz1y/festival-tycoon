@@ -9,7 +9,8 @@ vollen Tages mit den aktuell berechenbaren Fixkosten.
 | Aufgabe | Vollständiger Pfad | Einstieg / Symbol |
 | --- | --- | --- |
 | Ledger, Kategorien, Prognose | `src/game/finance.ts` | `bookFinance`, `financeEdition`, `financeForecast` |
-| Darlehensregeln | `src/game/finance.ts` | `LOAN`, `loanLimit`, `loanInterest` |
+| Darlehensregeln | `src/game/finance.ts` | `LOAN`, `loanLimit`, `loanInterest`, `canAfford` |
+| Szenario-Startgeld / Schulden | `src/game/scenario.ts`, `src/game/snapshotBootstrap.ts`, `src/game/scenarioFile.ts` | `startingMoney`, `startingLoan`; Editor: Ausgaben werden nicht gebucht |
 | Zustands-API und laufende Kosten | `src/game/GameState.ts` | `GameState.financeOverview`, `GameState.manageLoan`, `GameState.financeForecast` |
 | Aufschlüsselung der Kostenzeilen | `src/game/financeBreakdown.ts` | `financeCostBreakdown` |
 | Leerlauf-/Bühnen-/Kurs-Unterhalt | `src/game/upkeep.ts` | `buildingHourlyUpkeep`, `coasterHourlyUpkeep`, `courseHourlyUpkeep`, `festivalIsLive`, `venueUpkeepIdle` |
@@ -21,6 +22,8 @@ vollen Tages mit den aktuell berechenbaren Fixkosten.
 
 - Geldänderungen laufen über `bookFinance`; Darlehensauszahlung und Tilgung
   ändern Bargeld und Schuld, sind aber weder Einnahme noch Ausgabe.
+  Im Szenario-Editor (`scenario.authoring`) gilt **Baukosten 0**:
+  `canAfford` ist immer wahr, negative `bookFinance`-Buchungen entfallen.
 - Buchungen werden auf Cent gerundet und auf acht Festival-Ausgaben begrenzt.
 - Zinsen und laufende Kosten werden aus **Kalender**-Simulationszeit berechnet
   (`economyIntervalMinutes` = 60 Spielminuten, `runEconomy` je voller Spielstunde).

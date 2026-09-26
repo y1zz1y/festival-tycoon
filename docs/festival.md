@@ -14,7 +14,7 @@ hält die Simulationsuhr an, bis **Festival starten**.
 | Musikgeschmack, Basis-Evolution | `src/game/musicTaste.ts` | `evolveMusicAudience`, `GENRES` |
 | Automatischer Spielplan | `src/game/autoLineup.ts` | `planAutoLineup` (min/max Sterne, bestehende Slots bleiben) |
 | Ticketnachfrage | `src/game/ticketDemand.ts` | `estimateTicketDemand`, `arrivalPriceMultiplier` |
-| Nachfrage-Tuning | `src/game/demandTuning.ts`, `src/game/simulationConfig.ts` | `TicketDemandTuning`, Normalisierung und Standardwerte |
+| Nachfrage-Tuning | `src/game/demandTuning.ts`, `src/game/simulationConfig.ts` | `TicketDemandTuning`, Normalisierung und Standardwerte; Szenario-Dateien können `demandTuning` und `tickets` setzen ([scenarios.md](scenarios.md)) |
 | Waren im Festivalkontext | `src/game/supplyChain.ts`, `src/game/festivalManagement.ts` | `Supply` inkl. `goods` (Allgemeine Waren) |
 | Spielplan-UI | `src/musicPlanner.ts` | Band ziehen, Raster |
 | Festival-Fenster | `src/festivalUI.ts` | Tickets, Preise, Tagesplan, Auswertung, Ausbauten, **Park öffnen/schließen** (`setParkOpen`) |

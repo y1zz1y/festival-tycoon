@@ -1,5 +1,5 @@
 import { autoLineupDuration, planAutoLineup } from './autoLineup'
-import { bookFinance, type FinanceCategory } from './finance'
+import { bookFinance, canAfford, type FinanceCategory } from './finance'
 import { GENRES, bandGenre, musicTaste, musicAppeal, evolveMusicAudience, type MusicMix } from './musicTaste'
 import { stageDistance, buildingFootprint, stageDesignIssue, stageStats, stagePhase, type StageDesign } from './stageDesign'
 import type { WayType } from './wayTypes'
@@ -294,7 +294,7 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
   if (action.type === 'order') return orderGoods(s, action.kind, action.quantity, action.delay, action.depotId)
   const f = s.festival, now = festivalTime(s)
   const fail = (message: string): ActionResult => ({ ok: false, message })
-  const pay = (amount: number, category: FinanceCategory) => { if (s.money < amount) return false; bookFinance(s, category, -amount); return true }
+  const pay = (amount: number, category: FinanceCategory) => { if (!canAfford(s, amount)) return false; bookFinance(s, category, -amount); return true }
   if (action.type === 'sandbox') { f.planning = false; f.enabled = false; s.parkOpen = true; s.speed = 1; return { ok: true, message: 'Freies Spiel fortgesetzt' } }
   if (action.type === 'stageTemplate') {
     if(action.name!==null&&!f.stageTemplates?.some(t=>t.name===action.name))return fail('Vorlage nicht gefunden')

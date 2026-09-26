@@ -195,6 +195,7 @@ const DECORATION_ENTRIES: readonly DecorationEntry[] = [
   { kind: 'crateStack', theme: 'industrie', category: 'props' },
   { kind: 'oilDrum', theme: 'industrie', category: 'props' },
   { kind: 'chainFence', theme: 'industrie', category: 'fence' },
+  { kind: 'trackCurb', theme: 'industrie', category: 'fence' },
 
   { kind: 'palmTree', theme: 'tropen', category: 'plants' },
   { kind: 'parasol', theme: 'tropen', category: 'furniture' },
@@ -269,6 +270,7 @@ export const THEMED_DECORATION_KINDS = [
   'palletBench',
   'workLamp',
   'chainFence',
+  'trackCurb',
   'palmTree',
   'tikiStool',
   'tikiMask',

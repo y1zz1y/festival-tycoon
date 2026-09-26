@@ -1,3 +1,4 @@
+import { normalizeGroundCells } from './ground'
 import { normalizeBandActor } from './bandActors'
 import { isAttractionDefinitionId } from './attractions/definitions'
 import { migrateLegacyAttractions } from './attractions/migration'
@@ -124,6 +125,9 @@ export function migrateSnapshot(
       data.campingTicketPrice ??
       data.entryPrice ??
       SIMULATION_CONFIG.economy.defaultCampingTicketPrice,
+  }
+  if (migrated.festival.infrastructure?.ground) {
+    normalizeGroundCells(migrated.festival.infrastructure.ground)
   }
   if (migrated.festival.stageTemplates) {
     migrated.festival.stageTemplates =

@@ -90,11 +90,16 @@ Geländefarben und natürliche Vegetation passen zur Umgebung.
 RCT-artige Stufenplateaus). Wüste erzeugt Dünen ohne zufällige Wasserlöcher;
 Stadtfläche bleibt ebenfalls über Wasserniveau. Eingang und Straßenzufahrt
 bleiben bei jedem Wert eingeebnet.
-Im Reiter **Gelände** gibt es nur **Feld anheben**, **Feld senken** und
-**Glätten**. Ziehen markiert ein Rechteck; jeder Klick ändert um eine
+Im Reiter **Gelände** gibt es **Feld anheben**, **Feld senken**,
+**Glätten** und die **Untergrund**-Palette: Rasen, Sand, Stein, Acker,
+Schnee, Felsen, braune Erde, Salzpfanne und Asphalt. Ziehen markiert ein Rechteck; Anheben
+und Senken ändern um eine
 halbe Höhenstufe. Hänge bleiben höchstens 0,5 hoch, der Rest wird zur
 Steinklippe. **Glätten** zieht die Fläche auf die Höhe unter dem ersten
-Klick. Der Wasserspiegel liegt eine halbe Stufe unter Ebene 0 und liegt
+Klick. Gemalte Untergründe ändern nur das Aussehen — außer bei Rasen, Sand,
+Acker, brauner Erde und Salzpfanne, die dieselben Schritttempi wie der natürliche
+Wiesen-, Sand-, Acker-, Lehm- bzw. Sandboden nutzen. Asphalt bleibt optisch. Der Wasserspiegel liegt eine
+halbe Stufe unter Ebene 0 und liegt
 auch auf den abfallenden Uferhängen. Gäste mit wenig Spaß laufen zum
 erreichbaren Wasser und baden dort. Angehobene Gebäude und Deko bekommen
 Säulen nur, wo darunter Luft ist — nicht durch angehobenes Land oder ein
@@ -351,6 +356,18 @@ Jede weitere Ausgabe verlangt mehr: mehr Gäste, etwas mehr Zufriedenheit (bis 8
 und einen wachsenden Gewinn. Anschließend kann eine weitere Ausgabe oder das freie
 Spiel folgen.
 
+**Szenario-Editor:** Im Hauptmenü startet **Szenario-Editor** eine Sandbox,
+in der Bauen nichts kostet. Im Fenster **Szenario-Editor** (📜) setzt ihr Name,
+Beschreibung, Startgeld, Schulden, Publikumswerte, Ticket-Mix und Nachfrage.
+**Szenario exportieren** lädt eine JSON-Datei herunter; liegt sie in
+`public/scenarios/` (bzw. nach dem Build in `dist/scenarios/`), erscheint sie
+unter **Neues Spiel** mit Beschreibungstext. Eingebaute Szenarien bleiben
+unverändert.
+
+Zusätzliche Drop-in-Gelände (Black Rock City, Nürburgring-Skizze) erscheinen
+unter **Neues Spiel**, sobald sie im Szenarien-Ordner liegen. Autoren erzeugen
+sie aus OpenStreetMap und öffentlichen Höhendaten — nicht aus Google-Maps-Kacheln.
+
 **Szenarien:** Vor jedem vorbereiteten Szenario steht ein **Briefing** mit
 Gelände, Startgeld, Darlehen, Stichtag der ersten Ausgabe und Zielen. Ziele messen
 entweder den Park (Guthaben, Festivalwert, getilgtes Darlehen) oder eine beendete
@@ -561,7 +578,7 @@ wie bei Achterbahnen, nicht im Baumenü.
 - mittlere oder rechte Maustaste ziehen: Kamera verschieben
 - Mausrad: zoomen
 - Q / E: Kamera um 90 Grad drehen
-- 🔊 in der Sitzungsleiste oder Einstellungen → **Ton stumm**: Festival-SFX aus (Kamera-Listener, bleibt lokal gespeichert)
+- 🔊 in der Sitzungsleiste oder Einstellungen → **Ton stumm**: Festival-SFX aus (echte CC0-Klänge, Synth nur als Fallback; Kamera-Listener, bleibt lokal gespeichert). In der Nähe einer **spielenden Bühne** läuft Genre-Musik in der Schleife; Jubel, Schreie und Fahrzeuge nur gelegentlich bei echten Ereignissen.
 - **Finanzen** in der Sitzungsleiste: Ausgaben und Einnahmen je Festivalausgabe. Ein Klick auf **Betriebskosten**, **Personal**, **Gagen** oder **Kreditzinsen** klappt die aktuelle Aufschlüsselung auf (Stände, Attraktionen, Bühnen, Löhne, Darlehen, Buchungen); ein weiterer Klick schließt sie. Mehrere Zeilen können gleichzeitig offen sein.
 - R: Gebäude, Deko oder Kopiervorlage um 90 Grad drehen
 - Shift halten und Maus hoch/runter (oder Mausrad / Bild hoch/runter): Bauhöhe in halben Stufen (0.5, 0–6) ändern. Um das Gebäude erscheint ein 7×7-Baugitter auf dieser Ebene. Die Bodenkachel unter dem Zeiger bleibt immer gelb umrandet, auch wenn das Objekt angehoben ist. Shift loslassen behält die Höhe; ein neues Bauwerkzeug setzt sie auf 0.
@@ -665,7 +682,7 @@ Vorlagen kosten beim Speichern nichts. **Für Bühnenbau verwenden** wählt die 
 
 Motortraversen bewegen ihre angehängten Bauteile gemeinsam vertikal. Der Showregler **Traversenhub** bestimmt den Hub, **Bewegung / Tempo** die Geschwindigkeit; der Fahrbereich am Boden bleibt frei. **Feuerwerksmodul** und **Funkenfontäne** werden am Boden platziert und über **Feuerwerk / Funken** je Showphase gesteuert. Ohne aktiven, versorgten Auftritt bleiben die Effekte aus. Vorhandene Vorlagen ohne diese Regler behalten Hub und Pyrotechnik auf null. Neue Entwürfe steigern beide Werte bis zum Finale. Kosten, Strombedarf und Partywerte berücksichtigen die neuen Module.
 
-Gebuchte Bands stehen während gültiger, stromversorgter Auftritte als animierte Pixel-Musiker auf Standard- und selbstgebauten Bühnen. Die Besetzung unterscheidet Gitarren, Gesang, Schlagzeug, Bläser und Keyboards passend zur Band. Auf selbstgebauten Bühnen stehen Musiker ausschließlich auf platzierten Bühnenpodesten und in deren korrekter Höhe. Zuschauerfelder, andere Bodenaufbauten und Motortraversen-Fahrbereiche bleiben frei. Ohne Podeste erscheinen keine Musiker; für eine vierköpfige Band werden vier Podeste benötigt. Standardbühnen nutzen ihre feste Plattform. Die Bühnenwerkstatt bietet eine abschaltbare Indie-Bandvorschau zur Platzplanung. Musiker sind eine visuelle Darstellung der vorhandenen Buchung; diese Erweiterung erzeugt keine Musik-Audiospur.
+Gebuchte Bands stehen während gültiger, stromversorgter Auftritte als animierte Pixel-Musiker auf Standard- und selbstgebauten Bühnen. Die Besetzung unterscheidet Gitarren, Gesang, Schlagzeug, Bläser und Keyboards passend zur Band. Auf selbstgebauten Bühnen stehen Musiker ausschließlich auf platzierten Bühnenpodesten und in deren korrekter Höhe. Zuschauerfelder, andere Bodenaufbauten und Motortraversen-Fahrbereiche bleiben frei. Ohne Podeste erscheinen keine Musiker; für eine vierköpfige Band werden vier Podeste benötigt. Standardbühnen nutzen ihre feste Plattform. Die Bühnenwerkstatt bietet eine abschaltbare Indie-Bandvorschau zur Platzplanung. Musiker sind eine visuelle Darstellung der vorhandenen Buchung; sie selbst erzeugen keine Audiospur. Die Kamera hört loopende CC0-Genre-Beds, solange eine Bühne spielt und in Reichweite ist (siehe Festival-SFX).
 
 ### Musikpublikum und Bühnenzeitplan
 

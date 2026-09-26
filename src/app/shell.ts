@@ -97,6 +97,7 @@ export function mountAppShell(app: HTMLDivElement): void {
         <button id="undo-last-build" type="button" title="Rückgängig" aria-label="Rückgängig">↶</button>
         <button id="toggle-multiplayer" type="button" title="Mehrspieler" aria-label="Mehrspieler" aria-expanded="false">🌐</button>
         <button id="toggle-debug-menu" type="button" title="Debug" aria-label="Debug" aria-expanded="false">🐞</button>
+        <button id="toggle-scenario-editor" type="button" title="Szenario exportieren" aria-label="Szenario exportieren" aria-expanded="false" hidden>📜</button>
         <button id="toggle-scenario" class="scenario-toggle" type="button" title="Einstellungen" aria-label="Einstellungen" aria-expanded="false">⚙️</button>
       </div>
     </nav>
@@ -164,6 +165,28 @@ export function mountAppShell(app: HTMLDivElement): void {
       <h3 class="scenario-heading">Dieses Festival</h3>
       <p class="scenario-hint">Gelände und Publikum werden beim Start festgelegt und stehen für die ganze Partie fest. Ein neues Festival startest du über den Titelbildschirm.</p>
       <dl id="scenario-summary" class="scenario-summary"></dl>
+    </aside>
+    <aside id="scenario-editor-panel" class="scenario-panel scenario-editor-panel panel" hidden>
+      <div class="panel-header">
+        <span class="panel-drag-line" aria-hidden="true"></span>
+        <h2 class="panel-header-title">Szenario-Editor</h2>
+        <span class="panel-drag-line" aria-hidden="true"></span>
+        <button id="close-scenario-editor" class="panel-close-button" aria-label="Szenario-Editor schließen">×</button>
+      </div>
+      <p class="scenario-hint">Bauen ist hier kostenlos. Export schreibt eine JSON-Datei für den Ordner <code>public/scenarios/</code> — danach erscheint sie unter Neues Spiel.</p>
+      <label class="scenario-field"><span>Name</span><input id="editor-name" type="text" maxlength="80" placeholder="z. B. Flutlichtwiese" /></label>
+      <label class="scenario-field"><span>Beschreibung</span><textarea id="editor-detail" rows="3" maxlength="800" placeholder="Was die Spielerin vorfindet und worum es geht."></textarea></label>
+      <label class="scenario-field"><span>Startgeld <b id="editor-money-value">10.000 €</b></span><input id="editor-money" type="range" min="5000" max="250000" step="5000" value="10000" /></label>
+      <label class="scenario-field"><span>Schulden <b id="editor-loan-value">0 €</b></span><input id="editor-loan" type="range" min="0" max="100000" step="1000" value="0" /></label>
+      <label class="scenario-field"><span>Autobesucher <b id="editor-car-value">78%</b></span><input id="editor-car-share" type="range" min="0" max="100" step="1" value="78" /></label>
+      <label class="scenario-field"><span>Party-Affinität <b id="editor-party-value">55%</b></span><input id="editor-party" type="range" min="0" max="100" step="1" value="55" /></label>
+      <label class="scenario-field"><span>Schönheits-Affinität <b id="editor-beauty-value">55%</b></span><input id="editor-beauty" type="range" min="0" max="100" step="1" value="55" /></label>
+      <label class="scenario-field"><span>Gewaltbereitschaft <b id="editor-aggression-value">28%</b></span><input id="editor-aggression" type="range" min="0" max="100" step="1" value="28" /></label>
+      <label class="scenario-field"><span>Tagestickets zum Start</span><input id="editor-ticket-day" type="number" min="0" max="20000" step="10" value="150" /></label>
+      <label class="scenario-field"><span>Campingtickets zum Start</span><input id="editor-ticket-camping" type="number" min="0" max="20000" step="10" value="0" /></label>
+      <label class="scenario-field"><span>Nachfrage · Tagesgäste</span><input id="editor-demand-day" type="number" min="0" max="100000" step="10" value="${SIMULATION_CONFIG.ticketDemand.attendance.dayBaseGuests}" /></label>
+      <label class="scenario-field"><span>Nachfrage · Camper</span><input id="editor-demand-camping" type="number" min="0" max="100000" step="10" value="${SIMULATION_CONFIG.ticketDemand.attendance.campingBaseGuests}" /></label>
+      <button id="editor-export" type="button">Szenario exportieren</button>
     </aside>
     <aside id="multiplayer-panel" class="multiplayer-panel panel" hidden>
       <div class="panel-header">
@@ -871,7 +894,8 @@ export function mountAppShell(app: HTMLDivElement): void {
         </div>
         <nav class="title-menu" aria-label="Hauptmenü">
           <button type="button" data-title-menu="resume" disabled><span class="title-menu-label">Fortsetzen</span><span id="title-resume-meta" class="title-menu-meta">Noch nicht gespielt</span></button>
-          <button type="button" data-title-menu="new" aria-haspopup="true"><span class="title-menu-label">Neues Spiel</span><span class="title-menu-meta">${SCENARIO_PRESETS.length + 1} Szenarien</span></button>
+          <button type="button" data-title-menu="new" aria-haspopup="true"><span class="title-menu-label">Neues Spiel</span><span id="title-new-meta" class="title-menu-meta">${SCENARIO_PRESETS.length + 1} Szenarien</span></button>
+          <button type="button" data-title-menu="editor"><span class="title-menu-label">Szenario-Editor</span><span class="title-menu-meta">Frei bauen und exportieren</span></button>
           <button type="button" data-title-menu="load"><span class="title-menu-label">Spielstand laden</span><span class="title-menu-meta">Archiv öffnen</span></button>
           <button type="button" data-title-menu="multiplayer" aria-haspopup="true"><span class="title-menu-label">Mehrspieler beitreten</span><span class="title-menu-meta">Offene Lobby oder Code</span></button>
           <button type="button" data-title-menu="settings"><span class="title-menu-label">Einstellungen</span><span class="title-menu-meta">Debug · Festivaldaten</span></button>
@@ -938,9 +962,8 @@ export function mountAppShell(app: HTMLDivElement): void {
             <span class="title-submenu-title">Neues Spiel</span>
             <span class="title-submenu-kicker">Szenario wählen</span>
           </div>
-          <div class="title-submenu-rows">
+          <div id="title-scenario-rows" class="title-submenu-rows">
             <button type="button" data-title-scenario="" aria-haspopup="true"><span class="title-row-text"><span class="title-row-label">Freies Spiel</span><span class="title-row-meta">Gelände, Publikum und Startkapital selbst festlegen — ohne Vorgaben und ohne Ziele.</span></span><span class="title-row-value">frei</span></button>
-            ${SCENARIO_PRESETS.map((entry) => `<button type="button" data-title-scenario="${entry.id}"${entry.price ? ` data-title-locked="${entry.price}" aria-disabled="true"` : ''}><span class="title-row-text"><span class="title-row-label">${entry.name}</span><span class="title-row-meta">${entry.detail}</span></span><span class="title-row-value">${entry.price ? `<span class="title-row-lock" aria-hidden="true">🔒</span>${entry.price}` : `${entry.settings.worldSize} × ${entry.settings.worldSize}`}</span></button>`).join('')}
           </div>
           <button type="button" data-title-back>Zurück</button>
         </div>

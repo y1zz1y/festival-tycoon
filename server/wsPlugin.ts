@@ -3,6 +3,7 @@ import { WebSocketServer } from 'ws'
 import { attachMultiplayer, localJoinHost } from './rooms.ts'
 import { handleSaveRequest } from './saveSlots.ts'
 import { handleAccountRequest } from './accounts.ts'
+import { handleScenarioRequest } from './scenarios.ts'
 
 function bindWebSocket(
   server: ViteDevServer,
@@ -26,7 +27,11 @@ function bindWebSocket(
 
 /** The two APIs the game speaks to, in one middleware: accounts first, then saves. */
 async function handleApi(request: Parameters<typeof handleSaveRequest>[0], response: Parameters<typeof handleSaveRequest>[1]): Promise<boolean> {
-  return (await handleAccountRequest(request, response)) || (await handleSaveRequest(request, response))
+  return (
+    (await handleAccountRequest(request, response)) ||
+    (await handleSaveRequest(request, response)) ||
+    (await handleScenarioRequest(request, response))
+  )
 }
 
 export function festivalMultiplayer(): Plugin {

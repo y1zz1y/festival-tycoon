@@ -125,6 +125,7 @@ import { isTextEntryTarget } from './uiFocus'
 import { mountTitleScreen, type TitleScreenController } from './ui/titleScreen'
 import { mountSaveController } from './ui/saveController'
 import { createScenarioFormController } from './ui/scenarioScreen'
+import { createScenarioEditorController, editorMoneyLabel } from './ui/scenarioEditor'
 import { mountMobileUI } from './mobileUI'
 import { mountUpdateNotice } from './updateNotice'
 import { startGameLoop } from './app/gameLoop'
@@ -829,7 +830,9 @@ function bindGameState(nextGame: GameState): void {
     staffDetails.update(snapshot)
     tickerUI.update(snapshot)
     scenarioStatus.update(snapshot)
-    money.textContent = formatMoney(snapshot.money)
+    money.textContent = editorMoneyLabel(Boolean(snapshot.scenario.authoring), snapshot.money)
+    scenarioEditorToggle.hidden = !snapshot.scenario.authoring
+    if (!snapshot.scenario.authoring && !scenarioEditorPanel.hidden) setEditorPanelOpen(false)
     guests.textContent = snapshot.guests.toLocaleString('de-DE')
     reputation.textContent = `${snapshot.reputation}%`
     const powerDemand = Math.round(snapshot.power.demand)
@@ -3634,11 +3637,25 @@ const fillScenarioForm = scenarioForm.fill
 const updateScenarioSummary = scenarioForm.updateSummary
 const updateScenarioLabels = scenarioForm.updateLabels
 
+const scenarioEditorPanel = requireElement<HTMLElement>('#scenario-editor-panel')
+const scenarioEditorToggle = requireElement<HTMLButtonElement>('#toggle-scenario-editor')
+const scenarioEditor = createScenarioEditorController({
+  panel: scenarioEditorPanel,
+  getGame: () => game,
+  showToast,
+})
+
+function setEditorPanelOpen(open: boolean): void {
+  scenarioEditor.setOpen(open)
+  scenarioEditorToggle.setAttribute('aria-expanded', String(open))
+}
+
 function setScenarioPanelOpen(open: boolean): void {
   scenarioPanel.hidden = !open
   scenarioToggle.setAttribute('aria-expanded', String(open))
   if (open) {
     setMultiplayerPanelOpen(false)
+    setEditorPanelOpen(false)
     updateScenarioSummary()
   }
 }
@@ -3837,7 +3854,15 @@ scenarioToggle.addEventListener('click', () => {
 requireElement<HTMLButtonElement>('#close-scenario').addEventListener('click', () => {
   setScenarioPanelOpen(false)
 })
+scenarioEditorToggle.addEventListener('click', () => {
+  setEditorPanelOpen(scenarioEditorPanel.hasAttribute('hidden'))
+})
+requireElement<HTMLButtonElement>('#close-scenario-editor').addEventListener('click', () => {
+  setEditorPanelOpen(false)
+})
 makeDraggable(scenarioPanel.querySelector<HTMLElement>('.panel-header')!, scenarioPanel)
+makeDraggable(scenarioEditorPanel.querySelector<HTMLElement>('.panel-header')!, scenarioEditorPanel)
+makeResizable(scenarioEditorPanel)
 makeResizable(scenarioPanel)
 /**
  * The title screen: the first thing the game shows, and the way back to a clean start.
@@ -4647,6 +4672,7 @@ titleScreenController = mountTitleScreen({
   setSaveSlotsPanelOpen,
   fillScenarioForm,
   readScenarioForm,
+  setEditorPanelOpen,
   closePathEditor,
   isPathWindowOpen: () => pathWindowOpen,
   hideVisitorPanel,

@@ -37,6 +37,8 @@ export function testTerrainSurface(fixture: (count?: number) => GameState): void
   assert.equal(terrainMaterialAt(snapshot, 2, 2), 'gravel')
   snapshot.festival.infrastructure.ground['2,2']!.surface = 'paved'
   assert.equal(terrainMaterialAt(snapshot, 2, 2), 'paved')
+  snapshot.festival.infrastructure.ground['5,2'] = { cover: 'snow' }
+  assert.equal(terrainMaterialAt(snapshot, 5, 2), 'snow', 'painted cover overrides the natural atlas row')
   snapshot.logistics.parkingCells = [{ x: 3, z: 3, occupiedBy: null }]
   assert.equal(terrainMaterialAt(snapshot, 3, 3), 'parking')
   assert.equal(terrainMaterialAt(snapshot, 2, 2), 'paved', 'parking does not recolor neighboring paved or way tiles')

@@ -1,7 +1,7 @@
-import { BUILDING_KINDS, BUILDINGS, isCopyTool, type BuildingKind } from '../game/catalog'
+import { BUILDING_KINDS, BUILDINGS, isCopyTool, isTerrainCoverTool, type BuildingKind } from '../game/catalog'
 import { formatBackstageHover } from '../game/bandSupply'
 import { isWasteBin } from '../game/decorationWalls'
-import { groundInfo } from '../game/ground'
+import { GROUND_COVERS, groundCoverFromTool, groundInfo } from '../game/ground'
 import type { GameState } from '../game/GameState'
 import type { PlacementPreviewResult } from '../game/placementPreview'
 import { isEdgeScenery, isLargeScenery, isScenery } from '../game/scenery'
@@ -101,7 +101,9 @@ export function contextHelpText({ game, hoveredCell, placementPreview, modes }: 
     const backstage = game.getBackstageCellAt(cell.x, cell.z)
     const backstageStats = backstage ? game.getBandSupplyAt(cell.x, cell.z) : undefined
     const ground = groundInfo(game.snapshot, cell.x, cell.z)
-    const soilName = { field: 'Ackerboden', clay: 'Lehmboden', gravel: 'Kiesboden', sand: 'Sandboden', grass: 'Wiesenboden', urban: 'Stadtboden' }[ground.type]
+    const soilName = ground.cover
+      ? GROUND_COVERS[ground.cover].name
+      : { field: 'Ackerboden', clay: 'Lehmboden', gravel: 'Kiesboden', sand: 'Sandboden', grass: 'Wiesenboden', urban: 'Stadtboden' }[ground.type]
     const parking = game.snapshot.logistics.parkingCells.some((entry) => entry.x === cell.x && entry.z === cell.z)
     const surfaceName = parking
       ? 'Parkfläche'
@@ -120,6 +122,12 @@ export function contextHelpText({ game, hoveredCell, placementPreview, modes }: 
   if (tool === 'terrainRaise') return 'Rechteck ziehen: Fläche um 0,5 anheben. Hänge höchstens 0,5, Rest als Steilklippe.'
   if (tool === 'terrainLower') return 'Rechteck ziehen: Fläche um 0,5 senken. Unter −0,5 liegt Wasser.'
   if (tool === 'terrainSmooth') return 'Rechteck ziehen: alle Felder auf die Höhe unter dem Startpunkt setzen.'
+  if (isTerrainCoverTool(tool)) {
+    const cover = groundCoverFromTool(tool)
+    return cover
+      ? `Rechteck ziehen: ${GROUND_COVERS[cover].name} auf die Fläche malen.`
+      : 'Rechteck ziehen: Untergrund auf die Fläche malen.'
+  }
   if (isCopyTool(tool)) return modes.copyClipboard
     ? placementPreview?.message ?? 'Rechteck aufziehen, um Gebäude, Deko und Wege zu kopieren.'
     : 'Rechteck aufziehen, um Gebäude, Deko und Wege zu kopieren.'

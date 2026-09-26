@@ -135,6 +135,17 @@ export function enableMultiplayerCommands(game: GameState): void {
     mode,
     originHeight,
   }))
+  game.paintGroundCover = wrap(game, game.paintGroundCover, (x, z, cover) => ({
+    type: 'paintGroundCover',
+    x,
+    z,
+    cover,
+  }))
+  game.paintGroundCoverArea = wrap(game, game.paintGroundCoverArea, (cells, cover) => ({
+    type: 'paintGroundCoverArea',
+    cells: [...cells],
+    cover,
+  }))
   game.designateRoad = wrap(game, game.designateRoad, (cells) => ({
     type: 'designateRoad',
     cells: [...cells],

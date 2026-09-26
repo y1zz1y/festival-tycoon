@@ -2,6 +2,7 @@ import { testFacadeReveal } from './facadeReveal'
 import { testWayStructures } from './wayStructures'
 import { testMusicPlanning } from './musicPlanning'
 import { testPixelPeople } from './pixelPeople'
+import { testVisitorDance } from './visitorDance'
 import { testCarrierModels } from './carrierModels'
 import { testCampingModels } from './campingModels'
 import { testRideAccess } from './rideAccess'
@@ -10,6 +11,8 @@ import { testCoasterTypes } from './coasterTypes'
 import { testBandSupply } from './bandSupply'
 import { testTerrainSurface } from './terrainSurface'
 import { testTerrainLand } from './terrainLand'
+import { testGroundCover } from './groundCover'
+import { testTerrainImport } from './terrainImport'
 import { testScenery } from './scenery'
 import { testPedestrianBarriers } from './pedestrianBarriers'
 import { testDecorationThemes, testThemedDecorationPlacement, testDecorationLampLights } from './decoration'
@@ -56,6 +59,7 @@ import { testBuildMenu } from './buildMenu'
 import { testPlacementPreview } from './placementPreview'
 import { testFinance } from './finance'
 import { testScenarioOutcome } from './scenarioOutcome'
+import { testScenarioEditor } from './scenarioEditor'
 import { testCourseAttractions, testPostRefactorBacklog } from './courseAttractions'
 import { testVisitorSleep } from './visitorSleep'
 import { testQueueLanes } from './queueLanes'
@@ -66,7 +70,7 @@ import { testSaves } from './saves'
 import { testBrowserSaves, testServerSaveClient } from './browserSaves'
 import { testBlueprints, testBlueprintLibraryRoundtrip, testBlueprintParkingCopy } from './blueprints'
 import { testBuildUndo } from './buildUndo'
-import { testFestivalAudio } from './audio'
+import { testFestivalAudio, testFestivalAudioAssets } from './audio'
 import { testSnapshotModules } from './snapshotModules'
 import { testSimulationModules } from './simulationModules'
 import { testSimulationTime } from './simulationTime'
@@ -91,11 +95,13 @@ testUiModules()
 test('canonical attraction graph, area and construction foundations', () => {
   testAttractionFoundation()
 })
+await testFestivalAudioAssets()
 testFestivalAudio()
 testWayStructures()
 testMobileTouch()
 testQueueLanes()
 testPixelPeople()
+testVisitorDance()
 testCarrierModels()
 testCampingModels()
 test('build menu lists every placeable tool once', () => {
@@ -118,6 +124,9 @@ test('books, loans, prepared scenarios and their goals', () => {
 })
 test('scenario outcome: edition goals, win and loss, insolvency, due day, weekend goals', () => {
   testScenarioOutcome()
+})
+test('scenario editor: export file loads, start money and loan apply, listing shows detail, authoring is free', () => {
+  testScenarioEditor()
 })
 test('course attractions and post-refactor backlog checks', () => {
   testCourseAttractions()
@@ -183,6 +192,8 @@ test('band supply: bare vs supplied, shared pool, parking, fans, clock, placemen
 testRideAccess(fixture)
 testTerrainSurface(fixture)
 testTerrainLand(fixture)
+testGroundCover(fixture)
+testTerrainImport()
 
 test('Base64 saves preserve Unicode and full worlds without overwriting local saves', () => {
   const original = fixture(2)

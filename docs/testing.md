@@ -63,6 +63,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `tests/unsavedWork.ts` | Ungespeicherte Arbeit: Bauen/Abreißen markiert sie, Speichern setzt zurück, reines Ticken zählt nicht, Fünf-Minuten-Grenze exakt, abgeschaltete Warnung lässt Abbruchwege durch |
 | `tests/wakeLock.ts` | Bildschirmsperre: nur bei laufender Sitzung, kein Doppel-Lock, Freigabe beim Verbergen und Rückholen beim Sichtbarwerden, vom Browser abgeworfener Lock wird neu geholt, Sitzungsende während laufender Anfrage, Verweigerung und fehlende API |
 | `tests/scenarioOutcome.ts` | Szenario-Ausgang: Ausgabeziele mit Serien, Sieg/Niederlage, Insolvenzfrist, Stichtag mit Pause + Planung, mitwachsende Wochenendziele, Ticker-Meldungen zu Zielen, Gesamtnote |
+| `tests/scenarioEditor.ts` | Szenario-Editor: Export-Datei lädt, Startgeld/Schulden/Tickets/Nachfrage greifen, Listing inkl. Beschreibung, Bauen ohne Geldlimit |
 | `tests/multiplayerChat.ts` | Chat-Sanitizing, Ping-TTL, Edge-Arrow-Projektion; Roundtrip in `regression.ts` |
 | `tests/hotkeys.ts` | Tastenbelegung: Standardbelegung kollisionsfrei, Numpad zählt als Ziffernreihe, eine Taste gehört einer Aktion (der vorherige Halter wird frei), reservierte Tasten gesperrt, Beschriftungen, Speichern/Laden inkl. kaputtem Eintrag |
 | `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, endliche Festivalmodell-Bounds/Picking, Lights, Achterbahnwagen, Logistik-Modelle; Grafikstandard: jede Katalogart hat ein gebündeltes Modell, Bündeln nach Geometrie und Material mit verschachtelten Picking-IDs, `MATERIAL_CEILINGS` je Datei in `src/view` |
@@ -97,16 +98,19 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/blueprints.ts` | 2×2 mit zwei Dekos stempeln, Preview ohne Mutation, Parkplätze kopieren, Bibliothek-Roundtrip ohne `SAVE_KEY` |
 | `tests/buildUndo.ts` | Host-Bau-Stack: Place, Parkplatz, Stempel inkl. Parkplatz, Weg; vollständige Kostenerstattung |
 | `tests/placementPreview.ts` | Bauhöhe/Bodenkachel; autoritative Preview-Matrix für Gebäude, Slots, Haltestelle, Bandversorgung, Medizin/Dächer, Depots, Blueprint und Ride-Zugang; jede Anfrage bleibt mutationsfrei |
-| `tests/terrainSurface.ts` | Gelände-Mesh (zwei Dreiecke je Kachel), Pads, Parkplatz-Asphalt nur auf Parkfeldern |
+| `tests/terrainSurface.ts` | Gelände-Mesh (zwei Dreiecke je Kachel), Pads, Parkplatz-Asphalt nur auf Parkfeldern, gemalter Cover |
 | `tests/terrainLand.ts` | Drei Geländewerkzeuge, Stufe 0,5, Fläche auf Starthöhe, Klippe nach 0,5, Wasser am Uferhang, Baden, Nav nach Edit, Stützen nur im Freiraum, Fußweg land-0→0,5 ja / land-0→1 nein |
+| `tests/groundCover.ts` | Untergrund-Palette inkl. Salzpfanne/Asphalt: Paint, Fläche, Save-Roundtrip, Migration unbekannter Cover, Höhenedit behält Cover, MP-Commands |
+| `tests/terrainImport.ts` | OSM-Tag-Mapping, Burning-Man-/Nürburgring-Skizzen, Drop-in-Szenarien mit Ground-Slice |
 | `tests/environments.ts` | Umgebungen |
 | `tests/wayElevation.ts` | Halbstufen-Rampen für Fußweg und Straße, Autodach 1.0, Legacy-Höhe 1 bleibt 1.0, Shift-Ausgang bleibt beim Rampenstreichen, Fußweg auf Autostraße behält die Straße, gestapelte Autostraße / Brücke, ein Straßenfeld übermalen löscht keine Nachbarn, Klippe 0→1 blockiert, 0,5-Hang und Weg-Rampe begehbar, Bewegung ohne Y-Warp |
 | `tests/pixelPeople.ts` | Personen-Batches |
+| `tests/visitorDance.ts` | Two-Step-Pose: gepflanzte Knie, Hände hoch, Phase je Gast |
 | `tests/carrierModels.ts` | Träger: geteilte Gästeteile, Warnweste, Karren |
 | `tests/campingModels.ts` | Zelt-/Pavillon-Batches |
 | `tests/attractionFoundation.ts` | Camping-/Vorplatz-Ausweisung bleibt nach Attraction-Commands, Save/Load und MP-Deltas; Placement-Sperre (Gebäude/Weg/Deko), Fence/Delay-Ausnahme, Forecourt-Preview |
 | `tests/mobileTouch.ts` | Touch-Kamera / Gesten |
-| `tests/audio.ts` | Kamera-Listener (Look-At, nicht Gäste), Range-Skip, One-Shot-Cap, geclusterter Jubel + Cooldown |
+| `tests/audio.ts` | Kamera-Listener (Look-At, nicht Gäste), Range-Skip, One-Shot-Cap; Jubel nur bei Konzert-Kandidaten + Cooldown/Chance; Fahrzeuge nur Start/Halt/Pass-by; Musik looped solange Quelle + in Range; WAV-Pfade, `public/sfx/` vorhanden, Loader-Fallback |
 | `tests/performance.ts` | synthetische Last |
 | `tests/people-preview.html` | visuelle Personen-Fixture |
 | `tests/carrier-preview.html` | visuelle Träger neben Gästen |

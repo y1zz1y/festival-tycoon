@@ -13,7 +13,13 @@ Finanzen ([finance.md](finance.md)).
 | Aufgabe | Vollständiger Pfad | Einstieg / Symbol |
 | --- | --- | --- |
 | Szenario-Einstellungen, Zielarten | `src/game/scenario.ts` | `ScenarioSettings`, `ScenarioGoal`, `PARK_GOAL_KINDS`, `EDITION_GOAL_KINDS`, `normalizeScenarioSettings` |
-| Vorbereitete Szenarien | `src/game/scenarioPresets.ts` | `SCENARIO_PRESETS`, `scenarioPreset` |
+| Gelände-Import → Szenario-Datei | `src/game/terrainImport.ts`, `scripts/import-terrain.mjs`, `scripts/import-terrain-entry.ts` | Skizze oder OSM+DEM nach `public/scenarios/*.json` |
+| Vorbereitete Szenarien | `src/game/scenarioPresets.ts` | `SCENARIO_PRESETS`, `scenarioPreset`, `setExtraScenarioPresets` |
+| Drop-in-Dateien, Editor-Export | `src/game/scenarioFile.ts` | `ScenarioFile`, `parseScenarioFile`, `exportScenarioFile`, `createSnapshotFromScenarioFile` |
+| Katalog (eingebaut + Dateien) | `src/game/scenarioCatalog.ts` | `listedScenarioPresets`, `mergeScenarioCatalog`, `fetchFileScenarios` |
+| Szenarien-Ordner | `public/scenarios/` | JSON-Dateien; nach dem Build `dist/scenarios/`; optional `HEADLINER_SCENARIOS_DIR` |
+| Server-Liste / Speichern | `server/scenarios.ts` | `GET`/`POST` `/api/scenarios` |
+| Szenario-Editor-Fenster | `src/ui/scenarioEditor.ts` | `createScenarioEditorController`, Export-Download |
 | Fortschritt, Ausgang, Insolvenz, Stichtag | `src/game/scenarioGoals.ts` | `ScenarioProgress`, `updateScenarioProgress`, `recordEditionResult`, `updateInsolvency`, `isEditionOverdue`, `normalizeScenarioProgress`, `scenarioScore` |
 | Anbindung an den Tick | `src/game/GameState.ts` | `updateScenarioDay` (Tageswechsel), `recordFinishedEdition` (Ausgabeende nach `updateFestival`) |
 | Mitwachsende Wochenendziele | `src/game/festivalManagement.ts` | `weekendGoals`, gesetzt in `prepare` und `start`; `editionSatisfaction`, `festivalReputation` |
@@ -22,7 +28,7 @@ Finanzen ([finance.md](finance.md)).
 | Briefing, Szenariostart | `src/ui/titleScreen.ts` | `briefingMarkup`, `openTitleBriefing`, `startScenario`, `leaveToTitle` |
 | Ziele im freien Spiel, Zusammenfassung | `src/ui/scenarioScreen.ts` | `readGoals`, `fillGoals`, `updateSummary` |
 | Balancing | `src/game/simulationConfig.ts` | `scenario.firstEditionDays`, `scenario.insolvencyGraceDays`, `scenario.weekendGoals`, `scenario.weekendGoalGrowth` |
-| Tests | `tests/scenarioOutcome.ts` | `testScenarioOutcome` |
+| Tests | `tests/scenarioOutcome.ts`, `tests/scenarioEditor.ts`, `tests/terrainImport.ts` | `testScenarioOutcome`, `testScenarioEditor`, Import-Skizzen und Drop-ins |
 
 ## Datenfluss und Zuständigkeit
 
@@ -68,7 +74,52 @@ Wer mit „Freies Spiel fortsetzen“ ausweicht, wird am nächsten Tageswechsel
 wieder erinnert. Ein neues Szenario startet ohnehin in der Planung, der Stichtag
 greift also nur, wenn die Uhr ohne Ausgabe läuft.
 
-**Oberfläche.** Das Briefing liest nur das Preset. Die Zielanzeige
+**Dateiformat** (`kind: "headliner-scenario"`, `format: 1`):
+
+| Feld | Pflicht | Inhalt |
+| --- | --- | --- |
+| `id` | ja (sonst aus dem Namen) | Dateiname / Preset-Schlüssel, nur `a-z0-9-` |
+| `name` | ja | Anzeigename unter Neues Spiel und im Briefing |
+| `detail` | ja | Beschreibungstext in der Liste und im Briefing |
+| `settings` | ja | dieselben `ScenarioSettings` wie Presets (Startgeld, Darlehen, Verteilungen, Ziele, Gelände) |
+| `tickets` | nein | Startkontingent Tag / Camping |
+| `demandTuning` | nein | `TicketDemandTuning`; der Editor setzt die Basisgäste Tag/Camping |
+| `world` | nein | gebackene Anlage; fehlt sie, gilt `GameState.startNew` |
+
+**Gelände in `world`.** `captureScenarioWorld` schreibt neben Terrain und Gebäuden
+den gemalten Untergrund nach `world.festival.infrastructure.ground` (nur der
+Ground-Slice, nicht das ganze Festival). `createSnapshotFromScenarioFile` merged
+diesen Slice nach der Migration, damit Tickets und Planung vom Start kommen.
+Ohne Ground erzeugt der Start wie bisher nur Höhen und Gebäude. Import-CLI:
+`npm run import-terrain`. Testdateien `public/scenarios/burning-man.json` und
+`public/scenarios/rock-am-ring-strecke.json` (eigene IDs, das Preset
+`rock-am-ring` bleibt). Agent-Ableitung aus Referenzkarten:
+`.cursor/skills/festival-terrain-import/SKILL.md`. Kein Ingame-Import-Command.
+
+**Drop-in-Dateien.** Ein Szenario ist dieselbe `ScenarioPreset`-Form
+(`id`, `name`, `detail`, `settings`) plus optionale Ticket- und Nachfragewerte
+und eine gebackene Parkanlage. Dateien liegen in `public/scenarios/*.json`
+(Vite kopiert sie nach `dist/scenarios/`). Der Server listet den Ordner unter
+`GET /api/scenarios`; `HEADLINER_SCENARIOS_DIR` überschreibt den Pfad. Eine
+Datei mit `name` und `detail` erscheint unter **Neues Spiel**, die Beschreibung
+steht in der Zeile und im Briefing. `settings` laufen durch
+`normalizeScenarioSettings`. Fehlt `world`, erzeugt der Start wie ein
+eingebautes Preset das Gelände. Ist `world` gesetzt, wird die Anlage geladen
+(Gebäude, Gelände, Attraktionen, Wege/Logistik, Personal, Strom) und
+Startgeld, Darlehen, Tickets und Nachfrage greifen. Autor-Felder
+(`authoring`) werden beim Laden immer entfernt.
+
+**Szenario-Editor.** Im Hauptmenü startet **Szenario-Editor** eine
+Einzelspiel-Sandbox mit `scenario.authoring`. **Wahl: Baukosten 0** —
+`canAfford` ist immer wahr, `bookFinance` bucht keine Ausgaben, das Guthaben
+bleibt stehen und die Statusleiste zeigt „unbegrenzt“. Gelände und Bauen
+sind wie im normalen Spiel. Das Editor-Fenster setzt Name, Beschreibung,
+Startgeld, Schulden, die Freispiel-Verteilungen (Auto/Party/Schönheit/
+Gewalt), Ticket-Mix (Tag/Camping) und die Nachfrage-Basisgäste; der Export
+schreibt eine JSON-Datei (Download und, wenn der Server schreibbar ist,
+direkt in den Szenarien-Ordner). Der Editor ist kein Mehrspieler-Command.
+
+**Oberfläche.** Das Briefing liest das Preset bzw. die Datei. Die Zielanzeige
 `#scenario-goals-stat` steht in der Statusleiste und öffnet das Finanzfenster.
 Der Endbildschirm ist eine Sonderausgabe des HEADLINE Magazins
 (`src/headlineMagazine.css`) und wartet, bis das Magazin der entscheidenden
@@ -100,12 +151,15 @@ Preis und ohne `guests`, idempotente Fortschritts-Migration, Ausgabeziele mit
 Serien, Sieg und Niederlage (endgültig), Insolvenz mit Frist und im freien
 Spiel, Stichtag mit Pause und Planung, mitwachsende Wochenendziele, ein
 Durchlauf über echte Ticks bis zum Ausgabeende, Ticker-Meldungen und
-Gesamtnote. `tests/snapshotModules.ts` prüft die Migration v33 → v34,
+Gesamtnote. `tests/scenarioEditor.ts`: Export-Datei lädt als Szenario,
+Startgeld und Schulden greifen, Listing inkl. Beschreibung, Bauen ohne
+Geldlimit im Editor. `tests/snapshotModules.ts` prüft die Migration v33 → v34,
 `tests/finance.ts` Presets und die Tagesprüfung.
 
 ## Bei Änderungen dieses Dokuments
 
 Aktualisieren, wenn Zielarten, Fristregeln, Ausgangsgründe, Stichtag,
-Balancingwerte, die Felder von `ScenarioProgress` oder die Szenario-Oberfläche
-sich ändern. Neue Felder zusätzlich in [saves.md](saves.md) und
-[multiplayer.md](multiplayer.md), Spielerregeln im Root-`README.md`.
+Balancingwerte, die Felder von `ScenarioProgress`, das Dateiformat, der
+Szenarien-Ordner oder die Szenario-Oberfläche sich ändern. Neue Felder
+zusätzlich in [saves.md](saves.md) und [multiplayer.md](multiplayer.md),
+Spielerregeln im Root-`README.md`.

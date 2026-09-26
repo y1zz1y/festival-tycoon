@@ -3,7 +3,7 @@ import type { WayType } from './game/wayTypes'
 import { groundRectangle } from './game/ground'
 import type { GameState, GameSnapshot } from './game/GameState'
 import type { WorldView } from './view/WorldView'
-import { GROUND_WORK, groundInfo, roadGroundLimit, prepareGroundArea } from './game/ground'
+import { GROUND_COVERS, GROUND_WORK, groundInfo, roadGroundLimit, prepareGroundArea } from './game/ground'
 import type { GroundWork } from './game/ground'
 import { SUPPLIES } from './game/festivalManagement'
 import type { FestivalAction } from './game/festivalManagement'
@@ -19,7 +19,7 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
   // of their own: opening the tab is what puts the site into planning.
   const groundPanel = document.createElement('section'); groundPanel.className = 'terrain-planner'
   groundPanel.setAttribute('aria-label', 'Gelände planen')
-  groundPanel.innerHTML = `<p class="terrain-planner-intro">Solange dieser Reiter offen ist, sind die Besucher ausgeblendet und ihr bereitet den Untergrund vor.</p>
+  groundPanel.innerHTML = `<p class="terrain-planner-intro">Solange dieser Reiter offen ist, sind die Besucher ausgeblendet und ihr bereitet den Untergrund vor. Die Untergrundfarben (Rasen, Sand, Stein, Acker, Schnee, Felsen, braune Erde, Salzpfanne, Asphalt) stehen in der Palette darüber; Entwässern, Verdichten, Schotter und Pflaster bleiben hier.</p>
     <nav class="supply-tools"><button data-tool="inspect" aria-pressed="false">Feld prüfen</button>${Object.entries(GROUND_WORK).map(([key, work]) => `<button data-tool="${key}">${work.name} · ${work.cost} €</button>`).join('')}</nav>
     <p data-hint aria-live="polite">Oben ein Werkzeug wählen und auf dem Gelände ein Rechteck aufziehen.</p><div data-cell class="supply-card">Boden erkennen: Furchen = Acker · rötliche Flecken = Lehm · Körnung = Kies · Grasbüschel = Wiese · Rippeln = Sand · Fugen = Pflaster.<br>Verdichteter Boden ist geglättet. Türkise Markierung: entwässert. Über ein Feld fahren für Tragfähigkeit und Ausbau.</div>`
   const groundSlot = document.querySelector<HTMLElement>('#terrain-planner-slot')!
@@ -213,7 +213,10 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
     const s = getGame().snapshot
     if (mode in GROUND_WORK) execute({ type: 'ground', ...cell, kind: mode as GroundWork })
     const ground = groundInfo(s, cell.x, cell.z), b = s.buildings.find(b => b.x === cell.x && b.z === cell.z && b.kind !== 'path')
-    qG('[data-cell]').innerHTML = `<b>Feld ${cell.x}, ${cell.z}</b> · ${{ clay: 'Lehm', field: 'Ackerboden', gravel: 'Kiesboden', sand: 'Sandboden', grass: 'Wiesenboden', urban: 'Befestigter Stadtboden' }[ground.type]}<br>Tragfähigkeit ${ground.bearing}/3 · Tempo ${Math.round(ground.speed * 100)} %<br>Fahrbahn geeignet bis Tempo ${roadGroundLimit(s, cell.x, cell.z)}<br>${ground.drained ? 'Entwässert' : 'Ohne Entwässerung'} · ${ground.surface === 'paved' ? 'Gepflastert' : ground.surface === 'gravel' ? 'Geschottert' : ground.compacted ? 'Verdichtet' : 'Unbefestigt'}${b ? `<br>Gebäudeeffizienz ${Math.round((ground.bearing === 3 ? 1.25 : Math.max(.4, ground.speed)) * 100)} %${s.festival.infrastructure.shops[b.id] ? `<br>Standbestand: ${Object.entries(s.festival.infrastructure.shops[b.id]!).map(([k, n]) => `${SUPPLIES[k as keyof typeof SUPPLIES].name} ${Math.floor(n)}`).join(' · ')}` : ''}` : ''}`
+    const look = ground.cover
+      ? GROUND_COVERS[ground.cover].name
+      : { clay: 'Lehm', field: 'Ackerboden', gravel: 'Kiesboden', sand: 'Sandboden', grass: 'Wiesenboden', urban: 'Befestigter Stadtboden' }[ground.type]
+    qG('[data-cell]').innerHTML = `<b>Feld ${cell.x}, ${cell.z}</b> · ${look}<br>Tragfähigkeit ${ground.bearing}/3 · Tempo ${Math.round(ground.speed * 100)} %<br>Fahrbahn geeignet bis Tempo ${roadGroundLimit(s, cell.x, cell.z)}<br>${ground.drained ? 'Entwässert' : 'Ohne Entwässerung'} · ${ground.surface === 'paved' ? 'Gepflastert' : ground.surface === 'gravel' ? 'Geschottert' : ground.compacted ? 'Verdichtet' : 'Unbefestigt'}${b ? `<br>Gebäudeeffizienz ${Math.round((ground.bearing === 3 ? 1.25 : Math.max(.4, ground.speed)) * 100)} %${s.festival.infrastructure.shops[b.id] ? `<br>Standbestand: ${Object.entries(s.festival.infrastructure.shops[b.id]!).map(([k, n]) => `${SUPPLIES[k as keyof typeof SUPPLIES].name} ${Math.floor(n)}`).join(' · ')}` : ''}` : ''}`
     return true
   }
   return { update, handleCell, releaseTool, activateWay: (kind: 'path' | 'road') => choose(kind), getFootType: () => footType, getRoadType: () => roadType,

@@ -92,6 +92,15 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   ),
 ]
 
+let extraPresets: ScenarioPreset[] = []
+
+/** Drop-in files register here so existing `scenarioPreset` lookups find them. */
+export function setExtraScenarioPresets(presets: ScenarioPreset[]): void {
+  extraPresets = presets
+}
+
 export function scenarioPreset(id: string | undefined): ScenarioPreset | undefined {
-  return id ? SCENARIO_PRESETS.find((entry) => entry.id === id) : undefined
+  return id
+    ? SCENARIO_PRESETS.find((entry) => entry.id === id) ?? extraPresets.find((entry) => entry.id === id)
+    : undefined
 }

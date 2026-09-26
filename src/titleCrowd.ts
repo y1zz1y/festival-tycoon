@@ -9,6 +9,7 @@ import {
   WebGLRenderer,
 } from 'three'
 import { createPersonRig, type PersonRig } from './view/pixelPeople'
+import { applyVisitorDancePose, visitorDancePhase, visitorDancePose } from './view/visitorDance'
 import { SHIRT_COLORS } from './game/shopGoods'
 import { disposeObject3D } from './view/disposeObject3D'
 
@@ -58,6 +59,127 @@ const WALKERS = 6
 
 export type TitleCrowd = { setRunning(running: boolean): void; dispose(): void }
 
+function poseTitleFigure(walker: Walker, clock: number): {
+  lift: number
+  sidestep: number
+  yaw: number
+  roll: number
+  bob: number
+} {
+  const activity = walker.activity
+  const moving = activity === 'walk'
+  const dancing = activity === 'dance'
+  const phase = clock * 4.6 * (moving ? walker.speed / .7 : 1) + walker.seed
+  const stride = moving ? Math.sin(phase) : 0
+  const swing = stride * .65
+  const beat = clock * 6 + walker.seed
+  const { rig } = walker
+  const dance = dancing
+    ? visitorDancePose(visitorDancePhase(clock * 10, walker.seed), walker.seed)
+    : null
+  if (dance) applyVisitorDancePose(rig, dance)
+  else {
+    rig.leftLeg.rotation.x = swing * .65
+    rig.rightLeg.rotation.x = -swing * .65
+    rig.leftLeg.rotation.z = 0
+    rig.rightLeg.rotation.z = 0
+  }
+  rig.head.rotation.set(0, 0, 0)
+  let lift = dance?.bounce ?? 0
+  if (activity === 'cheer') {
+    rig.leftArm.rotation.x = -2.2 + Math.sin(clock * 9 + walker.seed) * .35
+    rig.rightArm.rotation.x = .2
+  } else if (activity === 'wave') {
+    const sway = Math.sin(beat * .55)
+    rig.leftArm.rotation.x = -2.5
+    rig.rightArm.rotation.x = -2.5
+    rig.leftArm.rotation.z = .35 + sway * .4
+    rig.rightArm.rotation.z = -.35 + sway * .4
+  } else if (activity === 'jump') {
+    const hop = Math.max(0, Math.sin(beat * .9))
+    rig.leftArm.rotation.x = -2.1 - hop * .5
+    rig.rightArm.rotation.x = -2.1 - hop * .5
+    rig.leftLeg.rotation.x = -hop * .5
+    rig.rightLeg.rotation.x = -hop * .5
+    lift = hop * .16
+  } else if (activity === 'clap') {
+    const clap = Math.sin(beat * 1.4)
+    rig.leftArm.rotation.x = -1.15
+    rig.rightArm.rotation.x = -1.15
+    rig.leftArm.rotation.z = .5 + clap * .22
+    rig.rightArm.rotation.z = -.5 - clap * .22
+  } else if (activity === 'stretch') {
+    const reachUp = (Math.sin(clock * .9 + walker.seed) + 1) / 2
+    rig.leftArm.rotation.x = -.2 - reachUp * 2.6
+    rig.rightArm.rotation.x = -.2 - reachUp * 2.6
+    rig.head.rotation.x = -reachUp * .35
+  } else if (activity === 'headbang') {
+    rig.head.rotation.x = Math.max(0, Math.sin(beat * 1.1)) * .75
+    rig.leftArm.rotation.x = -.55
+    rig.rightArm.rotation.x = -.55
+    lift = Math.max(0, Math.sin(beat * 1.1)) * .03
+  } else if (!dancing) {
+    rig.leftArm.rotation.x = -swing * .65
+    rig.rightArm.rotation.x = swing * .65
+  }
+  if (activity !== 'wave' && activity !== 'clap' && !dancing) {
+    rig.leftArm.rotation.z = 0
+    rig.rightArm.rotation.z = 0
+  }
+  return {
+    lift,
+    sidestep: dance?.sidestep ?? 0,
+    yaw: dancing
+      ? dance?.hipYaw ?? 0
+      : moving
+        ? walker.direction === 1 ? Math.PI / 2 : -Math.PI / 2
+        : Math.sin(clock * .8 + walker.seed) * .5,
+    roll: dance?.torsoRoll ?? 0,
+    bob: moving ? Math.abs(stride) * .02 : 0,
+  }
+}
+
+function skinsOf(rig: PersonRig): MeshStandardMaterial[] {
+  const found = new Set<MeshStandardMaterial>()
+  rig.group.traverse((object) => {
+    if (object instanceof Mesh) found.add(object.material as MeshStandardMaterial)
+  })
+  for (const material of found) material.transparent = true
+  return [...found]
+}
+
+function pickActivity(walker: Walker, clock: number): void {
+  if (walker.activity !== 'walk') {
+    walker.activity = 'walk'
+    walker.until = clock + 3 + Math.random() * 5
+    return
+  }
+  walker.activity = ACTIVITIES[Math.floor(Math.random() * ACTIVITIES.length)]!
+  walker.until = clock + (walker.activity === 'walk' ? 3 + Math.random() * 4 : 2 + Math.random() * 3.5)
+  if (walker.activity === 'walk' && Math.random() < .5) walker.direction = walker.direction === 1 ? -1 : 1
+}
+
+function respawn(walker: Walker, walkers: Walker[], clock: number, reach: number): void {
+  const shirt = SHIRT_COLORS[Math.floor(Math.random() * SHIRT_COLORS.length)]!.color
+  ;(walker.rig.body.material as MeshStandardMaterial).color.setHex(shirt)
+  let best = 0
+  let bestGap = -1
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const candidate = (Math.random() * 2 - 1) * reach
+    const gap = Math.min(...walkers.filter((other) => other !== walker && other.presence > .1)
+      .map((other) => Math.abs(other.x - candidate)), reach)
+    if (gap > bestGap) { bestGap = gap; best = candidate }
+  }
+  walker.x = best
+  walker.seed = Math.random() * 10
+  walker.speed = .5 + Math.random() * .45
+  walker.direction = Math.random() < .5 ? 1 : -1
+  walker.activity = 'walk'
+  walker.until = clock + 2 + Math.random() * 4
+  walker.leaving = false
+  walker.leaveAt = clock + 14 + Math.random() * 26
+}
+
 export function mountTitleCrowd(canvas: HTMLCanvasElement): TitleCrowd {
   const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true })
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
@@ -76,15 +198,6 @@ export function mountTitleCrowd(canvas: HTMLCanvasElement): TitleCrowd {
 
   const stage = new Group()
   scene.add(stage)
-  /** Every material the rig owns, which is what a single figure fades on. */
-  const skinsOf = (rig: PersonRig): MeshStandardMaterial[] => {
-    const found = new Set<MeshStandardMaterial>()
-    rig.group.traverse((object) => {
-      if (object instanceof Mesh) found.add(object.material as MeshStandardMaterial)
-    })
-    for (const material of found) material.transparent = true
-    return [...found]
-  }
   const walkers: Walker[] = Array.from({ length: WALKERS }, (_, index) => {
     const rig = createPersonRig(`title-${index}`, SHIRT_COLORS[(index * 3 + 1) % SHIRT_COLORS.length]!.color)
     stage.add(rig.group)
@@ -129,50 +242,6 @@ export function mountTitleCrowd(canvas: HTMLCanvasElement): TitleCrowd {
     reach = Math.max(1, halfWidth - .35)
   }
 
-  /**
-   * What someone does next while waiting. Coming off anything else they walk on for a
-   * bit, and from walking they pick freely from everything the figures can do, so the
-   * strip is never just a row of dancers.
-   */
-  const pickActivity = (walker: Walker): void => {
-    if (walker.activity !== 'walk') {
-      walker.activity = 'walk'
-      walker.until = clock + 3 + Math.random() * 5
-      return
-    }
-    walker.activity = ACTIVITIES[Math.floor(Math.random() * ACTIVITIES.length)]!
-    walker.until = clock + (walker.activity === 'walk' ? 3 + Math.random() * 4 : 2 + Math.random() * 3.5)
-    if (walker.activity === 'walk' && Math.random() < .5) walker.direction = walker.direction === 1 ? -1 : 1
-  }
-
-  /**
-   * Somebody has drifted off and somebody else turns up: the same rig comes back in
-   * new clothes, somewhere the crowd is thin, and fades in where it stands.
-   */
-  const respawn = (walker: Walker): void => {
-    // The body wears the rig's own shirt material, so recolouring it dresses this one
-    // figure and nobody else.
-    const shirt = SHIRT_COLORS[Math.floor(Math.random() * SHIRT_COLORS.length)]!.color
-    ;(walker.rig.body.material as MeshStandardMaterial).color.setHex(shirt)
-    // Furthest from everyone still on the strip, so they do not pop in on top of one.
-    let best = 0
-    let bestGap = -1
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const candidate = (Math.random() * 2 - 1) * reach
-      const gap = Math.min(...walkers.filter((other) => other !== walker && other.presence > .1)
-        .map((other) => Math.abs(other.x - candidate)), reach)
-      if (gap > bestGap) { bestGap = gap; best = candidate }
-    }
-    walker.x = best
-    walker.seed = Math.random() * 10
-    walker.speed = .5 + Math.random() * .45
-    walker.direction = Math.random() < .5 ? 1 : -1
-    walker.activity = 'walk'
-    walker.until = clock + 2 + Math.random() * 4
-    walker.leaving = false
-    walker.leaveAt = clock + 14 + Math.random() * 26
-  }
-
   const step = (dt: number): void => {
     clock += dt
     for (const walker of walkers) {
@@ -180,11 +249,11 @@ export function mountTitleCrowd(canvas: HTMLCanvasElement): TitleCrowd {
       // fades back in somewhere else, so the strip keeps changing faces.
       if (!walker.leaving && clock >= walker.leaveAt) walker.leaving = true
       walker.presence = Math.max(0, Math.min(1, walker.presence + (walker.leaving ? -dt / .9 : dt / .9)))
-      if (walker.leaving && walker.presence <= 0) respawn(walker)
+      if (walker.leaving && walker.presence <= 0) respawn(walker, walkers, clock, reach)
       for (const material of walker.skins) material.opacity = walker.presence
       walker.rig.group.visible = walker.presence > .01
 
-      if (clock >= walker.until) pickActivity(walker)
+      if (clock >= walker.until) pickActivity(walker, clock)
       const activity = walker.activity
       const moving = activity === 'walk'
       if (moving) {
@@ -192,76 +261,18 @@ export function mountTitleCrowd(canvas: HTMLCanvasElement): TitleCrowd {
         if (walker.x > reach) { walker.x = reach; walker.direction = -1 }
         if (walker.x < -reach) { walker.x = -reach; walker.direction = 1 }
       }
-      // The same phase-driven gait the crowd on the map uses: legs and arms swing
-      // against each other, dancing swings faster and throws the arms up.
-      const dancing = activity === 'dance'
-      const phase = clock * (dancing ? 7.4 : 4.6) * (moving ? walker.speed / .7 : 1) + walker.seed
-      const stride = dancing || moving ? Math.sin(phase) : 0
-      const swing = stride * (dancing ? 1.15 : .65)
-      const beat = clock * 6 + walker.seed
-      const { rig } = walker
-      rig.leftLeg.rotation.x = swing * .65
-      rig.rightLeg.rotation.x = -swing * .65
-      rig.head.rotation.set(0, 0, 0)
-      let lift = 0
-      if (dancing) {
-        rig.leftArm.rotation.x = -1.7 - stride * .45
-        rig.rightArm.rotation.x = -1.7 + stride * .45
-        lift = Math.max(0, Math.sin(phase * .64)) * .09
-      } else if (activity === 'cheer') {
-        // One arm up, waving from the elbow-less shoulder the figures have.
-        rig.leftArm.rotation.x = -2.2 + Math.sin(clock * 9 + walker.seed) * .35
-        rig.rightArm.rotation.x = .2
-      } else if (activity === 'wave') {
-        // Both hands over the head, swaying the way a field of people does.
-        const sway = Math.sin(beat * .55)
-        rig.leftArm.rotation.x = -2.5
-        rig.rightArm.rotation.x = -2.5
-        rig.leftArm.rotation.z = .35 + sway * .4
-        rig.rightArm.rotation.z = -.35 + sway * .4
-      } else if (activity === 'jump') {
-        const hop = Math.max(0, Math.sin(beat * .9))
-        rig.leftArm.rotation.x = -2.1 - hop * .5
-        rig.rightArm.rotation.x = -2.1 - hop * .5
-        rig.leftLeg.rotation.x = -hop * .5
-        rig.rightLeg.rotation.x = -hop * .5
-        lift = hop * .16
-      } else if (activity === 'clap') {
-        const clap = Math.sin(beat * 1.4)
-        rig.leftArm.rotation.x = -1.15
-        rig.rightArm.rotation.x = -1.15
-        rig.leftArm.rotation.z = .5 + clap * .22
-        rig.rightArm.rotation.z = -.5 - clap * .22
-      } else if (activity === 'stretch') {
-        // A slow reach upwards and a lean back with it, then down again.
-        const reachUp = (Math.sin(clock * .9 + walker.seed) + 1) / 2
-        rig.leftArm.rotation.x = -.2 - reachUp * 2.6
-        rig.rightArm.rotation.x = -.2 - reachUp * 2.6
-        rig.head.rotation.x = -reachUp * .35
-      } else if (activity === 'headbang') {
-        rig.head.rotation.x = Math.max(0, Math.sin(beat * 1.1)) * .75
-        rig.leftArm.rotation.x = -.55
-        rig.rightArm.rotation.x = -.55
-        lift = Math.max(0, Math.sin(beat * 1.1)) * .03
-      } else {
-        rig.leftArm.rotation.x = -swing * .65
-        rig.rightArm.rotation.x = swing * .65
-      }
-      if (activity !== 'wave' && activity !== 'clap') {
-        rig.leftArm.rotation.z = 0
-        rig.rightArm.rotation.z = 0
-      }
-      const bob = moving ? Math.abs(stride) * .02 : 0
+      const posed = poseTitleFigure(walker, clock)
       // The figures are modelled standing on their own y = 0, and that line is the
       // bottom of the strip — the -.38 the factory applies for the bungee rope would
       // lift them off the edge, so it is overwritten here. A figure on its way out
       // sinks a little as it goes, which reads better than a body simply thinning.
-      rig.group.position.set(walker.x, lift + bob - (1 - walker.presence) * .12, 0)
-      // Walkers face the way they are going; the others turn towards the viewer and
-      // look about a little.
-      rig.group.rotation.y = moving
-        ? walker.direction === 1 ? Math.PI / 2 : -Math.PI / 2
-        : Math.sin(clock * .8 + walker.seed) * .5
+      walker.rig.group.position.set(
+        walker.x + posed.sidestep,
+        posed.lift + posed.bob - (1 - walker.presence) * .12,
+        0,
+      )
+      walker.rig.group.rotation.y = posed.yaw
+      walker.rig.group.rotation.z = posed.roll
     }
   }
 

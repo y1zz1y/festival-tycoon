@@ -44,6 +44,8 @@ export const COMMAND_METADATA = {
   bulldozeArea: { optimistic: true },
   editTerrain: { optimistic: true },
   editTerrainArea: { optimistic: true },
+  paintGroundCover: { optimistic: true },
+  paintGroundCoverArea: { optimistic: true },
   designateRoad: { optimistic: true },
   designateParking: { optimistic: true },
   designateCampingCell: { optimistic: true },

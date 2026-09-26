@@ -1,6 +1,6 @@
 import { BUILDINGS, type BuildingKind } from './catalog'
 import { isQueuedFacilityKind } from './shopGoods'
-import { bookFinance } from './finance'
+import { bookFinance, canAfford } from './finance'
 import { groundKey } from './ground'
 import { DIRECTION_OFFSETS, DIRECTIONS, roadLayerElevation, type Direction, type RoadCell, type SpeedLimit } from './logistics'
 import { isEdgeScenery } from './scenery'
@@ -186,7 +186,7 @@ export class PlacementService {
       : existing
         ? 0
         : roadCost
-    if (c.state.money < extra + clearCost) {
+    if (!canAfford(c.state, extra + clearCost)) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     c.clearTreesAt(x, z, candidateBase, candidateTop - candidateBase)
@@ -361,7 +361,7 @@ export class PlacementService {
       return { ok: false, message: 'Eine Rampe muss an einen bestehenden Weg anschließen' }
     }
     const clearCost = c.getTreeClearCost(x, z, candidateBase, candidateTop - candidateBase)
-    if (c.state.money < pathCost + clearCost) {
+    if (!canAfford(c.state, pathCost + clearCost)) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     c.clearTreesAt(x, z, candidateBase, candidateTop - candidateBase)
@@ -487,7 +487,7 @@ export class PlacementService {
     }
     if (
       building.kind === 'tree' &&
-      c.state.money < SIMULATION_CONFIG.economy.treeClearCost
+      !canAfford(c.state, SIMULATION_CONFIG.economy.treeClearCost)
     ) {
       return { ok: false, message: 'Nicht genug Geld, um den Baum zu entfernen' }
     }

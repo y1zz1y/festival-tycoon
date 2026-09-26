@@ -3,14 +3,16 @@
   "entry": [
     "tests/regression.ts",
     "tests/performance.ts",
-    "scripts/*.mjs"
+    "scripts/*.mjs",
+    "scripts/import-terrain-entry.ts"
   ],
   "project": [
     "src/**/*.ts",
     "server/**/*.ts",
     "tests/**/*.ts",
     "tests/**/*.mjs",
-    "scripts/**/*.mjs"
+    "scripts/**/*.mjs",
+    "scripts/**/*.ts"
   ],
   "ignoreExportsUsedInFile": true
 }

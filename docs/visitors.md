@@ -22,6 +22,7 @@ sind abgeleitete Darstellung desselben Zustands.
 | Beschwerden | `src/game/complaints.ts` | `COMPLAINT_TOPICS`, Zähler |
 | Stabile Optik (Geschlecht, Hash) | `src/game/rng.ts` | `visitorLooksFemale`, `hashStringSeed` |
 | Pixel-Personen | `src/view/pixelPeople.ts` | geteilte Geometrien, Accessory-Batches |
+| Tanzpose (Darstellung) | `src/view/visitorDance.ts` | `visitorDancePose`, `visitorDancePhase`; Konzert, Sandbox, Dancefloor und Titel-Crowd |
 | Souvenirs | `src/game/shopGoods.ts`, `src/view/souvenirMeshes.ts` | `ownedMascot`/`heldMascot`, `wornShirt`; Instanz-Batches |
 | Ankunft per Auto/Fuß | `src/game/logistics.ts`, `src/game/GameState.ts` | `ArrivalGroup`, `collectSeatedPassengerIds`, `chooseParkingDisembarkPath`, `finishVehicleParking`, `placeVisitorOnDisembarkCell`, `keepDisembarkRouteOnFoot` |
 
@@ -34,6 +35,11 @@ sind abgeleitete Darstellung desselben Zustands.
   pro Tick gleich bleibt (`docs/simulation.md`).
 - Erscheinung aus stabilem Hash der **vollen** Visitor-ID ableiten, nicht aus
   Array-Index, Simulations-RNG oder Frame-Zeit.
+- `isDancing` (Konzert, Sandbox, Dancefloor) steuert nur die View-Pose. Die
+  Gliedmaßen kommen aus `visitorDancePose` (Gewicht/Sidestep, Hände über dem
+  Kopf leicht im Takt wippend, kleine Hüftrotation) mit Phase aus
+  `simTick + renderAlpha` plus ID-Seed.
+  Kein Extra-Skelett, kein Material pro Gast, keine Entscheidungen im Render.
 - Keine vollständigen Besucher-Scans innerhalb anderer Besucher-Schleifen.
   Räumliche / Belegungsindizes einmal pro Pass bauen.
 - Zielwahl und Interaktions-Callbacks zählen gegen das Entscheidungsbudget
@@ -200,7 +206,8 @@ Callbacks. Dringende Zustandsfreigaben passieren sofort; aufgeschobene Besucher
 behalten Camp und Müll, bis die faire Entscheidungsqueue ihren Auftrag verarbeitet.
 Bereits begonnene Müllwege werden beim wiederholten Schließzeit-Check beibehalten.
 
-`tests/pixelPeople.ts` (Batches, stabile Optik). `tests/shopGoods.ts` (Kauf,
+`tests/pixelPeople.ts` (Batches, stabile Optik). `tests/visitorDance.ts`
+(Two-Step-Pose, Amplitude, Phase je Gast). `tests/shopGoods.ts` (Kauf,
 Hand-Chance, Shirt vom Stand, Save). `tests/regression.ts`
 (Spawn, Needs, Speed-Partition, Festivalende-Abreise durch Campingflächen).
 Festival-Anreisen, Live-Show-Festivallust und vordere Konzertplätze
@@ -225,6 +232,7 @@ Zelt-/Abreiseziele: `tests/visitorSleep.ts`. Baden und Wassertiefe:
 ## Bei Änderungen dieses Dokument
 
 Aktualisieren, wenn `Visitor` / `VisitorState` / Needs neue Felder bekommen,
+die Tanzpose oder ihre Zeitquelle wechselt,
 Festivallust-Quellen oder -Verluste wechseln, Spawn- oder Abreiselogik wechselt,
 Müllfallen bei vollem Eimer ändert oder Gedanken/Bubbles neue Arten erhalten.
 Neue UI-Panels für Besucher in `docs/ui.md` mitvermerken.

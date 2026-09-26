@@ -30,7 +30,7 @@ export const BUILDING_KINDS = [
   'desertPalm', 'dustLantern', 'playaTotem', 'tumbleweed',
   'forestFern', 'mossLog', 'foxfireLamp', 'woodlandIdol',
   'neonPlant', 'neonArch', 'uvSpeaker', 'glowTape',
-  'scrapPlanter', 'palletBench', 'workLamp', 'chainFence',
+  'scrapPlanter', 'palletBench', 'workLamp', 'chainFence', 'trackCurb',
   'palmTree', 'tikiStool', 'tikiMask', 'coconutPile',
   'altarTable', 'spiritLantern', 'runeStone', 'occultBanner',
   'circusStool', 'carnivalBulbs', 'miniBigTop', 'popcornCart',
@@ -98,6 +98,15 @@ export type Tool =
   | 'terrainLowerCorner'
   | 'terrainWater'
   | 'terrainSmooth'
+  | 'terrainCoverGrass'
+  | 'terrainCoverSand'
+  | 'terrainCoverStone'
+  | 'terrainCoverField'
+  | 'terrainCoverSnow'
+  | 'terrainCoverRock'
+  | 'terrainCoverEarth'
+  | 'terrainCoverSalt'
+  | 'terrainCoverAsphalt'
   | 'powerCable'
   | 'bulldoze'
   | 'copy'
@@ -130,6 +139,22 @@ export const TERRAIN_EDIT_TOOLS = [
 
 export function isTerrainEditTool(tool: string | undefined): boolean {
   return (TERRAIN_EDIT_TOOLS as readonly string[]).includes(tool ?? '')
+}
+
+export const TERRAIN_COVER_TOOLS = [
+  'terrainCoverGrass',
+  'terrainCoverSand',
+  'terrainCoverStone',
+  'terrainCoverField',
+  'terrainCoverSnow',
+  'terrainCoverRock',
+  'terrainCoverEarth',
+  'terrainCoverSalt',
+  'terrainCoverAsphalt',
+] as const satisfies readonly Tool[]
+
+export function isTerrainCoverTool(tool: string | undefined): boolean {
+  return (TERRAIN_COVER_TOOLS as readonly string[]).includes(tool ?? '')
 }
 
 export function isCopyTool(tool: string | undefined): boolean {
@@ -526,6 +551,7 @@ export const BUILDINGS: Record<BuildingKind, BuildingDefinition> = {
   palletBench: { kind: 'palletBench', name: 'Palettenbank', cost: 36, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .45, color: 0xb28053, icon: '🪑' },
   workLamp: { kind: 'workLamp', name: 'Baustrahler', cost: 44, upkeep: 1, capacity: 0, appeal: 3, defaultPrice: 0, height: 1.1, color: 0xe4b754, icon: '🔦' },
   chainFence: { kind: 'chainFence', name: 'Absperrkette', cost: 20, upkeep: 0, capacity: 0, appeal: 1, defaultPrice: 0, height: .7, color: 0x92a6a5, icon: '⛓️' },
+  trackCurb: { kind: 'trackCurb', name: 'Streckenbegrenzung', cost: 22, upkeep: 0, capacity: 0, appeal: 2, defaultPrice: 0, height: .35, color: 0xc43d55, icon: '🏁' },
   palmTree: { kind: 'palmTree', name: 'Palme', cost: 52, upkeep: 1, capacity: 0, appeal: 5, defaultPrice: 0, height: 1.7, color: 0x4d8b46, icon: '🌴' },
   tikiStool: { kind: 'tikiStool', name: 'Tiki-Hocker', cost: 28, upkeep: 0, capacity: 0, appeal: 3, defaultPrice: 0, height: .5, color: 0x936141, icon: '🪑' },
   tikiMask: { kind: 'tikiMask', name: 'Tiki-Maske', cost: 88, upkeep: 1, capacity: 0, appeal: 7, defaultPrice: 0, height: 1.25, color: 0xd97a3a, icon: '🎭' },
