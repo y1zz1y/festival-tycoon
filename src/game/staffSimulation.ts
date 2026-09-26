@@ -15,6 +15,8 @@ import {
 import { SIMULATION_CONFIG } from './simulationConfig'
 import type { RngSource } from './rng'
 import { isInAnyZone, zoneCellRange } from './staffZones'
+import { buildingFootprint, type StageDesign } from './stageDesign'
+import { CARDINAL_OFFSETS } from './shopAccess'
 
 type Cell = { x: number; z: number; elevation: number }
 type Patient = {
@@ -35,6 +37,21 @@ type Patient = {
   rescueVehicleId?: string | null
 }
 
+type StaffBuildingRef = {
+  id: string
+  x: number
+  z: number
+  rotation: number
+  kind?: string
+  elevation?: number
+  stageDesign?: StageDesign
+  rideType?: string
+}
+
+type BuildingFootprintIndex = {
+  footprintsTouching(fire: Cell): ReadonlyArray<readonly Cell[]>
+}
+
 type StaffContext = {
   staff: StaffMember[]
   visitors: Patient[]
@@ -44,6 +61,8 @@ type StaffContext = {
   wasteDumps: WasteDumpCell[]
   wasteBins: WasteBinInfo[]
   sealedContainers?: SealedWasteContainerInfo[]
+  /** Built once per staff pass so fire approach can expand to a footprint. */
+  buildings?: readonly StaffBuildingRef[]
   securityGates: Array<{ id: string; x: number; z: number; elevation: number }>
   findPath: (start: Cell, goals: Cell[], allowGround?: boolean) => Cell[] | null
   /** Where a step can go from here; without grass unless it is asked for. */
@@ -79,8 +98,80 @@ const carryCapacity = (context: StaffContext): number =>
 const cartIsFull = (member: StaffMember, context: StaffContext): boolean =>
   member.carryingWaste >= carryCapacity(context)
 
+/** Same 4-neighbour set sealed-haul already uses to stand beside a closed tile. */
+function staffCardinalNeighbors(cell: Cell): Cell[] {
+  return CARDINAL_OFFSETS.map(([dx, dz]) => ({
+    x: cell.x + dx,
+    z: cell.z + dz,
+    elevation: cell.elevation,
+  }))
+}
+
+function cellKey(cell: { x: number; z: number }): string {
+  return `${cell.x}:${cell.z}`
+}
+
+function indexStaffBuildings(
+  buildings: readonly StaffBuildingRef[] | undefined,
+): BuildingFootprintIndex | undefined {
+  if (!buildings?.length) return undefined
+  const cellToIds = new Map<string, string[]>()
+  const footprints = new Map<string, Cell[]>()
+  for (const building of buildings) {
+    const elevation = building.elevation ?? 0
+    const cells = buildingFootprint(building).map((cell) => ({
+      x: cell.x,
+      z: cell.z,
+      elevation,
+    }))
+    footprints.set(building.id, cells)
+    for (const cell of cells) {
+      const key = cellKey(cell)
+      const list = cellToIds.get(key)
+      if (list) list.push(building.id)
+      else cellToIds.set(key, [building.id])
+    }
+  }
+  return {
+    footprintsTouching(fire: Cell) {
+      const ids = new Set<string>()
+      for (const key of [cellKey(fire), ...staffCardinalNeighbors(fire).map(cellKey)]) {
+        for (const id of cellToIds.get(key) ?? []) ids.add(id)
+      }
+      return [...ids].map((id) => footprints.get(id)!).filter(Boolean)
+    },
+  }
+}
+
+/** Fire tile plus walkable stand-off cells: 4-neighbours, or the whole footprint if it touches a building. */
+export function fireApproachGoals(
+  fire: Cell,
+  built?: BuildingFootprintIndex,
+): Cell[] {
+  const goals = [fire, ...staffCardinalNeighbors(fire)]
+  const extra = built?.footprintsTouching(fire)
+  if (!extra?.length) return goals
+  const seen = new Set(goals.map((cell) => `${cell.x}:${cell.z}:${cell.elevation}`))
+  for (const footprint of extra) {
+    for (const cell of footprint) {
+      for (const neighbor of staffCardinalNeighbors({
+        x: cell.x,
+        z: cell.z,
+        elevation: fire.elevation,
+      })) {
+        const key = `${neighbor.x}:${neighbor.z}:${neighbor.elevation}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        goals.push(neighbor)
+      }
+    }
+  }
+  return goals
+}
+
 export class StaffSimulation {
   update(context: StaffContext, minutes: number): void {
+    const built = indexStaffBuildings(context.buildings)
     this.assignSecurity(context)
     const claimed = new Set(
       context.staff.map((member) => member.targetId).filter((id): id is string => Boolean(id)),
@@ -152,7 +243,7 @@ export class StaffSimulation {
       for (let attempt = 0; attempt < 8; attempt++) {
         const target = this.findTarget(member, workContext, excluded)
         if (!target) break
-        const route = this.routeToStaffTarget(member, target, context)
+        const route = this.routeToStaffTarget(member, target, context, built)
         if (!route) {
           excluded.add(target.id)
           continue
@@ -844,20 +935,22 @@ export class StaffSimulation {
     member: StaffMember,
     target: { cell: Cell; allowMedical?: boolean; kind?: string },
     context: StaffContext,
+    built?: BuildingFootprintIndex,
   ): Cell[] | null {
     const start = this.staffCell(member)
+    if (target.kind === 'fire') {
+      return context.findPath(
+        start,
+        fireApproachGoals(target.cell, built),
+        target.allowMedical,
+      )
+    }
     const direct = context.findPath(start, [target.cell], target.allowMedical)
     if (direct) return direct
     // Sealed containers can sit off-path; if the box tile itself is closed,
     // stand on a neighbour instead of dropping the haul (do not change occupancy).
     if (target.kind !== 'sealed-haul') return null
-    const adjacent = [
-      { x: target.cell.x + 1, z: target.cell.z, elevation: target.cell.elevation },
-      { x: target.cell.x - 1, z: target.cell.z, elevation: target.cell.elevation },
-      { x: target.cell.x, z: target.cell.z + 1, elevation: target.cell.elevation },
-      { x: target.cell.x, z: target.cell.z - 1, elevation: target.cell.elevation },
-    ]
-    return context.findPath(start, adjacent, target.allowMedical)
+    return context.findPath(start, staffCardinalNeighbors(target.cell), target.allowMedical)
   }
 
   private incidentFieldKey(incident: GroundIncident): string {

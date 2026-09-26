@@ -608,6 +608,50 @@ export function testOperations(fixture:(count?:number)=>GameState):void {
   restricted.workZones=[zoneKey(9,9)]
   staff.update({...context,staff:[restricted],wasteBins:[{...bin,stored:5}]},.1)
   assert.equal(restricted.targetId,null,'assigned zones still restrict work')
+  const fires = [{id:'fire-built',kind:'fire' as const,x:1,z:0,elevation:0,severity:2,ageMinutes:0}]
+  const fighter = createStaffMember('ff-built','firefighter',{x:0,z:0,elevation:0})
+  const fireContext = {
+    ...context,
+    staff:[fighter],
+    incidents:fires,
+    wasteBins:[],
+    buildings:[{id:'stall-1',x:1,z:0,rotation:0,kind:'food'}],
+    findPath:(start:any,goals:any[])=>{
+      const open=goals.filter((goal:{x:number;z:number})=>!(goal.x===1&&goal.z===0))
+      if(!open.length) return null
+      if(open.some((goal:{x:number;z:number})=>goal.x===start.x&&goal.z===start.z)) return []
+      return [{...open[0]}]
+    },
+    removeIncident:(id:string)=>{const i=fires.findIndex(item=>item.id===id);if(i>=0)fires.splice(i,1)},
+  }
+  staff.update(fireContext,.1)
+  assert.equal(fighter.targetId,'fire-built','a firefighter claims a fire sitting on a building')
+  staff.update(fireContext,.1)
+  assert.equal(fighter.state,'working','work starts from the neighbouring walkable tile')
+  fighter.workMinutes=0
+  staff.update(fireContext,.1)
+  assert.equal(fires.length,0,'the neighbour stand-off extinguishes the built-tile fire')
+  const wideFires=[{id:'fire-wide',kind:'fire' as const,x:2,z:0,elevation:0,severity:2,ageMinutes:0}]
+  const wideFighter=createStaffMember('ff-wide','firefighter',{x:3,z:1,elevation:0})
+  const wideContext={
+    ...context,
+    staff:[wideFighter],
+    incidents:wideFires,
+    wasteBins:[],
+    buildings:[{id:'park-1',x:2,z:0,rotation:0,kind:'tourBusParking'}],
+    findPath:(_start:any,goals:any[])=>{
+      if(goals.some((goal:{x:number;z:number})=>goal.x===3&&goal.z===1)) return []
+      return null
+    },
+    removeIncident:(id:string)=>{const i=wideFires.findIndex(item=>item.id===id);if(i>=0)wideFires.splice(i,1)},
+  }
+  staff.update(wideContext,.1)
+  assert.equal(wideFighter.targetId,'fire-wide','standing against the footprint is enough when fire sits on the building')
+  staff.update(wideContext,.1)
+  assert.equal(wideFighter.state,'working')
+  wideFighter.workMinutes=0
+  staff.update(wideContext,.1)
+  assert.equal(wideFires.length,0,'a firefighter adjacent to the building puts the footprint fire out')
   const picker=createStaffMember('priority-cleaner','cleaner',{x:0,z:0,elevation:0})
   const nearly={id:'near-bin',x:1,z:0,elevation:0,stored:4}
   const overflowing={id:'full-bin',x:8,z:0,elevation:0,stored:SIMULATION_CONFIG.waste.binCapacity}

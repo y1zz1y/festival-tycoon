@@ -6602,6 +6602,7 @@ export class GameState {
           this.state.logistics.roadVehicles,
         ),
         incidents: this.state.incidents,
+        buildings: this.state.buildings,
         medicalCells: this.state.medicalCells,
         wasteDumps: this.state.wasteDumpCells,
         cleanerCarry: {

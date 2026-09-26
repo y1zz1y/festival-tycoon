@@ -504,7 +504,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
   und stehen in der Personalverwaltung als Reinigungskraft (Saugroboter)
 - versetzte Kotzeflecken pro Feld und vollständige Reinigung des nächstgelegenen Feldes
 - lokales, nicht ausbreitendes Brandrisiko durch betrunken gezündetes Feuerwerk
-- patrouillierende Feuerwehrkräfte, die lokale Brände löschen
+- patrouillierende Feuerwehrkräfte, die lokale Brände löschen, auch auf bebauten Feldern vom Nachbarn oder am Gebäude
 - RCT-Iconleiste oben rechts: Bauen, Verwalten und Sitzung; Baupaletten und Straßeneditor links
 - **Rückgängig** in der Sitzungsleiste nimmt den letzten Bau zurück (Gebäude, Wege, Straßen, Parkplätze, Kopierstempel)
 - **Kopieren** in der Bauleiste: Rechteck aufziehen, Geistervorschau folgt dem Zeiger, Klick stempelt (Katalogpreis × 0,8). **R** dreht. Mitkopiert werden Gebäude, Deko, Wege, Autostraßen und Parkplätze. Optional mit Namen in der **Baubibliothek** dieses Browsers speichern (nicht im Spielstand)

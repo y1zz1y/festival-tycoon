@@ -11,7 +11,7 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Rollen, Definitionen, Lohn | `src/game/staff.ts` | `STAFF_ROLES`, `STAFF_DEFINITIONS` |
-| Tick-Verhalten | `src/game/staffSimulation.ts` | `StaffSimulation` |
+| Tick-Verhalten | `src/game/staffSimulation.ts` | `StaffSimulation`, `fireApproachGoals` |
 | Einstellen / entlassen / platzieren | `src/game/GameState.ts` | `hireStaff`, `fireStaff`, `placeStaffAt` |
 | Arbeitszonen | `src/game/staffZones.ts` | `isInAnyZone`, `zoneCellRange`, `setAssignedWorkZones`, `staffZonePaintStroke` |
 | Saugroboter in der Personal-UI | `src/game/staff.ts`, `src/staffDetailsUI.ts`, `src/main.ts` | `sweeperStaffName`, Reinigungs-Tab |
@@ -73,7 +73,10 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
   versiegelte Container, vorher 6).
 - Priorität bleibt, aber ein höherer Job jenseits
   `staff.cleanerLocalWorkTiles` weicht lokaler Arbeit im nahen Umfeld.
-  Feuerwehrwagen fahren große Brände an; Fuß-Feuerwehr löscht vor Ort.
+  Feuerwehrwagen fahren große Brände an; Fuß-Feuerwehr löscht vor Ort
+  von der Brandkachel oder einem begehbaren 4-Nachbarn. Sitzt der Brand
+  auf einem Gebäude-Footprint oder berührt ihn, reicht Angrenzen an das
+  Gebäude (ein Footprint-Index einmal pro Staff-Pass, keine Extra-Scans).
 - Reinigungskräfte leeren Eimer in dieser Reihenfolge: volle Eimer
   (Füllstand ≥ `waste.binCapacity`) vor Bodenmüll, Kotze und verlassenen
   Camps; erst wenn nichts davon anliegt, leeren sie teilweise gefüllte
@@ -125,7 +128,8 @@ aktiven Block entfernt entlang des Strichs; `setStaffZone` ist idempotent;
 Saugroboter dieselbe Farbe), `tests/operations.ts` (Personaltor-Kante statt Vollfeld, bemalte Richtung für
 Gäste gesperrt, Staff und Saugroboter durch, Legacy-Mitte; Reinigung leert volle Eimer vor halbvollen und
 Bodenmüll, idle leert halbvolle Eimer in der Zone, Bodenmüll vor kaum
-genutzten Eimern; Krankenfeld-Abriss, Dach über Liegen, abgewiesenes
+genutzten Eimern; Feuerwehr löscht Brand auf bebautem Feld vom Nachbarn
+und am Footprint angrenzend; Krankenfeld-Abriss, Dach über Liegen, abgewiesenes
 Überbauen und Restbelegung; Verletzte an den
 nächsten freien Sanitäter bzw. Krankenwagen — näherer Idle vor fernem,
 kein Diebstahl eines tragenden Sanitäters, unerreichbarer Näherer wird
@@ -145,4 +149,5 @@ Verkauf, Gate-Verhalten, Krankenfeld-Platzierung (Dach-Overlay vs. Abriss),
 Träger-als-Personal-Zuweisung, Saugroboter-Einsatzgebiete,
 Reinigungs-Tempo (`roles.cleaner.speed`, Work-Minutes, Carry-Multiplier)
 oder Eimer-Leer-Priorität der Reinigung oder Container-Schlepp-Priorität
-ändern. Müll-/Brand-Ziele zusätzlich in `docs/incidents.md`.
+oder Feuerwehr-Löschreichweite (Nachbar / Gebäude-Footprint) ändern.
+Müll-/Brand-Ziele zusätzlich in `docs/incidents.md`.
