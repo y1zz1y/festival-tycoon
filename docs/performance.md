@@ -21,7 +21,7 @@ ignoriert und werden nicht als Repository-Fixtures verwendet.
 Registriert ist `festivalmittel` (Snapshot v32): 832 Besucher, 2.376 Gebäude
 und 34 Mitarbeitende, mit 120 Ticks als Standardlauf.
 
-## Personal, Träger, Fahrzeuge, Vorplatz und Zugänge gebündelt (Phase 6, B8, 2026-09-27)
+## Personal, Träger, Fahrzeuge, Vorplatz und Zugänge gebündelt (0.2.12, Phase 6, B8, 2026-09-27)
 
 Ausgangslage im Browser (Messbericht vor der Umsetzung, festivalmittel,
 Standardkamera, 1291×782, Pixelverhältnis 0,75): 806 Draw-Calls, davon
@@ -48,9 +48,68 @@ alle nicht eingestellten Fahrzeuge gezeichnet werden. Erwartung im Browser
 nach dem Messbericht: Standardkamera 806 → rund 345 Draw-Calls, herausgezoomt
 1.250 → rund 465; Fahrzeuge zeichnen jetzt auch außerhalb des Bildes
 (ein Farbbatch spannt die Karte), dafür höchstens sechs statt einem je Auto.
-**Die Browser-Messung mit `tests/render-performance.html` steht noch aus**
-(Draw-Calls, Render-/Szenenzeit Median/p95/Max, Zensus bei 1280×720 in
-Standard-, Zoom-0,55- und Parkplatzansicht); sie wird nachgetragen.
+
+**Browser-Messung** mit `tests/render-performance.html?fixture=festivalmittel`,
+Chromium, 1280×720, Pixelverhältnis 0,75. Vorher ist der Stand 0.2.11 (Commit
+5e8cc76), nachher B8, beide in derselben Sitzung auf derselben Maschine.
+Gemessen wurde bei 1× über 180 Frames, zusätzlich in der Standardkamera bei 8×
+über 600 Frames. Draw-Calls stehen als Median / p95 / Max je Frame, Render- und
+Szenenzeit als Median / p95 / Max in ms:
+
+| Ansicht | Draw-Calls vorher → nachher | Render vorher → nachher | Szene vorher → nachher |
+| --- | --- | --- | --- |
+| Standard (Ziel 0,0, Zoom 1) | 844 / 846 / 846 → 342 / 343 / 343 | 8,9 / 11,0 / 14,0 → 7,1 / 8,9 / 10,4 | 3,3 / 11,1 / 12,8 → 2,2 / 9,5 / 12,1 |
+| Zoom 0,55 | 1.288 / 1.289 / 1.289 → 476 / 477 / 477 | 9,8 / 11,1 / 13,3 → 7,8 / 8,9 / 9,8 | 3,0 / 10,2 / 11,5 → 2,3 / 9,7 / 13,0 |
+| Parkplatz (Ziel 12,20, Zoom 1) | 375 / 385 / 386 → 204 / 209 / 209 | 7,0 / 8,1 / 10,9 → 6,4 / 7,5 / 9,5 | 2,8 / 7,7 / 10,9 → 2,1 / 7,6 / 10,6 |
+| Standard, 8×, 600 Frames | 859 / 885 / 893 → 336 / 349 / 360 | 10,3 / 11,6 / 15,3 → 7,7 / 9,0 / 14,5 | 3,0 / 11,6 / 16,1 → 2,1 / 11,6 / 16,6 |
+
+Das Ziel, deutlich unter rund 700 Draw-Calls zu bleiben, ist in allen
+Ansichten erreicht. Erwartet waren in der Standardansicht rund 345 und bei
+Zoom 0,55 rund 465.
+
+Anteile je Gruppe, vorher → nachher. Gemessen wurde, indem jeweils eine Gruppe
+ausgeblendet und die Differenz von `renderer.info.render.calls` genommen wurde.
+Personal und Träger liegen nachher gemeinsam im Crew-Pool:
+
+- Standard: Personal 151 und Warenkette 261 → Crew-Pool 28 plus Warenkette 3;
+  Vorplatz 81 → 1; Zugänge 44 → 5; Fahrzeuge 4 → 4.
+- Zoom 0,55: Personal 324 und Warenkette 334 → Crew-Pool 28 plus Warenkette 4;
+  Fahrzeuge 77 → 6; Vorplatz 81 → 1; Zugänge 44 → 5.
+- Parkplatz: Fahrzeuge 112 → 4; Personal 30 und Warenkette 18 → Crew-Pool 25
+  plus Warenkette 2; Vorplatz 36 → 1; Zugänge 22 → 4.
+
+**Szenen-Zensus** in der Standardkamera nach dem 1×-Lauf, vorher → nachher:
+
+| | vorher | nachher |
+| --- | --- | --- |
+| Meshes | 16.414 | 15.436 |
+| sichtbar | 3.636 | 2.655 |
+| instanziert | 257 | 307 |
+| Materialien | 1.745 | 1.334 |
+| Geometrien | 491 | 309 |
+| Shaderprogramme | 35 | 35 |
+
+Bei den Materialien waren rund 1.340 erwartet.
+
+Die Dreieckszahl steigt:
+
+- Standard: 1,343 → 1,420 Mio.
+- Zoom 0,55: 1,413 → 1,453 Mio.
+- Parkplatz: 1,245 → 1,313 Mio.
+
+Grund ist, dass three einen Instanz-Batch nur als Ganzes cullt. Figuren und
+Autos außerhalb des Bildes laufen deshalb mit durch den Vertex-Shader. Die
+Render-Zeit sinkt trotzdem in allen Ansichten.
+
+`logisticsView.update` kostete im 8×-Lauf vorher 615,8 ms auf 600 Aufrufe
+(1,03 ms je Frame) und nachher 235,2 ms (0,39 ms je Frame).
+
+Die Bildzeit (`frame`) hängt an der Bildwiederholrate des Browserfensters und
+wird hier nicht verglichen. Der erste Frame nach `initialize` braucht vorher
+wie nachher bis zu 0,7 s, weil dort die Shader kompiliert werden.
+
+Die Werte vor der Umsetzung aus dem Messbericht (806 und 1.250) stammen aus
+einem 1291×782-Fenster und sind mit dieser Tabelle nicht direkt vergleichbar.
 
 **View-CPU headless** (Node, 600 Frames nach Aufwärmen, festivalmittel,
 Median/p95/Max je Frame): `LogisticsView.update` 0,417 / 0,556 / 1,16 ms
@@ -70,10 +129,19 @@ und Endbesucher, vorher → nachher:
 - 8×: 28,36 / 57,72 / 89,73 → 25,91 / 50,02 / 75,31; 787 Besucher.
 
 Endhashes vorher wie nachher identisch: `eccf9510…`, `49831ca9…`,
-`03bdd71d…`. Die Unterschiede sind Messrauschen. 1.200 Ticks nachher:
-1× 8,87 / 28,25 / 142,22 (679 Besucher), 3× 11,81 / 35,68 / 97,36 (606),
-8× 26,94 / 51,59 / 115,80 (929); Hashes `1da73bca…`, `aa977ff0…`,
-`10754e1d…`. Das sind CPU-Tickzeiten, keine Browser-FPS.
+`03bdd71d…`. Die Unterschiede sind Messrauschen.
+
+`npm run test:performance:fixtures -- 1200`, vorher (Stand 5e8cc76) und
+nachher direkt nacheinander auf derselben Maschine, vorher → nachher:
+
+- 1×: 8,25 / 24,95 / 139,17 → 8,68 / 26,37 / 137,16; 679 Besucher.
+- 3×: 9,61 / 28,96 / 82,28 → 9,04 / 28,31 / 85,41; 606 Besucher.
+- 8×: 22,56 / 41,41 / 75,06 → 22,38 / 40,71 / 74,97; 929 Besucher.
+
+Die Endhashes sind vorher wie nachher identisch: `1da73bca…`, `aa977ff0…`,
+`10754e1d…`. Ein früherer Lauf nach der Umsetzung lag mit denselben Hashes
+bei 1× 8,87 / 28,25 / 142,22, 3× 11,81 / 35,68 / 97,36 und
+8× 26,94 / 51,59 / 115,80. Das sind CPU-Tickzeiten, keine Browser-FPS.
 
 ## Konzert-Bandversorgung (0.1.194, 2026-09-19)
 

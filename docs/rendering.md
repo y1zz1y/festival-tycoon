@@ -112,7 +112,9 @@ Snapshot nicht autoritativ schreiben.
   weiter (früher zwei neue je Wachstum). Die Crew-Batches von Personal und
   Trägern sind keine Visitor-Picking-Ziele; sie haben `CrewInstances.pick`.
   Abriss/Info wählen zuerst das nächste Mesh mit `buildingId` /
-  `buildingIds[instanceId]` bzw. `accessId`; ein unbeschrifteter Treffer
+  `buildingIds[instanceId]` bzw. `accessIds[instanceId]` (Einzelmodelle:
+  `accessId` an einem Vorfahren), aufgelöst über
+  `accessIdFromObject(object, hit.instanceId)`; ein unbeschrifteter Treffer
   (Straße, Parkfeld) beendet die Suche, damit nichts dahinter fällt.
   Maskottchen und gekaufte Shirts sind solche Accessoire-Batches (kein Mesh
   pro Figur). Darstellung interpoliert nur aus dem Snapshot.
@@ -318,15 +320,17 @@ nach einem festen Muster der Simulationszeit; die Zahl der Lichter bleibt gleich
 Blickpunkt, ausgedünnt durch die Effektdichte; Regen fällt mit der Simulationszeit
 und steht bei Pause. Das Wetter-Overlay (`festival.css`) hat `data-storm`.
 
-## Personal, Träger, Fahrzeuge und Zugänge gebündelt (Phase 6, B8)
+## Personal, Träger, Fahrzeuge und Zugänge gebündelt (0.2.12, Phase 6, B8)
 
 Die letzten Objekte mit Mesh (und oft Material) pro Figur, Fahrzeug oder Feld
 zeichnen jetzt feste Instanz-Batches. Headless-Zensus auf festivalmittel
 (sichtbare Meshes plus InstancedMeshes mit Instanzen, kameraunabhängig):
 1.008 → 45 Objekte (Personal 335 und Warenkette 335 → Crew-Pool 28 plus
 4 für Balken, Tore und Depots; Fahrzeuge 204 → 6, Vorplatz 81 → 1,
-Ampeln/Tore 53 → 6). Browser-Draw-Calls stehen in
-[performance.md](performance.md).
+Ampeln/Tore 53 → 6). Im Browser (1280×720) fallen die Draw-Calls in der
+Standardkamera von 844 auf 342, bei Zoom 0,55 von 1.288 auf 476 und in der
+Parkplatzansicht von 375 auf 204. Die Szene hat danach 1.334 statt 1.745
+Materialien. Details stehen in [performance.md](performance.md).
 
 **Dynamische Batches** (`src/view/instanceBatch.ts`, `InstanceBatch`):
 
@@ -371,7 +375,11 @@ schlichten Datensätzen je ID (Interpolation, Blickrichtung, Glättung,
 
 **Fahrzeuge:** siehe [logistics.md](logistics.md); höchstens zehn Batches
 (sieben Arten, zwei Lackhüllen, eine Autodetail-Geometrie), eigene Kopie des
-Fahrzeugmaterials mit Instanzfarbe, Schatten wie zuvor.
+Fahrzeugmaterials mit Instanzfarbe, Schatten wie zuvor. Geplant waren
+höchstens neun Batches mit einem angenäherten grauen Dach für alle Autos.
+Das silberne Auto hat stattdessen eine eigene Hülle. So bleibt das dunklere
+Dach exakt, und die Dächer aller anderen Farben bleiben ebenfalls exakt.
+Das kostet einen Batch mehr.
 
 **Warenkette:** Füllstandsbalken sind ein Batch aus einem weißen
 Einheitswürfel (Rahmen und Füllung je eine Instanz), neu geschrieben nur bei
