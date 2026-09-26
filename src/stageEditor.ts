@@ -10,6 +10,7 @@ import { createOrientationGizmo, type OrientationGizmo } from './view/orientatio
 import type { GameState } from './game/GameState'
 import { makeDraggable, makeResizable } from './dragPanel'
 import { isTextEntryTarget } from './uiFocus'
+import { toUiPx, uiScale } from './ui/uiScale'
 import './stageEditor.css'
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!))
 function stepLabel(step:{x:number;y:number;z:number}){
@@ -321,7 +322,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
       const menu=drop?null:panel.querySelector<HTMLElement>(`[data-quality-menu=${clicked}]`)
       if(menu){
         const rect=b.getBoundingClientRect()
-        menu.hidden=false;menu.style.left=`${Math.min(window.innerWidth-235,rect.right+8)}px`;menu.style.right='auto';menu.style.top=`${Math.max(10,Math.min(window.innerHeight-200,rect.top))}px`
+        menu.hidden=false;menu.style.left=`${toUiPx(Math.min(window.innerWidth-235*uiScale(),rect.right+8))}px`;menu.style.right='auto';menu.style.top=`${toUiPx(Math.max(10,Math.min(window.innerHeight-200*uiScale(),rect.top)))}px`
         b.setAttribute('aria-expanded','true')
       }
       refresh();if(pointer)updateHover(pointer)

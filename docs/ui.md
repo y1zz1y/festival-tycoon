@@ -54,7 +54,9 @@ Eingang/Ausgang.
 | Spielstand-Archivdarstellung | `src/ui/saveArchive.ts` | Zusammenführen Server/Browser, sichere Zeilen, Speicherhinweis |
 | Differentielle UI-Updates | `src/ui/differentialUpdates.ts` | `DifferentialUpdates`, `listFingerprint` |
 | Rechteck-Flächenvertrag | `src/ui/areaDesignation.ts` | `AreaDesignationSpec`, `normalizeRectangle`, Preview/Execute-Adapter |
-| Ton stumm | `src/main.ts`, `src/view/FestivalAudio.ts` | `#toggle-mute`, `#setting-mute-audio`; echte CC0-WAVs, Synth-Fallback; [audio.md](audio.md) |
+| Ton stumm | `src/main.ts`, `src/view/FestivalAudio.ts` | `#toggle-mute`, `#setting-mute-audio`; CC0-Dateien, Synth-Rückfall; [audio.md](audio.md) |
+| Grafik, Oberfläche, Lautstärke | `src/app/playerSettings.ts`, `src/ui/playerSettingsPanel.ts` | `readPlayerSettings`, `normalizePlayerSettings`, `installPlayerSettings`; Abschnitt „Spielereinstellungen“ |
+| Oberflächengröße | `src/ui/uiScale.ts`, `src/style.css` | `setUiScale`, `toUiPx`, `zoom: var(--ui-scale)` |
 | Abriss-/Info-Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | `pickPlacedObject`, `resolvePickedBuilding` |
 | Infofenster Müllwagen / Ablage / Container | `src/main.ts`, `src/game/logistics.ts`, `src/game/waste.ts` | `formatRoadVehicleInspectLoad`, `connectedWasteDumpStats`, `formatSealedContainerInspect` |
 | Infofenster Backstage | `src/main.ts`, `src/game/bandSupply.ts` | `formatBackstageInspect`, Klick auf Backstage-Kachel |
@@ -438,3 +440,28 @@ Startpunkt. Ecke / Einebnen / Wasser-als-Werkzeug sind aus der UI.
 Bei Mülleimern dreht **R** die gewünschte freie Kante und die Vorschau folgt
 direkt. Bänke werden weiter automatisch am Rand ausgerichtet und können nun
 auf Fußwegen sowie auf gleich hohen Straßen platziert werden.
+
+## Spielereinstellungen (0.2.4)
+
+Das Einstellungsfenster hat die Abschnitte **Grafik** (Schatten Aus/Normal/Hoch,
+Auflösung Niedrig/Standard/Hoch, Effekte Niedrig/Mittel/Hoch, Oberfläche 90–130 %)
+und **Ton** (Ton stumm, Regler Gesamt, Musik, Effekte, Umgebung).
+`src/app/playerSettings.ts` hält Werte, Stufen und Grenzen und speichert sie
+unter `festival-player-settings` in `localStorage`: pro Gerät, nie im
+Spielstand, nie an andere Spieler. `normalizePlayerSettings` repariert alles,
+was dort liegt (unbekannte Stufen fallen auf den Standard, Lautstärken 0–1,
+Oberfläche rastet auf eine angebotene Stufe). `installPlayerSettings` wendet
+jede Änderung sofort an: `WorldView.setGraphics` (siehe
+[rendering.md](rendering.md)), `FestivalAudio.setVolumes` und `setUiScale`.
+Die Simulation liest keine dieser Einstellungen.
+
+**Oberflächengröße.** `.game-shell > :not(#game-canvas):not(.mp-ping-overlay)`
+bekommt `zoom: var(--ui-scale)`; die 3D-Leinwand und die Ping-Markierungen, die
+Weltpunkten folgen, bleiben ungezoomt. In einem gezoomten Element landet
+`left: 100px` bei 100 × Faktor auf dem Bildschirm. Wer ein Fenster aus einer
+Bildschirmmessung setzt (`getBoundingClientRect`, `clientX`), rechnet deshalb mit
+`toUiPx` um: `dragPanel.ts`, `positionDropdownPanel`, die Abstände
+`--topbar-gap-top`, `--toolbar-width`, `--status-overlay-gap`,
+`--debug-view-gap`, das Personal-Detailfenster und das Menü im Bühneneditor. Neue
+Stellen dieser Art brauchen dasselbe. Nach einem Wechsel misst `onUiScale` die
+Leisten neu und löst ein `resize` aus.

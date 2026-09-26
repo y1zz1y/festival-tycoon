@@ -319,7 +319,7 @@ Der **Ping**-Button markiert einen Punkt auf der Karte für alle Spieler
 Bildschirmrand die Richtung. 📍 in der Nachricht springt die Kamera zum Ping.
 
 Die 3D-Ansicht nutzt eine auf maximal 1440 × 810 Bildpunkte begrenzte Pixelrasterung
-(auch bei Full HD und 4K), helleres Tageslicht und weiterhin die
+(auch bei Full HD und 4K; unter Einstellungen → Grafik → Auflösung gröber oder feiner), helleres Tageslicht und weiterhin die
 isometrische Kamera. Die Oberfläche verwendet kompakte, gerahmte Tycoon-Fenster,
 eine zweizeilige Aktionsleiste. Karten-Overlays sitzen als eigene Icongruppe
 zwischen Verwalten und Sitzung. Die Mittelwerte weichen Infofenstern seitlich
@@ -578,7 +578,9 @@ wie bei Achterbahnen, nicht im Baumenü.
 - mittlere oder rechte Maustaste ziehen: Kamera verschieben
 - Mausrad: zoomen
 - Q / E: Kamera um 90 Grad drehen
-- 🔊 in der Sitzungsleiste oder Einstellungen → **Ton stumm**: Festival-SFX aus (echte CC0-Klänge, Synth nur als Fallback; Kamera-Listener, bleibt lokal gespeichert). In der Nähe einer **spielenden Bühne** läuft Genre-Musik in der Schleife; Jubel, Schreie und Fahrzeuge nur gelegentlich bei echten Ereignissen.
+- 🔊 in der Sitzungsleiste oder Einstellungen → **Ton stumm**: Ton aus (bleibt lokal gespeichert)
+- Einstellungen → **Ton**: Regler für Gesamt, Musik, Effekte und Umgebung. In der Nähe einer **spielenden Bühne** läuft Musik im Genre der Band in der Schleife, leiser mit der Entfernung zur Kamera; auf dem Titelbildschirm läuft die Titelmusik. Jubel, Schreie und Fahrzeuge nur gelegentlich bei echten Ereignissen. Alle Klänge und Stücke sind CC0 (Quellen in `docs/audio.md`), Synth nur als Rückfall.
+- Einstellungen → **Grafik**: Schatten (Aus/Normal/Hoch), Auflösung (Niedrig/Standard/Hoch), Effekte (Niedrig/Mittel/Hoch) und Oberflächengröße (90–130 %). Gilt nur für dieses Gerät.
 - **Finanzen** in der Sitzungsleiste: Ausgaben und Einnahmen je Festivalausgabe. Ein Klick auf **Betriebskosten**, **Personal**, **Gagen** oder **Kreditzinsen** klappt die aktuelle Aufschlüsselung auf (Stände, Attraktionen, Bühnen, Löhne, Darlehen, Buchungen); ein weiterer Klick schließt sie. Mehrere Zeilen können gleichzeitig offen sein.
 - R: Gebäude, Deko oder Kopiervorlage um 90 Grad drehen
 - Shift halten und Maus hoch/runter (oder Mausrad / Bild hoch/runter): Bauhöhe in halben Stufen (0.5, 0–6) ändern. Um das Gebäude erscheint ein 7×7-Baugitter auf dieser Ebene. Die Bodenkachel unter dem Zeiger bleibt immer gelb umrandet, auch wenn das Objekt angehoben ist. Shift loslassen behält die Höhe; ein neues Bauwerkzeug setzt sie auf 0.

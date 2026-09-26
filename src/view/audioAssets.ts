@@ -1,9 +1,9 @@
-import { AUDIO_PLACEHOLDER_ASSETS } from '../game/audio'
+import { AUDIO_ASSETS, type AudioAssetKey } from '../game/audio'
 
-export type AudioAssetKey = keyof typeof AUDIO_PLACEHOLDER_ASSETS
+export type { AudioAssetKey }
 
 export function audioAssetPublicPath(key: AudioAssetKey): string {
-  return AUDIO_PLACEHOLDER_ASSETS[key]
+  return AUDIO_ASSETS[key]
 }
 
 export function audioAssetUrl(path: string): string {

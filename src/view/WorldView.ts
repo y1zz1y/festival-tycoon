@@ -45,6 +45,7 @@ import { groundRectangle } from '../game/ground'
 import { groundInfo } from '../game/ground'
 import { SupplyChainView } from './SupplyChainView'
 import { scenePixelRatio } from './renderResolution'
+import { effectShare, setEffectShare } from './effectDensity'
 import { isTextEntryTarget } from '../uiFocus'
 import { isProjectedOnScreen } from '../net/chatProtocol'
 import type { AreaDesignationHandler } from '../ui/areaDesignation'
@@ -377,6 +378,8 @@ export class WorldView {
   private shadersWarmed = false
   /** Per moving population, its size when its shaders were last compiled ahead of time. */
   private warmedPopulation: string[] = []
+  /** The player's resolution level as a factor on the logical pixel canvas. */
+  private resolutionScale = 1
   private rideGates = new Group()
   private rideGatePreview = Object.assign(new Group(), {visible:false})
 
@@ -794,7 +797,7 @@ export class WorldView {
       powerPreference: 'high-performance',
     })
     // A restrained pixel grid at every display density, with a smaller GPU budget.
-    this.renderer.setPixelRatio(scenePixelRatio(canvas.clientWidth, canvas.clientHeight))
+    this.renderer.setPixelRatio(scenePixelRatio(canvas.clientWidth, canvas.clientHeight, this.resolutionScale, window.devicePixelRatio))
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.autoUpdate = false
     this.renderer.sortObjects = false
@@ -1210,6 +1213,27 @@ export class WorldView {
     this.shadersWarmed = true
     this.scene.remove(warm)
     await step()
+  }
+
+  /**
+   * The player's graphics settings. A shadow map size of 0 turns the sun's shadow off;
+   * that changes the light setup once, so the next frame recompiles its shaders.
+   */
+  setGraphics(settings: { shadowMapSize: number; resolutionScale: number; effectShare: number }): void {
+    const casts = settings.shadowMapSize > 0
+    if (casts && this.sunLight.shadow.mapSize.x !== settings.shadowMapSize) {
+      this.sunLight.shadow.mapSize.set(settings.shadowMapSize, settings.shadowMapSize)
+      this.sunLight.shadow.map?.dispose()
+      this.sunLight.shadow.map = null
+    }
+    this.sunLight.castShadow = casts
+    this.renderer.shadowMap.needsUpdate = true
+    if (this.resolutionScale !== settings.resolutionScale) {
+      this.resolutionScale = settings.resolutionScale
+      this.resize()
+    }
+    setEffectShare(settings.effectShare)
+    this.laserView.invalidate()
   }
 
   /** Show or hide the fill plates over stands and depots. */
@@ -2529,7 +2553,9 @@ export class WorldView {
     return group
   }
 
-  private updateSoundWaves(active: boolean): void {
+  private updateSoundWaves(stagesActive: boolean): void {
+    // The rings are the first effect a low density drops.
+    const active = stagesActive && effectShare() >= 0.5
     if (!active && this.soundWaveGroups.every((group) => !group.visible)) return
     const time = performance.now() * 0.00055
     this.soundWaveGroups.forEach((group) => {
@@ -4430,7 +4456,7 @@ export class WorldView {
     const height = this.canvas.clientHeight
     if (width === 0 || height === 0) return
 
-    this.renderer.setPixelRatio(scenePixelRatio(width, height))
+    this.renderer.setPixelRatio(scenePixelRatio(width, height, this.resolutionScale, window.devicePixelRatio))
     this.renderer.setSize(width, height, false)
     const aspect = width / height
     const viewHeight = 20 / this.zoom

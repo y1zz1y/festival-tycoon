@@ -3,7 +3,8 @@ import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  AUDIO_PLACEHOLDER_ASSETS,
+  AUDIO_ASSETS,
+  MUSIC_BUFFER_KEYS,
   audioCueKey,
   audioCueRoll,
   audioDistance2d,
@@ -273,9 +274,11 @@ export function testFestivalAudio(): void {
     0,
     'vehicle one-shots share a long kind cooldown',
   )
-  assert.equal(musicBedForGenre('metal'), 'rock')
-  assert.equal(musicBedForGenre('dance'), 'electronic')
-  assert.equal(musicBedForGenre('folk'), 'acoustic')
+  // Every genre has its own loop and file; unknown genres play as indie.
+  assert.equal(musicBedForGenre('metal'), 'metal')
+  assert.equal(musicBedForGenre('dance'), 'dance')
+  assert.equal(musicBedForGenre('schlager'), 'indie')
+  for (const key of Object.values(MUSIC_BUFFER_KEYS)) assert.ok(AUDIO_ASSETS[key].startsWith('music/'), `${key} has a music file`)
 
   const mapped = audioWorldFromSnapshot({
     simTick: 4,
@@ -291,22 +294,23 @@ export function testFestivalAudio(): void {
     minute: 10,
   })
   assert.deepEqual(mapped.performingStageIds, ['s1'])
-  assert.deepEqual(mapped.performingStages, [{ id: 's1', bed: 'rock' }])
+  assert.deepEqual(mapped.performingStages, [{ id: 's1', bed: 'metal' }])
   assert.equal(mapped.vehicles?.[0]?.kind, 'bus')
 
   console.log('PASS festival audio: camera listener, sparse cues, looping music')
 }
 
 export async function testFestivalAudioAssets(): Promise<void> {
-  assert.equal(AUDIO_PLACEHOLDER_ASSETS.crowdPath, 'sfx/ambient-crowd.wav')
-  assert.equal(AUDIO_PLACEHOLDER_ASSETS.concert, 'sfx/ambient-concert.wav')
-  assert.equal(AUDIO_PLACEHOLDER_ASSETS.musicAcoustic, 'sfx/music-acoustic.wav')
-  assert.equal(AUDIO_PLACEHOLDER_ASSETS.uiClick, 'sfx/oneshot-ui-click.wav')
-  assert.equal(audioAssetPublicPath('cheer'), 'sfx/oneshot-cheer.wav')
+  assert.equal(AUDIO_ASSETS.crowdPath, 'sfx/ambient-crowd.ogg')
+  assert.equal(AUDIO_ASSETS.concert, 'sfx/ambient-concert.ogg')
+  assert.equal(AUDIO_ASSETS.musicRock, 'music/rock.ogg')
+  assert.equal(AUDIO_ASSETS.musicTitle, 'music/title.ogg')
+  assert.equal(AUDIO_ASSETS.uiClick, 'sfx/oneshot-ui-click.ogg')
+  assert.equal(audioAssetPublicPath('cheer'), 'sfx/oneshot-cheer.ogg')
   assert.equal(audioAssetUrl('sfx/oneshot-place.wav'), '/sfx/oneshot-place.wav')
   assert.equal(audioAssetUrl('/sfx/oneshot-place.wav'), '/sfx/oneshot-place.wav')
-  for (const [key, rel] of Object.entries(AUDIO_PLACEHOLDER_ASSETS)) {
-    assert.match(rel, /^sfx\/[\w-]+\.wav$/, `${key} must keep the planned public WAV path`)
+  for (const [key, rel] of Object.entries(AUDIO_ASSETS)) {
+    assert.match(rel, /^(sfx|music)\/[\w-]+\.ogg$/, `${key} must keep its public Ogg path`)
     assert.equal(existsSync(resolve(REPO_ROOT, 'public', rel)), true, `missing public/${rel}`)
   }
 
@@ -322,5 +326,5 @@ export async function testFestivalAudioAssets(): Promise<void> {
   assert.ok(ok)
   assert.equal(ok.byteLength, 3)
 
-  console.log('PASS festival audio assets: paths, shipped WAVs, loader fallback')
+  console.log('PASS festival audio assets: paths, shipped CC0 files, loader fallback')
 }

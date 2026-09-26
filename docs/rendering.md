@@ -33,7 +33,8 @@ erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
 | Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call, zwei Dreiecke je Kachel; Atlaszeilen inkl. `stone`/`rock`/`snow`/`earth`/`salt`/`asphalt`; Parkfelder als Atlas-`parking` |
 | Objektstützen | `src/game/supportOccupancy.ts`, `src/view/supports.ts` | geteilter Zylinder; nur bei Luft unter dem Objekt |
 | Lichter | `src/view/FestivalLightsView.ts` | fester Pool (8 PointLights, 4 SpotLights); Deko-Lampenfarben aus `decorationLights.ts` |
-| Auflösungscaps | `src/view/renderResolution.ts` | max. 1440×810 intern |
+| Auflösungscaps | `src/view/renderResolution.ts` | max. 1440×810 intern bei Stufe Standard; Stufe Niedrig ×0,75, Hoch ×1,5, nie über `devicePixelRatio` |
+| Grafikeinstellungen | `src/view/WorldView.ts` `setGraphics`, `src/view/effectDensity.ts` | Schattenkarte 0/1024/2048, Auflösungsstufe, Effektdichte; Werte aus [ui.md](ui.md) |
 | Touch-Kamera | `src/view/touchCamera.ts` | Zwei-Finger-Pan/Zoom |
 | Dispose | `src/view/disposeObject3D.ts` | GPU-Ressourcen |
 | Browser-Messharness | `tests/render-performance.html` | `?fixture=festivalmittel` (Standard) oder `?save=`; berichtet Draw-Calls je Frame, Dreiecke, Geometrien, Texturen, Programme und einen Szenen-Zensus (Meshes, sichtbar, instanziert, Materialien); `?autorun=1` legt das Ergebnis in `window.__renderReport`. Werte: [performance.md](performance.md) |
@@ -267,3 +268,16 @@ Noch nicht gebündelt, nach Messung die nächsten Kandidaten: Personal
 (`StaffView`, 335 Einzel-Meshes, 217 Materialien), Träger (`SupplyChainView`,
 335), fahrende Fahrzeuge (204), Bühnenvorplätze (`ForecourtView`, 81) und
 Zugangsobjekte (`AccessControlView`, 53).
+
+## Grafikeinstellungen (0.2.4)
+
+`WorldView.setGraphics` setzt, was der Spieler unter Einstellungen → Grafik
+wählt. **Schatten:** Aus schaltet `sunLight.castShadow` ab (die Lichteinrichtung
+ändert sich einmal, die Shader kompilieren beim nächsten Bild neu); Normal ist
+die bisherige 1024er-Schattenkarte, Hoch 2048. Eine neue Kartengröße entsorgt
+die alte Karte. **Auflösung:** Faktor auf das logische Pixelraster von
+`scenePixelRatio` (0,75 / 1 / 1,5), begrenzt durch `devicePixelRatio`.
+**Effekte:** `effectDensity.ts` hält einen Anteil (1/3, 1/2, 1). Feuerwerk zeichnet
+`effectCount(24, 6)` Funken, gleichmäßig über den ganzen Ausbruch verteilt;
+Laser zeichnen `effectCount(4)` der vier Strahlfarben; die Schallwellen-Ringe
+über Lautsprechern entfallen unter 1/2. Die Zahl der Lichter ändert sich nie.

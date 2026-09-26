@@ -11,6 +11,7 @@ import {
 } from 'three'
 import type { FireworkEffect } from '../game/fireworks'
 import { disposeObject3D } from './disposeObject3D'
+import { effectCount } from './effectDensity'
 
 const rocketGeometry = new CylinderGeometry(0.025, 0.025, 0.18, 6)
 const trailGeometry = new CylinderGeometry(0.012, 0.035, 0.75, 6)
@@ -72,7 +73,11 @@ export class FireworksView {
         model.trail.scale.y = Math.max(0.15, Math.min(1, effect.age * 3))
         return
       }
-      model.directions.forEach((direction, index) => {
+      // A lower effect density keeps sparks spread around the whole burst.
+      const count = effectCount(model.directions.length, 6)
+      for (let instance = 0; instance < count; instance++) {
+        const index = Math.floor((instance * model.directions.length) / count)
+        const direction = model.directions[index]!
         const distance = burstTime * (index % 3 === 0 ? 1.65 : 1.35)
         this.pose.position.set(
           direction.x * distance,
@@ -82,8 +87,9 @@ export class FireworksView {
         const streak = Math.max(0.35, 1 - burstTime * 0.24)
         this.pose.scale.setScalar(streak)
         this.pose.updateMatrix()
-        model.burst.setMatrixAt(index, this.pose.matrix)
-      })
+        model.burst.setMatrixAt(instance, this.pose.matrix)
+      }
+      model.burst.count = count
       model.burst.instanceMatrix.needsUpdate = true
       model.burstMaterial.opacity = Math.max(0, 1 - burstTime / 1.95)
     })

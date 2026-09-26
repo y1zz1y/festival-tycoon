@@ -4,6 +4,10 @@ import { SCENARIO_PRESETS } from '../game/scenarioPresets'
 import { SHIRT_STYLE_LABELS, SHIRT_STYLES } from '../game/shopGoods'
 import { STAFF_DEFINITIONS, STAFF_ROLES } from '../game/staff'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
+import { EFFECT_OPTIONS, RESOLUTION_OPTIONS, SHADOW_OPTIONS, UI_SCALE_OPTIONS, VOLUME_CHANNELS } from './playerSettings'
+
+const options = (list: readonly { value: string; label: string }[]): string =>
+  list.map((option) => `<option value="${option.value}">${option.label}</option>`).join('')
 
 /** What free play can ask of itself. The peak crowd is left out: one full minute would do. */
 const FREEPLAY_GOAL_OPTIONS = [
@@ -153,11 +157,18 @@ export function mountAppShell(app: HTMLDivElement): void {
       </div>
       <h3 class="scenario-heading">Einstellungen</h3>
       <label class="scenario-check"><input id="setting-debug-tools" type="checkbox" /><span>Debug</span></label>
-      <label class="scenario-check"><input id="setting-mute-audio" type="checkbox" /><span>Ton stumm</span></label>
       <label class="scenario-check"><input id="setting-stock-bars" type="checkbox" /><span>Füllstände über Ständen</span></label>
       <label class="scenario-check"><input id="setting-unsaved-warning" type="checkbox" /><span>Vor ungespeichertem Verlassen warnen</span></label>
       <label class="scenario-check" id="setting-keep-awake-field"><input id="setting-keep-awake" type="checkbox" /><span>Im Mehrspieler Bildschirm wachhalten</span></label>
       <label class="scenario-field"><span>Autospeichern</span><select id="setting-autosave">${AUTOSAVE_INTERVALS.map((option) => `<option value="${option.minutes}">${option.label}</option>`).join('')}</select></label>
+      <h3 class="scenario-heading">Grafik</h3>
+      <label class="scenario-field"><span>Schatten</span><select id="setting-shadows">${options(SHADOW_OPTIONS)}</select></label>
+      <label class="scenario-field"><span>Auflösung</span><select id="setting-resolution">${options(RESOLUTION_OPTIONS)}</select></label>
+      <label class="scenario-field"><span>Effekte</span><select id="setting-effects">${options(EFFECT_OPTIONS)}</select></label>
+      <label class="scenario-field"><span>Oberfläche</span><select id="setting-ui-scale">${UI_SCALE_OPTIONS.map((scale) => `<option value="${scale}">${Math.round(scale * 100)} %</option>`).join('')}</select></label>
+      <h3 class="scenario-heading">Ton</h3>
+      <label class="scenario-check"><input id="setting-mute-audio" type="checkbox" /><span>Ton stumm</span></label>
+      ${VOLUME_CHANNELS.map((channel) => `<label class="scenario-field volume-field"><span>${channel.label}<output id="setting-volume-${channel.value}-value"></output></span><input id="setting-volume-${channel.value}" type="range" min="0" max="100" step="5" /></label>`).join('')}
       <h3 class="scenario-heading">Tastenbelegung</h3>
       <p class="scenario-hint">Auf eine Taste klicken und die neue drücken. Eine Taste gehört immer nur einer Aktion.</p>
       <div id="hotkey-list" class="hotkey-list"></div>

@@ -4,6 +4,7 @@ import { describeRoadVehicleActivity } from './game/logistics'
 import { zoneKey, zonePaintActive } from './game/staffZones'
 import type { WorldView } from './view/WorldView'
 import { makeDraggable, makeResizable } from './dragPanel'
+import { toUiPx } from './ui/uiScale'
 
 export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(message:string,error?:boolean)=>void, release:()=>void) {
   let selected:string|null=null, following=false, drawing=false, zoneEditing=false, grabbing=false, previewMode:'map'|'front'='map'
@@ -44,8 +45,8 @@ export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(
     panel.style.right='auto'
     panel.style.bottom='auto'
     panel.style.transform='none'
-    panel.style.left=`${Math.max(4,staffRect.left-width-gap)}px`
-    panel.style.top=`${staffRect.top}px`
+    panel.style.left=`${Math.max(4,toUiPx(staffRect.left)-width-gap)}px`
+    panel.style.top=`${toUiPx(staffRect.top)}px`
   }
   const close=()=>{
     cancel();selected=null;view.setMinimapTarget(null);panel.hidden=true;following=false;view.followStaff(null);view.showStaffArea(null)

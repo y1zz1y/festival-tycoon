@@ -1548,6 +1548,26 @@ body.title-open #app-install-hint {
   width: 100%;
 }
 
+/* Mixer sliders in the settings window: label and value on one line, slider below. */
+.volume-field output {
+  color: #8fa69c;
+  font-variant-numeric: tabular-nums;
+}
+
+.volume-field input[type='range'] {
+  width: 100%;
+  accent-color: #62c98f;
+}
+
+/*
+ * Interface size (settings, "Oberfläche"). Every window and bar is zoomed; the 3D
+ * canvas and the ping overlay, which follows points in the world, are not. Code that
+ * places a window from a screen measurement divides by the scale (src/ui/uiScale.ts).
+ */
+.game-shell > :not(#game-canvas):not(.mp-ping-overlay) {
+  zoom: var(--ui-scale, 1);
+}
+
 .stats {
   flex: 1 1 220px;
   display: flex;

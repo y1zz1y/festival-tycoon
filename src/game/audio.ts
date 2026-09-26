@@ -1,6 +1,7 @@
-import { bandGenre } from './musicTaste'
+import { bandGenre, GENRES, type MusicGenre } from './musicTaste'
 import { hashStringSeed } from './rng'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import { buildingSize, type StageDesign } from './stageDesign'
 import { getTerrainHeight, isWaterHeight, type TerrainSnapshot } from './terrain'
 
 export type AudioZone =
@@ -13,7 +14,8 @@ export type AudioZone =
   | 'backstage'
   | 'woods'
 
-export type MusicBed = 'acoustic' | 'rock' | 'electronic' | 'pop'
+/** What a stage plays: the genre of the band on it, one CC0 loop per genre. */
+export type MusicBed = MusicGenre
 
 export type AudioOneShotKind =
   | 'placeBuilding'
@@ -71,6 +73,9 @@ export type AudioWorldBuilding = {
   kind: string
   x: number
   z: number
+  /** Stages only: footprint for the middle their music comes from. */
+  rotation?: number
+  stageDesign?: StageDesign
 }
 
 export type AudioWorldVisitor = {
@@ -124,36 +129,50 @@ export type AudioPlannerState = {
   activeMusicIds: string[]
 }
 
-/** Public WAV paths under `public/`. Mixer fetches and decodes them; synth is fallback. */
-export const AUDIO_PLACEHOLDER_ASSETS = {
-  concert: 'sfx/ambient-concert.wav',
-  coaster: 'sfx/ambient-coaster.wav',
-  crowdPath: 'sfx/ambient-crowd.wav',
-  camp: 'sfx/ambient-camp.wav',
-  water: 'sfx/ambient-water.wav',
-  backstage: 'sfx/ambient-backstage.wav',
-  woods: 'sfx/ambient-woods.wav',
-  placeBuilding: 'sfx/oneshot-place.wav',
-  demolish: 'sfx/oneshot-demolish.wav',
-  coasterLaunch: 'sfx/oneshot-coaster-launch.wav',
-  cheer: 'sfx/oneshot-cheer.wav',
-  scream: 'sfx/oneshot-scream.wav',
-  medical: 'sfx/oneshot-medical.wav',
-  busHiss: 'sfx/oneshot-bus-hiss.wav',
-  wasteTruck: 'sfx/oneshot-waste-truck.wav',
-  incident: 'sfx/oneshot-incident.wav',
-  uiClick: 'sfx/oneshot-ui-click.wav',
-  musicAcoustic: 'sfx/music-acoustic.wav',
-  musicRock: 'sfx/music-rock.wav',
-  musicElectronic: 'sfx/music-electronic.wav',
-  musicPop: 'sfx/music-pop.wav',
+/**
+ * CC0 files under `public/` (sources in docs/audio.md). The mixer fetches and
+ * decodes them; until one has loaded, or when it is missing, a synth stands in.
+ */
+export const AUDIO_ASSETS = {
+  concert: 'sfx/ambient-concert.ogg',
+  coaster: 'sfx/ambient-coaster.ogg',
+  crowdPath: 'sfx/ambient-crowd.ogg',
+  camp: 'sfx/ambient-camp.ogg',
+  water: 'sfx/ambient-water.ogg',
+  backstage: 'sfx/ambient-backstage.ogg',
+  woods: 'sfx/ambient-woods.ogg',
+  placeBuilding: 'sfx/oneshot-place.ogg',
+  demolish: 'sfx/oneshot-demolish.ogg',
+  coasterLaunch: 'sfx/oneshot-coaster-launch.ogg',
+  cheer: 'sfx/oneshot-cheer.ogg',
+  scream: 'sfx/oneshot-scream.ogg',
+  medical: 'sfx/oneshot-medical.ogg',
+  busHiss: 'sfx/oneshot-bus-hiss.ogg',
+  wasteTruck: 'sfx/oneshot-waste-truck.ogg',
+  incident: 'sfx/oneshot-incident.ogg',
+  uiClick: 'sfx/oneshot-ui-click.ogg',
+  musicTitle: 'music/title.ogg',
+  musicFolk: 'music/folk.ogg',
+  musicIndie: 'music/indie.ogg',
+  musicRock: 'music/rock.ogg',
+  musicMetal: 'music/metal.ogg',
+  musicElectro: 'music/electro.ogg',
+  musicDance: 'music/dance.ogg',
+  musicPop: 'music/pop.ogg',
+  musicSoul: 'music/soul.ogg',
 } as const
 
-export const MUSIC_BUFFER_KEYS: Record<MusicBed, keyof typeof AUDIO_PLACEHOLDER_ASSETS> = {
-  acoustic: 'musicAcoustic',
+export type AudioAssetKey = keyof typeof AUDIO_ASSETS
+
+export const MUSIC_BUFFER_KEYS: Record<MusicBed, AudioAssetKey> = {
+  folk: 'musicFolk',
+  indie: 'musicIndie',
   rock: 'musicRock',
-  electronic: 'musicElectronic',
+  metal: 'musicMetal',
+  electro: 'musicElectro',
+  dance: 'musicDance',
   pop: 'musicPop',
+  soul: 'musicSoul',
 }
 
 const AUDIO = SIMULATION_CONFIG.audio
@@ -195,11 +214,9 @@ export function createAudioPlannerState(): AudioPlannerState {
   return { lastTick: -1, lastWorld: null, lastCueTick: {}, activeMusicIds: [] }
 }
 
+/** Every genre has its own loop; anything unknown plays as indie. */
 export function musicBedForGenre(genre: string): MusicBed {
-  if (genre === 'rock' || genre === 'metal') return 'rock'
-  if (genre === 'electro' || genre === 'dance') return 'electronic'
-  if (genre === 'pop') return 'pop'
-  return 'acoustic'
+  return GENRES.some((entry) => entry.id === genre) ? genre as MusicBed : 'indie'
 }
 
 export function musicEmitterId(stageId: string): string {
@@ -357,7 +374,7 @@ function livePerformingStages(world: AudioWorld): { id: string; bed: MusicBed }[
     for (const stage of world.performingStages) unique.set(stage.id, stage.bed)
     return [...unique.entries()].map(([id, bed]) => ({ id, bed }))
   }
-  return (world.performingStageIds ?? []).map((id) => ({ id, bed: 'acoustic' as const }))
+  return (world.performingStageIds ?? []).map((id) => ({ id, bed: 'indie' as const }))
 }
 
 export function collectMusicEmitters(
@@ -365,14 +382,18 @@ export function collectMusicEmitters(
   listener: Pick<AudioListenerPose, 'x' | 'z'>,
   activeMusicIds: readonly string[] = [],
 ): AudioEmitter[] {
-  const buildings = new Map(world.buildings.map((building) => [building.id, building]))
+  const stages = livePerformingStages(world)
+  if (stages.length === 0) return []
   const prev = new Set(activeMusicIds)
   const emitters: AudioEmitter[] = []
-  for (const stage of livePerformingStages(world)) {
-    const building = buildings.get(stage.id)
+  for (const stage of stages) {
+    // A handful of stages: a lookup each is cheaper than indexing every building per tick.
+    const building = world.buildings.find((entry) => entry.id === stage.id)
     if (!building) continue
-    const x = building.x + 0.5
-    const z = building.z + 0.5
+    // Music comes from the middle of the stage's footprint, not its corner tile.
+    const size = buildingSize({ kind: building.kind, rotation: building.rotation ?? 0, stageDesign: building.stageDesign })
+    const x = building.x + size.width / 2
+    const z = building.z + size.depth / 2
     const id = musicEmitterId(stage.id)
     const limit = AUDIO.maxDistance * (prev.has(id) ? AUDIO.musicHysteresis : 1)
     if (audioDistance2d(x, z, listener.x, listener.z) > limit) continue

@@ -8,6 +8,7 @@ import {
 } from 'three'
 import type { GameSnapshot } from '../game/GameState'
 import { disposeChildren } from './disposeObject3D'
+import { effectCount } from './effectDensity'
 
 const BEAM_COLORS = [0x2ee6a6, 0x38bdf8, 0xc77dff, 0xff4fc3]
 const beamGeometry = new PlaneGeometry(0.045, 7.2)
@@ -40,7 +41,9 @@ export class LaserView {
     const lasers = snapshot.buildings.filter(
       (building) => building.kind === 'laserShow' && powered.has(building.id),
     )
-    const fingerprint = `${performing}:${lasers.map((laser) => laser.id).join(',')}`
+    // A lower effect density draws fewer of the four beam colours per laser.
+    const colors = effectCount(beamMaterials.length)
+    const fingerprint = `${performing}:${colors}:${lasers.map((laser) => laser.id).join(',')}`
     if (fingerprint !== this.fingerprint) {
       this.fingerprint = fingerprint
       disposeChildren(this.group)
@@ -51,7 +54,7 @@ export class LaserView {
         z: laser.z + 0.5,
       }))
       if (performing) {
-        beamMaterials.forEach((material) => {
+        beamMaterials.slice(0, colors).forEach((material) => {
           const batch = new InstancedMesh(
             beamGeometry,
             material,

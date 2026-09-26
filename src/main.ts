@@ -2,6 +2,8 @@ import { contextDemolitionTarget } from './game/contextDemolition'
 import { isDecorationCatalogKind } from './game/decoration'
 import { scenerySlot } from './game/scenery'
 import { makeDraggable, makeResizable } from './dragPanel'
+import { toUiPx, uiScale } from './ui/uiScale'
+import { installPlayerSettings } from './ui/playerSettingsPanel'
 import { mountStageEditor } from './stageEditor'
 import { stageStats } from './game/stageDesign'
 import { mountStaffDetails } from './staffDetailsUI'
@@ -211,10 +213,11 @@ const syncTopOffsets = (): void => {
   const topbar = topbarElement.getBoundingClientRect()
   const toolbar = toolbarElement.getBoundingClientRect()
   const bottom = Math.max(topbar.bottom, toolbar.bottom)
-  document.documentElement.style.setProperty('--topbar-gap-top', `${Math.round(bottom + 12)}px`)
+  // Measured on screen, used inside zoomed windows: in their pixels (`toUiPx`).
+  document.documentElement.style.setProperty('--topbar-gap-top', `${Math.round(toUiPx(bottom) + 12)}px`)
   document.documentElement.style.setProperty(
     '--toolbar-width',
-    `${Math.round(toolbar.width + 18)}px`,
+    `${Math.round(toUiPx(toolbar.width) + 18)}px`,
   )
 }
 new ResizeObserver(syncTopOffsets).observe(topbarElement)
@@ -742,6 +745,21 @@ const setAudioMuted = (muted: boolean): void => {
 syncMuteUi(readAudioMuted())
 muteAudioButton.addEventListener('click', () => setAudioMuted(!festivalAudio.isMuted()))
 muteAudioToggle.addEventListener('change', () => setAudioMuted(muteAudioToggle.checked))
+installPlayerSettings({
+  view,
+  audio: festivalAudio,
+  onUiScale: () => {
+    syncTopOffsets()
+    window.dispatchEvent(new Event('resize'))
+  },
+})
+// The title theme plays while the title screen is up and fades when a game starts.
+{
+  const titleScreenElement = requireElement<HTMLElement>('#title-screen')
+  const syncTitleMusic = (): void => festivalAudio.setTitleMusic(titleScreenElement.classList.contains('visible'))
+  new MutationObserver(syncTitleMusic).observe(titleScreenElement, { attributes: true, attributeFilter: ['class'] })
+  syncTitleMusic()
+}
 const resumeFestivalAudio = (): void => {
   festivalAudio.resume()
 }
@@ -3519,14 +3537,15 @@ const saveMenuPanel =
 // button's live on-screen rect instead, clamped to stay fully in view.
 function positionDropdownPanel(button: HTMLElement, panel: HTMLElement, panelWidth = 250): void {
   const margin = 8
-  const width = Math.min(panelWidth, window.innerWidth - margin * 2)
+  // Screen pixels here; the zoomed panel gets them back in its own (`toUiPx`).
+  const width = Math.min(panelWidth * uiScale(), window.innerWidth - margin * 2)
   const rect = button.getBoundingClientRect()
   const left = Math.min(
     Math.max(rect.right - width, margin),
     window.innerWidth - width - margin,
   )
-  panel.style.left = `${left}px`
-  panel.style.top = `${rect.bottom + margin}px`
+  panel.style.left = `${toUiPx(left)}px`
+  panel.style.top = `${toUiPx(rect.bottom + margin)}px`
 }
 
 const staffMenuToggle =
@@ -5092,9 +5111,9 @@ document.body.append(performanceIndicator)
 // Bottom-left is a stack: the overview overlay sits on the floor, the debug line rides above it,
 // and anything anchored to the bottom edge (the build menu) clears both.
 const syncDebugViewGap = (): void => {
-  const overview = statusOverlay.getBoundingClientRect().height
+  const overview = toUiPx(statusOverlay.getBoundingClientRect().height)
   document.documentElement.style.setProperty('--status-overlay-gap', `${Math.round(overview + 18)}px`)
-  const height = performanceIndicator.getBoundingClientRect().height
+  const height = toUiPx(performanceIndicator.getBoundingClientRect().height)
   document.documentElement.style.setProperty(
     '--debug-view-gap',
     `${Math.max(48, Math.round(overview + height + 30))}px`,

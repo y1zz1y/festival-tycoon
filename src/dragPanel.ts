@@ -1,3 +1,5 @@
+import { toUiPx } from './ui/uiScale'
+
 // Lets the user grab a panel's header bar and freely reposition the panel.
 // Works regardless of how the panel is normally positioned (plain left/top,
 // centered via left:50%+transform:translateX(-50%), or sized via an
@@ -5,6 +7,7 @@
 // to plain left/top/width/height matching its current on-screen box the
 // moment a drag starts, before any pointer movement is applied - so
 // clearing right/bottom/transform can't resize or re-flow it.
+// Screen measurements go through `toUiPx`: the panel is zoomed by the UI scale.
 // Returns a callback reporting whether the panel has been dragged at least
 // once, so callers can stop re-centering/re-snapping it automatically.
 export function makeDraggable(handle: HTMLElement, panel: HTMLElement): () => boolean {
@@ -14,10 +17,10 @@ export function makeDraggable(handle: HTMLElement, panel: HTMLElement): () => bo
     if ((event.target as HTMLElement).closest('button')) return
     event.preventDefault()
     const rect = panel.getBoundingClientRect()
-    panel.style.left = `${rect.left}px`
-    panel.style.top = `${rect.top}px`
-    panel.style.width = `${rect.width}px`
-    panel.style.height = `${rect.height}px`
+    panel.style.left = `${toUiPx(rect.left)}px`
+    panel.style.top = `${toUiPx(rect.top)}px`
+    panel.style.width = `${toUiPx(rect.width)}px`
+    panel.style.height = `${toUiPx(rect.height)}px`
     panel.style.right = 'auto'
     panel.style.bottom = 'auto'
     panel.style.transform = 'none'
@@ -27,10 +30,10 @@ export function makeDraggable(handle: HTMLElement, panel: HTMLElement): () => bo
     const onMove = (moveEvent: PointerEvent): void => {
       moved = true
       const margin = 4
-      const maxLeft = Math.max(margin, window.innerWidth - panel.offsetWidth - margin)
+      const maxLeft = Math.max(margin, window.innerWidth - rect.width - margin)
       const maxTop = Math.max(margin, window.innerHeight - 40)
-      panel.style.left = `${Math.min(Math.max(moveEvent.clientX - offsetX, margin), maxLeft)}px`
-      panel.style.top = `${Math.min(Math.max(moveEvent.clientY - offsetY, margin), maxTop)}px`
+      panel.style.left = `${toUiPx(Math.min(Math.max(moveEvent.clientX - offsetX, margin), maxLeft))}px`
+      panel.style.top = `${toUiPx(Math.min(Math.max(moveEvent.clientY - offsetY, margin), maxTop))}px`
     }
     const onUp = (): void => {
       handle.removeEventListener('pointermove', onMove)
@@ -68,8 +71,8 @@ export function makeResizable(panel: HTMLElement): void {
     event.preventDefault()
     event.stopPropagation()
     const rect = panel.getBoundingClientRect()
-    panel.style.left = `${rect.left}px`
-    panel.style.top = `${rect.top}px`
+    panel.style.left = `${toUiPx(rect.left)}px`
+    panel.style.top = `${toUiPx(rect.top)}px`
     panel.style.right = 'auto'
     panel.style.bottom = 'auto'
     panel.style.transform = 'none'
@@ -88,8 +91,8 @@ export function makeResizable(panel: HTMLElement): void {
       const maxHeight = Math.max(minHeight, window.innerHeight - rect.top - 4)
       const width = Math.min(Math.max(startWidth + (moveEvent.clientX - startX), minWidth), maxWidth)
       const height = Math.min(Math.max(startHeight + (moveEvent.clientY - startY), minHeight), maxHeight)
-      panel.style.width = `${width}px`
-      panel.style.height = `${height}px`
+      panel.style.width = `${toUiPx(width)}px`
+      panel.style.height = `${toUiPx(height)}px`
       pinGrip()
     }
     const onUp = (): void => {

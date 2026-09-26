@@ -110,7 +110,8 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/campingModels.ts` | Zelt-/Pavillon-Batches |
 | `tests/attractionFoundation.ts` | Camping-/Vorplatz-Ausweisung bleibt nach Attraction-Commands, Save/Load und MP-Deltas; Placement-Sperre (Gebäude/Weg/Deko), Fence/Delay-Ausnahme, Forecourt-Preview |
 | `tests/mobileTouch.ts` | Touch-Kamera / Gesten |
-| `tests/audio.ts` | Kamera-Listener (Look-At, nicht Gäste), Range-Skip, One-Shot-Cap; Jubel nur bei Konzert-Kandidaten + Cooldown/Chance; Fahrzeuge nur Start/Halt/Pass-by; Musik looped solange Quelle + in Range; WAV-Pfade, `public/sfx/` vorhanden, Loader-Fallback |
+| `tests/audio.ts` | Kamera-Listener (Look-At, nicht Gäste), Range-Skip, One-Shot-Cap; Jubel nur bei Konzert-Kandidaten + Cooldown/Chance; Fahrzeuge nur Start/Halt/Pass-by; Musik looped solange Quelle + in Range, eine Schleife je Genre; Ogg-Pfade, `public/sfx/` und `public/music/` vorhanden, Loader-Fallback |
+| `tests/playerSettings.ts` | Spielereinstellungen: kaputte oder fremde Werte reparieren, Speichern/Lesen, Auflösungsstufen, Effektdichte |
 | `tests/performance.ts` | synthetische Last |
 | `tests/people-preview.html` | visuelle Personen-Fixture |
 | `tests/carrier-preview.html` | visuelle Träger neben Gästen |

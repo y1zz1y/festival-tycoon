@@ -1,5 +1,5 @@
 import {
-  AUDIO_PLACEHOLDER_ASSETS,
+  AUDIO_ASSETS,
   audioWorldFromSnapshot,
   createAudioPlannerState,
   listenerFromCamera,
@@ -14,7 +14,17 @@ import {
   type AudioZone,
 } from '../game/audio'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
+import type { VolumeChannel } from '../app/playerSettings'
 import { loadFestivalAudioBuffer } from './audioAssets'
+
+type Bus = Exclude<VolumeChannel, 'master'>
+
+/** Where in a loop a stage starts, so two stages with the same genre do not play in unison. */
+function loopOffset(id: string, duration: number): number {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0
+  return ((hash % 1000) / 1000) * duration
+}
 
 const AUDIO = SIMULATION_CONFIG.audio
 
@@ -28,15 +38,22 @@ type VoiceSlot = {
   priorityWeight: number
   intensity: number
   id: string
+  /** Buffer key playing, so a stage whose band changes genre restarts with the new loop. */
+  key: string
 }
 
 /**
  * Camera-listener mixer. Plans come from sim ticks; panners follow the camera
- * each render frame. Real WAVs load via fetch/decode; synths stay as fallback.
+ * each render frame. CC0 files load via fetch/decode; synths stand in until then.
+ * Voices run through three channels under the master (music, effects, ambient)
+ * that the player's mixer sets; the title theme plays on the music channel.
  */
 export class FestivalAudio {
   private context: AudioContext | null = null
   private master: GainNode | null = null
+  private buses: Partial<Record<Bus, GainNode>> = {}
+  private volume: Record<VolumeChannel, number> = { master: 1, music: 1, effects: 1, ambient: 1 }
+  private title: { wanted: boolean; source: AudioBufferSourceNode | null; gain: GainNode | null } = { wanted: false, source: null, gain: null }
   private muted = false
   private disposed = false
   private planner: AudioPlannerState = createAudioPlannerState()
@@ -55,6 +72,24 @@ export class FestivalAudio {
     this.muted = muted
     this.applyMasterGain()
     if (muted) this.stopAll()
+    else this.syncTitle()
+  }
+
+  /** The player's mixer: each channel 0 to 1, applied with a short glide. */
+  setVolumes(volume: Readonly<Record<VolumeChannel, number>>): void {
+    this.volume = { ...volume }
+    this.applyMasterGain()
+    const context = this.context
+    if (!context) return
+    for (const [channel, bus] of Object.entries(this.buses) as [Bus, GainNode][]) {
+      bus.gain.setTargetAtTime(this.volume[channel], context.currentTime, 0.04)
+    }
+  }
+
+  /** Title theme on or off; remembered until the audio context exists. */
+  setTitleMusic(active: boolean): void {
+    this.title.wanted = active
+    this.syncTitle()
   }
 
   isMuted(): boolean {
@@ -64,6 +99,7 @@ export class FestivalAudio {
   resume(): void {
     const context = this.ensureContext()
     if (context?.state === 'suspended') void context.resume()
+    this.syncTitle()
   }
 
   updateListener(pose: AudioListenerPose): void {
@@ -141,6 +177,8 @@ export class FestivalAudio {
     void this.context?.close()
     this.context = null
     this.master = null
+    this.buses = {}
+    this.title = { wanted: this.title.wanted, source: null, gain: null }
     this.oneShots = []
     this.ambients = []
     this.buffers.clear()
@@ -159,20 +197,26 @@ export class FestivalAudio {
     this.context = context
     this.master = context.createGain()
     this.master.connect(context.destination)
+    for (const channel of ['music', 'effects', 'ambient'] as const) {
+      const bus = context.createGain()
+      bus.gain.value = this.volume[channel]
+      bus.connect(this.master)
+      this.buses[channel] = bus
+    }
     this.applyMasterGain()
     this.prepareBuffers(context)
     this.loadRealAssets(context)
-    this.oneShots = Array.from({ length: AUDIO.maxOneShotVoices }, () => this.makeSlot(context))
-    this.ambients = Array.from({ length: AUDIO.maxAmbientVoices }, () => this.makeSlot(context))
+    this.oneShots = Array.from({ length: AUDIO.maxOneShotVoices }, () => this.makeSlot(context, 'effects'))
+    this.ambients = Array.from({ length: AUDIO.maxAmbientVoices }, () => this.makeSlot(context, 'ambient'))
     return context
   }
 
   private applyMasterGain(): void {
     if (!this.master || !this.context) return
-    this.master.gain.setTargetAtTime(this.muted ? 0 : AUDIO.masterGain, this.context.currentTime, 0.04)
+    this.master.gain.setTargetAtTime(this.muted ? 0 : AUDIO.masterGain * this.volume.master, this.context.currentTime, 0.04)
   }
 
-  private makeSlot(context: AudioContext): VoiceSlot {
+  private makeSlot(context: AudioContext, bus: Bus): VoiceSlot {
     const gain = context.createGain()
     const panner = context.createPanner()
     panner.panningModel = 'equalpower'
@@ -182,7 +226,7 @@ export class FestivalAudio {
     panner.maxDistance = AUDIO.maxDistance
     gain.gain.value = 0
     panner.connect(gain)
-    gain.connect(this.master ?? context.destination)
+    gain.connect(this.buses[bus] ?? this.master ?? context.destination)
     return {
       gain,
       panner,
@@ -193,6 +237,7 @@ export class FestivalAudio {
       priorityWeight: 0,
       intensity: 0,
       id: '',
+      key: '',
     }
   }
 
@@ -290,39 +335,60 @@ export class FestivalAudio {
       const local = t % every
       return Math.sin(2 * Math.PI * freq * t) * Math.exp(-local * 7) * 0.16
     }
-    this.buffers.set(
-      'musicAcoustic',
-      make(2, (_i, t) => pluck([262, 294, 330, 392][Math.floor(t * 2) % 4] ?? 262, t, 0.5) + Math.sin(2 * Math.PI * 131 * t) * 0.04),
-    )
-    this.buffers.set(
-      'musicRock',
-      make(2, (_i, t) => {
-        const fifth = Math.sin(2 * Math.PI * 110 * t) + Math.sin(2 * Math.PI * 165 * t)
-        const kick = Math.sin(2 * Math.PI * 70 * t) * Math.exp(-(t % 0.5) * 10)
-        return fifth * 0.07 + kick * 0.1
-      }),
-    )
-    this.buffers.set(
-      'musicElectronic',
-      make(2, (_i, t) => {
-        const bass = Math.sin(2 * Math.PI * 55 * t) * (0.5 + 0.5 * Math.sin(2 * Math.PI * 2 * t))
-        const hat = noise(t, 53) * Math.exp(-(t % 0.25) * 40) * 0.12
-        return bass * 0.1 + hat
-      }),
-    )
-    this.buffers.set(
-      'musicPop',
-      make(2, (_i, t) => {
-        const arp = [262, 330, 392, 523][Math.floor(t * 4) % 4] ?? 262
-        return Math.sin(2 * Math.PI * arp * t) * 0.1 * Math.exp(-(t % 0.25) * 8) + Math.sin(2 * Math.PI * 98 * t) * 0.05
-      }),
-    )
+    const sketches: Record<string, AudioBuffer> = {}
+    sketches.acoustic = make(2, (_i, t) => pluck([262, 294, 330, 392][Math.floor(t * 2) % 4] ?? 262, t, 0.5) + Math.sin(2 * Math.PI * 131 * t) * 0.04)
+    sketches.rock = make(2, (_i, t) => {
+      const fifth = Math.sin(2 * Math.PI * 110 * t) + Math.sin(2 * Math.PI * 165 * t)
+      const kick = Math.sin(2 * Math.PI * 70 * t) * Math.exp(-(t % 0.5) * 10)
+      return fifth * 0.07 + kick * 0.1
+    })
+    sketches.electronic = make(2, (_i, t) => {
+      const bass = Math.sin(2 * Math.PI * 55 * t) * (0.5 + 0.5 * Math.sin(2 * Math.PI * 2 * t))
+      const hat = noise(t, 53) * Math.exp(-(t % 0.25) * 40) * 0.12
+      return bass * 0.1 + hat
+    })
+    sketches.pop = make(2, (_i, t) => {
+      const arp = [262, 330, 392, 523][Math.floor(t * 4) % 4] ?? 262
+      return Math.sin(2 * Math.PI * arp * t) * 0.1 * Math.exp(-(t % 0.25) * 8) + Math.sin(2 * Math.PI * 98 * t) * 0.05
+    })
+    const sketchOf: Record<string, string> = { musicFolk: 'acoustic', musicIndie: 'acoustic', musicSoul: 'acoustic', musicRock: 'rock', musicMetal: 'rock', musicElectro: 'electronic', musicDance: 'electronic', musicPop: 'pop' }
+    for (const [key, sketch] of Object.entries(sketchOf)) this.buffers.set(key, sketches[sketch]!)
   }
 
   private loadRealAssets(context: AudioContext): void {
-    for (const [key, path] of Object.entries(AUDIO_PLACEHOLDER_ASSETS)) {
+    for (const [key, path] of Object.entries(AUDIO_ASSETS)) {
       void this.replaceBufferFromFile(context, key, path)
     }
+  }
+
+  /** Starts or fades the title theme to match `title.wanted`, once its file is there. */
+  private syncTitle(): void {
+    const context = this.context
+    if (!context) return
+    const title = this.title
+    const active = title.wanted && !this.muted
+    if (!title.gain) {
+      if (!active) return
+      title.gain = context.createGain()
+      title.gain.gain.value = 0
+      title.gain.connect(this.buses.music ?? this.master ?? context.destination)
+    }
+    const now = context.currentTime
+    title.gain.gain.cancelScheduledValues(now)
+    title.gain.gain.setTargetAtTime(active ? 0.9 : 0, now, active ? 0.5 : 0.3)
+    if (!active && title.source) {
+      title.source.stop(now + 1.5)
+      title.source = null
+      return
+    }
+    const buffer = this.buffers.get('musicTitle')
+    if (!active || title.source || !buffer) return
+    const source = context.createBufferSource()
+    source.buffer = buffer
+    source.loop = true
+    source.connect(title.gain)
+    source.start()
+    title.source = source
   }
 
   private async replaceBufferFromFile(
@@ -331,7 +397,9 @@ export class FestivalAudio {
     path: string,
   ): Promise<void> {
     const buffer = await loadFestivalAudioBuffer(context, path)
-    if (buffer && !this.disposed) this.buffers.set(key, buffer)
+    if (!buffer || this.disposed) return
+    this.buffers.set(key, buffer)
+    if (key === 'musicTitle') this.syncTitle()
   }
 
   private playCue(cue: AudioCue): void {
@@ -350,16 +418,18 @@ export class FestivalAudio {
       if (slot.playing && !next.has(slot.id)) this.stopSlot(slot, slot.id.startsWith('music:') ? 0.55 : 0.18)
     }
     for (const emitter of emitters) {
-      const existing = this.ambients.find((slot) => slot.playing && slot.id === emitter.id)
+      const key = emitter.zone === 'music' ? MUSIC_BUFFER_KEYS[emitter.bed ?? 'indie'] : emitter.zone
+      const existing = this.ambients.find((slot) => slot.playing && slot.id === emitter.id && slot.key === key)
       if (existing) {
         existing.intensity = emitter.intensity
         this.moveSlot(existing, emitter.x, emitter.z)
         continue
       }
       const priorityWeight = emitter.priority === 'local' ? 50 : 20
-      const slot = this.claimSlot(this.ambients, emitter.x, emitter.z, priorityWeight, emitter.intensity)
+      // A new band with another genre on the same stage: its slot restarts with the new loop.
+      const changed = this.ambients.find((slot) => slot.playing && slot.id === emitter.id)
+      const slot = changed ?? this.claimSlot(this.ambients, emitter.x, emitter.z, priorityWeight, emitter.intensity)
       if (!slot) continue
-      const key = emitter.zone === 'music' ? MUSIC_BUFFER_KEYS[emitter.bed ?? 'acoustic'] : emitter.zone
       const gain = emitter.zone === 'music' ? emitter.intensity * 0.68 : emitter.intensity * 0.45
       this.startBuffer(slot, key, emitter.x, emitter.z, gain, true, emitter.id, priorityWeight)
     }
@@ -404,7 +474,7 @@ export class FestivalAudio {
 
   private startBuffer(
     slot: VoiceSlot,
-    key: AudioOneShotKind | AudioZone | keyof typeof AUDIO_PLACEHOLDER_ASSETS,
+    key: AudioOneShotKind | AudioZone | keyof typeof AUDIO_ASSETS,
     x: number,
     z: number,
     intensity: number,
@@ -416,6 +486,12 @@ export class FestivalAudio {
     const buffer = this.buffers.get(key)
     if (!context || !buffer) return
     this.stopSlot(slot, 0)
+    const music = id.startsWith('music:')
+    // Ambient slots carry stage music too; route each voice to its mixer channel.
+    if (this.ambients.includes(slot)) {
+      slot.gain.disconnect()
+      slot.gain.connect(this.buses[music ? 'music' : 'ambient'] ?? this.master ?? context.destination)
+    }
     const source = context.createBufferSource()
     source.buffer = buffer
     source.loop = loop
@@ -423,6 +499,7 @@ export class FestivalAudio {
     slot.source = source
     slot.playing = true
     slot.id = id
+    slot.key = key
     slot.intensity = intensity
     slot.priorityWeight = priorityWeight
     this.moveSlot(slot, x, z)
@@ -437,7 +514,7 @@ export class FestivalAudio {
         slot.id = ''
       }
     }
-    source.start()
+    source.start(context.currentTime, music ? loopOffset(id, buffer.duration) : 0)
   }
 
   private moveSlot(slot: VoiceSlot, x: number, z: number): void {
@@ -476,11 +553,19 @@ export class FestivalAudio {
     slot.source = null
     slot.playing = false
     slot.id = ''
+    slot.key = ''
   }
 
   private stopAll(): void {
     for (const slot of [...this.oneShots, ...this.ambients]) this.stopSlot(slot, 0.05)
     this.currentAmbients.clear()
+    const title = this.title
+    if (title.source) {
+      title.source.stop()
+      title.source.disconnect()
+      title.source = null
+    }
+    if (title.gain) title.gain.gain.value = 0
   }
 }
 
@@ -489,4 +574,3 @@ function setListenerParam(param: AudioParam | undefined, value: number, time: nu
   param.setTargetAtTime(value, time, 0.03)
 }
 
-export { AUDIO_PLACEHOLDER_ASSETS }
