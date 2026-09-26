@@ -10,6 +10,7 @@ import {
   Float32BufferAttribute,
   Group,
   Line,
+  Matrix4,
   LineBasicMaterial,
   Mesh,
   MeshBasicMaterial,
@@ -38,15 +39,29 @@ import { resolveRoadLayer } from '../game/logistics'
 import { disposeObject3D } from './disposeObject3D'
 import {
   createLogisticsFacility,
-  createRoadVehicleModel,
   logisticsFacilityFootprint,
+  roadVehicleBatchGeometries,
+  roadVehicleBatchMaterial,
+  roadVehicleParts,
   type LogisticsFacilityKind,
+  type RoadVehiclePart,
 } from './logisticsModels'
 import { createRoadDirectionArrowGeometry } from './roadDirectionArrow'
+import { InstanceBatch, placementMatrix } from './instanceBatch'
 
 type FacilityLike = AmbulanceGarage | BusDepot | BusStop | WasteDepot | SpecialDepot
 type VehicleLike = RoadVehicle & {
   facing?: number
+}
+
+/** Where a vehicle is drawn: eased towards the snapshot, as the old per-vehicle model was. */
+type VehiclePose = {
+  kind: RoadVehicle['kind']
+  x: number
+  y: number
+  z: number
+  yaw: number
+  parts: readonly RoadVehiclePart[]
 }
 
 const HALF_PI = Math.PI / 2
@@ -236,7 +251,11 @@ export class LogisticsView {
   readonly group = new Group()
   private readonly staticGroup = new Group()
   private readonly vehicleGroup = new Group()
-  private readonly vehicleModels = new Map<string, Group>()
+  /** The vehicle batches only (picking, shader warm-up); routes and numbers stay beside them. */
+  private readonly vehicleBatchGroup = new Group()
+  private readonly vehiclePoses = new Map<string, VehiclePose>()
+  private readonly vehicleBatches = new Map<BufferGeometry, InstanceBatch>()
+  private readonly vehicleMatrix = new Matrix4()
   private readonly parkingHelpers = new Map<string, ParkingHelper>()
   private showParkingHelpers = false
   private roadSurface: (x: number, z: number) => WayType | undefined = () => undefined
@@ -265,6 +284,26 @@ export class LogisticsView {
 
   constructor() {
     this.group.add(this.staticGroup, this.vehicleGroup, this.marksGroup)
+    this.vehicleBatchGroup.name = 'vehicles'
+    this.vehicleGroup.add(this.vehicleBatchGroup)
+    // Up front and empty: the load-time shader compile covers them, and an empty
+    // batch costs no draw call.
+    for (const geometry of roadVehicleBatchGeometries()) this.vehicleBatch(geometry)
+  }
+
+  /** One batch per vehicle geometry (by identity): all cars of every colour share two. */
+  private vehicleBatch(geometry: BufferGeometry): InstanceBatch {
+    let batch = this.vehicleBatches.get(geometry)
+    if (!batch) {
+      batch = new InstanceBatch(this.vehicleBatchGroup, geometry, roadVehicleBatchMaterial(), {
+        colors: true,
+        idKey: 'vehicleIds',
+        castShadow: true,
+        receiveShadow: true,
+      })
+      this.vehicleBatches.set(geometry, batch)
+    }
+    return batch
   }
 
   invalidate(): void {
@@ -287,7 +326,7 @@ export class LogisticsView {
   }
 
   getVehiclePickRoot(): Group {
-    return this.vehicleGroup
+    return this.vehicleBatchGroup
   }
 
   getStaticPickRoot(): Group {
@@ -302,6 +341,13 @@ export class LogisticsView {
     paused = false,
     time = performance.now(),
     showParkingHelpers = false,
+    /**
+     * Whether roads, parking, facilities, terrain or road colours may have changed
+     * since the last call (WorldView passes its `dataChanged`). Only then are the
+     * road index and the static fingerprint rebuilt: doing that every frame cost
+     * about 0.85 ms per frame on festivalmittel.
+     */
+    structureChanged = true,
   ): void {
     const seconds=this.lastAnimationTime===null?0:Math.min(.25,Math.max(0,(time-this.lastAnimationTime)/1000))
     this.lastAnimationTime=time
@@ -310,6 +356,26 @@ export class LogisticsView {
     this.getGroundY = getGroundY
     this.roadColor = roadColor
     this.roadSurface = roadSurface
+    if (structureChanged || this.staticFingerprint === '') this.refreshStructure(logistics, getGroundY, roadColor)
+    if (this.showParkingHelpers !== showParkingHelpers) {
+      this.showParkingHelpers = showParkingHelpers
+      this.staticGroup.traverse(o => { if (o.userData.roadHelper) o.visible = showParkingHelpers })
+      this.parkingHelpers.forEach((helper) => {
+        helper.group.visible = showParkingHelpers
+      })
+    }
+    this.updateParkingOccupancy(logistics.parkingCells)
+    this.updateVehicles(logistics.roadVehicles)
+    this.updateInspectRoute(logistics.roadVehicles)
+    this.refreshPlannerRoute()
+  }
+
+  /** The road index for vehicle heights, and a static rebuild if anything static changed. */
+  private refreshStructure(
+    logistics: Readonly<LogisticsSnapshot>,
+    getGroundY: (x: number, z: number) => number,
+    roadColor: (x: number, z: number) => number,
+  ): void {
     this.roadsByKey = new Map()
     for (const cell of logistics.roadCells) {
       const key = `${cell.x}:${cell.z}`
@@ -331,17 +397,6 @@ export class LogisticsView {
       this.staticFingerprint = fingerprint
       this.rebuildStatic(logistics)
     }
-    if (this.showParkingHelpers !== showParkingHelpers) {
-      this.showParkingHelpers = showParkingHelpers
-      this.staticGroup.traverse(o => { if (o.userData.roadHelper) o.visible = showParkingHelpers })
-      this.parkingHelpers.forEach((helper) => {
-        helper.group.visible = showParkingHelpers
-      })
-    }
-    this.updateParkingOccupancy(logistics.parkingCells)
-    this.updateVehicles(logistics.roadVehicles)
-    this.updateInspectRoute(logistics.roadVehicles)
-    this.refreshPlannerRoute()
   }
 
   private groundY(x: number, z: number): number {
@@ -546,70 +601,63 @@ export class LogisticsView {
     return group
   }
 
+  /**
+   * Eases every vehicle and refills the vehicle batches. A housed vehicle (in its
+   * depot or garage) keeps its pose but is not drawn, so it cannot catch clicks either.
+   */
   private updateVehicles(vehicles: readonly VehicleLike[]): void {
-    const activeIds = new Set(vehicles.map((vehicle) => vehicle.id))
-    this.vehicleModels.forEach((model, id) => {
-      if (activeIds.has(id)) return
-      this.vehicleGroup.remove(model)
-      this.vehicleModels.delete(id)
-    })
-    vehicles.forEach((vehicle) => {
-      if (vehicle.housed) {
-        const parked = this.vehicleModels.get(vehicle.id)
-        if (parked) parked.visible = false
-        return
-      }
-      const kind = vehicle.kind
-      const targetX = vehicle.position.x + 0.5
-      const targetZ = vehicle.position.z + 0.5
-      const parked = vehicle.state === 'parked'
-      const road = parked
-        ? undefined
-        : this.roadAt(
-            vehicle.position.x,
-            vehicle.position.z,
-            vehicle.position.elevation ?? vehicle.cell?.elevation,
-          )
-      const targetY = road ? this.roadY(road) : this.groundY(vehicle.position.x, vehicle.position.z)
-      let model = this.vehicleModels.get(vehicle.id)
-      if (model && model.userData.vehicleKind !== kind) {
-        this.vehicleGroup.remove(model)
-        this.vehicleModels.delete(vehicle.id)
-        model = undefined
-      }
-      if (!model) {
-        model = createRoadVehicleModel(kind, vehicle.id)
-        model.userData.vehicleKind = kind
-        model.userData.vehicleId = vehicle.id
-        model.traverse((object) => {
-          object.userData.vehicleId = vehicle.id
-        })
-        model.position.set(targetX, targetY, targetZ)
-        model.rotation.y = this.vehicleFacing(vehicle, 0, 0)
-        this.vehicleModels.set(vehicle.id, model)
-        this.vehicleGroup.add(model)
-      } else {
-        model.userData.vehicleId = vehicle.id
-        const facing = this.vehicleFacing(
-          vehicle,
-          targetX - model.position.x,
-          targetZ - model.position.z,
+    if (this.vehiclePoses.size > vehicles.length || vehicles.some((vehicle) => !this.vehiclePoses.has(vehicle.id))) {
+      const activeIds = new Set(vehicles.map((vehicle) => vehicle.id))
+      for (const id of this.vehiclePoses.keys()) if (!activeIds.has(id)) this.vehiclePoses.delete(id)
+    }
+    for (const batch of this.vehicleBatches.values()) batch.begin()
+    for (const vehicle of vehicles) {
+      if (vehicle.housed) continue
+      const pose = this.vehiclePose(vehicle)
+      const matrix = placementMatrix(this.vehicleMatrix, pose.x, pose.y, pose.z, pose.yaw)
+      for (const part of pose.parts) this.vehicleBatch(part.geometry).add(matrix, vehicle.id, part.paint ?? undefined)
+    }
+    for (const batch of this.vehicleBatches.values()) batch.finish()
+  }
+
+  private vehiclePose(vehicle: VehicleLike): VehiclePose {
+    const targetX = vehicle.position.x + 0.5
+    const targetZ = vehicle.position.z + 0.5
+    const parked = vehicle.state === 'parked'
+    const road = parked
+      ? undefined
+      : this.roadAt(
+          vehicle.position.x,
+          vehicle.position.z,
+          vehicle.position.elevation ?? vehicle.cell?.elevation,
         )
-        if (vehicle.state === 'parked') {
-          model.position.set(targetX, targetY, targetZ)
-          model.rotation.y = facing
-        } else {
-          model.position.x += (targetX - model.position.x) * this.movementFactor
-          model.position.y += (targetY - model.position.y) * this.movementFactor
-          model.position.z += (targetZ - model.position.z) * this.movementFactor
-          model.rotation.y += Math.atan2(
-            Math.sin(facing - model.rotation.y),
-            Math.cos(facing - model.rotation.y),
-          ) * this.facingFactor
-        }
+    const targetY = road ? this.roadY(road) : this.groundY(vehicle.position.x, vehicle.position.z)
+    let pose = this.vehiclePoses.get(vehicle.id)
+    if (!pose || pose.kind !== vehicle.kind) {
+      pose = {
+        kind: vehicle.kind,
+        x: targetX,
+        y: targetY,
+        z: targetZ,
+        yaw: this.vehicleFacing(vehicle, 0, 0),
+        parts: roadVehicleParts(vehicle.kind, vehicle.id),
       }
-      model.visible = true
-    })
+      this.vehiclePoses.set(vehicle.id, pose)
+      return pose
+    }
+    const facing = this.vehicleFacing(vehicle, targetX - pose.x, targetZ - pose.z)
+    if (parked) {
+      pose.x = targetX
+      pose.y = targetY
+      pose.z = targetZ
+      pose.yaw = facing
+    } else {
+      pose.x += (targetX - pose.x) * this.movementFactor
+      pose.y += (targetY - pose.y) * this.movementFactor
+      pose.z += (targetZ - pose.z) * this.movementFactor
+      pose.yaw += Math.atan2(Math.sin(facing - pose.yaw), Math.cos(facing - pose.yaw)) * this.facingFactor
+    }
+    return pose
   }
 
   private refreshPlannerRoute(): void {

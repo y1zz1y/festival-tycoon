@@ -22,8 +22,8 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
 | Sicherheitsschleusen | `src/game/security.ts` | `SecuritySystem`, `SecurityGateConfig` |
 | Müllziele für Reinigung | `src/game/waste.ts` | nächster Eimer / versiegelter Container / Ablage; `wasteDropGoals` |
 | Personal-UI | `src/staffDetailsUI.ts` | Infofenster, Bereich zuweisen |
-| Darstellung | `src/view/StaffView.ts`, `src/view/MedicalView.ts` | Uniformen; Sanität als drei InstancedMeshes (Kachel, Liege, Patient) plus Schlafsymbol-Billboard, siehe [rendering.md](rendering.md) |
-| Depot-Träger (keine Rolle) | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts` | Gästefigur + Warnweste/Mütze + Handkarren |
+| Darstellung | `src/view/StaffView.ts`, `src/view/crewInstances.ts`, `src/view/MedicalView.ts` | Uniformen (Instanzfarbe), Mützen, Besen, Müllsack über den geteilten Crew-Pool (`CrewInstances`, fest ≤ 29 Batches, `userData.staffIds`); `StaffView` hält nur Interpolation und Blickrichtung je ID. Sanität als drei InstancedMeshes (Kachel, Liege, Patient) plus Schlafsymbol-Billboard, siehe [rendering.md](rendering.md) |
+| Depot-Träger (keine Rolle) | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts`, `src/view/crewInstances.ts` | Gästefigur + Warnweste/Mütze + Handkarren, im selben Crew-Pool wie das Personal; `createPorterModel`/`createCarrierFigure` bleiben für Vorschau und Tests |
 | Balancing | `src/game/simulationConfig.ts` | `staff` (`roles.cleaner.speed`, `cleanerWorkMinutes`, `cleanerLitterWorkMinutes`, `cleanerBinWorkMinutes`), `medical`, `security`, `waste.cleanerIdleEmptyFill`, `waste.cleanerCarrySpeedMultiplier` |
 
 ## Wichtige Regeln
@@ -113,6 +113,16 @@ begrenzen Abhol-/Einsatzorte; Entsorgungs- und Rettungswege dürfen hinaus.
   Druck sperrt den Strich auf Zuweisen oder Entfernen (`setStaffZone`,
   nicht Toggle). Derselbe 3×3-Schlüssel wird nicht erneut gekippt, wenn
   der Zeiger in der Kachel zittert. Zusammenhängend bleibt Pflicht.
+- Personal und Träger haben keine Meshes pro Person (seit Phase 6, B8).
+  `WorldView` öffnet den geteilten `CrewInstances`-Pool je Frame
+  (`begin`), `StaffView.update` und `SupplyChainView.animate` schreiben
+  ihre Figuren hinein, danach `finish`. Im Logistikmodus schreibt
+  `StaffView` nichts (`setVisible(false)`), Träger bleiben sichtbar.
+  Klicks löst `CrewInstances.pick` über `staffIds[instanceId]` auf; nur
+  Träger mit `carrier-`-ID sind anklickbar, wie zuvor. Laufphase bleibt
+  `performance.now()` (nur Darstellung); die Drehung zur Blickrichtung ist
+  zeitbasiert (`0,22` je 60-Hz-Frame, bei jeder Bildrate gleich schnell),
+  neue Personen starten mit ihrer Blickrichtung.
 
 ## Tests
 
@@ -129,7 +139,9 @@ kein Diebstahl eines tragenden Sanitäters, unerreichbarer Näherer wird
 idle Krankenwagen fährt zur Garage, Verkauf löscht am Depot sofort und
 nach Rückfahrt), `tests/sealedWasteContainer.ts` (nähere Container vor Ablage, volle übersprungen, idle Container→Ablage auch ohne Wagen, voller Eimer zuerst, Müllwagen vom Depot leert Straßen-Container), `tests/accessControl.ts` (`gateEdgeWorldPosition`, `staffGateBlocksVisitor`),
 `tests/festivalAdditions.ts`, `tests/performanceGuards.ts` (keine nested
-Scans). Personalwege hängen an denselben Nav-Invarianten wie
+Scans), `tests/renderBatching.ts` (Crew-Pool: gleiche Batchzahl für 34
+und 500 Personen, Hut/Besen/Müllsack/Ladung nur wenn fällig, Picking über
+`staffIds`, Logistikmodus, bildratenunabhängige Drehung). Personalwege hängen an denselben Nav-Invarianten wie
 `docs/pathfinding.md`.
 
 ## Bei Änderungen dieses Dokument

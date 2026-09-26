@@ -21,7 +21,7 @@ gelten Footprint, Strom, Vorplatz und Buchungen.
 | Modelle, Show, Lichtpool | `src/view/stageModel.ts` | `createStageModel`, `animateStageModel`; gemeinsame Facing-Helfer `orientedBox` / `orientedForwardCylinder` / `tintVertexColors` für Laser, Sparks, Fog, Screen |
 | Picking der Teile | `src/view/stagePicking.ts` | |
 | Pixel-Musiker | `src/view/stageBand.ts`, `src/view/bandMemberMesh.ts`, `src/game/bandLooks.ts` | nur visuell, kein Audio; dieselbe Costume-ID und dasselbe Mesh wie Backstage-`bandActors` |
-| Vorplatz-View | `src/view/ForecourtView.ts` | |
+| Vorplatz-View | `src/view/ForecourtView.ts` | ein Instanz-Batch für alle `stageForecourtCells` (Overlay-Material wie Sanität/Backstage, schreibt keine Tiefe); neu geschrieben nur bei geänderten Feldern oder Höhen (`x:z:elevation`) |
 | Laser | `src/view/LaserView.ts` | begrenzte dynamische Effekte |
 
 ## Wichtige Regeln
@@ -83,7 +83,9 @@ vordere Konzertplätze inkl. Fallback wenn die erste Reihe voll ist,
 Einlass vor Slotstart, Live-Show-Festivallust,
 Oberteil-Ereignis). Licht-Stabilität: `tests/performanceGuards.ts`.
 Placement-Sperre, Preview, Save/Load und MP gegen Attraction-Deltas:
-`tests/attractionFoundation.ts`.
+`tests/attractionFoundation.ts`. Vorplatz-Darstellung (ein Batch für 81
+oder 1.000 Felder, gleiche Felder ohne Neuschreiben, Höhenänderung
+schreibt neu): `tests/renderBatching.ts`.
 
 Bandversorgung skaliert Show-Spaß, Festivallust und Trinkgeld (`sales`)
 über `showQuality` der verbundenen Backstage-Komponente; ohne Backstage

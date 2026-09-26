@@ -20,8 +20,24 @@ export type MeshPickHit = {
 }
 
 type UserDataHolder = {
-  userData?: { buildingId?: unknown; buildingIds?: unknown; accessId?: unknown }
+  userData?: { buildingId?: unknown; buildingIds?: unknown; accessId?: unknown; accessIds?: unknown }
   parent?: UserDataHolder | null
+}
+
+/**
+ * The owner an instanced batch records for one of its instances: batches of staff,
+ * vehicles and access objects keep an id array in `userData[key]`, index = instanceId.
+ */
+export function instanceOwnerId(
+  userData: Record<string, unknown> | undefined,
+  key: 'staffIds' | 'vehicleIds' | 'accessIds',
+  instanceId: number | undefined,
+): string | undefined {
+  if (typeof instanceId !== 'number') return undefined
+  const ids = userData?.[key]
+  if (!Array.isArray(ids)) return undefined
+  const id: unknown = ids[instanceId]
+  return typeof id === 'string' ? id : undefined
 }
 
 /**
@@ -70,7 +86,13 @@ export function buildingIdFromObject(
   return undefined
 }
 
-export function accessIdFromObject(object: UserDataHolder | null | undefined): string | undefined {
+/**
+ * The traffic light or gate a hit belongs to: an instanced access batch names it per
+ * instance (`accessIds[instanceId]`), a plain model on one of its ancestors.
+ */
+export function accessIdFromObject(object: UserDataHolder | null | undefined, instanceId?: number): string | undefined {
+  const instanced = instanceOwnerId(object?.userData, 'accessIds', instanceId)
+  if (instanced) return instanced
   let current = object
   while (current) {
     if (typeof current.userData?.accessId === 'string') return current.userData.accessId

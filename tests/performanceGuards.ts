@@ -495,9 +495,8 @@ function testModelCoverageAndBatching(): void {
 const MATERIAL_CEILINGS: Record<string, number> = {
   'WorldView.ts': 24,
   'CampingView.ts': 9,
-  'StaffView.ts': 8,
   'LogisticsView.ts': 8,
-  'AccessControlView.ts': 7,
+  'AccessControlView.ts': 2,
   'pixelPeople.ts': 5,
   'carrierModels.ts': 5,
   'stageModel.ts': 3,
@@ -509,7 +508,7 @@ const MATERIAL_CEILINGS: Record<string, number> = {
   'campingModels.ts': 2,
   'bungee.ts': 2,
   'bandMemberMesh.ts': 2,
-  'SupplyChainView.ts': 2,
+  'SupplyChainView.ts': 1,
   'IncidentView.ts': 2,
   'CourseView.ts': 2,
   'wayTextures.ts': 1,
@@ -521,7 +520,6 @@ const MATERIAL_CEILINGS: Record<string, number> = {
   'coasterCars.ts': 1,
   'attractionAccess.ts': 1,
   'PowerView.ts': 1,
-  'ForecourtView.ts': 1,
   'BackstageView.ts': 1,
   'AttractionView.ts': 1,
 }

@@ -93,7 +93,8 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/scenery.ts` | Deko-Slots, Kanten-Fahnen, Tageslichtballon als Vollfeld, neue Arten, Attraktivität je Kind, Stapel/Reichweite, unbekannte Katalog-Arten |
 | `tests/pedestrianBarriers.ts` | Hecke/Wand/Zaun blockieren Fußgänger; Wandtür passierbar; Vollfeld vs. Kante; Nav-Invalidierung bei Setzen/Abriss |
 | `tests/decoration.ts` | Themenliste 8–12 inkl. Klassik/Arktis/Steampunk, Filter ohne Themen-Leaks, Legacy-Vollfeld, Platzierung über `scenery.ts`, Licht-Deskriptor je Lampenart, N Lampen → N Quellen, Abriss entfernt Licht |
-| `tests/picking.ts` | Abriss-Raycast: Instanz-IDs, getroffenes Mesh vs. Nachbar/Kachelmitte, Reittor-Zelle |
+| `tests/picking.ts` | Abriss-Raycast: Instanz-IDs, getroffenes Mesh vs. Nachbar/Kachelmitte, Reittor-Zelle; `accessIdFromObject` mit `accessIds[instanceId]`, `instanceOwnerId` |
+| `tests/renderBatching.ts` | Instanz-Batches (B8): Crew-Pool gleiche Batchzahl für 34/500 Personen, Teile-Summen, Müllsack/Ladung nur wenn fällig, `staffIds`-Picking, Logistikmodus, bildratenunabhängige Drehung, Instanz-Träger = `createPorterModel`; Fahrzeuge ≤ 10 Batches für 204/1.000, `housed` nicht instanziert, `vehicleIds`, Einrasten/Gleiten; Vorplatz ein Batch, gleiche Felder ohne Neuschreiben, Höhe schreibt neu; Ampeln/Tore ≤ 6 Batches, Signalwechsel behält Batches, Bodenhöhe, Picking; festivalmittel-Zensus der Draw-Objekte (vorher 1.008) |
 | `tests/buildMenu.ts` | Jedes platzierbare Tool außer `inspect` genau einmal im Baumenü; Deko/Attraktionen/Logistik als Katalog; Achterbahn-Kacheln mit Zugstil/`coasterVehiclePreview`; Camping-, Krankenhaus- und Bandversorgung-Tabs (`backstageArea`, `tourBusParking`); Bauhöhe bleibt beim gleichen Tool und fällt bei neuem `setTool` auf 0; Deko-Gruppen kommen aus `decoration.ts` |
 | `tests/blueprints.ts` | 2×2 mit zwei Dekos stempeln, Preview ohne Mutation, Parkplätze kopieren, Bibliothek-Roundtrip ohne `SAVE_KEY` |
 | `tests/buildUndo.ts` | Host-Bau-Stack: Place, Parkplatz, Stempel inkl. Parkplatz, Weg; vollständige Kostenerstattung |
@@ -106,7 +107,7 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/wayElevation.ts` | Halbstufen-Rampen für Fußweg und Straße, Autodach 1.0, Legacy-Höhe 1 bleibt 1.0, Shift-Ausgang bleibt beim Rampenstreichen, Fußweg auf Autostraße behält die Straße, gestapelte Autostraße / Brücke, ein Straßenfeld übermalen löscht keine Nachbarn, Klippe 0→1 blockiert, 0,5-Hang und Weg-Rampe begehbar, Bewegung ohne Y-Warp |
 | `tests/pixelPeople.ts` | Personen-Batches |
 | `tests/visitorDance.ts` | Two-Step-Pose: gepflanzte Knie, Hände hoch, Phase je Gast |
-| `tests/carrierModels.ts` | Träger: geteilte Gästeteile, Warnweste, Karren |
+| `tests/carrierModels.ts` | Träger: geteilte Gästeteile, Warnweste, Karren (Einzelmodell für Vorschau; im Spiel Crew-Pool, siehe `tests/renderBatching.ts`) |
 | `tests/campingModels.ts` | Zelt-/Pavillon-Batches |
 | `tests/attractionFoundation.ts` | Camping-/Vorplatz-Ausweisung bleibt nach Attraction-Commands, Save/Load und MP-Deltas; Placement-Sperre (Gebäude/Weg/Deko), Fence/Delay-Ausnahme, Forecourt-Preview |
 | `tests/mobileTouch.ts` | Touch-Kamera / Gesten |

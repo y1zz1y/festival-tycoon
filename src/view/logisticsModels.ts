@@ -1,5 +1,6 @@
-import { Group, Mesh, MeshStandardMaterial } from 'three'
+import { Color, Group, Mesh, MeshStandardMaterial, type BufferGeometry } from 'three'
 import { ModelKit } from './retroBuildings'
+import { shared } from './materials'
 import type { BuildingKind } from '../game/catalog'
 import type { RoadVehicleKind } from '../game/logistics'
 
@@ -23,6 +24,12 @@ const vehicleMaterial = new MeshStandardMaterial({
   metalness: 0.12,
 })
 vehicleMaterial.userData.shared = true
+/**
+ * The same look for the instanced vehicle batches. A separate object, because the
+ * single-mesh vehicles (supply trucks, previews) keep `vehicleMaterial`, and one
+ * material drawn both ways would switch shader programs on every change.
+ */
+const vehicleBatchMaterial = shared(vehicleMaterial.clone())
 
 export const LOGISTICS_FACILITY_KINDS = [
   'busStop',
@@ -293,12 +300,34 @@ function buildSupplyDepot(): ReturnType<ModelKit['finish']> {
   return k.finish()
 }
 
+/** Body and roof: the paint. The silver car's roof is a shade darker than its body. */
+function addVisitorCarPaint(k: ModelKit, body: number, roof: number): void {
+  k.box(0, 0.22, 0, 0.48, 0.18, 0.78, body)
+  k.box(0, 0.38, -0.02, 0.42, 0.18, 0.42, roof)
+}
+
+const SILVER_CAR = 0xe8e6e0
+const SILVER_ROOF = 0xd8d6d0
+
 function buildVisitorCar(color: number): ReturnType<ModelKit['finish']> {
   const k = new ModelKit()
-  const roof = color === 0xe8e6e0 ? 0xd8d6d0 : color
+  addVisitorCarPaint(k, color, color === SILVER_CAR ? SILVER_ROOF : color)
+  addVisitorCarDetails(k)
+  return k.finish()
+}
+
+/**
+ * The silver roof as a tint of the silver body: instance colour times vertex colour
+ * (both linear) gives back the darker roof of the single-mesh car.
+ */
+function silverRoofTint(): number {
+  const body = new Color(SILVER_CAR), roof = new Color(SILVER_ROOF)
+  return new Color(roof.r / body.r, roof.g / body.g, roof.b / body.b).getHex()
+}
+
+/** Everything on a car that is the same whatever its colour. */
+function addVisitorCarDetails(k: ModelKit): void {
   k.box(0, 0.1, 0, 0.52, 0.06, 0.82, ink)
-  k.box(0, 0.22, 0, 0.48, 0.18, 0.78, color)
-  k.box(0, 0.38, -0.02, 0.42, 0.18, 0.42, roof)
   // Windows
   k.box(0, 0.4, 0.2, 0.36, 0.12, 0.03, glass)
   k.box(0, 0.4, -0.24, 0.34, 0.12, 0.03, glass)
@@ -324,7 +353,6 @@ function buildVisitorCar(color: number): ReturnType<ModelKit['finish']> {
   // Roof rails / antenna
   k.box(0, 0.49, -0.05, 0.28, 0.02, 0.3, ink)
   k.cylinder(0.12, 0.56, -0.18, 0.012, 0.12, ink)
-  return k.finish()
 }
 
 function buildFireStation(): ReturnType<ModelKit['finish']> {
@@ -562,16 +590,83 @@ export function createRoadVehicleModel(
       vehicleMaterial,
     )
   }
-  const builders: Record<Exclude<RoadVehicleKind, 'visitorCar'>, () => ReturnType<ModelKit['finish']>> = {
-    ambulance: buildAmbulance,
-    fireTruck: buildFireTruck,
-    bus: buildBus,
-    garbageTruck: buildGarbageTruck,
-    deliveryTruck: buildDeliveryTruck,
-    sweeper: buildSweeper,
-    tourBus: buildTourBus,
+  return meshFrom(kind, vehicleGeometries, vehicleBuilders[kind], vehicleMaterial)
+}
+
+const vehicleBuilders: Record<Exclude<RoadVehicleKind, 'visitorCar'>, () => ReturnType<ModelKit['finish']>> = {
+  ambulance: buildAmbulance,
+  fireTruck: buildFireTruck,
+  bus: buildBus,
+  garbageTruck: buildGarbageTruck,
+  deliveryTruck: buildDeliveryTruck,
+  sweeper: buildSweeper,
+  tourBus: buildTourBus,
+}
+
+/** One piece of a vehicle for the instanced batches, with its paint if it takes one. */
+export type RoadVehiclePart = { geometry: BufferGeometry; paint: Color | null }
+
+function cachedVehicleGeometry(key: string, build: () => ReturnType<ModelKit['finish']>): BufferGeometry {
+  let geometry = vehicleGeometries.get(key)
+  if (!geometry) {
+    geometry = build()
+    geometry.userData.shared = true
+    vehicleGeometries.set(key, geometry)
   }
-  return meshFrom(kind, vehicleGeometries, builders[kind], vehicleMaterial)
+  return geometry
+}
+
+function visitorCarPaintGeometry(silver: boolean): BufferGeometry {
+  return cachedVehicleGeometry(silver ? 'visitorCarPaint:silver' : 'visitorCarPaint', () => {
+    const k = new ModelKit()
+    addVisitorCarPaint(k, 0xffffff, silver ? silverRoofTint() : 0xffffff)
+    return k.finish()
+  })
+}
+
+function visitorCarDetailGeometry(): BufferGeometry {
+  return cachedVehicleGeometry('visitorCarDetails', () => {
+    const k = new ModelKit()
+    addVisitorCarDetails(k)
+    return k.finish()
+  })
+}
+
+const vehicleParts = new Map<string, readonly RoadVehiclePart[]>()
+/**
+ * What the instanced vehicle batches draw for one vehicle. A visitor car is a white
+ * paint shell tinted per instance plus the details every car shares, so all car
+ * colours draw together; every other kind is its one merged model.
+ */
+export function roadVehicleParts(kind: RoadVehicleKind, seed: string = kind): readonly RoadVehiclePart[] {
+  const color = kind === 'visitorCar' ? visitorCarColor(seed) : null
+  const key = color === null ? kind : `visitorCar:${color}`
+  const cached = vehicleParts.get(key)
+  if (cached) return cached
+  const parts: RoadVehiclePart[] = kind === 'visitorCar'
+    ? [
+        { geometry: visitorCarPaintGeometry(color === SILVER_CAR), paint: new Color(color ?? 0xffffff) },
+        { geometry: visitorCarDetailGeometry(), paint: null },
+      ]
+    : [{ geometry: cachedVehicleGeometry(kind, vehicleBuilders[kind]), paint: null }]
+  vehicleParts.set(key, parts)
+  return parts
+}
+
+/** Every geometry `roadVehicleParts` can hand out, so the batches exist from the start. */
+export function roadVehicleBatchGeometries(): BufferGeometry[] {
+  const kinds = Object.keys(vehicleBuilders) as Array<keyof typeof vehicleBuilders>
+  return [
+    visitorCarPaintGeometry(false),
+    visitorCarPaintGeometry(true),
+    visitorCarDetailGeometry(),
+    ...kinds.map((kind) => cachedVehicleGeometry(kind, vehicleBuilders[kind])),
+  ]
+}
+
+/** The material of the instanced vehicle batches (every batch has an instance colour). */
+export function roadVehicleBatchMaterial(): MeshStandardMaterial {
+  return vehicleBatchMaterial
 }
 
 /** Compact menu/thumbnail scale so multi-tile depots fit the 96px orthographic frame. */

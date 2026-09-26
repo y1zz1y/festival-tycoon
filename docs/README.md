@@ -87,6 +87,7 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | Bau-Menü-Kategorien | `src/game/buildMenu.ts` |
 | UI-Bootstrap / Orchestrierung | `src/main.ts`, `src/app/gameLoop.ts`, `src/input/toolRouter.ts`, `src/ui/*.ts` |
 | 3D-Szene | `src/view/WorldView.ts` |
+| Instanz-Batches, Crew-Pool (Personal/Träger) | `src/view/instanceBatch.ts` (`InstanceBatch`), `src/view/crewInstances.ts` (`CrewInstances`); siehe [rendering.md](rendering.md) |
 | Fassaden, Dächer, Themen-Eimer | `src/game/decorationWalls.ts` (`WALL_KINDS`, `wallSpec`, `ROOF_KINDS`, `roofSpec`) |
 | Wegmöbel-Ausrichtung | `src/game/pathFurniture.ts` (`pathFurnitureRotation`) |
 | Track-Editor-Modus | `src/game/trackEditorMode.ts` (`palette` / `directionArrows`) |

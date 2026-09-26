@@ -489,6 +489,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Idle-Krankenwagen fahren zur Garage zurück statt auf der Straße zu warten; **RTW verkaufen** in der Logistikübersicht oder im Infofenster (sofort an der Garage, sonst nach der Rückfahrt)
 - deutlich erkennbare Personalmodelle mit rollenabhängigen Uniformen und Mützen
 - Träger (Transportkräfte) in derselben Figurenqualität wie Besucher, mit gelber Warnweste und Handkarren
+- Personal, Träger, Straßenfahrzeuge, Bühnenvorplätze, Füllstandsbalken, Personaltore, Ampeln und Personentore werden gebündelt gezeichnet: gleiches Aussehen und Anklicken, aber nur noch eine feste Handvoll Draw-Calls statt einem pro Figur, Fahrzeug oder Feld. Bühnenvorplätze verhalten sich dabei wie Kranken- und Backstage-Flächen (halbtransparente Bodenmarkierung, die nichts verdeckt).
 - gerichtete normale Wege mit dreh- und entfernbaren Bodenmarkierungen
 - automatisch besetzte Einbahn-Sicherheitsschleusen mit konfigurierbaren Verboten und Kontrollgründlichkeit
 - ausweisbare Krankenbereiche mit drei Liegen pro Feld und Sanitätertransport für Bewusstlose; Dächer dürfen die Liegen überdecken, Gebäude nicht ersetzen
@@ -658,8 +659,7 @@ Verbindliche Simulationsregeln: [AGENTS.md](AGENTS.md).
 
 ## Nächste Ausbaustufen
 
-1. Personal, Träger und Fahrzeuge gebündelt zeichnen
-2. Technik vor 1.0 festziehen
+1. Technik vor 1.0 festziehen
 
 RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafiken, Sounds, Daten und sonstige geschützte Inhalte sollten nicht übernommen werden.
 

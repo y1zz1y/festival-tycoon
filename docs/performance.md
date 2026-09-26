@@ -21,6 +21,60 @@ ignoriert und werden nicht als Repository-Fixtures verwendet.
 Registriert ist `festivalmittel` (Snapshot v32): 832 Besucher, 2.376 Gebäude
 und 34 Mitarbeitende, mit 120 Ticks als Standardlauf.
 
+## Personal, Träger, Fahrzeuge, Vorplatz und Zugänge gebündelt (Phase 6, B8, 2026-09-27)
+
+Ausgangslage im Browser (Messbericht vor der Umsetzung, festivalmittel,
+Standardkamera, 1291×782, Pixelverhältnis 0,75): 806 Draw-Calls, davon
+Warenkette 240, Personal 143, Vorplatz 81, Zugänge 44, Fahrzeuge 2 (die
+Parkplätze liegen außerhalb des Bildes); herausgezoomt (Zoom 0,55) 1.250,
+davon Personal 307, Warenkette 321, Fahrzeuge 82, Vorplatz 81, Zugänge 44.
+
+**Headless-Zensus** (`tests/renderBatching.ts`, kameraunabhängig): Objekte,
+die einen Draw-Call erzeugen (sichtbare Meshes plus InstancedMeshes mit
+Instanzen) unter den fünf Views, nach `GameState.fromJSON` auf festivalmittel
+und drei Frames `update`/`animate`:
+
+| | vorher | nachher |
+| --- | --- | --- |
+| Personal (`StaffView`) | 335 Meshes, 221 Materialien | gemeinsamer Crew-Pool: 28 |
+| Warenkette (`SupplyChainView`) | 335 Meshes, 110 Materialien | 4 (Balken, Tore, 2 Depot-Batches) |
+| Fahrzeuge (`LogisticsView`) | 204 | 6 |
+| Vorplatz (`ForecourtView`) | 81 Meshes, 81 Materialien | 1 |
+| Ampeln/Tore (`AccessControlView`) | 53 | 6 |
+| Summe | 1.008 | 45 |
+
+Der Test hält die Summe bei höchstens 50 und prüft, dass alle Personen und
+alle nicht eingestellten Fahrzeuge gezeichnet werden. Erwartung im Browser
+nach dem Messbericht: Standardkamera 806 → rund 345 Draw-Calls, herausgezoomt
+1.250 → rund 465; Fahrzeuge zeichnen jetzt auch außerhalb des Bildes
+(ein Farbbatch spannt die Karte), dafür höchstens sechs statt einem je Auto.
+**Die Browser-Messung mit `tests/render-performance.html` steht noch aus**
+(Draw-Calls, Render-/Szenenzeit Median/p95/Max, Zensus bei 1280×720 in
+Standard-, Zoom-0,55- und Parkplatzansicht); sie wird nachgetragen.
+
+**View-CPU headless** (Node, 600 Frames nach Aufwärmen, festivalmittel,
+Median/p95/Max je Frame): `LogisticsView.update` 0,417 / 0,556 / 1,16 ms
+vorher (Straßenindex und statischer Fingerprint jedes Bild) gegen 0,046 /
+0,062 / 3,3 ms nachher in Frames ohne Datenänderung; mit Datenänderung
+(etwa zehnmal je Sekunde, bei jedem Tick) weiter 0,425 / 0,491 / 1,29 ms.
+Personal plus Träger: alt 0,019 + 0,006 ms (ohne die three.js-Kosten der
+670 Einzelobjekte), neu 0,033 / 0,042 / 0,154 ms für das Füllen des ganzen
+Crew-Pools samt Balken bei drehender Kamera.
+
+**Simulation unverändert** (reine View-Änderung, `src/game` importiert keine
+Views). `npm run test:performance:fixtures`, 120 Ticks, Median/p95/Max CPU-ms
+und Endbesucher, vorher → nachher:
+
+- 1×: 11,25 / 32,55 / 134,70 → 10,89 / 33,59 / 145,89; 803 Besucher.
+- 3×: 19,27 / 41,96 / 93,35 → 17,28 / 34,51 / 96,67; 792 Besucher.
+- 8×: 28,36 / 57,72 / 89,73 → 25,91 / 50,02 / 75,31; 787 Besucher.
+
+Endhashes vorher wie nachher identisch: `eccf9510…`, `49831ca9…`,
+`03bdd71d…`. Die Unterschiede sind Messrauschen. 1.200 Ticks nachher:
+1× 8,87 / 28,25 / 142,22 (679 Besucher), 3× 11,81 / 35,68 / 97,36 (606),
+8× 26,94 / 51,59 / 115,80 (929); Hashes `1da73bca…`, `aa977ff0…`,
+`10754e1d…`. Das sind CPU-Tickzeiten, keine Browser-FPS.
+
 ## Konzert-Bandversorgung (0.1.194, 2026-09-19)
 
 Im unveränderten `festivalmittel`-Fixture wurde die Welt bei 8× bis vor den
