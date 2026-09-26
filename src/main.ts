@@ -101,6 +101,8 @@ import { groupVisitorsByThought } from './game/visitorThoughts'
 import { enableMultiplayerCommands } from './net/bind'
 import { MultiplayerSession } from './net/session'
 import type { MultiplayerStatus } from './net/session'
+import { takeoverSaveName } from './net/takeover'
+import { mountHostTakeoverUi, type HostTakeoverUi } from './ui/hostTakeover'
 import { SIMULATION_CONFIG } from './game/simulationConfig'
 import { INVENTORY_ITEMS } from './game/inventory'
 import { STAFF_DEFINITIONS, STAFF_ROLES, SWEEPER_STAFF_ICON, sweeperStaffName } from './game/staff'
@@ -645,6 +647,8 @@ const tickerUI = mountTickerUI({
 })
 const progressTracker = mountProgressTracker({
   isClient: () => multiplayer.status.mode === 'client',
+  // A park inherited by a host takeover is somebody else's: no wins, no achievements.
+  isInheritedWorld: () => multiplayer.inheritedHost,
   showToast: (message) => showToast(message),
   onChange: () => titleScreenController?.refreshProgress(),
 })
@@ -3154,13 +3158,13 @@ function renderAccessControlForm(control: AccessControl): void {
   if (!accessAreaDrawing) view.showAccessArea(control.area)
 }
 
-function showToast(message: string, isError = false): void {
+function showToast(message: string, isError = false, durationMs = 2200): void {
   window.clearTimeout(toastTimer)
   toast.textContent = message
   toast.className = isError ? 'visible error' : 'visible'
   toastTimer = window.setTimeout(() => {
     toast.className = ''
-  }, 2200)
+  }, durationMs)
 }
 
 document.querySelector('#rotate-scenery')?.addEventListener('click', () => {
@@ -3724,10 +3728,12 @@ function setMultiplayerName(name: string): void {
 
 function renderMultiplayerStatus(status: MultiplayerStatus): void {
   const connected = status.connected
-  multiplayerStatusBadge.dataset.state = connected ? 'online' : status.message ? 'disconnected' : 'solo'
+  const hostAway = connected && status.mode === 'client' && status.hostAway
+  multiplayerStatusBadge.dataset.state = hostAway ? 'disconnected' : connected ? 'online' : status.message ? 'disconnected' : 'solo'
   multiplayerStatus.textContent = connected
-    ? `Online · ${status.mode === 'host' ? 'Host' : 'Verbunden'} · Raum ${status.code}`
+    ? `Online · ${status.mode === 'host' ? 'Host' : hostAway ? 'Host weg' : 'Verbunden'} · Raum ${status.code}`
     : status.message || 'Singleplayer'
+  hostTakeoverUi?.render(status)
   multiplayerToggle.textContent = '🌐'
   const multiplayerLabel = connected
     ? status.mode === 'host'
@@ -3746,10 +3752,11 @@ function renderMultiplayerStatus(status: MultiplayerStatus): void {
   multiplayerJoinUrl.textContent = status.code ? inviteLink(status.code, status.joinUrl) : ''
   // Names come from whoever joined. On a server anyone can reach, that is a
   // stranger's text going into the page, so it is escaped like any other.
-  multiplayerPlayers.innerHTML = status.players
+  // The host is marked; while its seat is empty the list says so instead.
+  multiplayerPlayers.innerHTML = (hostAway ? '<li class="mp-host-away">Host ist weg</li>' : '') + status.players
     .map(
       (player) =>
-        `<li>${escapeHtml(player.name)}${player.role === 'host' ? ' · Host' : ''}</li>`,
+        `<li>${escapeHtml(player.name)}${player.role === 'host' ? ' · Host' : ''}${player.id === status.playerId ? ' (du)' : ''}</li>`,
     )
     .join('')
 }
@@ -3760,6 +3767,8 @@ function renderMultiplayerStatus(status: MultiplayerStatus): void {
  * screen, so it is handed to the screen as well.
  */
 let joinErrorSink: ((message: string) => void) | null = null
+/** Banner, rebuilt worlds, backup and the hand-over question; mounted with the save controller. */
+let hostTakeoverUi: HostTakeoverUi | undefined
 
 /**
  * A host's machine is the one running the world. Screen off means suspend a few
@@ -3804,7 +3813,8 @@ multiplayer.onToast = (message, isError) => {
     joinErrorSink(message)
     joinErrorSink = null
   }
-  showToast(message, Boolean(isError))
+  // Takeover notices are whole sentences; give them time to be read.
+  showToast(message, Boolean(isError), message.length > 70 ? 7000 : undefined)
 }
 multiplayerName.value =
   window.localStorage.getItem(MULTIPLAYER_NAME_KEY) ??
@@ -3867,7 +3877,9 @@ multiplayerJoinButton.addEventListener('click', () => {
   showToast(`Trete ${code} bei…`)
 })
 multiplayerLeaveButton.addEventListener('click', () => {
-  multiplayer.disconnect()
+  // A host with guests is asked first: hand the room over, or end it for everyone.
+  if (hostTakeoverUi) void hostTakeoverUi.leave()
+  else multiplayer.disconnect()
 })
 multiplayerCopyButton.addEventListener('click', async () => {
   const code = multiplayer.status.code
@@ -4696,6 +4708,14 @@ const saveController = mountSaveController({
   closePathEditor,
   bindGameState,
   fillScenarioForm,
+  showToast,
+  // An inherited park saves beside the player's own quicksave, never over it.
+  takeoverSlotName: () => (multiplayer.inheritedHost ? takeoverSaveName(multiplayer.inheritedCode) : null),
+})
+hostTakeoverUi = mountHostTakeoverUi({
+  session: multiplayer,
+  bindGameState,
+  backupLocally: saveController.backupLocally,
   showToast,
 })
 const saveSlotsPanel = saveController.panel

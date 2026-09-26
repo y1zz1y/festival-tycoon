@@ -25,10 +25,13 @@ export type ProgressTracker = {
 /**
  * Keeps cross-game progress (A8) and achievements for this browser and account.
  * Only the host or a solo game records: a guest in someone else's room sees their
- * festival but does not earn it. Games helped by debug money never count.
+ * festival but does not earn it, and neither does a guest who inherited that
+ * park by a host takeover. Games helped by debug money never count.
  */
 export function mountProgressTracker(options: {
   isClient(): boolean
+  /** True while the running park came to this player by a multiplayer takeover. */
+  isInheritedWorld?(): boolean
   showToast(message: string): void
   onChange(): void
 }): ProgressTracker {
@@ -39,7 +42,8 @@ export function mountProgressTracker(options: {
     options.onChange()
   }
   const counts = (snapshot: Readonly<GameSnapshot>): boolean =>
-    !options.isClient() && !snapshot.debugAssisted && !isAuthoringScenario(snapshot.scenario)
+    !options.isClient() && !options.isInheritedWorld?.() &&
+    !snapshot.debugAssisted && !isAuthoringScenario(snapshot.scenario)
   const sync = async (): Promise<void> => {
     if (!currentAccount()) return
     const result = await syncProgress(records)

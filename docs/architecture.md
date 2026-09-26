@@ -40,7 +40,9 @@ Netzwerk-Clients mutieren die Welt nicht lokal dauerhaft; der Host entscheidet.
 | 3D-Szene | `src/view/WorldView.ts` | Kamera, Picking, Instancing |
 | Festival-SFX | `src/game/audio.ts`, `src/view/FestivalAudio.ts`, `src/view/audioAssets.ts` | Kamera-Listener, Pools, WAV-Loader; siehe [audio.md](audio.md) |
 | Host-HTTP/WebSocket | `server/serve.ts` | Dev- und Docker-Server |
-| Mehrspieler-Räume | `server/rooms.ts` | `attachMultiplayer` |
+| Mehrspieler-Räume | `server/rooms.ts` | `attachMultiplayer`, Host-Übernahme (`electHost`) |
+| Weltkopie je Raum (Host-Übernahme) | `server/worldCache.ts` | reine Funktionen, nur `import type` aus `src/`; `mergeVisitorPatches` teilt sich der Client über `src/net/worldUpdates.ts` |
+| Übernommene Welt aufbauen | `src/net/takeover.ts` | `gameFromNetworkWorld` über `GameState.fromJSON`, siehe [multiplayer.md](multiplayer.md) |
 
 Fachlogik liegt in eigenen Modulen unter `src/game/` und wird von `GameState`
 aufgerufen. Views unter `src/view/` lesen den Snapshot und dürfen ihn nicht

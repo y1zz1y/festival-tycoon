@@ -81,6 +81,23 @@ laden** weiterhin öffnen, solange es den neuen Slot noch nicht gibt.
 Schnellstand und benannte Slots schreiben immer den vollen Snapshot — keine
 gekürzte Variante ohne Personen oder Objekte.
 
+**Host-Übernahme im Mehrspieler** ([multiplayer.md](multiplayer.md)): Ein Gast,
+der einen Raum übernommen hat, spielt den Park eines anderen. Solange dieser
+Park läuft (`MultiplayerSession.inheritedHost`), schreiben **Schnell speichern**
+und **Autospeichern** in den eigenen Slot „Übernommen {Code}“
+(`takeoverSaveName`, Kontext-Hook `takeoverSlotName` in
+`src/ui/saveController.ts`), gesucht über den Namen wie der Schnellstand — nie
+über das eigene „Schnellspeichern“. **Schnell laden** liest weiter den eigenen
+Schnellstand. Benannte Slots („Speichern unter“) bleiben frei wählbar. Der
+übernommene Park wird wie ein geladener Spielstand aufgebaut
+(`GameState.fromJSON`); das Werkzeug fällt wie nach jedem Laden auf „Ansehen“
+zurück. Ein Host, dessen Raum übernommen wurde, während er weg war, bekommt beim
+Zurückkommen seine offline weitergespielte Welt als **lokalen** Browser-Slot
+„Vor Host-Wechsel {Code}“ (`SaveController.backupLocally` über
+`GameState.saveSnapshotSlot`, bei Platzmangel IndexedDB wie jeder Slot); ein
+zweiter Wechsel ersetzt diese Sicherung, und sie wird nicht zum
+„Fortsetzen“-Stand. Kein neues Snapshot-Feld, keine Versionsänderung.
+
 ## Wichtige Regeln
 
 Die Extraktion von Besucher-Orchestrierung und Bau-/Abriss-/Coaster-Services
@@ -96,7 +113,12 @@ Camp und Müll rekonstruiert.
   nicht und bekommen beim ersten Hosten einen. Als einziges Feld geht er
   bewusst **nicht** über die Leitung (`packWorld` nimmt ihn heraus wie
   `selectedTool`): Ein Gast behält seinen eigenen, sonst würde er später mit dem
-  Code eines fremden Raums hosten wollen.
+  Code eines fremden Raums hosten wollen. Ausnahme Host-Übernahme: Der neue Host
+  baut die Welt mit dem Raumcode (`gameFromNetworkWorld(world, local, code)`),
+  und `attach` stempelt ihn zusätzlich (`rememberMultiplayerCode`). Alter und
+  neuer Stand tragen dann denselben Code; wer zuerst hostet, bekommt ihn
+  (`codeFor`), der andere einen neuen. Ein Gast, der nach dem Ende eines Raums
+  allein weiterspielt, behält seinen eigenen Code.
   Optionale `scenario.title` / `scenario.detail` halten Name und
   Beschreibung eines Drop-in-Szenarios; fehlend bleibt die Anzeige beim
   Preset bzw. „Freies Spiel“. Optionales `scenario.authoring` markiert den
@@ -271,6 +293,9 @@ Besucher/Gebäude; Liste ohne `fromJSON`; gemockter Server-Client stürzt bei
 HTML/401 nicht ab).
 `tests/saves.ts` (Konto-API). Roundtrips in `tests/terrainSurface.ts`,
 `tests/rideAccess.ts`, `tests/festival.ts`, `tests/scenery.ts`.
+`tests/hostTakeover.ts` (Sicherungs-Slot „Vor Host-Wechsel“ über
+`GameState.saveSnapshotSlot` inkl. Ersetzen, übernommene Welt über
+`GameState.fromJSON` mit Raumcode und RNG, Sicherung des zurückgestuften Hosts).
 
 ## Bei Änderungen dieses Dokument
 

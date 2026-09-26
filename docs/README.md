@@ -97,6 +97,7 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | Netzwerk-Protokoll | `src/net/protocol.ts` |
 | Command-Anwendung | `src/net/commands.ts` |
 | Host-Server | `server/serve.ts`, `server/rooms.ts` |
+| Host-Übernahme | `server/worldCache.ts`, `src/net/takeover.ts`, `src/ui/hostTakeover.ts` ([multiplayer.md](multiplayer.md#host-übernahme)) |
 | Test-Einstieg | `tests/regression.ts` |
 
 Fachmodule unter `src/game/*.ts` und Views unter `src/view/*.ts` sind in den

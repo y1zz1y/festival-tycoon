@@ -49,7 +49,8 @@ Eingang/Ausgang.
 | Achterbahn-Baufenster | `src/ui/coasterBuilderPanel.ts` | `updateCoasterBuilderPanel`; stabile Palette und Ghost-/Auswahlvorschau |
 | Kurs-Baufenster | `src/ui/courseBuilderPanel.ts` | `renderCourseBuilderPanel`; `editorMode` schaltet Palette+**Am Ende bauen** gegen Weg-Richtungspfeile; atomare Werkzeuge **Anlagenfläche** und **Fläche entfernen** für Pool/Paintball, Endpunkt-Palette und Ebene für Mudmasters/Tree-to-Tree/Wasserrutsche, Paintball-Teamgröße. Wasserrutsche beginnt mit Leiter-Klick, Stapel auf derselben Kachel. Betrieb (Öffnen/Schließen) sitzt nicht hier, sondern im Infofenster |
 | Kontexthilfe | `src/ui/contextHelp.ts` | `contextHelpText`; verwendet das autoritative `PlacementPreviewResult` |
-| Nachfrage-Dialog | `src/ui/confirmDialog.ts` | `confirmAction` (`<dialog>`, wie Spielstand-Text); `rideDemolishPrompt` vor `removeCoaster` / `removeCourse` |
+| Nachfrage-Dialog | `src/ui/confirmDialog.ts` | `confirmAction` (`<dialog>`, wie Spielstand-Text); `rideDemolishPrompt` vor `removeCoaster` / `removeCourse`; `chooseAction` für mehrere Antworten plus „Abbrechen“ (Esc, Fokus auf Abbrechen, `data-primary`/`data-confirm`), `confirmAction` baut darauf auf |
+| Mehrspieler: Host-Übernahme | `src/ui/hostTakeover.ts` | `mountHostTakeoverUi`: Banner `.mp-host-banner` mit Countdown „Host ist weg – Übernahme in {n} s“, Binden der neu aufgebauten Welt hinter dem Ladeoverlay (verborgener Tab sofort), Sicherung „Vor Host-Wechsel {Code}“, **Trennen** als Host mit Gästen: „An {Name} übergeben“ / „Spiel für alle beenden“ / „Abbrechen“; Regeln in [multiplayer.md](multiplayer.md) |
 | Baukatalog / stabile Statusanzeige | `src/ui/buildCatalog.ts` | `createBuildCatalog`, `catalogTileHtml` |
 | Spielstand-Archivdarstellung | `src/ui/saveArchive.ts` | Zusammenführen Server/Browser, sichere Zeilen, Speicherhinweis |
 | Differentielle UI-Updates | `src/ui/differentialUpdates.ts` | `DifferentialUpdates`, `listFingerprint` |

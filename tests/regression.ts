@@ -84,6 +84,7 @@ import { testUiModules } from './uiModules'
 import { testAttractionFoundation } from './attractionFoundation'
 import { testTicketDemandTuning } from './ticketDemandTuning'
 import { testMultiplayerChat } from './multiplayerChat'
+import { testHostTakeover, testTakeoverElection, testTakeoverNotices, testTakeoverWorld, testWorldCache } from './hostTakeover'
 
 function test(name: string, run: () => void) {
   run()
@@ -971,3 +972,17 @@ try {
   wss.clients.forEach(socket => socket.terminate())
   await new Promise<void>(resolve => wss.close(() => resolve()))
 }
+
+test('host takeover: the server copy merges like a guest, visitor order included', () => {
+  testWorldCache(fixture, asWire)
+})
+test('host takeover: the inherited world is rebuilt like a save, and a paused guest cannot build', () => {
+  testTakeoverWorld(fixture)
+})
+test('host takeover: the server picks an open guest with the world, the longest-seated first', () => {
+  testTakeoverElection()
+})
+test('host takeover: notices, backup slot and no progress for an inherited park', () => {
+  testTakeoverNotices(fixture)
+})
+await testHostTakeover(fixture, asWire)

@@ -49,7 +49,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 
 | Datei | Inhalt |
 | --- | --- |
-| `tests/regression.ts` | Orchestrierung, Tick-Partition, Multiplayer-Sockets, Saves, Abreise durch Camping-Ausweisungen nach Festivalende |
+| `tests/regression.ts` | Orchestrierung, Tick-Partition, Multiplayer-Sockets (inkl. Reconnect mit Standard-Übernahmefrist), Saves, Abreise durch Camping-Ausweisungen nach Festivalende; ruft zuletzt die Host-Übernahme-Tests auf |
 | `tests/accounts.ts` | Registrierung, Sessions, Passwort-Hashes und Rate-Limit |
 | `tests/saves.ts` | kontoabhängige und öffentliche Server-Spielstände |
 | `tests/finance.ts` | Bücher, Kredite, vorbereitete Szenarien, Ziele, aufklappbare Kostenaufschlüsselung, Leerlauf-Unterhalt aktiv vs. inaktiv |
@@ -65,6 +65,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `tests/scenarioOutcome.ts` | Szenario-Ausgang: Ausgabeziele mit Serien, Sieg/Niederlage, Insolvenzfrist, Stichtag mit Pause + Planung, mitwachsende Wochenendziele, Ticker-Meldungen zu Zielen, Gesamtnote |
 | `tests/scenarioEditor.ts` | Szenario-Editor: Export-Datei lädt, Startgeld/Schulden/Tickets/Nachfrage greifen, Listing inkl. Beschreibung, Bauen ohne Geldlimit |
 | `tests/multiplayerChat.ts` | Chat-Sanitizing, Ping-TTL, Edge-Arrow-Projektion; Roundtrip in `regression.ts` |
+| `tests/hostTakeover.ts` | Host-Übernahme: Server-Weltkopie gleich `asWire(host)` und in Gast-Besucherreihenfolge, Größengrenze, `gameFromNetworkWorld` (RNG, Raumcode, Werkzeug-Reset), Bau-Pause bei abwesendem Host, Wahlreihenfolge, deutsche Texte, Sicherungs-Slot, kein Fortschritt für übernommene Parks; echte Sockets mit eigenem `WebSocketServer`: Übernahme, zurückgestufter alter Host mit Sicherung, Rückkehr in der Frist, keine Beförderung ohne Welt, sofortige Übergabe, verworfene unbestätigte Bauten statt Geisterbau, ausfallender/scheiternder Kandidat, Solo-Weiterspiel nach `closed`. Setzt `roomsForTest.setTakeoverDelay` nur lokal |
 | `tests/hotkeys.ts` | Tastenbelegung: Standardbelegung kollisionsfrei, Numpad zählt als Ziffernreihe, eine Taste gehört einer Aktion (der vorherige Halter wird frei), reservierte Tasten gesperrt, Beschriftungen, Speichern/Laden inkl. kaputtem Eintrag |
 | `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, endliche Festivalmodell-Bounds/Picking, Lights, Achterbahnwagen, Logistik-Modelle; Grafikstandard: jede Katalogart hat ein gebündeltes Modell, Bündeln nach Geometrie und Material mit verschachtelten Picking-IDs, `MATERIAL_CEILINGS` je Datei in `src/view` |
 | `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust, vordere Konzertplätze |

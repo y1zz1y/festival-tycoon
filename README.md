@@ -302,7 +302,22 @@ am Weltzustand. Besucher werden feldweise aktualisiert; unveränderte Weltbereic
 nicht erneut übertragen. Beim Beitritt oder erneuten Abgleich wird ein vollständiger
 Zustand übertragen. WebSocket-Kompression und eine Sendepuffergrenze am Host reduzieren
 Übertragungsaufwand und Rückstau. Alle Teilnehmer müssen dieselbe Spielversion verwenden.
-Der Host muss geöffnet bleiben; eine automatische Host-Übernahme ist nicht enthalten.
+
+**Host-Übernahme:** Fällt der Host weg (Tab zu, Absturz, Netz weg), hält der Server den
+Raum und den letzten Weltstand fest. Gäste sehen oben ein Banner „Host ist weg – Übernahme
+in … s“ und können so lange nicht bauen („Host ist weg – Bauen pausiert“). Kommt der Host
+innerhalb von 20 Sekunden zurück, läuft alles weiter wie vorher. Sonst übernimmt der Gast,
+der am längsten im Raum sitzt: Die Welt läuft ab dann auf seinem Rechner weiter, alle
+anderen spielen ohne Neustart mit. Aktionen, die der alte Host nicht mehr bestätigt hat,
+werden verworfen und gemeldet („… unbestätigte Aktion verworfen – bitte prüfen“), nie
+doppelt ausgeführt. Wer übernommen hat, sollte den Tab offen lassen und speichern:
+Schnell- und Autospeichern landen dann im eigenen Slot „Übernommen <Code>“ und überschreiben
+nie den eigenen „Schnellspeichern“-Stand; Szenario-Siege und Erfolge gibt es für einen
+übernommenen Park nicht. Kommt der alte Host später zurück, spielt er als Gast weiter; seine
+zwischenzeitlich allein weitergespielte Welt liegt als lokaler Spielstand „Vor Host-Wechsel
+<Code>“ bereit. Klickt ein Host mit Mitspielern auf **Trennen**, fragt das Spiel: **An
+<Name> übergeben** (sofort, ohne Wartezeit), **Spiel für alle beenden** oder
+**Abbrechen** (auch Esc). Endet ein Raum, spielt ein Gast den Park allein weiter.
 
 **Live-Chat:** Der Chat ist ein eigenes Fenster unten links, das nur im
 Mehrspieler und nur bei eingeschaltetem **Chat anzeigen** erscheint. Es lässt sich

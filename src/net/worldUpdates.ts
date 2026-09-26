@@ -1,6 +1,12 @@
 import { quotedKey as quoted, roundForWire, stringifyRounded, WIRE_DIGITS, WIRE_DIGITS_NESTED } from './codec'
 import type { WorldSnapshot } from './protocol'
 
+/**
+ * The visitor merge a guest runs on every delta. It lives in `server/worldCache.ts`
+ * so the server's copy of a room (host takeover) merges in exactly the same order.
+ */
+export { mergeVisitorPatches } from '../../server/worldCache'
+
 /** Reliable, ordered WebSocket updates; unchanged world sections stay on the client. */
 export class WorldUpdates {
   private previous = new Map<string, string>()

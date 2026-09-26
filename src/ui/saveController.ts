@@ -8,6 +8,7 @@ import { EMPTY_SAVE_ARCHIVE, composeSaveArchive, findSaveSlot as findArchiveSlot
 import { formatSaveTime } from './format'
 import { loadWithOverlay } from './loadingOverlay'
 import { confirmDiscardingWork, markWorkSaved } from './unsavedWork'
+import type { GameSnapshot } from '../game/types/snapshot'
 
 export interface SaveControllerContext {
   getGame(): GameState
@@ -19,6 +20,12 @@ export interface SaveControllerContext {
   bindGameState(game: GameState): void
   fillScenarioForm(settings: GameState['snapshot']['scenario']): void
   showToast(message: string, isError?: boolean): void
+  /**
+   * A slot quick- and autosaving write to instead of the player's own quicksave,
+   * or null for that one. Set while the running park was inherited by a
+   * multiplayer takeover: somebody else's world must not overwrite your game.
+   */
+  takeoverSlotName?(): string | null
 }
 
 export interface SaveController {
@@ -31,6 +38,8 @@ export interface SaveController {
   bindLoadedGame(game: GameState, message: string): void
   tryQuickLoad(): Promise<boolean>
   formatSaveTime(value: number): string
+  /** Keeps any snapshot as a local browser save under `name`, replacing one of that name. */
+  backupLocally(name: string, snapshot: Readonly<GameSnapshot>): Promise<string>
 }
 
 export function mountSaveController(context: SaveControllerContext): SaveController {
@@ -100,15 +109,26 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
       ?? archive.own.find((slot) => slot.name === LEGACY_AUTOSAVE_NAME)
   }
 
+  /**
+   * Where quick- and autosaving write: the player's own quicksave slot, or — for
+   * a park inherited by a multiplayer takeover — a slot of its own, found by name
+   * the same way. Loading quickly still reads the player's own quicksave.
+   */
+  async function persistQuickTarget(): Promise<string> {
+    const takeover = context.takeoverSlotName?.() ?? null
+    const existing = takeover
+      ? (await fetchSaveSlots()).own.find((slot) => slot.name === takeover)
+      : await quicksaveSlot()
+    return persistNamedSave(
+      takeover ?? QUICKSAVE_NAME,
+      existing?.id,
+      existing?.source ?? (saveArchive.onServer ? 'server' : 'browser'),
+    )
+  }
+
   async function persistQuicksave(): Promise<void> {
     try {
-      const existing = await quicksaveSlot()
-      const message = await persistNamedSave(
-        QUICKSAVE_NAME,
-        existing?.id,
-        existing?.source ?? (saveArchive.onServer ? 'server' : 'browser'),
-      )
-      showToast(message)
+      showToast(await persistQuickTarget())
     } catch (error) {
       showToast(storageErrorMessage(error, 'Schnellspeichern ist fehlgeschlagen'), true)
     }
@@ -187,17 +207,38 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     }
   }
   
-  async function persistLocalNamedSave(name: string, id?: string): Promise<string> {
-    const json = serializeSnapshot(getGame().snapshot)
-    const result = getGame().saveSlot(name, id)
-    if (result.ok) {
-      rememberBrowserSave(name)
-      return result.message
-    }
+  /**
+   * Writes a snapshot into a browser slot: localStorage when it fits, the
+   * IndexedDB overflow store otherwise. `overflow` says which one took it.
+   */
+  async function writeLocalSlot(name: string, id: string | undefined, snapshot: Readonly<GameSnapshot>): Promise<{ message: string; slotId?: string; overflow: boolean }> {
+    const json = serializeSnapshot(snapshot)
+    const result = GameState.saveSnapshotSlot(snapshot, name, id)
+    if (result.ok) return { message: result.message, slotId: result.slotId, overflow: false }
     if (!result.slotId) throw new Error(result.message)
     await writeNamedSlotJson(result.slotId, json)
-    rememberLastSave({ id: result.slotId, source: 'browser', name: name.trim().replace(/\s+/g, ' ') })
-    return `Spielstand „${name.trim().replace(/\s+/g, ' ')}“ im erweiterten Browser-Speicher gespeichert`
+    return {
+      message: `Spielstand „${name.trim().replace(/\s+/g, ' ')}“ im erweiterten Browser-Speicher gespeichert`,
+      slotId: result.slotId,
+      overflow: true,
+    }
+  }
+
+  async function persistLocalNamedSave(name: string, id?: string): Promise<string> {
+    const written = await writeLocalSlot(name, id, getGame().snapshot)
+    if (!written.overflow) rememberBrowserSave(name)
+    else if (written.slotId) rememberLastSave({ id: written.slotId, source: 'browser', name: name.trim().replace(/\s+/g, ' ') })
+    return written.message
+  }
+
+  /**
+   * A backup kept in this browser only, whatever the archive is — the world a
+   * host ran offline before a takeover. It replaces an older backup of the same
+   * name and does not become the save „Fortsetzen“ offers.
+   */
+  async function backupLocally(name: string, snapshot: Readonly<GameSnapshot>): Promise<string> {
+    const existing = browserSlots().find((slot) => slot.name === name.trim().replace(/\s+/g, ' '))
+    return (await writeLocalSlot(name, existing?.id, snapshot)).message
   }
   
   async function persistNamedSave(name: string, id?: string, source: 'server' | 'browser' = saveArchive.onServer ? 'server' : 'browser'): Promise<string> {
@@ -236,10 +277,10 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     if (autosaveRunning || isTitleOpen() || getMultiplayerMode() === 'client') return
     autosaveRunning = true
     try {
-      const existing = await quicksaveSlot()
       // The same slot quick-saving writes: one latest save, not two competing ones.
-      await persistNamedSave(QUICKSAVE_NAME, existing?.id, existing?.source ?? (saveArchive.onServer ? 'server' : 'browser'))
-      showToast('Automatisch gespeichert')
+      await persistQuickTarget()
+      const takeover = context.takeoverSlotName?.() ?? null
+      showToast(takeover ? `Automatisch gespeichert als „${takeover}“` : 'Automatisch gespeichert')
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Automatisches Speichern fehlgeschlagen', true)
     } finally {
@@ -428,5 +469,6 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     bindLoadedGame,
     tryQuickLoad,
     formatSaveTime,
+    backupLocally,
   }
 }

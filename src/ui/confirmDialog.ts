@@ -20,14 +20,29 @@ type DemolishCell = {
   localZ?: number
 }
 
-let dialog: HTMLDialogElement | null = null
-let pending: ((confirmed: boolean) => void) | null = null
+/** One answer of a dialog with more than yes and no. */
+export type DialogChoice = {
+  id: string
+  label: string
+  /** `primary` is the suggested way on, `danger` the one that cannot be taken back. */
+  tone?: 'primary' | 'danger'
+}
 
-function finish(confirmed: boolean): void {
+export type ChoiceDialogOptions = {
+  title: string
+  message: string
+  choices: DialogChoice[]
+  cancelLabel?: string
+}
+
+let dialog: HTMLDialogElement | null = null
+let pending: ((choice: string | null) => void) | null = null
+
+function finish(choice: string | null): void {
   const resolve = pending
   pending = null
   dialog?.close()
-  resolve?.(confirmed)
+  resolve?.(choice)
 }
 
 function ensureDialog(): HTMLDialogElement {
@@ -35,37 +50,59 @@ function ensureDialog(): HTMLDialogElement {
   dialog = document.createElement('dialog')
   dialog.className = 'confirm-dialog'
   dialog.setAttribute('aria-labelledby', 'confirm-dialog-title')
-  dialog.innerHTML =
-    '<h2 id="confirm-dialog-title"></h2><p></p><div class="confirm-dialog-actions">' +
-    '<button type="button" data-confirm></button>' +
-    '<button type="button" data-cancel></button></div>'
-  dialog.querySelector('[data-confirm]')!.addEventListener('click', () => finish(true))
-  dialog.querySelector('[data-cancel]')!.addEventListener('click', () => finish(false))
+  dialog.innerHTML = '<h2 id="confirm-dialog-title"></h2><p></p><div class="confirm-dialog-actions"></div>'
+  // Esc and the browser's own close both mean „Abbrechen“.
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault()
-    finish(false)
+    finish(null)
   })
   dialog.addEventListener('close', () => {
-    if (pending) finish(false)
+    if (pending) finish(null)
   })
   document.body.append(dialog)
   return dialog
 }
 
-/** In-game modal, same `<dialog>` pattern as save import/export. */
-export function confirmAction(options: ConfirmDialogOptions): Promise<boolean> {
-  if (pending) finish(false)
+function choiceButton(label: string, attribute: string, choice: string | null): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.textContent = label
+  button.setAttribute(attribute, '')
+  button.addEventListener('click', () => finish(choice))
+  return button
+}
+
+/**
+ * In-game modal with any number of answers plus „Abbrechen“ (also Esc). Resolves
+ * with the chosen id, or null when cancelled. Same `<dialog>` pattern as save
+ * import/export; the cancel button has the focus, so Enter never picks harm.
+ */
+export function chooseAction(options: ChoiceDialogOptions): Promise<string | null> {
+  if (pending) finish(null)
   const el = ensureDialog()
   el.querySelector('#confirm-dialog-title')!.textContent = options.title
   el.querySelector('p')!.textContent = options.message
-  el.querySelector<HTMLButtonElement>('[data-confirm]')!.textContent = options.confirmLabel ?? 'OK'
-  const cancel = el.querySelector<HTMLButtonElement>('[data-cancel]')!
-  cancel.textContent = options.cancelLabel ?? 'Abbrechen'
+  const cancel = choiceButton(options.cancelLabel ?? 'Abbrechen', 'data-cancel', null)
+  el.querySelector('.confirm-dialog-actions')!.replaceChildren(
+    ...options.choices.map((choice) =>
+      choiceButton(choice.label, choice.tone === 'primary' ? 'data-primary' : 'data-confirm', choice.id)),
+    cancel,
+  )
   return new Promise((resolve) => {
     pending = resolve
     el.showModal()
     cancel.focus()
   })
+}
+
+/** In-game modal, same `<dialog>` pattern as save import/export. */
+export function confirmAction(options: ConfirmDialogOptions): Promise<boolean> {
+  return chooseAction({
+    title: options.title,
+    message: options.message,
+    choices: [{ id: 'confirm', label: options.confirmLabel ?? 'OK', tone: 'danger' }],
+    cancelLabel: options.cancelLabel,
+  }).then((choice) => choice === 'confirm')
 }
 
 function quotedNames(names: readonly string[]): string {

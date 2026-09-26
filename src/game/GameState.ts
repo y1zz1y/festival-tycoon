@@ -92,6 +92,7 @@ import {
 } from './buildUndo';
 import type { GameCommand, SimSnapshot, WorldSnapshot } from '../net/protocol';
 import { applySim, applyWorld } from '../net/codec';
+import { mergeVisitorPatches } from '../net/worldUpdates';
 import { AtmosphereSystem, collectBuiltAtmosphereCells } from './atmosphere';
 import { FestivalAreaSystem } from './festivalAreas';
 import type { StageForecourtCell } from './festivalAreas';
@@ -305,6 +306,12 @@ export class GameState {
   /** Local diagnostic counter; deliberately excluded from saves and network state. */
   executedLogicTicks = 0
   networkMode: 'solo' | 'host' | 'client' = 'solo'
+  /**
+   * Set on a guest while the room cannot take commands (the host is away). Its
+   * text is the refusal: building then is not shown optimistically, because
+   * nobody would ever confirm it.
+   */
+  networkPause: string | null = null
   commandOutbox: ((command: GameCommand) => void) | null = null
   onTurnCommit: ((turn: SimTurn) => void) | null = null
   onDesync: ((expected: number, actual: number) => void) | null = null
@@ -726,6 +733,7 @@ export class GameState {
     if (this.applyingCommand) return null
     if (this.networkMode === 'solo') return null
     if (this.networkMode === 'host') return this.executeHostCommand(command)
+    if (this.networkMode === 'client' && this.networkPause) return { ok: false, message: this.networkPause }
     if (this.networkMode === 'client' && isOptimisticCommand(command)) {
       const commandId = `client-${Date.now().toString(36)}-${++this.optimisticCommandSequence}`
       command.clientCommandId = commandId
@@ -747,6 +755,18 @@ export class GameState {
 
   resolveOptimisticCommand(commandId: string): boolean {
     return this.optimisticCommands.delete(commandId)
+  }
+
+  /**
+   * Forgets every optimistic command still waiting for its host: that host is
+   * gone and will never answer. They are not replayed onto later worlds any more
+   * and not sent again (a loan would be booked twice); the next full world shows
+   * what really happened. Returns their ids so the session can say how many.
+   */
+  discardOptimisticCommands(): string[] {
+    const ids = [...this.optimisticCommands.keys()]
+    this.optimisticCommands.clear()
+    return ids
   }
 
   private replayOptimisticCommands(): void {
@@ -1015,12 +1035,7 @@ export class GameState {
       this.legacyRecordSignature = legacyAttractionSignature(this.state)
     }
     const byId = new Map(this.state.visitors.map(visitor => [visitor.id, visitor]))
-    for (const id of removed) byId.delete(id)
-    for (const patch of visitors) {
-      const existing = byId.get(patch.id)
-      if (existing) Object.assign(existing, patch.changes)
-      else byId.set(patch.id, patch.changes as Visitor)
-    }
+    mergeVisitorPatches(byId, visitors, removed)
     this.state.visitors = [...byId.values()]
     this.tickAccumulator = 0
     this.indexedVisitorCount = -1
@@ -6779,6 +6794,14 @@ export class GameState {
   }
 
   saveSlot(name: string, id?: string): ActionResult {
+    return GameState.saveSnapshotSlot(this.state, name, id)
+  }
+
+  /**
+   * Writes any snapshot into a local slot, not only the running game's — the
+   * backup a demoted multiplayer host keeps of the world it ran offline.
+   */
+  static saveSnapshotSlot(snapshot: Readonly<GameSnapshot>, name: string, id?: string): ActionResult {
     const trimmed = name.trim().replace(/\s+/g, ' ').slice(0, 40)
     if (!trimmed) return { ok: false, message: 'Bitte einen Namen für den Spielstand eingeben' }
     try {
@@ -6790,16 +6813,16 @@ export class GameState {
         id: target?.id ?? `slot-${savedAt}-${Math.random().toString(36).slice(2, 8)}`,
         name: trimmed,
         savedAt,
-        edition: this.state.festival.edition,
-        day: this.state.day,
-        minute: this.state.minute,
+        edition: snapshot.festival.edition,
+        day: snapshot.day,
+        minute: snapshot.minute,
       }
       const updated = target
         ? slots.map(slot => slot.id === target.id ? next : slot)
         : [...slots, next]
       localStorage.setItem(SAVE_SLOTS_KEY, JSON.stringify(updated))
       try {
-        localStorage.setItem(saveSlotDataKey(next.id), serializeSnapshot(this.state))
+        localStorage.setItem(saveSlotDataKey(next.id), serializeSnapshot(snapshot))
         return { ok: true, message: `Spielstand „${trimmed}“ gespeichert`, slotId: next.id }
       } catch (error) {
         return { ok: false, message: storageErrorMessage(error, 'Lokaler Spielstandsspeicher ist nicht verfügbar'), slotId: next.id }
