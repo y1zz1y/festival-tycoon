@@ -85,7 +85,7 @@ export function createScenarioFormController(getGame: () => GameState) {
     const preset = scenarioPreset(settings.preset)
     const goals = settings.goals
     const rows: [string, string][] = [
-      ['Szenario', preset?.name ?? 'Freies Spiel'],
+      ['Szenario', settings.authoring ? 'Szenario-Editor' : (preset?.name ?? settings.title ?? 'Freies Spiel')],
       ['Umgebung', ENVIRONMENTS[settings.environment].name],
       ['Kartengröße', `${settings.worldSize}×${settings.worldSize}`],
       ['Unebenheit', `${Math.round(settings.unevenness * 100)} %`],

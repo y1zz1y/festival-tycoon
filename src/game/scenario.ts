@@ -60,6 +60,15 @@ export type ScenarioSettings = {
   firstEditionDays?: number
   /** The first weekend's own targets; later editions grow from them. */
   festivalGoals?: WeekendGoals
+  /** Display name for a drop-in file scenario; omitted for built-in presets and blank maps. */
+  title?: string
+  /** Description shown under Neues Spiel and in the briefing. */
+  detail?: string
+  /**
+   * Authoring session (scenario editor). Construction is free and spending is
+   * not booked. Omitted in playable games so a JSON round trip stays key-for-key.
+   */
+  authoring?: boolean
 }
 
 export const DEFAULT_SCENARIO: ScenarioSettings = {
@@ -191,7 +200,18 @@ export function normalizeScenarioSettings(
     ...(normalizeWeekendGoals(source?.festivalGoals)
       ? { festivalGoals: normalizeWeekendGoals(source?.festivalGoals) }
       : {}),
+    ...(typeof source?.title === 'string' && source.title.trim()
+      ? { title: source.title.trim().slice(0, 80) }
+      : {}),
+    ...(typeof source?.detail === 'string' && source.detail.trim()
+      ? { detail: source.detail.trim().slice(0, 800) }
+      : {}),
+    ...(source?.authoring === true ? { authoring: true } : {}),
   }
+}
+
+export function isAuthoringScenario(settings?: { authoring?: boolean } | null): boolean {
+  return settings?.authoring === true
 }
 
 export function sampleBiasedPreference(

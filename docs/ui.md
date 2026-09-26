@@ -37,7 +37,8 @@ Eingang/Ausgang.
 | Bau-Undo-Stack | `src/game/buildUndo.ts`, `src/game/GameState.ts` | `undoLastBuild`, Marker/Diff, max. 40 Einträge, nicht im Snapshot |
 | Festival-Preise / Bandplaner | `src/festivalUI.ts`, `src/musicPlanner.ts`, `src/festival.css` | Ticket-Slider + Schätzung; Kaufbereitschaft über `--range-accent` (Thumb/Track); Sterne-Tabs und Auto-Plan-Filter |
 | Stabile App-Shell / DOM-Vertrag | `src/app/shell.ts` | `mountAppShell`; vollständiges statisches Markup und Autosave-Konstanten |
-| Titel, Szenario und Saves | `src/ui/titleScreen.ts`, `src/ui/scenarioScreen.ts`, `src/ui/saveController.ts` | Controller mit injiziertem `GameState`-/Multiplayer-/Lade-Kontext; Briefing vor Presets (`openTitleBriefing`), Zielzeilen im freien Spiel (`readGoals`/`fillGoals`) |
+| Titel, Szenario und Saves | `src/ui/titleScreen.ts`, `src/ui/scenarioScreen.ts`, `src/ui/saveController.ts` | Controller mit injiziertem `GameState`-/Multiplayer-/Lade-Kontext; Briefing vor Presets (`openTitleBriefing`), Zielzeilen im freien Spiel (`readGoals`/`fillGoals`); Hauptmenü **Szenario-Editor**, dynamische Liste aus `src/game/scenarioCatalog.ts` |
+| Szenario-Editor-Fenster | `src/ui/scenarioEditor.ts` | `#scenario-editor-panel`: Name, Beschreibung, Startgeld, Schulden, Verteilungen, Ticket-Mix, Nachfrage-Basis; Export |
 | Szenario-Oberfläche | `src/ui/scenarioStatus.ts` | Zielanzeige `#scenario-goals-stat` in der Statusleiste, Endbildschirm als HEADLINE-Sonderausgabe, Stichtag-Übersicht; öffnen nur bei Änderung von `outcome.state`/`dueReminderDay`. Regeln: [scenarios.md](scenarios.md) |
 | Objekt- und Besucheranzeige | `src/ui/entityPanel.ts`, `src/ui/visitorPanel.ts` | Vollständige Objektpanel-Orchestrierung, Achterbahn-Telemetrie, Kurs-/Paintball-/Pool-Betrieb sowie zustandsbehaftete Besucher-Inspektion |
 | UI-Formatierung | `src/ui/format.ts` | HTML-Escaping, Geld-, Uhrzeit- und Speicherzeitformat |
@@ -53,7 +54,7 @@ Eingang/Ausgang.
 | Spielstand-Archivdarstellung | `src/ui/saveArchive.ts` | Zusammenführen Server/Browser, sichere Zeilen, Speicherhinweis |
 | Differentielle UI-Updates | `src/ui/differentialUpdates.ts` | `DifferentialUpdates`, `listFingerprint` |
 | Rechteck-Flächenvertrag | `src/ui/areaDesignation.ts` | `AreaDesignationSpec`, `normalizeRectangle`, Preview/Execute-Adapter |
-| Ton stumm | `src/main.ts`, `src/view/FestivalAudio.ts` | `#toggle-mute`, `#setting-mute-audio`; [audio.md](audio.md) |
+| Ton stumm | `src/main.ts`, `src/view/FestivalAudio.ts` | `#toggle-mute`, `#setting-mute-audio`; echte CC0-WAVs, Synth-Fallback; [audio.md](audio.md) |
 | Abriss-/Info-Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | `pickPlacedObject`, `resolvePickedBuilding` |
 | Infofenster Müllwagen / Ablage / Container | `src/main.ts`, `src/game/logistics.ts`, `src/game/waste.ts` | `formatRoadVehicleInspectLoad`, `connectedWasteDumpStats`, `formatSealedContainerInspect` |
 | Infofenster Backstage | `src/main.ts`, `src/game/bandSupply.ts` | `formatBackstageInspect`, Klick auf Backstage-Kachel |
@@ -64,7 +65,7 @@ Eingang/Ausgang.
 | Festival-Verwaltung | `src/festivalUI.ts`, `src/festival.css` | Tickets, Plan, **Park öffnen/schließen** (`setParkOpen`) |
 | HEADLINE Magazin | `src/headlineMagazineUI.ts`, `src/headlineMagazine.css`, `src/game/headlineMagazine.ts` | Vollbild-Heft nach `festival.finished`; Weiter/Schließen; erneut unter Abrechnung & Ruf |
 | Bandplan | `src/musicPlanner.ts` | |
-| Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css`, `src/game/buildMenu.ts` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold. Gelände-Reiter: Feld anheben/senken, Glätten (Fläche) |
+| Geländeplaner / Wegbelag | `src/logisticsUI.ts`, `src/logistics.css`, `src/game/buildMenu.ts` | Overlay über `WorldView.setLogisticsMode`; Fußweg-Art-Hold. Gelände-Reiter: Feld anheben/senken, Glätten (Fläche) plus Untergrund-Palette (Rasen, Sand, Stein, Acker, Schnee, Felsen, braune Erde) |
 | Buslinien-Planer | `src/main.ts`, `src/game/busPlanner.ts`, `src/view/LogisticsView.ts` | Zwei Spalten ohne Duplikate, DnD, `sortBusLineStops`, nummerierte `setBusPlannerRoute`; Klick auf Haltestelle in der Karte |
 | Shift-Rampen-Ausgang | `src/main.ts`, `src/game/wayElevation.ts` | `lockShiftElevationOrigin`, `planLockedOriginRamp` |
 | Bauvorschau / Bauhöhe / Bodenkachel | `src/game/placementPreview.ts`, `src/game/GameState.ts`, `src/view/WorldView.ts` | `PlacementPreviewRequest/Result` und `previewPlacement` liefern gemeinsame Gültigkeit/Meldung; Halbstufen `snapBuildElevation`; `groundTileMarker`; Werkzeug `stageForecourt` nutzt dieselbe Dry-Run-Prüfung wie die Ausweisung |
@@ -426,8 +427,9 @@ Wasser liegt eine halbe Stufe unter 0. Gäste baden auf gefluteten Feldern.
 
 ## Land-Editor drei Flächenwerkzeuge (0.1.134)
 
-Im Reiter **Gelände** nur **Feld anheben**, **Feld senken**, **Glätten**.
-Klick oder Ziehen füllt ein Rechteck, keine Linienstriche. Stufe 0,5.
+Im Reiter **Gelände** **Feld anheben**, **Feld senken**, **Glätten** und die
+**Untergrund**-Palette (Rasen, Sand, Stein, Acker, Schnee, Felsen, braune
+Erde). Klick oder Ziehen füllt ein Rechteck, keine Linienstriche. Stufe 0,5.
 **Glätten** setzt alle getroffenen Felder auf die Höhe unter dem
 Startpunkt. Ecke / Einebnen / Wasser-als-Werkzeug sind aus der UI.
 

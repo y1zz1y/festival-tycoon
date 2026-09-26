@@ -97,6 +97,12 @@ Camp und Müll rekonstruiert.
   bewusst **nicht** über die Leitung (`packWorld` nimmt ihn heraus wie
   `selectedTool`): Ein Gast behält seinen eigenen, sonst würde er später mit dem
   Code eines fremden Raums hosten wollen.
+  Optionale `scenario.title` / `scenario.detail` halten Name und
+  Beschreibung eines Drop-in-Szenarios; fehlend bleibt die Anzeige beim
+  Preset bzw. „Freies Spiel“. Optionales `scenario.authoring` markiert den
+  Szenario-Editor (Baukosten 0); fehlend oder falsch ist ein normales Spiel.
+  Alte Stände ohne diese Schlüssel bleiben gültig, kein Versionsbump.
+  Dateiformat und Ordner: [scenarios.md](scenarios.md).
   v34 erweitert `scenarioProgress` um `editions` (Ergebnis jeder beendeten
   Ausgabe), `outcome` (`running`/`won`/`lost` mit Grund und Tag),
   `insolventDays`, `nextEditionDue` und `dueReminderDay`; `scenario` bekommt die
@@ -193,7 +199,12 @@ Camp und Müll rekonstruiert.
   ganzzahlige Altsaves bleiben gültig. Optionale `terrain.corners` sind
   Eckhöhen; fehlend werden sie sichtbar aus den Kachelhöhen abgeleitet
   (`tileVisualCorner`). `editTerrainArea` ist nur ein Command, kein neues
-  Snapshot-Feld. Keine stillen Slot-Änderungen an Deko.
+  Snapshot-Feld. Optionales `festival.infrastructure.ground[].cover`
+  (`grass`/`sand`/`stone`/`field`/`snow`/`rock`/`earth`) speichert gemalte
+  Untergründe; fehlend bleibt der umgebungsbasierte `substrate`. Unbekannte
+  Werte werden beim Laden entfernt (`normalizeGroundCells`). Keine
+  Snapshot-Versionserhöhung. `paintGroundCover` / `paintGroundCoverArea`
+  sind nur Commands. Keine stillen Slot-Änderungen an Deko.
 - Verwaiste Parkplatz-`occupiedBy` und Krankenfeld-`occupants` ohne
   Fahrzeug bzw. Besucher werden beim Laden geleert. Kein neues
   Snapshot-Feld. Restkacheln bleiben abriss- und überbaubar.

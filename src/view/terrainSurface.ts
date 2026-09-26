@@ -1,10 +1,10 @@
 import { BufferGeometry, Color, DataTexture, Float32BufferAttribute, Mesh, MeshStandardMaterial, NearestFilter, LinearMipmapLinearFilter, SRGBColorSpace } from 'three'
 import type { GameSnapshot } from '../game/GameState'
-import { groundInfo } from '../game/ground'
+import { GROUND_COVERS, groundInfo } from '../game/ground'
 import { getTerrainHeight, getWaterLevel, isMudHeight, isWaterHeight } from '../game/terrain'
 import { TerrainShape } from './terrainShape'
 
-export const TERRAIN_MATERIALS = ['field', 'clay', 'gravel', 'sand', 'grass', 'paved', 'compact', 'mud', 'parking'] as const
+export const TERRAIN_MATERIALS = ['field', 'clay', 'gravel', 'sand', 'grass', 'stone', 'rock', 'snow', 'earth', 'paved', 'compact', 'mud', 'parking'] as const
 export type TerrainMaterial = typeof TERRAIN_MATERIALS[number]
 const PALETTE: Record<TerrainMaterial, number[]> = {
   field: [0x99915e, 0x887b51, 0xa89b6a, 0x7f8755],
@@ -12,6 +12,10 @@ const PALETTE: Record<TerrainMaterial, number[]> = {
   gravel: [0xa39879, 0x93886f, 0xb0a68a, 0x9b947b],
   sand: [0xd5bc85, 0xc6ac79, 0xe2cc98, 0xcfb67f],
   grass: [0x7d9d59, 0x718e50, 0x90a965, 0x839654],
+  stone: [0x9a9a94, 0x7e7e78, 0xb0b0aa, 0x8a8a84],
+  rock: [0x6b6358, 0x534c43, 0x7a7166, 0x4a453e],
+  snow: [0xe8eef2, 0xd4dce2, 0xf5f8fa, 0xc8d2da],
+  earth: [0x6b4a2e, 0x5a3d26, 0x7d5636, 0x4e3420],
   paved: [0xaca99b, 0x85877c, 0xbab7a9, 0xa19f91],
   compact: [0xa29473, 0x928365, 0xb0a180, 0x9a8c70],
   mud: [0x766149, 0x67543f, 0x806b51, 0x70624d],
@@ -49,6 +53,7 @@ export function terrainMaterialAt(
   if (isMudHeight(getTerrainHeight(s.terrain, x, z)) || isWaterHeight(getTerrainHeight(s.terrain, x, z), getWaterLevel(s))) return 'mud'
   if (parking.has(`${x},${z}`)) return 'parking'
   const g = groundInfo(s, x, z)
+  if (g.cover && g.cover in GROUND_COVERS) return GROUND_COVERS[g.cover].material
   return g.surface === 'paved' ? 'paved' : g.surface === 'gravel' ? 'gravel' : g.compacted ? 'compact' : g.type === 'urban' ? 'paved' : g.type
 }
 
@@ -81,6 +86,18 @@ export function createTerrainAtlas(): DataTexture {
         } else if (kind === 'clay' || kind === 'mud') {
           if (hash(Math.floor(x / 6) + variant * 11, Math.floor(y / 5)) > .8 && n > .3) tone = 1
         } else if (kind === 'compact' && y % 16 === 0 && n > .6) tone = 1
+        else if (kind === 'stone') {
+          if (x % 16 === 0 || y % 16 === 0) tone = 1
+          else if (n > .86) tone = 2
+        } else if (kind === 'rock') {
+          tone = Math.floor(hash(Math.floor(x / 5) + variant * 9, Math.floor(y / 4)) * 4)
+        } else if (kind === 'snow') {
+          if (n > .92) tone = 2
+          else if ((y + Math.round(Math.sin(x / 8) * 3)) % 22 === 0) tone = 3
+        } else if (kind === 'earth') {
+          if (y % 14 === 3 && n > .2) tone = 1
+          if (hash(Math.floor(x / 4) + variant * 13, Math.floor(y / 4)) > .84) tone = 3
+        }
         const rgb = PALETTE[kind][tone]!
         const at = ((row * TILE + y) * WIDTH + variant * TILE + x) * 4
         pixels[at] = rgb >>> 16; pixels[at + 1] = (rgb >>> 8) & 255; pixels[at + 2] = rgb & 255; pixels[at + 3] = 255
@@ -109,7 +126,7 @@ export function createTerrainSurface(s: Readonly<GameSnapshot>, material: MeshSt
     cells.set(`${x},${z}`, {
       kind: terrainMaterialAt(s, x, z, parking),
       height: getTerrainHeight(s.terrain, x, z),
-      prepared: parked || !!(work?.surface || work?.compacted),
+      prepared: parked || !!(work?.surface || work?.compacted || work?.cover),
     })
   }
   const tint = new Color()

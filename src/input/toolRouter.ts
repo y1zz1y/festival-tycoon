@@ -1,4 +1,5 @@
-import { isTerrainEditTool, type BuildingKind, type Tool } from '../game/catalog'
+import { isTerrainCoverTool, isTerrainEditTool, type BuildingKind, type Tool } from '../game/catalog'
+import { groundCoverFromTool } from '../game/ground'
 import type { CourseKind } from '../game/courseAttractions'
 import { terrainCornerIndex, terrainToolMode } from '../game/terrain'
 import { scenerySlot } from '../game/scenery'
@@ -58,6 +59,12 @@ export function applyDirectCellTool(
             terrainCornerIndex(cell.localX ?? 0.5, cell.localZ ?? 0.5),
           ),
         }
+      : { handled: true }
+  }
+  if (isTerrainCoverTool(tool)) {
+    const cover = groundCoverFromTool(tool)
+    return cover
+      ? { handled: true, result: game.paintGroundCover(cell.x, cell.z, cover) }
       : { handled: true }
   }
 

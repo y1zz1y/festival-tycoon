@@ -90,7 +90,7 @@ import {
   WebGLRenderer,
   WebGLRenderTarget,
 } from 'three'
-import { BUILDINGS, BUILDING_KINDS, WORLD_SIZE, isCopyTool, isRoadBuildTool, isTerrainEditTool } from '../game/catalog'
+import { BUILDINGS, BUILDING_KINDS, TERRAIN_COVER_TOOLS, WORLD_SIZE, isCopyTool, isRoadBuildTool, isTerrainCoverTool, isTerrainEditTool } from '../game/catalog'
 import type { BlueprintGhost } from '../game/blueprints'
 import type { BuildingKind } from '../game/catalog'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
@@ -108,6 +108,7 @@ import {
 } from '../game/coasters'
 import { createBungeeModel, animateBungee, setBungeeJumper } from './bungee'
 import { createNudeAnatomy, createPersonGeometry, PersonDetailsView, personSeed, personStyle } from './pixelPeople'
+import { visitorDancePhase, visitorDancePose } from './visitorDance'
 import { SouvenirPropsView } from './souvenirMeshes'
 import { mascotVariant } from '../game/shopGoods'
 import { createCoasterSpecial } from './coasterSpecials'
@@ -206,6 +207,7 @@ const GROUND_ONLY_TOOLS = new Set([
   'terrainLowerCorner',
   'terrainWater',
   'terrainSmooth',
+  ...TERRAIN_COVER_TOOLS,
   'camping',
   'medicalArea',
   'stageForecourt',
@@ -908,7 +910,7 @@ export class WorldView {
     if (dataChanged && (worldRevision === undefined || worldRevision !== this.lastGroundRevision)) {
       this.lastGroundRevision = worldRevision ?? this.lastGroundRevision
       this.cachedFootwayFingerprint = JSON.stringify(Object.entries(snapshot.festival.infrastructure.ground).filter(([, g]) => g.footway).map(([k, g]) => [k, g.footway]))
-      this.groundSurfaceFingerprint = JSON.stringify(Object.entries(snapshot.festival.infrastructure.ground).filter(([, g]) => g.compacted || g.surface).map(([k, g]) => [k, g.compacted, g.surface]))
+      this.groundSurfaceFingerprint = JSON.stringify(Object.entries(snapshot.festival.infrastructure.ground).filter(([, g]) => g.compacted || g.surface || g.cover).map(([k, g]) => [k, g.compacted, g.surface, g.cover]))
     }
     const fingerprint = dataChanged ? this.buildingFingerprintOf(snapshot.buildings) + this.cachedFootwayFingerprint + JSON.stringify(snapshot.logistics.roadCells.map(r => [r.x,r.z,r.elevation,r.roadSlope,r.roadSlopeDirection])) : this.buildingFingerprint
 
@@ -3388,19 +3390,22 @@ export class WorldView {
               ? 1.25
               : 1
       const phase = now * 0.009 * pace + seed
+      const dancing = visitor.isDancing && !sitting && !swimming
+      const dance = dancing
+        ? visitorDancePose(
+            visitorDancePhase((this.currentSnapshot?.simTick ?? 0) + this.renderAlpha, seed),
+            seed,
+          )
+        : null
       const stride = detailed
-        ? visitor.isDancing
-          ? Math.sin(phase * 1.8)
-          : moving
-            ? Math.sin(phase)
-            : 0
-        : visitor.isDancing
-          ? Math.sin(phase * 1.8)
-          : moving
+        ? moving && !dancing
+          ? Math.sin(phase)
+          : 0
+        : moving && !dancing
           ? Math.sin(phase * 0.7)
           : 0
-      const jump = visitor.isDancing
-        ? Math.max(0, Math.sin(phase * 1.15)) * (detailed ? 0.08 : 0.04)
+      const jump = dance
+        ? dance.bounce
         : detailed
           ? moving && (streaking || visitor.emotion === 'excited')
             ? Math.max(0, Math.sin(phase * 0.65)) * (streaking ? 0.16 : 0.11)
@@ -3508,8 +3513,14 @@ export class WorldView {
           ? 0
           : sitting || swimming
             ? Math.PI * 0.42
-            : stride * (visitor.isDancing ? 1.15 : strength)
+            : stride * strength
       const headTilt = visitor.emotion === 'sad' ? 0.35 : 0
+      const leftLegX = sitting ? -1.15 : dance ? dance.leftLegX : limbSwing * .65
+      const rightLegX = sitting ? -1.15 : dance ? dance.rightLegX : -limbSwing * .65
+      const leftArmX = dance ? dance.leftArmX : -limbSwing * .65
+      const rightArmX = dance ? dance.rightArmX : limbSwing * .65
+      const leftArmZ = dance?.leftArmZ ?? 0
+      const rightArmZ = dance?.rightArmZ ?? 0
       const wornShirt = !shirtless ? visitor.wornShirt : undefined
       const shirtColor = shirtless
         ? this.visitorSkinColor
@@ -3518,26 +3529,31 @@ export class WorldView {
           : this.visitorColor.setHex(wornShirt?.color ?? visitor.color)
       const legColor = streaking || (appearance.skirt && !shirtless) ? this.visitorSkinColor : this.visitorPantsColor
 
-      this.visitorPose.position.set(displayX, displayY, displayZ)
-      this.visitorPose.rotation.set(fleeing ? 0.28 : 0, targetRotation, fleeing ? 0 : tilt)
+      const poseX = displayX + (dance ? Math.cos(targetRotation) * dance.sidestep : 0)
+      const poseZ = displayZ - (dance ? Math.sin(targetRotation) * dance.sidestep : 0)
+      this.visitorPose.position.set(poseX, displayY, poseZ)
+      this.visitorPose.rotation.set(
+        fleeing ? 0.28 : 0,
+        targetRotation + (dance?.hipYaw ?? 0),
+        fleeing ? 0 : tilt + (dance?.torsoRoll ?? 0),
+      )
       this.visitorPose.scale.set(appearance.width, scaleY * appearance.height, appearance.width)
       this.visitorPose.updateMatrix()
       this.setVisitorLimb(index, appearance.female ? this.visitorFemaleBodyInstances : this.visitorBodyInstances, 0, .39, 0, 0, shirtColor)
       ;(appearance.female ? this.visitorBodyInstances : this.visitorFemaleBodyInstances)?.setMatrixAt(index, hiddenMatrix)
       this.setVisitorLimb(index, this.visitorHeadInstances, 0, .605, 0, headTilt * .3, this.visitorSkinColor)
-      this.setVisitorLimb(index, this.visitorLeftLegInstances, -.044, .275, 0, sitting ? -1.15 : limbSwing * .65, legColor)
-      this.setVisitorLimb(index, this.visitorRightLegInstances, .044, .275, 0, sitting ? -1.15 : -limbSwing * .65, legColor)
-      this.setVisitorLimb(index, this.visitorLeftArmInstances, appearance.female ? -.11 : -.128, .485, 0, visitor.isDancing ? -1.7 - stride * .45 : -limbSwing * .65, this.visitorSkinColor)
-      this.setVisitorLimb(index, this.visitorRightArmInstances, appearance.female ? .11 : .128, .485, 0, visitor.isDancing ? -1.7 + stride * .45 : limbSwing * .65, this.visitorSkinColor)
+      this.setVisitorLimb(index, this.visitorLeftLegInstances, -.044, .275, 0, leftLegX, legColor, 0, dance?.leftLegZ ?? 0)
+      this.setVisitorLimb(index, this.visitorRightLegInstances, .044, .275, 0, rightLegX, legColor, 0, dance?.rightLegZ ?? 0)
+      this.setVisitorLimb(index, this.visitorLeftArmInstances, appearance.female ? -.11 : -.128, .485, 0, leftArmX, this.visitorSkinColor, 0, leftArmZ)
+      this.setVisitorLimb(index, this.visitorRightArmInstances, appearance.female ? .11 : .128, .485, 0, rightArmX, this.visitorSkinColor, 0, rightArmZ)
       this.personDetails.place(appearance.variant, this.visitorPose.matrix, !shirtless)
       if (wornShirt) {
         this.souvenirProps.placeShirt(wornShirt.style, this.visitorPose.matrix, wornShirt.color)
       }
       if (visitor.heldMascot && !streaking) {
         const shoulder = appearance.female ? 0.11 : 0.128
-        const armSwing = visitor.isDancing ? -1.7 + stride * 0.45 : limbSwing * 0.65
         this.visitorLimb.position.set(shoulder, 0.485, 0)
-        this.visitorLimb.rotation.set(armSwing, 0, 0)
+        this.visitorLimb.rotation.set(rightArmX, 0, rightArmZ)
         this.visitorLimb.scale.set(1, 1, 1)
         this.visitorLimb.updateMatrix()
         this.visitorMatrix.multiplyMatrices(this.visitorPose.matrix, this.visitorLimb.matrix)
@@ -3617,10 +3633,12 @@ export class WorldView {
     z: number,
     swingX: number,
     color: Color,
+    swingY = 0,
+    swingZ = 0,
   ): void {
     if (!mesh) return
     this.visitorLimb.position.set(x, y, z)
-    this.visitorLimb.rotation.set(swingX, 0, 0)
+    this.visitorLimb.rotation.set(swingX, swingY, swingZ)
     this.visitorLimb.scale.set(1, 1, 1)
     this.visitorLimb.updateMatrix()
     this.visitorMatrix.multiplyMatrices(this.visitorPose.matrix, this.visitorLimb.matrix)
@@ -4012,6 +4030,7 @@ export class WorldView {
           this.currentSnapshot?.selectedTool === 'roadSpeed50' ||
           this.currentSnapshot?.selectedTool === 'course' ||
           isTerrainEditTool(this.currentSnapshot?.selectedTool) ||
+          isTerrainCoverTool(this.currentSnapshot?.selectedTool) ||
           this.currentSnapshot?.selectedTool === 'bulldoze' ||
           this.currentSnapshot?.selectedTool === 'powerCable' ||
           isCopyTool(this.currentSnapshot?.selectedTool))
@@ -4537,7 +4556,8 @@ export class WorldView {
       tool === 'camping' ||
       tool === 'medicalArea' ||
       tool === 'stageForecourt' ||
-      isTerrainEditTool(tool)
+      isTerrainEditTool(tool) ||
+      isTerrainCoverTool(tool)
         ? existing?.elevation ?? ground
         : ground + this.currentSnapshot.buildElevation
     const footprint = this.placementResult?.footprint ?? { width: 1, depth: 1 }

@@ -8,6 +8,7 @@ import { attachMultiplayer, localJoinHost } from './rooms.ts'
 import { storageProblem } from './database.ts'
 import { handleSaveRequest } from './saveSlots.ts'
 import { handleAccountRequest } from './accounts.ts'
+import { handleScenarioRequest } from './scenarios.ts'
 
 const PORT = Number(process.env.PORT || 8080)
 const HOST = process.env.HOST || '0.0.0.0'
@@ -70,6 +71,7 @@ const server = createServer((request, response) => {
 async function serve(request: Parameters<typeof handleSaveRequest>[0], response: Parameters<typeof handleSaveRequest>[1]): Promise<void> {
   if (await handleAccountRequest(request, response)) return
   if (await handleSaveRequest(request, response)) return
+  if (await handleScenarioRequest(request, response, DIST)) return
   const requested = safeFile(request.url ?? '/')
   const file = requested ? await existingFile(requested) : null
   const fallback = file ?? (await existingFile(join(DIST, 'index.html')))

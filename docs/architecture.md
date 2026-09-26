@@ -30,14 +30,15 @@ Netzwerk-Clients mutieren die Welt nicht lokal dauerhaft; der Host entscheidet.
 | Spielerbefehl → Methode | `src/net/commands.ts` | `applyGameCommand` |
 | Befehls- und Delta-Typen | `src/net/protocol.ts` | `GameCommand`, Snapshots |
 | Command-Metadaten | `src/net/commandRegistry.ts` | vollständige Optimistic-Klassifikation |
-| UI-Bootstrap / Systemverkabelung | `src/main.ts` | Controller erzeugen, Event-Binding, Tool-Leiste |
+| UI-Bootstrap / Systemverkabelung | `src/main.ts` | Controller erzeugen, Event-Binding, Tool-Leiste; Szenario-Editor-Fenster |
+| Szenario-Dateien / Editor | `src/game/scenarioFile.ts`, `src/game/scenarioCatalog.ts` | Drop-in-JSON, Katalog, Authoring-Start |
 | App-Schleife | `src/app/gameLoop.ts` | Renderframes und Hidden-Tab-Hosttick über injizierte Schnittstellen |
 | Eingaberouting | `src/input/toolRouter.ts` | Direkte Zellwerkzeuge über die öffentliche `GameState`-Fassade |
 | UI-Controller / Differential-Updates | `src/ui/*.ts` | Baukatalog, Spielstandarchiv, Fingerprint-Gates |
 | Flächenwerkzeug-Vertrag | `src/ui/areaDesignation.ts` | normalisiertes Rechteck, Preview/Execute |
 | HEADLINE Magazin (abgeleitet) | `src/game/headlineMagazine.ts` | `buildHeadlineMagazine` aus Snapshot, kein neues Feld |
 | 3D-Szene | `src/view/WorldView.ts` | Kamera, Picking, Instancing |
-| Festival-SFX | `src/game/audio.ts`, `src/view/FestivalAudio.ts` | Kamera-Listener, Pools; siehe [audio.md](audio.md) |
+| Festival-SFX | `src/game/audio.ts`, `src/view/FestivalAudio.ts`, `src/view/audioAssets.ts` | Kamera-Listener, Pools, WAV-Loader; siehe [audio.md](audio.md) |
 | Host-HTTP/WebSocket | `server/serve.ts` | Dev- und Docker-Server |
 | Mehrspieler-Räume | `server/rooms.ts` | `attachMultiplayer` |
 

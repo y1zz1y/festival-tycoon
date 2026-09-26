@@ -68,6 +68,12 @@ type FinanceHost = {
   money: number
   finance: FinanceState
   festival: { enabled: boolean; finished: boolean; edition: number }
+  scenario?: { authoring?: boolean }
+}
+
+/** Editor sessions treat every cost as payable so building has no money limit. */
+export function canAfford(s: { money: number; scenario?: { authoring?: boolean } }, cost: number): boolean {
+  return s.scenario?.authoring === true || s.money >= cost
 }
 
 export function createFinanceState(loan = 0): FinanceState {
@@ -100,6 +106,9 @@ export function financeEdition(s: FinanceHost): number {
 }
 
 export function bookFinance(s: FinanceHost, category: FinanceCategory, amount: number): void {
+  // Authoring: construction and other spends are free. Income still books so a
+  // test-play in the editor can be read, but the balance never drops.
+  if (s.scenario?.authoring === true && amount < 0) return
   s.money += amount
   if (!amount || !Number.isFinite(amount)) return
   const finance = (s.finance ??= createFinanceState())

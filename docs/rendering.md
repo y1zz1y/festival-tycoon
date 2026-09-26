@@ -24,12 +24,13 @@ erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
 | Szene, Kamera, Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | Haupt-View; `setPlacementPreviewResult` rendert den autoritativen Game-Layer-Vertrag; `pickPlacedObject` für Info/Abriss; ein `LineSegments`-Baugitter 7×7 auf `buildElevation`; Personalzonen als InstancedMesh |
 | Frame-Orchestrierung | `src/app/gameLoop.ts` | `startGameLoop`: Tick, Interpolation, Audio-Listener, Render, optionales `afterRender` (Map-Ping-HUD) und Messzeile; Hidden-Tab-Hosttick 100 ms |
 | Pixel-Personen | `src/view/pixelPeople.ts` | 6 Visitor-Batches + Accessoires |
+| Tanzpose | `src/view/visitorDance.ts` | reine Limb-Zahlen aus `simTick + renderAlpha`; `WorldView` und `src/titleCrowd.ts` teilen dieselbe Pose |
 | Souvenir-Props | `src/view/souvenirMeshes.ts` | 1 Maskottchen- + 4 Shirt-Schnitt-Batches, Instanzfarbe |
 | Gebäude-Instancing | `src/view/retroBuildings.ts` | ein gemergtes Vertex-Color-Mesh je `DETAILED_BUILDINGS`-Art inkl. aller `SCENERY_KINDS`; Themen-Deko über `buildThemedScenery` (Familien + Vertexfarben); Instanz-`buildingIds` für Picking |
 | Festivaltechnik | `src/view/retroBuildings.ts`, `src/view/FestivalEquipmentView.ts` | Bühne, PA, Generatoren, FOH, Delay-Tower, LED-Wand, Laser und Feuerwerk als gemergte statische Modelle; LED-Leuchtflächen in einem dynamischen Instanz-Batch |
 | Show-Effekte | `src/view/LaserView.ts`, `src/view/FireworksView.ts` | Laser teilen Geometrie/Material je Farbe; Feuerwerk nutzt geteilte Raketen-/Partikelgeometrie und einen Burst-Instanzbatch je Effekt |
 | Camping-Batches | `src/view/campingModels.ts`, `src/view/batchCampMeshes.ts` | 14 Camping-Batches |
-| Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call, zwei Dreiecke je Kachel; Parkfelder als Atlas-`parking` |
+| Terrain-Mesh | `src/view/terrainSurface.ts`, `src/view/terrainShape.ts` | ein Boden-Draw-Call, zwei Dreiecke je Kachel; Atlaszeilen inkl. `stone`/`rock`/`snow`/`earth`; Parkfelder als Atlas-`parking` |
 | Objektstützen | `src/game/supportOccupancy.ts`, `src/view/supports.ts` | geteilter Zylinder; nur bei Luft unter dem Objekt |
 | Lichter | `src/view/FestivalLightsView.ts` | fester Pool (8 PointLights, 4 SpotLights); Deko-Lampenfarben aus `decorationLights.ts` |
 | Auflösungscaps | `src/view/renderResolution.ts` | max. 1440×810 intern |
@@ -91,6 +92,10 @@ Snapshot nicht autoritativ schreiben.
   Bollerwagen teilen ihre statische Geometrie und Materialien.
 - `disposeObject3D` entsorgt bei `InstancedMesh` auch dessen Instanzattribute;
   Geometrie-/Material-Disposal allein gibt diese GPU-Puffer nicht frei.
+- Tanzende Gäste (`isDancing`) bleiben auf den bestehenden Limb-Instanzen.
+  `visitorDancePose` liefert nur Winkel/Offsets; Phase kommt aus Simulationszeit
+  plus ID-Seed, nicht aus `performance.now()`. Kein Skelett oder Material pro
+  Gast. Die Menge desynchronisiert über Phase und drei Hände-hoch-Armstile.
 - Sechs Visitor-Instance-Batches bleiben die Picking-Ziele. Accessoires in
   zusätzlichen kompakten Batches, unabhängig von der Population.
   Abriss/Info wählen zuerst das nächste Mesh mit `buildingId` /
@@ -121,7 +126,8 @@ Snapshot nicht autoritativ schreiben.
 
 ## Tests
 
-`tests/performanceGuards.ts`, `tests/pixelPeople.ts`, `tests/carrierModels.ts`,
+`tests/performanceGuards.ts`, `tests/pixelPeople.ts`, `tests/visitorDance.ts`,
+`tests/carrierModels.ts`,
 `tests/campingModels.ts`, `tests/terrainSurface.ts`, `tests/picking.ts`. Messungen: `docs/performance.md`.
 
 ## Bei Änderungen dieses Dokument

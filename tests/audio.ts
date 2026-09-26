@@ -1,12 +1,21 @@
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
+  AUDIO_PLACEHOLDER_ASSETS,
+  audioCueKey,
+  audioCueRoll,
   audioDistance2d,
   audioWorldFromSnapshot,
   collectAmbientEmitters,
   createAudioPlannerState,
   detectAudioCues,
   inAudioRange,
+  isCheerCandidate,
   listenerFromCamera,
+  musicBedForGenre,
+  musicEmitterId,
   planFestivalAudio,
   selectByVoiceBudget,
   type AudioCue,
@@ -14,6 +23,13 @@ import {
   type AudioWorldVisitor,
 } from '../src/game/audio'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
+import {
+  audioAssetPublicPath,
+  audioAssetUrl,
+  fetchAudioArrayBuffer,
+} from '../src/view/audioAssets'
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 const AUDIO = SIMULATION_CONFIG.audio
 
@@ -76,7 +92,7 @@ export function testFestivalAudio(): void {
   assert.ok(audioDistance2d(distantCue.x, distantCue.z, listener.x, listener.z) > AUDIO.maxDistance)
 
   const cheerers = Array.from({ length: 80 }, (_, i) =>
-    visitor(`c${i}`, listener.x + (i % 6) * 0.4, listener.z + Math.floor(i / 6) * 0.3, {
+    visitor(`c${i}`, listener.x + (i % 8) * 0.05, listener.z + Math.floor(i / 8) * 0.05, {
       emotion: 'excited',
       state: 'partying',
       concertId: 'show-1',
@@ -87,6 +103,16 @@ export function testFestivalAudio(): void {
   const rawCheers = detectAudioCues(prev, next).filter((cue) => cue.kind === 'cheer')
   assert.ok(rawCheers.length > 0, 'clustered cheer emits at least one cue')
   assert.ok(rawCheers.length < cheerers.length, 'cheers are clustered, not per visitor')
+  const walkers = Array.from({ length: 20 }, (_, i) =>
+    visitor(`w${i}`, listener.x + i * 0.2, listener.z, { emotion: 'excited', state: 'exploring' }),
+  )
+  assert.equal(walkers.every((guest) => !isCheerCandidate(guest)), true)
+  assert.equal(
+    detectAudioCues(world({ simTick: 10, visitors: walkers }), world({ simTick: 11, visitors: walkers }))
+      .filter((cue) => cue.kind === 'cheer').length,
+    0,
+    'excited walkers without a concert are not cheer candidates',
+  )
   const planned = planFestivalAudio(next, listener, createAudioPlannerState())
   const cheers = planned.plan.oneShots.filter((cue) => cue.kind === 'cheer')
   assert.ok(cheers.length <= AUDIO.maxOneShotVoices)
@@ -96,6 +122,25 @@ export function testFestivalAudio(): void {
     again.plan.oneShots.filter((cue) => cue.kind === 'cheer').length,
     0,
     'cheer cooldown suppresses retrigger on the next tick',
+  )
+  const cheerKey = audioCueKey(rawCheers[0]!)
+  let cheerHitTick = -1
+  let cheerMissTick = -1
+  for (let tick = 200; tick < 20000 && (cheerHitTick < 0 || cheerMissTick < 0); tick += AUDIO.cooldownTicks.cheer) {
+    if (audioCueRoll('cheer', cheerKey, tick)) cheerHitTick = tick
+    else cheerMissTick = tick
+  }
+  assert.ok(cheerHitTick >= 0 && cheerMissTick >= 0, 'cheer chance has both hit and miss windows')
+  assert.ok(
+    planFestivalAudio(world({ simTick: cheerHitTick, visitors: cheerers }), listener, createAudioPlannerState())
+      .plan.oneShots.some((cue) => cue.kind === 'cheer'),
+    'a ready cheer window with candidates can fire',
+  )
+  assert.equal(
+    planFestivalAudio(world({ simTick: cheerMissTick, visitors: cheerers }), listener, createAudioPlannerState())
+      .plan.oneShots.filter((cue) => cue.kind === 'cheer').length,
+    0,
+    'a failed cheer roll stays silent even when candidates exist',
   )
 
   const burst = Array.from({ length: 40 }, (_, i) => ({
@@ -118,16 +163,44 @@ export function testFestivalAudio(): void {
       { id: 'far-stage', kind: 'stage', x: listener.x + 80, z: listener.z + 80 },
     ],
     performingStageIds: ['stage-a'],
+    performingStages: [{ id: 'stage-a', bed: 'rock' }],
     visitors: Array.from({ length: 8 }, (_, i) =>
       visitor(`path${i}`, listener.x + 1 + i * 0.2, listener.z + 1, { state: 'seeking' }),
     ),
   })
   const ambients = collectAmbientEmitters(stages, listener)
-  assert.ok(ambients.some((emitter) => emitter.zone === 'concert'))
+  const musicId = musicEmitterId('stage-a')
+  assert.ok(ambients.some((emitter) => emitter.zone === 'music' && emitter.id === musicId && emitter.bed === 'rock'))
   assert.ok(ambients.some((emitter) => emitter.zone === 'woods'))
-  assert.equal(ambients.some((emitter) => emitter.id.startsWith('concert:') && Math.abs(emitter.x - 80) < 2), false)
-  const ambientPlan = planFestivalAudio(stages, listener, createAudioPlannerState()).plan
-  assert.ok(ambientPlan.ambients.length <= AUDIO.maxAmbientVoices)
+  assert.equal(ambients.some((emitter) => emitter.zone === 'concert'), false)
+  assert.equal(ambients.some((emitter) => emitter.id === musicEmitterId('far-stage')), false)
+  const firstMusic = planFestivalAudio(stages, listener, createAudioPlannerState())
+  assert.ok(firstMusic.plan.ambients.some((emitter) => emitter.id === musicId))
+  assert.ok(firstMusic.plan.ambients.length <= AUDIO.maxAmbientVoices)
+  const stillPlaying = planFestivalAudio(world({ ...stages, simTick: 21 }), listener, firstMusic.state)
+  assert.ok(stillPlaying.plan.ambients.some((emitter) => emitter.id === musicId), 'music keeps the same loop id while the source stays live')
+  const silent = planFestivalAudio(
+    world({ ...stages, simTick: 22, performingStageIds: [], performingStages: [] }),
+    listener,
+    stillPlaying.state,
+  )
+  assert.equal(silent.plan.ambients.some((emitter) => emitter.zone === 'music'), false, 'no music without a performing source')
+  const farListener = listenerFromCamera({ x: 120, y: 20, z: 120 }, { x: 110, y: 0, z: 110 })
+  const farPlan = planFestivalAudio(stages, farListener, createAudioPlannerState())
+  assert.equal(farPlan.plan.ambients.some((emitter) => emitter.zone === 'music'), false, 'music stays silent out of range')
+  const edge = listenerFromCamera(
+    { x: listener.x + AUDIO.maxDistance + 2, y: 20, z: listener.z },
+    { x: listener.x + AUDIO.maxDistance - 1, y: 0, z: listener.z },
+  )
+  const keepEdge = planFestivalAudio(
+    world({ ...stages, simTick: 23 }),
+    { ...edge, x: listener.x + AUDIO.maxDistance + 3, z: listener.z },
+    stillPlaying.state,
+  )
+  assert.ok(
+    keepEdge.plan.ambients.some((emitter) => emitter.id === musicId),
+    'already-playing music fades past maxDistance instead of restarting',
+  )
 
   const launched = detectAudioCues(
     world({
@@ -143,17 +216,111 @@ export function testFestivalAudio(): void {
   assert.ok(launched.some((cue) => cue.kind === 'scream'))
   assert.equal(launched.filter((cue) => cue.kind === 'scream').length, 1)
 
+  const idleBus = world({
+    simTick: 40,
+    vehicles: [{ id: 'bus-1', kind: 'bus', state: 'idle', x: listener.x + 2, z: listener.z }],
+  })
+  const drivingBus = world({
+    simTick: 41,
+    vehicles: [{ id: 'bus-1', kind: 'bus', state: 'driving', x: listener.x + 2, z: listener.z }],
+  })
+  const stillDriving = world({
+    simTick: 42,
+    vehicles: [{ id: 'bus-1', kind: 'bus', state: 'driving', x: listener.x + 2.4, z: listener.z }],
+  })
+  const haltedBus = world({
+    simTick: 43,
+    vehicles: [{ id: 'bus-1', kind: 'bus', state: 'at-stop', x: listener.x + 2.4, z: listener.z }],
+  })
+  assert.ok(detectAudioCues(idleBus, drivingBus, listener).some((cue) => cue.kind === 'busHiss' && cue.id.startsWith('start:')))
+  assert.equal(
+    detectAudioCues(drivingBus, stillDriving, listener).filter((cue) => cue.kind === 'busHiss').length,
+    0,
+    'a driving bus does not emit a continuous motor cue',
+  )
+  assert.ok(detectAudioCues(stillDriving, haltedBus, listener).some((cue) => cue.kind === 'busHiss' && cue.id.startsWith('halt:')))
+  const approaching = detectAudioCues(
+    world({
+      simTick: 50,
+      vehicles: [{ id: 'bus-2', kind: 'bus', state: 'driving', x: listener.x + AUDIO.vehiclePassRadius + 4, z: listener.z }],
+    }),
+    world({
+      simTick: 51,
+      vehicles: [{ id: 'bus-2', kind: 'bus', state: 'driving', x: listener.x + AUDIO.vehiclePassRadius - 1, z: listener.z }],
+    }),
+    listener,
+  )
+  assert.ok(approaching.some((cue) => cue.id.startsWith('pass:') && cue.kind === 'busHiss'))
+  const beforeStart = planFestivalAudio(idleBus, listener, createAudioPlannerState())
+  const started = planFestivalAudio(drivingBus, listener, beforeStart.state)
+  assert.ok(started.plan.oneShots.some((cue) => cue.kind === 'busHiss'))
+  const otherIdle = planFestivalAudio(world({
+    simTick: 42,
+    vehicles: [
+      { id: 'bus-1', kind: 'bus', state: 'driving', x: listener.x + 2, z: listener.z },
+      { id: 'bus-3', kind: 'bus', state: 'idle', x: listener.x + 1, z: listener.z },
+    ],
+  }), listener, started.state)
+  const otherStart = planFestivalAudio(world({
+    simTick: 43,
+    vehicles: [
+      { id: 'bus-1', kind: 'bus', state: 'driving', x: listener.x + 2, z: listener.z },
+      { id: 'bus-3', kind: 'bus', state: 'driving', x: listener.x + 1, z: listener.z },
+    ],
+  }), listener, otherIdle.state)
+  assert.equal(
+    otherStart.plan.oneShots.filter((cue) => cue.kind === 'busHiss').length,
+    0,
+    'vehicle one-shots share a long kind cooldown',
+  )
+  assert.equal(musicBedForGenre('metal'), 'rock')
+  assert.equal(musicBedForGenre('dance'), 'electronic')
+  assert.equal(musicBedForGenre('folk'), 'acoustic')
+
   const mapped = audioWorldFromSnapshot({
     simTick: 4,
     buildings: [{ id: 's1', kind: 'stage', x: 0, z: 0 }],
     visitors: [visitor('a', 1, 1)],
     logistics: { roadVehicles: [{ id: 'b1', kind: 'bus', state: 'driving', position: { x: 2, z: 3 } }] },
-    festival: { enabled: true, finished: false, bookings: [{ day: 0, start: 0, duration: 60, stageId: 's1' }] },
+    festival: {
+      enabled: true,
+      finished: false,
+      bookings: [{ day: 0, start: 0, duration: 60, stageId: 's1', bandId: 'iron' }],
+    },
     day: 0,
     minute: 10,
   })
   assert.deepEqual(mapped.performingStageIds, ['s1'])
+  assert.deepEqual(mapped.performingStages, [{ id: 's1', bed: 'rock' }])
   assert.equal(mapped.vehicles?.[0]?.kind, 'bus')
 
-  console.log('PASS festival audio: camera listener, range skip, voice cap, clustered cheers')
+  console.log('PASS festival audio: camera listener, sparse cues, looping music')
+}
+
+export async function testFestivalAudioAssets(): Promise<void> {
+  assert.equal(AUDIO_PLACEHOLDER_ASSETS.crowdPath, 'sfx/ambient-crowd.wav')
+  assert.equal(AUDIO_PLACEHOLDER_ASSETS.concert, 'sfx/ambient-concert.wav')
+  assert.equal(AUDIO_PLACEHOLDER_ASSETS.musicAcoustic, 'sfx/music-acoustic.wav')
+  assert.equal(AUDIO_PLACEHOLDER_ASSETS.uiClick, 'sfx/oneshot-ui-click.wav')
+  assert.equal(audioAssetPublicPath('cheer'), 'sfx/oneshot-cheer.wav')
+  assert.equal(audioAssetUrl('sfx/oneshot-place.wav'), '/sfx/oneshot-place.wav')
+  assert.equal(audioAssetUrl('/sfx/oneshot-place.wav'), '/sfx/oneshot-place.wav')
+  for (const [key, rel] of Object.entries(AUDIO_PLACEHOLDER_ASSETS)) {
+    assert.match(rel, /^sfx\/[\w-]+\.wav$/, `${key} must keep the planned public WAV path`)
+    assert.equal(existsSync(resolve(REPO_ROOT, 'public', rel)), true, `missing public/${rel}`)
+  }
+
+  const missing = await fetchAudioArrayBuffer('sfx/missing.wav', async () => new Response(null, { status: 404 }))
+  assert.equal(missing, null, '404 keeps the synth fallback')
+  const thrown = await fetchAudioArrayBuffer('sfx/oneshot-ui-click.wav', async () => {
+    throw new Error('offline')
+  })
+  assert.equal(thrown, null, 'fetch errors keep the synth fallback')
+  const empty = await fetchAudioArrayBuffer('sfx/oneshot-ui-click.wav', async () => new Response(new Uint8Array(), { status: 200 }))
+  assert.equal(empty, null, 'empty bodies keep the synth fallback')
+  const ok = await fetchAudioArrayBuffer('sfx/oneshot-ui-click.wav', async () => new Response(new Uint8Array([1, 2, 3]), { status: 200 }))
+  assert.ok(ok)
+  assert.equal(ok.byteLength, 3)
+
+  console.log('PASS festival audio assets: paths, shipped WAVs, loader fallback')
 }

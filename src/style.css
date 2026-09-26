@@ -325,10 +325,22 @@ button {
 }
 
 .scenario-panel[hidden],
+.scenario-editor-panel[hidden],
 .multiplayer-panel[hidden],
 .save-as-panel[hidden],
 .demand-debug-panel[hidden] {
   display: none;
+}
+
+.scenario-editor-panel {
+  width: 320px;
+  max-height: calc(100dvh - 116px);
+  overflow-y: auto;
+}
+
+.scenario-editor-panel textarea {
+  width: 100%;
+  resize: vertical;
 }
 
 .demand-debug-panel {

@@ -4,6 +4,7 @@ import type { AttractionOperationMode } from '../game/attractions/types'
 import type { BuildingKind, Tool } from '../game/catalog'
 import type { ActionResult, PlacedBuilding } from '../game/GameState'
 import type { TerrainEditMode } from '../game/terrain'
+import type { GroundCover } from '../game/ground'
 import type { Direction, RoadCell, RoadPosition, SpeedLimit } from '../game/logistics'
 import type {
   AccessControlMode,
@@ -96,6 +97,8 @@ export type GameCommandAction =
   | { type: 'bulldozeArea'; cells: CellRef[] }
   | { type: 'editTerrain'; x: number; z: number; mode: TerrainEditMode; corner?: number; originHeight?: number }
   | { type: 'editTerrainArea'; cells: CellRef[]; mode: TerrainEditMode; originHeight?: number }
+  | { type: 'paintGroundCover'; x: number; z: number; cover: GroundCover }
+  | { type: 'paintGroundCoverArea'; cells: CellRef[]; cover: GroundCover }
   | { type: 'designateRoad'; cells: RoadPosition[] }
   | { type: 'designateParking'; cells: RoadPosition[] }
   | { type: 'designateCampingCell'; x: number; z: number; enabled: boolean }

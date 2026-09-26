@@ -3,6 +3,12 @@ import { confirmDiscardingWork, markWorkSaved } from './unsavedWork'
 import { GameState } from '../game/GameState'
 import { normalizeScenarioSettings } from '../game/scenario'
 import type { ScenarioSettings } from '../game/scenario'
+import {
+  fetchFileScenarios,
+  listedScenarioPresets,
+  mergeScenarioCatalog,
+  scenarioFileEntry,
+} from '../game/scenarioCatalog'
 import { scenarioPreset, type ScenarioPreset } from '../game/scenarioPresets'
 import { ENVIRONMENTS } from '../game/environments'
 import { goalName } from '../game/scenarioGoals'
@@ -23,6 +29,7 @@ export interface TitleScreenContext {
   setSaveSlotsPanelOpen(open: boolean): void
   fillScenarioForm(settings: ScenarioSettings): void
   readScenarioForm(): ScenarioSettings
+  setEditorPanelOpen(open: boolean): void
   closePathEditor(): void
   isPathWindowOpen(): boolean
   hideVisitorPanel(): void
@@ -86,7 +93,7 @@ function briefingMarkup(preset: ScenarioPreset): string {
 }
 
 export function mountTitleScreen(context: TitleScreenContext): TitleScreenController {
-  const { getGame, getMultiplayerMode, scenarioPanel, saveSlotsPanel, setScenarioPanelOpen, setSaveSlotsPanelOpen, fillScenarioForm, readScenarioForm, closePathEditor, isPathWindowOpen, hideVisitorPanel, bindGameState, showToast, fetchSaveSlots, findSaveSlot, isOwnSave, readSaveSlot, bindLoadedGame, joinMultiplayer, readMultiplayerName, setMultiplayerName, formatSaveTime } = context
+  const { getGame, getMultiplayerMode, scenarioPanel, saveSlotsPanel, setScenarioPanelOpen, setSaveSlotsPanelOpen, fillScenarioForm, readScenarioForm, setEditorPanelOpen, closePathEditor, isPathWindowOpen, hideVisitorPanel, bindGameState, showToast, fetchSaveSlots, findSaveSlot, isOwnSave, readSaveSlot, bindLoadedGame, joinMultiplayer, readMultiplayerName, setMultiplayerName, formatSaveTime } = context
   const requireElement = <T extends Element>(selector: string): T => {
     const element = document.querySelector<T>(selector)
     if (!element) throw new Error(`Ben?tigtes UI-Element fehlt: ${selector}`)
@@ -112,6 +119,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
       setSaveSlotsPanelOpen(false)
       syncAccountBar()
       void refreshResumeEntry()
+      void refreshScenarioCatalog()
     }
     // The start screen is the whole screen: every readout, toolbar and hint of the running
     // game is hidden behind it (see the body.title-open rules), and the keyboard shortcuts
@@ -251,7 +259,23 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     bindLoadedGame(loaded, `„${resumeSlot.name}“ fortgesetzt`)
     setTitleScreenOpen(false)
   }
-  const titleRowButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-scenario]')]
+  const titleScenarioRows = requireElement<HTMLElement>('#title-scenario-rows')
+  const titleNewMeta = requireElement<HTMLElement>('#title-new-meta')
+  const titleRowButtons = (): HTMLButtonElement[] => [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-scenario]')]
+
+  function renderScenarioCatalog(): void {
+    const presets = listedScenarioPresets()
+    const freePlay = `<button type="button" data-title-scenario="" aria-haspopup="true"><span class="title-row-text"><span class="title-row-label">Freies Spiel</span><span class="title-row-meta">Gelände, Publikum und Startkapital selbst festlegen — ohne Vorgaben und ohne Ziele.</span></span><span class="title-row-value">frei</span></button>`
+    const rows = presets.map((entry) => `<button type="button" data-title-scenario="${escapeHtml(entry.id)}"${entry.price ? ` data-title-locked="${escapeHtml(entry.price)}" aria-disabled="true"` : ''}><span class="title-row-text"><span class="title-row-label">${escapeHtml(entry.name)}</span><span class="title-row-meta">${escapeHtml(entry.detail)}</span></span><span class="title-row-value">${entry.price ? `<span class="title-row-lock" aria-hidden="true">🔒</span>${escapeHtml(entry.price)}` : `${entry.settings.worldSize} × ${entry.settings.worldSize}`}</span></button>`).join('')
+    titleScenarioRows.innerHTML = `${freePlay}${rows}`
+    titleNewMeta.textContent = `${presets.length + 1} Szenarien`
+  }
+
+  async function refreshScenarioCatalog(): Promise<void> {
+    mergeScenarioCatalog(await fetchFileScenarios())
+    renderScenarioCatalog()
+    markTitleSelection(titleSelection)
+  }
   
   /**
    * The menu is keyboard-first, the way the design draws it: one entry is always the
@@ -264,7 +288,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     if (!titleBriefingMask.hidden) return [...titleBriefingMask.querySelectorAll<HTMLButtonElement>('.title-freeplay-actions button')]
     if (!titleLoadMask.hidden) return [...titleLoadRows.querySelectorAll<HTMLButtonElement>('[data-title-load-slot]')]
     if (!titleLobbyMask.hidden) return [...titleLobbyMask.querySelectorAll<HTMLButtonElement>('#title-lobby-join, #title-lobby-refresh, [data-title-lobby]')]
-    return (titleSubmenu.hidden ? titleMenuButtons : titleRowButtons).filter((entry) => !entry.disabled)
+    return (titleSubmenu.hidden ? titleMenuButtons : titleRowButtons()).filter((entry) => !entry.disabled)
   }
   
   /**
@@ -454,7 +478,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
         showToast('Nur der Host kann ein neues Szenario starten', true)
         return
       }
-      startFestival(normalizeScenarioSettings({ ...briefingPreset.settings, preset: briefingPreset.id }), `${briefingPreset.name} gestartet`)
+      startCatalogScenario(briefingPreset)
       return
     }
     if (target.closest('[data-title-back]')) { openTitleSubmenu(false); return }
@@ -469,7 +493,18 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     const menu = target.closest<HTMLButtonElement>('[data-title-menu]')
     if (menu) {
       if (menu.dataset.titleMenu === 'resume') void resumeLastGame()
-      else if (menu.dataset.titleMenu === 'new') openTitleSubmenu(true)
+      else if (menu.dataset.titleMenu === 'new') {
+        void refreshScenarioCatalog()
+        openTitleSubmenu(true)
+      }
+      else if (menu.dataset.titleMenu === 'editor') {
+        if (getMultiplayerMode() === 'client') {
+          showToast('Nur der Host kann den Szenario-Editor starten', true)
+          return
+        }
+        startGame(GameState.startAuthoring(), 'Szenario-Editor gestartet')
+        setEditorPanelOpen(true)
+      }
       else if (menu.dataset.titleMenu === 'load') void openTitleLoad()
       else if (menu.dataset.titleMenu === 'multiplayer') openTitleLobbies(true)
       else openAboveTitle(scenarioPanel, () => setScenarioPanelOpen(true))
@@ -515,15 +550,31 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') { event.preventDefault(); markTitleSelection(titleSelection - 1) }
     else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); titleEntries()[titleSelection]?.click() }
   })
-  function startFestival(settings: ScenarioSettings, message: string): void {
+  function startGame(game: GameState, message: string): void {
     if (isPathWindowOpen()) closePathEditor()
     hideVisitorPanel()
-    bindGameState(GameState.startNew(settings))
+    bindGameState(game)
     markWorkSaved()
     setScenarioPanelOpen(false)
     setSaveSlotsPanelOpen(false)
     setTitleScreenOpen(false)
     showToast(message)
+  }
+  function startFestival(settings: ScenarioSettings, message: string): void {
+    startGame(GameState.startNew(settings), message)
+  }
+  function startCatalogScenario(preset: ScenarioPreset): void {
+    const file = scenarioFileEntry(preset.id)
+    if (file) {
+      startGame(GameState.startFromScenarioFile(file), `${preset.name} gestartet`)
+      return
+    }
+    startFestival(normalizeScenarioSettings({
+      ...preset.settings,
+      preset: preset.id,
+      title: preset.name,
+      detail: preset.detail,
+    }), `${preset.name} gestartet`)
   }
   function leaveToTitle(): void {
     if (!confirmDiscardingWork('Zum Titelbildschirm zurückkehren?')) return

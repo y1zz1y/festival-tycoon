@@ -1,14 +1,19 @@
+import { bandGenre } from './musicTaste'
+import { hashStringSeed } from './rng'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import { getTerrainHeight, isWaterHeight, type TerrainSnapshot } from './terrain'
 
 export type AudioZone =
   | 'concert'
+  | 'music'
   | 'coaster'
   | 'crowdPath'
   | 'camp'
   | 'water'
   | 'backstage'
   | 'woods'
+
+export type MusicBed = 'acoustic' | 'rock' | 'electronic' | 'pop'
 
 export type AudioOneShotKind =
   | 'placeBuilding'
@@ -43,6 +48,7 @@ export type AudioEmitter = {
   z: number
   priority: AudioPriority
   intensity: number
+  bed?: MusicBed
 }
 
 export type AudioCue = {
@@ -105,6 +111,7 @@ export type AudioWorld = {
   coasters?: readonly AudioWorldCoaster[]
   vehicles?: readonly AudioWorldVehicle[]
   performingStageIds?: readonly string[]
+  performingStages?: readonly { id: string; bed: MusicBed }[]
   terrain?: TerrainSnapshot
   waterLevel?: number
   worldSize?: number
@@ -114,9 +121,10 @@ export type AudioPlannerState = {
   lastTick: number
   lastWorld: AudioWorld | null
   lastCueTick: Record<string, number>
+  activeMusicIds: string[]
 }
 
-/** Placeholder paths so real WAVs can drop in without renaming events. */
+/** Public WAV paths under `public/`. Mixer fetches and decodes them; synth is fallback. */
 export const AUDIO_PLACEHOLDER_ASSETS = {
   concert: 'sfx/ambient-concert.wav',
   coaster: 'sfx/ambient-coaster.wav',
@@ -135,7 +143,18 @@ export const AUDIO_PLACEHOLDER_ASSETS = {
   wasteTruck: 'sfx/oneshot-waste-truck.wav',
   incident: 'sfx/oneshot-incident.wav',
   uiClick: 'sfx/oneshot-ui-click.wav',
+  musicAcoustic: 'sfx/music-acoustic.wav',
+  musicRock: 'sfx/music-rock.wav',
+  musicElectronic: 'sfx/music-electronic.wav',
+  musicPop: 'sfx/music-pop.wav',
 } as const
+
+export const MUSIC_BUFFER_KEYS: Record<MusicBed, keyof typeof AUDIO_PLACEHOLDER_ASSETS> = {
+  acoustic: 'musicAcoustic',
+  rock: 'musicRock',
+  electronic: 'musicElectronic',
+  pop: 'musicPop',
+}
 
 const AUDIO = SIMULATION_CONFIG.audio
 
@@ -169,9 +188,37 @@ const CROWD_STATES = new Set([
   'exiting',
   'queuing',
 ])
+const VEHICLE_STOPPED = new Set(['idle', 'at-stop', 'parked'])
+const VEHICLE_MOVING = new Set(['driving', 'responding', 'returning', 'parking'])
 
 export function createAudioPlannerState(): AudioPlannerState {
-  return { lastTick: -1, lastWorld: null, lastCueTick: {} }
+  return { lastTick: -1, lastWorld: null, lastCueTick: {}, activeMusicIds: [] }
+}
+
+export function musicBedForGenre(genre: string): MusicBed {
+  if (genre === 'rock' || genre === 'metal') return 'rock'
+  if (genre === 'electro' || genre === 'dance') return 'electronic'
+  if (genre === 'pop') return 'pop'
+  return 'acoustic'
+}
+
+export function musicEmitterId(stageId: string): string {
+  return `music:${stageId}`
+}
+
+export function isCheerCandidate(visitor: AudioWorldVisitor): boolean {
+  return Boolean(visitor.concertId) && (visitor.emotion === 'excited' || CHEER_STATES.has(visitor.state))
+}
+
+export function audioCueRoll(
+  kind: AudioOneShotKind,
+  key: string,
+  tick: number,
+  chance: number = AUDIO.cueChance[kind] ?? 1,
+): boolean {
+  if (chance >= 1) return true
+  const window = Math.max(1, cooldownTicks(kind))
+  return (hashStringSeed(`${kind}:${key}:${Math.floor(tick / window)}`) % 10000) / 10000 < chance
 }
 
 export function audioDistance2d(
@@ -279,10 +326,6 @@ export function audioZoneForBuilding(kind: string): AudioZone | null {
   return null
 }
 
-function performingStageSet(world: AudioWorld): Set<string> {
-  return new Set(world.performingStageIds ?? [])
-}
-
 function nearbyWaterClusters(world: AudioWorld, listener: Pick<AudioListenerPose, 'x' | 'z'>) {
   const terrain = world.terrain
   if (!terrain) return []
@@ -308,11 +351,49 @@ function nearbyWaterClusters(world: AudioWorld, listener: Pick<AudioListenerPose
   return clusterPoints(cells)
 }
 
+function livePerformingStages(world: AudioWorld): { id: string; bed: MusicBed }[] {
+  if (world.performingStages?.length) {
+    const unique = new Map<string, MusicBed>()
+    for (const stage of world.performingStages) unique.set(stage.id, stage.bed)
+    return [...unique.entries()].map(([id, bed]) => ({ id, bed }))
+  }
+  return (world.performingStageIds ?? []).map((id) => ({ id, bed: 'acoustic' as const }))
+}
+
+export function collectMusicEmitters(
+  world: AudioWorld,
+  listener: Pick<AudioListenerPose, 'x' | 'z'>,
+  activeMusicIds: readonly string[] = [],
+): AudioEmitter[] {
+  const buildings = new Map(world.buildings.map((building) => [building.id, building]))
+  const prev = new Set(activeMusicIds)
+  const emitters: AudioEmitter[] = []
+  for (const stage of livePerformingStages(world)) {
+    const building = buildings.get(stage.id)
+    if (!building) continue
+    const x = building.x + 0.5
+    const z = building.z + 0.5
+    const id = musicEmitterId(stage.id)
+    const limit = AUDIO.maxDistance * (prev.has(id) ? AUDIO.musicHysteresis : 1)
+    if (audioDistance2d(x, z, listener.x, listener.z) > limit) continue
+    emitters.push({
+      id,
+      zone: 'music',
+      x,
+      z,
+      priority: 'local',
+      intensity: 0.88,
+      bed: stage.bed,
+    })
+  }
+  return emitters
+}
+
 export function collectAmbientEmitters(
   world: AudioWorld,
   listener: Pick<AudioListenerPose, 'x' | 'z'>,
+  activeMusicIds: readonly string[] = [],
 ): AudioEmitter[] {
-  const live = performingStageSet(world)
   const emitters: AudioEmitter[] = []
   const zonePoints = new Map<AudioZone, { id: string; x: number; z: number; intensity: number }[]>()
 
@@ -330,17 +411,9 @@ export function collectAmbientEmitters(
 
   for (const building of world.buildings) {
     const zone = audioZoneForBuilding(building.kind)
-    if (!zone) continue
+    if (!zone || zone === 'concert') continue
     if (!inAudioRange(building.x, building.z, listener, AUDIO.maxDistance * 1.25)) continue
-    const intensity =
-      zone === 'concert'
-        ? building.kind === 'stage' && live.has(building.id)
-          ? 1
-          : live.size > 0
-            ? 0.55
-            : 0.28
-        : 0.45
-    push(zone, building.id, building.x + 0.5, building.z + 0.5, intensity)
+    push(zone, building.id, building.x + 0.5, building.z + 0.5, 0.45)
   }
 
   for (const coaster of world.coasters ?? []) {
@@ -412,6 +485,7 @@ export function collectAmbientEmitters(
     }
   }
   emitters.push(...emittersFromZones)
+  emitters.push(...collectMusicEmitters(world, listener, activeMusicIds))
   return emitters
 }
 
@@ -435,7 +509,95 @@ function markCue(state: AudioPlannerState, key: string, tick: number): void {
   state.lastCueTick[key] = tick
 }
 
-export function detectAudioCues(prev: AudioWorld | null, next: AudioWorld): AudioCue[] {
+export function audioCueKey(cue: AudioCue): string {
+  if (cue.kind === 'cheer' || cue.kind === 'scream') return `${cue.kind}:${clusterKey(cue.x, cue.z)}`
+  if (cue.kind === 'placeBuilding' || cue.kind === 'demolish') return cue.id
+  return cue.kind
+}
+
+function vehicleOneShotKind(kind: string): AudioOneShotKind | null {
+  if (kind === 'bus' || kind === 'tourBus') return 'busHiss'
+  if (kind === 'garbageTruck') return 'wasteTruck'
+  if (kind === 'ambulance') return 'medical'
+  return null
+}
+
+function pushVehicleCues(
+  prev: AudioWorld | null,
+  next: AudioWorld,
+  listener: Pick<AudioListenerPose, 'x' | 'z'> | undefined,
+  cues: AudioCue[],
+): void {
+  const tick = next.simTick
+  const prevVehicles = new Map((prev?.vehicles ?? []).map((vehicle) => [vehicle.id, vehicle]))
+  for (const vehicle of next.vehicles ?? []) {
+    const before = prevVehicles.get(vehicle.id)
+    const kind = vehicleOneShotKind(vehicle.kind)
+    if (!kind || !before) continue
+    const wasStopped = VEHICLE_STOPPED.has(before.state)
+    const isMoving = VEHICLE_MOVING.has(vehicle.state)
+    const wasMoving = VEHICLE_MOVING.has(before.state)
+    const isStopped = VEHICLE_STOPPED.has(vehicle.state)
+    if (kind === 'medical') {
+      if (wasStopped && vehicle.state === 'responding') {
+        cues.push({
+          id: `ambulance:${vehicle.id}:${tick}`,
+          kind,
+          x: vehicle.x,
+          z: vehicle.z,
+          priority: 'important',
+          intensity: 0.95,
+          tick,
+        })
+      }
+      continue
+    }
+    if (wasStopped && isMoving) {
+      cues.push({
+        id: `start:${vehicle.id}:${tick}`,
+        kind,
+        x: vehicle.x,
+        z: vehicle.z,
+        priority: 'local',
+        intensity: 0.7,
+        tick,
+      })
+      continue
+    }
+    if (wasMoving && isStopped) {
+      cues.push({
+        id: `halt:${vehicle.id}:${tick}`,
+        kind,
+        x: vehicle.x,
+        z: vehicle.z,
+        priority: 'local',
+        intensity: 0.42,
+        tick,
+      })
+      continue
+    }
+    if (!listener || !isMoving) continue
+    const prevDist = audioDistance2d(before.x, before.z, listener.x, listener.z)
+    const nextDist = audioDistance2d(vehicle.x, vehicle.z, listener.x, listener.z)
+    if (nextDist <= AUDIO.vehiclePassRadius && prevDist > AUDIO.vehiclePassRadius) {
+      cues.push({
+        id: `pass:${vehicle.id}:${tick}`,
+        kind,
+        x: vehicle.x,
+        z: vehicle.z,
+        priority: 'local',
+        intensity: 0.38,
+        tick,
+      })
+    }
+  }
+}
+
+export function detectAudioCues(
+  prev: AudioWorld | null,
+  next: AudioWorld,
+  listener?: Pick<AudioListenerPose, 'x' | 'z'>,
+): AudioCue[] {
   const cues: AudioCue[] = []
   const tick = next.simTick
   const prevBuildings = new Map((prev?.buildings ?? []).map((building) => [building.id, building]))
@@ -531,55 +693,9 @@ export function detectAudioCues(prev: AudioWorld | null, next: AudioWorld): Audi
     }
   }
 
-  const prevVehicles = new Map((prev?.vehicles ?? []).map((vehicle) => [vehicle.id, vehicle]))
-  for (const vehicle of next.vehicles ?? []) {
-    const before = prevVehicles.get(vehicle.id)
-    const started =
-      before &&
-      (before.state === 'idle' || before.state === 'at-stop' || before.state === 'parked') &&
-      (vehicle.state === 'driving' || vehicle.state === 'responding')
-    if (!started) continue
-    if (vehicle.kind === 'bus' || vehicle.kind === 'tourBus') {
-      cues.push({
-        id: `bus:${vehicle.id}:${tick}`,
-        kind: 'busHiss',
-        x: vehicle.x,
-        z: vehicle.z,
-        priority: 'local',
-        intensity: 0.7,
-        tick,
-      })
-    }
-    if (vehicle.kind === 'garbageTruck') {
-      cues.push({
-        id: `waste:${vehicle.id}:${tick}`,
-        kind: 'wasteTruck',
-        x: vehicle.x,
-        z: vehicle.z,
-        priority: 'local',
-        intensity: 0.7,
-        tick,
-      })
-    }
-    if (vehicle.kind === 'ambulance' && vehicle.state === 'responding') {
-      cues.push({
-        id: `ambulance:${vehicle.id}:${tick}`,
-        kind: 'medical',
-        x: vehicle.x,
-        z: vehicle.z,
-        priority: 'important',
-        intensity: 0.95,
-        tick,
-      })
-    }
-  }
+  pushVehicleCues(prev, next, listener, cues)
 
-  const cheering = next.visitors.filter(
-    (visitor) =>
-      visitor.emotion === 'excited' ||
-      CHEER_STATES.has(visitor.state) ||
-      Boolean(visitor.concertId),
-  )
+  const cheering = next.visitors.filter(isCheerCandidate)
   for (const cluster of clusterPoints(cheering)) {
     if (cluster.count < AUDIO.cheerMinCluster) continue
     cues.push({
@@ -605,47 +721,62 @@ export function planFestivalAudio(
     lastTick: world.simTick,
     lastWorld: world,
     lastCueTick: { ...state.lastCueTick },
+    activeMusicIds: [],
   }
-  const ambients = selectByVoiceBudget(
-    collectAmbientEmitters(world, listener),
+  const collected = collectAmbientEmitters(world, listener, state.activeMusicIds)
+  const music = collected.filter((emitter) => emitter.zone === 'music')
+  const other = collected.filter((emitter) => emitter.zone !== 'music')
+  const musicPick = selectByVoiceBudget(
+    music,
     listener,
-    AUDIO.maxAmbientVoices,
+    Math.min(AUDIO.musicVoiceReserve, AUDIO.maxAmbientVoices),
+    AUDIO.maxDistance * AUDIO.musicHysteresis,
   )
+  const ambients = [
+    ...musicPick,
+    ...selectByVoiceBudget(other, listener, AUDIO.maxAmbientVoices - musicPick.length),
+  ]
+  nextState.activeMusicIds = musicPick.map((emitter) => emitter.id)
   const rawCues =
     state.lastWorld && state.lastTick === world.simTick
       ? []
-      : detectAudioCues(state.lastWorld, world)
+      : detectAudioCues(state.lastWorld, world, listener)
   const accepted: AudioCue[] = []
   for (const cue of rawCues) {
-    const key = cue.kind === 'cheer' || cue.kind === 'scream'
-      ? `${cue.kind}:${clusterKey(cue.x, cue.z)}`
-      : cue.kind === 'placeBuilding' || cue.kind === 'demolish'
-        ? cue.id
-        : cue.kind
+    const key = audioCueKey(cue)
     if (!readyForCue(nextState, key, world.simTick, cue.kind)) continue
-    accepted.push(cue)
     markCue(nextState, key, world.simTick)
+    const chance = cue.id.startsWith('pass:') ? AUDIO.passByChance : AUDIO.cueChance[cue.kind] ?? 1
+    if (!audioCueRoll(cue.kind, key, world.simTick, chance)) continue
+    accepted.push(cue)
   }
   const oneShots = selectByVoiceBudget(accepted, listener, AUDIO.maxOneShotVoices)
   return { plan: { ambients, oneShots }, state: nextState }
 }
 
-export function performingStageIdsFromFestival(source: {
+export function performingStagesFromFestival(source: {
   day?: number
   minute?: number
   festival?: {
     enabled?: boolean
     finished?: boolean
-    bookings?: readonly { day: number; start: number; duration: number; stageId: string }[]
+    bookings?: readonly { day: number; start: number; duration: number; stageId: string; bandId?: string }[]
   }
-}): string[] {
+}): { id: string; bed: MusicBed }[] {
   const festival = source.festival
   if (!festival?.enabled || festival.finished) return []
   const day = source.day ?? 0
   const minute = source.minute ?? 0
-  return (festival.bookings ?? [])
-    .filter((booking) => booking.day === day && minute >= booking.start && minute < booking.start + booking.duration)
-    .map((booking) => booking.stageId)
+  const unique = new Map<string, MusicBed>()
+  for (const booking of festival.bookings ?? []) {
+    if (booking.day !== day || minute < booking.start || minute >= booking.start + booking.duration) continue
+    unique.set(booking.stageId, musicBedForGenre(booking.bandId ? bandGenre(booking.bandId) : 'indie'))
+  }
+  return [...unique.entries()].map(([id, bed]) => ({ id, bed }))
+}
+
+export function performingStageIdsFromFestival(source: Parameters<typeof performingStagesFromFestival>[0]): string[] {
+  return performingStagesFromFestival(source).map((stage) => stage.id)
 }
 
 export function audioWorldFromSnapshot(snapshot: {
@@ -663,7 +794,7 @@ export function audioWorldFromSnapshot(snapshot: {
   festival?: {
     enabled?: boolean
     finished?: boolean
-    bookings?: readonly { day: number; start: number; duration: number; stageId: string }[]
+    bookings?: readonly { day: number; start: number; duration: number; stageId: string; bandId?: string }[]
   }
   terrain?: TerrainSnapshot
   scenario?: { worldSize?: number }
@@ -684,6 +815,7 @@ export function audioWorldFromSnapshot(snapshot: {
       z: vehicle.position.z,
     })),
     performingStageIds: performingStageIdsFromFestival(snapshot),
+    performingStages: performingStagesFromFestival(snapshot),
     terrain: snapshot.terrain,
     waterLevel: snapshot.waterLevel,
     worldSize: snapshot.scenario?.worldSize,

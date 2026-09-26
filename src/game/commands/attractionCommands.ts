@@ -3,6 +3,7 @@ import { createAttraction } from '../attractions/factory'
 import { refreshAttractionProjections } from '../attractions/projections'
 import type { AttractionConstructionRequest } from '../attractions/construction'
 import type { AttractionOperationMode } from '../attractions/types'
+import { canAfford } from '../finance'
 import type { ActionResult, GameSnapshot } from '../types/snapshot'
 
 export type AttractionCommandContext = {
@@ -44,8 +45,8 @@ export function constructAttractionCommand(
   if (index < 0) return { ok: false, message: 'Attraktion nicht gefunden.' }
   const result = resolveAttractionConstruction(context.state.attractions[index], request)
   if (!result.ok) return { ok: false, message: result.message }
-  if (result.cost > context.state.money) return { ok: false, message: 'Nicht genug Geld.' }
-  context.state.money -= result.cost
+  if (!canAfford(context.state, result.cost)) return { ok: false, message: 'Nicht genug Geld.' }
+  if (!context.state.scenario.authoring) context.state.money -= result.cost
   context.state.attractions[index] = result.attraction
   refreshAttractionProjections(context.state)
   if (request.kind === 'setEntrance' || request.kind === 'setExit') context.recalculateQueues()

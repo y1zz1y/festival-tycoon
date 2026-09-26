@@ -12,16 +12,18 @@ import { createInfrastructure, updateSupplyChain, localStock, normalizeInfrastru
 import { CARDINAL_OFFSETS, isShopServiceKind } from './shopAccess';
 import { isPricedShopKind, isQueuedFacilityKind, normalizeShirtColor, normalizeShirtStyle, shopSupplyKind, stockoutThought, type ShirtStyle } from './shopGoods';
 import { QUEUE_CARDINALS, isStallQueueKind, queueStandOffset as computeQueueStandOffset, queueTravelLane, stallQueueLaneFromLocal, stallQueueTileOffset } from './queueLanes';
-import { groundInfo, groundKey, roadGroundLimit } from './ground';
+import { groundInfo, groundKey, paintGroundCover, paintGroundCoverArea, roadGroundLimit } from './ground';
+import type { GroundCover } from './ground';
 import { BUILDINGS, SAVE_KEY, SAVE_SLOTS_KEY, saveSlotDataKey } from './catalog';
 import { serializeSnapshot, storageErrorMessage } from './saveText';
-import { bookFinance, financeEdition, financeForecast, financePeriodTotal, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance';
+import { bookFinance, canAfford, financeEdition, financeForecast, financePeriodTotal, loanInterest, loanLimit, rollFinanceDay, LOAN, CARRIER_WAGE_PER_MINUTE, type FinanceCategory, type FinanceEntries, type FinanceState } from './finance';
 import { financeCostBreakdown, type FinanceBreakdown } from './financeBreakdown';
 import { snapshotHourlyBuildingUpkeep } from './upkeep';
 import { isEditionOverdue, recordEditionResult, updateInsolvency, updateScenarioProgress } from './scenarioGoals';
 import { createFestivalManagement, editionSatisfaction, festivalAction, festivalReputation, updateFestival, activeBookings, cleanerCarryFactor, staffSpeedFactor, showIssue } from './festivalManagement';
 import type { Booking, FestivalAction } from './festivalManagement';
 import { createScenarioEntrance, createScenarioRoadEntry, normalizeScenarioSettings } from './scenario';
+import { createAuthoringSettings, createSnapshotFromScenarioFile, type ScenarioFile } from './scenarioFile';
 import type { ScenarioSettings } from './scenario';
 import type { BuildingKind, Tool } from './catalog';
 import { TRACK_PIECES, computeTrackFrame, isCoasterCircuitClosed, snapTrackPieceToAnchor, trackAnchorsAlign } from './coasters';
@@ -656,6 +658,19 @@ export class GameState {
     return new GameState(createInitialSnapshot(settings))
   }
 
+  /** Sandbox for the scenario editor: construction costs are not charged. */
+  static startAuthoring(settings?: Partial<ScenarioSettings>): GameState {
+    return new GameState(createInitialSnapshot(createAuthoringSettings(settings)))
+  }
+
+  static startFromScenarioFile(file: ScenarioFile): GameState {
+    return new GameState(createSnapshotFromScenarioFile(file))
+  }
+
+  private lacksFunds(cost: number): boolean {
+    return !canAfford(this.state, cost)
+  }
+
   get snapshot(): Readonly<GameSnapshot> {
     return this.state
   }
@@ -945,7 +960,7 @@ export class GameState {
       const base = type.mode === 'foot' ? BUILDINGS.path.cost : SIMULATION_CONFIG.logistics.roadBuildCost
       const extra = existing ? type.cost : type.cost - base
       const clear = existing ? 0 : this.getTreeClearCost(c.x, c.z, this.getTerrainHeight(c.x, c.z), 1)
-      if (this.state.money < type.cost + clear) { reason = 'Budget erschöpft'; continue }
+      if (this.lacksFunds(type.cost + clear)) { reason = 'Budget erschöpft'; continue }
       if (!existing) {
         const result = type.mode === 'foot' ? this.placePathSegment(c.x, c.z, this.getTerrainHeight(c.x, c.z)) : this.designateRoad([c])
         if (!result.ok) { reason = result.message; continue }
@@ -1122,7 +1137,7 @@ export class GameState {
     if (!planned.ok) return planned
     const changedCells = planned.changes.length
     const cost = Math.max(1, changedCells) * SIMULATION_CONFIG.terrain.editCost
-    if (this.state.money < cost) {
+    if (this.lacksFunds(cost)) {
       return {
         ok: false,
         message: `Nicht genug Geld (${cost} € für ${Math.max(1, changedCells)} Felder)`,
@@ -1130,7 +1145,12 @@ export class GameState {
     }
     bookFinance(this.state, 'landscaping', -cost)
     applyTerrainChanges(this.state.terrain, planned.changes, planned.cornerChanges)
-    for (const c of planned.changes) delete this.state.festival.infrastructure.ground[groundKey(c.x, c.z)]
+    for (const c of planned.changes) {
+      const key = groundKey(c.x, c.z)
+      const cover = this.state.festival.infrastructure.ground[key]?.cover
+      delete this.state.festival.infrastructure.ground[key]
+      if (cover) this.state.festival.infrastructure.ground[key] = { cover }
+    }
     this.terrainHeights = null
     this.worldRevision += 1
     this.editRevision += 1
@@ -1165,6 +1185,26 @@ export class GameState {
         fields === 1 ? '' : 'er'
       }, ${cost} €)`,
     }
+  }
+
+  paintGroundCover(x: number, z: number, cover: GroundCover): ActionResult {
+    const result = paintGroundCover(this.state, x, z, cover)
+    if (result.ok) {
+      this.worldRevision += 1
+      this.editRevision += 1
+      this.emit()
+    }
+    return result
+  }
+
+  paintGroundCoverArea(cells: ReadonlyArray<{ x: number; z: number }>, cover: GroundCover): ActionResult {
+    const result = paintGroundCoverArea(this.state, cells, cover)
+    if (result.ok) {
+      this.worldRevision += 1
+      this.editRevision += 1
+      this.emit()
+    }
+    return result
   }
 
   adjustBuildElevation(delta: number): void {
@@ -1481,7 +1521,7 @@ export class GameState {
 
   hireStaff(role: StaffRole): ActionResult {
     const definition = STAFF_DEFINITIONS[role]
-    if (this.state.money < definition.hireCost) {
+    if (this.lacksFunds(definition.hireCost)) {
       return { ok: false, message: 'Nicht genug Geld für diese Einstellung' }
     }
     bookFinance(this.state, 'staff', -definition.hireCost)
@@ -1930,7 +1970,7 @@ export class GameState {
       message:
         result.placed > 0
           ? `${result.placed} Felder als Müllablage ausgewiesen`
-          : this.state.money < SIMULATION_CONFIG.waste.dumpDesignationCost
+          : this.lacksFunds(SIMULATION_CONFIG.waste.dumpDesignationCost)
             ? 'Nicht genug Geld für eine Müllablage'
             : 'Keine freien Felder für eine Müllablage',
     }
@@ -2033,7 +2073,7 @@ export class GameState {
             ? `${result.changed} Backstage-Felder ausgewiesen`
             : `${result.changed} Backstage-Felder entfernt`
           : enabled
-            ? this.state.money < SIMULATION_CONFIG.bandSupply.backstageDesignationCost
+            ? this.lacksFunds(SIMULATION_CONFIG.bandSupply.backstageDesignationCost)
               ? 'Nicht genug Geld für Backstage'
               : 'Keine neuen Backstage-Felder'
             : 'Keine Backstage-Felder zum Entfernen',
@@ -2077,7 +2117,7 @@ export class GameState {
       return { ok: false, message: 'Hier steht bereits eine Ampel in dieser Richtung', placedId: existing.id }
     }
     const cost = SIMULATION_CONFIG.logistics.trafficLightCost
-    if (this.state.money < cost) {
+    if (this.lacksFunds(cost)) {
       return { ok: false, message: `Die Ampel kostet ${cost} €` }
     }
     bookFinance(this.state, 'construction', -cost)
@@ -2104,7 +2144,7 @@ export class GameState {
       return { ok: false, message: 'Hier steht bereits eine Schranke in dieser Richtung', placedId: existing.id }
     }
     const cost = SIMULATION_CONFIG.logistics.pathBarrierCost
-    if (this.state.money < cost) {
+    if (this.lacksFunds(cost)) {
       return { ok: false, message: `Die Schranke kostet ${cost} €` }
     }
     bookFinance(this.state, 'construction', -cost)
@@ -2443,7 +2483,7 @@ export class GameState {
     }
     if (enabled) {
       const clearCost = this.getTreeClearCost(x, z, 0, 1)
-      if (this.state.money < clearCost) {
+      if (this.lacksFunds(clearCost)) {
         return { ok: false, message: 'Nicht genug Geld, um den Baum zu entfernen' }
       }
       this.clearTreesAt(x, z, 0, 1)
@@ -2465,7 +2505,7 @@ export class GameState {
       (total, cell) => total + this.getTreeClearCost(cell.x, cell.z, 0, 1),
       0,
     )
-    if (this.state.money < clearCost) {
+    if (this.lacksFunds(clearCost)) {
       return { ok: false, message: 'Nicht genug Geld, um Bäume zu entfernen' }
     }
     landCells.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
@@ -2637,7 +2677,7 @@ export class GameState {
       return { ok: false, message: 'Dieses Feld ist belegt.' }
     }
     const cost = courseStartCost(kind)
-    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld für den Kurs.' }
+    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für den Kurs.' }
     const id = `course-${this.state.simTick}-${this.state.courses.length + 1}`
     const course = createEmptyCourse(id, kind)
     const first = courseUsesArea(kind)
@@ -2673,7 +2713,7 @@ export class GameState {
     }
     const areaKind = kind === 'pool' ? 'poolBasin' : 'paintballField'
     const cost = courseStartCost(kind) + Math.max(0, unique.length - 1) * COURSE_PIECE_COST[areaKind]
-    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld für diese Anlagenfläche.' }
+    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für diese Anlagenfläche.' }
     this.state.courses ??= []
     const id = `course-${this.state.simTick}-${this.state.courses.length + 1}`
     const course = createEmptyCourse(id, kind)
@@ -2695,7 +2735,7 @@ export class GameState {
       return { ok: false, message: 'Dieses Feld ist belegt.' }
     }
     const cost = COURSE_PIECE_COST[course.kind === 'pool' ? 'poolBasin' : 'paintballField']
-    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld für die Fläche.' }
+    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für die Fläche.' }
     const added = appendCourseAreaCell(course, x, z)
     if (typeof added === 'string') return { ok: false, message: added }
     bookFinance(this.state, 'construction', -cost)
@@ -2722,7 +2762,7 @@ export class GameState {
     }
     const areaKind = course.kind === 'pool' ? 'poolBasin' : 'paintballField'
     const cost = additions.length * COURSE_PIECE_COST[areaKind]
-    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld für diese Anlagenfläche.' }
+    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für diese Anlagenfläche.' }
     const added = appendCourseAreaCells(course, additions)
     if (typeof added === 'string') return { ok: false, message: added }
     bookFinance(this.state, 'construction', -cost)
@@ -2772,7 +2812,7 @@ export class GameState {
       ? Math.max(1, Math.ceil(Math.hypot(x - start.x, z - start.z, (elevation ?? COURSE_PIECE_ELEVATION[kind]) - start.elevation)))
       : 1
     const cost = COURSE_PIECE_COST[kind] * length
-    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld für dieses Streckenelement.' }
+    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für dieses Streckenelement.' }
     const added = appendCoursePiece(
       course,
       kind,
@@ -2928,7 +2968,7 @@ export class GameState {
     if (this.getTerrainHeight(x,z)>building.elevation || this.isWaterTerrain(x,z) || this.getCampingCellAt(x,z) || this.getRoadCellAt(x,z) || this.getMedicalCellAt(x,z) || this.getWasteDumpAt(x,z) || this.getStageForecourtCellAt(x,z) || this.state.festival.infrastructure.depots.some(d=>d.x===x&&d.z===z)) return { ok: false, message: 'Dieses Feld ist für einen Zugang ungeeignet' }
     const cost = own ? 0 : SIMULATION_CONFIG.economy.coasterAccessCost
     if (this.state.logistics.parkingCells.some(c=>c.x===x && c.z===z)) return {ok:false,message:'Hier liegt bereits eine Parkfläche'}
-    return this.state.money < cost ? {ok:false,message:'Nicht genug Geld'} : {ok:true,message:`${type==='entrance'?'Eingang':'Ausgang'} bauen · ${cost} €`}
+    return this.lacksFunds(cost) ? {ok:false,message:'Nicht genug Geld'} : {ok:true,message:`${type==='entrance'?'Eingang':'Ausgang'} bauen · ${cost} €`}
   }
 
   setRideAccess(buildingId: string, type: 'entrance' | 'exit', x: number, z: number): ActionResult {
@@ -2968,7 +3008,7 @@ export class GameState {
     const accessCost = coaster[accessType]
       ? 0
       : SIMULATION_CONFIG.economy.coasterAccessCost
-    if (this.state.money < accessCost) return { ok: false, message: 'Nicht genug Geld' }
+    if (this.lacksFunds(accessCost)) return { ok: false, message: 'Nicht genug Geld' }
     coaster[accessType] = { x, y: station.start.elevation, z }
     bookFinance(this.state, 'construction', -accessCost)
     this.recalculateQueueDirections()
@@ -3369,7 +3409,7 @@ export class GameState {
     const elevation = this.getPlaceElevation(x, z)
     const top = height / 4 + .4
     if (this.coasterOccupiesVolume(x, z, elevation, top) || this.state.buildings.some(b => b.x === x && b.z === z && this.volumesOverlap(b, elevation, top))) return { ok: false, message: 'Über der Turmfläche muss Platz frei bleiben' }
-    if (this.state.money < BUILDINGS.ride.cost + height * 25) return { ok: false, message: 'Nicht genug Geld für diese Turmhöhe' }
+    if (this.lacksFunds(BUILDINGS.ride.cost + height * 25)) return { ok: false, message: 'Nicht genug Geld für diese Turmhöhe' }
     return this.canPlace('ride', x, z)
   }
 
@@ -3380,7 +3420,7 @@ export class GameState {
     const top = height / 4 + .4
     if (this.coasterOccupiesVolume(tower.x, tower.z, tower.elevation, top) || this.state.buildings.some(b => b.id !== id && b.x === tower.x && b.z === tower.z && this.volumesOverlap(b, tower.elevation, top))) return { ok: false, message: 'Über der Turmfläche muss Platz frei bleiben' }
     const cost = Math.max(0, height - (tower.bungeeHeight ?? 20)) * 25
-    if (this.state.money < cost) return { ok: false, message: 'Nicht genug Geld' }
+    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld' }
     bookFinance(this.state, 'construction', -cost); tower.bungeeHeight = height; this.emit()
     return { ok: true, message: `Turmhöhe auf ${height} m geändert` }
   }
@@ -3495,7 +3535,7 @@ export class GameState {
       }
       const clearCost = this.getTreeClearCost(cell.x, cell.z, 0, 1)
       const roadCost = SIMULATION_CONFIG.logistics.roadBuildCost + clearCost
-      if (this.state.money < roadCost) break
+      if (this.lacksFunds(roadCost)) break
       this.clearTreesAt(cell.x, cell.z, 0, 1)
       bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.roadBuildCost)
       this.state.logistics.roadCells.push({
@@ -3560,10 +3600,7 @@ export class GameState {
         continue
       }
       const clearCost = this.getTreeClearCost(cell.x, cell.z, 0, 1)
-      if (
-        this.state.money <
-        SIMULATION_CONFIG.logistics.parkingDesignationCost + clearCost
-      ) {
+      if (this.lacksFunds(SIMULATION_CONFIG.logistics.parkingDesignationCost + clearCost)) {
         break
       }
       this.clearTreesAt(cell.x, cell.z, 0, 1)
@@ -3743,7 +3780,7 @@ export class GameState {
     }
     if (existing) return { ok: true, message: 'Hier liegt bereits ein Kabel' }
     const cost = SIMULATION_CONFIG.power.cableCost
-    if (this.state.money < cost) {
+    if (this.lacksFunds(cost)) {
       return { ok: false, message: `Nicht genug Geld (${cost} €)` }
     }
     bookFinance(this.state, 'construction', -cost)
@@ -3769,7 +3806,7 @@ export class GameState {
     if (result.placed === 0) {
       return { ok: false, message: 'In dieser Fläche gibt es keine freien Kabelfelder' }
     }
-    if (this.state.money < cost) {
+    if (this.lacksFunds(cost)) {
       return {
         ok: false,
         message: `Nicht genug Geld (${cost} € für ${result.placed} Felder)`,
@@ -4016,7 +4053,7 @@ export class GameState {
     const path = this.getPathAt(x, z, elevation)
     if (!path) return { ok: false, message: 'Personaltor auf einem Fußweg platzieren' }
     if (path.staffOnly) return { ok: true, message: 'Personaltor entfernen' }
-    return this.state.money < 80
+    return this.lacksFunds(80)
       ? { ok: false, message: 'Personaltor kostet 80 €' }
       : { ok: true, message: 'Personaltor setzen' }
   }
@@ -4029,7 +4066,7 @@ export class GameState {
     if (this.getCampingCellAt(x, z)) {
       return { ok: false, message: 'Dieses Feld gehört bereits zum Zeltbereich' }
     }
-    if (this.state.money < clearCost) {
+    if (this.lacksFunds(clearCost)) {
       return { ok: false, message: 'Nicht genug Geld, um den Baum zu entfernen' }
     }
     return { ok: true, message: 'Zeltbereich ausweisen' }
@@ -4050,7 +4087,7 @@ export class GameState {
       !this.getCoasterAt(x, z)
     if (
       !free ||
-      this.state.money < SIMULATION_CONFIG.atmosphere.forecourtDesignationCost
+      this.lacksFunds(SIMULATION_CONFIG.atmosphere.forecourtDesignationCost)
     ) {
       return { ok: false, message: 'Keine freien oder bezahlbaren Felder für den Bühnenvorplatz' }
     }
@@ -4075,7 +4112,7 @@ export class GameState {
       const valid = this.canDesignateWasteDumpCell(x, z)
       result = !valid
         ? { ok: false, message: 'Keine freien Felder für eine Müllablage' }
-        : this.state.money < SIMULATION_CONFIG.waste.dumpDesignationCost
+        : this.lacksFunds(SIMULATION_CONFIG.waste.dumpDesignationCost)
           ? { ok: false, message: 'Nicht genug Geld für eine Müllablage' }
           : { ok: true, message: 'Müllablage ausweisen' }
     } else if (tool === 'stageForecourt') {
@@ -4087,7 +4124,7 @@ export class GameState {
         : existing
       result = !valid
         ? { ok: false, message: enabled ? 'Keine neuen Backstage-Felder' : 'Keine Backstage-Felder zum Entfernen' }
-        : enabled && this.state.money < SIMULATION_CONFIG.bandSupply.backstageDesignationCost
+        : enabled && this.lacksFunds(SIMULATION_CONFIG.bandSupply.backstageDesignationCost)
           ? { ok: false, message: 'Nicht genug Geld für Backstage' }
           : { ok: true, message: enabled ? 'Backstage ausweisen' : 'Backstage entfernen' }
     } else if (tool === 'deliveryYard' || tool === 'supplyDepot') {
@@ -4146,7 +4183,7 @@ export class GameState {
     if (groundInfo(this.state, x, z).bearing < 2) {
       return { ok: false, message: 'Depot benötigt verdichteten Untergrund' }
     }
-    if (this.state.money < 400) return { ok: false, message: 'Depot kostet 400 €' }
+    if (this.lacksFunds(400)) return { ok: false, message: 'Depot kostet 400 €' }
     if (role === 'delivery' && this.getAdjacentRoadPositions({ x, z }).length === 0) {
       return { ok: false, message: 'Anlieferungsplatz direkt neben einer Straße setzen' }
     }
@@ -4298,7 +4335,7 @@ export class GameState {
       BUILDINGS[kind].height,
     )
     const design = kind === 'stage' ? this.state.festival.stageTemplates?.find(t=>t.name===this.state.festival.selectedStageTemplate) : undefined
-    if (this.state.money < BUILDINGS[kind].cost + clearCost + (design ? stageStats(design).cost : 0)) {
+    if (this.lacksFunds(BUILDINGS[kind].cost + clearCost + (design ? stageStats(design).cost : 0))) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     if (design) return {ok:true,message:`${design.name} bauen · ${BUILDINGS[kind].cost + clearCost + stageStats(design).cost} €`}
@@ -4400,7 +4437,7 @@ export class GameState {
       message:
         placements.length === 0
           ? 'Die Auswahl ist leer'
-          : this.state.money < charge
+          : this.lacksFunds(charge)
             ? `Nicht genug Geld (${charge} €)`
             : ok
               ? `${valid} Objekt${valid === 1 ? '' : 'e'} für ${charge} € kopieren`
@@ -4416,7 +4453,7 @@ export class GameState {
     const transformed = transformBlueprintItems(items, rotation)
     if (transformed.length === 0) return { ok: false, message: 'Die Auswahl ist leer' }
     const charge = blueprintStampCharge(transformed)
-    if (this.state.money < charge) {
+    if (this.lacksFunds(charge)) {
       return { ok: false, message: `Nicht genug Geld (${charge} €)` }
     }
     const preview = this.previewBlueprint(originX, originZ, rotation, items)
@@ -4717,7 +4754,7 @@ export class GameState {
     ) {
       return { ok: false, message: 'Hier steht bereits eine Haltestelle' }
     }
-    if (this.state.money < BUILDINGS.busStop.cost) {
+    if (this.lacksFunds(BUILDINGS.busStop.cost)) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     return { ok: true, message: 'Bushaltestelle bauen' }
@@ -4733,7 +4770,7 @@ export class GameState {
     if (!hasRoad) {
       return { ok: false, message: 'Der Tourbus-Parkplatz braucht eine angrenzende Straße' }
     }
-    if (this.state.money < BUILDINGS.tourBusParking.cost) {
+    if (this.lacksFunds(BUILDINGS.tourBusParking.cost)) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     return { ok: true, message: 'Tourbus-Parkplatz bauen' }
@@ -4747,7 +4784,7 @@ export class GameState {
     const footprint = buildingFootprint({ kind, x, z, rotation: this.state.buildRotation })
     const clear = this.checkBandSupplyFootprint(kind, footprint)
     if (!clear.ok) return clear
-    if (this.state.money < BUILDINGS[kind].cost) {
+    if (this.lacksFunds(BUILDINGS[kind].cost)) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     return { ok: true, message: `${BUILDINGS[kind].name} bauen` }
@@ -4836,7 +4873,7 @@ export class GameState {
       (total, cell) => total + this.getTreeClearCost(cell.x, cell.z, 0, 1),
       0,
     )
-    if (this.state.money < cost + clearCost) {
+    if (this.lacksFunds(cost + clearCost)) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     if (
@@ -4899,7 +4936,7 @@ export class GameState {
     if (!garage) return { ok: false, message: 'Garage nicht gefunden' }
     const bay = garage.bays.findIndex((vehicleId) => vehicleId === null)
     if (bay < 0) return { ok: false, message: 'In dieser Garage stehen bereits zwei Krankenwagen' }
-    if (this.state.money < SIMULATION_CONFIG.logistics.ambulanceCost) {
+    if (this.lacksFunds(SIMULATION_CONFIG.logistics.ambulanceCost)) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     const access = this.getLogisticsBuildingAccess(garage, 2)
@@ -4919,7 +4956,7 @@ export class GameState {
     if (!station) return { ok: false, message: 'Feuerwache nicht gefunden' }
     const bay = station.bays.findIndex((vehicleId) => vehicleId === null)
     if (bay < 0) return { ok: false, message: 'In dieser Wache stehen bereits zwei Feuerwehrwagen' }
-    if (this.state.money < SIMULATION_CONFIG.logistics.fireTruckCost) {
+    if (this.lacksFunds(SIMULATION_CONFIG.logistics.fireTruckCost)) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     const access = this.getLogisticsBuildingAccess(station, 2)
@@ -4956,7 +4993,7 @@ export class GameState {
     if (depot.busIds.length >= 3) {
       return { ok: false, message: 'Dieses Depot besitzt bereits drei Busse' }
     }
-    if (this.state.money < SIMULATION_CONFIG.logistics.busCost) {
+    if (this.lacksFunds(SIMULATION_CONFIG.logistics.busCost)) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     const access = this.getLogisticsBuildingAccess(depot, 3)
@@ -4993,7 +5030,7 @@ export class GameState {
         message: `Hier stehen bereits ${SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot} Müllautos`,
       }
     }
-    if (this.state.money < SIMULATION_CONFIG.logistics.garbageTruckCost) {
+    if (this.lacksFunds(SIMULATION_CONFIG.logistics.garbageTruckCost)) {
       return { ok: false, message: 'Nicht genug Geld' }
     }
     const access = this.getLogisticsBuildingAccess(host, size)
@@ -5048,7 +5085,7 @@ export class GameState {
     if (depot.vehicleIds.length >= 4) {
       return { ok: false, message: 'In diesem Betriebshof stehen bereits vier Spezialfahrzeuge' }
     }
-    if (this.state.money < SIMULATION_CONFIG.logistics.sweeperCost) {
+    if (this.lacksFunds(SIMULATION_CONFIG.logistics.sweeperCost)) {
       return { ok: false, message: 'Nicht genug Geld für den Saugreiniger' }
     }
     const access = this.getLogisticsPathAccess(depot, 3)
@@ -5234,7 +5271,7 @@ export class GameState {
       if (depot.busIds.length >= 3) {
         return { ok: false, message: 'Dieses Depot besitzt bereits drei Busse' }
       }
-      if (this.state.money < SIMULATION_CONFIG.logistics.busCost) {
+      if (this.lacksFunds(SIMULATION_CONFIG.logistics.busCost)) {
         return { ok: false, message: 'Nicht genug Geld' }
       }
       const access = this.getLogisticsBuildingAccess(depot, 3)

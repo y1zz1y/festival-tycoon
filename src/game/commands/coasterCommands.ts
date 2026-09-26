@@ -1,4 +1,4 @@
-import { bookFinance } from '../finance'
+import { bookFinance, canAfford } from '../finance'
 import {
   TRACK_PIECES,
   createCoasterTelemetry,
@@ -53,7 +53,7 @@ export function startCoasterCommand(
   if (!context.canBuildTrackPiece(piece)) {
     return { ok: false, message: 'Für die Startplattform ist nicht genug Platz' }
   }
-  if (context.state.money < TRACK_PIECES.station.cost) {
+  if (!canAfford(context.state, TRACK_PIECES.station.cost)) {
     return { ok: false, message: 'Nicht genug Geld' }
   }
 
@@ -143,7 +143,7 @@ export function appendCoasterPieceCommand(
   const cost =
     TRACK_PIECES[kind].cost +
     (piece.chainLift ? SIMULATION_CONFIG.economy.chainLiftCost : 0)
-  if (context.state.money < cost) return { ok: false, message: 'Nicht genug Geld' }
+  if (!canAfford(context.state, cost)) return { ok: false, message: 'Nicht genug Geld' }
 
   bookFinance(context.state, 'construction', -cost)
   coaster.pieces.splice(anchorIndex + 1, 0, piece)

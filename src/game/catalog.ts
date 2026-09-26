@@ -98,6 +98,13 @@ export type Tool =
   | 'terrainLowerCorner'
   | 'terrainWater'
   | 'terrainSmooth'
+  | 'terrainCoverGrass'
+  | 'terrainCoverSand'
+  | 'terrainCoverStone'
+  | 'terrainCoverField'
+  | 'terrainCoverSnow'
+  | 'terrainCoverRock'
+  | 'terrainCoverEarth'
   | 'powerCable'
   | 'bulldoze'
   | 'copy'
@@ -130,6 +137,20 @@ export const TERRAIN_EDIT_TOOLS = [
 
 export function isTerrainEditTool(tool: string | undefined): boolean {
   return (TERRAIN_EDIT_TOOLS as readonly string[]).includes(tool ?? '')
+}
+
+export const TERRAIN_COVER_TOOLS = [
+  'terrainCoverGrass',
+  'terrainCoverSand',
+  'terrainCoverStone',
+  'terrainCoverField',
+  'terrainCoverSnow',
+  'terrainCoverRock',
+  'terrainCoverEarth',
+] as const satisfies readonly Tool[]
+
+export function isTerrainCoverTool(tool: string | undefined): boolean {
+  return (TERRAIN_COVER_TOOLS as readonly string[]).includes(tool ?? '')
 }
 
 export function isCopyTool(tool: string | undefined): boolean {

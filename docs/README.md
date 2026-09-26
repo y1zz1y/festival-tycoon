@@ -52,14 +52,14 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | Gebäude, Katalog, Deko, Platzierung | [buildings.md](buildings.md) | `BUILDING_KINDS`, Scenery-Slots, Abriss |
 | Kopieren / Baubibliothek | [blueprints.md](blueprints.md) | Rechteck, Vorschau, Stempel, lokale Bibliothek |
 | Themen-Deko, Deko-Reiter | [decoration.md](decoration.md) | Festival-Themen, Kategorienfilter, neue Arten |
-| Gelände, Boden, Wege, Umgebung | [terrain.md](terrain.md) | Höhen, Ground-Prep, Way-Types |
+| Gelände, Boden, Wege, Umgebung | [terrain.md](terrain.md) | Höhen, Ground-Prep, Cover-Palette, Way-Types |
 | Straßen, Fahrzeuge, Waren, Depots | [logistics.md](logistics.md) | Roads, Träger, Lastwagen, Ampeln, Schranken |
 | Bandversorgung, Backstage, Tourbus | [band-supply.md](band-supply.md) | Backstage-Flächen, Bandzufriedenheit, Tourbus-Parkplatz, Show-Qualität |
 | Personal, Zonen, Sanität, Security | [staff.md](staff.md) | Rollen, Arbeitsbereiche, Tore |
 | Müll, Vorfälle, Feuerwerk, Panik | [incidents.md](incidents.md) | Incidents, Waste-Dumps, Ticker, Bubbles |
 | Festivalwochenende, Bands, Tickets | [festival.md](festival.md) | Buchungen, Wetter, Ruf, Tagesplan |
 | Finanzen, Buchungen, Darlehen | [finance.md](finance.md) | Ledger, Prognose, Kreditrahmen |
-| Szenarien, Ziele, Spielausgang | [scenarios.md](scenarios.md) | Zielarten, Frist, Sieg/Niederlage, Insolvenz, Stichtag, Briefing, Endbildschirm |
+| Szenarien, Ziele, Spielausgang, Editor | [scenarios.md](scenarios.md) | Zielarten, Frist, Sieg/Niederlage, Insolvenz, Stichtag, Briefing, Endbildschirm, Drop-in-Dateien, Szenario-Editor |
 | Konten, Sessions, Authentifizierung | [accounts.md](accounts.md) | Konto-API, Cookies, Rate-Limit |
 | Bühnenwerkstatt, Show, Publikum | [stages.md](stages.md) | Designs, Vorlagen, Zuschauerflächen |
 | Achterbahn, Karussell, Bungee | [attractions.md](attractions.md) | Queues, Ride-Zugang, Betrieb |
@@ -92,7 +92,7 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | Brücken- und Wegdetails | `src/view/wayStructures.ts` (`indexWayStructures`, `wayStructurePlan`, `createWayStructure`) |
 | Bühnen-Orientierungsgizmo | `src/view/orientationGizmo.ts` (`createOrientationGizmo`, `OrientationGizmo`) |
 | Titelbild-Publikum | `src/titleCrowd.ts` (`mountTitleCrowd`, `TitleCrowd`) |
-| Festival-SFX | `src/game/audio.ts`, `src/view/FestivalAudio.ts` |
+| Festival-SFX | `src/game/audio.ts`, `src/view/FestivalAudio.ts`, `src/view/audioAssets.ts` |
 | Netzwerk-Protokoll | `src/net/protocol.ts` |
 | Command-Anwendung | `src/net/commands.ts` |
 | Host-Server | `server/serve.ts`, `server/rooms.ts` |

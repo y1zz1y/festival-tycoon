@@ -41,7 +41,8 @@ const STATUS_MARK: Record<GoalStatus, string> = { done: '✔', failed: '✘', op
 const stars = (count: number): string => `${'★'.repeat(count)}${'☆'.repeat(Math.max(0, 5 - count))}`
 
 function scenarioName(snapshot: Readonly<GameSnapshot>): string {
-  return scenarioPreset(snapshot.scenario.preset)?.name ?? 'Freies Spiel'
+  if (snapshot.scenario.authoring) return 'Szenario-Editor'
+  return scenarioPreset(snapshot.scenario.preset)?.name ?? snapshot.scenario.title ?? 'Freies Spiel'
 }
 
 /** One line per goal: its mark, what it asks, where it stands and its deadline. */

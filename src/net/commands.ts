@@ -68,6 +68,10 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       )
     case 'editTerrainArea':
       return game.editTerrainArea(command.cells, command.mode, command.originHeight)
+    case 'paintGroundCover':
+      return game.paintGroundCover(command.x, command.z, command.cover)
+    case 'paintGroundCoverArea':
+      return game.paintGroundCoverArea(command.cells, command.cover)
     case 'designateRoad':
       return game.designateRoad(command.cells)
     case 'designateParking':
