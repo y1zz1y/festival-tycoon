@@ -8,9 +8,9 @@ import { isStageAudienceCell, buildingFootprint, buildingSize, occupiesBuildingC
 import { WAY_TYPES, wayInfo, wayIssue } from './wayTypes';
 import type { WayType } from './wayTypes';
 import { groundRectangle } from './ground';
-import { createInfrastructure, updateSupplyChain, localStock, normalizeInfrastructure, normalizeStock } from './supplyChain';
+import { consumeLocal, createInfrastructure, updateSupplyChain, localStock, normalizeInfrastructure, normalizeStock } from './supplyChain';
 import { CARDINAL_OFFSETS, isShopServiceKind } from './shopAccess';
-import { isPricedShopKind, isQueuedFacilityKind, normalizeShirtColor, normalizeShirtStyle, shopSupplyKind, stockoutThought, type ShirtStyle } from './shopGoods';
+import { isPricedShopKind, isQueuedFacilityKind, normalizeShirtColor, normalizeShirtStyle, perGuestSupply, stockoutThought, type ShirtStyle } from './shopGoods';
 import { QUEUE_CARDINALS, isStallQueueKind, queueStandOffset as computeQueueStandOffset, queueTravelLane, stallQueueLaneFromLocal, stallQueueTileOffset } from './queueLanes';
 import { groundInfo, groundKey, paintGroundCover, paintGroundCoverArea, roadGroundLimit } from './ground';
 import type { GroundCover } from './ground';
@@ -59,7 +59,10 @@ import { FireworksSystem } from './fireworks';
 import { PedestrianNavigation, isPedestrianSolidKind, type PedestrianNeighborOptions } from './pedestrianNavigation';
 import { updateLogisticsSimulation, type LogisticsTickState } from './logisticsSimulation';
 import { RoadVehicleSimulation } from './roadVehicleSimulation';
-import { DeterministicRng, rollsBungeeNude } from './rng';
+import { DeterministicRng, hashStringSeed, rollsBungeeNude } from './rng';
+import { isFlatRideType, rideProfile, type FlatRideType } from './flatRides';
+import { lightningMinutes, stormAt, stormExposure } from './storm';
+import { difficultyProfile } from './difficulty';
 import { applyGameCommand } from '../net/commands';
 import { isOptimisticCommand } from '../net/commandRegistry';
 import { allowsPathFlow, normalizeFlowDirection } from './pathFlow';
@@ -2974,7 +2977,10 @@ export class GameState {
   canPlaceRideAccess(buildingId: string, type: 'entrance' | 'exit', x: number, z: number): ActionResult {
     const building = this.state.buildings.find(b => b.id === buildingId && b.kind === 'ride')
     if (!building || !['entrance', 'exit'].includes(type)) return { ok: false, message: 'Fahrgeschäft nicht gefunden' }
-    if (!Number.isInteger(x) || !Number.isInteger(z) || !this.isInWorld(x,z) || Math.abs(x-building.x)+Math.abs(z-building.z)!==1) return { ok: false, message: 'Ein- und Ausgang direkt neben das Fahrgeschäft setzen' }
+    // Next to any field of the ride (flat rides cover several), never on it.
+    const footprint = buildingFootprint(building)
+    const beside = footprint.some(cell => Math.abs(x-cell.x)+Math.abs(z-cell.z)===1) && !footprint.some(cell => cell.x===x && cell.z===z)
+    if (!Number.isInteger(x) || !Number.isInteger(z) || !this.isInWorld(x,z) || !beside) return { ok: false, message: 'Ein- und Ausgang direkt neben das Fahrgeschäft setzen' }
     const own = type === 'entrance' ? building.rideEntrance : building.rideExit
     if (own && this.state.visitors.some(v => v.targetId === building.id && v.state === 'using')) return { ok: false, message: 'Bitte die laufende Fahrt abwarten' }
     const occupied = this.getRideAccessAt(x,z,building.elevation)
@@ -3198,6 +3204,47 @@ export class GameState {
     this.worldRevision++
   }
 
+  /** Festival minute the storm hazards were last rolled for (runtime only). */
+  private lastStormMinute = -1
+
+  /**
+   * While a storm rages: guests out in the open can fall and get hurt (sim RNG, once
+   * per festival minute), and at the storm's lightning minutes a tall structure catches
+   * fire unless the Sturmsicherung is bought. Guests in tents, vehicles or on their way
+   * out are safe; a shelter order cuts the risk for the rest.
+   */
+  private updateStormHazards(): void {
+    const f = this.state.festival
+    const storm = stormAt(f, this.state.day, this.state.minute)
+    const now = this.state.day * 1440 + this.state.minute
+    if (storm.phase !== 'active' || !storm.storm) {
+      this.lastStormMinute = -1
+      return
+    }
+    if (now === this.lastStormMinute) return
+    const minutes = this.lastStormMinute < 0 ? 1 : Math.min(10, now - this.lastStormMinute)
+    this.lastStormMinute = now
+    const chance = SIMULATION_CONFIG.storm.injuryChancePerMinute * minutes
+    for (const visitor of this.state.visitors) {
+      const exposure = stormExposure(visitor, Boolean(f.shelterOrder))
+      if (exposure <= 0 || this.rng.next() >= chance * exposure) continue
+      visitor.state = 'injured'
+      visitor.targetId = null
+      visitor.route = []
+      visitor.thought = 'Im Sturm bin ich gestürzt!'
+      f.stormInjuries = (f.stormInjuries ?? 0) + 1
+    }
+    if (f.upgrades.rigging) return
+    for (const after of lightningMinutes(storm.storm)) {
+      const at = storm.storm.day * 1440 + storm.storm.start + after
+      if (at <= now - minutes || at > now) continue
+      const tall = this.state.buildings.filter((building) => ['stage', 'delayTower', 'lighting', 'lightBalloon', 'videoWall'].includes(building.kind))
+      if (tall.length === 0) continue
+      const target = tall[hashStringSeed(`${f.seed}:lightning:${at}`) % tall.length]!
+      this.addGroundIncident('fire', { x: target.x, z: target.z, elevation: target.elevation }, 2)
+    }
+  }
+
   /** The edition has just ended: keep what it achieved and judge the edition goals on it. */
   private recordFinishedEdition(): void {
     const f = this.state.festival
@@ -3223,7 +3270,7 @@ export class GameState {
     const buildings = this.state.buildings.reduce(
       (total, item) =>
         total +
-        BUILDINGS[item.kind].cost +
+        (item.kind === 'ride' ? rideProfile(item).cost : BUILDINGS[item.kind].cost) +
         (item.stageDesign ? stageStats(item.stageDesign).cost : 0),
       0,
     )
@@ -3301,6 +3348,8 @@ export class GameState {
     // Deliberately not booked: a debug purse is not income, and the finance table
     // should keep adding up to what the park actually earned.
     this.state.money += amount
+    // A game helped along like this no longer counts for progress and achievements.
+    this.state.debugAssisted = true
     this.state.cashEffects.push({
       id: this.nextId('debug-cash'),
       amount,
@@ -3404,6 +3453,51 @@ export class GameState {
       ok: true,
       message: `Debug: ${cars.length} Autos entfernt, alle Parkplätze freigegeben; die Gäste gehen zu Fuß nach Hause`,
     }
+  }
+
+  /**
+   * A flat ride: the `ride` building with a ride type, covering its type's footprint
+   * from the clicked field. Every field must take a ride; the ride type's cost replaces
+   * the carousel's.
+   */
+  placeRide(rideType: FlatRideType, x: number, z: number): ActionResult {
+    return this.trackBuildUndo(() => {
+      const preview = this.canPlaceRide(rideType, x, z)
+      if (!preview.ok) return preview
+      const profile = rideProfile({ rideType })
+      const rotation = this.state.buildRotation
+      const cells = buildingFootprint({ kind: 'ride', x, z, rotation, rideType })
+      const elevation = this.getPlaceElevation(x, z)
+      for (const cell of cells) {
+        this.clearDesignatedOccupancyAt(cell.x, cell.z, false, { preserveMedical: true })
+        this.clearTreesAt(cell.x, cell.z, elevation, BUILDINGS.ride.height)
+      }
+      const result = this.place('ride', x, z)
+      if (!result.ok) return result
+      const ride = this.state.buildings.at(-1)!
+      ride.rideType = rideType
+      ride.price = profile.defaultPrice
+      bookFinance(this.state, 'construction', -(profile.cost - BUILDINGS.ride.cost))
+      this.indexedBuildingCount = -1
+      this.recalculateQueueDirections()
+      this.recalculatePark()
+      this.emit()
+      return { ok: true, message: `${profile.name} gebaut` }
+    })
+  }
+
+  canPlaceRide(rideType: FlatRideType, x: number, z: number): ActionResult {
+    if (!isFlatRideType(rideType)) return { ok: false, message: 'Unbekanntes Fahrgeschäft' }
+    const profile = rideProfile({ rideType })
+    const cells = buildingFootprint({ kind: 'ride', x, z, rotation: this.state.buildRotation, rideType })
+    const elevation = this.getPlaceElevation(x, z)
+    for (const cell of cells) {
+      if (Math.abs(this.getPlaceElevation(cell.x, cell.z) - elevation) > 0.01) return { ok: false, message: `${profile.name} braucht eine ebene Fläche` }
+      const result = this.canPlace('ride', cell.x, cell.z)
+      if (!result.ok) return result
+    }
+    if (this.lacksFunds(profile.cost)) return { ok: false, message: 'Nicht genug Geld' }
+    return { ok: true, message: `${profile.name} bauen · ${profile.cost.toLocaleString('de-DE')} €` }
   }
 
   placeBungee(x: number, z: number, height: number): ActionResult {
@@ -4016,6 +4110,7 @@ export class GameState {
       canPlaceRideAccess: (buildingId, accessType, x, z) =>
         this.canPlaceRideAccess(buildingId, accessType, x, z),
       canPlaceBungee: (x, z, height) => this.canPlaceBungee(x, z, height),
+      canPlaceRide: (rideType, x, z) => this.canPlaceRide(rideType, x, z),
       canPlace: (kind, x, z, decorationSlot, preserveLegacySlot) =>
         this.canPlace(kind, x, z, decorationSlot, preserveLegacySlot),
       facingRoadDirection: (x, z, size, preferred) =>
@@ -5744,6 +5839,7 @@ export class GameState {
     this.syncBandSupply()
     const editionWasOver = this.state.festival.finished
     updateFestival(this.state)
+    this.updateStormHazards()
     if (!editionWasOver && this.state.festival.enabled && this.state.festival.finished) this.recordFinishedEdition()
     updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, true, undefined, true), (a, b) => this.canCarrierStep(a, b))
 
@@ -7101,8 +7197,8 @@ export class GameState {
         })
         queue.splice(0, queue.length, ...valid)
         this.prioritizeArrivedQueueVisitors(queue)
-        const supply = shopSupplyKind(building.kind)
-        if (supply && supply !== 'water' && localStock(this.state, building.id, supply) < 1) {
+        const supply = perGuestSupply(building.kind)
+        if (supply && localStock(this.state, building.id, supply) < 1) {
           const wait = SIMULATION_CONFIG.needs.interactionMinutes.stockout
           const waitingThought = stockoutThought(building.kind, true)
           for (const visitorId of [...queue]) {
@@ -7128,7 +7224,7 @@ export class GameState {
         this.positionFacilityQueue(queue, queueCells, minutes, splitStallQueue)
 
         let free =
-          (building.rideType === 'bungee' ? 1 : BUILDINGS[building.kind].capacity) -
+          (building.kind === 'ride' ? rideProfile(building).capacity : BUILDINGS[building.kind].capacity) -
           (usingCounts.get(building.id) ?? 0)
         while (free > 0 && queue.length > 0) {
           const visitor = this.getVisitor(queue[0]!)
@@ -7250,8 +7346,8 @@ export class GameState {
       visitor.state = 'exploring'; visitor.targetId = null; visitor.route = []
       this.queueVisitorDecision(visitor); return
     }
-    const supply = shopSupplyKind(target.kind)
-    if (supply && supply !== 'water' && localStock(this.state, target.id, supply) < 1) {
+    const supply = perGuestSupply(target.kind)
+    if (supply && localStock(this.state, target.id, supply) < 1) {
       visitor.state = 'using'
       visitor.interactionRemaining = SIMULATION_CONFIG.needs.interactionMinutes.stockout
       visitor.thought = stockoutThought(target.kind, false)
@@ -7277,17 +7373,21 @@ export class GameState {
     const interaction = SIMULATION_CONFIG.needs.interactionMinutes
     visitor.interactionRemaining =
       target.kind === 'ride'
-        ? interaction.ride
+        ? rideProfile(target).minutes
         : target.kind === 'alcohol'
           ? interaction.alcohol
           : target.kind === 'toilet'
             ? interaction.toilet
+            : target.kind === 'waterPoint'
+              ? interaction.waterPoint
+            : target.kind === 'shower'
+              ? interaction.shower
             : target.kind === 'mascot'
               ? interaction.mascot
               : target.kind === 'shirt'
                 ? interaction.shirt
                 : interaction.food
-    visitor.thought = target.rideType === 'bungee' ? 'Jetzt geht es hoch zum Bungeesprung!' : `Ich besuche ${BUILDINGS[target.kind].name}.`
+    visitor.thought = target.rideType === 'bungee' ? 'Jetzt geht es hoch zum Bungeesprung!' : `Ich besuche ${target.kind === 'ride' ? rideProfile(target).name : BUILDINGS[target.kind].name}.`
   }
 
   private recallCoasterTrainInternal(coaster: Coaster): void {
@@ -7455,10 +7555,12 @@ export class GameState {
       (total, member) => total + STAFF_DEFINITIONS[member.role].hourlyWage,
       0,
     )
+    // Difficulty scales everything that runs by the hour; prices the player reads stay.
+    const factor = difficultyProfile(this.state.scenario).runningCosts
     return {
-      upkeep: upkeep + (this.state.power.backupActive ? SIMULATION_CONFIG.power.backupFuelPerHour : 0),
+      upkeep: (upkeep + (this.state.power.backupActive ? SIMULATION_CONFIG.power.backupFuelPerHour : 0)) * factor,
       // Carriers are paid by the minute while they walk, not by the hour like the rest.
-      staff: staff + this.state.festival.infrastructure.routes.length * CARRIER_WAGE_PER_MINUTE * 60,
+      staff: (staff + this.state.festival.infrastructure.routes.length * CARRIER_WAGE_PER_MINUTE * 60) * factor,
     }
   }
 
@@ -8982,6 +9084,28 @@ export class GameState {
     return stops
   }
 
+  /**
+   * Where a musician stands to use a backstage toilet: the walkable backstage fields
+   * around one that still has water. Each stop remembers its toilet, which pays the water.
+   */
+  private backstageToiletStops(componentId: string): Array<Cell & { toiletId: string }> {
+    const component = this.bandSupplyComponents.find((item) => item.id === componentId)
+    if (!component?.active) return []
+    const keys = new Set(component.cells.map((cell) => backstageCellKey(cell)))
+    const stops: Array<Cell & { toiletId: string }> = []
+    for (const building of this.state.buildings) {
+      if (building.kind !== 'backstageToilet') continue
+      if (!keys.has(backstageCellKey(building)) || localStock(this.state, building.id, 'water') < 1) continue
+      for (const [dx, dz] of [[0, 1], [1, 0], [0, -1], [-1, 0]] as const) {
+        const cell = { x: building.x + dx, z: building.z + dz }
+        if (!keys.has(backstageCellKey(cell))) continue
+        if (this.isPedestrianSolidAt(cell.x, cell.z, building.elevation)) continue
+        stops.push({ x: cell.x, z: cell.z, elevation: building.elevation, toiletId: building.id })
+      }
+    }
+    return stops
+  }
+
   /** Hands out the couch seats so two band members never claim the same cushion. */
   private assignBackstageSeats(): Map<string, Cell> {
     const byComponent = new Map<string, BandActor[]>()
@@ -9350,15 +9474,19 @@ export class GameState {
         }
       } else if (seatByActor.has(actor.id)) {
         // With a couch backstage the band sits it out instead of waiting around in
-        // front of the stage, and walks over to the fridge every now and then.
+        // front of the stage, and walks over to the fridge every now and then. About
+        // every third break (per hour window, by actor) it is the toilet instead, which
+        // uses one unit of its water.
         const seat = seatByActor.get(actor.id)!
         const onSeat = actor.route.length === 0 && actor.cellX === seat.x && actor.cellZ === seat.z
         actor.seated = onSeat
         if (actor.route.length === 0) {
           actor.wanderMinutes = Math.max(0, actor.wanderMinutes - minutes)
           if (actor.wanderMinutes <= 0 && this.decisionBudget > 0) {
-            const fridgeStops = onSeat ? this.backstageFridgeStops(actor.componentId) : []
-            const goals = fridgeStops.length > 0 ? fridgeStops : [seat]
+            const toiletBreak = onSeat && (hashStringSeed(actor.id) + Math.floor(this.state.simTick / 600)) % 3 === 0
+            const toiletStops = toiletBreak ? this.backstageToiletStops(actor.componentId) : []
+            const fridgeStops = onSeat && toiletStops.length === 0 ? this.backstageFridgeStops(actor.componentId) : []
+            const goals = toiletStops.length > 0 ? toiletStops : fridgeStops.length > 0 ? fridgeStops : [seat]
             const arrived = goals.some((cell) => cell.x === actor.cellX && cell.z === actor.cellZ)
             if (!arrived) {
               this.decisionBudget -= 1
@@ -9375,11 +9503,16 @@ export class GameState {
                   true,
                 ) ?? []
               actor.seated = false
+              const end = actor.route.at(-1)
+              const toilet = end ? toiletStops.find((cell) => cell.x === end.x && cell.z === end.z) : undefined
+              if (toilet) consumeLocal(this.state, toilet.toiletId, 'water')
             }
             actor.wanderMinutes =
-              fridgeStops.length > 0
-                ? SIMULATION_CONFIG.bandSupply.fridgeVisitMinutes
-                : SIMULATION_CONFIG.bandSupply.couchRestMinutes
+              toiletStops.length > 0
+                ? SIMULATION_CONFIG.bandSupply.toiletVisitMinutes
+                : fridgeStops.length > 0
+                  ? SIMULATION_CONFIG.bandSupply.fridgeVisitMinutes
+                  : SIMULATION_CONFIG.bandSupply.couchRestMinutes
           }
         }
       } else if (idleWanderReady(actor) && this.decisionBudget > 0) {

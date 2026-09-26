@@ -244,3 +244,36 @@ die Tanzpose oder ihre Zeitquelle wechselt,
 Festivallust-Quellen oder -Verluste wechseln, Spawn- oder Abreiselogik wechselt,
 Müllfallen bei vollem Eimer ändert oder Gedanken/Bubbles neue Arten erhalten.
 Neue UI-Panels für Besucher in `docs/ui.md` mitvermerken.
+
+## Durst und Hygiene (0.2.10)
+
+`VisitorNeeds` hat zwei weitere Werte (100 = zufrieden), Helfer in
+`src/game/visitorNeeds.ts`:
+
+- **Durst** (`thirst`) sinkt für alle um `needs.thirstDecayPerMinute`, bei
+  Hitze draußen um `heatThirstMultiplier` schneller (nicht im Zelt). Unter
+  `decisions.seekDrinkBelow` sucht der Gast zuerst eine **Trinkwasserstelle**
+  (`waterPoint`, kostenlos, eine Einheit Wasser je Gast), dann den
+  **Getränkestand**: Wer keine Lust auf Alkohol hat (`wantsSoftDrink`), kauft
+  dort eine Limo zu `drink.softDrinkPriceShare` des Standpreises aus dem
+  Getränkevorrat und trinkt sie sofort. Ein alkoholisches Getränk löscht beim
+  Trinken `drink.alcoholThirstGain`. Durst zählt als dringendes Bedürfnis wie
+  Hunger und Toilette. Mit dem Trinkwasser-Upgrade geben versorgte WCs bei Hitze
+  auch Durst zurück.
+- **Hygiene** (`hygiene`) sinkt nur für **Camper** (`isCamper`: Campingticket
+  und Campingphase), um `needs.hygieneDecayPerMinute`. Unter
+  `decisions.seekShowerBelow` suchen Camper eine **Dusche** (`shower`, Preis,
+  eine Einheit Wasser je Gast), die Hygiene auf `needs.shower.hygiene` setzt.
+- **Laune und Zufriedenheit** (`moodNeedValues`, `moodNeedAverage`): Durst zählt
+  für alle, Hygiene nur für Camper. Tagesgäste werden also nicht nach Hygiene
+  bewertet. Die Sprechblasen (`visitorBubbles.ts`) lassen Hygiene ganz weg.
+- **Startwerte** kommen aus der Besucher-ID (`initialThirstAndHygiene`), nicht aus
+  dem Zufallsstrom, damit bestehende Spawns deterministisch gleich bleiben.
+  Alte Stände bekommen in `snapshotRepair` Durst 80 und Hygiene 100.
+- Das Besucherfenster zeigt „Durst gestillt“ für alle und „Hygiene“ nur für
+  Camper.
+- Wasserstellen und Duschen brauchen Wasservorrat (`perGuestSupply`): ohne
+  Wasser sind sie kein Ziel, wartende Gäste gehen wie bei ausverkauften
+  Ständen. Toiletten funktionieren weiter ohne Wasser.
+
+Test: `tests/visitorNeeds.ts`.

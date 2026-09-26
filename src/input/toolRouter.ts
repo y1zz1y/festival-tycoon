@@ -1,3 +1,4 @@
+import type { FlatRideType } from '../game/flatRides'
 import { isTerrainCoverTool, isTerrainEditTool, type BuildingKind, type Tool } from '../game/catalog'
 import { groundCoverFromTool } from '../game/ground'
 import type { CourseKind } from '../game/courseAttractions'
@@ -23,6 +24,8 @@ export type DirectToolContext = {
   backstageEraseMode: boolean
   bungeeBuildMode: boolean
   bungeeHeight: number
+  /** Set while a flat ride from the build menu is the active tool. */
+  rideType?: FlatRideType
   courseKind?: CourseKind
 }
 
@@ -209,6 +212,8 @@ export function applyDirectCellTool(
                   )
                 : tool === 'ride' && context.bungeeBuildMode
                   ? game.placeBungee(cell.x, cell.z, context.bungeeHeight)
+                : tool === 'ride' && context.rideType
+                  ? game.placeRide(context.rideType, cell.x, cell.z)
                   : game.place(
                       tool as BuildingKind,
                       cell.x,

@@ -66,7 +66,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `tests/scenarioEditor.ts` | Szenario-Editor: Export-Datei lädt, Startgeld/Schulden/Tickets/Nachfrage greifen, Listing inkl. Beschreibung, Bauen ohne Geldlimit |
 | `tests/multiplayerChat.ts` | Chat-Sanitizing, Ping-TTL, Edge-Arrow-Projektion; Roundtrip in `regression.ts` |
 | `tests/hotkeys.ts` | Tastenbelegung: Standardbelegung kollisionsfrei, Numpad zählt als Ziffernreihe, eine Taste gehört einer Aktion (der vorherige Halter wird frei), reservierte Tasten gesperrt, Beschriftungen, Speichern/Laden inkl. kaputtem Eintrag |
-| `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, endliche Festivalmodell-Bounds/Picking, Lights, Achterbahnwagen, Logistik-Modelle |
+| `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, endliche Festivalmodell-Bounds/Picking, Lights, Achterbahnwagen, Logistik-Modelle; Grafikstandard: jede Katalogart hat ein gebündeltes Modell, Bündeln nach Geometrie und Material mit verschachtelten Picking-IDs, `MATERIAL_CEILINGS` je Datei in `src/view` |
 | `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust, vordere Konzertplätze |
 | `tests/headlineMagazine.ts` | HEADLINE Magazin nur nach Festivalende, ≥1 Pro/Kontra, deterministisch, nicht mitten im Wochenende |
 | `tests/headline-magazine-preview.html` | visuelles HEADLINE-Heft nach einem beendeten Wochenende |
@@ -111,7 +111,12 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/campingModels.ts` | Zelt-/Pavillon-Batches |
 | `tests/attractionFoundation.ts` | Camping-/Vorplatz-Ausweisung bleibt nach Attraction-Commands, Save/Load und MP-Deltas; Placement-Sperre (Gebäude/Weg/Deko), Fence/Delay-Ausnahme, Forecourt-Preview |
 | `tests/mobileTouch.ts` | Touch-Kamera / Gesten |
-| `tests/audio.ts` | Kamera-Listener (Look-At, nicht Gäste), Range-Skip, One-Shot-Cap; Jubel nur bei Konzert-Kandidaten + Cooldown/Chance; Fahrzeuge nur Start/Halt/Pass-by; Musik looped solange Quelle + in Range; WAV-Pfade, `public/sfx/` vorhanden, Loader-Fallback |
+| `tests/audio.ts` | Kamera-Listener (Look-At, nicht Gäste), Range-Skip, One-Shot-Cap; Jubel nur bei Konzert-Kandidaten + Cooldown/Chance; Fahrzeuge nur Start/Halt/Pass-by; Musik looped solange Quelle + in Range, eine Schleife je Genre; Ogg-Pfade, `public/sfx/` und `public/music/` vorhanden, Loader-Fallback |
+| `tests/progress.ts` | Fortschritt: Best-of-Merge, lokaler Speicher, Konto-Endpunkt mit Anmeldung, Client-Abgleich und Offline-Rückfall |
+| `tests/festivalExtras.ts` | Unwetter (Planung, Phasen, Schutz, Auftritte, Blitz, Verlauf), Sponsoren (Angebote, Unterschrift, Abrechnung), Schwierigkeit, Erste Schritte, Erfolge |
+| `tests/visitorNeeds.ts` | Durst und Hygiene: Startwerte aus der ID, Hitze, Camper-Hygiene, Trinkwasserstelle mit Wasserverbrauch, Limo am Getränkestand, Dusche, alte Stände |
+| `tests/flatRides.ts` | Flat Rides: Baumenü, Grundfläche, Typkosten, Tore neben jedem Feld, Fahrtdauer und Spaß je Typ, Speichern, unbekannte Typen, Mehrspieler-Befehl, animierte Modelle mit geteilter Geometrie |
+| `tests/playerSettings.ts` | Spielereinstellungen: kaputte oder fremde Werte reparieren, Speichern/Lesen, Auflösungsstufen, Effektdichte |
 | `tests/performance.ts` | synthetische Last |
 | `tests/people-preview.html` | visuelle Personen-Fixture |
 | `tests/carrier-preview.html` | visuelle Träger neben Gästen |

@@ -3,7 +3,7 @@ import { SIMULATION_CONFIG } from './simulationConfig'
 type BubbleVisitor = {
   state: string
   emotion: string
-  needs: { hunger: number; toilet: number; fun: number; energy: number }
+  needs: { hunger: number; toilet: number; fun: number; energy: number; thirst?: number }
   isDancing: boolean
   isConversing: boolean
   crowding: number
@@ -23,8 +23,10 @@ export type VisitorBubbleKind =
   | 'crushed'
   | 'panic'
 
+/** Hygiene stays out here: it only drops for campers and would lift day guests' average. */
 export function visitorNeedAverage(visitor: Pick<BubbleVisitor, 'needs'>): number {
-  const values = Object.values(visitor.needs)
+  const needs = visitor.needs
+  const values = [needs.hunger, needs.toilet, needs.fun, needs.energy, needs.thirst ?? 100]
   return values.reduce((total, value) => total + value, 0) / values.length
 }
 

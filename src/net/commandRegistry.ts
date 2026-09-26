@@ -31,6 +31,7 @@ export const COMMAND_METADATA = {
   configureAttraction: { optimistic: false },
   setRideAccess: { optimistic: true },
   placeBungee: { optimistic: true },
+  placeRide: { optimistic: true },
   setBungeeHeight: { optimistic: true },
   festival: { optimistic: false },
   loan: { optimistic: false },

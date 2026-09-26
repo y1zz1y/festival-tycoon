@@ -5,6 +5,7 @@ import { SHIRT_STYLE_LABELS } from '../game/shopGoods'
 import type { GameState } from '../game/GameState'
 import type { WorldView } from '../view/WorldView'
 import { formatMoney, formatTime } from './format'
+import { isCamper } from '../game/visitorNeeds'
 
 export interface VisitorPanelContext {
   getGame(): GameState
@@ -184,9 +185,11 @@ export function mountVisitorPanel({ getGame, getPreviewMode, view, closeEntityPa
       [visitorInventory.innerHTML, ...souvenirBits].filter(Boolean).join('') ||
       '<small>Keine Gegenstände</small>'
   
-    const needKeys = ['hunger', 'toilet', 'fun', 'energy'] as const
+    // Hygiene only drops for campers, so the row is shown for them alone.
+    requireElement<HTMLElement>('#hygiene-row').hidden = !isCamper(visitor)
+    const needKeys = ['hunger', 'toilet', 'thirst', 'hygiene', 'fun', 'energy'] as const
     needKeys.forEach((key) => {
-      const value = Math.round(visitor.needs[key])
+      const value = Math.round(visitor.needs[key] ?? 100)
       const bar = requireElement<HTMLElement>(`#${key}-bar`)
       const output = requireElement<HTMLElement>(`#${key}-value`)
       bar.style.width = `${value}%`

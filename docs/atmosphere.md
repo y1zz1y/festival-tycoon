@@ -66,6 +66,8 @@ Details der Gewichte stehen in `SIMULATION_CONFIG.atmosphere.sources`
 - `lighting`, Lichterketten und Lampions: warmes gelbes Licht, Reichweite 3–4.
   `lightBalloon` (Demand 3, Priorität 42): weißes Licht, Atmosphäre `range` 8,
   PointLight-Distance 9 statt 3.5. Derselbe Pool, Instanzfarben für Glow/Birne.
+  Nachts leuchtet die Hülle über `shellRadius` (additive Hülle in
+  `FestivalLightsView`), nicht über ein Material pro Ballon.
 - Render-Entscheidungen nicht im `GameSnapshot` speichern.
 - LED-, Laser- und Pyroanimationen lesen nur autoritative Tick-/Showdaten.
   Animation und Ressourcen-Pooling bleiben Renderzustand; Strom und laufende

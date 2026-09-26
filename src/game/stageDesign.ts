@@ -215,6 +215,14 @@ export function stageSize(d:StageDesign|undefined,rotation=0){
   return rotation%2 ? {width:depth,depth:width} : {width,depth}
 }
 /** The rare building whose footprint isn't a single tile without going as far as a full stage design — a tour bus's own length, not a stage's. */
+/** Flat rides by `rideType` (src/game/flatRides.ts); width runs along the ride's own x axis. */
+const RIDE_FOOTPRINTS: Partial<Record<string,{width:number;depth:number}>> = {
+  chainSwing: {width:3,depth:3},
+  freefall: {width:2,depth:2},
+  ferrisWheel: {width:3,depth:1},
+  bumperCars: {width:3,depth:2},
+  swingShip: {width:3,depth:1},
+}
 const NON_STAGE_FOOTPRINTS: Partial<Record<string,{width:number;depth:number}>> = {
   tourBusParking: {width:1,depth:2},
   backstageCouch2: {width:2,depth:1},
@@ -222,16 +230,16 @@ const NON_STAGE_FOOTPRINTS: Partial<Record<string,{width:number;depth:number}>> 
 }
 /** Every building's real footprint, stage or not: a stage design's own size, this handful of
  * other multi-tile kinds, or the ordinary single tile — always turned to match its rotation. */
-export function buildingSize(b:{kind?:string;rotation:number;stageDesign?:StageDesign}){
+export function buildingSize(b:{kind?:string;rotation:number;stageDesign?:StageDesign;rideType?:string}){
   if(b.stageDesign)return stageSize(b.stageDesign,b.rotation)
-  const base=NON_STAGE_FOOTPRINTS[b.kind??'']??{width:1,depth:1}
+  const base=(b.kind==='ride'&&b.rideType?RIDE_FOOTPRINTS[b.rideType]:undefined)??NON_STAGE_FOOTPRINTS[b.kind??'']??{width:1,depth:1}
   return b.rotation%2 ? {width:base.depth,depth:base.width} : base
 }
-export function occupiesBuildingCell(b:{kind?:string;x:number;z:number;rotation:number;stageDesign?:StageDesign},x:number,z:number){
+export function occupiesBuildingCell(b:{kind?:string;x:number;z:number;rotation:number;stageDesign?:StageDesign;rideType?:string},x:number,z:number){
   const size=buildingSize(b)
   return x>=b.x&&x<b.x+size.width&&z>=b.z&&z<b.z+size.depth
 }
-export function buildingFootprint(b:{kind?:string;x:number;z:number;rotation:number;stageDesign?:StageDesign}){
+export function buildingFootprint(b:{kind?:string;x:number;z:number;rotation:number;stageDesign?:StageDesign;rideType?:string}){
   const size=buildingSize(b),cells:Array<{x:number;z:number}>=[]
   for(let z=b.z;z<b.z+size.depth;z++)for(let x=b.x;x<b.x+size.width;x++)cells.push({x,z})
   return cells

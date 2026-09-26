@@ -68,10 +68,15 @@ import { testShopGoods } from './shopGoods'
 import { testTickerAndWasteCaps } from './ticker'
 import { testAccounts } from './accounts'
 import { testSaves } from './saves'
+import { testProgress } from './progress'
 import { testBrowserSaves, testServerSaveClient } from './browserSaves'
 import { testBlueprints, testBlueprintLibraryRoundtrip, testBlueprintParkingCopy } from './blueprints'
 import { testBuildUndo } from './buildUndo'
 import { testFestivalAudio, testFestivalAudioAssets } from './audio'
+import { testPlayerSettings } from './playerSettings'
+import { testVisitorNeeds } from './visitorNeeds'
+import { testFlatRides } from './flatRides'
+import { testFestivalExtras } from './festivalExtras'
 import { testSnapshotModules } from './snapshotModules'
 import { testSimulationModules } from './simulationModules'
 import { testSimulationTime } from './simulationTime'
@@ -98,6 +103,7 @@ test('canonical attraction graph, area and construction foundations', () => {
 })
 await testFestivalAudioAssets()
 testFestivalAudio()
+testPlayerSettings()
 testWayStructures()
 testMobileTouch()
 testQueueLanes()
@@ -136,6 +142,7 @@ test('course attractions and post-refactor backlog checks', () => {
 await testAccounts()
 console.log('PASS accounts: registration, sessions, hashed passwords and throttled guessing')
 await testSaves()
+await testProgress()
 console.log('PASS saves belong to their account, public ones are readable by all and writable by none')
 testBrowserSaves(fixture)
 console.log('PASS local slots and quicksave keep visitors and buildings; listing ignores corrupt worlds')
@@ -357,6 +364,9 @@ test('festival sleep rhythm, tents and circadian energy', () => {
   testVisitorSleep(fixture)
 })
 testMusicPlanning(fixture)
+testVisitorNeeds(fixture)
+testFlatRides(fixture)
+testFestivalExtras(fixture)
 testOperations(fixture)
 testBusPlanner(fixture)
 testSealedWasteContainer(fixture)

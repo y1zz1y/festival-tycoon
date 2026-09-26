@@ -1,4 +1,4 @@
-import { CanvasTexture, NearestFilter, SRGBColorSpace } from 'three'
+import { BoxGeometry, CanvasTexture, LinearMipmapLinearFilter, MeshStandardMaterial, NearestFilter, SRGBColorSpace } from 'three'
 import type { WayType } from '../game/wayTypes'
 
 const textures = new Map<WayType, CanvasTexture>()
@@ -47,8 +47,10 @@ export function wayTexture(kind?: WayType): CanvasTexture | null {
     ctx.fillStyle = '#dedfdd'; for(let n=0;n<150;n++) ctx.fillRect((n*31)%64,(n*19+Math.floor(n/11))%64,1,1)
   }
   const texture = new CanvasTexture(canvas)
-  texture.magFilter = NearestFilter; texture.minFilter = NearestFilter
-  texture.colorSpace = SRGBColorSpace; texture.generateMipmaps = false
+  // Crisp pixels up close, mipmapped far away, like the terrain atlas: without
+  // mipmaps the planks and grain shimmered as soon as the camera zoomed out.
+  texture.magFilter = NearestFilter; texture.minFilter = LinearMipmapLinearFilter
+  texture.colorSpace = SRGBColorSpace; texture.generateMipmaps = true
   textures.set(kind, texture)
   return texture
 }
@@ -68,8 +70,38 @@ export function parkingTexture(): CanvasTexture {
   ctx.fillRect(2, 15, 14, 2)
   ctx.fillRect(2, 28, 18, 2)
   const texture = new CanvasTexture(canvas)
-  texture.magFilter = NearestFilter; texture.minFilter = NearestFilter
-  texture.colorSpace = SRGBColorSpace; texture.generateMipmaps = false
+  // Crisp pixels up close, mipmapped far away, like the terrain atlas: without
+  // mipmaps the planks and grain shimmered as soon as the camera zoomed out.
+  texture.magFilter = NearestFilter; texture.minFilter = LinearMipmapLinearFilter
+  texture.colorSpace = SRGBColorSpace; texture.generateMipmaps = true
   parkingSurface = texture
   return texture
+}
+
+const deckMaterials = new Map<string, MeshStandardMaterial>()
+/**
+ * The deck material of a path tile: one per surface, colour and roughness, shared by
+ * every tile that looks alike, so the decks batch like the house models instead of
+ * bringing a material and a draw call each.
+ */
+export function wayDeckMaterial(kind: WayType, color: number, roughness: number): MeshStandardMaterial {
+  const key = `${kind}:${color}:${roughness}`
+  const cached = deckMaterials.get(key)
+  if (cached) return cached
+  const material = new MeshStandardMaterial({ color, map: wayTexture(kind), roughness })
+  material.userData.shared = true
+  deckMaterials.set(key, material)
+  return material
+}
+
+const deckGeometries = new Map<string, BoxGeometry>()
+/** One box per deck shape (full tile or crossing strip, flat or sloped). */
+export function wayDeckGeometry(width: number, height: number, length: number): BoxGeometry {
+  const key = `${width}:${height}:${length.toFixed(4)}`
+  const cached = deckGeometries.get(key)
+  if (cached) return cached
+  const geometry = new BoxGeometry(width, height, length)
+  geometry.userData.shared = true
+  deckGeometries.set(key, geometry)
+  return geometry
 }

@@ -56,7 +56,15 @@ hält die Simulationsuhr an, bis **Festival starten**.
   Anzeige und darf sich ändern (0.2.0 hat 17 Namen ersetzt, die aus den
   Wörtern einer anderen Band bestanden). Kein Name soll aus denselben Wörtern
   wie ein anderer bestehen. Sterne aus Reputation (`bandStarRating`); 5-Sterne
-  nur aus `festival.headlinerPool` (Sim-RNG beim Vorbereiten). Planner-Tabs
+  nur aus `festival.headlinerPool` (Sim-RNG beim Vorbereiten). **Headliner heißt
+  5 Sterne** (`isHeadlinerBand`); das Genre trägt keinen Zusatz mehr, die
+  Anzeige „· Headliner“ kommt aus `bandGenreLabel`, damit Genre-Prüfungen wie
+  DJ-Acts (`bandLooks.ts`) das reine Genre sehen. Jedes der acht Genres hat
+  mindestens einen Headliner (0.2.10: Hollow Oak Revival Folk, Starlight
+  Syndicate Pop, Golden Hour Revue Soul, Gravemarch Legion Metal; dazu Lunar
+  Dispatch Dance). Die 24 `x2`-Bands sind keine 3-%-Kopien ihrer `x` mehr:
+  andere Zugkraft (mindestens 3), dazu anderes Publikum, andere Stufe oder
+  andere Boxen. `tests/musicPlanning.ts` prüft das. Planner-Tabs
   und Auto-Plan filtern nach Sternen und überschreiben keine bestehenden Slots.
   Ticket-Slider färben die erwartete Kaufbereitschaft (grün/gelb/rot über
   CSS-Variable `--range-accent` am Range-Thumb und -Track; natives
@@ -107,3 +115,35 @@ Planungs-/Start-Zyklus oder die Endauswertung (HEADLINE Magazin) ändern.
 Bühnenwerkstatt bleibt in `docs/stages.md`. Spielerregeln auch im Root-`README.md`.
 
 Der Festivalbereich kombiniert die Ticketpreis-Regler samt Nachfrageschätzung mit dem separaten Reiter **Upgrades** für die Infrastruktur-Ausbaustufen.
+
+## Unwetter und Sponsoren (0.2.11)
+
+**Unwetter** (`src/game/storm.ts`, Config `storm`): Beim Start einer Ausgabe
+plant `planStorms` aus `festival.seed` die Gewitter der Festivaltage
+(`festival.storms`, Chance je Tag `storm.chancePerDay` × Schwierigkeit). Nichts
+wird aus dem Sim-Zufallsstrom gezogen. `stormAt` liefert `warning`
+(`warningMinutes` vorher) oder `active`.
+- Während `active` ruhen alle Auftritte (`showIssue`: „Unwetter …“), es regnet
+  (`weather = 'rain'`), Gäste im Freien verlieren Energie und Spaß
+  (`drainPerMinute`, Wetterbelastung `impactPerMinute`) und können stürzen
+  (`GameState.updateStormHazards`, `injuryChancePerMinute`, Sim-RNG, einmal je
+  Festivalminute). Sicher sind Gäste im Zelt, im Fahrzeug, auf dem Heimweg.
+- Zu den Minuten `lightningAfterMinutes` schlägt ein Blitz in eine hohe
+  Struktur (Bühne, Delay-Tower, Lichtmast, Ballon, Videowand) und legt Feuer, außer
+  die **Sturmsicherung** ist gekauft.
+- **Schutz anordnen** (Festival-Aktion `shelter`, ab der Warnung): Auftritte
+  pausieren sofort, das Risiko sinkt um `shelterOrderProtection`. Die Anordnung
+  endet mit dem Gewitter.
+- `festival.stormLive`, `stormInjuries` und `stormStats` (überstanden / ohne
+  Verletzte) halten den Verlauf; `stormStats.calm` speist den Erfolg „Sturmfest“.
+- Darstellung: Verdunkelung, Blitze und Regen in [rendering.md](rendering.md),
+  Donner und Regen in [audio.md](audio.md), Ticker „Unwetterwarnung“/„Gewitter“.
+
+**Sponsoren** (`src/game/sponsors.ts`, Config `sponsors`): Beim Öffnen der
+Planung (und im neuen Spiel) rollt `rollSponsorOffers` drei Angebote mit
+verschiedenen Bedingungen (Anreisen, Zufriedenheit, Festivalbanner, Headliner).
+`sponsor`-Aktion (vor dem Start, höchstens `maximumSigned`) bucht den Vorschuss in
+der Kategorie „Sponsoren“. Am Ende der Ausgabe, noch bevor sie als beendet gilt,
+zahlt `settleSponsors` den Bonus bei erfüllter Bedingung oder bucht den
+Vorschuss zurück. `festival.sponsorsFulfilled` zählt erfüllte Verträge.
+Die Marken sind erfunden.

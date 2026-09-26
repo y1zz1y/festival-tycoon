@@ -42,7 +42,8 @@ Multi-Goal-Suche, kein A* pro Objekt.
 - `CampingView` hält `CampMeshBatcher` dauerhaft: kleine Phasen-/Farb-/Alterungs-
   Änderungen aktualisieren Instanzdaten statt alle GPU-Batches neu zu erzeugen.
   Kapazität wächst in Zweierpotenzen, Instanzpuffer werden beim Ersetzen freigegeben.
-  Bollerwagen teilen statische Geometrie/Materialien; Sprites bleiben eigenständig.
+  Bollerwagen teilen statische Geometrie/Materialien; Schlaf- und Musiksymbole
+  sitzen in je einem `IconBillboards`-Batch statt als Sprite am Zelt.
 - Gleichzeitige Camp-Abreisen teilen das Besucher-Entscheidungsbudget. Ein noch
   abzubauendes Camp wird bei verzögerter Routenplanung auch am Ausgang erhalten.
 - Die Camping-Ausweisung selbst bleibt immer begehbarer Boden, auch bei
@@ -80,3 +81,11 @@ Visuelle Fixture: `tests/camping-preview.html`.
 Aktualisieren, wenn Phasen, Installationsarten, Gathering-Suche, Ticketbindung
 oder Batch-Grenzen ändern. Neue Camp-Props in Simulation **und**
 `campingModels` / `docs/rendering.md` eintragen.
+
+## Hygiene und Duschen (0.2.10)
+
+Camper werden mit der Zeit weniger frisch (`needs.hygieneDecayPerMinute`, nur
+für `isCamper`). Unter `decisions.seekShowerBelow` suchen sie eine Dusche
+(`shower`), die Wasser von den Trägern braucht. Ungeduschte Camper sind
+schlechter gelaunt; Hygiene zählt für sie in Laune und Zufriedenheit. Details
+in [visitors.md](visitors.md).

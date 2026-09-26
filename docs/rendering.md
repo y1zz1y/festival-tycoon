@@ -34,11 +34,12 @@ erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
 | Flächenrahmen | `src/view/coverOverlay.ts`, `src/game/groundCoverLook.ts` | Camping und Vorplatz: offener Innenbereich, ein Steinrahmen-Batch; Objektfilm nur Instanzfarbe |
 | Objektstützen | `src/game/supportOccupancy.ts`, `src/view/supports.ts` | geteilter Zylinder; nur bei Luft unter dem Objekt |
 | Lichter | `src/view/FestivalLightsView.ts` | fester Pool (8 PointLights, 4 SpotLights); Deko-Lampenfarben aus `decorationLights.ts` |
-| Auflösungscaps | `src/view/renderResolution.ts` | max. 1440×810 intern |
+| Auflösungscaps | `src/view/renderResolution.ts` | max. 1440×810 intern bei Stufe Standard; Stufe Niedrig ×0,75, Hoch ×1,5, nie über `devicePixelRatio` |
+| Grafikeinstellungen | `src/view/WorldView.ts` `setGraphics`, `src/view/effectDensity.ts` | Schattenkarte 0/1024/2048, Auflösungsstufe, Effektdichte; Werte aus [ui.md](ui.md) |
 | Touch-Kamera | `src/view/touchCamera.ts` | Zwei-Finger-Pan/Zoom |
 | Dispose | `src/view/disposeObject3D.ts` | GPU-Ressourcen |
-| Browser-Messharness | `tests/render-performance.html` | |
-| Logistik-Einbahn-Overlay | `src/view/LogisticsView.ts`, `src/view/roadDirectionArrow.ts` | Weiße StVO-Pfeile nach den Fahrzeugen; kompaktes InstancedMesh-Overlay nur bei Werkzeug Fahrtrichtung. Parkflächen: geteiltes Asphaltmaterial plus `parkingTexture` (Stelllinien in der Textur). Grün/Orange und das P nur in der Autostraßen-Bauansicht oder im Logistik-Overlay (`showParkingHelpers`) |
+| Browser-Messharness | `tests/render-performance.html` | `?fixture=festivalmittel` (Standard) oder `?save=`; berichtet Draw-Calls je Frame, Dreiecke, Geometrien, Texturen, Programme und einen Szenen-Zensus (Meshes, sichtbar, instanziert, Materialien); `?autorun=1` legt das Ergebnis in `window.__renderReport`. Werte: [performance.md](performance.md) |
+| Logistik-Einbahn-Overlay | `src/view/LogisticsView.ts`, `src/view/roadDirectionArrow.ts` | Weiße StVO-Pfeile nach den Fahrzeugen; kompaktes InstancedMesh-Overlay nur bei Werkzeug Fahrtrichtung. Parkflächen: geteiltes Asphaltmaterial plus `parkingTexture` (Stelllinien in der Textur); Asphalt und das gemalte P sind statisch und gebündelt. Straßendecks, Zebrastreifen, Sperren und Richtungspfeile teilen Geometrie (`sharedBox`, `sharedPlane`) und Material (`sharedMaterial` je Oberfläche und Farbe) und laufen durch `batchRetroBuildings`; nur die umschaltbaren Bauhilfen (Tempo-Tönung, frei/belegt) bleiben einzelne Meshes. Grün/Orange und das P nur in der Autostraßen-Bauansicht oder im Logistik-Overlay (`showParkingHelpers`) |
 | Buslinien-Planerroute | `src/view/LogisticsView.ts` `setPlannerRoute` | Eine `Line` / ein Material für die Stoppfolge plus ein Mesh mit geteiltem Zahlenatlas (1, 2, 3 …) an den Halten; weg beim Schließen des Reiters |
 | Logistik-Modelle | `src/view/logisticsModels.ts` | ModelKit-Gebäude und Fahrzeuge; Besucherautos teilen Geometrie je Lackfarbe |
 | Straßenrampen | `src/view/LogisticsView.ts` | Deck kippt um `roadSlope`; Stützen bei Erhöhung; Fahrzeuge folgen `waySurfaceY` |
@@ -51,7 +52,7 @@ erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
 | Kurs-Attraktionen | `src/view/CourseView.ts`, `src/view/courseBasinMesh.ts` | explizite Flächen instanziert; verbundene Strecken, Hindernisse und Außenränder als ein gecachtes Vertex-Color-Mesh; Punktobjekte je Stückart instanziert; benachbarte `poolBasin`-Kacheln derselben Attraktion teilen greedy Wasserrechtecke (ein InstancedMesh) und nur den Außenrand |
 | Achterbahnwagen | `src/view/coasterCars.ts` | ein gemergtes Mesh pro Wagen plus Sitzgruppen; Geometrie je **Zugstil + Lackfarbe** geteilt (`sitDownSteel`, `wooden`, `bmSitdown`, `invertV`, `flying`, `standUp`, `junior`, `mouse`, `bobsled`, `mine`, `swinging`, `launched`, `giga`). Derselbe Wagen wird als 96-px-Katalogkachel gerendert (`WorldView.coasterTrainThumbnail`) |
 | Achterbahnschienen | `src/view/coasterTrack.ts` via `WorldView.rebuildCoasters` | ein vertex-color Mesh je Stück. Schienen sind **Segmentboxen entlang der diskreten Sample-Polylinie** (Heading/Pitch/Bank, ein Basisvektor pro Segment, leichter Überlapp, kein jedes-zweite-Sample mit fester 0,14-Länge). Schwellen, Stützen, optional Spine/Trog im selben Mesh. Geteiltes Material. Animierte Züge, Specials (Foto/Splash) und Picking bleiben außerhalb des statischen Batches. Stil-Tabelle: `steelLattice`, `wooden`, `boxSpine`, `invertedBox`, `flyingSpine`, `juniorTubular`, `wildMouse`, `woodenMouse`, `bobsledTrough`, `suspendedSpine`, `gigaLattice`, `launchedSteel` |
-| Stand-Queue-Spuren | `src/view/WorldView.ts` `addQueueBarriers` | Mittelschiene und zwei Pfeile am Queue-Mesh; bleibt im Gebäude-Batch |
+| Stand-Queue-Spuren | `src/view/WorldView.ts` `addQueueBarriers` | Geländer, Mittelschiene und Pfeile aus `QUEUE_RAIL_MATERIAL`/`QUEUE_ARROW_MATERIAL` und einer Box je Maß (`queueBox`), statisch markiert und damit im Gebäude-Batch |
 
 Kursgäste besitzen während der Nutzung ebenfalls `state === 'riding'`, dürfen
 aber nicht wie Fahrgäste in Achterbahnwagen ausgeblendet werden.
@@ -89,7 +90,9 @@ Snapshot nicht autoritativ schreiben.
   aktualisieren Instanzdaten; Geometrie und Material werden weiterverwendet.
 - `CampMeshBatcher` in `batchCampMeshes.ts` hält GPU-Batches über Campänderungen
   hinweg vor und vergrößert die Kapazität in Zweierpotenzen. Formen, Farben,
-  Transformationen und separate Schlaf-/Musik-Sprites bleiben erhalten.
+  Transformationen bleiben erhalten. Schlaf- und Musiksymbole sind je ein
+  `IconBillboards`-Batch für das ganze Gelände (`src/view/spriteAtlas.ts`),
+  nicht mehr ein Canvas, eine Textur und ein Sprite-Material pro Camper.
   Bollerwagen teilen ihre statische Geometrie und Materialien.
 - `disposeObject3D` entsorgt bei `InstancedMesh` auch dessen Instanzattribute;
   Geometrie-/Material-Disposal allein gibt diese GPU-Puffer nicht frei.
@@ -111,12 +114,21 @@ Snapshot nicht autoritativ schreiben.
   den Hautton, ohne Brustwarzen-Geometrie oder farbige Markierungen.
 - Custom-BufferGeometry-Buckets nach **Geometrie-Identität** keyen, nicht nur
   nach Constructor-Parametern.
+- Shader vorkompilieren nie über die ganze Szene zur Laufzeit: `renderer.compile`
+  ruft `getProgram` je Objekt auf, auch für ausgeblendete Batch-Quellen. Wächst
+  eine Population (Personal, Fahrzeuge, Routen, Züge), kompiliert `WorldView.update`
+  nur deren Gruppe mit `compile(group, camera, scene)`; die ganze Szene nur einmal
+  beim Laden.
 - Light-Anzahl nie zur Laufzeit ändern (Shader-Recompile / Freezes).
   Acht PointLights, vier SpotLights und das Cursor-Licht bleiben immer
   in der Szene. Neue Deko-Lampen (`auroraLamp`, `gasLamp`, …) nur Farbe,
   Höhe, Distance und Intensität der vorhandenen Slots setzen; Glow/Birne
   sind InstancedMeshes außerhalb der statischen Scenery-Batches. Kein
-  Material oder Draw-Call pro Glühbirne.
+  Material oder Draw-Call pro Glühbirne. Leuchtet ein ganzer Körper (der
+  Tageslichtballon), setzt `DecorationLightSpec.shellRadius` eine additive
+  Leuchthülle aus einem gemeinsamen Batch darüber; sie existiert nur für
+  Quellen mit Strom und aktiver Lichtzeit und wird mit der Nacht stärker.
+  Modelle bringen kein eigenes Nachtlicht-Material mehr mit.
 - Preview-Materials dürfen gebaute Instanzen nicht einfärben oder disposen.
 - `WorldView` entscheidet keine Platzierungslegalität. Es rendert
   `PlacementPreviewResult` (`model`, `scenery`, `footprint`, `path`,
@@ -174,7 +186,10 @@ Details, einschließlich Picking-IDs bei Wegen. Kein Draw-Call pro Pfosten.
 Warteschlangen behalten ihre eigenen Geländer und bekommen nur den Stützenplan.
 
 Weg-/Straßendecks reichen ohne graue Anschlussflicken über die ganze Kachel.
-`wayTextures.ts` bäckt differenzierte 64px-Beläge (Bohlen mit Fugen/Nägeln,
+`wayTextures.ts` bäckt differenzierte 64px-Beläge (vergrößert `NearestFilter`,
+verkleinert `LinearMipmapLinearFilter` mit Mipmaps wie das Geländeatlas, sonst
+flimmern Wege beim Herauszoomen; Parkfläche 32 px) und liefert mit
+`wayDeckMaterial`/`wayDeckGeometry` die geteilten Wegdecks. Die Beläge: (Bohlen mit Fugen/Nägeln,
 versetztes Pflaster, Kieskörnung, Fahrplatten, Dirt-Spuren und Asphaltkörnung).
 Auch Legacy-Beläge ohne WayType bekommen Textur. Asphaltgeraden erhalten
 Mittellinien; Geschwindigkeits-Farbtönung erscheint nur mit Straßenbauhilfen.
@@ -220,3 +235,74 @@ Außerhalb davon lassen lokal transparent gewordene Fassaden Klicks zu den
 Objekten dahinter durch, etwa zu Ständen. Entfernte, undurchsichtige Bauteile
 bleiben anklickbar. Der Hover-Test trifft weiterhin die Fassaden, damit der
 Einblick beim Durchklicken stabil bleibt.
+
+## Grafikstandard durchgesetzt (0.2.3)
+
+Gemessen mit `tests/render-performance.html` und festivalmittel sind Draw-Calls von
+2.305 auf 833 und die Render-Zeit von 21,6 auf rund 12,4 ms gefallen
+([performance.md](performance.md)). Die Regeln dahinter:
+
+- **Jede Katalogart hat ein gebündeltes Modell.** `createBuildingModel` kennt nur
+  noch Hausstil-Modelle (`createRetroBuilding`), Logistikmodelle und das Wegdeck
+  (`createPathModel`). Bauzaun, Tisch, Beleuchtung und Tageslichtballon sind
+  Rezepte in `retroBuildings.ts`; der alte Flachfarben-Fallback mit Material pro
+  Objekt ist weg. `tests/performanceGuards.ts` prüft, dass keine Art ohne Modell
+  bleibt.
+- **Bündeln nach Geometrie und Material.** `batchRetroBuildings` fasst alle
+  `userData.retroStatic`-Meshes mit gleicher Geometrie und gleichem Material zu
+  einem InstancedMesh zusammen. `userData.flatSurface` (Decks, Asphalt) wirft
+  keinen Schatten. Die Gebäude-ID für das Anklicken wird über alle Vorfahren
+  gesucht (`owningBuildingId`), damit verschachtelte Teile sie behalten.
+- **Materialpalette.** `src/view/materials.ts` hält das Hausmaterial
+  (`HOUSE_MATERIAL`) und geteilte Overlays (`overlayMaterial`); `shared()`
+  markiert, was `disposeObject3D` nicht entsorgen darf. `MATERIAL_CEILINGS` in
+  `tests/performanceGuards.ts` begrenzt `new MeshStandardMaterial(` je Datei auf den
+  heutigen Stand; eine Obergrenze wird nur gesenkt.
+- **Symbole.** `src/view/spriteAtlas.ts` zeichnet Gefühle, Schlaf, Noten und
+  Sprechblase als 16×16-Pixelgrafik im Code (`iconTexture`), auf jedem System
+  gleich; die Emoji-Schrift ist raus. `IconBillboards` zeichnet ein Symbol an
+  beliebig vielen Stellen in einem Draw-Call; die Quads drehen sich im
+  Vertex-Shader zur Kamera. Camping und Sanität teilen dasselbe Schlafsymbol.
+- **Sanität.** `MedicalView` hält drei InstancedMeshes (Kachel, Liege, Patient)
+  und einen Billboard-Batch und schreibt bei Belegungswechseln nur Instanzen um.
+- **Farbraum.** Jede Canvas-Textur setzt `SRGBColorSpace` (0.2.0).
+
+Noch nicht gebündelt, nach Messung die nächsten Kandidaten: Personal
+(`StaffView`, 335 Einzel-Meshes, 217 Materialien), Träger (`SupplyChainView`,
+335), fahrende Fahrzeuge (204), Bühnenvorplätze (`ForecourtView`, 81) und
+Zugangsobjekte (`AccessControlView`, 53).
+
+## Grafikeinstellungen (0.2.4)
+
+`WorldView.setGraphics` setzt, was der Spieler unter Einstellungen → Grafik
+wählt. **Schatten:** Aus schaltet `sunLight.castShadow` ab (die Lichteinrichtung
+ändert sich einmal, die Shader kompilieren beim nächsten Bild neu); Normal ist
+die bisherige 1024er-Schattenkarte, Hoch 2048. Eine neue Kartengröße entsorgt
+die alte Karte. **Auflösung:** Faktor auf das logische Pixelraster von
+`scenePixelRatio` (0,75 / 1 / 1,5), begrenzt durch `devicePixelRatio`.
+**Effekte:** `effectDensity.ts` hält einen Anteil (1/3, 1/2, 1). Feuerwerk zeichnet
+`effectCount(24, 6)` Funken, gleichmäßig über den ganzen Ausbruch verteilt;
+Laser zeichnen `effectCount(4)` der vier Strahlfarben; die Schallwellen-Ringe
+über Lautsprechern entfallen unter 1/2. Die Zahl der Lichter ändert sich nie.
+
+## Flat-Ride-Modelle (0.2.10)
+
+`src/view/flatRideModels.ts` baut je Fahrgeschäftstyp eine statische Basis und
+wenige bewegte Teile (Rotor, Gondeln, Wagen, Schiff) aus `ModelKit`-Geometrie mit
+`HOUSE_MATERIAL`. Die Geometrie je Teil ist einmal pro Typ gebaut und geteilt
+(`userData.shared`), die Materialzahl bleibt null neue Konstruktoren. Die Modelle
+sind nicht `retroStatic`, weil sie sich bewegen. `WorldView.update` animiert sie
+mit der interpolierten Festivalzeit (`showTime / 2`, Minuten) und nur mit
+Fahrgästen; die Bauvorschau zeigt das halbtransparente Modell auf der ganzen
+Grundfläche. Trinkwasserstelle und Duschen sind statische Hausstil-Rezepte in
+`retroBuildings.ts`.
+
+## Unwetter (0.2.11)
+
+`WorldView.applyStormLight` legt jedes Bild auf die Tag-Nacht-Werte
+(`updateDayNight` merkt sich die Basis) eine Verdunkelung von Himmel, Umgebungs-
+und Sonnenlicht, in der Warnstunde ansteigend. Blitze sind kurze Helligkeitsstöße
+nach einem festen Muster der Simulationszeit; die Zahl der Lichter bleibt gleich.
+`src/view/RainView.ts` zeichnet Regen als einen InstancedMesh-Batch um den
+Blickpunkt, ausgedünnt durch die Effektdichte; Regen fällt mit der Simulationszeit
+und steht bei Pause. Das Wetter-Overlay (`festival.css`) hat `data-storm`.

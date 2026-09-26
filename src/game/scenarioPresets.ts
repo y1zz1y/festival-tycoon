@@ -24,6 +24,24 @@ const preset = (
 ): ScenarioPreset => ({ id, name, detail, price, settings: { ...DEFAULT_SCENARIO, ...settings } })
 
 export const SCENARIO_PRESETS: ScenarioPreset[] = [
+  // First steps (A9): no goals, no deadline; a checklist (src/game/tutorial.ts) leads
+  // through the first build instead.
+  preset(
+    'einstieg',
+    'Erste Schritte',
+    'Ein kleines, flaches Feld und genug Geld für den Anfang. Eine Checkliste führt durch den ersten Aufbau: Weg, Bühne mit Strom, Imbiss und Toilette, Band buchen, Festival starten.',
+    {
+      environment: 'farmland',
+      unevenness: .05,
+      worldSize: 32,
+      startingMoney: 30_000,
+      startingLoan: 0,
+      partyAffinity: .6,
+      beautyAffinity: .4,
+      carArrivalShare: .2,
+      goals: [],
+    },
+  ),
   preset(
     'woodstock',
     'Woodstock',
@@ -88,6 +106,82 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
       partyAffinity: .6,
       beautyAffinity: .5,
       goals: [{ kind: 'money', target: 25_000, edition: 3 }],
+    },
+  ),
+  // The four below borrow a real festival's character, not its name: the name is a
+  // cheerful mangling, the goals are the ones the first four leave unused.
+  preset(
+    'wackelstein',
+    'Wackelstein Open Air',
+    'Ein Dorf, eine Kuhweide und sehr viel Metal. Regnet es, wird der Acker zu Schlamm und der Schlamm zur Legende. Hier zählt nicht die Menge, sondern der Ruf unter den Kuttenträgern.',
+    {
+      environment: 'farmland',
+      unevenness: .2,
+      worldSize: 64,
+      startingMoney: 12_000,
+      startingLoan: 0,
+      partyAffinity: .55,
+      beautyAffinity: .25,
+      carArrivalShare: .6,
+      aggressiveShare: .3,
+      goals: [
+        { kind: 'reputation', target: 60, edition: 3 },
+        { kind: 'admissions', target: 500, edition: 3 },
+      ],
+    },
+  ),
+  preset(
+    'kutschella',
+    'Kutschella',
+    'Wüste, Palmen, Sonnenbrillen. Das Publikum will Kunst, Aussicht und Schatten, die Geldgeber wollen Gewinn — nicht einmal, sondern zwei Ausgaben hintereinander.',
+    {
+      environment: 'desert',
+      unevenness: .25,
+      worldSize: 64,
+      startingMoney: 30_000,
+      startingLoan: 20_000,
+      partyAffinity: .7,
+      beautyAffinity: .9,
+      carArrivalShare: .8,
+      goals: [{ kind: 'profit', target: 12_000, edition: 4, streak: 2 }],
+    },
+  ),
+  preset(
+    'glastonbauer',
+    'Glastonbauer',
+    'Ein Bauernhof, so groß, dass man sich darauf verläuft, und Gäste, die bleiben wollen. Wer hier glücklich macht, darf wiederkommen: Zufriedenheit zählt, zwei Ausgaben in Folge.',
+    {
+      environment: 'farmland',
+      unevenness: .55,
+      worldSize: 80,
+      startingMoney: 25_000,
+      startingLoan: 0,
+      partyAffinity: .6,
+      beautyAffinity: .7,
+      carArrivalShare: .3,
+      goals: [
+        { kind: 'satisfaction', target: 75, edition: 4, streak: 2 },
+        { kind: 'admissions', target: 800, edition: 4 },
+      ],
+    },
+  ),
+  preset(
+    'verschmelzung',
+    'Verschmelzung',
+    'Ein stillgelegter Flugplatz, Beton bis zum Horizont und eine Crew mit großen Plänen. Kein Baum, kein Schatten, dafür fester Boden. Am Ende soll das Gelände etwas wert sein — und schuldenfrei.',
+    {
+      environment: 'urban',
+      unevenness: .05,
+      worldSize: 64,
+      startingMoney: 20_000,
+      startingLoan: 15_000,
+      partyAffinity: .9,
+      beautyAffinity: .6,
+      carArrivalShare: .25,
+      goals: [
+        { kind: 'parkValue', target: 120_000, edition: 4 },
+        { kind: 'loanFree', edition: 4 },
+      ],
     },
   ),
 ]

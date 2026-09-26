@@ -153,6 +153,42 @@ parkingOccupiedMaterial.userData.shared = true
 
 type ParkingHelper = { group: Group; free: Mesh; occupied: Mesh }
 
+/**
+ * Everything static on a road or a parking space shares its box and its material with
+ * every other piece of the same size and colour, and is marked static, so
+ * batchRetroBuildings turns a whole network into a few instanced batches instead of
+ * a mesh, a geometry and a material per crosswalk stripe, barrier foot or road tile.
+ */
+const sharedBoxes = new Map<string, BoxGeometry>()
+function sharedBox(size: readonly [number, number, number]): BoxGeometry {
+  const key = size.map((value) => value.toFixed(4)).join(':')
+  const cached = sharedBoxes.get(key)
+  if (cached) return cached
+  const geometry = new BoxGeometry(...size)
+  geometry.userData.shared = true
+  sharedBoxes.set(key, geometry)
+  return geometry
+}
+const sharedPlanes = new Map<string, PlaneGeometry>()
+function sharedPlane(width: number, length: number): PlaneGeometry {
+  const key = `${width.toFixed(4)}:${length.toFixed(4)}`
+  const cached = sharedPlanes.get(key)
+  if (cached) return cached
+  const geometry = new PlaneGeometry(width, length)
+  geometry.userData.shared = true
+  sharedPlanes.set(key, geometry)
+  return geometry
+}
+const sharedMaterials = new Map<string, MeshStandardMaterial>()
+function sharedMaterial(key: string, create: () => MeshStandardMaterial): MeshStandardMaterial {
+  const cached = sharedMaterials.get(key)
+  if (cached) return cached
+  const material = create()
+  material.userData.shared = true
+  sharedMaterials.set(key, material)
+  return material
+}
+
 function addBox(
   parent: Group,
   size: readonly [number, number, number],
@@ -161,10 +197,11 @@ function addBox(
   roughness = 0.8,
 ): Mesh {
   const mesh = new Mesh(
-    new BoxGeometry(...size),
-    new MeshStandardMaterial({ color, roughness }),
+    sharedBox(size),
+    sharedMaterial(`box:${color}:${roughness}`, () => new MeshStandardMaterial({ color, roughness })),
   )
   mesh.position.set(...position)
+  mesh.userData.retroStatic = true
   parent.add(mesh)
   return mesh
 }
@@ -174,19 +211,21 @@ function addSharedMark(
   size: readonly [number, number, number],
   position: readonly [number, number, number],
   material: MeshStandardMaterial = parkingMarkMaterial,
+  batched = false,
 ): Mesh {
-  const mesh = new Mesh(new BoxGeometry(...size), material)
+  const mesh = new Mesh(sharedBox(size), material)
   mesh.position.set(...position)
+  mesh.userData.retroStatic = batched
   parent.add(mesh)
   return mesh
 }
 /** The four strokes of a "P": a stem and a bowl closed on its right. Shared by the always-on
  * paint and the free/occupied helper overlay, so both read as the same letter in the same spot. */
-function addParkingLetter(parent: Group, y: number, material: MeshStandardMaterial): void {
-  addSharedMark(parent, [0.07, 0.018, 0.5], [-0.17, y, 0], material)
-  addSharedMark(parent, [0.3, 0.018, 0.07], [-0.02, y, -0.215], material)
-  addSharedMark(parent, [0.3, 0.018, 0.07], [-0.02, y, 0], material)
-  addSharedMark(parent, [0.07, 0.018, 0.22], [0.13, y, -0.11], material)
+function addParkingLetter(parent: Group, y: number, material: MeshStandardMaterial, batched = false): void {
+  addSharedMark(parent, [0.07, 0.018, 0.5], [-0.17, y, 0], material, batched)
+  addSharedMark(parent, [0.3, 0.018, 0.07], [-0.02, y, -0.215], material, batched)
+  addSharedMark(parent, [0.3, 0.018, 0.07], [-0.02, y, 0], material, batched)
+  addSharedMark(parent, [0.07, 0.018, 0.22], [0.13, y, -0.11], material, batched)
 }
 
 export class LogisticsView {
@@ -358,6 +397,7 @@ export class LogisticsView {
       this.staticGroup.add(this.placeFacility(stop, 'busStop'))
     })
     this.staticGroup.add(batchRetroBuildings(this.staticGroup))
+    this.marksGroup.add(batchRetroBuildings(this.marksGroup))
   }
 
   private createRoad(road: RoadCell): Group {
@@ -375,12 +415,16 @@ export class LogisticsView {
       group.rotation.y = DIRECTION_ANGLE[(road.roadSlopeDirection ?? 0) as Direction]
     }
     group.add(deck)
+    const color = this.roadColor(road.x, road.z)
+    const surface = this.roadSurface(road.x, road.z) ?? 'roadAsphalt'
     const asphalt = new Mesh(
-      new PlaneGeometry(1, Math.hypot(1, slope)),
-      new MeshStandardMaterial({ color: this.roadColor(road.x, road.z), map: wayTexture(this.roadSurface(road.x, road.z) ?? 'roadAsphalt'), roughness: 1 }),
+      sharedPlane(1, Math.hypot(1, slope)),
+      sharedMaterial(`road:${surface}:${color}`, () => new MeshStandardMaterial({ color, map: wayTexture(surface), roughness: 1 })),
     )
     asphalt.rotation.x = -HALF_PI
     asphalt.receiveShadow = true
+    asphalt.userData.retroStatic = true
+    asphalt.userData.flatSurface = true
     deck.add(asphalt)
     const cell = this.structureRoads.get(road)!
     const structure = createWayStructure(cell, wayStructurePlan(cell, this.structureIndex, this.groundY(road.x, road.z)))
@@ -388,14 +432,16 @@ export class LogisticsView {
 
     const speed = road.speedLimit
     const zoneColor = speed <= 10 ? 0x35bb66 : speed <= 30 ? 0xf2cf45 : 0xe64b45
+    // The speed tint is a build helper, switched on and off with the road tools, so it
+    // stays a mesh of its own; its material and shape are shared all the same.
     const zone = new Mesh(
-      new PlaneGeometry(0.78, slope === 0 ? 0.78 : Math.hypot(0.78, slope)),
-      new MeshStandardMaterial({
+      sharedPlane(0.78, slope === 0 ? 0.78 : Math.hypot(0.78, slope)),
+      sharedMaterial(`zone:${zoneColor}`, () => new MeshStandardMaterial({
         color: zoneColor,
         transparent: true,
         opacity: 0.2,
         depthWrite: false,
-      }),
+      })),
     )
     zone.rotation.x = -HALF_PI
     zone.position.y = 0.008
@@ -414,6 +460,7 @@ export class LogisticsView {
       : directionsFromMask(road.allowedDirections)
     ).forEach((direction) => {
       const arrow = new Mesh(roadArrowGeometry, roadArrowMaterial)
+      arrow.userData.retroStatic = true
       arrow.rotation.y = DIRECTION_ANGLE[direction]
       arrow.position.set(road.x + 0.5, this.roadY(road) + 0.018, road.z + 0.5)
       arrow.scale.setScalar(0.72)
@@ -456,8 +503,10 @@ export class LogisticsView {
     const asphalt = new Mesh(parkingAsphaltGeometry, getParkingAsphaltMaterial())
     asphalt.rotation.x = -HALF_PI
     asphalt.receiveShadow = true
+    asphalt.userData.retroStatic = true
+    asphalt.userData.flatSurface = true
     group.add(asphalt)
-    addParkingLetter(group, 0.006, parkingLetterMaterial)
+    addParkingLetter(group, 0.006, parkingLetterMaterial, true)
     const helpers = new Group()
     helpers.visible = this.showParkingHelpers
     const free = new Mesh(parkingHelperGeometry, parkingFreeMaterial)

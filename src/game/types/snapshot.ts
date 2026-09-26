@@ -89,6 +89,8 @@ export type GameSnapshot = {
   scenario: ScenarioSettings
   finance: FinanceState
   scenarioProgress: ScenarioProgress
+  /** Set once debug money was added: progress records and achievements skip this game. */
+  debugAssisted?: boolean
   terrain: TerrainSnapshot
   power: PowerSnapshot
 }

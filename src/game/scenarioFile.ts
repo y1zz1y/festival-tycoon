@@ -1,3 +1,4 @@
+import { difficultyProfile } from './difficulty'
 import { normalizeTicketDemandTuning, type TicketDemandTuning } from './demandTuning'
 import { createFinanceState } from './finance'
 import { weekendGoals } from './festivalManagement'
@@ -188,7 +189,7 @@ function applyPlayableStart(snapshot: GameSnapshot, file: ScenarioFile): GameSna
   })
   delete settings.authoring
   snapshot.scenario = settings
-  snapshot.money = settings.startingMoney
+  snapshot.money = Math.round(settings.startingMoney * difficultyProfile(settings).money)
   snapshot.finance = createFinanceState(settings.startingLoan)
   snapshot.parkOpen = false
   snapshot.festival.planning = true

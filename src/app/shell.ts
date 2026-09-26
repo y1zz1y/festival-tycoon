@@ -1,9 +1,17 @@
+import { DIFFICULTIES, DIFFICULTY_NAMES } from '../game/difficulty'
 import { BUILD_CATEGORIES, buildCategoryById } from '../game/buildMenu'
 import { ENVIRONMENTS } from '../game/environments'
 import { SCENARIO_PRESETS } from '../game/scenarioPresets'
 import { SHIRT_STYLE_LABELS, SHIRT_STYLES } from '../game/shopGoods'
 import { STAFF_DEFINITIONS, STAFF_ROLES } from '../game/staff'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
+import { EFFECT_OPTIONS, RESOLUTION_OPTIONS, SHADOW_OPTIONS, UI_SCALE_OPTIONS, VOLUME_CHANNELS } from './playerSettings'
+
+const difficultyOptions = (): string =>
+  DIFFICULTIES.map((difficulty) => `<option value="${difficulty}"${difficulty === 'normal' ? ' selected' : ''}>${DIFFICULTY_NAMES[difficulty]}</option>`).join('')
+
+const options = (list: readonly { value: string; label: string }[]): string =>
+  list.map((option) => `<option value="${option.value}">${option.label}</option>`).join('')
 
 /** What free play can ask of itself. The peak crowd is left out: one full minute would do. */
 const FREEPLAY_GOAL_OPTIONS = [
@@ -153,11 +161,18 @@ export function mountAppShell(app: HTMLDivElement): void {
       </div>
       <h3 class="scenario-heading">Einstellungen</h3>
       <label class="scenario-check"><input id="setting-debug-tools" type="checkbox" /><span>Debug</span></label>
-      <label class="scenario-check"><input id="setting-mute-audio" type="checkbox" /><span>Ton stumm</span></label>
       <label class="scenario-check"><input id="setting-stock-bars" type="checkbox" /><span>Füllstände über Ständen</span></label>
       <label class="scenario-check"><input id="setting-unsaved-warning" type="checkbox" /><span>Vor ungespeichertem Verlassen warnen</span></label>
       <label class="scenario-check" id="setting-keep-awake-field"><input id="setting-keep-awake" type="checkbox" /><span>Im Mehrspieler Bildschirm wachhalten</span></label>
       <label class="scenario-field"><span>Autospeichern</span><select id="setting-autosave">${AUTOSAVE_INTERVALS.map((option) => `<option value="${option.minutes}">${option.label}</option>`).join('')}</select></label>
+      <h3 class="scenario-heading">Grafik</h3>
+      <label class="scenario-field"><span>Schatten</span><select id="setting-shadows">${options(SHADOW_OPTIONS)}</select></label>
+      <label class="scenario-field"><span>Auflösung</span><select id="setting-resolution">${options(RESOLUTION_OPTIONS)}</select></label>
+      <label class="scenario-field"><span>Effekte</span><select id="setting-effects">${options(EFFECT_OPTIONS)}</select></label>
+      <label class="scenario-field"><span>Oberfläche</span><select id="setting-ui-scale">${UI_SCALE_OPTIONS.map((scale) => `<option value="${scale}">${Math.round(scale * 100)} %</option>`).join('')}</select></label>
+      <h3 class="scenario-heading">Ton</h3>
+      <label class="scenario-check"><input id="setting-mute-audio" type="checkbox" /><span>Ton stumm</span></label>
+      ${VOLUME_CHANNELS.map((channel) => `<label class="scenario-field volume-field"><span>${channel.label}<output id="setting-volume-${channel.value}-value"></output></span><input id="setting-volume-${channel.value}" type="range" min="0" max="100" step="5" /></label>`).join('')}
       <h3 class="scenario-heading">Tastenbelegung</h3>
       <p class="scenario-hint">Auf eine Taste klicken und die neue drücken. Eine Taste gehört immer nur einer Aktion.</p>
       <div id="hotkey-list" class="hotkey-list"></div>
@@ -546,6 +561,8 @@ export function mountAppShell(app: HTMLDivElement): void {
       <div class="needs">
         <div><label><span>🍔 Sättigung</span><b id="hunger-value">0%</b></label><i><u id="hunger-bar"></u></i></div>
         <div><label><span>🚻 Toilette</span><b id="toilet-value">0%</b></label><i><u id="toilet-bar"></u></i></div>
+            <div><label><span>🚰 Durst gestillt</span><b id="thirst-value">0%</b></label><i><u id="thirst-bar"></u></i></div>
+            <div id="hygiene-row"><label><span>🚿 Hygiene</span><b id="hygiene-value">0%</b></label><i><u id="hygiene-bar"></u></i></div>
         <div><label><span>🎉 Spaß</span><b id="fun-value">0%</b></label><i><u id="fun-bar"></u></i></div>
         <div><label><span>⚡ Energie</span><b id="energy-value">0%</b></label><i><u id="energy-bar"></u></i></div>
         <div><label><span>🍺 Alkoholpegel</span><b id="alcohol-value">0%</b></label><i><u id="alcohol-bar"></u></i></div>
@@ -897,6 +914,7 @@ export function mountAppShell(app: HTMLDivElement): void {
           <button type="button" data-title-menu="new" aria-haspopup="true"><span class="title-menu-label">Neues Spiel</span><span id="title-new-meta" class="title-menu-meta">${SCENARIO_PRESETS.length + 1} Szenarien</span></button>
           <button type="button" data-title-menu="editor"><span class="title-menu-label">Szenario-Editor</span><span class="title-menu-meta">Frei bauen und exportieren</span></button>
           <button type="button" data-title-menu="load"><span class="title-menu-label">Spielstand laden</span><span class="title-menu-meta">Archiv öffnen</span></button>
+          <button type="button" data-title-menu="achievements"><span class="title-menu-label">Erfolge</span><span id="title-achievements-meta" class="title-menu-meta">Noch keine</span></button>
           <button type="button" data-title-menu="multiplayer" aria-haspopup="true"><span class="title-menu-label">Mehrspieler beitreten</span><span class="title-menu-meta">Offene Lobby oder Code</span></button>
           <button type="button" data-title-menu="settings"><span class="title-menu-label">Einstellungen</span><span class="title-menu-meta">Debug · Festivaldaten</span></button>
         </nav>
@@ -945,6 +963,17 @@ export function mountAppShell(app: HTMLDivElement): void {
           <button type="button" data-title-lobby-close>Zurück</button>
         </div>
       </div>
+      <div id="title-achievements-mask" class="title-submenu" hidden>
+        <div class="title-submenu-card">
+          <div class="title-submenu-head">
+            <span class="title-submenu-title">Erfolge</span>
+            <span id="title-achievements-kicker" class="title-submenu-kicker">Über alle Partien</span>
+          </div>
+          <div id="title-achievements-rows" class="title-submenu-rows title-achievement-rows"></div>
+          <p class="scenario-hint">Erfolge und geschaffte Szenarien bleiben in diesem Browser und, wenn du angemeldet bist, in deinem Konto. Spiele mit Debug-Geld zählen nicht.</p>
+          <button type="button" data-title-achievements-close>Zurück</button>
+        </div>
+      </div>
       <div id="title-load-mask" class="title-submenu" hidden>
         <div class="title-submenu-card">
           <div class="title-submenu-head">
@@ -976,6 +1005,7 @@ export function mountAppShell(app: HTMLDivElement): void {
           </div>
           <div id="title-briefing" class="title-freeplay title-briefing"></div>
           <div class="title-freeplay-actions">
+            <label class="scenario-field title-briefing-difficulty"><span>Schwierigkeit</span><select id="title-briefing-difficulty">${difficultyOptions()}</select></label>
             <button id="title-briefing-start" type="button">▶ Szenario starten</button>
             <button type="button" data-title-briefing-close>Zurück</button>
           </div>
@@ -1015,6 +1045,11 @@ export function mountAppShell(app: HTMLDivElement): void {
       <label class="scenario-field">
         <span>Startgeld <b id="scenario-money-value">10.000 €</b></span>
         <input id="scenario-money" type="range" min="5000" max="250000" step="5000" value="10000" />
+      </label>
+      <label class="scenario-field">
+        <span>Schwierigkeit</span>
+        <select id="scenario-difficulty">${difficultyOptions()}</select>
+        <small>Startgeld, laufende Kosten, Andrang, Gästebudget, Bedürfnisse und Unwetter</small>
       </label>
       <label class="scenario-field">
         <span>Kartengröße</span>

@@ -9,13 +9,15 @@ import type { ShirtStyle, WornShirt } from '../shopGoods'
 import type { StageDesign } from '../stageDesign'
 import type { ComplaintTopic } from '../complaints'
 import type { WayType } from '../wayTypes'
+import type { RideType } from '../flatRides'
 
 export type Cell = { x: number; z: number; elevation: number }
 
 export type PlacedBuilding = {
   rideEntrance?: { x: number; y: number; z: number }
   rideExit?: { x: number; y: number; z: number }
-  rideType?: 'bungee'
+  /** Unset: carousel. See src/game/flatRides.ts. */
+  rideType?: RideType
   bungeeHeight?: number
   bungeeVisitorId?: string
   decorationSlot?: number
@@ -48,6 +50,10 @@ export type PlacedBuilding = {
 export type VisitorNeeds = {
   hunger: number
   toilet: number
+  /** 100 = not thirsty. Faster in heat. */
+  thirst: number
+  /** 100 = fresh. Only drops for campers; see src/game/visitorNeeds.ts. */
+  hygiene: number
   fun: number
   energy: number
 }

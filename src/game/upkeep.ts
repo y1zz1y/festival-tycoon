@@ -1,12 +1,13 @@
 import { BUILDINGS, type BuildingKind } from './catalog'
 import { courseHourlyUpkeep } from './courseAttractions'
+import { rideProfile } from './flatRides'
 import { getFestivalCycleStatus } from './dayPlan'
 import { stageStats } from './stageDesign'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import type { PlacedBuilding } from './types/entities'
 import type { GameSnapshot } from './types/snapshot'
 
-const BOOTH_KINDS = new Set<BuildingKind>(['food', 'alcohol', 'shirt', 'mascot', 'toilet'])
+const BOOTH_KINDS = new Set<BuildingKind>(['food', 'alcohol', 'shirt', 'mascot', 'toilet', 'waterPoint', 'shower'])
 const ATTRACTION_KINDS = new Set<BuildingKind>(['ride'])
 
 export function festivalIsLive(state: Pick<GameSnapshot, 'festival' | 'dayPlan' | 'day'>): boolean {
@@ -27,7 +28,7 @@ export function buildingHourlyUpkeep(
   building: Pick<PlacedBuilding, 'kind' | 'stageDesign' | 'rideType'>,
   options: { festivalLive: boolean; onBreak: boolean },
 ): number {
-  const base = BUILDINGS[building.kind].upkeep
+  const base = building.kind === 'ride' ? rideProfile(building).upkeep : BUILDINGS[building.kind].upkeep
   const tech = building.stageDesign ? stageStats(building.stageDesign).upkeep : 0
   const idle = venueUpkeepIdle(options)
   if (building.kind === 'stage') {

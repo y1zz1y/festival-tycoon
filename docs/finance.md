@@ -61,3 +61,11 @@ Gesamtlauf: `npm test`.
 
 Aktualisieren, wenn Kategorien, Ledger-Zuordnung, Prognose, Kreditregeln,
 Snapshot-Struktur oder Finanz-UI geändert werden.
+
+## Sponsoren und Schwierigkeit (0.2.11)
+
+Neue Kategorie `sponsors` („Sponsoren“): Vorschüsse beim Unterschreiben, Boni
+oder Rückzahlungen am Ende der Ausgabe (vor `finished`, damit sie in der Spalte
+dieser Ausgabe landen), siehe [festival.md](festival.md). Die Schwierigkeit
+skaliert Betriebskosten und Personal (`difficultyProfile().runningCosts`) in
+`GameState.hourlyRunningCosts` und in der Aufschlüsselung gleich.

@@ -4,6 +4,7 @@ import type { GameSnapshot, PlacedBuilding } from './GameState'
 import { buildingFootprint } from './stageDesign'
 import { isScenery, SCENERY_KINDS } from './scenery'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import { localStock } from './supplyChain'
 import { BANDS } from './festivalManagement'
 import type { Booking } from './festivalManagement'
 
@@ -66,6 +67,11 @@ export type BandSupplyStats = {
   foodCount: number
   drinkCount: number
   dedicatedCatering: number
+  /** Couch seats and a stocked toilet on active tiles, as attractiveness points. */
+  furnitureTerm: number
+  couchSeats: number
+  fridgeCount: number
+  suppliedToilets: number
   satisfaction: number
   showQuality: number
   bareStage: boolean
@@ -373,6 +379,29 @@ export function decoScoreOnActiveTiles(
   return diminishBeauty(raw)
 }
 
+/**
+ * The band's own furniture on active backstage tiles: fridges, couch seats (one per
+ * field a couch covers) and backstage toilets that have water in stock.
+ */
+export function backstageFurnitureOnActiveTiles(
+  snapshot: GameSnapshot,
+  activeKeys: ReadonlySet<string>,
+): { fridgeCount: number; couchSeats: number; suppliedToilets: number } {
+  let fridgeCount = 0
+  let couchSeats = 0
+  let suppliedToilets = 0
+  for (const building of snapshot.buildings) {
+    if (building.kind === 'bandFridge') {
+      if (activeKeys.has(backstageCellKey(building))) fridgeCount += 1
+    } else if (isBackstageCouchKind(building.kind)) {
+      couchSeats += buildingFootprint(building).filter((cell) => activeKeys.has(backstageCellKey(cell))).length
+    } else if (building.kind === 'backstageToilet') {
+      if (activeKeys.has(backstageCellKey(building)) && localStock(snapshot, building.id, 'water') >= 1) suppliedToilets += 1
+    }
+  }
+  return { fridgeCount, couchSeats, suppliedToilets }
+}
+
 export type BandSupplyComputeContext = {
   fansOnActiveTiles: number
   usableSlots: number
@@ -405,8 +434,14 @@ export function computeBandSupplyStats(
   const decoScore = hasActiveBackstage
     ? decoScoreOnActiveTiles(snapshot.buildings, activeKeys)
     : 0
+  const furniture = hasActiveBackstage
+    ? backstageFurnitureOnActiveTiles(snapshot, activeKeys)
+    : { fridgeCount: 0, couchSeats: 0, suppliedToilets: 0 }
+  const furnitureTerm =
+    Math.min(config.couchComfortCap, furniture.couchSeats * config.comfortPerCouchSeat) +
+    (furniture.suppliedToilets > 0 ? config.suppliedToiletComfort : 0)
   const attractiveness = hasActiveBackstage
-    ? clampScore(decoScore + parkingTerm - fanPenalty)
+    ? clampScore(decoScore + parkingTerm + furnitureTerm - fanPenalty)
     : config.bareStageAttractiveness
   const tilesForCatering = hasActiveBackstage
     ? component.tiles
@@ -415,7 +450,8 @@ export function computeBandSupplyStats(
     snapshot.buildings,
     tilesForCatering,
   )
-  const dedicatedCatering = 0
+  const dedicatedCatering =
+    Math.min(config.fridgesCounted, furniture.fridgeCount) * config.cateringPerFridge
   const parkCatering =
     foodCount * config.cateringPerFoodStall +
     drinkCount * config.cateringPerDrinkStall
@@ -481,6 +517,10 @@ export function computeBandSupplyStats(
     foodCount,
     drinkCount,
     dedicatedCatering,
+    furnitureTerm,
+    couchSeats: furniture.couchSeats,
+    fridgeCount: furniture.fridgeCount,
+    suppliedToilets: furniture.suppliedToilets,
     satisfaction,
     showQuality,
     bareStage: !hasActiveBackstage,
@@ -616,13 +656,17 @@ export function formatBackstageInspect(stats: BandSupplyStats): {
       { label: 'Tourbus-Parkplätze', value: parking },
       { label: 'Attraktivität', value: `${Math.round(stats.attractiveness)} / 100` },
       {
-        label: 'Davon Deko / Parkplätze / Fans',
-        value: `${Math.round(stats.decoScore)} / ${Math.round(stats.parkingTerm)} / −${Math.round(stats.fanPenalty)}`,
+        label: 'Davon Deko / Parkplätze / Möbel / Fans',
+        value: `${Math.round(stats.decoScore)} / ${Math.round(stats.parkingTerm)} / ${Math.round(stats.furnitureTerm)} / −${Math.round(stats.fanPenalty)}`,
+      },
+      {
+        label: 'Couchplätze / Kühlschränke / Klo mit Wasser',
+        value: `${stats.couchSeats} / ${stats.fridgeCount} / ${stats.suppliedToilets}`,
       },
       { label: 'Verpflegung', value: `${Math.round(stats.catering)} / 100` },
       {
-        label: 'Imbiss / Getränke / Backstage-Küche',
-        value: `${stats.foodCount} / ${stats.drinkCount} / ${stats.dedicatedCatering}`,
+        label: 'Imbiss / Getränke / Bandkühlschrank',
+        value: `${stats.foodCount} / ${stats.drinkCount} / ${Math.round(stats.dedicatedCatering)}`,
       },
       {
         label: 'Bandzufriedenheit / Drauf',

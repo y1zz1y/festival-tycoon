@@ -323,7 +323,7 @@ Der **Ping**-Button markiert einen Punkt auf der Karte für alle Spieler
 Bildschirmrand die Richtung. 📍 in der Nachricht springt die Kamera zum Ping.
 
 Die 3D-Ansicht nutzt eine auf maximal 1440 × 810 Bildpunkte begrenzte Pixelrasterung
-(auch bei Full HD und 4K), helleres Tageslicht und weiterhin die
+(auch bei Full HD und 4K; unter Einstellungen → Grafik → Auflösung gröber oder feiner), helleres Tageslicht und weiterhin die
 isometrische Kamera. Die Oberfläche verwendet kompakte, gerahmte Tycoon-Fenster,
 eine zweizeilige Aktionsleiste. Karten-Overlays sitzen als eigene Icongruppe
 zwischen Verwalten und Sitzung. Die Mittelwerte weichen Infofenstern seitlich
@@ -583,7 +583,20 @@ wie bei Achterbahnen, nicht im Baumenü.
 - mittlere oder rechte Maustaste ziehen: Kamera verschieben
 - Mausrad: zoomen
 - Q / E: Kamera um 90 Grad drehen
-- 🔊 in der Sitzungsleiste oder Einstellungen → **Ton stumm**: Festival-SFX aus (echte CC0-Klänge, Synth nur als Fallback; Kamera-Listener, bleibt lokal gespeichert). In der Nähe einer **spielenden Bühne** läuft Genre-Musik in der Schleife; Jubel, Schreie und Fahrzeuge nur gelegentlich bei echten Ereignissen.
+- 🔊 in der Sitzungsleiste oder Einstellungen → **Ton stumm**: Ton aus (bleibt lokal gespeichert)
+- Einstellungen → **Ton**: Regler für Gesamt, Musik, Effekte und Umgebung. In der Nähe einer **spielenden Bühne** läuft Musik im Genre der Band in der Schleife, leiser mit der Entfernung zur Kamera; auf dem Titelbildschirm läuft die Titelmusik. Jubel, Schreie und Fahrzeuge nur gelegentlich bei echten Ereignissen. Alle Klänge und Stücke sind CC0 (Quellen in `docs/audio.md`), Synth nur als Rückfall.
+- **Erste Schritte:** Das Szenario ganz oben in „Neues Spiel“ führt mit einer Checkliste durch den ersten Aufbau; jeder Schritt hakt sich selbst ab.
+- **Schwierigkeit** (Leicht/Normal/Schwer) beim Start wählen: ändert Startgeld, laufende Kosten, Andrang, Gästebudget, Bedürfnisse und Unwetterhäufigkeit, nicht aber die Baupreise.
+- **Fortschritt und Erfolge:** Geschaffte Szenarien bekommen im Titelbildschirm ein Häkchen mit Bestnote; unter „Erfolge“ stehen zwölf Auszeichnungen. Gespeichert im Browser und, angemeldet, im Konto. Spiele mit Debug-Geld zählen nicht.
+- **Unwetter:** Gewitter werden eine Stunde vorher angekündigt (Ticker, Festivalfenster → Wetter & Vorsorge). Während des Gewitters ruhen die Auftritte, Gäste im Freien werden nass und können stürzen; ohne Sturmsicherung können Blitze Feuer legen. „Schutz anordnen“ pausiert die Auftritte sofort und senkt das Risiko.
+- **Sponsoren** (Festivalfenster → Sponsoren): vor dem Start bis zu zwei Verträge unterschreiben, Vorschuss sofort, Bonus bei erfüllter Bedingung, sonst geht der Vorschuss zurück.
+- **Fahrgeschäfte** (Attraktionen → Fahrgeschäfte): neben Karussell und Bungee-Turm auch Kettenkarussell, Freefall-Turm, Riesenrad, Autoscooter und Schiffschaukel. Jedes braucht gepflasterten Boden auf seiner ganzen Fläche und Ein- und Ausgang direkt neben einem seiner Felder; jedes hat eigene Fahrtdauer, eigenen Spaß und eigene Übelkeit.
+- **Durst:** Gäste werden durstig, bei Hitze viel schneller. Sie trinken an der **Trinkwasserstelle** (kostenlos, braucht Wasser von den Trägern) oder kaufen am Getränkestand eine Limo, wenn sie keine Lust auf Bier haben.
+- **Hygiene:** Camper brauchen nach etwa einem Tag eine **Dusche** (braucht Wasser). Ungeduschte Camper sind schlechter gelaunt.
+- **Backstage-Möbel wirken:** Couches und ein Klo mit Wasser machen das Backstage attraktiver, der Bandkühlschrank verpflegt die Band; zwischen den Sets gehen Musiker aufs Klo.
+- **Headliner** sind die 5-Sterne-Bands; jedes Genre hat mindestens einen.
+- Neue Szenarien: Wackelstein Open Air, Kutschella, Glastonbauer und Verschmelzung.
+- Einstellungen → **Grafik**: Schatten (Aus/Normal/Hoch), Auflösung (Niedrig/Standard/Hoch), Effekte (Niedrig/Mittel/Hoch) und Oberflächengröße (90–130 %). Gilt nur für dieses Gerät.
 - **Finanzen** in der Sitzungsleiste: Ausgaben und Einnahmen je Festivalausgabe. Ein Klick auf **Betriebskosten**, **Personal**, **Gagen** oder **Kreditzinsen** klappt die aktuelle Aufschlüsselung auf (Stände, Attraktionen, Bühnen, Löhne, Darlehen, Buchungen); ein weiterer Klick schließt sie. Mehrere Zeilen können gleichzeitig offen sein.
 - R: Gebäude, Deko oder Kopiervorlage um 90 Grad drehen
 - Shift halten und Maus hoch/runter (oder Mausrad / Bild hoch/runter): Bauhöhe in halben Stufen (0.5, 0–6) ändern. Um das Gebäude erscheint ein 7×7-Baugitter auf dieser Ebene. Die Bodenkachel unter dem Zeiger bleibt immer gelb umrandet, auch wenn das Objekt angehoben ist. Shift loslassen behält die Höhe; ein neues Bauwerkzeug setzt sie auf 0.
@@ -650,12 +663,8 @@ Verbindliche Simulationsregeln: [AGENTS.md](AGENTS.md).
 
 ## Nächste Ausbaustufen
 
-1. Spielausgang: Szenarien gewinnen und verlieren, Endbildschirm, Insolvenz
-2. Rückmeldung zu Zielen, Briefing vor dem Start und mitwachsende Wochenendziele
-3. Die letzten Platzhaltermodelle (Weg, Bauzaun, Tisch, Beleuchtung, Tageslichtballon) im Hausstil und gebündelt
-4. Echte Klänge und Konzertmusik statt synthetischer Platzhalter
-5. Weitere Fahrgeschäfte, Durst und Hygiene, Headliner für alle Genres
-6. Fortschritt über Partien und eine Einführung für neue Spieler
+1. Personal, Träger und Fahrzeuge gebündelt zeichnen
+2. Technik vor 1.0 festziehen
 
 RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafiken, Sounds, Daten und sonstige geschützte Inhalte sollten nicht übernommen werden.
 

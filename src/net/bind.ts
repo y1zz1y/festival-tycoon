@@ -56,6 +56,7 @@ export function enableMultiplayerCommands(game: GameState): void {
   }))
   game.setRideAccess = wrap(game, game.setRideAccess, (buildingId, accessType, x, z) => ({type:'setRideAccess',buildingId,accessType,x,z}))
   game.placeBungee = wrap(game, game.placeBungee, (x, z, height) => ({ type: 'placeBungee', x, z, height }))
+  game.placeRide = wrap(game, game.placeRide, (rideType, x, z) => ({ type: 'placeRide', rideType, x, z }))
   game.setBungeeHeight = wrap(game, game.setBungeeHeight, (id, height) => ({ type: 'setBungeeHeight', id, height }))
   game.place = wrap(game, game.place, (kind, x, z, decorationSlot) => ({
     type: 'place',

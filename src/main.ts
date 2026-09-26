@@ -2,8 +2,13 @@ import { contextDemolitionTarget } from './game/contextDemolition'
 import { isDecorationCatalogKind } from './game/decoration'
 import { scenerySlot } from './game/scenery'
 import { makeDraggable, makeResizable } from './dragPanel'
+import { toUiPx, uiScale } from './ui/uiScale'
+import { installPlayerSettings } from './ui/playerSettingsPanel'
+import { mountProgressTracker } from './ui/progressTracker'
+import { mountTutorialChecklist } from './ui/tutorialChecklist'
+import { isFlatRideType, rideProfile, type FlatRideType } from './game/flatRides'
 import { mountStageEditor } from './stageEditor'
-import { stageStats } from './game/stageDesign'
+import { buildingFootprint, stageStats } from './game/stageDesign'
 import { mountStaffDetails } from './staffDetailsUI'
 import { mountLogisticsUI } from './logisticsUI'
 import { setupDemandDebugUI } from './ui/demandDebugUI'
@@ -211,10 +216,11 @@ const syncTopOffsets = (): void => {
   const topbar = topbarElement.getBoundingClientRect()
   const toolbar = toolbarElement.getBoundingClientRect()
   const bottom = Math.max(topbar.bottom, toolbar.bottom)
-  document.documentElement.style.setProperty('--topbar-gap-top', `${Math.round(bottom + 12)}px`)
+  // Measured on screen, used inside zoomed windows: in their pixels (`toUiPx`).
+  document.documentElement.style.setProperty('--topbar-gap-top', `${Math.round(toUiPx(bottom) + 12)}px`)
   document.documentElement.style.setProperty(
     '--toolbar-width',
-    `${Math.round(toolbar.width + 18)}px`,
+    `${Math.round(toUiPx(toolbar.width) + 18)}px`,
   )
 }
 new ResizeObserver(syncTopOffsets).observe(topbarElement)
@@ -637,7 +643,15 @@ const visitorPanelController = mountVisitorPanel({
 const tickerUI = mountTickerUI({
   focusWorld: (x, z) => view.focusWorldPosition(x, z),
 })
+const progressTracker = mountProgressTracker({
+  isClient: () => multiplayer.status.mode === 'client',
+  showToast: (message) => showToast(message),
+  onChange: () => titleScreenController?.refreshProgress(),
+})
+let lastAchievementCheckTick = -Infinity
+const tutorialChecklist = mountTutorialChecklist()
 const scenarioStatus = mountScenarioStatus({
+  onDecided: (snapshot) => progressTracker.recordDecided(snapshot),
   parkValue: () => game.parkValue(),
   isMagazineOpen: () => festivalUI.isMagazineOpen(),
   openFinance: () => openFinancePanel(true),
@@ -742,6 +756,21 @@ const setAudioMuted = (muted: boolean): void => {
 syncMuteUi(readAudioMuted())
 muteAudioButton.addEventListener('click', () => setAudioMuted(!festivalAudio.isMuted()))
 muteAudioToggle.addEventListener('change', () => setAudioMuted(muteAudioToggle.checked))
+installPlayerSettings({
+  view,
+  audio: festivalAudio,
+  onUiScale: () => {
+    syncTopOffsets()
+    window.dispatchEvent(new Event('resize'))
+  },
+})
+// The title theme plays while the title screen is up and fades when a game starts.
+{
+  const titleScreenElement = requireElement<HTMLElement>('#title-screen')
+  const syncTitleMusic = (): void => festivalAudio.setTitleMusic(titleScreenElement.classList.contains('visible'))
+  new MutationObserver(syncTitleMusic).observe(titleScreenElement, { attributes: true, attributeFilter: ['class'] })
+  syncTitleMusic()
+}
 const resumeFestivalAudio = (): void => {
   festivalAudio.resume()
 }
@@ -830,6 +859,12 @@ function bindGameState(nextGame: GameState): void {
     staffDetails.update(snapshot)
     tickerUI.update(snapshot)
     scenarioStatus.update(snapshot)
+    tutorialChecklist.update(snapshot)
+    // Achievements are cheap to check but need not be checked every frame.
+    if (Math.abs(snapshot.simTick - lastAchievementCheckTick) >= 100) {
+      lastAchievementCheckTick = snapshot.simTick
+      progressTracker.checkAchievements(snapshot)
+    }
     money.textContent = editorMoneyLabel(Boolean(snapshot.scenario.authoring), snapshot.money)
     scenarioEditorToggle.hidden = !snapshot.scenario.authoring
     if (!snapshot.scenario.authoring && !scenarioEditorPanel.hidden) setEditorPanelOpen(false)
@@ -913,6 +948,7 @@ function bindGameState(nextGame: GameState): void {
         snapshot.speed,
         selectedCoasterTypeId(),
         view.bungeePreviewHeight,
+        view.ridePreviewType,
       ]),
       () => {
         document.querySelectorAll<HTMLElement>('[data-tool]').forEach((button) => {
@@ -921,7 +957,7 @@ function bindGameState(nextGame: GameState): void {
             'active',
             button.dataset.tool === snapshot.selectedTool &&
               typeMatch &&
-              (snapshot.selectedTool !== 'ride' || (button.dataset.bungee === 'true') === (view.bungeePreviewHeight !== null)),
+              (snapshot.selectedTool !== 'ride' || ((button.dataset.bungee === 'true') === (view.bungeePreviewHeight !== null) && (button.dataset.rideType ?? null) === view.ridePreviewType)),
           )
         })
         if (!buildCatalogStatus.hidden) buildCatalog.syncSelection()
@@ -1558,6 +1594,8 @@ function updateVisitorOverview(force = false): void {
 }
 
 let bungeeBuildMode = false
+/** The flat ride chosen in the build menu, while the ride tool builds that type. */
+let rideBuildType: FlatRideType | null = null
 let pendingCourseKind: CourseKind | undefined
 requireElement<HTMLInputElement>('#bungee-height').addEventListener('input', e => {
   if (bungeeBuildMode) view.bungeePreviewHeight = Math.max(4, Math.min(200, Number((e.target as HTMLInputElement).value) || 20))
@@ -1654,6 +1692,7 @@ function applyRoutedCellTool(cell: CellPosition): void {
     backstageEraseMode,
     bungeeBuildMode,
     bungeeHeight: Number(requireElement<HTMLInputElement>('#bungee-height').value),
+    rideType: rideBuildType ?? undefined,
     courseKind: pendingCourseKind,
   })
   if (!routed.handled || !routed.result) return
@@ -2632,6 +2671,7 @@ function placementPreviewAt(cell: CellPosition | null): PlacementPreviewResult |
         kind === 'ride' && bungeeBuildMode
           ? Number(requireElement<HTMLInputElement>('#bungee-height').value)
           : undefined,
+      rideType: kind === 'ride' && rideBuildType ? rideBuildType : undefined,
     })
   }
   if (tool === 'inspect') return null
@@ -2685,7 +2725,7 @@ function openRideBuilder(id: string): void {
   if (pathWindowOpen) closePathEditor()
   closeEntityPanel(); closeBuildMenu(); supplyPlanner.releaseTool()
   hideVisitorPanel()
-  activeRideId=id; bungeeBuildMode=false; view.bungeePreviewHeight=null
+  activeRideId=id; bungeeBuildMode=false; view.bungeePreviewHeight=null; rideBuildType=null; view.ridePreviewType=null
   requireElement<HTMLInputElement>('#ride-target-height').value=String(ride.bungeeHeight ?? 20)
   const panel=requireElement<HTMLElement>('#ride-builder')
   panel.hidden=false; panel.classList.add('visible')
@@ -2697,7 +2737,7 @@ function updateRideBuilder(): void {
   if (!activeRideId) return
   const ride=game.snapshot.buildings.find(b=>b.id===activeRideId && b.kind==='ride')
   if (!ride) { closeRideBuilder(false); return }
-  requireElement('#ride-builder-name').textContent=ride.rideType==='bungee'?'Bungee-Turm bauen':'Karussell bauen'
+  requireElement('#ride-builder-name').textContent=`${rideProfile(ride).name} bauen`
   requireElement('#ride-builder-status').textContent=game.getRideAccessIssue(ride) ?? 'Ein- und Ausgang angeschlossen. Konstruktion vollständig.'
   for (const type of ['entrance','exit'] as const) {
     const access=ride[type==='entrance'?'rideEntrance':'rideExit']
@@ -2734,7 +2774,7 @@ function updateRideAccessPreview(cell: CellPosition | null): void {
   const target=rideAccessPlacement && game.snapshot.buildings.find(b=>b.id===rideAccessPlacement!.id)
   if (!cell || !target || !rideAccessPlacement) {view.setRideAccessPreview(null);return}
   const result=game.canPlaceRideAccess(target.id,rideAccessPlacement.type,cell.x,cell.z)
-  view.setRideAccessPreview({x:cell.x,y:target.elevation,z:cell.z,type:rideAccessPlacement.type,theme:target.rideType==='bungee'?'bungee':'carousel',valid:result.ok,rotation:Math.atan2(target.x-cell.x,target.z-cell.z)})
+  view.setRideAccessPreview({x:cell.x,y:target.elevation,z:cell.z,type:rideAccessPlacement.type,theme:target.rideType==='bungee'?'bungee':'carousel',valid:result.ok,rotation:(()=>{const facing=buildingFootprint(target).find(c=>Math.abs(c.x-cell.x)+Math.abs(c.z-cell.z)===1)??target;return Math.atan2(facing.x-cell.x,facing.z-cell.z)})()})
 }
 function startRideAccessPlacement(id:string,type:'entrance'|'exit'): void {
   if (activeRideId!==id) openRideBuilder(id)
@@ -3261,6 +3301,8 @@ function activateBuildTool(button: HTMLButtonElement): void {
   closeRideBuilder(false)
   pendingCourseKind = button.dataset.courseKind as CourseKind | undefined
   bungeeBuildMode = button.dataset.bungee === 'true'
+  rideBuildType = isFlatRideType(button.dataset.rideType) ? button.dataset.rideType : null
+  view.ridePreviewType = rideBuildType
   view.bungeePreviewHeight = bungeeBuildMode
     ? Math.max(4, Math.min(200, Number(requireElement<HTMLInputElement>('#bungee-height').value) || 20))
     : null
@@ -3519,14 +3561,15 @@ const saveMenuPanel =
 // button's live on-screen rect instead, clamped to stay fully in view.
 function positionDropdownPanel(button: HTMLElement, panel: HTMLElement, panelWidth = 250): void {
   const margin = 8
-  const width = Math.min(panelWidth, window.innerWidth - margin * 2)
+  // Screen pixels here; the zoomed panel gets them back in its own (`toUiPx`).
+  const width = Math.min(panelWidth * uiScale(), window.innerWidth - margin * 2)
   const rect = button.getBoundingClientRect()
   const left = Math.min(
     Math.max(rect.right - width, margin),
     window.innerWidth - width - margin,
   )
-  panel.style.left = `${left}px`
-  panel.style.top = `${rect.bottom + margin}px`
+  panel.style.left = `${toUiPx(left)}px`
+  panel.style.top = `${toUiPx(rect.bottom + margin)}px`
 }
 
 const staffMenuToggle =
@@ -4690,6 +4733,8 @@ titleScreenController = mountTitleScreen({
   readMultiplayerName,
   setMultiplayerName,
   formatSaveTime,
+  progressRecords: () => progressTracker.records(),
+  onSignedIn: () => void progressTracker.sync(),
 })
 undoLastBuildButton.addEventListener('click', () => {
   const result = game.undoLastBuild()
@@ -5092,9 +5137,9 @@ document.body.append(performanceIndicator)
 // Bottom-left is a stack: the overview overlay sits on the floor, the debug line rides above it,
 // and anything anchored to the bottom edge (the build menu) clears both.
 const syncDebugViewGap = (): void => {
-  const overview = statusOverlay.getBoundingClientRect().height
+  const overview = toUiPx(statusOverlay.getBoundingClientRect().height)
   document.documentElement.style.setProperty('--status-overlay-gap', `${Math.round(overview + 18)}px`)
-  const height = performanceIndicator.getBoundingClientRect().height
+  const height = toUiPx(performanceIndicator.getBoundingClientRect().height)
   document.documentElement.style.setProperty(
     '--debug-view-gap',
     `${Math.max(48, Math.round(overview + height + 30))}px`,
@@ -5265,4 +5310,7 @@ void (async () => {
 
 // Who the session cookie belongs to. Asked once, after everything is wired, and the
 // account bar redraws itself when the answer arrives.
-void refreshAccount().then(() => titleScreenController.syncAccountBar())
+void refreshAccount().then(() => {
+  titleScreenController.syncAccountBar()
+  void progressTracker.sync()
+})

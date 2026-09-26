@@ -8,6 +8,7 @@ import { bandLeaveMinute } from '../src/game/bandSupply'
 import { bandCostumeId, bandRoles } from '../src/game/bandLooks'
 import { updateStageBand } from '../src/view/stageBand'
 import { buildingSize } from '../src/game/stageDesign'
+import { normalizeStock } from '../src/game/supplyChain'
 
 const CONFIG = SIMULATION_CONFIG.bandSupply
 
@@ -291,7 +292,12 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
     { x: 1, z: -19 },
     { x: 1, z: -21 },
     { x: 1, z: -22 },
+    { x: 0, z: -21 },
+    { x: 0, z: -22 },
   ])
+  const emptyLounge = lounge.getBandSupplyForStage(loungeStage.id)!
+  assert.equal(emptyLounge.dedicatedCatering, 0)
+  assert.equal(emptyLounge.furnitureTerm, 0)
   // Turned a quarter, the three-seater runs along z instead of x.
   lounge.rotateBuild()
   const couchPlacement = lounge.place('backstageCouch3', 1, -21)
@@ -302,6 +308,28 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
     'the couch occupies every field it covers',
   )
   assert.ok(lounge.place('bandFridge', 1, -22).ok)
+  // Furniture is not decoration only: the fridge is the band's own catering, the
+  // seats and a toilet with water are comfort. Equipped beats empty on every count.
+  const furnished = lounge.getBandSupplyForStage(loungeStage.id)!
+  assert.equal(furnished.couchSeats, 3)
+  assert.equal(furnished.fridgeCount, 1)
+  assert.equal(furnished.dedicatedCatering, CONFIG.cateringPerFridge)
+  assert.equal(furnished.furnitureTerm, 3 * CONFIG.comfortPerCouchSeat)
+  assert.ok(furnished.attractiveness > emptyLounge.attractiveness, 'couch seats raise attractiveness')
+  assert.ok(furnished.catering > emptyLounge.catering, 'the fridge raises catering')
+  assert.ok(furnished.satisfaction > emptyLounge.satisfaction, 'an equipped backstage beats an empty one')
+  assert.ok(lounge.showQualityForStage(loungeStage.id) > emptyLounge.showQuality)
+  lounge.rotateBuild()
+  lounge.rotateBuild()
+  lounge.rotateBuild()
+  const toiletPlacement = lounge.place('backstageToilet', 0, -22)
+  assert.ok(toiletPlacement.ok, `toilet: ${toiletPlacement.message}`)
+  const toilet = lounge.snapshot.buildings.find((building) => building.kind === 'backstageToilet')!
+  assert.equal(lounge.getBandSupplyForStage(loungeStage.id)!.suppliedToilets, 0, 'a dry toilet does not count')
+  ;(lounge.snapshot as GameSnapshot).festival.infrastructure.shops[toilet.id] = normalizeStock({ water: 20 })
+  const withToilet = lounge.getBandSupplyForStage(loungeStage.id)!
+  assert.equal(withToilet.suppliedToilets, 1)
+  assert.ok(withToilet.satisfaction > furnished.satisfaction, 'a toilet with water adds comfort')
   lounge.snapshot.minute = CONFIG.busArriveHour * 60
   lounge.syncBandSupply()
   const loungeBand = lounge.snapshot.bandActors.filter((actor) => actor.bandId === 'meadow')
@@ -324,6 +352,13 @@ export function testBandSupply(fixture: (count?: number) => GameState): void {
   }
   assert.ok(everSeated, 'a waiting band member takes a seat on the couch')
   assert.ok(everLeftTheCouch, 'and heads off to the fridge again after a while')
+  // Between the fridge runs the band uses the backstage toilet, which pays with water.
+  let toiletUsed = false
+  for (let i = 0; i < 4000 && !toiletUsed; i++) {
+    lounge.tick(0.1)
+    toiletUsed = (lounge.snapshot.festival.infrastructure.shops[toilet.id]?.water ?? 20) < 20
+  }
+  assert.ok(toiletUsed, 'musicians use the backstage toilet between sets')
 
   const stageLook = new Group()
   updateStageBand(stageLook, 'lantern', 0, true)

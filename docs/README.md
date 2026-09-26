@@ -61,6 +61,7 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | Finanzen, Buchungen, Darlehen | [finance.md](finance.md) | Ledger, Prognose, Kreditrahmen |
 | Szenarien, Ziele, Spielausgang, Editor | [scenarios.md](scenarios.md) | Zielarten, Frist, Sieg/Niederlage, Insolvenz, Stichtag, Briefing, Endbildschirm, Drop-in-Dateien, Szenario-Editor, Gelände-Import |
 | Konten, Sessions, Authentifizierung | [accounts.md](accounts.md) | Konto-API, Cookies, Rate-Limit |
+| Fortschritt über Partien, Erfolge | [progress.md](progress.md) | Geschaffte Szenarien, Bestnote, Erfolge, Konto-Abgleich |
 | Bühnenwerkstatt, Show, Publikum | [stages.md](stages.md) | Designs, Vorlagen, Zuschauerflächen |
 | Achterbahn, Karussell, Bungee | [attractions.md](attractions.md) | Queues, Ride-Zugang, Betrieb |
 | Kurs-Attraktionen | [course-attractions.md](course-attractions.md) | Mudmasters, Bad, Tree-to-Tree, Paintball, Wasserrutsche |

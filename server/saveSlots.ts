@@ -114,16 +114,17 @@ function sharedSlots(userId: string | null): ServerSaveSlot[] {
 const slotRow = (id: string): SaveRow | undefined =>
   db().prepare(`${SELECT_SLOT} WHERE saves.id = ?`).get(id) as SaveRow | undefined
 
-async function bodyOf(request: IncomingMessage): Promise<unknown> {
+/** The request body as JSON; longer than `limit` bytes is an error, not a truncation. */
+export async function bodyOf(request: IncomingMessage, limit = MAX_SAVE_BYTES + 1024 * 64): Promise<unknown> {
   let body = ''
   for await (const chunk of request) {
     body += String(chunk)
-    if (Buffer.byteLength(body, 'utf8') > MAX_SAVE_BYTES + 1024 * 64) throw new Error('Anfrage zu groß')
+    if (Buffer.byteLength(body, 'utf8') > limit) throw new Error('Anfrage zu groß')
   }
   return JSON.parse(body || '{}')
 }
 
-function send(response: ServerResponse, status: number, payload: unknown): void {
+export function send(response: ServerResponse, status: number, payload: unknown): void {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
   response.end(JSON.stringify(payload))
 }

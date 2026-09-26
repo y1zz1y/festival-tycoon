@@ -24,7 +24,7 @@ ist von Wegbelägen getrennt.
 | Terrain-Balancing | `src/game/simulationConfig.ts` | `terrain` (`waterHeight` −0.5, `minSwimDepth`, Schwimmkosten) |
 | Sichtbares Mesh / Atlas | `src/view/terrainSurface.ts` | ein Draw-Call für den Boden |
 | Hänge, Pads, Kanten | `src/view/terrainShape.ts` | `TerrainShape`, `terrainPads` |
-| Belagstexturen | `src/view/wayTextures.ts` | `wayTexture`, `parkingTexture` |
+| Belagstexturen | `src/view/wayTextures.ts` | `wayTexture`, `parkingTexture`, geteilte Wegdecks `wayDeckMaterial`/`wayDeckGeometry` |
 
 ## Wichtige Regeln
 

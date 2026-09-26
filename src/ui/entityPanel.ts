@@ -1,3 +1,4 @@
+import { rideProfile } from '../game/flatRides'
 import { getCoasterType, type Coaster } from '../game/coasters'
 import { formatCourseInspect } from '../game/courseAttractions'
 import { BUILDINGS } from '../game/catalog'
@@ -378,8 +379,9 @@ export function updateEntityPanel(
     if (!building) return services.close()
     editStage.hidden = building.kind !== 'stage'
     const definition = BUILDINGS[building.kind]
-    icon.textContent = building.rideType === 'bungee' ? '🪂' : definition.icon; typeLabel.textContent = 'Gebäude'
-    name.textContent = building.rideType === 'bungee' ? `Bungee-Turm · ${building.bungeeHeight ?? 20} m` : definition.name
+    const ride = building.kind === 'ride' ? rideProfile(building) : null
+    icon.textContent = ride?.icon ?? definition.icon; typeLabel.textContent = 'Gebäude'
+    name.textContent = building.rideType === 'bungee' ? `Bungee-Turm · ${building.bungeeHeight ?? 20} m` : ride?.name ?? definition.name
     element<HTMLElement>('#open-ride-construction').hidden = building.kind !== 'ride'
     const active = game.isBuildingCurrentlyActive(building)
     const demand = SIMULATION_CONFIG.power.demand[building.kind] ?? 0
@@ -395,7 +397,7 @@ export function updateEntityPanel(
                 : isWasteBin(building.kind) ? `Füllstand ${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity} · Gäste im Umkreis von 7 Feldern nutzen ihn`
                   : isSealedWasteContainer(building.kind) ? formatSealedContainerInspect({ stored: building.wasteFill ?? 0, onRoad: Boolean(game.getRoadCellAt(building.x, building.z, building.elevation)), truckReachable: Boolean(game.getRoadCellAt(building.x, building.z, building.elevation)) }).status
                     : `Zugang ${isoDirection(building.rotation, state.cameraQuarter)} · Ebene ${building.elevation}`)
-    stats.innerHTML = `<span>Baukosten <b>${formatMoney(definition.cost + (building.stageDesign ? stageStats(building.stageDesign).cost : 0))}</b></span>${building.stageDesign ? `<span>Eigene Bühne <b>${escapeHtml(building.stageDesign.name)}</b></span><span>Party / Umgebung <b>${stageStats(building.stageDesign).party} / ${stageStats(building.stageDesign).beauty}</b></span><span>Technik zusätzlich <b>${stageStats(building.stageDesign).power} kW · ${stageStats(building.stageDesign).upkeep} €/h</b></span>` : ''}<span>Unterhalt <b>${formatMoney(definition.upkeep)}/h</b></span><span>Kapazität <b>${building.rideType === 'bungee' ? '1 Springer' : definition.capacity}</b></span>${shopSupplyKind(building.kind) ? `<span>Warenbestand <b>${Math.floor(game.snapshot.festival.infrastructure.shops[building.id]?.[shopSupplyKind(building.kind)!] ?? 0)} / Ziel 40</b></span>` : ''}${isWasteBin(building.kind) ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity}</b></span>` : isSealedWasteContainer(building.kind) ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.sealedContainerCapacity}</b></span>` : ''}${output > 0 ? `<span>Leistung <b>${output} kW</b></span>` : demand > 0 ? `<span>Strom <b>${demand} kW ${powered ? 'versorgt' : 'ohne Netz'}</b></span>` : ''}${wasteTipStats(game, building)}`
+    stats.innerHTML = `<span>Baukosten <b>${formatMoney((ride?.cost ?? definition.cost) + (building.stageDesign ? stageStats(building.stageDesign).cost : 0))}</b></span>${building.stageDesign ? `<span>Eigene Bühne <b>${escapeHtml(building.stageDesign.name)}</b></span><span>Party / Umgebung <b>${stageStats(building.stageDesign).party} / ${stageStats(building.stageDesign).beauty}</b></span><span>Technik zusätzlich <b>${stageStats(building.stageDesign).power} kW · ${stageStats(building.stageDesign).upkeep} €/h</b></span>` : ''}<span>Unterhalt <b>${formatMoney(ride?.upkeep ?? definition.upkeep)}/h</b></span><span>Kapazität <b>${building.rideType === 'bungee' ? '1 Springer' : ride?.capacity ?? definition.capacity}</b></span>${ride && building.rideType !== 'bungee' ? `<span>Fahrt <b>${ride.minutes} min</b></span>` : ''}${shopSupplyKind(building.kind) ? `<span>Warenbestand <b>${Math.floor(game.snapshot.festival.infrastructure.shops[building.id]?.[shopSupplyKind(building.kind)!] ?? 0)} / Ziel 40</b></span>` : ''}${isWasteBin(building.kind) ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity}</b></span>` : isSealedWasteContainer(building.kind) ? `<span>Inhalt <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.sealedContainerCapacity}</b></span>` : ''}${output > 0 ? `<span>Leistung <b>${output} kW</b></span>` : demand > 0 ? `<span>Strom <b>${demand} kW ${powered ? 'versorgt' : 'ohne Netz'}</b></span>` : ''}${wasteTipStats(game, building)}`
     resetCommon()
     const hasPrice = isPricedShopKind(building.kind)
     const shirt = building.kind === 'shirt'

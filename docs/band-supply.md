@@ -344,9 +344,12 @@ it). Clamp displayed scores to 0–100.
 decoScore    = diminish(sum of scenery beauty on active tiles)
 parkingTerm  = see Tourbus (0 if no bus demand)
 fanPenalty   = see Fans
-attractiveness = clamp(decoScore + parkingTerm - fanPenalty)
-               // no active backstage: bareStageAttractiveness (fans/deco/parking skipped)
+furnitureTerm = min(couchComfortCap, couchSeats * comfortPerCouchSeat)
+              + (suppliedToilets > 0 ? suppliedToiletComfort : 0)
+attractiveness = clamp(decoScore + parkingTerm + furnitureTerm - fanPenalty)
+               // no active backstage: bareStageAttractiveness (fans/deco/parking/furniture skipped)
 
+dedicatedCatering = min(fridgesCounted, fridgeCount) * cateringPerFridge
 catering     = clamp(0, cateringCap, parkCatering + dedicatedCatering)
 
 satisfaction = clamp(
@@ -358,21 +361,23 @@ satisfaction = clamp(
 showQuality  = lerp(bareShowQuality, maxShowQuality, satisfaction / 100)
 ```
 
-Comfort / Privacy / Facilities are **out of scope** for v1: no backstage
-furniture enters these stats. `dedicatedCatering` is fixed at `0`, and the
-furniture below has `appeal: 0` and is not scenery, so `decoScore` skips it.
+Backstage furniture counts on **active** tiles only
+(`backstageFurnitureOnActiveTiles`): couch seats (one per covered field), band
+fridges and backstage toilets that have water in stock. It is not scenery and
+has `appeal: 0`, so `decoScore` still skips it; its effect goes through
+`furnitureTerm` and `dedicatedCatering` (0.2.10).
 
-### Backstage furniture (behaviour only)
+### Backstage furniture
 
 | Kind | What it does today | Where |
 | --- | --- | --- |
 | `backstageCouch2` / `backstageCouch3` | One seat per covered field on an **active** component. Off-stage band members sit there instead of milling about; `assignBackstageSeats` keeps two members off one cushion. | `GameState.backstageSeatCells`, `assignBackstageSeats`; `BACKSTAGE_COUCH_KINDS` |
-| `bandFridge` | Walkable fields around it are stops band members visit between sets. | `GameState.backstageFridgeStops` |
-| `backstageToilet` | **No user yet.** Buildable (1.000 €, upkeep 14), rendered and solid for pedestrians, but visitors only seek `toilet` and band actors never route to it. | `catalog.ts`, `simulationConfig.ts` `economy.buildings.backstageToilet` |
+| `bandFridge` | Walkable fields around it are stops band members visit between sets. Each fridge (up to `fridgesCounted`) adds `cateringPerFridge` to catering as the band's own supply. | `GameState.backstageFridgeStops`; `bandSupply.ts` `computeBandSupplyStats` |
+| `backstageToilet` | Counts as comfort (`suppliedToiletComfort`) while it has water from the carriers. About every third break (per hour window, by actor id) a seated musician walks to it instead of the fridge and uses one unit of water; a dry toilet is neither a goal nor comfort. | `GameState.backstageToiletStops`; `bandSupply.toiletVisitMinutes` |
 
-None of the three changes attractiveness, catering, satisfaction or show
-quality. Giving them an effect (for example fridge → `dedicatedCatering`,
-toilet → a band need) is open work, not a regression.
+Couch seats add `comfortPerCouchSeat` each up to `couchComfortCap`. The
+inspect window shows the split as Deko / Parkplätze / Möbel / Fans and a line
+Couchplätze / Kühlschränke / Klo mit Wasser.
 
 ### Bare stage (playable, worse)
 
@@ -463,7 +468,7 @@ panel pattern as waste-dump / depot inspect). UI reads the snapshot only.
 7. **Attraktivität** 0–100  
 8. Breakdown: Deko, Parkplätze, Fan-Abzug  
 9. **Verpflegung** 0–100  
-10. Breakdown: Imbiss count, Getränkestand count, dedicated catering (0 in v1)  
+10. Breakdown: Imbiss count, Getränkestand count, band fridge catering  
 11. **Bandzufriedenheit** / Drauf 0–100  
 12. Bare-stage flag  
 13. Show-quality modifier (e.g. 0.62–1.18)  

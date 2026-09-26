@@ -163,3 +163,39 @@ Balancingwerte, die Felder von `ScenarioProgress`, das Dateiformat, der
 Szenarien-Ordner oder die Szenario-Oberfläche sich ändern. Neue Felder
 zusätzlich in [saves.md](saves.md) und [multiplayer.md](multiplayer.md),
 Spielerregeln im Root-`README.md`.
+
+## Presets (0.2.10)
+
+Acht eingebaute Presets in `SCENARIO_PRESETS`. Zu Woodstock, Tomorrowland, Rock
+am Ring und Hurricane kamen vier, die sich an echte Festivals anlehnen, deren
+Namen aber verballhornen und die bisher ungenutzten Ziele und Umgebungen
+nutzen:
+
+| Preset | Umgebung | Ziele |
+| --- | --- | --- |
+| Wackelstein Open Air | Acker, 64 | Ruf 60 und 500 Anreisen bis Ausgabe 3 |
+| Kutschella | Wüste, 64, Kredit | 12.000 € Gewinn in 2 Ausgaben hintereinander bis Ausgabe 4 |
+| Glastonbauer | Acker, 80 | Zufriedenheit 75 % in 2 Ausgaben hintereinander, 800 Anreisen bis Ausgabe 4 |
+| Verschmelzung | Stadt (Beton), 64, Kredit | Festivalwert 120.000 € und schuldenfrei bis Ausgabe 4 |
+
+`tests/finance.ts` und `tests/scenarioEditor.ts` zählen die Presets; jedes muss
+seine Ziele unverändert durch `normalizeGoals` bringen.
+
+## Schwierigkeitsgrade und Einstieg (0.2.11)
+
+**Schwierigkeit** (`src/game/difficulty.ts`, Config `difficulty`):
+`ScenarioSettings.difficulty` ist `easy` oder `hard`, bei Normal fehlt das Feld.
+`difficultyProfile` liefert Faktoren für Startgeld (nach dem Geländeseed, das
+Gelände bleibt gleich), laufende Kosten (`hourlyRunningCosts` und
+Finanzaufschlüsselung), Ticketnachfrage (`purchaseWillingness`), Gästebudget,
+Bedürfnisverfall (`decayNeeds`) und Unwetterhäufigkeit. Baupreise bleiben, damit
+jeder angezeigte Preis stimmt. Wählbar im freien Spiel und im Briefing jedes
+Presets; Drop-in-Dateien starten auf Normal.
+
+**Erste Schritte** (`src/game/tutorial.ts`, Preset `einstieg`): kleines flaches
+Feld ohne Ziele und ohne Frist. `tutorialSteps` liest fünf Schritte aus dem
+Snapshot (Weg mit `TUTORIAL_PATH_FIELDS` Feldern vom Eingang, Bühne mit Strom,
+Imbiss und Toilette, Buchung, Start). `src/ui/tutorialChecklist.ts` zeigt sie oben
+rechts, nur in diesem Preset, einklappbar; der nächste offene Schritt zeigt seinen
+Hinweis. Kein eigenes Snapshot-Feld. Das Preset steht vorn in
+`SCENARIO_PRESETS`, zählt aber nicht für den Erfolg „Tourneeprofi“.

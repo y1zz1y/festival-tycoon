@@ -368,9 +368,13 @@ full dynamic illumination onto all objects. Store no render choices in game stat
 identities/attachment, retained bulb/patch counts, and moving the camera focus.
 
 Reproduce browser timing with the Vite-only `tests/render-performance.html`.
-It reads an ignored local copy at `saves/performance-dessert-copy.json`; no personal
-save belongs in git. `?save=filename.json&frames=1800` changes the fixture and frame
-count. Select Pause/1x/3x/8x and start; each measurement restores the same snapshot.
+It loads the versioned fixture `tests/fixtures/performance/festivalmittel.json` by
+default (`?fixture=<id>` for another registered fixture); `?save=filename.json`
+reads an ignored local copy from `saves/` instead, and no personal save belongs in
+git. `?frames=1800` changes the frame count, `?autorun=1` measures on load and
+leaves the result in `window.__renderReport`. Besides frame, scene and render times
+it reports draw calls per frame, triangles, geometries, textures, shader programs
+and a scene census (meshes, visible, instanced, distinct materials). Select Pause/1x/3x/8x and start; each measurement restores the same snapshot.
 Initialization is reported separately from frame/CPU stage timings. Long tasks
 exclude initialization. The harness measures the production WorldView and GameState,
 without the main game's DOM panels. It does not overwrite saves or contact the
@@ -591,3 +595,38 @@ Populationen und State-Hashes; die Werte sind deshalb keine isolierte
 CPU-Prozentmessung gegen v30. Alle p95-Werte bleiben unter dem festen
 100-ms-Tick. Der lange 8×-Lauf erreicht erneut das Festivalende und ist wegen
 der fast leeren Welt nicht als bevölkerter Parkvergleich geeignet.
+
+## Render-Standard (0.2.3)
+
+`tests/render-performance.html?fixture=festivalmittel`, Chromium, 1280×720,
+Pause, 180 Frames, Kamera in der Standardansicht (832 Besucher, 2.376 Gebäude).
+Vorher ist ein Lauf, nachher drei (der erste nach dem Laden ist der langsamste).
+
+| | vorher (0.2.2) | nachher (0.2.3) |
+| --- | --- | --- |
+| Render-Zeit Median / p95 | 21,6 / 25,9 ms | 13,9 / 18,3 ms (1. Lauf); 12,4–12,5 / 13,4–14,1 ms |
+| Draw-Calls je Frame | 2.305 | 833–841 |
+| Dreiecke | 1,28 Mio. | 1,34 Mio. |
+| Geometrien / Texturen | 1.990 / 67 | 486 / 22 |
+| Meshes sichtbar / Materialien | 10.696 / 6.005 | 3.634 / 1.745 |
+
+Die Dreiecke steigen, weil Bauzaun, Tisch, Beleuchtung und Ballon jetzt
+ausgearbeitete Modelle sind. Die Ursachen lagen fast ganz in zwei Bereichen:
+Straßen und Parkflächen (4.424 Einzel-Meshes, 1.548 Materialien) und dem
+Flachfarben-Fallback für Wege, Bauzäune, Tische, Lampen und Ballons (2.534 Meshes,
+1.688 Materialien). Bei 1× lag die Render-Zeit danach bei 11,9 / 14,1 ms; die
+Simulationszeit dieses Laufs ist wie immer von der Tick-Taktung überlagert und
+kein CPU-Vergleich. Das Planziel von rund 700 Draw-Calls ist nicht erreicht; die
+verbleibenden Einzel-Meshes stehen in [rendering.md](rendering.md).
+
+Bei 8× (600 Frames) zeigte die Szenenzeit Spitzen von 127 ms p95 / 149 ms max,
+obwohl der Median bei 4 ms lag. Ursache war nicht das Bündeln, sondern das
+Vorkompilieren der Shader: Änderte sich die Zahl von Personal, Fahrzeugen, Routen
+oder Zügen, lief `renderer.compile` über die ganze Szene. three ruft dabei
+`getProgram` für jedes Objekt auf, auch für die ausgeblendeten Quellen der
+Gebäude- und Straßen-Batches, rund 120 ms je Aufruf, 36-mal in 600 Frames (jedes
+ankommende oder abfahrende Fahrzeug). Jetzt kompiliert nur die Gruppe, deren
+Bestand sich geändert hat, gegen die Lichter der Szene (Fahrzeuge: nur
+`getVehiclePickRoot()`, nicht die Straßen); danach 29 Aufrufe mit höchstens 3,9 ms,
+Szenenzeit 8× Median / p95 / max 4,0 / 15,5 / 18,6 ms. Das Muster bestand schon
+vor 0.2.3 und war dort mit mehr Objekten eher teurer.

@@ -1,3 +1,4 @@
+import { difficultyProfile } from './difficulty'
 import { BANDS, bandPriceWillingness, bandVisitorDraw } from './festivalManagement'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import {
@@ -78,7 +79,7 @@ export function purchaseWillingness(
   state: Pick<
     GameSnapshot,
     'attractiveness' | 'complaints' | 'festival' | 'buildings' | 'campingCells' | 'coasters'
-  >,
+  > & { scenario?: GameSnapshot['scenario'] },
 ): TicketWillingness {
   const tuning = normalizeTicketDemandTuning(state.festival.demandTuning)
   const beauty = clamp01(((state.attractiveness.average ?? 0) + 40) / 80)
@@ -109,7 +110,9 @@ export function purchaseWillingness(
       rides * campingWeights.attractions +
       complaints * campingWeights.complaints,
   )
-  return { day, camping }
+  // Difficulty: an easier crowd is keener to come, a harder one needs more convincing.
+  const demand = difficultyProfile(state.scenario).demand
+  return { day: clamp01(day * demand), camping: clamp01(camping * demand) }
 }
 
 export function priceAcceptance(

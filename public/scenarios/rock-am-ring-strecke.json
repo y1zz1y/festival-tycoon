@@ -1,0 +1,1921 @@
+{
+  "kind": "headliner-scenario",
+  "format": 1,
+  "id": "rock-am-ring",
+  "name": "Rock am Ring · Nürburgring",
+  "detail": "Hügelland mit Nordschleifen-Schleife und GP-Oval im Süden. Das Festivalgelände liegt in der Infield-Wiese am Eingang; Asphalt und Streckenbegrenzung tragen die Form der Rennstrecke.",
+  "settings": {
+    "environment": "grassland",
+    "unevenness": 0.35,
+    "carArrivalShare": 0.9,
+    "partyAffinity": 0.75,
+    "beautyAffinity": 0.45,
+    "aggressiveShare": 0.28,
+    "startingMoney": 16000,
+    "worldSize": 64,
+    "startingLoan": 0,
+    "goals": [
+      {
+        "kind": "admissions",
+        "target": 700,
+        "edition": 3
+      }
+    ],
+    "title": "Rock am Ring · Nürburgring",
+    "detail": "Hügelland mit Nordschleifen-Schleife und GP-Oval im Süden. Das Festivalgelände liegt in der Infield-Wiese am Eingang; Asphalt und Streckenbegrenzung tragen die Form der Rennstrecke.",
+    "preset": "rock-am-ring"
+  },
+  "tickets": {
+    "day": 120,
+    "camping": 40
+  },
+  "world": {
+    "version": 34,
+    "waterLevel": -0.5,
+    "terrain": {
+      "heights": {
+        "-10,6": 0.5,
+        "-9,6": 0.5,
+        "-5,6": 0.5,
+        "-4,6": 0.5,
+        "-3,6": 0.5,
+        "-2,6": 0.5,
+        "-1,6": 0.5,
+        "0,6": 0.5,
+        "1,6": 0.5,
+        "2,6": 0.5,
+        "3,6": 0.5,
+        "4,6": 0.5,
+        "5,6": 0.5,
+        "6,6": 0.5,
+        "7,6": 0.5,
+        "8,6": 0.5,
+        "9,6": 0.5,
+        "10,6": 0.5,
+        "-10,7": 0.5,
+        "-9,7": 0.5,
+        "-8,7": 0.5,
+        "-5,7": 0.5,
+        "-4,7": 0.5,
+        "-3,7": 0.5,
+        "-2,7": 0.5,
+        "-1,7": 0.5,
+        "0,7": 0.5,
+        "1,7": 0.5,
+        "2,7": 0.5,
+        "3,7": 0.5,
+        "4,7": 0.5,
+        "5,7": 0.5,
+        "6,7": 0.5,
+        "7,7": 0.5,
+        "8,7": 0.5,
+        "9,7": 0.5,
+        "13,7": 0.5,
+        "-10,8": 0.5,
+        "-9,8": 0.5,
+        "-8,8": 0.5,
+        "-4,8": 0.5,
+        "-3,8": 0.5,
+        "-2,8": 0.5,
+        "-1,8": 0.5,
+        "0,8": 0.5,
+        "1,8": 0.5,
+        "2,8": 0.5,
+        "3,8": 0.5,
+        "4,8": 0.5,
+        "5,8": 0.5,
+        "6,8": 0.5,
+        "7,8": 0.5,
+        "8,8": 0.5,
+        "12,8": 0.5,
+        "13,8": 0.5,
+        "-10,9": 0.5,
+        "-9,9": 0.5,
+        "-8,9": 0.5,
+        "-7,9": 0.5,
+        "-4,9": 0.5,
+        "-3,9": 0.5,
+        "-2,9": 0.5,
+        "-1,9": 0.5,
+        "0,9": 0.5,
+        "1,9": 0.5,
+        "2,9": 0.5,
+        "3,9": 0.5,
+        "4,9": 0.5,
+        "5,9": 0.5,
+        "6,9": 0.5,
+        "7,9": 0.5,
+        "11,9": 0.5,
+        "12,9": 0.5,
+        "13,9": 0.5,
+        "-10,10": 0.5,
+        "-9,10": 0.5,
+        "-8,10": 0.5,
+        "-7,10": 0.5,
+        "-3,10": 0.5,
+        "-2,10": 0.5,
+        "-1,10": 0.5,
+        "0,10": 0.5,
+        "1,10": 0.5,
+        "2,10": 0.5,
+        "3,10": 0.5,
+        "4,10": 0.5,
+        "5,10": 0.5,
+        "6,10": 0.5,
+        "10,10": 0.5,
+        "11,10": 0.5,
+        "12,10": 0.5,
+        "13,10": 0.5,
+        "-10,11": 0.5,
+        "-9,11": 0.5,
+        "-8,11": 0.5,
+        "-7,11": 0.5,
+        "-6,11": 0.5,
+        "-3,11": 0.5,
+        "-2,11": 0.5,
+        "-1,11": 0.5,
+        "0,11": 0.5,
+        "1,11": 0.5,
+        "2,11": 0.5,
+        "3,11": 0.5,
+        "4,11": 0.5,
+        "5,11": 0.5,
+        "9,11": 0.5,
+        "10,11": 0.5,
+        "11,11": 0.5,
+        "12,11": 0.5,
+        "13,11": 0.5,
+        "-10,12": 1,
+        "-9,12": 1,
+        "-8,12": 1,
+        "-7,12": 1,
+        "-6,12": 1,
+        "1,12": 1,
+        "2,12": 1,
+        "3,12": 1,
+        "4,12": 1,
+        "8,12": 1,
+        "9,12": 1,
+        "10,12": 1,
+        "11,12": 1,
+        "12,12": 1,
+        "13,12": 1,
+        "-10,13": 1,
+        "-9,13": 1,
+        "-8,13": 1,
+        "-7,13": 1,
+        "-6,13": 1,
+        "-5,13": 1,
+        "7,13": 1,
+        "8,13": 1,
+        "9,13": 1,
+        "10,13": 1,
+        "11,13": 1,
+        "12,13": 1,
+        "-10,14": 1,
+        "-9,14": 1,
+        "-8,14": 1,
+        "-7,14": 1,
+        "-6,14": 1,
+        "-5,14": 1,
+        "-4,14": 1,
+        "-3,14": 1,
+        "-2,14": 1,
+        "-1,14": 1,
+        "6,14": 1,
+        "7,14": 1,
+        "8,14": 1,
+        "9,14": 1,
+        "10,14": 1,
+        "11,14": 1,
+        "12,14": 1,
+        "-10,15": 1,
+        "-9,15": 1,
+        "-8,15": 1,
+        "-7,15": 1,
+        "-6,15": 1,
+        "-5,15": 1,
+        "-4,15": 1,
+        "-3,15": 1,
+        "-2,15": 1,
+        "-1,15": 1,
+        "0,15": 1,
+        "1,15": 1,
+        "2,15": 1,
+        "3,15": 1,
+        "5,15": 1,
+        "6,15": 1,
+        "7,15": 1,
+        "8,15": 1,
+        "9,15": 1,
+        "10,15": 1,
+        "11,15": 1,
+        "12,15": 1,
+        "-10,16": 1,
+        "-9,16": 1,
+        "-8,16": 1,
+        "-7,16": 1,
+        "-6,16": 1,
+        "-5,16": 1,
+        "-4,16": 1,
+        "-3,16": 1,
+        "-2,16": 1,
+        "-1,16": 1,
+        "0,16": 1,
+        "1,16": 1,
+        "2,16": 1,
+        "3,16": 1,
+        "4,16": 1,
+        "5,16": 1,
+        "6,16": 1,
+        "7,16": 1,
+        "8,16": 1,
+        "9,16": 1,
+        "10,16": 1,
+        "11,16": 1,
+        "-10,17": 1,
+        "-9,17": 1,
+        "-8,17": 1,
+        "-7,17": 1,
+        "-6,17": 1,
+        "-5,17": 1,
+        "-4,17": 1,
+        "-3,17": 1,
+        "-2,17": 1,
+        "-1,17": 1,
+        "0,17": 1,
+        "1,17": 1,
+        "2,17": 1,
+        "3,17": 1,
+        "4,17": 1,
+        "5,17": 1,
+        "6,17": 1,
+        "7,17": 1,
+        "8,17": 1,
+        "9,17": 1,
+        "10,17": 1,
+        "11,17": 1,
+        "-8,18": 1.5,
+        "-7,18": 1.5,
+        "-6,18": 1.5,
+        "-5,18": 1.5,
+        "-4,18": 1.5,
+        "-3,18": 1.5,
+        "-2,18": 1.5,
+        "-1,18": 1.5,
+        "0,18": 1.5,
+        "1,18": 1.5,
+        "2,18": 1.5,
+        "3,18": 1.5,
+        "4,18": 1.5,
+        "5,18": 1.5,
+        "6,18": 1.5,
+        "7,18": 1.5,
+        "8,18": 1.5,
+        "-5,19": 1.5,
+        "-4,19": 1.5,
+        "-3,19": 1.5,
+        "-2,19": 1.5,
+        "-1,19": 1.5,
+        "0,19": 1.5,
+        "1,19": 1.5,
+        "2,19": 1.5,
+        "3,19": 1.5,
+        "4,19": 1.5,
+        "5,19": 1.5,
+        "13,19": 1.5,
+        "-10,20": 1.5,
+        "-2,20": 1.5,
+        "-1,20": 1.5,
+        "0,20": 1.5,
+        "1,20": 1.5,
+        "2,20": 1.5,
+        "10,20": 1.5,
+        "11,20": 1.5,
+        "12,20": 1.5,
+        "13,20": 1.5,
+        "-10,21": 1.5,
+        "-9,21": 1.5,
+        "-8,21": 1.5,
+        "-7,21": 1.5,
+        "7,21": 1.5,
+        "8,21": 1.5,
+        "9,21": 1.5,
+        "10,21": 1.5,
+        "11,21": 1.5,
+        "12,21": 1.5,
+        "13,21": 1.5,
+        "-10,22": 1.5,
+        "-9,22": 1.5,
+        "-8,22": 1.5,
+        "-7,22": 1.5,
+        "-6,22": 1.5,
+        "-5,22": 1.5,
+        "-4,22": 1.5,
+        "4,22": 1.5,
+        "5,22": 1.5,
+        "6,22": 1.5,
+        "7,22": 1.5,
+        "8,22": 1.5,
+        "9,22": 1.5,
+        "10,22": 1.5,
+        "11,22": 1.5,
+        "12,22": 1.5,
+        "13,22": 1.5,
+        "-10,23": 1.5,
+        "-9,23": 1.5,
+        "-8,23": 1.5,
+        "-7,23": 1.5,
+        "-6,23": 1.5,
+        "-5,23": 1.5,
+        "-4,23": 1.5,
+        "-3,23": 1.5,
+        "-2,23": 1.5,
+        "-1,23": 1.5,
+        "1,23": 1.5,
+        "2,23": 1.5,
+        "3,23": 1.5,
+        "4,23": 1.5,
+        "5,23": 1.5,
+        "6,23": 1.5,
+        "7,23": 1.5,
+        "8,23": 1.5,
+        "9,23": 1.5,
+        "10,23": 1.5,
+        "11,23": 1.5,
+        "12,23": 1.5,
+        "13,23": 1.5
+      }
+    },
+    "buildings": [
+      {
+        "id": "entrance-path",
+        "kind": "path",
+        "x": 3,
+        "z": -32,
+        "rotation": 0,
+        "elevation": 0,
+        "pathType": "normal",
+        "pathSlope": 0,
+        "pathSlopeDirection": 0,
+        "price": 0
+      },
+      {
+        "id": "curb-0",
+        "kind": "trackCurb",
+        "x": 10,
+        "z": 0,
+        "rotation": 1,
+        "elevation": 0,
+        "price": 0,
+        "decorationSlot": 1
+      },
+      {
+        "id": "curb-1",
+        "kind": "trackCurb",
+        "x": 12,
+        "z": 18,
+        "rotation": 0,
+        "elevation": 0,
+        "price": 0,
+        "decorationSlot": 0
+      },
+      {
+        "id": "curb-2",
+        "kind": "trackCurb",
+        "x": -18,
+        "z": 8,
+        "rotation": 3,
+        "elevation": 0,
+        "price": 0,
+        "decorationSlot": 3
+      },
+      {
+        "id": "curb-3",
+        "kind": "trackCurb",
+        "x": -8,
+        "z": 4,
+        "rotation": 2,
+        "elevation": 0,
+        "price": 0,
+        "decorationSlot": 2
+      },
+      {
+        "id": "curb-4",
+        "kind": "trackCurb",
+        "x": 8,
+        "z": -14,
+        "rotation": 0,
+        "elevation": 0,
+        "price": 0,
+        "decorationSlot": 0
+      },
+      {
+        "id": "curb-5",
+        "kind": "trackCurb",
+        "x": -10,
+        "z": -12,
+        "rotation": 1,
+        "elevation": 0,
+        "price": 0,
+        "decorationSlot": 1
+      },
+      {
+        "id": "curb-6",
+        "kind": "trackCurb",
+        "x": 16,
+        "z": 8,
+        "rotation": 3,
+        "elevation": 0,
+        "price": 0,
+        "decorationSlot": 3
+      },
+      {
+        "id": "curb-7",
+        "kind": "trackCurb",
+        "x": 0,
+        "z": 22,
+        "rotation": 2,
+        "elevation": 0,
+        "price": 0,
+        "decorationSlot": 2
+      },
+      {
+        "id": "paddock-cone",
+        "kind": "trafficCone",
+        "x": -4,
+        "z": -15,
+        "rotation": 0,
+        "elevation": 0,
+        "price": 0
+      }
+    ],
+    "festival": {
+      "infrastructure": {
+        "ground": {
+          "6,-9": {
+            "cover": "asphalt"
+          },
+          "5,-8": {
+            "cover": "asphalt"
+          },
+          "6,-8": {
+            "cover": "asphalt"
+          },
+          "7,-8": {
+            "cover": "asphalt"
+          },
+          "6,-7": {
+            "cover": "asphalt"
+          },
+          "7,-7": {
+            "cover": "asphalt"
+          },
+          "6,-6": {
+            "cover": "asphalt"
+          },
+          "7,-6": {
+            "cover": "asphalt"
+          },
+          "8,-6": {
+            "cover": "asphalt"
+          },
+          "7,-5": {
+            "cover": "asphalt"
+          },
+          "8,-5": {
+            "cover": "asphalt"
+          },
+          "7,-4": {
+            "cover": "asphalt"
+          },
+          "8,-4": {
+            "cover": "asphalt"
+          },
+          "9,-4": {
+            "cover": "asphalt"
+          },
+          "8,-3": {
+            "cover": "asphalt"
+          },
+          "9,-3": {
+            "cover": "asphalt"
+          },
+          "8,-2": {
+            "cover": "asphalt"
+          },
+          "9,-2": {
+            "cover": "asphalt"
+          },
+          "10,-2": {
+            "cover": "asphalt"
+          },
+          "9,-1": {
+            "cover": "asphalt"
+          },
+          "10,-1": {
+            "cover": "asphalt"
+          },
+          "9,0": {
+            "cover": "asphalt"
+          },
+          "10,0": {
+            "cover": "asphalt"
+          },
+          "11,0": {
+            "cover": "asphalt"
+          },
+          "10,1": {
+            "cover": "asphalt"
+          },
+          "11,1": {
+            "cover": "asphalt"
+          },
+          "11,2": {
+            "cover": "asphalt"
+          },
+          "12,1": {
+            "cover": "asphalt"
+          },
+          "12,2": {
+            "cover": "asphalt"
+          },
+          "11,3": {
+            "cover": "asphalt"
+          },
+          "12,3": {
+            "cover": "asphalt"
+          },
+          "13,3": {
+            "cover": "asphalt"
+          },
+          "12,4": {
+            "cover": "asphalt"
+          },
+          "13,4": {
+            "cover": "asphalt"
+          },
+          "14,4": {
+            "cover": "asphalt"
+          },
+          "13,5": {
+            "cover": "asphalt"
+          },
+          "14,5": {
+            "cover": "asphalt"
+          },
+          "14,6": {
+            "cover": "asphalt"
+          },
+          "15,5": {
+            "cover": "asphalt"
+          },
+          "15,6": {
+            "cover": "asphalt"
+          },
+          "14,7": {
+            "cover": "asphalt"
+          },
+          "15,7": {
+            "cover": "asphalt"
+          },
+          "16,7": {
+            "cover": "asphalt"
+          },
+          "15,8": {
+            "cover": "asphalt"
+          },
+          "16,8": {
+            "cover": "asphalt"
+          },
+          "17,8": {
+            "cover": "asphalt"
+          },
+          "16,9": {
+            "cover": "asphalt"
+          },
+          "15,9": {
+            "cover": "asphalt"
+          },
+          "15,10": {
+            "cover": "asphalt"
+          },
+          "16,10": {
+            "cover": "asphalt"
+          },
+          "15,11": {
+            "cover": "asphalt"
+          },
+          "14,11": {
+            "cover": "asphalt"
+          },
+          "15,12": {
+            "cover": "asphalt"
+          },
+          "14,12": {
+            "cover": "asphalt"
+          },
+          "14,13": {
+            "cover": "asphalt"
+          },
+          "15,13": {
+            "cover": "asphalt"
+          },
+          "13,13": {
+            "cover": "asphalt"
+          },
+          "14,14": {
+            "cover": "asphalt"
+          },
+          "13,14": {
+            "cover": "asphalt"
+          },
+          "13,15": {
+            "cover": "asphalt"
+          },
+          "14,15": {
+            "cover": "asphalt"
+          },
+          "13,16": {
+            "cover": "asphalt"
+          },
+          "12,16": {
+            "cover": "asphalt"
+          },
+          "13,17": {
+            "cover": "asphalt"
+          },
+          "12,17": {
+            "cover": "asphalt"
+          },
+          "12,18": {
+            "cover": "asphalt"
+          },
+          "13,18": {
+            "cover": "asphalt"
+          },
+          "11,18": {
+            "cover": "asphalt"
+          },
+          "12,19": {
+            "cover": "asphalt"
+          },
+          "11,19": {
+            "cover": "asphalt"
+          },
+          "10,18": {
+            "cover": "asphalt"
+          },
+          "10,19": {
+            "cover": "asphalt"
+          },
+          "9,18": {
+            "cover": "asphalt"
+          },
+          "9,19": {
+            "cover": "asphalt"
+          },
+          "8,19": {
+            "cover": "asphalt"
+          },
+          "9,20": {
+            "cover": "asphalt"
+          },
+          "8,20": {
+            "cover": "asphalt"
+          },
+          "7,19": {
+            "cover": "asphalt"
+          },
+          "7,20": {
+            "cover": "asphalt"
+          },
+          "6,20": {
+            "cover": "asphalt"
+          },
+          "6,19": {
+            "cover": "asphalt"
+          },
+          "5,20": {
+            "cover": "asphalt"
+          },
+          "6,21": {
+            "cover": "asphalt"
+          },
+          "5,21": {
+            "cover": "asphalt"
+          },
+          "4,20": {
+            "cover": "asphalt"
+          },
+          "4,21": {
+            "cover": "asphalt"
+          },
+          "3,20": {
+            "cover": "asphalt"
+          },
+          "3,21": {
+            "cover": "asphalt"
+          },
+          "2,21": {
+            "cover": "asphalt"
+          },
+          "3,22": {
+            "cover": "asphalt"
+          },
+          "2,22": {
+            "cover": "asphalt"
+          },
+          "1,21": {
+            "cover": "asphalt"
+          },
+          "1,22": {
+            "cover": "asphalt"
+          },
+          "0,22": {
+            "cover": "asphalt"
+          },
+          "0,21": {
+            "cover": "asphalt"
+          },
+          "-1,22": {
+            "cover": "asphalt"
+          },
+          "0,23": {
+            "cover": "asphalt"
+          },
+          "-1,21": {
+            "cover": "asphalt"
+          },
+          "-2,21": {
+            "cover": "asphalt"
+          },
+          "-2,22": {
+            "cover": "asphalt"
+          },
+          "-3,21": {
+            "cover": "asphalt"
+          },
+          "-3,22": {
+            "cover": "asphalt"
+          },
+          "-3,20": {
+            "cover": "asphalt"
+          },
+          "-4,21": {
+            "cover": "asphalt"
+          },
+          "-4,20": {
+            "cover": "asphalt"
+          },
+          "-5,20": {
+            "cover": "asphalt"
+          },
+          "-5,21": {
+            "cover": "asphalt"
+          },
+          "-6,20": {
+            "cover": "asphalt"
+          },
+          "-6,21": {
+            "cover": "asphalt"
+          },
+          "-6,19": {
+            "cover": "asphalt"
+          },
+          "-7,20": {
+            "cover": "asphalt"
+          },
+          "-7,19": {
+            "cover": "asphalt"
+          },
+          "-8,19": {
+            "cover": "asphalt"
+          },
+          "-8,20": {
+            "cover": "asphalt"
+          },
+          "-9,19": {
+            "cover": "asphalt"
+          },
+          "-9,20": {
+            "cover": "asphalt"
+          },
+          "-9,18": {
+            "cover": "asphalt"
+          },
+          "-10,19": {
+            "cover": "asphalt"
+          },
+          "-10,18": {
+            "cover": "asphalt"
+          },
+          "-11,18": {
+            "cover": "asphalt"
+          },
+          "-11,19": {
+            "cover": "asphalt"
+          },
+          "-12,18": {
+            "cover": "asphalt"
+          },
+          "-12,19": {
+            "cover": "asphalt"
+          },
+          "-12,17": {
+            "cover": "asphalt"
+          },
+          "-13,18": {
+            "cover": "asphalt"
+          },
+          "-13,17": {
+            "cover": "asphalt"
+          },
+          "-13,16": {
+            "cover": "asphalt"
+          },
+          "-13,15": {
+            "cover": "asphalt"
+          },
+          "-14,16": {
+            "cover": "asphalt"
+          },
+          "-14,15": {
+            "cover": "asphalt"
+          },
+          "-14,14": {
+            "cover": "asphalt"
+          },
+          "-15,14": {
+            "cover": "asphalt"
+          },
+          "-15,13": {
+            "cover": "asphalt"
+          },
+          "-14,13": {
+            "cover": "asphalt"
+          },
+          "-15,12": {
+            "cover": "asphalt"
+          },
+          "-16,13": {
+            "cover": "asphalt"
+          },
+          "-16,12": {
+            "cover": "asphalt"
+          },
+          "-16,11": {
+            "cover": "asphalt"
+          },
+          "-16,10": {
+            "cover": "asphalt"
+          },
+          "-17,11": {
+            "cover": "asphalt"
+          },
+          "-17,10": {
+            "cover": "asphalt"
+          },
+          "-17,9": {
+            "cover": "asphalt"
+          },
+          "-18,9": {
+            "cover": "asphalt"
+          },
+          "-18,8": {
+            "cover": "asphalt"
+          },
+          "-17,8": {
+            "cover": "asphalt"
+          },
+          "-18,7": {
+            "cover": "asphalt"
+          },
+          "-19,8": {
+            "cover": "asphalt"
+          },
+          "-17,7": {
+            "cover": "asphalt"
+          },
+          "-18,6": {
+            "cover": "asphalt"
+          },
+          "-17,6": {
+            "cover": "asphalt"
+          },
+          "-18,5": {
+            "cover": "asphalt"
+          },
+          "-17,5": {
+            "cover": "asphalt"
+          },
+          "-18,4": {
+            "cover": "asphalt"
+          },
+          "-17,4": {
+            "cover": "asphalt"
+          },
+          "-17,3": {
+            "cover": "asphalt"
+          },
+          "-18,3": {
+            "cover": "asphalt"
+          },
+          "-17,2": {
+            "cover": "asphalt"
+          },
+          "-16,3": {
+            "cover": "asphalt"
+          },
+          "-16,2": {
+            "cover": "asphalt"
+          },
+          "-17,1": {
+            "cover": "asphalt"
+          },
+          "-16,1": {
+            "cover": "asphalt"
+          },
+          "-17,0": {
+            "cover": "asphalt"
+          },
+          "-16,0": {
+            "cover": "asphalt"
+          },
+          "-16,-1": {
+            "cover": "asphalt"
+          },
+          "-17,-1": {
+            "cover": "asphalt"
+          },
+          "-16,-2": {
+            "cover": "asphalt"
+          },
+          "-17,-2": {
+            "cover": "asphalt"
+          },
+          "-16,-3": {
+            "cover": "asphalt"
+          },
+          "-15,-2": {
+            "cover": "asphalt"
+          },
+          "-15,-1": {
+            "cover": "asphalt"
+          },
+          "-14,-1": {
+            "cover": "asphalt"
+          },
+          "-15,0": {
+            "cover": "asphalt"
+          },
+          "-14,0": {
+            "cover": "asphalt"
+          },
+          "-13,-1": {
+            "cover": "asphalt"
+          },
+          "-13,0": {
+            "cover": "asphalt"
+          },
+          "-13,1": {
+            "cover": "asphalt"
+          },
+          "-12,0": {
+            "cover": "asphalt"
+          },
+          "-12,1": {
+            "cover": "asphalt"
+          },
+          "-11,1": {
+            "cover": "asphalt"
+          },
+          "-12,2": {
+            "cover": "asphalt"
+          },
+          "-11,2": {
+            "cover": "asphalt"
+          },
+          "-10,2": {
+            "cover": "asphalt"
+          },
+          "-11,3": {
+            "cover": "asphalt"
+          },
+          "-10,3": {
+            "cover": "asphalt"
+          },
+          "-9,2": {
+            "cover": "asphalt"
+          },
+          "-9,3": {
+            "cover": "asphalt"
+          },
+          "-9,4": {
+            "cover": "asphalt"
+          },
+          "-8,3": {
+            "cover": "asphalt"
+          },
+          "-8,4": {
+            "cover": "asphalt"
+          },
+          "-7,4": {
+            "cover": "asphalt"
+          },
+          "-8,5": {
+            "cover": "asphalt"
+          },
+          "-7,5": {
+            "cover": "asphalt"
+          },
+          "-8,6": {
+            "cover": "asphalt"
+          },
+          "-7,6": {
+            "cover": "asphalt"
+          },
+          "-6,6": {
+            "cover": "asphalt"
+          },
+          "-7,7": {
+            "cover": "asphalt"
+          },
+          "-6,7": {
+            "cover": "asphalt"
+          },
+          "-7,8": {
+            "cover": "asphalt"
+          },
+          "-6,8": {
+            "cover": "asphalt"
+          },
+          "-5,8": {
+            "cover": "asphalt"
+          },
+          "-6,9": {
+            "cover": "asphalt"
+          },
+          "-5,9": {
+            "cover": "asphalt"
+          },
+          "-6,10": {
+            "cover": "asphalt"
+          },
+          "-5,10": {
+            "cover": "asphalt"
+          },
+          "-4,10": {
+            "cover": "asphalt"
+          },
+          "-5,11": {
+            "cover": "asphalt"
+          },
+          "-4,11": {
+            "cover": "asphalt"
+          },
+          "-5,12": {
+            "cover": "asphalt"
+          },
+          "-4,12": {
+            "cover": "asphalt"
+          },
+          "-3,12": {
+            "cover": "asphalt"
+          },
+          "-4,13": {
+            "cover": "asphalt"
+          },
+          "-3,13": {
+            "cover": "asphalt"
+          },
+          "-2,12": {
+            "cover": "asphalt"
+          },
+          "-2,13": {
+            "cover": "asphalt"
+          },
+          "-1,12": {
+            "cover": "asphalt"
+          },
+          "-1,13": {
+            "cover": "asphalt"
+          },
+          "0,13": {
+            "cover": "asphalt"
+          },
+          "0,12": {
+            "cover": "asphalt"
+          },
+          "1,13": {
+            "cover": "asphalt"
+          },
+          "0,14": {
+            "cover": "asphalt"
+          },
+          "1,14": {
+            "cover": "asphalt"
+          },
+          "2,13": {
+            "cover": "asphalt"
+          },
+          "2,14": {
+            "cover": "asphalt"
+          },
+          "3,13": {
+            "cover": "asphalt"
+          },
+          "3,14": {
+            "cover": "asphalt"
+          },
+          "4,14": {
+            "cover": "asphalt"
+          },
+          "4,13": {
+            "cover": "asphalt"
+          },
+          "5,14": {
+            "cover": "asphalt"
+          },
+          "4,15": {
+            "cover": "asphalt"
+          },
+          "5,13": {
+            "cover": "asphalt"
+          },
+          "5,12": {
+            "cover": "asphalt"
+          },
+          "6,13": {
+            "cover": "asphalt"
+          },
+          "6,12": {
+            "cover": "asphalt"
+          },
+          "6,11": {
+            "cover": "asphalt"
+          },
+          "7,12": {
+            "cover": "asphalt"
+          },
+          "7,11": {
+            "cover": "asphalt"
+          },
+          "7,10": {
+            "cover": "asphalt"
+          },
+          "8,11": {
+            "cover": "asphalt"
+          },
+          "8,10": {
+            "cover": "asphalt"
+          },
+          "8,9": {
+            "cover": "asphalt"
+          },
+          "9,10": {
+            "cover": "asphalt"
+          },
+          "9,9": {
+            "cover": "asphalt"
+          },
+          "9,8": {
+            "cover": "asphalt"
+          },
+          "10,9": {
+            "cover": "asphalt"
+          },
+          "10,8": {
+            "cover": "asphalt"
+          },
+          "10,7": {
+            "cover": "asphalt"
+          },
+          "11,8": {
+            "cover": "asphalt"
+          },
+          "11,7": {
+            "cover": "asphalt"
+          },
+          "11,6": {
+            "cover": "asphalt"
+          },
+          "12,7": {
+            "cover": "asphalt"
+          },
+          "12,6": {
+            "cover": "asphalt"
+          },
+          "12,5": {
+            "cover": "asphalt"
+          },
+          "13,6": {
+            "cover": "asphalt"
+          },
+          "14,3": {
+            "cover": "asphalt"
+          },
+          "15,4": {
+            "cover": "asphalt"
+          },
+          "13,2": {
+            "cover": "asphalt"
+          },
+          "13,1": {
+            "cover": "asphalt"
+          },
+          "12,0": {
+            "cover": "asphalt"
+          },
+          "11,-1": {
+            "cover": "asphalt"
+          },
+          "12,-1": {
+            "cover": "asphalt"
+          },
+          "11,-2": {
+            "cover": "asphalt"
+          },
+          "10,-3": {
+            "cover": "asphalt"
+          },
+          "10,-4": {
+            "cover": "asphalt"
+          },
+          "9,-5": {
+            "cover": "asphalt"
+          },
+          "9,-6": {
+            "cover": "asphalt"
+          },
+          "8,-7": {
+            "cover": "asphalt"
+          },
+          "-8,-19": {
+            "cover": "asphalt"
+          },
+          "-9,-18": {
+            "cover": "asphalt"
+          },
+          "-8,-18": {
+            "cover": "asphalt"
+          },
+          "-7,-18": {
+            "cover": "grass"
+          },
+          "-8,-17": {
+            "cover": "asphalt"
+          },
+          "-7,-19": {
+            "cover": "asphalt"
+          },
+          "-6,-18": {
+            "cover": "grass"
+          },
+          "-6,-19": {
+            "cover": "grass"
+          },
+          "-5,-18": {
+            "cover": "grass"
+          },
+          "-5,-19": {
+            "cover": "grass"
+          },
+          "-4,-19": {
+            "cover": "grass"
+          },
+          "-4,-18": {
+            "cover": "grass"
+          },
+          "-3,-19": {
+            "cover": "grass"
+          },
+          "-3,-18": {
+            "cover": "grass"
+          },
+          "-2,-19": {
+            "cover": "grass"
+          },
+          "-2,-18": {
+            "cover": "grass"
+          },
+          "-2,-20": {
+            "cover": "grass"
+          },
+          "-1,-19": {
+            "cover": "grass"
+          },
+          "-1,-20": {
+            "cover": "grass"
+          },
+          "0,-20": {
+            "cover": "grass"
+          },
+          "0,-19": {
+            "cover": "grass"
+          },
+          "1,-20": {
+            "cover": "grass"
+          },
+          "1,-19": {
+            "cover": "grass"
+          },
+          "2,-20": {
+            "cover": "asphalt"
+          },
+          "2,-19": {
+            "cover": "grass"
+          },
+          "3,-20": {
+            "cover": "asphalt"
+          },
+          "3,-19": {
+            "cover": "asphalt"
+          },
+          "4,-20": {
+            "cover": "asphalt"
+          },
+          "4,-19": {
+            "cover": "asphalt"
+          },
+          "4,-21": {
+            "cover": "asphalt"
+          },
+          "5,-20": {
+            "cover": "asphalt"
+          },
+          "5,-19": {
+            "cover": "asphalt"
+          },
+          "4,-18": {
+            "cover": "asphalt"
+          },
+          "5,-18": {
+            "cover": "asphalt"
+          },
+          "6,-19": {
+            "cover": "asphalt"
+          },
+          "6,-18": {
+            "cover": "asphalt"
+          },
+          "5,-17": {
+            "cover": "asphalt"
+          },
+          "6,-17": {
+            "cover": "asphalt"
+          },
+          "7,-17": {
+            "cover": "asphalt"
+          },
+          "6,-16": {
+            "cover": "asphalt"
+          },
+          "7,-16": {
+            "cover": "asphalt"
+          },
+          "7,-15": {
+            "cover": "asphalt"
+          },
+          "8,-16": {
+            "cover": "asphalt"
+          },
+          "6,-15": {
+            "cover": "asphalt"
+          },
+          "8,-15": {
+            "cover": "asphalt"
+          },
+          "7,-14": {
+            "cover": "asphalt"
+          },
+          "8,-14": {
+            "cover": "asphalt"
+          },
+          "9,-14": {
+            "cover": "asphalt"
+          },
+          "8,-13": {
+            "cover": "asphalt"
+          },
+          "7,-13": {
+            "cover": "asphalt"
+          },
+          "6,-14": {
+            "cover": "asphalt"
+          },
+          "6,-13": {
+            "cover": "asphalt"
+          },
+          "6,-12": {
+            "cover": "asphalt"
+          },
+          "7,-12": {
+            "cover": "asphalt"
+          },
+          "5,-13": {
+            "cover": "asphalt"
+          },
+          "5,-12": {
+            "cover": "asphalt"
+          },
+          "4,-12": {
+            "cover": "asphalt"
+          },
+          "5,-11": {
+            "cover": "asphalt"
+          },
+          "4,-11": {
+            "cover": "asphalt"
+          },
+          "3,-11": {
+            "cover": "asphalt"
+          },
+          "3,-12": {
+            "cover": "asphalt"
+          },
+          "4,-10": {
+            "cover": "asphalt"
+          },
+          "3,-10": {
+            "cover": "asphalt"
+          },
+          "2,-11": {
+            "cover": "asphalt"
+          },
+          "2,-10": {
+            "cover": "asphalt"
+          },
+          "1,-10": {
+            "cover": "asphalt"
+          },
+          "2,-9": {
+            "cover": "asphalt"
+          },
+          "1,-11": {
+            "cover": "asphalt"
+          },
+          "0,-10": {
+            "cover": "asphalt"
+          },
+          "0,-11": {
+            "cover": "grass"
+          },
+          "-1,-10": {
+            "cover": "asphalt"
+          },
+          "-1,-11": {
+            "cover": "grass"
+          },
+          "-2,-11": {
+            "cover": "grass"
+          },
+          "-2,-10": {
+            "cover": "asphalt"
+          },
+          "-3,-11": {
+            "cover": "grass"
+          },
+          "-3,-10": {
+            "cover": "asphalt"
+          },
+          "-4,-11": {
+            "cover": "grass"
+          },
+          "-4,-10": {
+            "cover": "asphalt"
+          },
+          "-4,-12": {
+            "cover": "grass"
+          },
+          "-5,-11": {
+            "cover": "asphalt"
+          },
+          "-5,-12": {
+            "cover": "grass"
+          },
+          "-6,-12": {
+            "cover": "asphalt"
+          },
+          "-6,-11": {
+            "cover": "asphalt"
+          },
+          "-7,-12": {
+            "cover": "asphalt"
+          },
+          "-7,-11": {
+            "cover": "asphalt"
+          },
+          "-8,-12": {
+            "cover": "asphalt"
+          },
+          "-8,-11": {
+            "cover": "asphalt"
+          },
+          "-9,-12": {
+            "cover": "asphalt"
+          },
+          "-9,-11": {
+            "cover": "asphalt"
+          },
+          "-10,-12": {
+            "cover": "asphalt"
+          },
+          "-10,-11": {
+            "cover": "asphalt"
+          },
+          "-10,-13": {
+            "cover": "asphalt"
+          },
+          "-11,-12": {
+            "cover": "asphalt"
+          },
+          "-9,-13": {
+            "cover": "asphalt"
+          },
+          "-10,-14": {
+            "cover": "asphalt"
+          },
+          "-9,-14": {
+            "cover": "asphalt"
+          },
+          "-10,-15": {
+            "cover": "asphalt"
+          },
+          "-9,-15": {
+            "cover": "asphalt"
+          },
+          "-8,-15": {
+            "cover": "asphalt"
+          },
+          "-9,-16": {
+            "cover": "asphalt"
+          },
+          "-8,-16": {
+            "cover": "asphalt"
+          },
+          "-9,-17": {
+            "cover": "asphalt"
+          },
+          "-4,-21": {
+            "cover": "grass"
+          },
+          "-3,-21": {
+            "cover": "grass"
+          },
+          "-2,-21": {
+            "cover": "grass"
+          },
+          "-1,-21": {
+            "cover": "grass"
+          },
+          "0,-21": {
+            "cover": "grass"
+          },
+          "-5,-20": {
+            "cover": "grass"
+          },
+          "-4,-20": {
+            "cover": "grass"
+          },
+          "-3,-20": {
+            "cover": "grass"
+          },
+          "-1,-18": {
+            "cover": "grass"
+          },
+          "0,-18": {
+            "cover": "grass"
+          },
+          "1,-18": {
+            "cover": "grass"
+          },
+          "2,-18": {
+            "cover": "grass"
+          },
+          "3,-18": {
+            "cover": "grass"
+          },
+          "-7,-17": {
+            "cover": "grass"
+          },
+          "-6,-17": {
+            "cover": "grass"
+          },
+          "-5,-17": {
+            "cover": "grass"
+          },
+          "-4,-17": {
+            "cover": "grass"
+          },
+          "-3,-17": {
+            "cover": "grass"
+          },
+          "-2,-17": {
+            "cover": "grass"
+          },
+          "-1,-17": {
+            "cover": "grass"
+          },
+          "0,-17": {
+            "cover": "grass"
+          },
+          "1,-17": {
+            "cover": "grass"
+          },
+          "2,-17": {
+            "cover": "grass"
+          },
+          "3,-17": {
+            "cover": "grass"
+          },
+          "-7,-16": {
+            "cover": "grass"
+          },
+          "-6,-16": {
+            "cover": "grass"
+          },
+          "-5,-16": {
+            "cover": "grass"
+          },
+          "-4,-16": {
+            "cover": "grass"
+          },
+          "-3,-16": {
+            "cover": "grass"
+          },
+          "-2,-16": {
+            "cover": "grass"
+          },
+          "-1,-16": {
+            "cover": "grass"
+          },
+          "0,-16": {
+            "cover": "grass"
+          },
+          "1,-16": {
+            "cover": "grass"
+          },
+          "2,-16": {
+            "cover": "grass"
+          },
+          "3,-16": {
+            "cover": "grass"
+          },
+          "-7,-15": {
+            "cover": "grass"
+          },
+          "-6,-15": {
+            "cover": "grass"
+          },
+          "-5,-15": {
+            "cover": "grass"
+          },
+          "-4,-15": {
+            "cover": "grass"
+          },
+          "-3,-15": {
+            "cover": "grass"
+          },
+          "-2,-15": {
+            "cover": "grass"
+          },
+          "-1,-15": {
+            "cover": "grass"
+          },
+          "0,-15": {
+            "cover": "grass"
+          },
+          "1,-15": {
+            "cover": "grass"
+          },
+          "2,-15": {
+            "cover": "grass"
+          },
+          "3,-15": {
+            "cover": "grass"
+          },
+          "-7,-14": {
+            "cover": "grass"
+          },
+          "-6,-14": {
+            "cover": "grass"
+          },
+          "-5,-14": {
+            "cover": "grass"
+          },
+          "-4,-14": {
+            "cover": "grass"
+          },
+          "-3,-14": {
+            "cover": "grass"
+          },
+          "-2,-14": {
+            "cover": "grass"
+          },
+          "-1,-14": {
+            "cover": "grass"
+          },
+          "0,-14": {
+            "cover": "grass"
+          },
+          "1,-14": {
+            "cover": "grass"
+          },
+          "2,-14": {
+            "cover": "grass"
+          },
+          "3,-14": {
+            "cover": "grass"
+          },
+          "-6,-13": {
+            "cover": "grass"
+          },
+          "-5,-13": {
+            "cover": "grass"
+          },
+          "-4,-13": {
+            "cover": "grass"
+          },
+          "-3,-13": {
+            "cover": "grass"
+          },
+          "-2,-13": {
+            "cover": "grass"
+          },
+          "-1,-13": {
+            "cover": "grass"
+          },
+          "0,-13": {
+            "cover": "grass"
+          },
+          "1,-13": {
+            "cover": "grass"
+          },
+          "2,-13": {
+            "cover": "grass"
+          },
+          "-3,-12": {
+            "cover": "grass"
+          },
+          "-2,-12": {
+            "cover": "grass"
+          },
+          "-1,-12": {
+            "cover": "grass"
+          },
+          "0,-12": {
+            "cover": "grass"
+          },
+          "1,-12": {
+            "cover": "grass"
+          },
+          "1,6": {
+            "cover": "rock"
+          },
+          "8,6": {
+            "cover": "rock"
+          },
+          "0,7": {
+            "cover": "rock"
+          },
+          "7,7": {
+            "cover": "rock"
+          },
+          "-8,8": {
+            "cover": "rock"
+          },
+          "-1,8": {
+            "cover": "rock"
+          },
+          "6,8": {
+            "cover": "rock"
+          },
+          "13,8": {
+            "cover": "rock"
+          },
+          "-9,9": {
+            "cover": "rock"
+          },
+          "-2,9": {
+            "cover": "rock"
+          },
+          "5,9": {
+            "cover": "rock"
+          },
+          "12,9": {
+            "cover": "rock"
+          },
+          "-10,10": {
+            "cover": "rock"
+          },
+          "-3,10": {
+            "cover": "rock"
+          },
+          "4,10": {
+            "cover": "rock"
+          },
+          "11,10": {
+            "cover": "rock"
+          },
+          "3,11": {
+            "cover": "rock"
+          },
+          "10,11": {
+            "cover": "rock"
+          },
+          "2,12": {
+            "cover": "rock"
+          },
+          "9,12": {
+            "cover": "rock"
+          },
+          "-6,13": {
+            "cover": "rock"
+          },
+          "8,13": {
+            "cover": "rock"
+          },
+          "-7,14": {
+            "cover": "rock"
+          },
+          "7,14": {
+            "cover": "rock"
+          },
+          "-8,15": {
+            "cover": "rock"
+          },
+          "-1,15": {
+            "cover": "rock"
+          },
+          "6,15": {
+            "cover": "rock"
+          },
+          "-9,16": {
+            "cover": "rock"
+          },
+          "-2,16": {
+            "cover": "rock"
+          },
+          "5,16": {
+            "cover": "rock"
+          },
+          "-10,17": {
+            "cover": "rock"
+          },
+          "-3,17": {
+            "cover": "rock"
+          },
+          "4,17": {
+            "cover": "rock"
+          },
+          "11,17": {
+            "cover": "rock"
+          },
+          "-4,18": {
+            "cover": "rock"
+          },
+          "3,18": {
+            "cover": "rock"
+          },
+          "-5,19": {
+            "cover": "rock"
+          },
+          "2,19": {
+            "cover": "rock"
+          },
+          "1,20": {
+            "cover": "rock"
+          },
+          "-7,21": {
+            "cover": "rock"
+          },
+          "7,21": {
+            "cover": "rock"
+          },
+          "-8,22": {
+            "cover": "rock"
+          },
+          "6,22": {
+            "cover": "rock"
+          },
+          "13,22": {
+            "cover": "rock"
+          },
+          "-9,23": {
+            "cover": "rock"
+          },
+          "-2,23": {
+            "cover": "rock"
+          },
+          "5,23": {
+            "cover": "rock"
+          },
+          "12,23": {
+            "cover": "rock"
+          }
+        }
+      }
+    }
+  }
+}

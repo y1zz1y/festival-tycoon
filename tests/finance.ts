@@ -108,7 +108,7 @@ export function testFinance(): void {
   assert.equal(forecastGame.financeForecast().tickets, 400, 'the forecast keeps to the last full day')
 
   // Prepared scenarios carry their own site, debt and goals.
-  assert.equal(SCENARIO_PRESETS.length, 4)
+  assert.equal(SCENARIO_PRESETS.length, 9)
   for (const preset of SCENARIO_PRESETS) {
     const settings = normalizeScenarioSettings({ ...preset.settings, preset: preset.id })
     assert.equal(settings.preset, preset.id)

@@ -1,3 +1,5 @@
+import { difficultyProfile } from './difficulty'
+import { rideProfile } from './flatRides'
 /**
  * Current-cost line items for the finance ledger. The books only store
  * category totals; this derives the stand / ride / wage / loan pieces from
@@ -26,7 +28,7 @@ import {
   venueUpkeepIdle,
 } from './upkeep'
 
-const BOOTH_KINDS = new Set<BuildingKind>(['food', 'alcohol', 'shirt', 'mascot', 'toilet'])
+const BOOTH_KINDS = new Set<BuildingKind>(['food', 'alcohol', 'shirt', 'mascot', 'toilet', 'waterPoint', 'shower'])
 
 export const FINANCE_BREAKDOWN_SECTION_NAMES = {
   stands: 'Stände',
@@ -110,7 +112,7 @@ function sectionFromHourly(
 
 function buildingLabel(building: Pick<PlacedBuilding, 'kind' | 'rideType' | 'stageDesign'>): string {
   if (building.kind === 'stage') return building.stageDesign?.name || BUILDINGS.stage.name
-  if (building.rideType === 'bungee') return 'Bungee-Turm'
+  if (building.kind === 'ride') return rideProfile(building).name
   return BUILDINGS[building.kind].name
 }
 
@@ -125,11 +127,13 @@ function upkeepSectionId(
 
 function buildingItemId(building: PlacedBuilding, hourly: number): string {
   if (building.kind === 'stage') return `stage:${building.id}`
-  if (building.rideType === 'bungee') return `bungee:${hourly}`
+  if (building.rideType) return `${building.rideType}:${hourly}`
   return `${building.kind}:${hourly}`
 }
 
 function collectUpkeep(state: GameSnapshot): FinanceCategoryBreakdown | undefined {
+  // Running costs follow the difficulty factor, like GameState.hourlyRunningCosts.
+  const factor = difficultyProfile(state.scenario).runningCosts
   const festivalLive = festivalIsLive(state)
   const onBreak = festivalIsOnBreak(state)
   const idle = venueUpkeepIdle({ festivalLive, onBreak })
@@ -146,7 +150,7 @@ function collectUpkeep(state: GameSnapshot): FinanceCategoryBreakdown | undefine
   let hourlyTotal = 0
 
   for (const building of state.buildings) {
-    const hourly = buildingHourlyUpkeep(building, { festivalLive, onBreak })
+    const hourly = (buildingHourlyUpkeep(building, { festivalLive, onBreak })) * factor
     hourlyTotal += hourly
     addHourlyItem(
       buckets[upkeepSectionId(building)],
@@ -156,12 +160,12 @@ function collectUpkeep(state: GameSnapshot): FinanceCategoryBreakdown | undefine
     )
   }
   for (const coaster of state.coasters ?? []) {
-    const hourly = coasterHourlyUpkeep(coaster.pieces?.length ?? 0, idle)
+    const hourly = (coasterHourlyUpkeep(coaster.pieces?.length ?? 0, idle)) * factor
     hourlyTotal += hourly
     addHourlyItem(buckets.attractions, `coaster:${coaster.id}`, coaster.name, hourly)
   }
   for (const course of state.courses ?? []) {
-    const hourly = courseHourlyUpkeep(course, idle)
+    const hourly = (courseHourlyUpkeep(course, idle)) * factor
     hourlyTotal += hourly
     addHourlyItem(
       buckets.attractions,
@@ -176,7 +180,7 @@ function collectUpkeep(state: GameSnapshot): FinanceCategoryBreakdown | undefine
     addHourlyItem(buckets.other, 'garbageTruck', 'Müllwagen', truckRate)
   }
   if (state.power?.backupActive) {
-    const hourly = SIMULATION_CONFIG.power.backupFuelPerHour
+    const hourly = (SIMULATION_CONFIG.power.backupFuelPerHour) * factor
     hourlyTotal += hourly
     addHourlyItem(buckets.other, 'backupFuel', 'Notstromaggregat (Brennstoff)', hourly)
   }
@@ -194,6 +198,8 @@ function collectUpkeep(state: GameSnapshot): FinanceCategoryBreakdown | undefine
 }
 
 function collectStaff(state: GameSnapshot): FinanceCategoryBreakdown | undefined {
+  // Running costs follow the difficulty factor, like GameState.hourlyRunningCosts.
+  const factor = difficultyProfile(state.scenario).runningCosts
   const wages = new Map<string, { label: string; count: number; hourly: number }>()
   let hourlyTotal = 0
   const counts: Partial<Record<(typeof STAFF_ROLES)[number], number>> = {}
@@ -203,7 +209,7 @@ function collectStaff(state: GameSnapshot): FinanceCategoryBreakdown | undefined
   for (const role of STAFF_ROLES) {
     const count = counts[role] ?? 0
     if (!count) continue
-    const hourly = STAFF_DEFINITIONS[role].hourlyWage * count
+    const hourly = (STAFF_DEFINITIONS[role].hourlyWage * count) * factor
     hourlyTotal += hourly
     wages.set(role, { label: STAFF_DEFINITIONS[role].name, count, hourly })
   }

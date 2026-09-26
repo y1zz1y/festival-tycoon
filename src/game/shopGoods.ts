@@ -41,15 +41,33 @@ export function isGeneralGoodsShopKind(kind: string): kind is GeneralGoodsShopKi
 export function shopSupplyKind(kind: BuildingKind | string): Supply | null {
   if (kind === 'food') return 'food'
   if (kind === 'alcohol') return 'drinks'
-  if (kind === 'toilet' || kind === 'backstageToilet') return 'water'
+  if (kind === 'toilet' || kind === 'backstageToilet' || kind === 'waterPoint' || kind === 'shower') return 'water'
   if (isGeneralGoodsShopKind(kind)) return 'goods'
   return null
+}
+
+/**
+ * Facilities that use up one unit of their supply per guest even though it is water:
+ * a water point pours it, a shower runs on it. Toilets only need water delivered for
+ * the heat upgrade and keep working without.
+ */
+export function usesWaterPerGuest(kind: string): boolean {
+  return kind === 'waterPoint' || kind === 'shower'
+}
+
+/** The supply a guest's visit uses up, or null when the visit needs no stock. */
+export function perGuestSupply(kind: string): Supply | null {
+  const supply = shopSupplyKind(kind)
+  if (!supply) return null
+  return supply !== 'water' || usesWaterPerGuest(kind) ? supply : null
 }
 
 export function isQueuedFacilityKind(kind: string): boolean {
   return (
     kind === 'food' ||
     kind === 'toilet' ||
+    kind === 'waterPoint' ||
+    kind === 'shower' ||
     kind === 'ride' ||
     kind === 'alcohol' ||
     kind === 'mascot' ||
@@ -61,6 +79,8 @@ export function isStallFacilityKind(kind: string): boolean {
   return (
     kind === 'food' ||
     kind === 'toilet' ||
+    kind === 'waterPoint' ||
+    kind === 'shower' ||
     kind === 'alcohol' ||
     kind === 'mascot' ||
     kind === 'shirt'
@@ -128,6 +148,16 @@ export function stockoutThought(kind: string, waiting: boolean): string {
     return waiting
       ? 'Die T-Shirts sind ausverkauft. Ich warte noch kurz.'
       : 'Ich schaue kurz, ob noch Shirts da sind.'
+  }
+  if (kind === 'waterPoint') {
+    return waiting
+      ? 'Hier kommt kein Wasser mehr. Ich warte noch kurz.'
+      : 'Ich schaue kurz, ob noch Wasser kommt.'
+  }
+  if (kind === 'shower') {
+    return waiting
+      ? 'Die Duschen haben kein Wasser. Ich warte noch kurz.'
+      : 'Ich schaue kurz, ob die Duschen Wasser haben.'
   }
   return waiting ? 'Ausverkauft! Ich warte noch kurz.' : 'Ich schaue kurz, ob noch etwas da ist.'
 }

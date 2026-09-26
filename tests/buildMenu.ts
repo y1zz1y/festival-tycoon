@@ -31,6 +31,8 @@ export function testBuildMenu(): void {
       for (const item of group.items) {
         const key = item.bungee
           ? `${item.tool}:bungee`
+          : item.rideType
+            ? `${item.tool}:${item.rideType}`
           : item.coasterTypeId
             ? `${item.tool}:${item.coasterTypeId}`
             : item.courseKind

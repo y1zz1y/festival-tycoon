@@ -27,6 +27,8 @@ import type { Cell, Visitor } from './types/entities'
 import type { GameSnapshot } from './types/snapshot'
 import { normalizeStaffGateDirection } from './accessControl'
 import { snapWayElevation } from './wayElevation'
+import { ensureThirstAndHygiene } from './visitorNeeds'
+import { isFlatRideType, rideProfile } from './flatRides'
 import {
   FEMALE_VISITOR_NAMES,
   MALE_VISITOR_NAMES,
@@ -128,7 +130,9 @@ export function repairSnapshotEntities(context: SnapshotRepairContext): number {
   )
   state.buildings.forEach((building) => {
     building.elevation ??= 0
-    building.price ??= BUILDINGS[building.kind].defaultPrice
+    // A ride type from a newer or foreign save that this build does not know is a carousel.
+    if (building.rideType && building.rideType !== 'bungee' && !isFlatRideType(building.rideType)) delete building.rideType
+    building.price ??= building.kind === 'ride' ? rideProfile(building).defaultPrice : BUILDINGS[building.kind].defaultPrice
     if (building.kind === 'path') {
       building.pathType ??= 'normal'
       building.queueDirection ??= building.rotation
@@ -306,6 +310,7 @@ function repairVisitor(visitor: Visitor, context: SnapshotRepairContext): void {
   visitor.campActivitySlot ??= 0
   visitor.campActivityCapacity ??= 1
   visitor.nausea ??= 0
+  ensureThirstAndHygiene(visitor.needs)
   visitor.nauseaCooldown ??= 0
   visitor.medicalCell ??= null
   visitor.medicalSlot ??= null

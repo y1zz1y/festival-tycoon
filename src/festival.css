@@ -104,3 +104,16 @@
 .band-card,.show-booking{touch-action:none;user-select:none}
 .festival-management .band-card.unavailable{cursor:not-allowed;filter:grayscale(.8);opacity:.48;background:#293630}
 .festival-management .band-card.unavailable small{color:#f0c5a0}
+
+/* Storms: a darker, heavier rain veil over the site while one rages, a hint of it in the warning. */
+.festival-weather[data-storm='active'] {
+  background: linear-gradient(rgba(22, 28, 40, 0.34), rgba(22, 28, 40, 0.18)), repeating-linear-gradient(105deg, rgba(190, 210, 230, 0.16) 0 1px, transparent 1px 7px);
+}
+.festival-weather[data-storm='warning'] {
+  background: linear-gradient(rgba(40, 46, 60, 0.14), rgba(40, 46, 60, 0));
+}
+.festival-storm-line {
+  color: #ffd27a;
+  font-weight: 600;
+}
+

@@ -1,9 +1,10 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, SphereGeometry, Shape, ExtrudeGeometry, Vector3 } from 'three'
+import { BoxGeometry, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, Mesh, Quaternion, SphereGeometry, Shape, ExtrudeGeometry, Vector3, type Material, type Object3D } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { BuildingKind } from '../game/catalog'
 import { SCENERY_KINDS } from '../game/scenery'
 import { isFacade, wallSpec, roofWallTop, roofSpec, isWasteBin, binSpec, THEMED_BIN_KINDS, WALL_STYLES } from '../game/decorationWalls'
 import { decorationThemeOf, decorationCategoryOf } from '../game/decoration'
+import { HOUSE_MATERIAL } from './materials'
 
 // Small, strongly silhouetted pieces, baked into vertex colors: detail adds
 // triangles, never a draw call per bolt, plank, bottle or awning stripe.
@@ -25,8 +26,11 @@ export class ModelKit {
   cylinder(x: number, y: number, z: number, radius: number, height: number, color: number, top = radius, sides = 8): void {
     this.add(new CylinderGeometry(top, radius, height, sides), color, x, y, z)
   }
-  sphere(x: number, y: number, z: number, radius: number, color: number, segments = 8): void {
-    this.add(new SphereGeometry(radius, segments, Math.max(4, segments - 2)), color, x, y, z)
+  /** `scaleY` squashes or stretches the sphere, as for the flattened envelope of a light balloon. */
+  sphere(x: number, y: number, z: number, radius: number, color: number, segments = 8, scaleY = 1): void {
+    const geometry = new SphereGeometry(radius, segments, Math.max(4, segments - 2))
+    if (scaleY !== 1) geometry.scale(1, scaleY, 1)
+    this.add(geometry, color, x, y, z)
   }
   beam(a: [number, number, number], b: [number, number, number], width: number, color: number): void {
     const start = new Vector3(...a), end = new Vector3(...b), direction = end.clone().sub(start)
@@ -57,15 +61,16 @@ const moss = 0x3d6b3a, bark = 0x5a4634
 const neonM = 0xff2d95, neonC = 0x2ee6ff
 const brass = 0xc4a15a, copper = 0xb87333, iron = 0x3a3530
 const ice = 0xc8e8f4, aurora = 0x5ee0b0, auroraP = 0x7b6cff
-const material = new MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: .05 })
-material.userData.shared = true
+const material = HOUSE_MATERIAL
 const geometries = new Map<BuildingKind, BufferGeometry>()
 export const DETAILED_BUILDINGS: readonly BuildingKind[] = [
+  'fence', 'table', 'lighting', 'lightBalloon',
   'food', 'alcohol', 'mascot', 'shirt', 'toilet', 'bench', 'wasteBin',
   'sealedWasteContainer', ...THEMED_BIN_KINDS, 'stage', 'directionalSpeaker',
   'omniSpeaker', 'generator', 'backupGenerator', 'foh', 'delayTower',
   'videoWall', 'laserShow', 'fireworkBattery', 'securityGate', 'ride',
   'bandFridge', 'backstageCouch2', 'backstageCouch3', 'backstageToilet',
+  'waterPoint', 'shower',
   ...SCENERY_KINDS,
 ]
 
@@ -720,6 +725,48 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
     k.cylinder(0, .34, 0, .07, .16, 0xd4652a, .02, 5)
     k.cylinder(0, .4, 0, .045, .14, 0xf2b35a, .01, 5)
     k.cylinder(0, .44, 0, .02, .1, cream, .01, 5)
+  } else if (kind === 'fence') {
+    // Bauzaun: steel posts on concrete feet with the orange and white warning slats
+    // between them, standing on the tile edge the way the old fence did.
+    const z = .42
+    for (const x of [-.4, .4]) {
+      k.box(x, .56, z, .055, 1.08, .055, 0x4a4d52)
+      k.box(x, .04, z, .18, .08, .22, 0x8e8c86)
+    }
+    for (let i = 0; i < 4; i++) {
+      const y = .19 + i * .22
+      k.box(0, y, z, .86, .16, .03, i % 2 ? 0xf4f0e6 : 0xe67a22)
+      k.box(0, y - .075, z + .017, .86, .012, .006, i % 2 ? 0xc9c3b5 : 0xb45d17)
+    }
+  } else if (kind === 'table') {
+    // Bistro table: a plank top over a darker frame, one post on a cross foot.
+    for (let i = 0; i < 5; i++) k.box(-.28 + i * .14, .48, 0, .13, .05, .7, i % 2 ? 0xb07a48 : 0x9c6a3e)
+    k.box(0, .445, 0, .62, .03, .62, 0x7b5332)
+    k.box(0, .22, 0, .1, .42, .1, ink)
+    k.box(0, .02, 0, .5, .04, .08, ink)
+    k.box(0, .02, 0, .08, .04, .5, ink)
+  } else if (kind === 'lighting') {
+    // Festival light post: foot, slim mast and a hood open underneath. The bulb that
+    // glows under it is FestivalLightsView's, at DECORATION_LIGHTS.lighting.height.
+    k.box(0, .04, 0, .22, .08, .22, ink)
+    k.cylinder(0, .74, 0, .045, 1.36, 0x4a4d52, .032, 6)
+    k.cylinder(0, 1.55, 0, .16, .07, ink, .07, 8)
+    k.cylinder(0, 1.5, 0, .09, .03, 0xd9c98f, .09, 8)
+  } else if (kind === 'lightBalloon') {
+    // Daylight balloon: ballast and power crate on the ground, a tripod up to the
+    // collar, and the fabric envelope with its seam band. Lit like everything else by
+    // day; at night FestivalLightsView lays its glow shell over it.
+    k.box(0, .08, 0, .34, .16, .28, 0x3b4046)
+    k.box(.2, .07, .12, .18, .12, .16, 0x3d4a55)
+    k.box(.2, .1, .201, .12, .02, .006, 0xe4b754)
+    for (const a of [0, Math.PI * 2 / 3, Math.PI * 4 / 3]) {
+      k.beam([Math.sin(a) * .26, .02, Math.cos(a) * .26], [0, 1.84, 0], .03, 0x4a4d52)
+    }
+    k.cylinder(0, 1.84, 0, .15, .05, ink)
+    // A shade under pure white, so daylight models the fabric instead of burning it out.
+    k.sphere(0, 2.35, 0, .54, 0xe3e8ef, 14, .9)
+    k.cylinder(0, 2.35, 0, .548, .035, 0xc5cdd8, .548, 14)
+    k.cylinder(0, 2.84, 0, .12, .02, 0xc5cdd8, .12, 10)
   } else if (kind === 'picketFence') {
     for (const x of [-.4, -.13, .13, .4]) {
       k.box(x, .36, 0, .05, .72, .04, cream)
@@ -1006,6 +1053,42 @@ function build(kind: BuildingKind, variant?: string): BufferGeometry {
         k.box(x, .6, .3, .05, .02, .04, cream)
       }
     }
+  } else if (kind === 'waterPoint') {
+    // Drinking water: a concrete plinth, a steel trough with three taps and a blue
+    // sign with a drop, so it reads as water from above and in the menu.
+    k.box(0, .04, 0, .8, .08, .56, 0x9a9d99)
+    k.box(0, .28, 0, .7, .06, .34, 0xb9c2c6)
+    k.box(0, .2, 0, .66, .12, .3, 0x8e999e)
+    for (const x of [-.3, .3]) k.box(x, .16, 0, .05, .24, .26, 0x6f7a80)
+    k.box(0, .52, -.14, .07, .5, .07, 0x7d878c)
+    k.box(0, .74, -.14, .62, .05, .06, 0x7d878c)
+    for (const x of [-.22, 0, .22]) {
+      k.box(x, .69, -.1, .035, .08, .07, 0xd4dadd)
+      k.box(x, .72, -.14, .06, .03, .03, 0x2f6fdb)
+    }
+    k.box(0, .96, -.14, .34, .3, .03, 0x2f6fdb)
+    k.box(0, .95, -.12, .09, .13, .01, 0xf4f8fb)
+    k.box(0, 1.02, -.12, .04, .05, .01, 0xf4f8fb)
+    k.box(0, .315, 0, .6, .01, .24, 0x6fb6e8)
+  } else if (kind === 'shower') {
+    // A shower block: a turquoise container with two doors, a tank on the roof and a
+    // pipe with two heads over a slatted floor in front.
+    k.box(0, .045, 0, .86, .09, .8, 0x6f6a64)
+    k.box(0, .6, -.06, .82, 1.02, .6, 0x6cc4d8)
+    k.box(0, .13, -.06, .86, .1, .64, 0x3f8ea3)
+    for (const x of [-.2, .2]) {
+      k.box(x, .56, .245, .32, .86, .02, 0xe8f4f6)
+      k.box(x + .11, .56, .26, .03, .08, .02, 0x2f3a3f)
+    }
+    k.box(0, .56, .25, .03, .9, .02, 0x3f8ea3)
+    k.box(0, 1.14, -.06, .86, .06, .64, 0xdfe6e8)
+    k.cylinder(-.18, 1.3, -.1, .16, .26, 0x9aa7ad, .16, 10)
+    k.box(0, 1.02, .3, .7, .035, .035, 0xb9c2c6)
+    for (const x of [-.2, .2]) {
+      k.box(x, .98, .34, .03, .08, .03, 0xb9c2c6)
+      k.cylinder(x, .93, .34, .06, .03, 0xd4dadd, .03, 8)
+    }
+    for (const x of [-.3, -.15, 0, .15, .3]) k.box(x, .1, .34, .1, .02, .14, 0x8a6b4a)
   } else if (kind === 'toilet' || kind === 'backstageToilet') {
     portableToilet(k, kind === 'toilet' ? BLUE_CABIN : GOLD_CABIN)
     if (kind === 'backstageToilet') {
@@ -1394,31 +1477,49 @@ export type CoverInstanceTint = (
   z: number,
 ) => { r: number; g: number; b: number } | undefined
 
-/** Shared geometry lets hundreds of identical assets draw once per kind. */
+/**
+ * One InstancedMesh per shared geometry and shared material among the static
+ * meshes (`userData.retroStatic`) below `source`. The house models all use the one
+ * vertex-colour material; textured decks and roads bring their own shared ones, so
+ * the bucket key is both. `userData.flatSurface` marks decks that only receive
+ * shadows. Instance order follows the traversal, and `buildingIds` keeps picking.
+ * Optional `tint` paints a cover film via `instanceColor` (`weatheringRgb`).
+ */
+/** The id of the placed object a mesh belongs to, however deep in its model it sits. */
+function owningBuildingId(mesh: Object3D): string | undefined {
+  for (let node = mesh.parent; node; node = node.parent) {
+    const id = node.userData.buildingId as string | undefined
+    if (id) return id
+  }
+  return undefined
+}
+
 export function batchRetroBuildings(source: Group, tint?: CoverInstanceTint): Group {
   source.updateWorldMatrix(true, true)
   const inverse = source.matrixWorld.clone().invert()
-  const buckets = new Map<BufferGeometry, Mesh[]>()
+  const buckets = new Map<BufferGeometry, Map<Material, Mesh[]>>()
   source.traverse(object => {
-    if (!(object instanceof Mesh) || !object.userData.retroStatic) return
-    const bucket = buckets.get(object.geometry) ?? []
-    bucket.push(object); buckets.set(object.geometry, bucket)
+    if (!(object instanceof Mesh) || !object.userData.retroStatic || Array.isArray(object.material)) return
+    const byMaterial = buckets.get(object.geometry) ?? new Map<Material, Mesh[]>()
+    const bucket = byMaterial.get(object.material) ?? []
+    bucket.push(object); byMaterial.set(object.material, bucket); buckets.set(object.geometry, byMaterial)
     object.visible = false
   })
   const group = new Group(), matrix = new Matrix4(), color = new Color(), world = new Vector3()
-  for (const [geometry, meshes] of buckets) {
-    const batch = new InstancedMesh(geometry, material, meshes.length)
+  for (const [geometry, byMaterial] of buckets) for (const [shared, meshes] of byMaterial) {
+    const batch = new InstancedMesh(geometry, shared, meshes.length)
     batch.userData.facade = meshes[0]!.userData.facade === true
-    batch.userData.buildingIds = meshes.map(mesh => mesh.parent?.userData.buildingId)
+    batch.userData.buildingIds = meshes.map(owningBuildingId)
     meshes.forEach((mesh, i) => {
       batch.setMatrixAt(i, matrix.multiplyMatrices(inverse, mesh.matrixWorld))
       mesh.getWorldPosition(world)
-      const rgb = tint?.(mesh.parent?.userData.buildingId as string | undefined, world.x, world.z)
+      const rgb = tint?.(owningBuildingId(mesh), world.x, world.z)
       if (rgb) color.setRGB(rgb.r, rgb.g, rgb.b)
       else color.setRGB(1, 1, 1)
       batch.setColorAt(i, color)
     })
-    batch.castShadow = batch.receiveShadow = true
+    batch.castShadow = meshes[0]!.userData.flatSurface !== true
+    batch.receiveShadow = true
     batch.computeBoundingSphere()
     if (batch.instanceColor) batch.instanceColor.needsUpdate = true
     group.add(batch)

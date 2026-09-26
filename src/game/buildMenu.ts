@@ -1,3 +1,4 @@
+import { FLAT_RIDE_TYPES, rideProfile, type FlatRideType } from './flatRides'
 import { BUILDING_KINDS, BUILDINGS } from './catalog'
 import type { BuildingKind, Tool } from './catalog'
 import { TRACK_PIECES, type CoasterTypeId } from './coasters'
@@ -40,6 +41,8 @@ export type BuildMenuItem = {
   previewKind?: BuildingKind
   previewSupply?: 'delivery' | 'supply'
   bungee?: boolean
+  /** A flat ride (src/game/flatRides.ts) built with the `ride` tool. */
+  rideType?: FlatRideType
   coasterTypeId?: CoasterTypeId
   courseKind?: CourseKind
 }
@@ -75,7 +78,7 @@ function toolItem(
   name: string,
   icon: string,
   detail: string,
-  extra?: Pick<BuildMenuItem, 'bungee' | 'previewKind' | 'previewSupply' | 'coasterTypeId' | 'courseKind'>,
+  extra?: Pick<BuildMenuItem, 'bungee' | 'rideType' | 'previewKind' | 'previewSupply' | 'coasterTypeId' | 'courseKind'>,
 ): BuildMenuItem {
   return { tool, name, icon, detail, ...extra }
 }
@@ -220,6 +223,10 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
           toolItem('ride', 'Bungee-Turm', '🪂', '1.200 € + 25 €/Meter', {
             bungee: true,
           }),
+          ...FLAT_RIDE_TYPES.map((rideType) => {
+            const profile = rideProfile({ rideType })
+            return toolItem('ride', profile.name, profile.icon, `${profile.cost.toLocaleString('de-DE')} €`, { rideType })
+          }),
         ],
       },
       {
@@ -256,6 +263,8 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
         items: [
           buildingMenuItem('food'),
           buildingMenuItem('toilet'),
+          buildingMenuItem('waterPoint'),
+          buildingMenuItem('shower'),
           buildingMenuItem('alcohol'),
           buildingMenuItem('mascot'),
           buildingMenuItem('shirt'),

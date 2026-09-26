@@ -74,7 +74,7 @@ export class SupplyChainView {
       ;(fill.material as MeshStandardMaterial).color.setHex(ratio<=0?0xe86e53:ratio<.25?0xe4b557:0x70c481)
     }
     for(const b of s.buildings) {
-      const kind=b.kind==='food'?'food':b.kind==='alcohol'?'drinks':b.kind==='toilet'?'water':b.kind==='mascot'||b.kind==='shirt'?'goods':null
+      const kind=b.kind==='food'?'food':b.kind==='alcohol'?'drinks':b.kind==='toilet'||b.kind==='waterPoint'||b.kind==='shower'?'water':b.kind==='mascot'||b.kind==='shirt'?'goods':null
       if(!kind) continue
       stockIds.add(b.id)
       let model=this.stockModels.get(b.id)

@@ -1,3 +1,4 @@
+import { difficultyOf, isDifficulty } from '../game/difficulty'
 import { ENVIRONMENTS, type Environment } from '../game/environments'
 import type { GameState } from '../game/GameState'
 import { SCENARIO_WORLD_SIZES, normalizeScenarioSettings, type ScenarioSettings } from '../game/scenario'
@@ -43,6 +44,7 @@ export function createScenarioFormController(getGame: () => GameState) {
     })
   }
 
+  const scenarioDifficulty = document.querySelector<HTMLSelectElement>('#scenario-difficulty')
   function read(): ScenarioSettings {
     const worldSize = Number(scenarioWorldSize.value)
     return normalizeScenarioSettings({
@@ -59,6 +61,7 @@ export function createScenarioFormController(getGame: () => GameState) {
         ? (worldSize as (typeof SCENARIO_WORLD_SIZES)[number])
         : 48,
       goals: readGoals() as ScenarioSettings['goals'],
+      difficulty: isDifficulty(scenarioDifficulty?.value) ? scenarioDifficulty.value : 'normal',
     })
   }
   
@@ -71,6 +74,7 @@ export function createScenarioFormController(getGame: () => GameState) {
     scenarioAggression.value = String(Math.round(settings.aggressiveShare * 100))
     scenarioMoney.value = String(settings.startingMoney)
     scenarioWorldSize.value = String(settings.worldSize)
+    if (scenarioDifficulty) scenarioDifficulty.value = difficultyOf(settings)
     fillGoals(settings.goals)
     updateLabels()
   }

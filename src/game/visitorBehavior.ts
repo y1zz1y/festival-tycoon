@@ -5,7 +5,10 @@ import { stageDistance, stageFrontRank, stageSize, type StageDesign } from './st
 import { wayInfo } from './wayTypes';
 import { localStock, consumeLocal } from './supplyChain';
 import { isShopServiceKind } from './shopAccess';
-import { defaultShirtSettings, normalizeShirtColor, normalizeShirtStyle, shopSupplyKind, souvenirPurchaseThought, souvenirSeekThought } from './shopGoods';
+import { defaultShirtSettings, normalizeShirtColor, normalizeShirtStyle, perGuestSupply, souvenirPurchaseThought, souvenirSeekThought } from './shopGoods';
+import { isCamper, moodNeedValues } from './visitorNeeds';
+import { rideProfile } from './flatRides';
+import { difficultyProfile } from './difficulty';
 import { isStallQueueKind } from './queueLanes';
 import { buildingEfficiency } from './ground';
 import { BUILDINGS } from './catalog';
@@ -169,7 +172,25 @@ function applyPurchaseOutcome(
   paid: boolean,
   available: boolean,
   holdMascotRoll: () => number,
+  softDrink = false,
 ): void {
+  const drink = SIMULATION_CONFIG.needs.drink
+  if (target?.kind === 'waterPoint' && paid) {
+    visitor.needs.thirst = Math.min(100, (visitor.needs.thirst ?? 0) + drink.waterPointThirst)
+    visitor.thought = 'Frisches Wasser, genau richtig.'
+    return
+  }
+  if (target?.kind === 'shower' && paid) {
+    visitor.needs.hygiene = SIMULATION_CONFIG.needs.shower.hygiene
+    visitor.thought = 'Endlich geduscht – wie neugeboren.'
+    return
+  }
+  if (target?.kind === 'alcohol' && paid && softDrink) {
+    visitor.needs.thirst = Math.min(100, (visitor.needs.thirst ?? 0) + drink.softDrinkThirst)
+    visitor.needs.toilet = Math.max(0, visitor.needs.toilet - drink.softDrinkToiletCost)
+    visitor.thought = 'Eine kalte Limo, genau das Richtige.'
+    return
+  }
   if (target?.kind === 'food' && paid) {
     addItem(visitor.inventory, 'food')
     visitor.thought = 'Ich habe Essen gekauft und suche einen Platz zum Essen.'
@@ -181,12 +202,13 @@ function applyPurchaseOutcome(
     return
   }
   if (target?.kind === 'ride' && paid) {
-    grantAttractionFun(visitor, SIMULATION_CONFIG.needs.ride.funGain)
+    const profile = rideProfile(target)
+    grantAttractionFun(visitor, profile.funGain)
     visitor.needs.energy = Math.max(
       0,
-      visitor.needs.energy - SIMULATION_CONFIG.needs.ride.energyCost,
+      visitor.needs.energy - profile.energyCost,
     )
-    visitor.thought = target.rideType === 'bungee' ? 'Was für ein Bungeesprung!' : 'Das Karussell war großartig!'
+    visitor.thought = profile.thought
     visitor.bungeeNude = false
     return
   }
@@ -1378,17 +1400,22 @@ export class VisitorBehaviorService {
 
     const desiredKinds: BuildingKind[] = []
     if (visitor.needs.toilet < decisions.seekToiletBelow) desiredKinds.push('toilet')
+    const thirsty = (visitor.needs.thirst ?? 100) < decisions.seekDrinkBelow
+    // Water first (free), then the drink stand, which also sells soft drinks.
+    if (thirsty) desiredKinds.push('waterPoint', 'alcohol')
     if (visitor.needs.hunger < decisions.seekFoodBelow) desiredKinds.push('food')
     if (
       visitor.alcoholDesire >= decisions.seekAlcoholDesire &&
       visitor.alcoholLevel < decisions.maximumAlcoholForPurchase &&
-      visitor.needs.energy > decisions.minimumEnergyForAlcohol
+      visitor.needs.energy > decisions.minimumEnergyForAlcohol &&
+      !desiredKinds.includes('alcohol')
     ) {
       desiredKinds.push('alcohol')
     }
+    if (isCamper(visitor) && (visitor.needs.hygiene ?? 100) < decisions.seekShowerBelow) desiredKinds.push('shower')
     if (visitor.needs.fun < decisions.seekFunBelow) desiredKinds.push('ride')
 
-    const urgentNeed = desiredKinds.some(
+    const urgentNeed = thirsty || desiredKinds.some(
       (kind) => kind === 'toilet' || kind === 'food',
     )
     if (!urgentNeed && this.tryVisitConcert(visitor)) return
@@ -1504,8 +1531,12 @@ export class VisitorBehaviorService {
         visitor.thought =
           kind === 'food'
             ? 'Ich habe Hunger.'
+            : kind === 'waterPoint'
+              ? 'Ich habe Durst.'
+            : kind === 'shower'
+              ? 'Ich sollte dringend duschen.'
             : kind === 'alcohol'
-              ? 'Ich hole mir etwas zu trinken.'
+              ? this.wantsSoftDrink(visitor) ? 'Ich habe Durst und hole mir etwas zu trinken.' : 'Ich hole mir etwas zu trinken.'
             : kind === 'toilet'
               ? 'Ich brauche dringend eine Toilette.'
             : kind === 'mascot' || kind === 'shirt'
@@ -2408,6 +2439,7 @@ export class VisitorBehaviorService {
         visitor.alcoholLevel + config.alcoholGain,
       )
       visitor.alcoholDesire = 0
+      visitor.needs.thirst = Math.min(100, (visitor.needs.thirst ?? 100) + SIMULATION_CONFIG.needs.drink.alcoholThirstGain)
       visitor.needs.fun = Math.min(
         100,
         visitor.needs.fun + config.drinkFunGain,
@@ -2497,7 +2529,7 @@ export class VisitorBehaviorService {
   ): DayPlanOffer | null {
     if (kind === 'food') return 'food'
     if (kind === 'alcohol') return 'drinks'
-    if (kind === 'toilet') return 'toilets'
+    if (kind === 'toilet' || kind === 'waterPoint' || kind === 'shower') return 'toilets'
     if (kind === 'mascot' || kind === 'shirt') return 'shops'
     if (kind === 'ride') return 'rides'
     if (
@@ -3105,11 +3137,13 @@ export class VisitorBehaviorService {
       z: visitor.cellZ,
       elevation: visitor.cellElevation,
     }
+    // Stands need stock, water points and showers need water; toilets do without.
+    const supply = perGuestSupply(kind)
     const candidates = this.context.state.buildings
       .filter(
         (building) =>
           building.kind === kind && this.context.isBuildingCurrentlyActive(building) &&
-          (!isShopServiceKind(kind) || localStock(this.context.state, building.id, shopSupplyKind(kind) ?? 'goods') >= 1),
+          (!supply || localStock(this.context.state, building.id, supply) >= 1),
       )
       .map((building) => {
         const queueCells = this.context.getBuildingQueueCells(building)
@@ -3441,30 +3475,35 @@ export class VisitorBehaviorService {
       visitor.thought = 'Ich warte, bis der Ausgang wieder mit einem Gehweg verbunden ist.'
       return
     }
-    const supply = target ? shopSupplyKind(target.kind) : null
-    const shopSupply = supply && supply !== 'water' ? supply : null
+    const shopSupply = target ? perGuestSupply(target.kind) : null
     const available = !shopSupply || !!target && localStock(this.context.state, target.id, shopSupply) >= 1
     if (!available) this.context.state.festival.metrics.stockouts++
+    // Thirsty without a wish for alcohol: a soft drink at a share of the stand's price.
+    const softDrink = target?.kind === 'alcohol' && this.wantsSoftDrink(visitor)
+    const price = target && softDrink
+      ? Math.ceil(target.price * SIMULATION_CONFIG.needs.drink.softDrinkPriceShare)
+      : target?.price ?? 0
     const paid =
       target && available &&
-      this.context.chargeVisitor(visitor, target.price, {
+      this.context.chargeVisitor(visitor, price, {
         x: target.x + 0.5,
         y: target.elevation + BUILDINGS[target.kind].height,
         z: target.z + 0.5,
       })
     if (paid && shopSupply && target) consumeLocal(this.context.state, target.id, shopSupply)
-    applyPurchaseOutcome(visitor, target, Boolean(paid), available, () => this.context.rng.next())
+    applyPurchaseOutcome(visitor, target, Boolean(paid), available, () => this.context.rng.next(), softDrink)
+    if (softDrink && paid) this.giveWaste(visitor, 1)
     if (target?.kind === 'ride' && paid) {
       this.context.incidents.addRideNausea(
         visitor,
-        SIMULATION_CONFIG.nausea.carouselIntensity,
+        rideProfile(target).nausea,
       )
       delete target.bungeeVisitorId
     }
 
     const purchasedConsumable =
       Boolean(paid) &&
-      (target?.kind === 'food' || target?.kind === 'alcohol')
+      (target?.kind === 'food' || (target?.kind === 'alcohol' && !softDrink))
     visitor.targetId = null
     if (target?.kind === 'ride' && target.rideExit && rideExitPath) {
       visitor.x=target.rideExit.x+.5; visitor.y=target.rideExit.y; visitor.z=target.rideExit.z+.5
@@ -3519,8 +3558,16 @@ export class VisitorBehaviorService {
     this.decideNextAction(visitor)
   }
 
+  /** Thirsty and not after alcohol: at the drink stand this guest takes a soft drink. */
+  wantsSoftDrink(visitor: Visitor): boolean {
+    const decisions = SIMULATION_CONFIG.visitors.decisions
+    return (visitor.needs.thirst ?? 100) < decisions.seekDrinkBelow && visitor.alcoholDesire < decisions.seekAlcoholDesire
+  }
+
   decayNeeds(visitor: Visitor, minutes: number): void {
     const config = SIMULATION_CONFIG.needs
+    // Difficulty: needs run down faster on Schwer, slower on Leicht.
+    minutes *= difficultyProfile(this.context.state.scenario).needDecay
     visitor.needs.hunger = Math.max(
       0,
       visitor.needs.hunger - minutes * config.hungerDecayPerMinute,
@@ -3533,6 +3580,12 @@ export class VisitorBehaviorService {
       0,
       visitor.needs.fun - minutes * config.funDecayPerMinute,
     )
+    const sheltered = visitor.state === 'camping' && visitor.campingPhase === 'resting'
+    const heat = this.context.state.festival.weather === 'heat' && !sheltered ? config.heatThirstMultiplier : 1
+    visitor.needs.thirst = Math.max(0, (visitor.needs.thirst ?? 100) - minutes * config.thirstDecayPerMinute * heat)
+    if (isCamper(visitor)) {
+      visitor.needs.hygiene = Math.max(0, (visitor.needs.hygiene ?? 100) - minutes * config.hygieneDecayPerMinute)
+    }
     const alcoholEnergyDrain =
       (visitor.alcoholLevel / 100) * config.alcoholEnergyDecayPerMinute
     const circadian = circadianEnergyDecayMultiplier(
@@ -3727,7 +3780,7 @@ export class VisitorBehaviorService {
       visitor.emotionMinutes = Math.max(0, visitor.emotionMinutes - minutes)
       return
     }
-    const values = Object.values(visitor.needs)
+    const values = moodNeedValues(visitor)
     const minimum = Math.min(...values)
     const average = values.reduce((total, value) => total + value, 0) / values.length
     const emotions = SIMULATION_CONFIG.visitors.emotions
