@@ -25,3 +25,8 @@ data
 *.njsproj
 *.sln
 *.sw?
+
+# Desktop app (docs/desktop.md)
+electron/build
+release
+steam/build

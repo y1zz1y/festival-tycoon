@@ -1,8 +1,11 @@
 {
   "name": "festival-simulator",
   "private": true,
-  "version": "0.2.17",
+  "version": "0.3.1",
+  "description": "Headliner Tycoon – Festival-Aufbauspiel",
+  "author": "Baudewiglange Studios",
   "type": "module",
+  "main": "electron/main.mjs",
   "scripts": {
     "lint": "eslint . --max-warnings 36",
     "quality:dead-code": "knip --include files,dependencies,unlisted,unresolved",
@@ -19,12 +22,17 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "start": "node --experimental-strip-types server/serve.ts"
+    "start": "node --experimental-strip-types server/serve.ts",
+    "desktop:bundle": "node scripts/build-desktop.mjs",
+    "desktop": "npm run build && npm run desktop:bundle && electron .",
+    "desktop:dist": "npm run build && npm run desktop:bundle && electron-builder"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/three": "^0.185.4",
     "@types/ws": "^8.18.1",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "eslint": "^10.11.0",
     "eslint-plugin-sonarjs": "^4.2.1",
     "globals": "^17.12.0",

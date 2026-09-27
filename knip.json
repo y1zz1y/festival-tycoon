@@ -4,7 +4,8 @@
     "tests/regression.ts",
     "tests/performance.ts",
     "scripts/*.mjs",
-    "scripts/import-terrain-entry.ts"
+    "scripts/import-terrain-entry.ts",
+    "electron/main.mjs"
   ],
   "project": [
     "src/**/*.ts",
@@ -12,7 +13,8 @@
     "tests/**/*.ts",
     "tests/**/*.mjs",
     "scripts/**/*.mjs",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "electron/*.mjs"
   ],
   "ignoreExportsUsedInFile": true
 }

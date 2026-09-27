@@ -14,8 +14,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
+    env:
+      # The web build and the tests do not need the Electron runtime.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -90,8 +93,102 @@ jobs:
             "/users/${{ github.repository_owner }}/packages/container/${{ github.event.repository.name }}/visibility" \
             -f visibility=public
 
+  # Desktop app (Electron, docs/desktop.md): every OS builds x64 and arm64 on its own
+  # runner. The unpacked x64 (Windows, Linux) and universal (macOS) apps are also kept
+  # as Steam depot payloads for the steam job.
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            builder: --linux
+            steam_depot: linux
+            steam_path: release/linux-unpacked
+          - os: windows-latest
+            platform: windows
+            builder: --win
+            steam_depot: windows
+            steam_path: release/win-unpacked
+          - os: macos-latest
+            platform: macos
+            builder: --mac
+            steam_depot: macos
+            steam_path: release/mac-universal
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    env:
+      # No code-signing certificates yet: unsigned builds (docs/desktop.md).
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app and desktop server bundle
+        run: |
+          npm run build
+          npm run desktop:bundle
+
+      - name: Package desktop app (x64 and arm64)
+        run: npx electron-builder ${{ matrix.builder }} --publish never
+
+      - name: Package universal macOS app for Steam
+        if: matrix.platform == 'macos'
+        run: npx electron-builder --mac dir --universal --publish never
+
+      - name: Upload desktop downloads
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: |
+            release/*.exe
+            release/*.zip
+            release/*.dmg
+            release/*.AppImage
+            release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 90
+
+      # tar keeps the executable bits and the symlinks inside macOS frameworks, which
+      # a plain artifact upload would drop.
+      - name: Pack Steam depot payload
+        shell: bash
+        run: tar -czf steam-${{ matrix.steam_depot }}.tar.gz -C "${{ matrix.steam_path }}" .
+
+      - name: Upload Steam depot payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: steam-${{ matrix.steam_depot }}
+          path: steam-${{ matrix.steam_depot }}.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: [build, desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: '{festival-tycoon-web,desktop-*}'
+          merge-multiple: true
+
       - name: Publish latest GitHub Release
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
@@ -99,9 +196,14 @@ jobs:
           target_commitish: ${{ github.sha }}
           prerelease: true
           make_latest: true
-          files: festival-tycoon-web.zip
+          files: artifacts/*
           body: |
             Öffentliche Build-Artefakte dieses Commits.
+
+            **Desktop-App** (Einzelspieler offline, Mehrspieler im Heimnetz):
+            - Windows: `headliner-tycoon-<version>-win-x64.exe` bzw. `-arm64` (Installer) oder `.zip`
+            - macOS: `headliner-tycoon-<version>-mac-arm64.dmg` (Apple Silicon) bzw. `-x64` (Intel). Noch unsigniert: beim ersten Start Rechtsklick → Öffnen.
+            - Linux: `headliner-tycoon-<version>-linux-x86_64.AppImage` bzw. `-arm64`, oder `.tar.gz`
 
             **Web-Build:** `festival-tycoon-web.zip` (statische Dateien)
 
@@ -113,3 +215,42 @@ jobs:
             ```
 
             Danach im Browser öffnen: http://localhost:8080
+
+  # Steam (docs/desktop.md): uploads the three depots through SteamPipe once the
+  # repository variable STEAM_APP_ID and the secrets STEAM_USERNAME and
+  # STEAM_CONFIG_VDF exist. Depot IDs follow Steam's default numbering:
+  # App ID + 1 = Windows, + 2 = Linux, + 3 = macOS. The build goes to the branch in
+  # STEAM_BRANCH (default "beta"), never straight to the public default branch.
+  steam:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && vars.STEAM_APP_ID != ''
+    needs: [desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download Steam depot payloads
+        uses: actions/download-artifact@v4
+        with:
+          path: steam/archives
+          pattern: steam-*
+          merge-multiple: true
+
+      - name: Unpack the depot folders
+        run: |
+          for depot in windows linux macos; do
+            mkdir -p "steam/build/$depot"
+            tar -xzf "steam/archives/steam-$depot.tar.gz" -C "steam/build/$depot"
+          done
+
+      - name: Upload to Steam
+        uses: game-ci/steam-deploy@v3
+        with:
+          username: ${{ secrets.STEAM_USERNAME }}
+          configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
+          appId: ${{ vars.STEAM_APP_ID }}
+          buildDescription: ${{ github.sha }}
+          rootPath: steam/build
+          depot1Path: windows
+          depot2Path: linux
+          depot3Path: macos
+          releaseBranch: ${{ vars.STEAM_BRANCH || 'beta' }}

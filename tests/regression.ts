@@ -72,6 +72,7 @@ import { testTickerAndWasteCaps } from './ticker'
 import { testAccounts } from './accounts'
 import { testSaves } from './saves'
 import { testProgress } from './progress'
+import { testDesktopServer } from './desktopServer'
 import { testBrowserSaves, testServerSaveClient } from './browserSaves'
 import { testBlueprints, testBlueprintLibraryRoundtrip, testBlueprintParkingCopy } from './blueprints'
 import { testBuildUndo } from './buildUndo'
@@ -153,6 +154,7 @@ await testAccounts()
 console.log('PASS accounts: registration, sessions, hashed passwords and throttled guessing')
 await testSaves()
 await testProgress()
+await testDesktopServer()
 console.log('PASS saves belong to their account, public ones are readable by all and writable by none')
 testBrowserSaves(fixture)
 console.log('PASS local slots and quicksave keep visitors and buildings; listing ignores corrupt worlds')

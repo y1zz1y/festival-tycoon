@@ -2,6 +2,8 @@
 
 FROM node:22-alpine AS build
 WORKDIR /app
+# Electron is a dev dependency for the desktop app only; the image never needs its runtime.
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY index.html tsconfig.json vite.config.ts ./

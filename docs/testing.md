@@ -61,6 +61,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `npm run test:performance -- rtest3 1200` | langer Lauf (Festival kann enden) |
 | `npm run test:performance:fixtures` | alle in `tests/fixtures/performance/manifest.json` registrierten Referenz-Saves |
 | `npm run test:install` | PWA/Homescreen-Artefakte |
+| `npm run desktop` / `npm run desktop:dist` | Desktop-App starten bzw. paketieren, siehe [desktop.md](desktop.md) |
 | `$env:PROFILE_METHODS='1'` | inklusive Methodenzeiten (PowerShell) |
 | `$env:I18N_COVERAGE_DUMP='1'` | `npm test` listet jede noch deutsche Stelle der englischen Abdeckung (PowerShell) |
 
@@ -155,6 +156,7 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/attractionFoundation.ts` | Camping-/Vorplatz-Ausweisung bleibt nach Attraction-Commands, Save/Load und MP-Deltas; Placement-Sperre (Gebäude/Weg/Deko), Fence/Delay-Ausnahme, Forecourt-Preview; Doppelmodell-Invarianten (`assertDualModel`, Signatur, Waisen samt Gast-Freigabe, IDs samt Reparatur doppelter IDs, Tick-Doppelsimulation, Queue-Reihenfolge, v1-Park, Save/MP, kanonische Commands, neue kanonische Arten) |
 | `tests/mobileTouch.ts` | Touch-Kamera / Gesten |
 | `tests/audio.ts` | Kamera-Listener (Look-At, nicht Gäste), Range-Skip, One-Shot-Cap; Jubel nur bei Konzert-Kandidaten + Cooldown/Chance; Fahrzeuge nur Start/Halt/Pass-by; Musik looped solange Quelle + in Range, eine Schleife je Genre; Ogg-Pfade, `public/sfx/` und `public/music/` vorhanden, Loader-Fallback |
+| `tests/desktopServer.ts` | Spielserver als Funktion für die Desktop-App: Port 0, Dist-Rückfall, Mehrspieler-Socket, belegter Port lehnt ab, sauberes Schließen |
 | `tests/progress.ts` | Fortschritt: Best-of-Merge, lokaler Speicher, Konto-Endpunkt mit Anmeldung, Client-Abgleich und Offline-Rückfall |
 | `tests/festivalExtras.ts` | Unwetter (Planung, Phasen, Schutz, Auftritte, Blitz, Verlauf), Sponsoren (Angebote, Unterschrift, Abrechnung), Schwierigkeit, Erste Schritte, Erfolge |
 | `tests/visitorNeeds.ts` | Durst und Hygiene: Startwerte aus der ID, Hitze, Camper-Hygiene, Trinkwasserstelle mit Wasserverbrauch, Limo am Getränkestand, Dusche, alte Stände |

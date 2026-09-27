@@ -36,6 +36,7 @@ feature you touch. Keep detailed file maps and feature history in topic docs.
 | Languages, texts, translation | `docs/i18n.md` |
 | Multiplayer commands / deltas | `docs/multiplayer.md` |
 | Saves / snapshot fields | `docs/saves.md` |
+| Desktop app, CI packages, Steam | `docs/desktop.md` |
 | Tests / how to run checks | `docs/testing.md` |
 | Measured performance | `docs/performance.md` |
 | Layers / where to dock a feature | `docs/architecture.md` |

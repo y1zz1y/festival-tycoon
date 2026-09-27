@@ -347,8 +347,9 @@ Der Spielzustand läuft ausschließlich über eine WebSocket auf `/ws`. Der Clie
 wählt das Schema aus der Seite: HTTPS-Seite → `wss:`, sonst `ws:`. Es gibt
 keinen Polling-Fallback, und es soll auch keinen geben.
 
-Der Produktionsserver (`server/serve.ts`) lauscht auf `HOST`/`PORT`
-(Standard `0.0.0.0:8080`). Vor dem Server steht in der Regel ein Reverse Proxy mit
+Der Produktionsserver (`server/serve.ts`, Logik in `server/app.ts`) lauscht auf
+`HOST`/`PORT` (Standard `0.0.0.0:8080`). Die Desktop-App startet denselben Server
+auf Port 47880 im Heimnetz, siehe [desktop.md](desktop.md). Vor dem Server steht in der Regel ein Reverse Proxy mit
 TLS — und genau dort scheitert es, wenn der Upgrade nicht durchgereicht wird:
 
 ```nginx

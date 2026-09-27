@@ -1,0 +1,51 @@
+# Desktop packages (docs/desktop.md). Built per OS in CI (.github/workflows/build.yml,
+# job "desktop"); locally: npm run desktop:dist (current OS and architecture).
+appId: de.baudewiglange.headlinertycoon
+productName: Headliner Tycoon
+copyright: Copyright © Baudewiglange Studios
+directories:
+  output: release
+files:
+  - dist/**
+  - electron/main.mjs
+  - electron/build/**
+  - package.json
+  - "!**/*.map"
+  # Runtime code is bundled into dist/ and electron/build/: no node_modules in the app.
+  - "!node_modules/**"
+asar: true
+npmRebuild: false
+artifactName: headliner-tycoon-${version}-${os}-${arch}.${ext}
+publish: null
+win:
+  icon: public/app-icons/icon-512.png
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Headliner Tycoon
+mac:
+  icon: public/app-icons/icon-512.png
+  category: public.app-category.simulation-games
+  # Unsigned until a Developer ID exists (docs/desktop.md).
+  identity: null
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+linux:
+  icon: public/app-icons/icon-512.png
+  # Launch option for the Steam Linux depot: ./headliner-tycoon
+  executableName: headliner-tycoon
+  category: Game
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: tar.gz
+      arch: [x64, arm64]

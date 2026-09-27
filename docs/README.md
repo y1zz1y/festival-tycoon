@@ -72,6 +72,7 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | UI, Eingaben, Mobile | [ui.md](ui.md) | `main.ts`, Fenster, Touch |
 | Sprachen, Texte, Übersetzung | [i18n.md](i18n.md) | Sprachwahl, `t`/`de`/`localize`, Katalog, Prüfskript, Glossar |
 | Mehrspieler, Host, Deltas | [multiplayer.md](multiplayer.md) | Commands, Codec, Server |
+| Desktop-App, CI-Pakete, Steam | [desktop.md](desktop.md) | Electron, eingebauter Server, electron-builder, SteamPipe |
 | Spielstände, Version, Export | [saves.md](saves.md) | Snapshot-Version, Slots, Base64 |
 | Tests und Prüfkommandos | [testing.md](testing.md) | Welche Suite was abdeckt |
 | Performance-Messungen | [performance.md](performance.md) | Baseline, rtest3, Render-Freezes |

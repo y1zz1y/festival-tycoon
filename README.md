@@ -32,7 +32,7 @@ npm run preview
 
 GitHub Actions baut bei jedem Push auf `master` das Spiel und stellt es öffentlich bereit:
 
-- **Release:** https://github.com/y1zz1y/festival-tycoon/releases/latest (`festival-tycoon-web.zip`)
+- **Release:** https://github.com/y1zz1y/festival-tycoon/releases/latest (`festival-tycoon-web.zip` und die Desktop-App)
 - **Actions-Artefakt:** Workflow-Lauf *Build* → `festival-tycoon-web`
 - **Container:** `ghcr.io/y1zz1y/festival-tycoon:latest`
 
@@ -44,6 +44,17 @@ docker run --rm -p 8080:8080 -v festival-saves:/app/saves ghcr.io/y1zz1y/festiva
 ```
 
 Oder aus dem Repo: `docker compose up --build`. Danach http://localhost:8080 öffnen.
+
+### Desktop-App
+
+Am selben Release liegen Desktop-Pakete für Windows (Installer oder Zip), macOS (dmg,
+noch unsigniert: beim ersten Start Rechtsklick → Öffnen) und Linux (AppImage oder
+tar.gz), jeweils für x64 und ARM. Die App braucht keinen Browser und kein Internet:
+Einzelspiel, Spielstände und Konten liegen auf dem eigenen Rechner. Ein
+Mehrspieler-Raum lässt sich direkt aus der App eröffnen; Mitspieler im selben Netz
+treten über den Einladungslink im Browser bei (Windows fragt beim ersten Start einmal
+nach der Firewall-Freigabe). F11 schaltet Vollbild. Aus dem Repo: `npm run desktop`.
+Details, Steam und Signatur: [docs/desktop.md](docs/desktop.md).
 
 Für Entwickler: Das Image enthält nur `server/` und `dist/` (kein `src/`).
 Server-Code darf deshalb keine Value-Imports aus `src/` ziehen — siehe
