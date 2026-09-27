@@ -2,8 +2,8 @@
   "kind": "headliner-scenario",
   "format": 1,
   "id": "burning-man",
-  "name": "Burning Man · Black Rock City",
-  "detail": "Salzpfanne mit Hufeisenstadt und innerer Playastrecke. Das Tor öffnet nach Süden zum Eingang; The Man steht in der Mitte, der Tempel nördlich davon. Wüste, flach, viel Platz für Camps.",
+  "name": "Brennender Mann · Schwarzfelsstadt",
+  "detail": "Salzpfanne mit Hufeisenstadt und innerer Playastrecke. Das Tor öffnet nach Süden zum Eingang; der Brennende Mann steht in der Mitte, der Tempel nördlich davon. Wüste, flach, viel Platz für Camps.",
   "settings": {
     "environment": "desert",
     "unevenness": 0,
@@ -21,8 +21,8 @@
         "edition": 3
       }
     ],
-    "title": "Burning Man · Black Rock City",
-    "detail": "Salzpfanne mit Hufeisenstadt und innerer Playastrecke. Das Tor öffnet nach Süden zum Eingang; The Man steht in der Mitte, der Tempel nördlich davon. Wüste, flach, viel Platz für Camps.",
+    "title": "Brennender Mann · Schwarzfelsstadt",
+    "detail": "Salzpfanne mit Hufeisenstadt und innerer Playastrecke. Das Tor öffnet nach Süden zum Eingang; der Brennende Mann steht in der Mitte, der Tempel nördlich davon. Wüste, flach, viel Platz für Camps.",
     "preset": "burning-man"
   },
   "tickets": {

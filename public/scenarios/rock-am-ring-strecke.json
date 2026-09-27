@@ -1,8 +1,8 @@
 {
   "kind": "headliner-scenario",
   "format": 1,
-  "id": "rock-am-ring",
-  "name": "Rock am Ring · Nürburgring",
+  "id": "rock-am-ring-strecke",
+  "name": "Rock am Kranz · Nörgelring",
   "detail": "Hügelland mit Nordschleifen-Schleife und GP-Oval im Süden. Das Festivalgelände liegt in der Infield-Wiese am Eingang; Asphalt und Streckenbegrenzung tragen die Form der Rennstrecke.",
   "settings": {
     "environment": "grassland",
@@ -21,9 +21,9 @@
         "edition": 3
       }
     ],
-    "title": "Rock am Ring · Nürburgring",
+    "title": "Rock am Kranz · Nörgelring",
     "detail": "Hügelland mit Nordschleifen-Schleife und GP-Oval im Süden. Das Festivalgelände liegt in der Infield-Wiese am Eingang; Asphalt und Streckenbegrenzung tragen die Form der Rennstrecke.",
-    "preset": "rock-am-ring"
+    "preset": "rock-am-ring-strecke"
   },
   "tickets": {
     "day": 120,

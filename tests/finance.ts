@@ -121,7 +121,7 @@ export function testFinance(): void {
     assert.equal(started.scenarioProgress.status.length, preset.settings.goals.length)
     assert.ok(preset.settings.goals.every((goal) => goalName(goal).length > 0))
   }
-  assert.equal(scenarioPreset('woodstock')?.name, 'Woodstock')
+  assert.equal(scenarioPreset('woodstock')?.name, 'Klotzstock')
   assert.equal(scenarioPreset('does-not-exist'), undefined)
   assert.deepEqual(normalizeScenarioSettings({ goals: [{ kind: 'guests', target: -5, edition: 2 }] as never }).goals, [], 'nonsense goals are dropped')
 

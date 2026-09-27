@@ -37,14 +37,14 @@ export const TERRAIN_SKETCH_PRESETS: Record<
 > = {
   'burning-man': {
     bbox: { south: 40.764, west: -119.236, north: 40.807, east: -119.176 },
-    name: keep('Burning Man · Black Rock City'),
+    name: keep('Brennender Mann · Schwarzfelsstadt'),
     detail:
-      de('Salzpfanne mit Hufeisenstadt und innerer Playastrecke. Das Tor öffnet nach Süden zum Eingang; The Man steht in der Mitte, der Tempel nördlich davon. Wüste, flach, viel Platz für Camps.'),
+      de('Salzpfanne mit Hufeisenstadt und innerer Playastrecke. Das Tor öffnet nach Süden zum Eingang; der Brennende Mann steht in der Mitte, der Tempel nördlich davon. Wüste, flach, viel Platz für Camps.'),
     environment: 'desert',
   },
   'rock-am-ring': {
     bbox: { south: 50.323, west: 6.916, north: 50.359, east: 6.98 },
-    name: keep('Rock am Ring · Nürburgring'),
+    name: keep('Rock am Kranz · Nörgelring'),
     detail:
       de('Hügelland mit Nordschleifen-Schleife und GP-Oval im Süden. Das Festivalgelände liegt in der Infield-Wiese am Eingang; Asphalt und Streckenbegrenzung tragen die Form der Rennstrecke.'),
     environment: 'grassland',

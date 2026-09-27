@@ -308,7 +308,7 @@ export const text: Record<string, string> = {
   'Hügel Ebene {0:n}': 'Hill, level {0}',
   'Ebenes Gelände': 'Level ground',
   // Terrain sketches (real festival sites keep their names).
-  'Salzpfanne mit Hufeisenstadt und innerer Playastrecke. Das Tor öffnet nach Süden zum Eingang; The Man steht in der Mitte, der Tempel nördlich davon. Wüste, flach, viel Platz für Camps.': 'Salt flat with a horseshoe city and an inner playa loop. The gate opens south towards the entrance; The Man stands in the middle, the Temple to the north of it. Desert, flat, plenty of room for camps.',
+  'Salzpfanne mit Hufeisenstadt und innerer Playastrecke. Das Tor öffnet nach Süden zum Eingang; der Brennende Mann steht in der Mitte, der Tempel nördlich davon. Wüste, flach, viel Platz für Camps.': 'Salt flat with a horseshoe city and an inner playa loop. The gate opens south towards the entrance; the Burning Man stands in the middle, the Temple to the north of it. Desert, flat, plenty of room for camps.',
   'Hügelland mit Nordschleifen-Schleife und GP-Oval im Süden. Das Festivalgelände liegt in der Infield-Wiese am Eingang; Asphalt und Streckenbegrenzung tragen die Form der Rennstrecke.': 'Hilly country with the Nordschleife loop and the GP oval in the south. The festival grounds lie in the infield meadow by the entrance; asphalt and track kerbs trace the circuit.',
   // Way types.
   'Trampelpfad': 'Dirt track',

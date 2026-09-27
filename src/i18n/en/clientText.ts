@@ -258,13 +258,9 @@ export const text: Record<string, string> = {
   'Ein Park, der zur Bühne wird: großes Gelände, hohe Ansprüche ans Auge — und eine Bank, die den Aufbau vorfinanziert hat. Das Darlehen läuft, die Zinsen auch.': 'A park that becomes a stage: large grounds, high demands on the eye — and a bank that has pre-financed the build. The loan is running, and so is the interest.',
   'Hügelland rund um eine Rennstrecke. Kaum ein Feld ist eben, dafür kommen fast alle mit dem Auto — Zufahrt, Parkplatz und Geländearbeit entscheiden hier alles.': 'Hill country around a race track. Hardly a tile is level, but almost everyone comes by car — access, car park and terrain work decide everything here.',
   'Flaches Land kurz vor der Küste: schnell aufgebaut, schnell aufgeweicht. Ein kleines Gelände, ein kleiner Kredit und die Ansage, am Ende trotzdem im Plus zu stehen.': 'Flat land just short of the coast: quick to build, quick to turn soggy. Small grounds, a small loan and orders to end up in the black anyway.',
-  'Wackelstein Open Air': 'Wobblestone Open Air',
   'Ein Dorf, eine Kuhweide und sehr viel Metal. Regnet es, wird der Acker zu Schlamm und der Schlamm zur Legende. Hier zählt nicht die Menge, sondern der Ruf unter den Kuttenträgern.': 'A village, a cow pasture and a great deal of metal. When it rains, the field turns to mud and the mud to legend. What counts here is not the size of the crowd but your reputation among the battle jackets.',
-  'Kutschella': 'Stagecoachella',
   'Wüste, Palmen, Sonnenbrillen. Das Publikum will Kunst, Aussicht und Schatten, die Geldgeber wollen Gewinn — nicht einmal, sondern zwei Ausgaben hintereinander.': 'Desert, palm trees, sunglasses. The audience wants art, views and shade, the backers want profit — not once, but two editions in a row.',
-  'Glastonbauer': 'Glastonbarn',
   'Ein Bauernhof, so groß, dass man sich darauf verläuft, und Gäste, die bleiben wollen. Wer hier glücklich macht, darf wiederkommen: Zufriedenheit zählt, zwei Ausgaben in Folge.': 'A farm so big you get lost on it, and visitors who want to stay. Make them happy and you may come back: satisfaction counts, two editions in a row.',
-  'Verschmelzung': 'Confusion',
   'Ein stillgelegter Flugplatz, Beton bis zum Horizont und eine Crew mit großen Plänen. Kein Baum, kein Schatten, dafür fester Boden. Am Ende soll das Gelände etwas wert sein — und schuldenfrei.': 'A disused airfield, concrete to the horizon and a crew with big plans. No tree, no shade, but solid ground. In the end the grounds should be worth something — and free of debt.',
   // Ticker (ticker.ts).
   'Unwetterwarnung': 'Storm warning',

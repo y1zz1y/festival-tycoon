@@ -14,6 +14,7 @@ import {
   type TerrainSketchId,
 } from '../src/game/terrainImport'
 import { serializeScenarioFile } from '../src/game/scenarioFile'
+import { SCENARIO_PRESETS } from '../src/game/scenarioPresets'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const USER_AGENT = 'HeadlinerTycoon/0.2.8 (terrain-import; OSM+Open-Topo-Data; no Google tiles)'
@@ -118,7 +119,10 @@ export async function runTerrainImportCli(argv = process.argv.slice(2)): Promise
   const worldSize = clampWorldSize(Number(argValue(argv, '--size', '64')))
   const name = argValue(argv, '--name', known?.name ?? 'Importiertes Gelände')
   const detail = argValue(argv, '--detail', known?.detail ?? 'Gelände aus OpenStreetMap und optionaler öffentlicher Höhendaten.')
-  const id = slugOf(argValue(argv, '--id', named || name))
+  // A drop-in file whose id matches a built-in preset is hidden behind it in the title
+  // screen, so sketch names that double as preset ids get a suffix.
+  const wanted = slugOf(argValue(argv, '--id', named || name))
+  const id = SCENARIO_PRESETS.some((entry) => entry.id === wanted) ? `${wanted}-strecke` : wanted
   const out = path.resolve(root, argValue(argv, '--out', `public/scenarios/${id}.json`))
   const wantElevation = argv.includes('--elevation')
   const live = argv.includes('--osm') || Boolean(preset) || Boolean(argValue(argv, '--bbox'))

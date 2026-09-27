@@ -137,8 +137,8 @@ function properNouns(s: GameSnapshot): Set<string> {
   // Course brands and English coaster type names are kept as they are.
   for (const kind of ['mudmasters', 'treeToTree', 'paintball'] as const) nouns.add(COURSE_SPECS[kind].name)
   for (const type of ['corkscrew', 'twister', 'verticalDrop', 'inverted', 'flying'] as const) nouns.add(COASTER_TYPES[type].name)
-  // Real festivals the scenario presets are named after (scenarioPresets.ts, keep()).
-  for (const festivalName of ['Woodstock', 'Tomorrowland', 'Rock am Ring', 'Hurricane']) nouns.add(festivalName)
+  // Festival names of the scenario presets are proper nouns (scenarioPresets.ts, keep()).
+  for (const preset of SCENARIO_PRESETS) if (preset.id !== 'einstieg') nouns.add(preset.name)
   // Save names the player typed in the save-archive sample below; user content stays verbatim.
   nouns.add('Server')
   nouns.add('Shared')

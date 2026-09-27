@@ -180,7 +180,12 @@ Kein Google-Maps-/Earth-Download. Legal: OpenStreetMap (Wege, Wasser, landuse),
 öffentliche DEMs (SRTM über Open-Topo-Data), Nutzer-Upload, oder Offline-Skizze.
 CLI: `npm run import-terrain` (`scripts/import-terrain.mjs`). Agent-Skill:
 `.cursor/skills/festival-terrain-import/SKILL.md`. Neue Cover `salt` (Playa,
-Sand-Tempo) und `asphalt` (Rennstrecke, optisch). Testdaten: Burning Man
+Sand-Tempo) und `asphalt` (Rennstrecke, optisch). Die Drop-in-Szenarien heißen im
+Spiel „Brennender Mann · Schwarzfelsstadt“ und „Rock am Kranz · Nörgelring“ (seit
+0.2.17, Eigennamen per `keep`). Eine Datei-ID darf keine eingebaute Preset-ID sein, sonst
+verdeckt das Preset die Datei im Titelbildschirm; `scripts/import-terrain-entry.ts`
+hängt dann `-strecke` an (die Ring-Datei heißt deshalb `rock-am-ring-strecke`). Die
+Geodaten stammen weiter von: Burning Man
 (Hufeisen + Playastrecke) und Rock am Ring (Nordschleifen-Andeutung + GP-Oval).
 Szenario-Export legt Ground unter `world.festival.infrastructure.ground` ab.
 

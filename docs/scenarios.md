@@ -167,10 +167,13 @@ Spielerregeln im Root-`README.md`.
 
 ## Presets (0.2.10)
 
-Acht eingebaute Presets in `SCENARIO_PRESETS`. Zu Woodstock, Tomorrowland, Rock
-am Ring und Hurricane kamen vier, die sich an echte Festivals anlehnen, deren
-Namen aber verballhornen und die bisher ungenutzten Ziele und Umgebungen
-nutzen:
+Acht eingebaute Festival-Presets in `SCENARIO_PRESETS` (dazu das Tutorial „Erste
+Schritte“). Alle lehnen sich an echte Festivals an, verballhornen aber deren Namen:
+Klotzstock, Morgenland, Rock am Kranz und Orkan Open Air (IDs weiter `woodstock`,
+`tomorrowland`, `rock-am-ring`, `hurricane`, damit Fortschritt und Spielstände ihr
+Szenario finden; umbenannt in 0.2.17), dazu vier, die die bisher ungenutzten Ziele
+und Umgebungen nutzen. Festivalnamen sind Eigennamen (`keep`) und lauten in jeder
+Sprache gleich; übersetzt wird nur „Erste Schritte“:
 
 | Preset | Umgebung | Ziele |
 | --- | --- | --- |
