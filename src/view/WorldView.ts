@@ -145,6 +145,7 @@ import { PathGraphView } from './PathGraphView'
 import type { PedestrianGraphEdge } from '../game/pedestrianNavigation'
 import { AtmosphereView } from './AtmosphereView'
 import { ForecourtView } from './ForecourtView'
+import { ArrivalGateView } from './ArrivalGateView'
 import {
   disposeChildren,
   disposeObject3D,
@@ -510,6 +511,7 @@ export class WorldView {
   private attractivenessView = new AtmosphereView(0.3, true)
   private partyMoodView = new AtmosphereView(0.82, false)
   private forecourtView = new ForecourtView()
+  private arrivalGateView = new ArrivalGateView()
   private backstageView = new BackstageView()
   private bandActorView = new BandActorView()
   private logisticsView = new LogisticsView()
@@ -923,6 +925,7 @@ export class WorldView {
       this.incidentView.group,
       this.crew.group,
       this.forecourtView.group,
+      this.arrivalGateView.group,
       this.backstageView.group,
       this.bandActorView.group,
       this.attractivenessView.group,
@@ -1036,6 +1039,7 @@ export class WorldView {
     this.staffView.setVisible(!this.logisticsMode)
     this.staffView.update(snapshot.staff, this.renderAlpha, snapshot.simTick, this.actorTerrainHeight)
     if (dataChanged) this.forecourtView.update(snapshot, snapshot.stageForecourtCells)
+    if (dataChanged) this.arrivalGateView.update(snapshot)
     if (dataChanged) {
       this.backstageView.update(
         snapshot.backstageCells ?? [],
@@ -1324,6 +1328,7 @@ export class WorldView {
     this.incidentView.invalidate()
     this.staffView.invalidate()
     this.forecourtView.invalidate()
+    this.arrivalGateView.invalidate()
     this.backstageView.invalidate()
     this.bandActorView.invalidate()
     this.logisticsView.invalidate()

@@ -1,7 +1,7 @@
 {
   "name": "festival-simulator",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Headliner Tycoon – Festival-Aufbauspiel",
   "author": "Baudewiglange Studios",
   "type": "module",

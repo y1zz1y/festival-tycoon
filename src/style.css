@@ -5748,3 +5748,24 @@ body.title-open .tutorial-reopen {
   display: none;
 }
 
+/* The next control the first-steps checklist wants pressed (src/ui/tutorialChecklist.ts). */
+.tutorial-target {
+  position: relative;
+  z-index: 2;
+  outline: 3px solid #ffd35a;
+  outline-offset: 2px;
+  animation: tutorial-target-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes tutorial-target-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(255 211 90 / 0.75); }
+  50% { box-shadow: 0 0 0 7px rgb(255 211 90 / 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-target {
+    animation: none;
+    box-shadow: 0 0 0 4px rgb(255 211 90 / 0.45);
+  }
+}
+

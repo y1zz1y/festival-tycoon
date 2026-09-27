@@ -10,6 +10,7 @@ import { ROAD_VEHICLE_KIND_LABELS } from '../game/logistics'
 import { describeRoadVehicleActivity, describeRoadVehicleDestination, formatRoadVehicleInspectLoad } from '../game/logisticsText'
 import { isPricedShopKind, SHIRT_COLORS, shopSupplyKind } from '../game/shopGoods'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
+import { ENTRANCE_PATH_ID } from '../game/snapshotBootstrap'
 import { stageStats } from '../game/stageDesign'
 import { isSealedWasteContainer, connectedWasteDumpStats, parseWasteDumpId, wasteTipCapacity, wasteTipProcessingPerSecond, type WasteTipKind } from '../game/waste'
 import { formatSealedContainerInspect, formatWasteDumpAreaInspect } from '../game/wasteText'
@@ -418,6 +419,12 @@ export function updateEntityPanel(
                 : isWasteBin(building.kind) ? joinParts(t`Füllstand ${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity}`, t('Gäste im Umkreis von 7 Feldern nutzen ihn'))
                   : isSealedWasteContainer(building.kind) ? formatSealedContainerInspect({ stored: building.wasteFill ?? 0, onRoad: Boolean(game.getRoadCellAt(building.x, building.z, building.elevation)), truckReachable: Boolean(game.getRoadCellAt(building.x, building.z, building.elevation)) }).status
                     : joinParts(t`Zugang ${isoDirection(building.rotation, state.cameraQuarter)}`, t`Ebene ${building.elevation}`))
+    if (building.id === ENTRANCE_PATH_ID) {
+      // The walk-in field under the arrival gate (view/ArrivalGateView.ts).
+      icon.textContent = '🚶'
+      name.textContent = t('Ankunft zu Fuß')
+      status.textContent = t('Hier kommen Gäste ohne Auto an. Das Feld bleibt immer stehen; baut von hier aus Wege ins Gelände.')
+    }
     stats.innerHTML = `<span>${t('Baukosten')} <b>${formatMoney((ride?.cost ?? definition.cost) + (building.stageDesign ? stageStats(building.stageDesign).cost : 0))}</b></span>${building.stageDesign ? stageDesignStats(building.stageDesign) : ''}<span>${t('Unterhalt')} <b>${formatMoney(ride?.upkeep ?? definition.upkeep)}/h</b></span><span>${t('Kapazität')} <b>${building.rideType === 'bungee' ? t('1 Springer') : ride?.capacity ?? definition.capacity}</b></span>${ride && building.rideType !== 'bungee' ? `<span>${t('Fahrt')} <b>${t`${ride.minutes} min`}</b></span>` : ''}${shopSupplyKind(building.kind) ? `<span>${t('Warenbestand')} <b>${t`${Math.floor(game.snapshot.festival.infrastructure.shops[building.id]?.[shopSupplyKind(building.kind)!] ?? 0)} / Ziel 40`}</b></span>` : ''}${isWasteBin(building.kind) ? `<span>${t('Inhalt')} <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.binCapacity}</b></span>` : isSealedWasteContainer(building.kind) ? `<span>${t('Inhalt')} <b>${building.wasteFill ?? 0}/${SIMULATION_CONFIG.waste.sealedContainerCapacity}</b></span>` : ''}${output > 0 ? `<span>${t('Leistung')} <b>${t`${output} kW`}</b></span>` : demand > 0 ? `<span>${t('Strom')} <b>${t`${demand} kW`} ${powered ? t('versorgt') : t('ohne Netz')}</b></span>` : ''}${wasteTipStats(game, building)}`
     resetCommon()
     const hasPrice = isPricedShopKind(building.kind)

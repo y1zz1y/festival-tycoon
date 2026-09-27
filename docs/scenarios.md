@@ -201,5 +201,10 @@ Feld ohne Ziele und ohne Frist. `tutorialSteps` liest fünf Schritte aus dem
 Snapshot (Weg mit `TUTORIAL_PATH_FIELDS` Feldern vom Eingang, Bühne mit Strom,
 Imbiss und Toilette, Buchung, Start). `src/ui/tutorialChecklist.ts` zeigt sie oben
 rechts, nur in diesem Preset, einklappbar; der nächste offene Schritt zeigt seinen
-Hinweis. Kein eigenes Snapshot-Feld. Das Preset steht vorn in
+Hinweis. Jeder Schritt trägt ein `target` (`TutorialTarget`: Bau-Werkzeug als
+Kategorie → Gruppe → Werkzeug, oder Festivalfenster → Reiter → Knopf); die
+Checkliste lässt den ersten noch nicht geöffneten Knopf dieses Pfads pulsieren
+(Klasse `.tutorial-target`) und prüft nach jedem Klick und jeder Taste neu, also
+auch bei Pause. Hält der Spieler schon das richtige Werkzeug, leuchtet nichts;
+eingeklappt leuchtet nichts. Kein eigenes Snapshot-Feld. Das Preset steht vorn in
 `SCENARIO_PRESETS`, zählt aber nicht für den Erfolg „Tourneeprofi“.

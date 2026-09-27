@@ -7,6 +7,7 @@ import type { RoadVehicle } from '../src/game/logistics'
 import { createStaffMember, STAFF_ROLES, type StaffMember } from '../src/game/staff'
 import { getTerrainHeight } from '../src/game/terrain'
 import { AccessControlView } from '../src/view/AccessControlView'
+import { ArrivalGateView } from '../src/view/ArrivalGateView'
 import { createPorterModel } from '../src/view/carrierModels'
 import { CrewInstances } from '../src/view/crewInstances'
 import { ForecourtView } from '../src/view/ForecourtView'
@@ -358,9 +359,31 @@ function withCanvasStub(run: () => void): void {
   }
 }
 
+/** The arrival gate is one mesh over the entrance field, facing into the grounds, pickable as that field. */
+function testArrivalGate(fixture: Fixture): void {
+  const game = fixture(0)
+  const snapshot = game.snapshot
+  const view = new ArrivalGateView()
+  view.update(snapshot)
+  const meshes: Mesh[] = []
+  view.group.traverse((object) => { if (object instanceof Mesh) meshes.push(object) })
+  assert.equal(meshes.length, 1, 'one merged mesh, one draw call')
+  assert.equal(view.group.visible, true)
+  const entrance = snapshot.buildings.find((building) => building.id === 'entrance-path')!
+  const gate = meshes[0]!
+  assert.equal(gate.userData.buildingId, 'entrance-path', 'a click on the gate opens the arrival field')
+  assert.deepEqual([gate.position.x, gate.position.z], [entrance.x + 0.5, entrance.z + 0.5])
+  // The entrance sits on the north edge, so the gate faces +z into the grounds.
+  assert.equal(gate.rotation.y, 0)
+  const geometry = gate.geometry
+  view.update(snapshot)
+  assert.equal(meshes[0]!.geometry, geometry, 'an unchanged entrance keeps its geometry')
+}
+
 export function testRenderBatching(fixture: Fixture): void {
   withCanvasStub(() => {
     testCrewPool(fixture)
+    testArrivalGate(fixture)
     testVehicleBatches(fixture)
     testAccessBatches()
     testFixtureCensus()

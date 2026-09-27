@@ -622,7 +622,8 @@ wie bei Achterbahnen, nicht im Baumenü.
 - Q / E: Kamera um 90 Grad drehen
 - 🔊 in der Sitzungsleiste oder Einstellungen → **Ton stumm**: Ton aus (bleibt lokal gespeichert)
 - Einstellungen → **Ton**: Regler für Gesamt, Musik, Effekte und Umgebung. In der Nähe einer **spielenden Bühne** läuft Musik im Genre der Band in der Schleife, leiser mit der Entfernung zur Kamera; auf dem Titelbildschirm läuft die Titelmusik. Jubel, Schreie und Fahrzeuge nur gelegentlich bei echten Ereignissen. Alle Klänge und Stücke sind CC0 (Quellen in `docs/audio.md`), Synth nur als Rückfall.
-- **Erste Schritte:** Das Szenario ganz oben in „Neues Spiel“ führt mit einer Checkliste durch den ersten Aufbau; jeder Schritt hakt sich selbst ab.
+- **Erste Schritte:** Das Szenario ganz oben in „Neues Spiel“ führt mit einer Checkliste durch den ersten Aufbau; jeder Schritt hakt sich selbst ab, und der nächste zu drückende Knopf leuchtet gelb auf.
+- **Ankunft zu Fuß:** Gäste ohne Auto erscheinen am Eingangstor mit rotem 🚶-Banner am Kartenrand; von dort führt der erste Weg ins Gelände.
 - **Schwierigkeit** (Leicht/Normal/Schwer) beim Start wählen: ändert Startgeld, laufende Kosten, Andrang, Gästebudget, Bedürfnisse und Unwetterhäufigkeit, nicht aber die Baupreise.
 - **Fortschritt und Erfolge:** Geschaffte Szenarien bekommen im Titelbildschirm ein Häkchen mit Bestnote; unter „Erfolge“ stehen zwölf Auszeichnungen. Gespeichert im Browser und, angemeldet, im Konto. Spiele mit Debug-Geld zählen nicht.
 - **Unwetter:** Gewitter werden eine Stunde vorher angekündigt (Ticker, Festivalfenster → Wetter & Vorsorge). Während des Gewitters ruhen die Auftritte, Gäste im Freien werden nass und können stürzen; ohne Sturmsicherung können Blitze Feuer legen. „Schutz anordnen“ pausiert die Auftritte sofort und senkt das Risiko.

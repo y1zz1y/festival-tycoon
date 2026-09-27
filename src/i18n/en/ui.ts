@@ -414,6 +414,9 @@ export const text: Record<string, string> = {
   'Maskottchen': 'Mascot',
   'in der Hand': 'in hand',
   'Festival-Shirt': 'Festival shirt',
+  // Arrival field under the entrance gate (entityPanel.ts, view/ArrivalGateView.ts).
+  'Ankunft zu Fuß': 'Arrival on foot',
+  'Hier kommen Gäste ohne Auto an. Das Feld bleibt immer stehen; baut von hier aus Wege ins Gelände.': 'Visitors without a car arrive here. This tile always stays; build paths from here into the grounds.',
   'Keine Gegenstände': 'No items',
 }
 /** Entity default-name vocabulary: bases for the ordinal rule and name templates. */

@@ -169,11 +169,20 @@ function testTutorial(): void {
   const s = game.snapshot as GameSnapshot
   game.addDebugMoney()
   assert.deepEqual(tutorialSteps(s).map((step) => step.done), [false, false, false, false, false])
+  // The checklist highlights the next control along each step's target path.
+  assert.deepEqual(tutorialSteps(s).map((step) => step.target), [
+    { kind: 'build', category: 'paths', group: 'main', tool: 'path' },
+    { kind: 'build', category: 'attractions', group: 'festival', tool: 'stage' },
+    { kind: 'build', category: 'attractions', group: 'stalls', tool: 'food' },
+    { kind: 'festival', tab: 'lineup' },
+    { kind: 'festival', tab: 'overview', action: 'start' },
+  ])
   const entrance = s.buildings.find((building) => building.id === 'entrance-path')!
   for (let i = 1; i <= TUTORIAL_PATH_FIELDS; i++) assert.ok(game.placePathSegment(entrance.x, entrance.z + i, 0).ok, `path ${i}`)
   assert.equal(tutorialSteps(s)[0]!.done, true, 'a path out of the entrance ticks the first step')
   const pathEnd = entrance.z + TUTORIAL_PATH_FIELDS
   assert.ok(game.place('food', entrance.x + 1, pathEnd).ok)
+  assert.equal(tutorialSteps(s)[2]!.target?.kind === 'build' && tutorialSteps(s)[2]!.target.tool, 'toilet', 'with a food stall the toilet is next')
   assert.ok(game.place('toilet', entrance.x - 1, pathEnd).ok)
   assert.equal(tutorialSteps(s)[2]!.done, true)
   s.festival.bookings.push({ id: 'b', bandId: 'meadow', stageId: 'x', day: s.day + 1, start: 840, duration: 60, fee: 0 })

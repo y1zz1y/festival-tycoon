@@ -302,7 +302,7 @@ export const text: Record<string, string> = {
   'Tag {0}': 'Day {0}',
   // Tutorial checklist (tutorial.ts). The arrows name menu paths.
   'Weg vom Eingang ins Gelände': 'A path from the entrance into the grounds',
-  'Bauen → Wege: vom Eingang am Kartenrand einen Weg ziehen, mindestens {0} Felder.': 'Build → Paths: draw a path from the entrance at the edge of the map, at least {0} tiles long.',
+  'Bauen → Wege: vom Eingangstor mit dem roten 🚶-Banner am Kartenrand einen Weg ziehen, mindestens {0} Felder.': 'Build → Paths: draw a path from the entrance gate with the red 🚶 banner at the edge of the map, at least {0} tiles long.',
   'Bühne mit Strom': 'A powered stage',
   'Festival → Festivalbühne setzen und einen Bühnenvorplatz ausweisen; unter Logistik → Strom einen Generator bauen und per Kabel mit der Bühne verbinden.': 'Festival → place a festival stage and designate a stage forecourt; under Logistics → Power, build a generator and connect it to the stage with a cable.',
   'Imbiss und Toilette': 'Food stall and toilet',

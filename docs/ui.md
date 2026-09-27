@@ -558,6 +558,11 @@ Buslinien-Namensfeld fällt auf `BUS_LINE_DEFAULT_NAME` zurück.
 - Schwierigkeit: Auswahl im freien Spiel (`#scenario-difficulty`) und im
   Briefing (`#title-briefing-difficulty`).
 - Erste Schritte: Checkliste oben rechts (`.tutorial-checklist`, z-index 21,
-  unter rechten Infofenstern), einklappbar zu „📋 Erste Schritte“.
+  unter rechten Infofenstern), einklappbar zu „📋 Erste Schritte“. Der nächste zu
+  drückende Knopf pulsiert gelb (`.tutorial-target`, ruhig bei
+  `prefers-reduced-motion`), siehe [scenarios.md](scenarios.md).
+- Ankunftsfeld: Das Wegfeld `entrance-path`, auf dem Gäste ohne Auto erscheinen,
+  trägt ein Eingangstor (`src/view/ArrivalGateView.ts`); ein Klick darauf öffnet
+  das Infofenster „🚶 Ankunft zu Fuß“ (`src/ui/entityPanel.ts`).
 - Festivalfenster: Reiter **Sponsoren** (Angebote, Unterschreiben, Status) und
   unter „Wetter & Vorsorge“ die Unwetterlage mit **Schutz anordnen**.
