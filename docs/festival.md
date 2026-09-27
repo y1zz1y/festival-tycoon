@@ -11,6 +11,8 @@ hält die Simulationsuhr an, bis **Festival starten**.
 | Zustand, Aktionen, Wetter, Ruf | `src/game/festivalManagement.ts` | `FestivalManagement`, `FestivalAction`, `updateFestival`, `BANDS` |
 | Command-Einstieg | `src/game/GameState.ts` | `manageFestival` |
 | Tages-/Campingzyklus | `src/game/dayPlan.ts` | `getFestivalCycleStatus`, `FestivalPhase` (`lead` Vorbereitung, `festival`, `break` Pause), Angebote; Live-Phase steuert Venue-Unterhalt (`docs/finance.md`) |
+| Sponsor-Bedingung als Anzeigetext | `src/game/sponsorText.ts` (Client-Text, `t`) | `SPONSOR_CONDITION_TEXT`; nur `src/festivalUI.ts` importiert es |
+| Texte und Übersetzung | `src/i18n/en/festival.ts` | Spieltexte kanonisch deutsch mit `de`; Bands, Genres, Sponsoren- und Technikmarken in `keep()`; Standardnamen `Bühne`, `Umbau / Pause` (`CHANGEOVER_LABEL`), `Meine Traumbühne` (`DEFAULT_STAGE_DESIGN_NAME`) im `names`-Export ([i18n.md](i18n.md)) |
 | Musikgeschmack, Basis-Evolution | `src/game/musicTaste.ts` | `evolveMusicAudience`, `GENRES` |
 | Automatischer Spielplan | `src/game/autoLineup.ts` | `planAutoLineup` (min/max Sterne, bestehende Slots bleiben) |
 | Ticketnachfrage | `src/game/ticketDemand.ts` | `estimateTicketDemand`, `arrivalPriceMultiplier` |
@@ -18,7 +20,7 @@ hält die Simulationsuhr an, bis **Festival starten**.
 | Waren im Festivalkontext | `src/game/supplyChain.ts`, `src/game/festivalManagement.ts` | `Supply` inkl. `goods` (Allgemeine Waren) |
 | Spielplan-UI | `src/musicPlanner.ts` | Band ziehen, Raster |
 | Festival-Fenster | `src/festivalUI.ts` | Tickets, Preise, Tagesplan, Auswertung, Ausbauten, **Park öffnen/schließen** (`setParkOpen`) |
-| HEADLINE Magazin | `src/game/headlineMagazine.ts`, `src/headlineMagazineUI.ts` | `buildHeadlineMagazine`, Overlay nach Festivalende |
+| HEADLINE Magazin | `src/game/headlineMagazine.ts`, `src/headlineMagazineUI.ts` | `buildHeadlineMagazine`, Overlay nach Festivalende; Client-Text (`t()`), Magazintitel `keep`, Aufmacher als ganze Sätze je Urteil mit und ohne Headliner (`LEDES`) |
 | Balancing | `src/game/simulationConfig.ts` | `visitors.festivalArrivals`, `economy.defaultEntryPrice`, `economy.defaultCampingTicketPrice`; Kalenderlänge `time.normalDayDurationSeconds` (20 min Echtzeit/Spieltag, [`simulation.md`](simulation.md)) |
 
 ## Wichtige Regeln
@@ -146,4 +148,6 @@ verschiedenen Bedingungen (Anreisen, Zufriedenheit, Festivalbanner, Headliner).
 der Kategorie „Sponsoren“. Am Ende der Ausgabe, noch bevor sie als beendet gilt,
 zahlt `settleSponsors` den Bonus bei erfüllter Bedingung oder bucht den
 Vorschuss zurück. `festival.sponsorsFulfilled` zählt erfüllte Verträge.
-Die Marken sind erfunden.
+Die Marken sind erfunden. Ihre Namen gehen in den Angebots-Hash ein, stehen in
+`keep()` und werden nie übersetzt; die Bedingung liest die UI aus
+`SPONSOR_CONDITION_TEXT` in `src/game/sponsorText.ts`.

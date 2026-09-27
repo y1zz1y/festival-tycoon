@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import {
   captureBlueprint,
-  describeBlueprint,
   rotateDecorationSlot,
   rotateOffset,
   transformBlueprintItems,
 } from '../src/game/blueprints'
+import { describeBlueprint } from '../src/game/blueprintText'
 import {
   deleteBlueprintLibraryEntry,
   listBlueprintLibrary,

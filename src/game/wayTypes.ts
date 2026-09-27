@@ -1,15 +1,16 @@
 import type { GameSnapshot } from './GameState'
 import { groundInfo } from './ground'
+import { de, named } from '../i18n/marker'
 
 export const WAY_TYPES = {
-  footDirt: { name: 'Trampelpfad', mode: 'foot', cost: 10, speed: .85, rain: .65, capacity: 6, limit: 0, bearing: 1, drain: false, stuck: 0, color: 0xb19a71, detail: 'Günstig, schmal; bei Regen sehr langsam.' },
-  footGravel: { name: 'Schotterweg', mode: 'foot', cost: 24, speed: 1, rain: .12, capacity: 9, limit: 0, bearing: 2, drain: false, stuck: 0, color: 0xb8b3a0, detail: 'Solider Allrounder; tragfähigen Boden vorbereiten.' },
-  footBoard: { name: 'Holzbohlenweg', mode: 'foot', cost: 45, speed: .95, rain: .03, capacity: 7, limit: 0, bearing: 1, drain: false, stuck: 0, color: 0xa68a62, detail: 'Regenfest auch auf weichem Boden; begrenzter Durchsatz.' },
-  footPaved: { name: 'Promenade', mode: 'foot', cost: 60, speed: 1.2, rain: 0, capacity: 12, limit: 0, bearing: 2, drain: true, stuck: 0, color: 0xc2bbaa, detail: 'Schnell und belastbar; Entwässerung und tragfähiger Boden nötig.' },
-  roadDirt: { name: 'Feldstraße', mode: 'road', cost: 28, speed: .85, rain: .65, capacity: 0, limit: 10, bearing: 1, drain: false, stuck: .35, color: 0x897758, detail: 'Günstige Zufahrt; bei Nässe droht Festfahren.' },
-  roadGravel: { name: 'Schotterstraße', mode: 'road', cost: 65, speed: 1, rain: .12, capacity: 0, limit: 30, bearing: 2, drain: false, stuck: 0, color: 0x85867e, detail: 'Bis Tempo 30; verdichteter oder natürlicher Kiesboden.' },
-  roadPlates: { name: 'Baustraße mit Fahrplatten', mode: 'road', cost: 110, speed: .9, rain: .02, capacity: 0, limit: 30, bearing: 1, drain: false, stuck: 0, color: 0x65706d, detail: 'Trägt Fahrzeuge auf weichem Boden; teuer, aber rasch einsatzbereit.' },
-  roadAsphalt: { name: 'Asphaltstraße', mode: 'road', cost: 140, speed: 1.15, rain: 0, capacity: 0, limit: 50, bearing: 2, drain: true, stuck: 0, color: 0x50555a, detail: 'Schnellste dauerhafte Zufahrt; Entwässerung und tragfähiger Boden nötig.' },
+  footDirt: { name: de('Trampelpfad'), mode: 'foot', cost: 10, speed: .85, rain: .65, capacity: 6, limit: 0, bearing: 1, drain: false, stuck: 0, color: 0xb19a71, detail: de('Günstig, schmal; bei Regen sehr langsam.') },
+  footGravel: { name: de('Schotterweg'), mode: 'foot', cost: 24, speed: 1, rain: .12, capacity: 9, limit: 0, bearing: 2, drain: false, stuck: 0, color: 0xb8b3a0, detail: de('Solider Allrounder; tragfähigen Boden vorbereiten.') },
+  footBoard: { name: de('Holzbohlenweg'), mode: 'foot', cost: 45, speed: .95, rain: .03, capacity: 7, limit: 0, bearing: 1, drain: false, stuck: 0, color: 0xa68a62, detail: de('Regenfest auch auf weichem Boden; begrenzter Durchsatz.') },
+  footPaved: { name: de('Promenade'), mode: 'foot', cost: 60, speed: 1.2, rain: 0, capacity: 12, limit: 0, bearing: 2, drain: true, stuck: 0, color: 0xc2bbaa, detail: de('Schnell und belastbar; Entwässerung und tragfähiger Boden nötig.') },
+  roadDirt: { name: de('Feldstraße'), mode: 'road', cost: 28, speed: .85, rain: .65, capacity: 0, limit: 10, bearing: 1, drain: false, stuck: .35, color: 0x897758, detail: de('Günstige Zufahrt; bei Nässe droht Festfahren.') },
+  roadGravel: { name: de('Schotterstraße'), mode: 'road', cost: 65, speed: 1, rain: .12, capacity: 0, limit: 30, bearing: 2, drain: false, stuck: 0, color: 0x85867e, detail: de('Bis Tempo 30; verdichteter oder natürlicher Kiesboden.') },
+  roadPlates: { name: de('Baustraße mit Fahrplatten'), mode: 'road', cost: 110, speed: .9, rain: .02, capacity: 0, limit: 30, bearing: 1, drain: false, stuck: 0, color: 0x65706d, detail: de('Trägt Fahrzeuge auf weichem Boden; teuer, aber rasch einsatzbereit.') },
+  roadAsphalt: { name: de('Asphaltstraße'), mode: 'road', cost: 140, speed: 1.15, rain: 0, capacity: 0, limit: 50, bearing: 2, drain: true, stuck: 0, color: 0x50555a, detail: de('Schnellste dauerhafte Zufahrt; Entwässerung und tragfähiger Boden nötig.') },
 } as const
 export type WayType = keyof typeof WAY_TYPES
 export type WayMode = 'foot' | 'road'
@@ -22,8 +23,8 @@ export function wayInfo(s: Readonly<GameSnapshot>, x: number, z: number, mode: W
 }
 export function wayIssue(s: Readonly<GameSnapshot>, x: number, z: number, id: WayType): string | null {
   const type = WAY_TYPES[id], ground = groundInfo(s, x, z)
-  if (!type) return 'Unbekannter Wegtyp'
-  if (ground.bearing < type.bearing) return `${type.name}: Untergrund zuerst verdichten (Lehm zuvor entwässern)`
-  if (type.drain && !ground.drained) return `${type.name}: Entwässerung fehlt`
+  if (!type) return de('Unbekannter Wegtyp')
+  if (ground.bearing < type.bearing) return de`${named(type.name)}: Untergrund zuerst verdichten (Lehm zuvor entwässern)`
+  if (type.drain && !ground.drained) return de`${named(type.name)}: Entwässerung fehlt`
   return null
 }

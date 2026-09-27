@@ -1,3 +1,4 @@
+import { de, listOf, named, num, plural, verbatim } from '../i18n/marker';
 import { isWasteBin } from './decorationWalls';
 import { isSealedWasteContainer } from './waste';
 import { musicTaste, musicAppeal } from './musicTaste';
@@ -19,6 +20,7 @@ import type { Booking } from './festivalManagement';
 import type { BuildingKind } from './catalog';
 import type { Coaster } from './coasters';
 import type { Attraction } from './attractions/types';
+import { isCanonicalAttractionRecord } from './attractions/dualModel';
 import { courseCapacityFor, courseEntrance, isCourseSwimCell, validateCourse, type CourseAttraction } from './courseAttractions';
 import { CampingSystem } from './camping';
 import type { CampingCell } from './camping';
@@ -177,28 +179,28 @@ function applyPurchaseOutcome(
   const drink = SIMULATION_CONFIG.needs.drink
   if (target?.kind === 'waterPoint' && paid) {
     visitor.needs.thirst = Math.min(100, (visitor.needs.thirst ?? 0) + drink.waterPointThirst)
-    visitor.thought = 'Frisches Wasser, genau richtig.'
+    visitor.thought = de('Frisches Wasser, genau richtig.')
     return
   }
   if (target?.kind === 'shower' && paid) {
     visitor.needs.hygiene = SIMULATION_CONFIG.needs.shower.hygiene
-    visitor.thought = 'Endlich geduscht – wie neugeboren.'
+    visitor.thought = de('Endlich geduscht – wie neugeboren.')
     return
   }
   if (target?.kind === 'alcohol' && paid && softDrink) {
     visitor.needs.thirst = Math.min(100, (visitor.needs.thirst ?? 0) + drink.softDrinkThirst)
     visitor.needs.toilet = Math.max(0, visitor.needs.toilet - drink.softDrinkToiletCost)
-    visitor.thought = 'Eine kalte Limo, genau das Richtige.'
+    visitor.thought = de('Eine kalte Limo, genau das Richtige.')
     return
   }
   if (target?.kind === 'food' && paid) {
     addItem(visitor.inventory, 'food')
-    visitor.thought = 'Ich habe Essen gekauft und suche einen Platz zum Essen.'
+    visitor.thought = de('Ich habe Essen gekauft und suche einen Platz zum Essen.')
     return
   }
   if (target?.kind === 'toilet' && paid) {
     visitor.needs.toilet = SIMULATION_CONFIG.needs.toilet.toilet
-    visitor.thought = 'Das war dringend nötig.'
+    visitor.thought = de('Das war dringend nötig.')
     return
   }
   if (target?.kind === 'ride' && paid) {
@@ -214,7 +216,7 @@ function applyPurchaseOutcome(
   }
   if (target?.kind === 'alcohol' && paid) {
     addItem(visitor.inventory, 'alcohol')
-    visitor.thought = 'Ich habe ein Getränk gekauft und trinke es gleich in Ruhe.'
+    visitor.thought = de('Ich habe ein Getränk gekauft und trinke es gleich in Ruhe.')
     return
   }
   if (target?.kind === 'mascot' && paid) {
@@ -235,7 +237,7 @@ function applyPurchaseOutcome(
     return
   }
   if (target && !paid) {
-    visitor.thought = available ? 'Dafür reicht mein Budget nicht.' : 'Ausverkauft! Hier fehlt Nachschub.'
+    visitor.thought = available ? de('Dafür reicht mein Budget nicht.') : de('Ausverkauft! Hier fehlt Nachschub.')
     visitor.emotion = 'sad'
     visitor.emotionMinutes = 45
   }
@@ -360,7 +362,7 @@ export class VisitorBehaviorService {
           this.context.medical.releaseBed(this.context.state.medicalCells, visitor.id)
           visitor.medicalCell = null
           visitor.medicalSlot = null
-          visitor.thought = 'Mir geht es wieder besser.'
+          visitor.thought = de('Mir geht es wieder besser.')
           if (this.context.shouldReturnToArrivalCar(visitor)) {
             visitor.state = 'leaving'
             this.context.ensureExitRoute(visitor)
@@ -395,7 +397,7 @@ export class VisitorBehaviorService {
           visitor.state = 'exploring'
           visitor.emotion = 'sad'
           visitor.emotionMinutes = 30
-          visitor.thought = 'Ich bin wieder wach. Mein Kopf brummt.'
+          visitor.thought = de('Ich bin wieder wach. Mein Kopf brummt.')
           this.decideNextAction(visitor)
         }
         return
@@ -420,7 +422,7 @@ export class VisitorBehaviorService {
             SIMULATION_CONFIG.needs.interactionMinutes.vomiting
           visitor.emotion = 'sad'
           visitor.emotionMinutes = 30
-          visitor.thought = 'Mir ist richtig übel!'
+          visitor.thought = de('Mir ist richtig übel!')
         }
       }
       this.updateVisitorEmotion(visitor, minutes)
@@ -479,7 +481,7 @@ export class VisitorBehaviorService {
             SIMULATION_CONFIG.camping.unplacedRetryIntervalMinutes
           if (this.context.camping.assignCampsite(visitor)) {
             visitor.thought =
-              'Endlich ist ein Campingplatz frei geworden!'
+              de('Endlich ist ein Campingplatz frei geworden!')
             return
           }
         }
@@ -491,10 +493,15 @@ export class VisitorBehaviorService {
           this.context.recordComplaint(visitor, 'no-campsite')
           this.context.beginVisitorDeparture(visitor)
           visitor.thought =
-            'Ich habe einen Tag vergeblich gewartet. Ich verlange mein Geld zurück!'
+            de('Ich habe einen Tag vergeblich gewartet. Ich verlange mein Geld zurück!')
           return
         }
-        visitor.thought = `Ich warte seit ${Math.floor(visitor.campingWaitMinutes / 60)} Stunden auf einen Campingplatz.`
+        const waitedHours = Math.floor(visitor.campingWaitMinutes / 60)
+        visitor.thought = plural(
+          waitedHours,
+          de`Ich warte seit ${num(waitedHours)} Stunde auf einen Campingplatz.`,
+          de`Ich warte seit ${num(waitedHours)} Stunden auf einen Campingplatz.`,
+        )
         return
       }
 
@@ -509,7 +516,7 @@ export class VisitorBehaviorService {
         ) {
           visitor.interactionRemaining =
             SIMULATION_CONFIG.camping.tentPackMinutes
-          visitor.thought = 'Ich packe Zelt und Campingsachen ein.'
+          visitor.thought = de('Ich packe Zelt und Campingsachen ein.')
         }
         if (
           (visitor.campingPhase === 'building' || visitor.campingPhase === 'packing') &&
@@ -524,7 +531,7 @@ export class VisitorBehaviorService {
               visitor.state = 'exploring'
               visitor.emotion = 'happy'
               visitor.emotionMinutes = 40
-              visitor.thought = 'Mein Zelt steht – jetzt kann das Festival beginnen!'
+              visitor.thought = de('Mein Zelt steht – jetzt kann das Festival beginnen!')
               this.decideNextAction(visitor)
             } else {
               this.context.camping.removeVisitorInstallations(visitor.id)
@@ -536,11 +543,11 @@ export class VisitorBehaviorService {
               }
               if (visitor.pendingWaste > 0 && visitor.route.length > 0) {
                 visitor.thought =
-                  'Vor dem Heimweg werfe ich den Zeltmüll noch in den Eimer.'
+                  de('Vor dem Heimweg werfe ich den Zeltmüll noch in den Eimer.')
                 return
               }
               visitor.state = 'leaving'
-              visitor.thought = 'Alles eingepackt. Zeit für den Heimweg.'
+              visitor.thought = de('Alles eingepackt. Zeit für den Heimweg.')
               visitor.route = []
               this.context.ensureExitRoute(visitor)
             }
@@ -561,7 +568,7 @@ export class VisitorBehaviorService {
           ) {
             visitor.campingPhase = 'ready'
             visitor.state = 'exploring'
-            visitor.thought = 'Im Zelt habe ich mich gut erholt.'
+            visitor.thought = de('Im Zelt habe ich mich gut erholt.')
             this.decideNextAction(visitor)
           }
           return
@@ -586,7 +593,7 @@ export class VisitorBehaviorService {
           visitor.campActivityKind = null
           visitor.campActivitySlot = 0
           visitor.campActivityCapacity = 1
-          visitor.thought = 'Das Treffen am Zeltplatz war schön.'
+          visitor.thought = de('Das Treffen am Zeltplatz war schön.')
           this.decideNextAction(visitor)
         }
         return
@@ -625,8 +632,8 @@ export class VisitorBehaviorService {
         }
         if (!consumed) {
           visitor.thought = visitor.isDancing
-            ? 'Die Stimmung ist großartig – ich tanze!'
-            : 'Ich genieße die Musik und die Atmosphäre.'
+            ? de('Die Stimmung ist großartig – ich tanze!')
+            : de('Ich genieße die Musik und die Atmosphäre.')
         }
         if (
           visitor.interactionRemaining <= 0 ||
@@ -654,7 +661,7 @@ export class VisitorBehaviorService {
         visitor.emotion = 'happy'
         visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 10)
         if (!consumed) {
-          visitor.thought = 'Auf der Bank kann ich mich kurz erholen.'
+          visitor.thought = de('Auf der Bank kann ich mich kurz erholen.')
         }
         if (visitor.interactionRemaining <= 0) {
           this.clearVisitorActivity(visitor)
@@ -682,8 +689,8 @@ export class VisitorBehaviorService {
         visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 8)
         if (!consumed) {
           visitor.thought = visitor.isConversing
-            ? 'Hier gefällt es mir – wir unterhalten uns.'
-            : 'Hier ist es schön. Ich bleibe eine Weile.'
+            ? de('Hier gefällt es mir – wir unterhalten uns.')
+            : de('Hier ist es schön. Ich bleibe eine Weile.')
         }
         if (
           visitor.interactionRemaining <= 0 ||
@@ -708,7 +715,7 @@ export class VisitorBehaviorService {
         visitor.emotion = 'happy'
         visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 10)
         if (!consumed) {
-          visitor.thought = 'Das Wasser ist herrlich. Ich bleibe noch ein bisschen.'
+          visitor.thought = de('Das Wasser ist herrlich. Ich bleibe noch ein bisschen.')
         }
         if (
           visitor.interactionRemaining <= 0 ||
@@ -756,7 +763,7 @@ export class VisitorBehaviorService {
         ) {
           this.context.recordComplaint(visitor, 'bus-wait')
           visitor.emotion = 'angry'
-          visitor.thought = 'Ich warte schon viel zu lange auf den Bus.'
+          visitor.thought = de('Ich warte schon viel zu lange auf den Bus.')
         }
         if (visitor.route.length === 0) return
       }
@@ -964,7 +971,7 @@ export class VisitorBehaviorService {
       const crowdSpeed = returningOnStallQueue
         ? 1
         : Math.max(0.04, 1 / (1 + 7 * Math.pow(Math.max(0, density - 0.5) * 2, 2)))
-      if (!returningOnStallQueue && density >= 1) visitor.thought = 'Hier ist es eng – ich komme nur langsam voran.'
+      if (!returningOnStallQueue && density >= 1) visitor.thought = de('Hier ist es eng – ich komme nur langsam voran.')
       const nextCampingCell = this.context.getCampingCellAt(next.x, next.z)
       const nextMedicalCell = this.context.getMedicalCellAt(next.x, next.z)
       const nextFestivalCell = this.context.getStageForecourtCellAt(next.x, next.z)
@@ -986,7 +993,7 @@ export class VisitorBehaviorService {
         visitor.route = []
         visitor.targetId = null
         visitor.state = 'exploring'
-        visitor.thought = 'Der Weg ist versperrt.'
+        visitor.thought = de('Der Weg ist versperrt.')
         return
       }
 
@@ -1053,8 +1060,8 @@ export class VisitorBehaviorService {
           visitor.emotionMinutes = 35
           visitor.thought =
             inspection.confiscated.length > 0
-              ? `Beschlagnahmt: ${inspection.confiscated.map((kind) => INVENTORY_ITEMS[kind].name).join(', ')}.`
-              : 'Diese Kontrolle dauert ganz schön lange.'
+              ? de`Beschlagnahmt: ${listOf(inspection.confiscated.map((kind) => INVENTORY_ITEMS[kind].name))}.`
+              : de('Diese Kontrolle dauert ganz schön lange.')
           if (inspection.confiscated.length > 0) {
             this.context.recordComplaint(visitor, 'security-confiscation')
           }
@@ -1110,12 +1117,12 @@ export class VisitorBehaviorService {
     if (this.context.visitorSimulation.isAwaiting(visitor.id)) return
     if (visitor.state === 'leaving' || visitor.isPanicking || visitor.state === 'panicking') return
     if (visitor.state === 'bus-waiting') {
-      visitor.thought = 'Ich warte an der Haltestelle auf den Bus.'
+      visitor.thought = de('Ich warte an der Haltestelle auf den Bus.')
       return
     }
 
     if (visitor.state === 'socializing') {
-      visitor.thought = 'Wir sitzen zusammen, essen, trinken und unterhalten uns.'
+      visitor.thought = de('Wir sitzen zusammen, essen, trinken und unterhalten uns.')
       return
     }
     if (
@@ -1132,18 +1139,18 @@ export class VisitorBehaviorService {
         visitor.campingPhase = 'building'
         visitor.interactionRemaining =
           SIMULATION_CONFIG.camping.tentBuildMinutes
-        visitor.thought = 'Ich baue mein Zelt auf.'
+        visitor.thought = de('Ich baue mein Zelt auf.')
         return
       }
       if (visitor.campingPhase === 'returning') {
         visitor.campingPhase = 'resting'
-        visitor.thought = 'Ich ruhe mich in meinem Zelt aus.'
+        visitor.thought = de('Ich ruhe mich in meinem Zelt aus.')
         return
       }
       if (visitor.campingPhase === 'packing') {
         visitor.interactionRemaining =
           SIMULATION_CONFIG.camping.tentPackMinutes
-        visitor.thought = 'Ich packe Zelt und Campingsachen ein.'
+        visitor.thought = de('Ich packe Zelt und Campingsachen ein.')
         return
       }
     }
@@ -1167,7 +1174,7 @@ export class VisitorBehaviorService {
         if (!this.context.isBuildingCurrentlyActive(target)) {
           visitor.targetId = null
           visitor.state = 'exploring'
-          visitor.thought = 'Dieses Angebot hat inzwischen geschlossen.'
+          visitor.thought = de('Dieses Angebot hat inzwischen geschlossen.')
           this.decideNextAction(visitor)
           return
         }
@@ -1176,7 +1183,7 @@ export class VisitorBehaviorService {
           if (!queue.includes(visitor.id)) queue.push(visitor.id)
           visitor.state = 'queuing'
           visitor.interactionRemaining = 0
-          visitor.thought = `Ich stehe bei ${BUILDINGS[target.kind].name} an.`
+          visitor.thought = de`Ich stehe bei ${named(BUILDINGS[target.kind].name)} an.`
           return
         }
         this.context.startFacilityInteraction(visitor, target)
@@ -1203,20 +1210,20 @@ export class VisitorBehaviorService {
           visitor.emotionMinutes = 35
           visitor.targetId = null
           visitor.state = 'exploring'
-          visitor.thought = 'Die Warteschlange ist voll. Ich gehe erst einmal weiter.'
+          visitor.thought = de('Die Warteschlange ist voll. Ich gehe erst einmal weiter.')
           this.decideNextAction(visitor)
           return
         }
         if (!hasReservation) coaster.queue.push(visitor.id)
         visitor.state = 'queuing'
-        visitor.thought = `Ich warte bei ${coaster.name}.`
+        visitor.thought = de`Ich warte bei ${named(coaster.name)}.`
         return
       }
       const course = (this.context.state.courses ?? []).find((entry) => entry.id === visitor.targetId)
       if (course?.operating) {
         if (!course.queue.includes(visitor.id)) course.queue.push(visitor.id)
         visitor.state = 'queuing'
-        visitor.thought = `Ich warte bei ${course.name}.`
+        visitor.thought = de`Ich warte bei ${named(course.name)}.`
         return
       }
     }
@@ -1271,7 +1278,7 @@ export class VisitorBehaviorService {
     )
     if (festivalPhase.phase === 'break') {
       this.context.beginVisitorDeparture(visitor)
-      visitor.thought = 'Das Festival ist beendet. Ich reise ab.'
+      visitor.thought = de('Das Festival ist beendet. Ich reise ab.')
       return
     }
     if (
@@ -1281,7 +1288,7 @@ export class VisitorBehaviorService {
     ) {
       this.context.beginVisitorDeparture(visitor)
       visitor.thought =
-        'Meine Zeit als Tagesgast ist vorbei. Ich gehe nach Hause.'
+        de('Meine Zeit als Tagesgast ist vorbei. Ich gehe nach Hause.')
       return
     }
     // Resume unfinished setup in saves made while camping arrivals were misrouted.
@@ -1313,7 +1320,7 @@ export class VisitorBehaviorService {
         visitor.targetId = null
         if (this.tryBeginBusJourney(visitor, visitor.campsite, route)) return
         visitor.route = route
-        visitor.thought = `Es ist Schlafenszeit. Ich gehe zu meinem Zelt.`
+        visitor.thought = de('Es ist Schlafenszeit. Ich gehe zu meinem Zelt.')
         return
       }
     }
@@ -1325,7 +1332,7 @@ export class VisitorBehaviorService {
           .nonCamperDepartureEnergyBelow
     ) {
       this.context.beginVisitorDeparture(visitor)
-      visitor.thought = 'Es ist spät und ich brauche Schlaf. Ich gehe nach Hause.'
+      visitor.thought = de('Es ist spät und ich brauche Schlaf. Ich gehe nach Hause.')
       return
     }
     if (
@@ -1336,7 +1343,7 @@ export class VisitorBehaviorService {
     ) {
       this.beginStationaryBreak(
         visitor,
-        'Ich suche mir kurz einen Platz zum Essen oder Trinken.',
+        de('Ich suche mir kurz einen Platz zum Essen oder Trinken.'),
       )
       return
     }
@@ -1369,7 +1376,7 @@ export class VisitorBehaviorService {
         ) {
           return
         }
-        visitor.thought = 'Ich suche mir eine freie Bank zum Ausruhen.'
+        visitor.thought = de('Ich suche mir eine freie Bank zum Ausruhen.')
         return
       }
     }
@@ -1383,7 +1390,7 @@ export class VisitorBehaviorService {
           visitor.targetId = null
           if (this.tryBeginBusJourney(visitor, visitor.campsite, route)) return
           visitor.route = route
-          visitor.thought = 'Ich gehe zu meinem Zelt und ruhe mich aus.'
+          visitor.thought = de('Ich gehe zu meinem Zelt und ruhe mich aus.')
           return
         }
       }
@@ -1392,7 +1399,7 @@ export class VisitorBehaviorService {
         [this.context.getEntrance()],
       )
       visitor.state = 'leaving'
-      visitor.thought = 'Ich bin müde und gehe nach Hause.'
+      visitor.thought = de('Ich bin müde und gehe nach Hause.')
       visitor.targetId = null
       visitor.route = route ?? []
       return
@@ -1463,7 +1470,7 @@ export class VisitorBehaviorService {
           visitor.state = 'seeking'
           visitor.targetId = attractionDestination.attraction.id
           visitor.route = attractionDestination.route
-          visitor.thought = `Ich möchte ${attractionDestination.attraction.name} ausprobieren!`
+          visitor.thought = de`Ich möchte ${named(attractionDestination.attraction.name)} ausprobieren!`
           return
         }
         const coasterDestination = this.findReachableCoaster(visitor)
@@ -1474,7 +1481,7 @@ export class VisitorBehaviorService {
           visitor.state = 'seeking'
           visitor.targetId = coasterDestination.coaster.id
           visitor.route = coasterDestination.route
-          visitor.thought = `Ich möchte ${coasterDestination.coaster.name} fahren!`
+          visitor.thought = de`Ich möchte ${named(coasterDestination.coaster.name)} fahren!`
           return
         }
         const courseDestination = this.findReachableCourse(visitor)
@@ -1485,7 +1492,7 @@ export class VisitorBehaviorService {
           visitor.state = 'seeking'
           visitor.targetId = courseDestination.course.id
           visitor.route = courseDestination.route
-          visitor.thought = `Ich möchte ${courseDestination.course.name} ausprobieren!`
+          visitor.thought = de`Ich möchte ${named(courseDestination.course.name)} ausprobieren!`
           return
         }
         const fullCoaster = this.context.state.coasters.find((coaster) => {
@@ -1530,18 +1537,18 @@ export class VisitorBehaviorService {
         visitor.route = destination.route
         visitor.thought =
           kind === 'food'
-            ? 'Ich habe Hunger.'
+            ? de('Ich habe Hunger.')
             : kind === 'waterPoint'
-              ? 'Ich habe Durst.'
+              ? de('Ich habe Durst.')
             : kind === 'shower'
-              ? 'Ich sollte dringend duschen.'
+              ? de('Ich sollte dringend duschen.')
             : kind === 'alcohol'
-              ? this.wantsSoftDrink(visitor) ? 'Ich habe Durst und hole mir etwas zu trinken.' : 'Ich hole mir etwas zu trinken.'
+              ? this.wantsSoftDrink(visitor) ? de('Ich habe Durst und hole mir etwas zu trinken.') : de('Ich hole mir etwas zu trinken.')
             : kind === 'toilet'
-              ? 'Ich brauche dringend eine Toilette.'
+              ? de('Ich brauche dringend eine Toilette.')
             : kind === 'mascot' || kind === 'shirt'
               ? souvenirSeekThought(kind)
-              : 'Ich möchte etwas Spannendes erleben!'
+              : de('Ich möchte etwas Spannendes erleben!')
         return
       }
     }
@@ -1587,10 +1594,10 @@ export class VisitorBehaviorService {
           gathering.kind === 'chairs' ? 'sitting' : 'standing'
         visitor.thought =
           gathering.kind === 'pavilion'
-            ? 'Ich gehe zu den anderen unter den Pavillon.'
+            ? de('Ich gehe zu den anderen unter den Pavillon.')
             : gathering.kind === 'musicBox'
-              ? 'Ich gehe zur Musikbox am Zeltplatz.'
-              : 'Ich setze mich zu den anderen Campern.'
+              ? de('Ich gehe zur Musikbox am Zeltplatz.')
+              : de('Ich setze mich zu den anderen Campern.')
         return
       }
     }
@@ -1614,8 +1621,8 @@ export class VisitorBehaviorService {
         visitor.isDancing = false
         visitor.thought =
           swim.route.length > 1
-            ? 'Ich gehe baden – das wird Spaß machen.'
-            : 'Ich springe ins Wasser.'
+            ? de('Ich gehe baden – das wird Spaß machen.')
+            : de('Ich springe ins Wasser.')
         return
       }
     }
@@ -1638,8 +1645,8 @@ export class VisitorBehaviorService {
         visitor.isDancing = false
         visitor.thought =
           leisure.party > leisure.beauty
-            ? 'Dort ist gute Stimmung. Ich gehe zu den anderen.'
-            : 'Dort sieht es schön aus. Da möchte ich mich aufhalten.'
+            ? de('Dort ist gute Stimmung. Ich gehe zu den anderen.')
+            : de('Dort sieht es schön aus. Da möchte ich mich aufhalten.')
         return
       }
     }
@@ -1647,8 +1654,8 @@ export class VisitorBehaviorService {
     this.assignDeterministicWander(visitor, decisionRng)
     visitor.thought =
       desiredKinds.length > 0
-        ? 'Ich finde hier nicht, was ich brauche.'
-        : 'Ich schaue mich ein wenig um.'
+        ? de('Ich finde hier nicht, was ich brauche.')
+        : de('Ich schaue mich ein wenig um.')
   }
 
   tryBeginBusJourney(
@@ -1756,7 +1763,7 @@ export class VisitorBehaviorService {
     visitor.busWaitMinutes = 0
     visitor.route = choice.route
     visitor.targetId = choice.stop.id
-    visitor.thought = `Ich fahre mit ${choice.line.name}, damit ich nicht so weit laufen muss.`
+    visitor.thought = de`Ich fahre mit ${named(choice.line.name)}, damit ich nicht so weit laufen muss.`
     return true
   }
 
@@ -1795,8 +1802,8 @@ export class VisitorBehaviorService {
     visitor.isDancing = false
     visitor.isConversing = false
     visitor.thought = party.forecourt
-      ? 'Ich gehe zum Bühnenvorplatz!'
-      : 'Dort scheint gute Stimmung zu sein!'
+      ? de('Ich gehe zum Bühnenvorplatz!')
+      : de('Dort scheint gute Stimmung zu sein!')
     this.tryBeginBusJourney(visitor, party.cell, visitor.route)
   }
 
@@ -2077,8 +2084,8 @@ export class VisitorBehaviorService {
     visitor.concertId = show.booking.id
     visitor.interactionRemaining = show.booking.start + show.booking.duration - this.context.state.minute
     visitor.thought = this.context.state.minute < show.booking.start
-      ? `Ich gehe schon zu ${show.band.name}, damit ich den Anfang nicht verpasse.`
-      : `Ich möchte ${show.band.name} sehen!`
+      ? de`Ich gehe schon zu ${verbatim(show.band.name)}, damit ich den Anfang nicht verpasse.`
+      : de`Ich möchte ${verbatim(show.band.name)} sehen!`
     return true
   }
 
@@ -2094,7 +2101,7 @@ export class VisitorBehaviorService {
     )
     if (this.context.state.minute < concert.booking.start) {
       visitor.toplessMinutes = 0
-      if (!consumed) visitor.thought = `Ich warte auf ${concert.band.name}.`
+      if (!consumed) visitor.thought = de`Ich warte auf ${verbatim(concert.band.name)}.`
       return
     }
     visitor.motivation = Math.min(
@@ -2109,8 +2116,8 @@ export class VisitorBehaviorService {
     if (visitor.thought === CONCERT_TOPLESS_CROWD_THOUGHT) return
     if (!consumed) {
       visitor.thought = visitor.isDancing
-        ? `${concert.band.name} spielen – ich tanze die ganze Show!`
-        : `${concert.band.name} spielen live – ich bleibe bis zum Ende.`
+        ? de`${verbatim(concert.band.name)} spielen – ich tanze die ganze Show!`
+        : de`${verbatim(concert.band.name)} spielen live – ich bleibe bis zum Ende.`
     }
   }
 
@@ -2292,8 +2299,8 @@ export class VisitorBehaviorService {
     visitor.route = route
     visitor.thought =
       this.listVisitorWasteBins().find((entry) => entry.id === bin.id)?.kind === 'sealed'
-        ? 'Ich gehe zum verschlossenen Mülleimer.'
-        : 'Ich gehe zum Mülleimer.'
+        ? de('Ich gehe zum verschlossenen Mülleimer.')
+        : de('Ich gehe zum Mülleimer.')
   }
 
   depositPendingWaste(visitor: Visitor, binId: string): void {
@@ -2315,8 +2322,8 @@ export class VisitorBehaviorService {
     visitor.pendingWaste -= stored
     visitor.thought =
       stored > 0
-        ? 'Ich werfe den Müll in den Eimer.'
-        : 'Der Mülleimer ist voll.'
+        ? de('Ich werfe den Müll in den Eimer.')
+        : de('Der Mülleimer ist voll.')
     if (visitor.pendingWaste > 0) this.dropPendingWaste(visitor)
   }
 
@@ -2339,8 +2346,8 @@ export class VisitorBehaviorService {
       }
     }
     visitor.thought = cell
-      ? 'Hier liegt jetzt mein Müll. Ein Eimer wäre besser gewesen.'
-      : 'Hier kann ich den Müll nicht lassen, ich nehme ihn mit.'
+      ? de('Hier liegt jetzt mein Müll. Ein Eimer wäre besser gewesen.')
+      : de('Hier kann ich den Müll nicht lassen, ich nehme ihn mit.')
   }
 
   findLitterDropCell(visitor: Visitor): {
@@ -2425,7 +2432,7 @@ export class VisitorBehaviorService {
       visitor.consumptionCooldown =
         config.cooldownMinimumMinutes +
         this.context.rng.next() * config.cooldownRandomMinutes
-      visitor.thought = 'Ich bleibe stehen und esse mein gekauftes Essen.'
+      visitor.thought = de('Ich bleibe stehen und esse mein gekauftes Essen.')
       this.giveWaste(visitor, 1)
       return true
     }
@@ -2456,7 +2463,7 @@ export class VisitorBehaviorService {
       visitor.consumptionCooldown =
         config.cooldownMinimumMinutes +
         this.context.rng.next() * config.cooldownRandomMinutes
-      visitor.thought = 'Ich bleibe hier und trinke mein Getränk.'
+      visitor.thought = de('Ich bleibe hier und trinke mein Getränk.')
       this.giveWaste(visitor, 1)
       return true
     }
@@ -2868,7 +2875,7 @@ export class VisitorBehaviorService {
       ) {
         this.context.beginVisitorDeparture(visitor)
         visitor.thought =
-          'Das Festival ist vorbei. Jetzt beginnt die Veranstaltungspause.'
+          de('Das Festival ist vorbei. Jetzt beginnt die Veranstaltungspause.')
         return
       }
       if (
@@ -2882,7 +2889,7 @@ export class VisitorBehaviorService {
       ) {
         this.context.beginVisitorDeparture(visitor)
         visitor.thought =
-          'Die Besuchszeit für Tagesgäste ist vorbei. Ich gehe nach Hause.'
+          de('Die Besuchszeit für Tagesgäste ist vorbei. Ich gehe nach Hause.')
         return
       }
       if (visitor.state === 'queuing' && !ridesActive) {
@@ -2890,7 +2897,7 @@ export class VisitorBehaviorService {
           ? this.context.state.buildings.find((building) => building.id === visitor.targetId)
           : undefined
         if (target?.kind === 'ride' || (visitor.targetId && this.context.getCoaster(visitor.targetId))) {
-          this.context.leaveQueueOnFoot(visitor, 'Die Fahrgeschäfte schließen für heute.')
+          this.context.leaveQueueOnFoot(visitor, de('Die Fahrgeschäfte schließen für heute.'))
         }
         return
       }
@@ -2905,7 +2912,7 @@ export class VisitorBehaviorService {
       ) {
         this.clearVisitorActivity(visitor)
         visitor.state = 'exploring'
-        visitor.thought = 'Das Bühnenprogramm ist für heute beendet.'
+        visitor.thought = de('Das Bühnenprogramm ist für heute beendet.')
         this.decideNextAction(visitor)
         return
       }
@@ -2924,7 +2931,7 @@ export class VisitorBehaviorService {
       visitor.state = 'exploring'
       visitor.targetId = null
       visitor.route = []
-      visitor.thought = 'Dieses Angebot ist gerade geschlossen.'
+      visitor.thought = de('Dieses Angebot ist gerade geschlossen.')
       this.decideNextAction(visitor)
     })
   }
@@ -3217,18 +3224,13 @@ export class VisitorBehaviorService {
       elevation: visitor.cellElevation,
     }
     // Coasters, courses and rides keep their own finders, which know the ride
-    // offer, queue capacity and the coaster a guest is avoiding. Their canonical
-    // records must not be offered a second time here.
-    const legacyIds = new Set<string>([
-      ...(this.context.state.coasters ?? []).map((coaster) => coaster.id),
-      ...(this.context.state.courses ?? []).map((course) => course.id),
-      ...this.context.state.buildings
-        .filter((building) => building.kind === 'ride')
-        .map((building) => building.id),
-    ])
+    // offer, queue capacity and the coaster a guest is avoiding. Their
+    // projection records must not be offered a second time here. The shape
+    // check needs no building scan per decision; it agrees with the legacy-id
+    // rule because the refresh drops orphans (`assertDualModel`).
     const candidates = this.context.state.attractions
       .filter((attraction) =>
-        !legacyIds.has(attraction.id) &&
+        isCanonicalAttractionRecord(attraction) &&
         attraction.operationMode === 'open' &&
         attraction.access.mode === 'queuedEntrance' &&
         Boolean(attraction.access.entrance) &&
@@ -3466,13 +3468,13 @@ export class VisitorBehaviorService {
   finishInteraction(visitor: Visitor): void {
     const target = this.context.state.buildings.find((building) => building.id === visitor.targetId)
     if (target && isShopServiceKind(target.kind) && !this.context.isVisitorAtShopCounter(visitor, target)) {
-      this.context.leaveQueueOnFoot(visitor, 'Ich gehe zur Vorderseite des Ladens.')
+      this.context.leaveQueueOnFoot(visitor, de('Ich gehe zur Vorderseite des Ladens.'))
       return
     }
     const rideExitPath = target?.kind === 'ride' && target.rideExit
       ? this.context.getAccessPathNeighbors(target.rideExit).find(c=>this.context.getPathAt(c.x,c.z,c.elevation)?.pathType !== 'queue') : undefined
     if (target?.kind === 'ride' && !rideExitPath) {
-      visitor.thought = 'Ich warte, bis der Ausgang wieder mit einem Gehweg verbunden ist.'
+      visitor.thought = de('Ich warte, bis der Ausgang wieder mit einem Gehweg verbunden ist.')
       return
     }
     const shopSupply = target ? perGuestSupply(target.kind) : null
@@ -3526,7 +3528,7 @@ export class VisitorBehaviorService {
       visitor.interactionRemaining = 0
       this.context.beginStallQueueReturn(visitor, queueExit[0])
       if (purchasedConsumable) {
-        visitor.thought = 'Ich gehe die Schlange zurück und suche einen Platz zum Essen oder Trinken.'
+        visitor.thought = de('Ich gehe die Schlange zurück und suche einen Platz zum Essen oder Trinken.')
       }
       return
     }
@@ -3545,7 +3547,7 @@ export class VisitorBehaviorService {
       if (route.length) {
         this.clearVisitorActivity(visitor)
         visitor.state = 'exploring'; visitor.route = route
-        visitor.thought = 'Ich mache den Stand frei und suche einen Platz zum Essen oder Trinken.'
+        visitor.thought = de('Ich mache den Stand frei und suche einen Platz zum Essen oder Trinken.')
       } else this.beginStationaryBreak(visitor, visitor.thought)
       return
     }
@@ -3641,13 +3643,13 @@ export class VisitorBehaviorService {
         100,
         visitor.needs.fun + minutes * config.selfFunPerMinute,
       )
-      visitor.thought = 'Nackt durchs Festival! Wer macht mit?'
+      visitor.thought = de('Nackt durchs Festival! Wer macht mit?')
       this.spreadStreakingFun(visitor, minutes)
       if (visitor.streakingMinutes <= 0) {
         visitor.streakingCooldownMinutes = config.cooldownMinutes
         visitor.emotion = 'happy'
         visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 18)
-        visitor.thought = 'Okay, das war vielleicht etwas zu viel.'
+        visitor.thought = de('Okay, das war vielleicht etwas zu viel.')
       }
       return
     }
@@ -3667,7 +3669,7 @@ export class VisitorBehaviorService {
       config.durationMinimum + this.context.rng.next() * config.durationRandomRange
     visitor.emotion = 'excited'
     visitor.emotionMinutes = visitor.streakingMinutes + 8
-    visitor.thought = 'Nackt durchs Festival! Wer macht mit?'
+    visitor.thought = de('Nackt durchs Festival! Wer macht mit?')
     this.continueStreakingRun(visitor)
   }
 
@@ -3745,7 +3747,7 @@ export class VisitorBehaviorService {
       visitor.state = 'sleeping'
       visitor.route = []
       visitor.targetId = null
-      visitor.thought = 'Ich muss mich kurz hinlegen …'
+      visitor.thought = de('Ich muss mich kurz hinlegen …')
       visitor.emotion = 'sad'
       visitor.emotionMinutes = 60
       return true
@@ -3760,7 +3762,7 @@ export class VisitorBehaviorService {
       visitor.emotion = 'angry'
       visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 12)
       if (visitor.alcoholLevel >= config.veryDrunkBehaviorThreshold) {
-        visitor.thought = 'Lasst mich durch!'
+        visitor.thought = de('Lasst mich durch!')
       }
     } else {
       visitor.emotion =
@@ -3769,7 +3771,7 @@ export class VisitorBehaviorService {
           : 'happy'
       visitor.emotionMinutes = Math.max(visitor.emotionMinutes, 12)
       if (visitor.alcoholLevel >= config.veryDrunkBehaviorThreshold) {
-        visitor.thought = 'Was für ein großartiges Festival!'
+        visitor.thought = de('Was für ein großartiges Festival!')
       }
     }
     return false

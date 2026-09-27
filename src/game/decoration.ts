@@ -1,5 +1,6 @@
 import { WALL_KINDS, wallSpec, ROOF_KINDS, roofSpec, THEMED_BIN_KINDS, binSpec } from './decorationWalls'
 import type { BuildingKind } from './catalog'
+import { de } from '../i18n/marker'
 
 /**
  * Festival deco themes. Grounded in real festival aesthetics, plus two
@@ -46,81 +47,81 @@ export type DecorationTheme = {
 export const DECORATION_THEMES: readonly DecorationTheme[] = [
   {
     id: 'klassik',
-    label: 'Klassik',
+    label: de('Klassik'),
     icon: '🎸',
-    rationale: 'Woodstock-/Folk-Open-Air: Holz, Fahnen, Wegweiser — neutrales Festivalgelände.',
+    rationale: de('Woodstock-/Folk-Open-Air: Holz, Fahnen, Wegweiser — neutrales Festivalgelände.'),
   },
   {
     id: 'wueste',
-    label: 'Wüste',
+    label: de('Wüste'),
     icon: '🌵',
-    rationale: 'Burning-Man-/Wüstenfestivals: Playa, Staub, Kakteen und Skulpturen.',
+    rationale: de('Burning-Man-/Wüstenfestivals: Playa, Staub, Kakteen und Skulpturen.'),
   },
   {
     id: 'wald',
-    label: 'Wald',
+    label: de('Wald'),
     icon: '🌲',
-    rationale: 'Wald-Raves (Boom, Ozora): Farne, Pilze, Moos und Waldidole.',
+    rationale: de('Wald-Raves (Boom, Ozora): Farne, Pilze, Moos und Waldidole.'),
   },
   {
     id: 'neon',
-    label: 'Neon',
+    label: de('Neon'),
     icon: '🪩',
-    rationale: 'Rave/UV-Nacht: Leuchtfarben, Diskokugel, LED-Bänder.',
+    rationale: de('Rave/UV-Nacht: Leuchtfarben, Diskokugel, LED-Bänder.'),
   },
   {
     id: 'industrie',
-    label: 'Industrie',
+    label: de('Industrie'),
     icon: '🛢️',
-    rationale: 'Warehouse-Techno: Paletten, Fässer, Ketten, Baustrahler.',
+    rationale: de('Warehouse-Techno: Paletten, Fässer, Ketten, Baustrahler.'),
   },
   {
     id: 'tropen',
-    label: 'Tropen',
+    label: de('Tropen'),
     icon: '🌴',
-    rationale: 'Strand- und Karibik-Festivals: Palmen, Tiki, Liegestühle.',
+    rationale: de('Strand- und Karibik-Festivals: Palmen, Tiki, Liegestühle.'),
   },
   {
     id: 'mystik',
-    label: 'Mystik',
+    label: de('Mystik'),
     icon: '🔮',
-    rationale: 'Spirituelle/okkulte Open-Airs: Kristalle, Runen, Gebetsfahnen, Feuer.',
+    rationale: de('Spirituelle/okkulte Open-Airs: Kristalle, Runen, Gebetsfahnen, Feuer.'),
   },
   {
     id: 'zirkus',
-    label: 'Zirkus',
+    label: de('Zirkus'),
     icon: '🎪',
-    rationale: 'Jahrmarkt- und Circus-Fields: Wimpel, Mini-Zelt, Popcorn, Lichter.',
+    rationale: de('Jahrmarkt- und Circus-Fields: Wimpel, Mini-Zelt, Popcorn, Lichter.'),
   },
   {
     id: 'alpin',
-    label: 'Alpin',
+    label: de('Alpin'),
     icon: '🏔️',
-    rationale: 'Alpen-/Oktoberfest-Ästhetik: Tannen, Biertische, Maibaum, Lattenzaun.',
+    rationale: de('Alpen-/Oktoberfest-Ästhetik: Tannen, Biertische, Maibaum, Lattenzaun.'),
   },
   {
     id: 'arktis',
-    label: 'Arktis',
+    label: de('Arktis'),
     icon: '❄️',
-    rationale: 'Spezial: Eis, Polarlicht und Schnee — klar von Holz/Neon getrennt.',
+    rationale: de('Spezial: Eis, Polarlicht und Schnee — klar von Holz/Neon getrennt.'),
   },
   {
     id: 'steampunk',
-    label: 'Steampunk',
+    label: de('Steampunk'),
     icon: '🔧',
-    rationale: 'Spezial: Messing, Zahnräder, Rohre und Gaslicht — viktorianische Industrie-Fantasie.',
+    rationale: de('Spezial: Messing, Zahnräder, Rohre und Gaslicht — viktorianische Industrie-Fantasie.'),
   },
 ]
 
 export const DECORATION_CATEGORY_LABELS: Record<DecorationCategoryId, string> = {
-  plants: 'Pflanzen',
-  furniture: 'Möbel',
-  lights: 'Licht',
-  festival: 'Fest',
-  props: 'Kulisse',
-  fence: 'Zaun',
-  walls: 'Wände',
-  roofs: 'Dächer',
+  plants: de('Pflanzen'),
+  furniture: de('Möbel'),
+  lights: de('Licht'),
+  festival: de('Fest'),
+  props: de('Kulisse'),
+  fence: de('Zaun'),
+  walls: de('Wände'),
+  roofs: de('Dächer'),
 }
 
 export const DEFAULT_DECORATION_THEME: DecorationThemeId = 'klassik'

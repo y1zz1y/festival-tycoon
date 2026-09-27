@@ -2,6 +2,7 @@ import type { FlatRideType } from '../flatRides'
 import { BUILDING_GHOST_MODES, BUILDINGS } from '../catalog'
 import type { BuildingKind } from '../catalog'
 import { bookFinance } from '../finance'
+import { de, named } from '../../i18n/marker'
 import { isLargeScenery, isEdgeScenery, isScenery } from '../scenery'
 import { defaultShirtSettings, isQueuedFacilityKind } from '../shopGoods'
 import { isSealedWasteContainer } from '../waste'
@@ -236,7 +237,9 @@ export function placeBuildingCommand(
   context.recalculatePark()
   context.refreshPower()
   context.emit()
-  return { ok: true, message: `${BUILDINGS[kind].name} gebaut` }
+  // A catalog label is canonical text from a `de` table, so it nests: style names like
+  // “Lehm · Wand” resolve through the catalog patterns (docs/i18n.md).
+  return { ok: true, message: de`${named(BUILDINGS[kind].name)} gebaut` }
 }
 
 function placementFootprint(

@@ -8,6 +8,7 @@ import {
   projectCourses,
   projectPartyAreas,
   refreshLegacyAttractionRecords,
+  releaseGuestsOfOrphans,
 } from './attractions/projections'
 import type { Attraction } from './attractions/types'
 import { emptyBandSupplySnapshot, normalizeBackstageCell } from './bandSupply'
@@ -133,7 +134,7 @@ export function migrateSnapshot(
     migrated.festival.stageTemplates =
       migrated.festival.stageTemplates.map(migrateStageDesign)
   }
-  refreshLegacyAttractionRecords(migrated)
+  releaseGuestsOfOrphans(migrated, refreshLegacyAttractionRecords(migrated))
   return migrated
 }
 

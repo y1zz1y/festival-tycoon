@@ -30,12 +30,14 @@ import {
   collectEligibleBusWaiters,
   collectSeatedPassengerIds,
   compareBusBoardPriority,
-  describeRoadVehicleActivity,
-  describeRoadVehicleDestination,
-  formatRoadVehicleInspectLoad,
   isVehicleReversing,
   isVisitorReadyToBoardBus,
 } from '../src/game/logistics'
+import {
+  describeRoadVehicleActivity,
+  describeRoadVehicleDestination,
+  formatRoadVehicleInspectLoad,
+} from '../src/game/logisticsText'
 import { CrowdingSystem } from '../src/game/crowding'
 
 export function testOperations(fixture:(count?:number)=>GameState):void {

@@ -1,10 +1,15 @@
 import { DEFAULT_SCENARIO, type ScenarioSettings } from './scenario'
+import { de, keep } from '../i18n/marker'
 
 /**
  * Prepared scenarios: instead of an empty map, a site with a character of its own —
  * its size, its ground, the money and debt it starts with, and what it wants from
  * you. Everything here goes through normalizeScenarioSettings before it is used,
  * so these are plain descriptions, not trusted input.
+ *
+ * Names and briefings are canonical German (`de`) and go into the snapshot as the
+ * scenario title; the UI shows them with `localize`. Real festivals keep their name,
+ * the pun names get an English adaptation in the catalog (docs/i18n.md).
  */
 export type ScenarioPreset = {
   id: string
@@ -28,8 +33,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   // through the first build instead.
   preset(
     'einstieg',
-    'Erste Schritte',
-    'Ein kleines, flaches Feld und genug Geld für den Anfang. Eine Checkliste führt durch den ersten Aufbau: Weg, Bühne mit Strom, Imbiss und Toilette, Band buchen, Festival starten.',
+    de('Erste Schritte'),
+    de('Ein kleines, flaches Feld und genug Geld für den Anfang. Eine Checkliste führt durch den ersten Aufbau: Weg, Bühne mit Strom, Imbiss und Toilette, Band buchen, Festival starten.'),
     {
       environment: 'farmland',
       unevenness: .05,
@@ -44,8 +49,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   ),
   preset(
     'woodstock',
-    'Woodstock',
-    'Eine Milchviehweide, drei Tage Regen und mehr Leute als geplant. Viel Platz, weicher Lehmboden und wenig Geld — der Boden will entwässert und verdichtet werden, bevor irgendetwas Schweres darauf steht.',
+    keep('Woodstock'),
+    de('Eine Milchviehweide, drei Tage Regen und mehr Leute als geplant. Viel Platz, weicher Lehmboden und wenig Geld — der Boden will entwässert und verdichtet werden, bevor irgendetwas Schweres darauf steht.'),
     {
       environment: 'farmland',
       unevenness: .3,
@@ -60,8 +65,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   ),
   preset(
     'tomorrowland',
-    'Tomorrowland',
-    'Ein Park, der zur Bühne wird: großes Gelände, hohe Ansprüche ans Auge — und eine Bank, die den Aufbau vorfinanziert hat. Das Darlehen läuft, die Zinsen auch.',
+    keep('Tomorrowland'),
+    de('Ein Park, der zur Bühne wird: großes Gelände, hohe Ansprüche ans Auge — und eine Bank, die den Aufbau vorfinanziert hat. Das Darlehen läuft, die Zinsen auch.'),
     {
       environment: 'grassland',
       unevenness: .45,
@@ -78,8 +83,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   ),
   preset(
     'rock-am-ring',
-    'Rock am Ring',
-    'Hügelland rund um eine Rennstrecke. Kaum ein Feld ist eben, dafür kommen fast alle mit dem Auto — Zufahrt, Parkplatz und Geländearbeit entscheiden hier alles.',
+    keep('Rock am Ring'),
+    de('Hügelland rund um eine Rennstrecke. Kaum ein Feld ist eben, dafür kommen fast alle mit dem Auto — Zufahrt, Parkplatz und Geländearbeit entscheiden hier alles.'),
     {
       environment: 'grassland',
       unevenness: .9,
@@ -95,8 +100,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   ),
   preset(
     'hurricane',
-    'Hurricane',
-    'Flaches Land kurz vor der Küste: schnell aufgebaut, schnell aufgeweicht. Ein kleines Gelände, ein kleiner Kredit und die Ansage, am Ende trotzdem im Plus zu stehen.',
+    keep('Hurricane'),
+    de('Flaches Land kurz vor der Küste: schnell aufgebaut, schnell aufgeweicht. Ein kleines Gelände, ein kleiner Kredit und die Ansage, am Ende trotzdem im Plus zu stehen.'),
     {
       environment: 'farmland',
       unevenness: .12,
@@ -112,8 +117,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   // cheerful mangling, the goals are the ones the first four leave unused.
   preset(
     'wackelstein',
-    'Wackelstein Open Air',
-    'Ein Dorf, eine Kuhweide und sehr viel Metal. Regnet es, wird der Acker zu Schlamm und der Schlamm zur Legende. Hier zählt nicht die Menge, sondern der Ruf unter den Kuttenträgern.',
+    de('Wackelstein Open Air'),
+    de('Ein Dorf, eine Kuhweide und sehr viel Metal. Regnet es, wird der Acker zu Schlamm und der Schlamm zur Legende. Hier zählt nicht die Menge, sondern der Ruf unter den Kuttenträgern.'),
     {
       environment: 'farmland',
       unevenness: .2,
@@ -132,8 +137,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   ),
   preset(
     'kutschella',
-    'Kutschella',
-    'Wüste, Palmen, Sonnenbrillen. Das Publikum will Kunst, Aussicht und Schatten, die Geldgeber wollen Gewinn — nicht einmal, sondern zwei Ausgaben hintereinander.',
+    de('Kutschella'),
+    de('Wüste, Palmen, Sonnenbrillen. Das Publikum will Kunst, Aussicht und Schatten, die Geldgeber wollen Gewinn — nicht einmal, sondern zwei Ausgaben hintereinander.'),
     {
       environment: 'desert',
       unevenness: .25,
@@ -148,8 +153,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   ),
   preset(
     'glastonbauer',
-    'Glastonbauer',
-    'Ein Bauernhof, so groß, dass man sich darauf verläuft, und Gäste, die bleiben wollen. Wer hier glücklich macht, darf wiederkommen: Zufriedenheit zählt, zwei Ausgaben in Folge.',
+    de('Glastonbauer'),
+    de('Ein Bauernhof, so groß, dass man sich darauf verläuft, und Gäste, die bleiben wollen. Wer hier glücklich macht, darf wiederkommen: Zufriedenheit zählt, zwei Ausgaben in Folge.'),
     {
       environment: 'farmland',
       unevenness: .55,
@@ -167,8 +172,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   ),
   preset(
     'verschmelzung',
-    'Verschmelzung',
-    'Ein stillgelegter Flugplatz, Beton bis zum Horizont und eine Crew mit großen Plänen. Kein Baum, kein Schatten, dafür fester Boden. Am Ende soll das Gelände etwas wert sein — und schuldenfrei.',
+    de('Verschmelzung'),
+    de('Ein stillgelegter Flugplatz, Beton bis zum Horizont und eine Crew mit großen Plänen. Kein Baum, kein Schatten, dafür fester Boden. Am Ende soll das Gelände etwas wert sein — und schuldenfrei.'),
     {
       environment: 'urban',
       unevenness: .05,

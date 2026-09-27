@@ -1,18 +1,21 @@
+import { de, keep } from '../i18n/marker'
+
 /** Shared catalog/model dimensions. Heights match the construction grid. */
 export const WALL_STYLES = {
-  adobe: { theme: 'wueste', label: 'Lehm', color: 0xc69362, trim: 0x815439 },
-  woodland: { theme: 'wald', label: 'Waldholz', color: 0x61523c, trim: 0x426044 },
-  neon: { theme: 'neon', label: 'Neon', color: 0x283343, trim: 0x37dbdf },
-  industrial: { theme: 'industrie', label: 'Wellblech', color: 0x788489, trim: 0xc49b43 },
-  bamboo: { theme: 'tropen', label: 'Bambus', color: 0xbfa064, trim: 0x655437 },
-  arcane: { theme: 'mystik', label: 'Runenstein', color: 0x71677b, trim: 0xb997dc },
-  circus: { theme: 'zirkus', label: 'Zirkus', color: 0xc65652, trim: 0xf4dda5 },
-  chalet: { theme: 'alpin', label: 'Fachwerk', color: 0xe3d5b3, trim: 0x6e4835 },
-  ice: { theme: 'arktis', label: 'Eis', color: 0xb2d6e3, trim: 0xe7f5fa },
-  brass: { theme: 'steampunk', label: 'Kupfer', color: 0x956347, trim: 0xd3b56f },
+  adobe: { theme: 'wueste', label: de('Lehm'), color: 0xc69362, trim: 0x815439 },
+  woodland: { theme: 'wald', label: de('Waldholz'), color: 0x61523c, trim: 0x426044 },
+  neon: { theme: 'neon', label: de('Neon'), color: 0x283343, trim: 0x37dbdf },
+  industrial: { theme: 'industrie', label: de('Wellblech'), color: 0x788489, trim: 0xc49b43 },
+  bamboo: { theme: 'tropen', label: de('Bambus'), color: 0xbfa064, trim: 0x655437 },
+  arcane: { theme: 'mystik', label: de('Runenstein'), color: 0x71677b, trim: 0xb997dc },
+  circus: { theme: 'zirkus', label: de('Zirkus'), color: 0xc65652, trim: 0xf4dda5 },
+  chalet: { theme: 'alpin', label: de('Fachwerk'), color: 0xe3d5b3, trim: 0x6e4835 },
+  ice: { theme: 'arktis', label: de('Eis'), color: 0xb2d6e3, trim: 0xe7f5fa },
+  brass: { theme: 'steampunk', label: de('Kupfer'), color: 0x956347, trim: 0xd3b56f },
 } as const
 export type WallStyle = keyof typeof WALL_STYLES
-export const WALL_SHAPES = ['Full', 'Half', 'Window', 'Door', 'SlopeLeft', 'SlopeRight', 'RoofEnd'] as const
+/** Shape ids (part of the building kind), not text. */
+export const WALL_SHAPES = keep(['Full', 'Half', 'Window', 'Door', 'SlopeLeft', 'SlopeRight', 'RoofEnd'] as const)
 export type WallKind = `wall${Capitalize<WallStyle>}${typeof WALL_SHAPES[number]}`
 export const WALL_KINDS = Object.keys(WALL_STYLES).flatMap(style => WALL_SHAPES.map(shape =>
   `wall${style[0]!.toUpperCase()}${style.slice(1)}${shape}` as WallKind))

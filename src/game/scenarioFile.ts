@@ -12,6 +12,7 @@ import { normalizeGroundCells } from './ground'
 import { createInitialSnapshot, createBlankSnapshot } from './snapshotBootstrap'
 import { migrateSnapshot } from './snapshotMigration'
 import type { GameSnapshot } from './types/snapshot'
+import { de } from '../i18n/marker'
 
 /** Drop-in JSON lives in `public/scenarios/` (dev) or `dist/scenarios/` (build). */
 export const SCENARIO_FILE_KIND = 'headliner-scenario' as const
@@ -166,8 +167,8 @@ export function exportScenarioFile(snapshot: GameSnapshot, meta: ScenarioExportM
     kind: SCENARIO_FILE_KIND,
     format: SCENARIO_FILE_FORMAT,
     id: settings.preset ?? scenarioFileSlug(meta.name),
-    name: meta.name.trim().slice(0, 80) || 'Szenario',
-    detail: meta.detail.trim().slice(0, 800) || 'Ein selbst gebautes Szenario.',
+    name: meta.name.trim().slice(0, 80) || de('Szenario'),
+    detail: meta.detail.trim().slice(0, 800) || de('Ein selbst gebautes Szenario.'),
     settings,
     ...(tickets ? { tickets } : {}),
     demandTuning,

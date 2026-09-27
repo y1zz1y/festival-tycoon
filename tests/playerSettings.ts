@@ -13,6 +13,9 @@ import { scenePixelRatio } from '../src/view/renderResolution'
 export function testPlayerSettings(): void {
   // Anything stored comes back complete and in range; unknown values fall back.
   assert.deepEqual(normalizePlayerSettings(null), DEFAULT_PLAYER_SETTINGS)
+  assert.equal(DEFAULT_PLAYER_SETTINGS.language, 'auto', 'the language follows the browser until the player picks one')
+  assert.equal(normalizePlayerSettings({ language: 'en' }).language, 'en')
+  assert.equal(normalizePlayerSettings({ language: 'fr' }).language, 'auto')
   const repaired = normalizePlayerSettings({ shadows: 'ultra', resolution: 'high', effects: 'low', uiScale: 1.27, volume: { master: 3, music: -1, effects: 'loud' } })
   assert.equal(repaired.shadows, DEFAULT_PLAYER_SETTINGS.shadows)
   assert.equal(repaired.resolution, 'high')

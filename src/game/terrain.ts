@@ -3,6 +3,7 @@ import type { Environment } from './environments'
 import { BUILDINGS } from './catalog'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import type { RngSource } from './rng'
+import { de, num } from '../i18n/marker'
 
 export type TerrainTree = {
   id: string
@@ -447,10 +448,10 @@ function planExactCellEdit(
   unchangedMessage: string,
 ): { ok: false; message: string } | { ok: true; changes: TerrainChange[] } {
   if (desired < TERRAIN_MIN) {
-    return { ok: false, message: 'Tiefer geht das Gelände nicht' }
+    return { ok: false, message: de('Tiefer geht das Gelände nicht') }
   }
   if (desired > TERRAIN_MAX) {
-    return { ok: false, message: 'Höher geht das Gelände nicht' }
+    return { ok: false, message: de('Höher geht das Gelände nicht') }
   }
   if (desired === current) {
     return { ok: false, message: unchangedMessage }
@@ -458,14 +459,14 @@ function planExactCellEdit(
   if (isProtected(x, z)) {
     return {
       ok: false,
-      message: 'Unter bebauten Flächen kann das Gelände nicht verändert werden',
+      message: de('Unter bebauten Flächen kann das Gelände nicht verändert werden'),
     }
   }
   const pending = new Map<string, number>()
   pending.set(terrainCellKey(x, z), desired)
   const changes = collectCellChanges(terrain, pending)
   if (changes.length === 0) {
-    return { ok: false, message: 'Das Gelände ändert sich hier nicht' }
+    return { ok: false, message: de('Das Gelände ändert sich hier nicht') }
   }
   return { ok: true, changes }
 }
@@ -481,10 +482,10 @@ function planCellEdit(
   unchangedMessage: string,
 ): { ok: false; message: string } | { ok: true; changes: TerrainChange[] } {
   if (desired < TERRAIN_MIN) {
-    return { ok: false, message: 'Tiefer geht das Gelände nicht' }
+    return { ok: false, message: de('Tiefer geht das Gelände nicht') }
   }
   if (desired > TERRAIN_MAX) {
-    return { ok: false, message: 'Höher geht das Gelände nicht' }
+    return { ok: false, message: de('Höher geht das Gelände nicht') }
   }
   if (desired === current) {
     return { ok: false, message: unchangedMessage }
@@ -492,7 +493,7 @@ function planCellEdit(
   if (isProtected(x, z)) {
     return {
       ok: false,
-      message: 'Unter bebauten Flächen kann das Gelände nicht verändert werden',
+      message: de('Unter bebauten Flächen kann das Gelände nicht verändert werden'),
     }
   }
   const pending = floodCellHeights(terrain, worldSize, x, z, desired, isProtected)
@@ -500,12 +501,12 @@ function planCellEdit(
   if (startHeight === undefined || startHeight === current) {
     return {
       ok: false,
-      message: 'Nachbarfelder blockieren diese Höhenänderung',
+      message: de('Nachbarfelder blockieren diese Höhenänderung'),
     }
   }
   const changes = collectCellChanges(terrain, pending)
   if (changes.length === 0) {
-    return { ok: false, message: 'Das Gelände ändert sich hier nicht' }
+    return { ok: false, message: de('Das Gelände ändert sich hier nicht') }
   }
   return { ok: true, changes }
 }
@@ -522,19 +523,19 @@ function planCornerEdit(
   | { ok: false; message: string }
   | { ok: true; changes: TerrainChange[]; cornerChanges: TerrainCornerChange[] } {
   if (!isInTerrainWorld(x, z, worldSize)) {
-    return { ok: false, message: 'Außerhalb des Geländes' }
+    return { ok: false, message: de('Außerhalb des Geländes') }
   }
   const offset = TILE_CORNER_OFFSETS[((corner % 4) + 4) % 4]
-  if (!offset) return { ok: false, message: 'Diese Ecke gibt es nicht' }
+  if (!offset) return { ok: false, message: de('Diese Ecke gibt es nicht') }
   const vx = x + offset.x
   const vz = z + offset.z
   if (!isInTerrainVertex(vx, vz, worldSize)) {
-    return { ok: false, message: 'Außerhalb des Geländes' }
+    return { ok: false, message: de('Außerhalb des Geländes') }
   }
   if (isProtected(x, z)) {
     return {
       ok: false,
-      message: 'Unter bebauten Flächen kann das Gelände nicht verändert werden',
+      message: de('Unter bebauten Flächen kann das Gelände nicht verändert werden'),
     }
   }
   const current = applyPendingCorner(terrain, new Map(), vx, vz, worldSize)
@@ -542,10 +543,10 @@ function planCornerEdit(
     current + (mode === 'raiseCorner' ? TERRAIN_HEIGHT_STEP : -TERRAIN_HEIGHT_STEP),
   )
   if (desired < TERRAIN_MIN) {
-    return { ok: false, message: 'Tiefer geht das Gelände nicht' }
+    return { ok: false, message: de('Tiefer geht das Gelände nicht') }
   }
   if (desired > TERRAIN_MAX) {
-    return { ok: false, message: 'Höher geht das Gelände nicht' }
+    return { ok: false, message: de('Höher geht das Gelände nicht') }
   }
   const vertexProtected = (px: number, pz: number) => {
     for (const dx of [-1, 0]) {
@@ -560,7 +561,7 @@ function planCornerEdit(
   if (vertexProtected(vx, vz)) {
     return {
       ok: false,
-      message: 'Unter bebauten Flächen kann das Gelände nicht verändert werden',
+      message: de('Unter bebauten Flächen kann das Gelände nicht verändert werden'),
     }
   }
 
@@ -590,7 +591,7 @@ function planCornerEdit(
   }
 
   if ((pending.get(terrainCellKey(vx, vz)) ?? current) === current) {
-    return { ok: false, message: 'Das Gelände ändert sich hier nicht' }
+    return { ok: false, message: de('Das Gelände ändert sich hier nicht') }
   }
 
   const preview = new Map(pending)
@@ -639,7 +640,7 @@ function planCornerEdit(
   })
   const changes = collectCellChanges(terrain, cellPending)
   if (cornerChanges.length === 0 && changes.length === 0) {
-    return { ok: false, message: 'Das Gelände ändert sich hier nicht' }
+    return { ok: false, message: de('Das Gelände ändert sich hier nicht') }
   }
   return { ok: true, changes, cornerChanges }
 }
@@ -658,10 +659,10 @@ function terrainEditTarget(
 }
 
 function unchangedTerrainMessage(mode: TerrainEditMode): string {
-  if (mode === 'flatten') return 'Dieses Feld ist bereits eben'
-  if (mode === 'water') return 'Hier ist schon tiefes Wasser'
-  if (mode === 'smooth') return 'Diese Fläche ist bereits geglättet'
-  return 'Das Gelände ändert sich hier nicht'
+  if (mode === 'flatten') return de('Dieses Feld ist bereits eben')
+  if (mode === 'water') return de('Hier ist schon tiefes Wasser')
+  if (mode === 'smooth') return de('Diese Fläche ist bereits geglättet')
+  return de('Das Gelände ändert sich hier nicht')
 }
 
 export function planTerrainEdit(
@@ -677,7 +678,7 @@ export function planTerrainEdit(
   | { ok: false; message: string }
   | { ok: true; changes: TerrainChange[]; cornerChanges?: TerrainCornerChange[] } {
   if (!isInTerrainWorld(x, z, worldSize)) {
-    return { ok: false, message: 'Außerhalb des Geländes' }
+    return { ok: false, message: de('Außerhalb des Geländes') }
   }
   if (mode === 'raiseCorner' || mode === 'lowerCorner') {
     return planCornerEdit(terrain, worldSize, x, z, mode, isProtected, corner)
@@ -712,7 +713,7 @@ export function planTerrainAreaEdit(
   | { ok: true; changes: TerrainChange[]; cornerChanges?: TerrainCornerChange[] } {
   if (mode === 'raiseCorner' || mode === 'lowerCorner') {
     const first = cells[0]
-    if (!first) return { ok: false, message: 'Keine Fläche gewählt' }
+    if (!first) return { ok: false, message: de('Keine Fläche gewählt') }
     return planTerrainEdit(terrain, worldSize, first.x, first.z, mode, isProtected)
   }
   const pending = new Map<string, number>()
@@ -727,7 +728,7 @@ export function planTerrainAreaEdit(
     if (desired < TERRAIN_MIN || desired > TERRAIN_MAX) continue
     pending.set(terrainCellKey(cell.x, cell.z), desired)
   }
-  if (!seen) return { ok: false, message: 'Außerhalb des Geländes' }
+  if (!seen) return { ok: false, message: de('Außerhalb des Geländes') }
   const changes = collectCellChanges(terrain, pending)
   if (changes.length === 0) {
     return { ok: false, message: unchangedTerrainMessage(mode) }
@@ -878,8 +879,8 @@ export function describeTerrainHeight(
   height: number,
   waterLevel: number = DEFAULT_WATER_LEVEL,
 ): string {
-  if (isWaterHeight(height, waterLevel)) return 'Wasser'
-  if (isMudHeight(height)) return 'Schlamm'
-  if (height > 0) return `Hügel Ebene ${height}`
-  return 'Ebenes Gelände'
+  if (isWaterHeight(height, waterLevel)) return de('Wasser')
+  if (isMudHeight(height)) return de('Schlamm')
+  if (height > 0) return de`Hügel Ebene ${num(height)}`
+  return de('Ebenes Gelände')
 }

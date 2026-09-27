@@ -4,6 +4,7 @@
  * IndexedDB holds the JSON. Listing never opens a snapshot, so a heavy world
  * cannot empty the archive.
  */
+import { de } from '../i18n/marker'
 import { SAVE_KEY, saveSlotDataKey } from './catalog'
 import { createBrowserObjectStore, isQuotaError } from './browserPersistence'
 
@@ -16,7 +17,7 @@ const overflowStore = createBrowserObjectStore(
   DB_NAME,
   DB_VERSION,
   STORE,
-  'Erweiterter Browser-Speicher ist hier nicht verfügbar',
+  de('Erweiterter Browser-Speicher ist hier nicht verfügbar'),
 )
 
 export const readOverflowSnapshot = (key: string): Promise<string | null> =>

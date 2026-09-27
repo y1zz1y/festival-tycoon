@@ -1,3 +1,4 @@
+import { de } from '../i18n/marker'
 import { installationIsClaimed } from './camping'
 import { bookFinance } from './finance'
 import { groundInfo, groundKey, roadGroundLimit } from './ground'
@@ -440,7 +441,7 @@ export class RoadVehicleSimulation {
           victim.streakingMinutes = 0
           victim.toplessMinutes = 0
           victim.injuryVehicleId = vehicle.id
-          victim.thought = 'Ich wurde von einem Fahrzeug angefahren!'
+          victim.thought = de('Ich wurde von einem Fahrzeug angefahren!')
           this.context.recordComplaint(victim, 'traffic-accident')
           vehicle.resumeState = vehicle.state
           vehicle.state = 'waiting'
@@ -619,8 +620,8 @@ export class RoadVehicleSimulation {
             visitor.motivation - minutes * 0.018,
           )
           visitor.thought = this.isVisitorCarHoldingNearParking(vehicle)
-            ? 'Wir warten vor dem Parkplatz, bis einer frei wird.'
-            : 'Wir fahren erstmal weiter und suchen einen freien Parkplatz.'
+            ? de('Wir warten vor dem Parkplatz, bis einer frei wird.')
+            : de('Wir fahren erstmal weiter und suchen einen freien Parkplatz.')
         }
       })
     }
@@ -2361,7 +2362,7 @@ export class RoadVehicleSimulation {
       truck.deliveryId = null
       truck.phase = 'return'
       this.context.state.festival.infrastructure.status =
-        'Ware im Depot entladen – Träger verteilen sie an die Stände'
+        de('Ware im Depot entladen – Träger verteilen sie an die Stände')
       vehicle.state = 'returning'
       const route = this.findServiceVehicleRoute(vehicle, edges)
       if (route?.length) {
@@ -3459,7 +3460,7 @@ export class RoadVehicleSimulation {
         visitor.cellX = vehicle.cell.x
         visitor.cellZ = vehicle.cell.z
         visitor.thought =
-          'Der Krankenwagen hat mich an der Garage an die Sanitäter übergeben.'
+          de('Der Krankenwagen hat mich an der Garage an die Sanitäter übergeben.')
       })
       vehicle.passengerIds = []
       vehicle.target = null
@@ -3558,7 +3559,7 @@ export class RoadVehicleSimulation {
         ]
       }
       this.context.emit()
-      return { ok: false, message: 'Der Krankenwagen war nicht mehr vorhanden und wurde bereinigt' }
+      return { ok: false, message: de('Der Krankenwagen war nicht mehr vorhanden und wurde bereinigt') }
     }
     vehicle.pendingSale = true
     if (vehicle.passengerIds.length === 0 && vehicle.state === 'responding') {
@@ -3571,7 +3572,7 @@ export class RoadVehicleSimulation {
     ) {
       this.completeAmbulanceSale(vehicle)
       this.context.emit()
-      return { ok: true, message: 'Krankenwagen verkauft' }
+      return { ok: true, message: de('Krankenwagen verkauft') }
     }
     if (vehicle.passengerIds.length === 0 && vehicle.state !== 'returning') {
       this.sendAmbulanceHome(vehicle)
@@ -3581,7 +3582,7 @@ export class RoadVehicleSimulation {
     this.context.emit()
     return {
       ok: true,
-      message: 'Krankenwagen fährt zur Garage und wird dann verkauft',
+      message: de('Krankenwagen fährt zur Garage und wird dann verkauft'),
     }
   }
 
@@ -3607,7 +3608,7 @@ export class RoadVehicleSimulation {
       visitor.rescueVehicleId = null
       visitor.injuryVehicleId = null
       visitor.state = 'sleeping'
-      visitor.thought = 'Der Krankenwagen wurde an der Garage übergeben.'
+      visitor.thought = de('Der Krankenwagen wurde an der Garage übergeben.')
     })
     for (const visitor of this.context.state.visitors) {
       if (visitor.rescueVehicleId === vehicle.id) visitor.rescueVehicleId = null
@@ -3716,7 +3717,7 @@ export class RoadVehicleSimulation {
         visitor.state = resumeState ?? 'exploring'
         visitor.targetId = resumeTargetId
         visitor.route = route
-        visitor.thought = 'Nach der Busfahrt gehe ich den Rest des Weges zu Fuß.'
+        visitor.thought = de('Nach der Busfahrt gehe ich den Rest des Weges zu Fuß.')
       } else {
         visitor.state = resumeState ?? 'exploring'
         visitor.targetId = resumeTargetId

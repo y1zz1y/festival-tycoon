@@ -5,6 +5,7 @@ import { isScenery, scenerySlot } from '../game/scenery'
 import { terrainToolMode } from '../game/terrain'
 import type { CellPosition } from '../view/WorldView'
 import type { WayType } from '../game/wayTypes'
+import { localize, plural, t } from '../i18n'
 
 export interface PathDragModes {
   editorActive: boolean
@@ -196,7 +197,9 @@ export function createPathToolController(services: PathDragServices, view: PathD
             : game.manageFestival({ type: 'wayArea', from: cell, to: cell, kind: services.getRoadType() }).ok
           if (ok) changed += 1
         }
-        services.showToast(`${changed} Straßenfelder ${modes.demolishActive ? 'entfernt' : 'gebaut'}`, changed === 0)
+        services.showToast(modes.demolishActive
+          ? plural(changed, t`${changed} Straßenfeld entfernt`, t`${changed} Straßenfelder entfernt`)
+          : plural(changed, t`${changed} Straßenfeld gebaut`, t`${changed} Straßenfelder gebaut`), changed === 0)
       } else if (ROAD_EDIT_TOOLS.has(tool)) {
         for (const cell of selectedCells) {
           const direction = game.snapshot.buildRotation as 0 | 1 | 2 | 3
@@ -210,9 +213,9 @@ export function createPathToolController(services: PathDragServices, view: PathD
           if (result.ok) changed += 1
         }
         services.showToast(
-          tool === 'trafficLight' ? `${changed} Ampel${changed === 1 ? '' : 'n'} gesetzt`
-            : tool === 'pathBarrier' ? `${changed} Schranke${changed === 1 ? '' : 'n'} gesetzt`
-              : `${changed} Straßenfelder geändert`,
+          tool === 'trafficLight' ? plural(changed, t`${changed} Ampel gesetzt`, t`${changed} Ampeln gesetzt`)
+            : tool === 'pathBarrier' ? plural(changed, t`${changed} Schranke gesetzt`, t`${changed} Schranken gesetzt`)
+              : plural(changed, t`${changed} Straßenfeld geändert`, t`${changed} Straßenfelder geändert`),
           changed === 0,
         )
       } else if (isTerrainEditTool(tool)) {
@@ -231,10 +234,10 @@ export function createPathToolController(services: PathDragServices, view: PathD
         services.placeCourseCells(selectedCells)
       } else if (tool === 'fence') {
         for (const cell of selectedCells) if (game.place('fence', cell.x, cell.z).ok) changed += 1
-        services.showToast(changed ? `${changed} Bauzaun${changed === 1 ? '' : 'e'} gesetzt` : 'Hier konnte kein Bauzaun gesetzt werden', changed === 0)
+        services.showToast(changed ? plural(changed, t`${changed} Bauzaun gesetzt`, t`${changed} Bauzäune gesetzt`) : t('Hier konnte kein Bauzaun gesetzt werden'), changed === 0)
       } else if (modes.demolishActive) {
         for (const cell of selectedCells) if (services.demolish(cell, true)) changed += 1
-        services.showToast(changed ? `${changed} Wegfeld${changed === 1 ? '' : 'er'} abgerissen` : 'Hier liegt kein Weg', changed === 0)
+        services.showToast(changed ? plural(changed, t`${changed} Wegfeld abgerissen`, t`${changed} Wegfelder abgerissen`) : t('Hier liegt kein Weg'), changed === 0)
       } else {
         for (const cell of selectedCells) {
           if (game.getPathAt(cell.x, cell.z, elevation)) continue
@@ -242,10 +245,10 @@ export function createPathToolController(services: PathDragServices, view: PathD
             cell.x, cell.z, elevation, modes.constructionType,
             modes.constructionType === 'queue' ? modes.direction : 0, 0, services.getFootType(),
           )
-          if (!result.ok) { services.showToast(`${result.message} – Bau an dieser Stelle beendet`, true); break }
+          if (!result.ok) { services.showToast(t`${localize(result.message)} – Bau an dieser Stelle beendet`, true); break }
           changed += 1
         }
-        if (changed) services.showToast(`${changed} zusammenhängende Wegfelder gebaut`)
+        if (changed) services.showToast(plural(changed, t`${changed} zusammenhängendes Wegfeld gebaut`, t`${changed} zusammenhängende Wegfelder gebaut`))
       }
       clear()
     },

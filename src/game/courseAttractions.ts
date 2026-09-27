@@ -1,3 +1,4 @@
+import { de, keep, named, numberedName } from '../i18n/marker'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import { grantAttractionFun } from './attractionFun'
 import {
@@ -54,7 +55,7 @@ export const COURSE_SPECS: Record<
   }
 > = {
   mudmasters: {
-    name: 'Mudmasters',
+    name: keep('Mudmasters'),
     icon: '🏃',
     startCost: 4200,
     price: 12,
@@ -62,7 +63,7 @@ export const COURSE_SPECS: Record<
     editorMode: 'directionArrows',
   },
   pool: {
-    name: 'Schwimmbad',
+    name: de('Schwimmbad'),
     icon: '🏊',
     startCost: 5600,
     price: 10,
@@ -70,7 +71,7 @@ export const COURSE_SPECS: Record<
     editorMode: 'directionArrows',
   },
   treeToTree: {
-    name: 'Tree-to-Tree',
+    name: keep('Tree-to-Tree'),
     icon: '🌲',
     startCost: 4800,
     price: 14,
@@ -78,7 +79,7 @@ export const COURSE_SPECS: Record<
     editorMode: 'directionArrows',
   },
   paintball: {
-    name: 'Paintball',
+    name: keep('Paintball'),
     icon: '🎯',
     startCost: 3800,
     price: 16,
@@ -86,7 +87,7 @@ export const COURSE_SPECS: Record<
     editorMode: 'palette',
   },
   waterSlide: {
-    name: 'Wasserrutsche',
+    name: de('Wasserrutsche'),
     icon: '🌊',
     startCost: 3600,
     price: 11,
@@ -135,30 +136,30 @@ export const COURSE_PIECE_CATALOG: Record<CourseKind, readonly CoursePieceKind[]
 }
 
 export const COURSE_PIECE_LABELS: Record<CoursePieceKind, string> = {
-  entrance: 'Eingang',
-  exit: 'Ausgang',
-  path: 'Weg',
-  climbWall: 'Kletterwand',
-  ropeSwing: 'Seilschwung',
-  waterDitch: 'Wassergraben',
-  crawlTunnel: 'Kriechtunnel',
-  slide: 'Rutsche',
-  ladder: 'Leiter',
-  jump: 'Sprung',
-  monkeyBars: 'Hangelstrecke',
-  poolBasin: 'Becken',
-  waterSlide: 'Wasserrutsche',
-  tree: 'Kletterbaum',
-  treeRing: 'Baumumrundung',
-  treeLadder: 'Baumleiter',
-  hangingBridge: 'Hängebrücke',
-  treeObstacle: 'Kletterhindernis',
-  treeSwing: 'Seilschwung',
-  treeZip: 'Seilbahn',
-  paintballField: 'Spielfeld',
-  cover: 'Deckung',
-  teamStartA: 'Start Blau',
-  teamStartB: 'Start Orange',
+  entrance: de('Eingang'),
+  exit: de('Ausgang'),
+  path: de('Weg'),
+  climbWall: de('Kletterwand'),
+  ropeSwing: de('Seilschwung'),
+  waterDitch: de('Wassergraben'),
+  crawlTunnel: de('Kriechtunnel'),
+  slide: de('Rutsche'),
+  ladder: de('Leiter'),
+  jump: de('Sprung'),
+  monkeyBars: de('Hangelstrecke'),
+  poolBasin: de('Becken'),
+  waterSlide: de('Wasserrutsche'),
+  tree: de('Kletterbaum'),
+  treeRing: de('Baumumrundung'),
+  treeLadder: de('Baumleiter'),
+  hangingBridge: de('Hängebrücke'),
+  treeObstacle: de('Kletterhindernis'),
+  treeSwing: de('Seilschwung'),
+  treeZip: de('Seilbahn'),
+  paintballField: de('Spielfeld'),
+  cover: de('Deckung'),
+  teamStartA: de('Start Blau'),
+  teamStartB: de('Start Orange'),
 }
 
 export const COURSE_PIECE_ICONS: Record<CoursePieceKind, string> = {
@@ -466,8 +467,8 @@ export function appendCourseAreaCell(
   x: number,
   z: number,
 ): CourseAreaCell | string {
-  if (!courseUsesArea(course.kind)) return 'Nur Schwimmbad und Paintball besitzen eine Fläche.'
-  if (courseAreaContains(course, x, z)) return 'Dieses Feld gehört bereits zur Anlage.'
+  if (!courseUsesArea(course.kind)) return de('Nur Schwimmbad und Paintball besitzen eine Fläche.')
+  if (courseAreaContains(course, x, z)) return de('Dieses Feld gehört bereits zur Anlage.')
   const cell = { x, z }
   course.areaCells.push(cell)
   return cell
@@ -496,7 +497,7 @@ export function appendCourseAreaCells(
   course: CourseAttraction,
   cells: readonly CourseAreaCell[],
 ): number | string {
-  if (!courseUsesArea(course.kind)) return 'Nur Schwimmbad und Paintball besitzen eine Fläche.'
+  if (!courseUsesArea(course.kind)) return de('Nur Schwimmbad und Paintball besitzen eine Fläche.')
   const existing = new Set(course.areaCells.map((cell) => `${cell.x}:${cell.z}`))
   const additions: CourseAreaCell[] = []
   for (const cell of cells) {
@@ -507,7 +508,7 @@ export function appendCourseAreaCells(
   }
   const combined = [...course.areaCells, ...additions]
   if (combined.length > 0 && !courseAreaCellsAreConnected(combined)) {
-    return 'Die Anlagenfläche muss zusammenhängen.'
+    return de('Die Anlagenfläche muss zusammenhängen.')
   }
   course.areaCells.push(...additions)
   return additions.length
@@ -517,7 +518,7 @@ export function removeCourseAreaCells(
   course: CourseAttraction,
   cells: readonly CourseAreaCell[],
 ): number | string {
-  if (!courseUsesArea(course.kind)) return 'Nur Schwimmbad und Paintball besitzen eine Fläche.'
+  if (!courseUsesArea(course.kind)) return de('Nur Schwimmbad und Paintball besitzen eine Fläche.')
   const removal = new Set(cells.map((cell) => `${cell.x}:${cell.z}`))
   const occupied = course.pieces.some((piece) =>
     courseSpanCells(
@@ -525,10 +526,10 @@ export function removeCourseAreaCells(
       { x: piece.endX ?? piece.x, z: piece.endZ ?? piece.z },
     ).some((cell) => removal.has(`${cell.x}:${cell.z}`)),
   )
-  if (occupied) return 'Entferne zuerst die Gegenstände und Strecken auf diesen Feldern.'
+  if (occupied) return de('Entferne zuerst die Gegenstände und Strecken auf diesen Feldern.')
   const remaining = course.areaCells.filter((cell) => !removal.has(`${cell.x}:${cell.z}`))
   if (remaining.length > 0 && !courseAreaCellsAreConnected(remaining)) {
-    return 'Die verbleibende Anlagenfläche muss zusammenhängen.'
+    return de('Die verbleibende Anlagenfläche muss zusammenhängen.')
   }
   const removed = course.areaCells.length - remaining.length
   course.areaCells = remaining
@@ -699,84 +700,43 @@ function placementAdjacency(course: CourseAttraction, kind: CoursePieceKind, x: 
   if (kind === 'tree') {
     return course.pieces.some((piece) => manhattan(piece, point) <= TREE_RANGE)
       ? null
-      : 'Bäume müssen in der Nähe des Kurses stehen.'
+      : de('Bäume müssen in der Nähe des Kurses stehen.')
   }
-  if (kind === 'treeRing') return 'Umrundungen gehören auf einen Kletterbaum.'
+  if (kind === 'treeRing') return de('Umrundungen gehören auf einen Kletterbaum.')
   if (TREE_LINKS.has(kind)) {
     const touchingTree = course.pieces.some(
       (piece) => (piece.kind === 'tree' || piece.kind === 'treeRing') && manhattan(piece, point) === 1,
     )
-    return touchingTree ? null : 'Verbindungen müssen von einem Baum zum nächsten gehen.'
+    return touchingTree ? null : de('Verbindungen müssen von einem Baum zum nächsten gehen.')
   }
   if (kind === 'treeLadder') {
     return course.pieces.some((piece) => piece.kind === 'tree' && manhattan(piece, point) <= 1)
       ? null
-      : 'Leitern müssen an einem Baum stehen.'
+      : de('Leitern müssen an einem Baum stehen.')
   }
   if (course.pieces.some((piece) => manhattan(piece, point) === 1)) return null
-  return 'Stücke müssen an den bestehenden Kurs anschließen.'
+  return de('Stücke müssen an den bestehenden Kurs anschließen.')
 }
 
 export function isCourseReadyToOperate(course: CourseAttraction): boolean {
   return validateCourse(course) === null
 }
 
-export function formatCourseInspect(
-  course: CourseAttraction,
-  ridesOfferActive: boolean,
-): {
-  icon: string
-  typeLabel: string
-  name: string
-  status: string
-  lines: { label: string; value: string }[]
-} {
-  const spec = COURSE_SPECS[course.kind]
-  const issue = validateCourse(course)
-  const status = issue
-    ? issue
-    : !course.operating
-      ? `${spec.name} ist geschlossen.`
-      : !ridesOfferActive
-        ? 'Nach Tagesplan derzeit geschlossen.'
-        : course.kind === 'paintball' && course.match
-          ? `Match läuft · ${course.match.scoreA}:${course.match.scoreB}`
-          : course.riders.length > 0
-            ? `${course.riders.length} Gäste unterwegs`
-            : `${spec.name} ist geöffnet.`
-  const lines: { label: string; value: string }[] = [
-    { label: 'Betrieb', value: course.operating ? 'Geöffnet' : 'Geschlossen' },
-    { label: 'Stücke', value: String(course.pieces.length) },
-  ]
-  if (course.areaCells.length > 0) {
-    lines.push({ label: 'Fläche', value: `${course.areaCells.length} Felder` })
-  }
-  lines.push(
-    { label: 'Gäste', value: `${course.riders.length}/${courseCapacityFor(course)}` },
-    { label: 'Warteschlange', value: String(course.queue.length) },
-    { label: 'Unterhalt', value: `${courseHourlyUpkeep(course, false)} €/h` },
-  )
-  if (course.kind === 'paintball') {
-    lines.push({ label: 'Personen pro Team', value: String(courseTeamSize(course)) })
-  }
-  return { icon: spec.icon, typeLabel: spec.name, name: course.name, status, lines }
-}
-
 function validateWaterSlide(course: CourseAttraction): string | null {
   const track = courseTrackPieces(course)
-  if (track[0]?.kind !== 'ladder') return 'Die Wasserrutsche beginnt immer mit Leitern.'
+  if (track[0]?.kind !== 'ladder') return de('Die Wasserrutsche beginnt immer mit Leitern.')
   if (!track.some((piece) => piece.kind === 'waterSlide')) {
-    return 'Die Wasserrutsche braucht mindestens ein Rutschstück.'
+    return de('Die Wasserrutsche braucht mindestens ein Rutschstück.')
   }
   if (track.at(-1)?.kind === 'ladder') {
-    return 'Leitern gehören nur an den Start, nicht an den Auslauf.'
+    return de('Leitern gehören nur an den Start, nicht an den Auslauf.')
   }
   const firstSlide = track.findIndex((piece) => piece.kind === 'waterSlide')
   if (track.slice(firstSlide).some((piece) => piece.kind === 'ladder')) {
-    return 'Leitern gehören nur an den Start, nicht an den Auslauf.'
+    return de('Leitern gehören nur an den Start, nicht an den Auslauf.')
   }
   if (!course.pieces.some((piece) => piece.kind === 'poolBasin')) {
-    return 'Die Wasserrutsche braucht einen Auslauf mit Wasser.'
+    return de('Die Wasserrutsche braucht einen Auslauf mit Wasser.')
   }
   return null
 }
@@ -798,7 +758,7 @@ function validateSlideLanding(course: CourseAttraction): string | null {
   )
   for (const slide of terminalSlides) {
     if (!slideLandsInBasin(course, slide)) {
-      return 'Der Wasserrutschen-Auslauf muss auf ein Becken zielen.'
+      return de('Der Wasserrutschen-Auslauf muss auf ein Becken zielen.')
     }
   }
   return null
@@ -807,23 +767,23 @@ function validateSlideLanding(course: CourseAttraction): string | null {
 export function validateCourse(course: CourseAttraction): string | null {
   const catalog = COURSE_PIECE_CATALOG[course.kind]
   if (course.pieces.some((piece) => !catalog.includes(piece.kind))) {
-    return 'Dieses Stück gehört nicht zu diesem Kurs.'
+    return de('Dieses Stück gehört nicht zu diesem Kurs.')
   }
   const entrance = courseEntrance(course)
   const exit = courseExit(course)
   if (courseUsesArea(course.kind) && course.areaCells.length < 4) {
-    return 'Markiere zuerst eine zusammenhängende Anlagenfläche.'
+    return de('Markiere zuerst eine zusammenhängende Anlagenfläche.')
   }
   if (courseUsesArea(course.kind) && !courseAreaCellsAreConnected(course.areaCells)) {
-    return 'Die Anlagenfläche muss zusammenhängen.'
+    return de('Die Anlagenfläche muss zusammenhängen.')
   }
-  if (!entrance) return 'Der Kurs braucht einen Eingang.'
-  if (!exit) return 'Der Kurs muss am Ausgang enden.'
+  if (!entrance) return de('Der Kurs braucht einen Eingang.')
+  if (!exit) return de('Der Kurs muss am Ausgang enden.')
   if (course.kind === 'mudmasters' && !course.pieces.some((piece) => PARKOUR_OBSTACLES.has(piece.kind))) {
-    return 'Der Parcours braucht mindestens ein Hindernis.'
+    return de('Der Parcours braucht mindestens ein Hindernis.')
   }
   if (course.kind === 'pool' && !course.pieces.some((piece) => piece.kind === 'poolBasin')) {
-    return 'Lege mindestens ein Schwimmbecken an.'
+    return de('Lege mindestens ein Schwimmbecken an.')
   }
   if (course.kind === 'waterSlide') {
     const waterIssue = validateWaterSlide(course)
@@ -834,16 +794,16 @@ export function validateCourse(course: CourseAttraction): string | null {
     if (landingIssue) return landingIssue
   }
   if (course.kind === 'treeToTree' && !course.pieces.some((piece) => piece.kind === 'tree')) {
-    return 'Platziere mindestens einen Kletterbaum.'
+    return de('Platziere mindestens einen Kletterbaum.')
   }
   if (course.kind === 'paintball') {
-    if (!course.pieces.some((piece) => piece.kind === 'teamStartA')) return 'Paintball braucht Start Blau.'
-    if (!course.pieces.some((piece) => piece.kind === 'teamStartB')) return 'Paintball braucht Start Orange.'
+    if (!course.pieces.some((piece) => piece.kind === 'teamStartA')) return de('Paintball braucht Start Blau.')
+    if (!course.pieces.some((piece) => piece.kind === 'teamStartB')) return de('Paintball braucht Start Orange.')
     if (
       !courseAreaBoundaryContains(course, entrance.x, entrance.z) ||
       !courseAreaBoundaryContains(course, exit.x, exit.z)
     ) {
-      return 'Ein- und Ausgang gehören an das Spielfeld.'
+      return de('Ein- und Ausgang gehören an das Spielfeld.')
     }
     return null
   }
@@ -862,9 +822,9 @@ export function validateCourse(course: CourseAttraction): string | null {
         if (!seen.has(other.id) && piecesAreLinked(current, other)) stack.push(other.id)
       }
     }
-    return seen.has(exit.id) ? null : 'Der Pfad muss am Ausgang enden.'
+    return seen.has(exit.id) ? null : de('Der Pfad muss am Ausgang enden.')
   }
-  if (track.at(-1)?.id !== exit.id) return 'Der Pfad muss am Ausgang enden.'
+  if (track.at(-1)?.id !== exit.id) return de('Der Pfad muss am Ausgang enden.')
   return trackContinuityIssue(track)
 }
 
@@ -887,7 +847,7 @@ function trackPiecesJoin(previous: CoursePiece, current: CoursePiece): boolean {
 function trackContinuityIssue(track: readonly CoursePiece[]): string | null {
   for (let index = 1; index < track.length; index += 1) {
     if (!trackPiecesJoin(track[index - 1]!, track[index]!)) {
-      return 'Die Strecke besitzt eine Unterbrechung.'
+      return de('Die Strecke besitzt eine Unterbrechung.')
     }
   }
   return null
@@ -1055,19 +1015,19 @@ export function describeCourseAppendIssue(
   elevation = COURSE_PIECE_ELEVATION[kind],
 ): string | null {
   if (!COURSE_PIECE_CATALOG[course.kind].includes(kind)) {
-    return 'Dieses Stück gehört nicht zu diesem Kurs.'
+    return de('Dieses Stück gehört nicht zu diesem Kurs.')
   }
   if (course.kind === 'waterSlide' && kind === 'ladder') {
     const ladderIssue = describeWaterSlideLadderIssue(course, x, z)
     if (ladderIssue) return ladderIssue
   }
   if (courseUsesArea(course.kind)) {
-    if (!courseAreaContains(course, x, z)) return 'Das Objekt muss innerhalb der Anlagenfläche stehen.'
+    if (!courseAreaContains(course, x, z)) return de('Das Objekt muss innerhalb der Anlagenfläche stehen.')
     if (
       (kind === 'entrance' || kind === 'exit') &&
       !courseAreaBoundaryContains(course, x, z)
     ) {
-      return 'Ein- und Ausgang müssen auf dem Rand der Anlagenfläche liegen.'
+      return de('Ein- und Ausgang müssen auf dem Rand der Anlagenfläche liegen.')
     }
   }
   const occupants = occupantsAt(course, x, z)
@@ -1079,7 +1039,7 @@ export function describeCourseAppendIssue(
     courseUsesArea(course.kind) && isCourseTrackPiece(course.kind, kind)
   if (occupants.length > 0 && !treeDestination && !areaTrackDestination) {
     if (!occupants.every((piece) => canStackCoursePiece(piece.kind, kind))) {
-      return 'Dieses Feld ist schon belegt.'
+      return de('Dieses Feld ist schon belegt.')
     }
   } else if (
     course.pieces.length > 0 &&
@@ -1090,26 +1050,26 @@ export function describeCourseAppendIssue(
     if (issue) return issue
   }
   if (kind === 'entrance' && course.pieces.some((piece) => piece.kind === 'entrance')) {
-    return 'Es gibt schon einen Eingang.'
+    return de('Es gibt schon einen Eingang.')
   }
   if (kind === 'exit' && course.pieces.some((piece) => piece.kind === 'exit')) {
-    return 'Es gibt schon einen Ausgang.'
+    return de('Es gibt schon einen Ausgang.')
   }
   if (kind === 'teamStartA' && course.pieces.some((piece) => piece.kind === 'teamStartA')) {
-    return 'Start Blau ist schon gesetzt.'
+    return de('Start Blau ist schon gesetzt.')
   }
   if (kind === 'teamStartB' && course.pieces.some((piece) => piece.kind === 'teamStartB')) {
-    return 'Start Orange ist schon gesetzt.'
+    return de('Start Orange ist schon gesetzt.')
   }
   const trackEnd = courseTrackEnd(course)
   const isTrack = isCourseTrackPiece(course.kind, kind)
   if (isTrack && kind !== defaultFirstCoursePiece(course.kind) && !trackEnd) {
     return course.kind === 'waterSlide'
-      ? 'Setze zuerst die Leiter am Start der Rutsche.'
-      : 'Setze zuerst den Eingang der Strecke.'
+      ? de('Setze zuerst die Leiter am Start der Rutsche.')
+      : de('Setze zuerst den Eingang der Strecke.')
   }
   if (course.kind === 'treeToTree' && isTreeCourseDestination(kind) && !treeDestination) {
-    return 'Dieses Streckenelement muss an einem Kletterbaum enden.'
+    return de('Dieses Streckenelement muss an einem Kletterbaum enden.')
   }
   if (
     isTrack &&
@@ -1119,7 +1079,7 @@ export function describeCourseAppendIssue(
     Math.abs(trackEnd.elevation - elevation) < 0.01 &&
     !(course.kind === 'waterSlide' && kind === 'ladder')
   ) {
-    return 'Das Streckenelement braucht einen anderen Endpunkt.'
+    return de('Das Streckenelement braucht einen anderen Endpunkt.')
   }
   return null
 }
@@ -1157,9 +1117,9 @@ export function listCourseDirectionChoices(
         occupantsAt(course, target.x, target.z).some((piece) => piece.kind === 'tree')
       )
     const issue = alreadyBuilt
-      ? 'In dieser Richtung liegt schon ein Stück.'
+      ? de('In dieser Richtung liegt schon ein Stück.')
       : occupied
-        ? 'Dieses Feld ist schon belegt.'
+        ? de('Dieses Feld ist schon belegt.')
         : describeCourseAppendIssue(course, kind, target.x, target.z, elevation)
     return { heading, ...target, enabled: issue === null, issue }
   })
@@ -1169,12 +1129,12 @@ function describeWaterSlideLadderIssue(course: CourseAttraction, x: number, z: n
   if (course.pieces.some((piece) =>
     piece.kind === 'waterSlide' || piece.kind === 'poolBasin' || piece.kind === 'exit'
   )) {
-    return 'Leitern gehören nur an den Start der Rutsche, nicht an den Auslauf.'
+    return de('Leitern gehören nur an den Start der Rutsche, nicht an den Auslauf.')
   }
   if (course.pieces.length === 0) return null
   const top = courseTrackEnd(course)
   if (top && top.x === x && top.z === z) return null
-  return 'Setze die nächste Leiter auf die bestehende, um höher zu kommen.'
+  return de('Setze die nächste Leiter auf die bestehende, um höher zu kommen.')
 }
 
 function nextLadderStackElevation(course: CourseAttraction, x: number, z: number): number {
@@ -1226,10 +1186,10 @@ export function appendCoursePiece(
 
 export function removeLastCoursePiece(course: CourseAttraction): CoursePiece | string {
   if (course.riders.length > 0 || course.queue.length > 0) {
-    return 'Während Gäste auf dem Kurs sind, geht das nicht.'
+    return de('Während Gäste auf dem Kurs sind, geht das nicht.')
   }
   const piece = course.pieces.pop()
-  return piece ?? 'Nichts zum Entfernen.'
+  return piece ?? de('Nichts zum Entfernen.')
 }
 
 export function normalizeCourses(raw: unknown): CourseAttraction[] {
@@ -1322,7 +1282,7 @@ function splitLegacyPoolSlides(courses: readonly CourseAttraction[]): CourseAttr
       result.push({
         id,
         kind: 'waterSlide',
-        name: `${course.name} Rutsche ${index + 1}`,
+        name: numberedName(de`${named(course.name)} Rutsche`, index + 1),
         operating: course.operating,
         price: course.price,
         pieces,
@@ -1394,7 +1354,7 @@ function admitCourseQueue(
       course.queue.splice(readyIndex, 1)
       visitor.state = 'exploring'
       visitor.targetId = null
-      visitor.thought = 'Das ist mir zu teuer.'
+      visitor.thought = de('Das ist mir zu teuer.')
       continue
     }
     if (!charge(visitor, course.price)) {
@@ -1405,7 +1365,7 @@ function admitCourseQueue(
     visitor.state = 'riding'
     visitor.targetId = course.id
     visitor.route = []
-    visitor.thought = `Los geht's: ${course.name}!`
+    visitor.thought = de`Los geht's: ${named(course.name)}!`
     visitor.x = entrance.x + 0.5
     visitor.z = entrance.z + 0.5
     visitor.cellX = entrance.x
@@ -1445,7 +1405,7 @@ function stepPaintball(
       }
       for (const rider of course.riders) {
         const visitor = visitors.find((entry) => entry.id === rider.visitorId)
-        if (visitor) visitor.thought = 'Paintball — die Runde läuft!'
+        if (visitor) visitor.thought = de('Paintball — die Runde läuft!')
       }
     }
     return
@@ -1460,7 +1420,7 @@ function stepPaintball(
     const visitor = visitors.find((entry) => entry.id === rider.visitorId)
     if (!visitor) continue
     visitor.thought =
-      winner === rider.team ? 'Wir haben das Paintball-Match gewonnen!' : 'Das Paintball-Match ist vorbei.'
+      winner === rider.team ? de('Wir haben das Paintball-Match gewonnen!') : de('Das Paintball-Match ist vorbei.')
     visitor.state = 'exploring'
     visitor.targetId = null
     grantAttractionFun(visitor, SIMULATION_CONFIG.courses.funGain)
@@ -1486,20 +1446,20 @@ function pieceHeight(piece: CoursePiece): number {
 }
 
 const COURSE_RIDER_THOUGHTS: Partial<Record<CoursePieceKind, string>> = {
-  poolBasin: 'Ich schwimme im Becken.',
-  waterDitch: 'Durch den Wassergraben!',
-  treeRing: 'Einmal um den Baum.',
-  climbWall: 'Hoch über die Kletterwand!',
-  ropeSwing: 'Festhalten und schwingen!',
-  treeSwing: 'Festhalten und schwingen!',
-  crawlTunnel: 'Durch den Kriechtunnel.',
-  ladder: 'Die Leiter hinauf!',
-  treeLadder: 'Die Leiter hinauf!',
-  jump: 'Absprung!',
-  monkeyBars: 'Weiterhangeln!',
-  treeObstacle: 'Weiterhangeln!',
-  hangingBridge: 'Die Brücke schwankt!',
-  treeZip: 'Mit der Seilbahn zum nächsten Baum!',
+  poolBasin: de('Ich schwimme im Becken.'),
+  waterDitch: de('Durch den Wassergraben!'),
+  treeRing: de('Einmal um den Baum.'),
+  climbWall: de('Hoch über die Kletterwand!'),
+  ropeSwing: de('Festhalten und schwingen!'),
+  treeSwing: de('Festhalten und schwingen!'),
+  crawlTunnel: de('Durch den Kriechtunnel.'),
+  ladder: de('Die Leiter hinauf!'),
+  treeLadder: de('Die Leiter hinauf!'),
+  jump: de('Absprung!'),
+  monkeyBars: de('Weiterhangeln!'),
+  treeObstacle: de('Weiterhangeln!'),
+  hangingBridge: de('Die Brücke schwankt!'),
+  treeZip: de('Mit der Seilbahn zum nächsten Baum!'),
 }
 
 function coursePiecePosition(
@@ -1553,8 +1513,8 @@ function placePaintballFighter(course: CourseAttraction, rider: CourseRider, vis
   visitor.cellZ = pad.z
   visitor.y = 0.05
   visitor.thought = course.match
-    ? rider.team === 'a' ? 'Team Blau, Deckung!' : 'Team Orange, vor!'
-    : 'Ich warte am Teamstart auf die nächste Runde.'
+    ? rider.team === 'a' ? de('Team Blau, Deckung!') : de('Team Orange, vor!')
+    : de('Ich warte am Teamstart auf die nächste Runde.')
 }
 
 function launchRider(piece: CoursePiece, rider: CourseRider): void {
@@ -1610,7 +1570,7 @@ function resolveLanding(
       : undefined
     if (continuation) rider.pieceId = continuation.id
     else if (basin) rider.pieceId = basin.id
-    visitor.thought = 'Sauber im Wasser gelandet!'
+    visitor.thought = de('Sauber im Wasser gelandet!')
     return 'safe'
   }
   options.injure({
@@ -1621,7 +1581,7 @@ function resolveLanding(
   })
   visitor.state = 'injured'
   visitor.targetId = null
-  visitor.thought = 'Ich bin neben dem Becken aufgeschlagen!'
+  visitor.thought = de('Ich bin neben dem Becken aufgeschlagen!')
   return 'injured'
 }
 
@@ -1646,7 +1606,7 @@ function advanceAirborne(
     visitor.cellZ = Math.floor(visitor.z)
     if ((rider.airY ?? 0) <= 0.08) return resolveLanding(course, rider, visitor, options)
   }
-  visitor.thought = 'Ich fliege von der Rutsche!'
+  visitor.thought = de('Ich fliege von der Rutsche!')
   return 'flying'
 }
 
@@ -1718,7 +1678,7 @@ function advanceCourseRiders(
       visitor.state = 'exploring'
       visitor.targetId = null
       grantAttractionFun(visitor, SIMULATION_CONFIG.courses.funGain)
-      visitor.thought = `${course.name} war großartig!`
+      visitor.thought = de`${named(course.name)} war großartig!`
       continue
     }
     const next = pickNextPiece(course, piece, rng)
@@ -1753,20 +1713,4 @@ function pickNextPiece(
 export function releaseCourseVisitor(course: CourseAttraction, visitorId: string): void {
   course.queue = course.queue.filter((id) => id !== visitorId)
   course.riders = course.riders.filter((rider) => rider.visitorId !== visitorId)
-}
-
-export function courseBuilderHint(kind: CourseKind): string {
-  if (kind === 'mudmasters') {
-    return 'Am Streckenende erscheinen Richtungspfeile in noch freie Nachbarfelder. Ein Klick setzt das nächste Stück. Wege lassen sich zusätzlich ziehen; Hindernisse verbinden den bisherigen Endpunkt mit dem neuen. Der Pfad muss am Ausgang enden.'
-  }
-  if (kind === 'pool') {
-    return 'Zuerst die Anlagenfläche ziehen, dann Becken und Zugänge darin setzen. Für Weg und Rutsche zeigen Pfeile die freien Nachbarfelder; der Auslauf muss im Becken landen.'
-  }
-  if (kind === 'treeToTree') {
-    return 'Bäume frei setzen. Am Streckenende zeigen Pfeile freie Nachbarfelder; ein Klick setzt das nächste Stück. Längere Spannweiten weiterhin per Zielbaum. Der Pfad endet am Ausgang.'
-  }
-  if (kind === 'waterSlide') {
-    return 'Die Rutsche beginnt immer mit Leitern. Weitere Leitern auf dieselbe Kachel setzen, um Höhe zu gewinnen. Danach die Rutsche per Richtungspfeil anbauen; das Ende ist der Auslauf mit Wasser, keine Leiter.'
-  }
-  return 'Zuerst die Spielfläche ziehen. Deckungen und beide Teamstarts kommen hinein; Ein- und Ausgang liegen am Flächenrand.'
 }

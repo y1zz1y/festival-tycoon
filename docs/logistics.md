@@ -23,16 +23,17 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Automatische Träger | `src/game/depotCarriers.ts` | `updateDepotCarriers` |
 | Bude: alle Seiten | `src/game/shopAccess.ts` | `isShopServiceKind`, `CARDINAL_OFFSETS` |
 | Müllablagen / Eimer / versiegelte Container | `src/game/waste.ts` | `designateWasteDumps`, `findNearestWasteDump`, `connectedWasteDumpStats`, `wasteDropGoals`, `isSealedWasteContainer` |
-| Fahrzeug-Infofenster | `src/game/logistics.ts` | `formatRoadVehicleInspectLoad`, `roadVehicleCarriesPeople` |
+| Fahrzeug-Infofenster | `src/game/logisticsText.ts` (Client-Text), `src/game/logistics.ts` | `describeRoadVehicleActivity`, `describeRoadVehicleDestination`, `formatRoadVehicleInspectLoad` (übersetzt mit `t`); `roadVehicleCarriesPeople`, `roadVehicleWasteCapacity`, `ROAD_VEHICLE_KIND_LABELS` (kanonisches Deutsch, UI zeigt es mit `localize`) |
 | Boden für Straßen/Depots | `src/game/ground.ts` | Tragfähigkeit, Nässe, Tempo-Limits |
 | Festival-Bestellungen | `src/game/festivalManagement.ts` | `orderGoods`, Supplies |
 | Straßen-UI | `src/logisticsUI.ts` | Geländeplaner, Straßenbelag; Fußweg-Art-Hold in `#path-construction` |
-| Straßen-/Depot-Darstellung | `src/view/LogisticsView.ts`, `src/view/SupplyChainView.ts`, `src/view/logisticsModels.ts` | Retro-ModelKit: Haltestellen, Depots, Anlieferung, Lager; Fahrzeuge. Parkplätze: graue Asphaltfläche in der normalen Ansicht; Belegung (grün/orange, P) nur als Bauhelfer |
-| Träger-Figuren | `src/view/carrierModels.ts` | Gäste-Personen-Teile, Warnweste, Handkarren, Kistenstapel; Picking über `staffId` |
+| Straßen-/Depot-Darstellung | `src/view/LogisticsView.ts`, `src/view/SupplyChainView.ts`, `src/view/logisticsModels.ts` | Retro-ModelKit: Haltestellen, Depots, Anlieferung, Lager; Fahrzeuge als Instanz-Batches je Geometrie (`roadVehicleParts`, `roadVehicleBatchGeometries`, `roadVehicleBatchMaterial`; `userData.vehicleIds`). Füllstandsbalken und Personaltore je ein Instanz-Batch. Parkplätze: graue Asphaltfläche in der normalen Ansicht; Belegung (grün/orange, P) nur als Bauhelfer |
+| Träger-Figuren | `src/view/carrierModels.ts`, `src/view/crewInstances.ts` | Gäste-Personen-Teile, Warnweste, Handkarren, Kistenstapel; im Spiel über den geteilten Crew-Pool gezeichnet, Picking über `staffIds[instanceId]` |
 | StVO-Fahrtrichtungspfeil | `src/view/roadDirectionArrow.ts` | Weiße Markierung (`paint`) auf Straße und in der Vorschau; kompaktes Overlay (`overlay`) |
 | Ampeln und Wegschranken | `src/game/accessControl.ts` | Slots, Tageszeit, Festivalphase, Tagesplan, Sensoren, Gebiet, `evaluateAccessSignal` |
+| Ampel-/Schranken-Texte | `src/game/accessControlText.ts` (Client-Text) | `ACCESS_SCHEDULE_TIME_LABELS`, `previewLabel`, `areaPreviewText` (`t`, `plural`, `joinParts`) |
 | Trennlinie / Kante sperren | `src/game/GameState.ts` | `toggleRoadSeparator`, `road.blockedEdges` |
-| Ampel-/Schranken-Darstellung | `src/view/AccessControlView.ts` | eine Richtung, Grün/Rot bzw. offen/zu |
+| Ampel-/Schranken-Darstellung | `src/view/AccessControlView.ts` | eine Richtung, Grün/Rot bzw. offen/zu; sechs Instanz-Batches (`accessIds`), Signalwechsel schreibt nur Lampen und Flügel um |
 | Fahrzeug-Interpolation | `src/view/transportMotion.ts` | nur Darstellung |
 | Balancing | `src/game/simulationConfig.ts` | `logistics` (`visitorCarCapacity` 6 = max. Anreisegruppe, `groupSizeWeights` 1–6, `busCapacity` 40 = Festivalbus-Fahrgäste, `busStopDwellMinutes` 2, `busBoardingRadiusTiles` 4, `busBoardsPerTick` 40), `waste` |
 
@@ -306,10 +307,34 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   Vorschau (über Autos und Baufeld) und eine kompakte Laufanimation
   auf gesetzten Einbahnen.
 - Gebäude und Fahrzeuge nutzen gemergte ModelKit-Meshes
-  (`logisticsModels.ts`): ein Draw-Call pro Instanz, geteilte Geometrie.
+  (`logisticsModels.ts`) mit geteilter Geometrie. Gebäude laufen durch
+  `batchRetroBuildings`. Straßenfahrzeuge zeichnet `LogisticsView` als
+  `InstancedMesh` je Geometrie-Identität (höchstens zehn Batches, egal wie
+  viele Fahrzeuge): jede Fahrzeugart ein Batch, Besucherautos als weiße
+  Lackhülle mit Instanzfarbe (`visitorCarColor`) plus eine gemeinsame
+  Detailgeometrie; das silberne Auto hat eine eigene Hülle mit dunklerem Dach.
+  Pro Fahrzeug bleibt nur eine Pose (Position, Gierwinkel) mit derselben
+  Glättung wie zuvor; eingestellte (`housed`) Fahrzeuge werden nicht
+  geschrieben und fangen deshalb keine Klicks. `pickVehicle` liest
+  `vehicleIds[instanceId]`; Planer- und Inspektionslinie bleiben außerhalb
+  der Batches. `createRoadVehicleModel` bleibt für Vorschau, Tests und die
+  Lieferwagen der Warenkette.
+- `LogisticsView.update` baut Straßenindex und statischen Fingerprint nur
+  noch neu, wenn `WorldView` Datenänderung meldet (`structureChanged`,
+  also `dataChanged`); vorher lief das jedes Bild (~0,85 ms/Frame auf
+  festivalmittel).
 - Träger nutzen `carrierModels.ts`: dieselben Personen-Teile wie Gäste,
   plus eine geteilte Warnwesten-Geometrie, einen gemergten Handkarren und
-  einen Kistenstapel (`load`). Kein Mesh pro Latte oder Schloss.
+  einen Kistenstapel (`load`). Kein Mesh pro Latte oder Schloss. Im Spiel
+  schreibt `SupplyChainView.animate` sie in den Crew-Pool
+  (`crewInstances.ts`), auch während der Pause (dann ohne Bewegung und
+  Beinschwung). Lieferwagen ohne Straßenfahrzeug-Spiegel bleiben ein
+  einzelnes Modell; ihr Fahrer steigt nur bei `stuck` als Crew-Figur aus.
+- Füllstandsbalken sind ein Instanz-Batch aus einem Einheitswürfel (Rahmen
+  und Füllung je eine Instanz, Instanzfarbe rot/gelb/grün); sie drehen zur
+  Kamera und werden nur neu geschrieben, wenn sich Daten oder die
+  Kameradrehung ändern. Personaltore sind ein Instanz-Batch, Depotgebäude
+  laufen durch `batchRetroBuildings`.
   Fahrzeugnasen zeigen lokal nach **+Z** (wie `facing` /
   `atan2(dx, dz)`). Besucherautos wählen die Lackfarbe deterministisch aus
   `VISITOR_CAR_COLORS` über die Fahrzeug-ID.
@@ -374,6 +399,15 @@ werden im Tick korrigiert. Ausparken richtet die Nase beim Einfahren aus.
 ## Tests
 
 `tests/carrierModels.ts` (geteilte Gästeteile, Warnweste, Karren).
+`tests/renderBatching.ts` (Fahrzeug-Batches: höchstens zehn für 204 oder
+1.000 Fahrzeuge, eingestellte Fahrzeuge nicht instanziert, `vehicleIds`
+beim Klick, geparkte rasten ein, fahrende gleiten; Instanz-Träger deckt sich
+mit `createPorterModel`, Lackhülle plus Details decken das ganze Auto;
+Ampeln/Tore in höchstens sechs Batches, Signalwechsel behält die Batches,
+Bodenhöhe hebt die Ampel; festivalmittel-Zensus).
+`tests/regression.ts` (Träger gleiten zwischen Feldern und halten in der
+Pause; Füllstandsbalken als Instanzen: vier je Depot, zur Kamera gedreht,
+ohne Kameradrehung kein Neuschreiben, ausgeblendet nicht gedreht).
 `tests/simulationModules.ts` (Logistik-Phasenfolge, Tick-Indizes,
 Entfernungsabschluss, zustandslose Fahrzeughelfer und Besitz der
 Straßenfahrzeugfamilien durch `RoadVehicleSimulation`).

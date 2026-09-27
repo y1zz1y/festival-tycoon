@@ -1,3 +1,4 @@
+import { de } from '../i18n/marker'
 import { CrowdingSystem } from './crowding'
 import { collectSeatedPassengerIds } from './logistics'
 import { SIMULATION_CONFIG } from './simulationConfig'
@@ -192,7 +193,7 @@ export class VisitorCrowdingSimulation {
       ) {
         visitor.emotion = 'sad'
         visitor.emotionMinutes = 60
-        visitor.thought = 'Unter diesen Bedingungen habe ich keine Lust mehr.'
+        visitor.thought = de('Unter diesen Bedingungen habe ich keine Lust mehr.')
         if (visitor.crowding >= 70) context.recordComplaint(visitor, 'overcrowding')
         if (litterPressure > 0 || visitor.localAttractiveness < -20) {
           context.recordComplaint(visitor, 'dirty-grounds')
@@ -412,7 +413,7 @@ export class VisitorCrowdingSimulation {
     visitor.concertId = null
     visitor.emotion = 'angry'
     visitor.emotionMinutes = 20
-    visitor.thought = 'Massenpanik! Ich muss hier raus!'
+    visitor.thought = de('Massenpanik! Ich muss hier raus!')
     this.ensurePanicFleeRoute(visitor)
   }
 
@@ -426,6 +427,6 @@ export class VisitorCrowdingSimulation {
     visitor.route = []
     visitor.emotion = 'happy'
     visitor.emotionMinutes = 10
-    visitor.thought = 'Das Gedränge lässt nach. Kurz durchatmen, dann geht es weiter.'
+    visitor.thought = de('Das Gedränge lässt nach. Kurz durchatmen, dann geht es weiter.')
   }
 }

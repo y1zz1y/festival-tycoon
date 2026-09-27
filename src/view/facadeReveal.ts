@@ -19,6 +19,7 @@ export class FacadeReveal {
       shader.uniforms.facadeCenter = this.center
       shader.uniforms.facadeStrength = this.strength
       shader.vertexShader = 'varying vec3 facadeWorldPosition;\n' + shader.vertexShader
+      // i18n-ignore: GLSL shader source, not text (the checker reads <project_vertex> as markup)
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
         vec4 facadeWorld = vec4(transformed, 1.0);
         #ifdef USE_INSTANCING
@@ -26,6 +27,7 @@ export class FacadeReveal {
         #endif
         facadeWorldPosition = (modelMatrix * facadeWorld).xyz;`)
       shader.fragmentShader = 'varying vec3 facadeWorldPosition;\nuniform vec3 facadeCenter;\nuniform float facadeStrength;\n' + shader.fragmentShader
+      // i18n-ignore: GLSL shader source, not text
       shader.fragmentShader = shader.fragmentShader.replace('#include <alphahash_fragment>', `
         float revealArea = 1.0 - smoothstep(1.0, 2.5, distance(facadeWorldPosition.xz, facadeCenter.xz));
         diffuseColor.a *= 1.0 - 0.9 * facadeStrength * revealArea;

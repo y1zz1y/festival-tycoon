@@ -13,6 +13,7 @@ vollen Tages mit den aktuell berechenbaren Fixkosten.
 | Szenario-Startgeld / Schulden | `src/game/scenario.ts`, `src/game/snapshotBootstrap.ts`, `src/game/scenarioFile.ts` | `startingMoney`, `startingLoan`; Editor: Ausgaben werden nicht gebucht |
 | Zustands-API und laufende Kosten | `src/game/GameState.ts` | `GameState.financeOverview`, `GameState.manageLoan`, `GameState.financeForecast` |
 | Aufschlüsselung der Kostenzeilen | `src/game/financeBreakdown.ts` | `financeCostBreakdown` |
+| Spalten- und Postennamen (Texte) | `src/game/finance.ts`, `src/game/financeBreakdown.ts` | `FINANCE_CATEGORY_NAMES` (kanonisches Deutsch; `Gelände` als `dc('finance', …)`, die UI zeigt jede Spalte mit `localize(name, 'finance')`), `FINANCE_BREAKDOWN_SECTION_NAMES`, Hinweise und Posten als `de` (Postennamen mit `localizeName`, Bands wörtlich); Übersetzungen in `src/i18n/en/operations.ts` |
 | Leerlauf-/Bühnen-/Kurs-Unterhalt | `src/game/upkeep.ts` | `buildingHourlyUpkeep`, `coasterHourlyUpkeep`, `courseHourlyUpkeep`, `festivalIsLive`, `venueUpkeepIdle` |
 | Finanzfenster | `src/main.ts`, `src/ui/financePanel.ts` | `updateFinancePanel`, `renderFinanceLedger` |
 | Szenario-Finanzziele, Insolvenz | `src/game/scenarioGoals.ts` | `updateScenarioProgress`, `updateInsolvency`, `isInsolvent` (Guthaben unter null, das der freie Kreditrahmen `loanLimit` nicht deckt); Regeln in [scenarios.md](scenarios.md) |
@@ -46,6 +47,11 @@ vollen Tages mit den aktuell berechenbaren Fixkosten.
   gebuchte Gagen. Die Tagesbeträge von Betrieb, Personal und Zinsen
   entsprechen der Spalte **Prognose morgen**. Die Simulation bucht weiter
   nur Kategoriesummen.
+- Anzeige (`src/ui/financePanel.ts`): Beträge über `formatMoney` mit eigenem
+  Vorzeichen (`−1.234 €` / `−€1,234`), Kategorien über
+  `localize(name, 'finance')` (Homonym `Gelände`), Abschnitte und Hinweise über
+  `localize`, Posten über `localizeName` mit `localize` als Rückfall (die Zeile zum
+  offenen Darlehen ist ein Satz mit Zahl).
 
 ## Tests
 

@@ -1,3 +1,5 @@
+import { de } from '../i18n/marker'
+
 export type BrowserObjectStore = {
   get<T>(key: IDBValidKey): Promise<T | undefined>
   put<T>(key: IDBValidKey, value: T): Promise<void>
@@ -19,7 +21,7 @@ export function createBrowserObjectStore(
   databaseName: string,
   version: number,
   storeName: string,
-  unavailableMessage = 'IndexedDB nicht verfügbar',
+  unavailableMessage: string = de('IndexedDB nicht verfügbar'),
 ): BrowserObjectStore {
   const open = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
@@ -42,12 +44,12 @@ export function createBrowserObjectStore(
   ): Promise<T> => open().then((db) => new Promise<T>((resolve, reject) => {
     const tx = db.transaction(storeName, mode)
     const operation = run(tx.objectStore(storeName))
-    operation.onerror = () => reject(operation.error ?? new Error('IndexedDB-Zugriff fehlgeschlagen'))
+    operation.onerror = () => reject(operation.error ?? new Error(de('IndexedDB-Zugriff fehlgeschlagen')))
     operation.onsuccess = () => resolve(operation.result)
     tx.oncomplete = () => db.close()
     tx.onabort = () => {
       db.close()
-      reject(tx.error ?? new Error('IndexedDB-Transaktion abgebrochen'))
+      reject(tx.error ?? new Error(de('IndexedDB-Transaktion abgebrochen')))
     }
   }))
 

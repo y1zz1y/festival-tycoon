@@ -6,6 +6,12 @@ import type { GameState } from '../game/GameState'
 import type { WorldView } from '../view/WorldView'
 import { formatMoney, formatTime } from './format'
 import { isCamper } from '../game/visitorNeeds'
+import { getLocale, joinParts, localize, t } from '../i18n'
+
+/** A visitor's thought in the viewer's quotation marks: „…“ in German, “…” in English. */
+function quoted(text: string): string {
+  return getLocale() === 'de' ? `„${text}“` : `“${text}”`
+}
 
 export interface VisitorPanelContext {
   getGame(): GameState
@@ -23,7 +29,7 @@ export interface VisitorPanelController {
 export function mountVisitorPanel({ getGame, getPreviewMode, view, closeEntityPanel }: VisitorPanelContext): VisitorPanelController {
   const requireElement = <T extends Element>(selector: string): T => {
     const element = document.querySelector<T>(selector)
-    if (!element) throw new Error(`Ben?tigtes UI-Element fehlt: ${selector}`)
+    if (!element) throw new Error(t`Benötigtes UI-Element fehlt: ${selector}`)
     return element
   }
   const visitorPanel = requireElement<HTMLElement>('#visitor-panel')
@@ -82,61 +88,61 @@ export function mountVisitorPanel({ getGame, getPreviewMode, view, closeEntityPa
     followVisitorButton.classList.toggle('active', isFollowing)
     followVisitorButton.setAttribute('aria-pressed', String(isFollowing))
     followVisitorButton.textContent = isFollowing
-      ? '⏹ Verfolgung beenden'
-      : '📍 Besucher verfolgen'
+      ? `⏹ ${t('Verfolgung beenden')}`
+      : `📍 ${t('Besucher verfolgen')}`
   
     const stateLabels = {
-      entering: 'Betritt den Park',
-      exploring: 'Erkundet den Park',
-      seeking: 'Auf dem Weg zu einem Ziel',
-      using: 'Benutzt eine Attraktion',
-      queuing: 'Wartet an einer Achterbahn',
-      riding: 'Fährt Achterbahn',
-      sleeping: 'Schläft auf dem Boden',
-      camping: 'Am eigenen Zeltplatz',
-      socializing: 'Chillt auf dem Zeltplatz',
-      vomiting: 'Übergibt sich',
-      'security-check': 'Wird kontrolliert',
-      'medical-transport': 'Wird zum Krankenbereich gebracht',
-      medical: 'Wird medizinisch versorgt',
-      partying: 'Feiert zur Musik',
-      'bench-resting': 'Ruht sich auf einer Bank aus',
-      relaxing: 'Hält sich an einem Lieblingsort auf',
-      swimming: 'Baden im Wasser',
-      'camp-waiting': 'Wartet auf einen Campingplatz',
-      'vehicle-arrival': 'Sitzt im anreisenden Auto',
-      'bus-waiting': 'Wartet auf einen Bus',
-      'bus-riding': 'Fährt mit dem Bus',
-      injured: 'Wartet verletzt auf Hilfe',
-      exiting: 'Verlässt die Attraktion',
-      leaving: 'Verlässt den Park',
-      panicking: 'Flieht aus dem Gedränge',
+      entering: t('Betritt den Park'),
+      exploring: t('Erkundet den Park'),
+      seeking: t('Auf dem Weg zu einem Ziel'),
+      using: t('Benutzt eine Attraktion'),
+      queuing: t('Wartet an einer Achterbahn'),
+      riding: t('Fährt Achterbahn'),
+      sleeping: t('Schläft auf dem Boden'),
+      camping: t('Am eigenen Zeltplatz'),
+      socializing: t('Chillt auf dem Zeltplatz'),
+      vomiting: t('Übergibt sich'),
+      'security-check': t('Wird kontrolliert'),
+      'medical-transport': t('Wird zum Krankenbereich gebracht'),
+      medical: t('Wird medizinisch versorgt'),
+      partying: t('Feiert zur Musik'),
+      'bench-resting': t('Ruht sich auf einer Bank aus'),
+      relaxing: t('Hält sich an einem Lieblingsort auf'),
+      swimming: t('Baden im Wasser'),
+      'camp-waiting': t('Wartet auf einen Campingplatz'),
+      'vehicle-arrival': t('Sitzt im anreisenden Auto'),
+      'bus-waiting': t('Wartet auf einen Bus'),
+      'bus-riding': t('Fährt mit dem Bus'),
+      injured: t('Wartet verletzt auf Hilfe'),
+      exiting: t('Verlässt die Attraktion'),
+      leaving: t('Verlässt den Park'),
+      panicking: t('Flieht aus dem Gedränge'),
     }
     visitorName.textContent = visitor.name
-    visitorThought.textContent = `„${visitor.thought}“`
+    visitorThought.textContent = quoted(localize(visitor.thought))
     visitorState.textContent =
       visitor.streakingMinutes > 0
-        ? 'Flitzt nackt über das Gelände'
+        ? t('Flitzt nackt über das Gelände')
         : stateLabels[visitor.state]
     visitorBudget.textContent = formatMoney(visitor.budget)
-    requireElement<HTMLElement>('#visitor-music').textContent=GENRES.find(g=>g.id===visitor.musicTaste)?.name??'Noch offen'
-    requireElement<HTMLElement>('#visitor-audience').textContent = visitor.audience ? AUDIENCE_NAMES[visitor.audience] : 'Freies Spiel'
+    requireElement<HTMLElement>('#visitor-music').textContent=GENRES.find(g=>g.id===visitor.musicTaste)?.name??t('Noch offen')
+    requireElement<HTMLElement>('#visitor-audience').textContent = visitor.audience ? localize(AUDIENCE_NAMES[visitor.audience]) : t('Freies Spiel')
     visitorAlcoholDisposition.textContent =
-      visitor.alcoholDisposition === 'aggressive' ? 'Eher aggressiv' : 'Eher ruhig'
+      visitor.alcoholDisposition === 'aggressive' ? t('Eher aggressiv') : t('Eher ruhig')
     visitorCamping.textContent =
       visitor.campingPhase === 'none'
-        ? 'Kein Zelt'
+        ? t('Kein Zelt')
         : visitor.campingPhase === 'seeking'
-          ? 'Auf dem Weg zur Parzelle'
+          ? t('Auf dem Weg zur Parzelle')
           : visitor.campingPhase === 'building'
-            ? 'Baut das Zelt auf'
+            ? t('Baut das Zelt auf')
             : visitor.campingPhase === 'packing'
-              ? 'Packt das Zelt ein'
+              ? t('Packt das Zelt ein')
               : visitor.campingPhase === 'resting' || visitor.campingPhase === 'returning'
-                ? 'Erholt sich im eigenen Zelt'
-                : 'Zelt aufgebaut'
+                ? t('Erholt sich im eigenen Zelt')
+                : t('Zelt aufgebaut')
     visitorTicket.textContent =
-      visitor.ticketType === 'camping' ? 'Campingpass' : 'Tageskarte'
+      visitor.ticketType === 'camping' ? t('Campingpass') : t('Tageskarte')
     visitorSleepRhythm.textContent =
       `${formatTime(visitor.preferredBedtime)}–${formatTime(visitor.preferredWakeTime)}`
     visitorCrowding.textContent = `${Math.round(visitor.crowding)}%`
@@ -144,7 +150,7 @@ export function mountVisitorPanel({ getGame, getPreviewMode, view, closeEntityPa
       `${Math.round(visitor.localAttractiveness)}%`
     visitorParty.textContent = `${Math.round(visitor.localPartyMood)}%`
     visitorPreferences.textContent =
-      `Schönheit ${Math.round(visitor.beautyPreference * 100)}% · Party ${Math.round(visitor.partyPreference * 100)}%`
+      joinParts(t`Schönheit ${Math.round(visitor.beautyPreference * 100)}%`, t`Party ${Math.round(visitor.partyPreference * 100)}%`)
     visitorInventory.innerHTML =
       visitor.inventory.length > 0
         ? visitor.inventory
@@ -155,7 +161,7 @@ export function mountVisitorPanel({ getGame, getPreviewMode, view, closeEntityPa
                 visitor.campsite &&
                 visitor.campingPhase !== 'seeking' &&
                 visitor.campingPhase !== 'building'
-                  ? ' · aufgebaut'
+                  ? t('aufgebaut')
                   : (item.kind === 'chairs' ||
                       item.kind === 'pavilion' ||
                       item.kind === 'musicBox') &&
@@ -164,26 +170,27 @@ export function mountVisitorPanel({ getGame, getPreviewMode, view, closeEntityPa
                           installation.kind === item.kind &&
                           installation.contributorIds.includes(visitor.id),
                       )
-                    ? ' · aufgestellt'
+                    ? t('aufgestellt')
                     : ''
-              return `<span title="${definition.name}${deployed}">${definition.icon} ${definition.name} ×${item.quantity}${deployed}</span>`
+              const name = localize(definition.name)
+              return `<span title="${joinParts(name, deployed)}">${definition.icon} ${joinParts(`${name} ×${item.quantity}`, deployed)}</span>`
             })
             .join('')
         : ''
     const souvenirBits: string[] = []
     if (visitor.ownedMascot) {
       souvenirBits.push(
-        `<span title="Maskottchen">${visitor.heldMascot ? '🧸 Maskottchen · in der Hand' : '🧸 Maskottchen'}</span>`,
+        `<span title="${t('Maskottchen')}">🧸 ${visitor.heldMascot ? joinParts(t('Maskottchen'), t('in der Hand')) : t('Maskottchen')}</span>`,
       )
     }
     if (visitor.wornShirt) {
       souvenirBits.push(
-        `<span title="Festival-Shirt">👕 ${SHIRT_STYLE_LABELS[visitor.wornShirt.style]}</span>`,
+        `<span title="${t('Festival-Shirt')}">👕 ${localize(SHIRT_STYLE_LABELS[visitor.wornShirt.style])}</span>`,
       )
     }
     visitorInventory.innerHTML =
       [visitorInventory.innerHTML, ...souvenirBits].filter(Boolean).join('') ||
-      '<small>Keine Gegenstände</small>'
+      `<small>${t('Keine Gegenstände')}</small>`
   
     // Hygiene only drops for campers, so the row is shown for them alone.
     requireElement<HTMLElement>('#hygiene-row').hidden = !isCamper(visitor)

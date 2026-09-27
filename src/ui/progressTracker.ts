@@ -11,6 +11,7 @@ import {
 import { isAuthoringScenario } from '../game/scenario'
 import { scenarioScore, scenarioStars } from '../game/scenarioGoals'
 import type { GameSnapshot } from '../game/types/snapshot'
+import { localize, t } from '../i18n'
 
 export type ProgressTracker = {
   records(): ProgressRecords
@@ -25,32 +26,36 @@ export type ProgressTracker = {
 /**
  * Keeps cross-game progress (A8) and achievements for this browser and account.
  * Only the host or a solo game records: a guest in someone else's room sees their
- * festival but does not earn it. Games helped by debug money never count.
+ * festival but does not earn it, and neither does a guest who inherited that
+ * park by a host takeover. Games helped by debug money never count.
  */
 export function mountProgressTracker(options: {
   isClient(): boolean
+  /** True while the running park came to this player by a multiplayer takeover. */
+  isInheritedWorld?(): boolean
   showToast(message: string): void
   onChange(): void
 }): ProgressTracker {
   let records = readLocalProgress()
-  const keep = (next: ProgressRecords): void => {
+  const store = (next: ProgressRecords): void => {
     records = next
     writeLocalProgress(records)
     options.onChange()
   }
   const counts = (snapshot: Readonly<GameSnapshot>): boolean =>
-    !options.isClient() && !snapshot.debugAssisted && !isAuthoringScenario(snapshot.scenario)
+    !options.isClient() && !options.isInheritedWorld?.() &&
+    !snapshot.debugAssisted && !isAuthoringScenario(snapshot.scenario)
   const sync = async (): Promise<void> => {
     if (!currentAccount()) return
     const result = await syncProgress(records)
-    if (result.synced) keep(result.records)
+    if (result.synced) store(result.records)
   }
   const checkAchievements = (snapshot: Readonly<GameSnapshot>): void => {
     if (!counts(snapshot)) return
     const result = unlockAchievements(records, earnedAchievements(snapshot, records), Date.now())
     if (result.unlocked.length === 0) return
-    keep(result.records)
-    for (const achievement of result.unlocked) options.showToast(`${achievement.icon} Erfolg: ${achievement.name}`)
+    store(result.records)
+    for (const achievement of result.unlocked) options.showToast(`${achievement.icon} ${t`Erfolg: ${localize(achievement.name)}`}`)
     void sync()
   }
   return {
@@ -61,7 +66,7 @@ export function mountProgressTracker(options: {
       const outcome = snapshot.scenarioProgress.outcome.state
       if (outcome === 'running') return
       const score = scenarioScore(snapshot.scenarioProgress)
-      keep(recordScenarioResult(records, id, { won: outcome === 'won', score, stars: scenarioStars(score) }, Date.now()))
+      store(recordScenarioResult(records, id, { won: outcome === 'won', score, stars: scenarioStars(score) }, Date.now()))
       checkAchievements(snapshot)
       void sync()
     },

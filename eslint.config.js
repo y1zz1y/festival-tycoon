@@ -11,6 +11,8 @@ export default tseslint.config(
       '.test-output/**',
       'coverage/**',
       'data/**',
+      // Agent worktrees are full checkouts; linting them would count every warning again.
+      '.claude/**',
     ],
   },
   {

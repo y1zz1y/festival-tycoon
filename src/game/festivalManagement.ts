@@ -17,11 +17,13 @@ import { CONCERT_TOPLESS_CROWD_THOUGHT, CONCERT_TOPLESS_THOUGHT } from './visito
 import { createTicketDemandTuning, type TicketDemandTuning } from './demandTuning'
 import { moodNeedAverage } from './visitorNeeds'
 import type { WeekendGoals } from './scenario'
+import { de, eur, keep, nested, num, plural, verbatim } from '../i18n/marker'
 
 export const AUDIENCES = ['music', 'party', 'family', 'comfort', 'camping'] as const
 export type Audience = typeof AUDIENCES[number]
-export const AUDIENCE_NAMES: Record<Audience, string> = { music: 'Musikfans', party: 'Partygänger', family: 'Familien', comfort: 'Komfortgäste', camping: 'Campingfans' }
-export const BANDS = [
+export const AUDIENCE_NAMES: Record<Audience, string> = { music: de('Musikfans'), party: de('Partygänger'), family: de('Familien'), comfort: de('Komfortgäste'), camping: de('Campingfans') }
+/** Band names and genres are proper nouns (docs/i18n.md): shown as they are in every language. */
+export const BANDS = keep([
   { id: 'meadow', name: 'Meadow Letters', genre: 'Indie', audience: 'music', fee: 450, draw: 20, speakers: 0, reputation: 0 },
   { id: 'lantern', name: 'Lantern Parade', genre: 'Indie', audience: 'music', fee: 680, draw: 34, speakers: 1, reputation: 10 },
   { id: 'paper', name: 'Paper Satellites', genre: 'Indie', audience: 'music', fee: 1100, draw: 52, speakers: 2, reputation: 30 },
@@ -78,9 +80,12 @@ export const BANDS = [
   { id: 'starlight', name: 'Starlight Syndicate', genre: 'Pop', audience: 'party', fee: 2700, draw: 96, speakers: 3, reputation: 62 },
   { id: 'goldenhour', name: 'Golden Hour Revue', genre: 'Soul', audience: 'comfort', fee: 2500, draw: 90, speakers: 3, reputation: 60 },
   { id: 'gravemarch', name: 'Gravemarch Legion', genre: 'Metal', audience: 'music', fee: 2600, draw: 92, speakers: 3, reputation: 62 },
-] as const
+] as const)
 
 export type BandStar = 1 | 2 | 3 | 4 | 5
+
+/** A stage's band label between shows (stored in `bandName`, shown with localizeName). */
+export const CHANGEOVER_LABEL = de('Umbau / Pause')
 
 export function bandStarRating(band: { reputation: number }): BandStar {
   if (band.reputation >= 60) return 5
@@ -113,7 +118,7 @@ export function isHeadlinerBand(band: { reputation: number }): boolean {
 
 /** Genre as shown on a band card: the genre, plus "Headliner" for five-star bands. */
 export function bandGenreLabel(band: { genre: string; reputation: number }): string {
-  return isHeadlinerBand(band) ? `${band.genre} · Headliner` : band.genre
+  return isHeadlinerBand(band) ? de`${verbatim(band.genre)} · Headliner` : band.genre
 }
 
 export function rollFiveStarOffers(
@@ -130,20 +135,20 @@ export function rollFiveStarOffers(
 
 export type Supply = 'food' | 'drinks' | 'water' | 'goods'
 export const SUPPLIES: Record<Supply, { name: string; price: number }> = {
-  food: { name: 'Essen', price: 2 },
-  drinks: { name: 'Getränke', price: 1.5 },
-  water: { name: 'Trinkwasser', price: 0.3 },
-  goods: { name: 'Allgemeine Waren', price: 1.2 },
+  food: { name: de('Essen'), price: 2 },
+  drinks: { name: de('Getränke'), price: 1.5 },
+  water: { name: de('Trinkwasser'), price: 0.3 },
+  goods: { name: de('Allgemeine Waren'), price: 1.2 },
 }
 export const UPGRADES = {
-  drainage: { name: 'Entwässerung & Wegmatten', cost: 900, detail: 'Halbiert die Schlammwirkung auf unbefestigten Flächen.' },
-  shelter: { name: 'Überdachte Ruheplätze', cost: 700, detail: 'Schützt bis zu 250 Gäste vor Regen und Hitze.' },
-  rigging: { name: 'Sturmsicherung der Bühnen', cost: 1100, detail: 'Ermöglicht technisch geeignete Auftritte auch bei starkem Wind.' },
-  water: { name: 'Trinkwasserstationen', cost: 450, detail: 'Versorgte WCs geben Trinkwasser im Umkreis von drei Feldern aus. Trägerroute für Wasser nötig.' },
-  quiet: { name: 'Ruhecamp mit Schallschutz', cost: 850, detail: 'Reduziert den Schlafverlust durch nahe Nachtkonzerte.' },
-  warehouse: { name: 'Lagererweiterung', cost: 750, detail: 'Erhöht die Kapazität je Depot von 3.000 auf 5.000 Einheiten.' },
-  staffSpeed: { name: 'E-Roller fürs Personal', cost: 1500, detail: 'Reinigungskräfte, Sicherheit, Sanitäter und Feuerwehr sind doppelt so schnell unterwegs.' },
-  truckHydraulics: { name: 'Schnellkipper für Müllautos', cost: 1000, detail: 'Halbiert die Be- und Entladezeit jedes Müllautos an Container, Müllablage, Mülldepot und Bauhof.' },
+  drainage: { name: de('Entwässerung & Wegmatten'), cost: 900, detail: de('Halbiert die Schlammwirkung auf unbefestigten Flächen.') },
+  shelter: { name: de('Überdachte Ruheplätze'), cost: 700, detail: de('Schützt bis zu 250 Gäste vor Regen und Hitze.') },
+  rigging: { name: de('Sturmsicherung der Bühnen'), cost: 1100, detail: de('Ermöglicht technisch geeignete Auftritte auch bei starkem Wind.') },
+  water: { name: de('Trinkwasserstationen'), cost: 450, detail: de('Versorgte WCs geben Trinkwasser im Umkreis von drei Feldern aus. Trägerroute für Wasser nötig.') },
+  quiet: { name: de('Ruhecamp mit Schallschutz'), cost: 850, detail: de('Reduziert den Schlafverlust durch nahe Nachtkonzerte.') },
+  warehouse: { name: de('Lagererweiterung'), cost: 750, detail: de('Erhöht die Kapazität je Depot von 3.000 auf 5.000 Einheiten.') },
+  staffSpeed: { name: de('E-Roller fürs Personal'), cost: 1500, detail: de('Reinigungskräfte, Sicherheit, Sanitäter und Feuerwehr sind doppelt so schnell unterwegs.') },
+  truckHydraulics: { name: de('Schnellkipper für Müllautos'), cost: 1000, detail: de('Halbiert die Be- und Entladezeit jedes Müllautos an Container, Müllablage, Mülldepot und Bauhof.') },
 } as const
 /** How much faster the crew moves once it has wheels. */
 export const STAFF_SPEED_UPGRADE_FACTOR = 2
@@ -162,8 +167,10 @@ export type Upgrade = keyof typeof UPGRADES
  */
 export const TIERED_UPGRADES = {
   cleanerCarry: {
-    name: 'Größere Müllkarren',
-    detail: 'Reinigungskräfte tragen je Gang doppelt so viel Müll. Jede weitere Stufe verdoppelt die Ladung erneut.',
+    name: de('Größere Müllkarren'),
+    detail: de('Reinigungskräfte tragen je Gang doppelt so viel Müll. Jede weitere Stufe verdoppelt die Ladung erneut.'),
+    /** The result line once a step is paid for (one full sentence per upgrade, docs/i18n.md). */
+    stepDone: (level: number, factor: number) => de`Größere Müllkarren · Stufe ${num(level)}: Ladung ×${num(factor)}`,
     steps: [
       { cost: 1000, factor: 2 },
       { cost: 1000, factor: 4 },
@@ -183,7 +190,7 @@ export function cleanerCarryFactor(f: FestivalManagement): number {
 }
 export type Booking = { id: string; bandId: string; stageId: string; day: number; start: number; duration: number; fee: number }
 export type Weather = 'sun' | 'rain' | 'heat' | 'wind'
-export const WEATHER_NAMES: Record<Weather, string> = { sun: 'Heiter', rain: 'Regen', heat: 'Hitze', wind: 'Starker Wind' }
+export const WEATHER_NAMES: Record<Weather, string> = { sun: de('Heiter'), rain: de('Regen'), heat: de('Hitze'), wind: de('Starker Wind') }
 /** The same four kinds of weather at a glance, for the forecast and wherever it is reported. */
 export const WEATHER_ICONS: Record<Weather, string> = { sun: '☀️', rain: '🌧️', heat: '🌡️', wind: '💨' }
 type Reputation = { music: number; atmosphere: number; comfort: number; organization: number }
@@ -315,19 +322,19 @@ export function watchableBookings(s: Readonly<GameSnapshot>): Booking[] {
 export function showIssue(s: Readonly<GameSnapshot>, booking: Booking, atMinute = s.minute): string | null {
   const stage = s.buildings.find(b => b.id === booking.stageId && b.kind === 'stage')
   const band = BANDS.find(b => b.id === booking.bandId)
-  if (!stage || !band) return 'Bühne fehlt'
-  if (band.draw >= 60 && buildingFootprint(stage).some(c=>groundInfo(s,c.x,c.z).bearing<3)) return 'Großauftritt braucht ein entwässertes, gepflastertes Bühnenfundament'
-  if (!s.stageForecourtCells.some(c => stageDistance(stage,c) <= 8)) return 'Bühnenvorplatz im Umkreis von 8 Feldern fehlt'
-  if (!s.power.poweredBuildingIds.includes(stage.id)) return 'Bühne ohne Strom'
-  if (!s.dayPlan.offers.stages[Math.floor(atMinute / 60) % 24]) return 'Bühnen laut Tagesplan geschlossen'
+  if (!stage || !band) return de('Bühne fehlt')
+  if (band.draw >= 60 && buildingFootprint(stage).some(c=>groundInfo(s,c.x,c.z).bearing<3)) return de('Großauftritt braucht ein entwässertes, gepflastertes Bühnenfundament')
+  if (!s.stageForecourtCells.some(c => stageDistance(stage,c) <= 8)) return de('Bühnenvorplatz im Umkreis von 8 Feldern fehlt')
+  if (!s.power.poweredBuildingIds.includes(stage.id)) return de('Bühne ohne Strom')
+  if (!s.dayPlan.offers.stages[Math.floor(atMinute / 60) % 24]) return de('Bühnen laut Tagesplan geschlossen')
   const speakers = s.buildings.filter(b => ['directionalSpeaker', 'omniSpeaker', 'delayTower'].includes(b.kind) &&
     stageDistance(stage,b) <= 10 && s.power.poweredBuildingIds.includes(b.id)).length
-  if (speakers + (stage.stageDesign ? stageStats(stage.stageDesign).speakers : 0) < band.speakers) return `${band.speakers} aktive Lautsprecher im Umkreis von 10 Feldern nötig`
-  if (s.festival.weather === 'wind' && !s.festival.upgrades.rigging) return 'Starker Wind: Sturmsicherung fehlt'
+  if (speakers + (stage.stageDesign ? stageStats(stage.stageDesign).speakers : 0) < band.speakers) return plural(band.speakers, de`${num(band.speakers)} aktiver Lautsprecher im Umkreis von 10 Feldern nötig`, de`${num(band.speakers)} aktive Lautsprecher im Umkreis von 10 Feldern nötig`)
+  if (s.festival.weather === 'wind' && !s.festival.upgrades.rigging) return de('Starker Wind: Sturmsicherung fehlt')
   // Storms are a now-thing: a show planned for later is not blocked by today's forecast.
   const storm = atMinute === s.minute ? stormAt(s.festival, s.day, s.minute) : { phase: 'none' as const }
-  if (storm.phase === 'active') return 'Unwetter: Auftritte unterbrochen'
-  if (storm.phase === 'warning' && s.festival.shelterOrder) return 'Schutz angeordnet: Auftritte pausiert'
+  if (storm.phase === 'active') return de('Unwetter: Auftritte unterbrochen')
+  if (storm.phase === 'warning' && s.festival.shelterOrder) return de('Schutz angeordnet: Auftritte pausiert')
   return null
 }
 export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionResult {
@@ -336,20 +343,20 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
   const f = s.festival, now = festivalTime(s)
   const fail = (message: string): ActionResult => ({ ok: false, message })
   const pay = (amount: number, category: FinanceCategory) => { if (!canAfford(s, amount)) return false; bookFinance(s, category, -amount); return true }
-  if (action.type === 'sandbox') { f.planning = false; f.enabled = false; s.parkOpen = true; s.speed = 1; return { ok: true, message: 'Freies Spiel fortgesetzt' } }
+  if (action.type === 'sandbox') { f.planning = false; f.enabled = false; s.parkOpen = true; s.speed = 1; return { ok: true, message: de('Freies Spiel fortgesetzt') } }
   if (action.type === 'stageTemplate') {
-    if(action.name!==null&&!f.stageTemplates?.some(t=>t.name===action.name))return fail('Vorlage nicht gefunden')
+    if(action.name!==null&&!f.stageTemplates?.some(t=>t.name===action.name))return fail(de('Vorlage nicht gefunden'))
     f.selectedStageTemplate=action.name
-    return {ok:true,message:action.name?'Bühnenvorlage gewählt':'Standardbühne für Neubauten gewählt'}
+    return {ok:true,message:action.name?de('Bühnenvorlage gewählt'):de('Standardbühne für Neubauten gewählt')}
   }
   if (action.type === 'stageDesign') {
     const issue = stageDesignIssue(action.design); if (issue) return fail(issue)
     const stage = action.stageId ? s.buildings.find(b=>b.id===action.stageId&&b.kind==='stage') : undefined
-    if (action.stageId && !stage) return fail('Bühne nicht gefunden')
-    if ((action.saveTemplate || action.selectForBuild) && (f.stageTemplates?.length??0)>=30 && !f.stageTemplates?.some(t=>t.name===action.design.name)) return fail('Höchstens 30 Vorlagen speichern')
+    if (action.stageId && !stage) return fail(de('Bühne nicht gefunden'))
+    if ((action.saveTemplate || action.selectForBuild) && (f.stageTemplates?.length??0)>=30 && !f.stageTemplates?.some(t=>t.name===action.design.name)) return fail(de('Höchstens 30 Vorlagen speichern'))
     if (stage) {
       const price = Math.max(0,stageStats(action.design).cost-(stage.stageDesign?stageStats(stage.stageDesign).cost:0))
-      if (!pay(price, 'construction')) return fail('Nicht genug Geld für den Bühnenausbau')
+      if (!pay(price, 'construction')) return fail(de('Nicht genug Geld für den Bühnenausbau'))
       stage.stageDesign = structuredClone(action.design)
     }
     if (action.saveTemplate || action.selectForBuild) {
@@ -357,19 +364,19 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
       if(index>=0)f.stageTemplates[index]=structuredClone(action.design);else f.stageTemplates.push(structuredClone(action.design))
     }
     if(action.selectForBuild)f.selectedStageTemplate=action.design.name
-    return {ok:true,message:stage?'Bühne umgebaut':action.selectForBuild?'Vorlage für den Bühnenbau gewählt':'Bühnenvorlage gespeichert'}
+    return {ok:true,message:stage?de('Bühne umgebaut'):action.selectForBuild?de('Vorlage für den Bühnenbau gewählt'):de('Bühnenvorlage gespeichert')}
   }
   if (action.type === 'tickets') {
-    if (f.enabled && !f.finished) return fail('Ticketkontingente vor dem Festivalstart festlegen')
-    if (![action.day, action.camping].every(n => Number.isInteger(n) && n >= 0 && n <= 100000)) return fail('Gültige Ticketzahlen zwischen 0 und 100.000 wählen')
+    if (f.enabled && !f.finished) return fail(de('Ticketkontingente vor dem Festivalstart festlegen'))
+    if (![action.day, action.camping].every(n => Number.isInteger(n) && n >= 0 && n <= 100000)) return fail(de('Gültige Ticketzahlen zwischen 0 und 100.000 wählen'))
     const capacity = Math.floor(s.campingCells.length * (1 - s.dayPlan.campingCapacityBufferPercent / 100))
-    if (action.camping > capacity) return fail(`Nur ${capacity} Campingplätze buchbar`)
+    if (action.camping > capacity) return fail(plural(capacity, de`Nur ${num(capacity)} Campingplatz buchbar`, de`Nur ${num(capacity)} Campingplätze buchbar`))
     f.tickets = { day: action.day, camping: action.camping, usedDay: {}, usedCamping: 0 }
-    return { ok: true, message: 'Ticketkontingente gespeichert' }
+    return { ok: true, message: de('Ticketkontingente gespeichert') }
   }
   if(action.type==='prepare'){
-    if(f.enabled&&!f.finished)return fail('Das laufende Festival zuerst abschließen')
-    if(f.planning&&!f.finished)return {ok:true,message:'Die Festivalplanung ist bereits geöffnet'}
+    if(f.enabled&&!f.finished)return fail(de('Das laufende Festival zuerst abschließen'))
+    if(f.planning&&!f.finished)return {ok:true,message:de('Die Festivalplanung ist bereits geöffnet')}
     f.enabled=false;f.finished=false;f.planning=true;f.bookings=[];f.startDay=s.day;s.parkOpen=false;s.speed=0
     f.goals = weekendGoals(f.edition + 1, s.scenario.festivalGoals)
     let offerSeed = hashStringSeed(`headliners:${f.seed}:${f.edition}`)
@@ -380,12 +387,12 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
     f.headlinerPool = rollFiveStarOffers(f.reputation.music, offerRng, new Set())
     f.sponsorOffers = rollSponsorOffers(`${f.seed}:${s.rngState}`, f.edition + 1)
     f.sponsors = []
-    return {ok:true,message:'Nächste Ausgabe planen – die Besucherbasis bleibt erhalten'}
+    return {ok:true,message:de('Nächste Ausgabe planen – die Besucherbasis bleibt erhalten')}
   }
   if (action.type === 'start') {
-    if (f.enabled && !f.finished) return fail('Das Festivalwochenende läuft bereits')
-    if (f.tickets && f.tickets.camping > Math.floor(s.campingCells.length * (1 - s.dayPlan.campingCapacityBufferPercent / 100))) return fail('Für die Campingtickets fehlen nutzbare Plätze')
-    if(!f.finished&&f.bookings.some(b=>b.day<f.startDay+s.dayPlan.leadDays||b.day>=f.startDay+s.dayPlan.leadDays+s.dayPlan.festivalDays||!bookingHoursOpen(s,b.start,b.duration)))return fail('Spielplan passt nicht zur Tagesplanung. Auftritte zuerst anpassen.')
+    if (f.enabled && !f.finished) return fail(de('Das Festivalwochenende läuft bereits'))
+    if (f.tickets && f.tickets.camping > Math.floor(s.campingCells.length * (1 - s.dayPlan.campingCapacityBufferPercent / 100))) return fail(de('Für die Campingtickets fehlen nutzbare Plätze'))
+    if(!f.finished&&f.bookings.some(b=>b.day<f.startDay+s.dayPlan.leadDays||b.day>=f.startDay+s.dayPlan.leadDays+s.dayPlan.festivalDays||!bookingHoursOpen(s,b.start,b.duration)))return fail(de('Spielplan passt nicht zur Tagesplanung. Auftritte zuerst anpassen.'))
     if (f.tickets) { f.tickets.usedDay = {}; f.tickets.usedCamping = 0 }
     const plannedStart=f.startDay
     if(f.finished)f.bookings=[]
@@ -401,46 +408,46 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
     f.shelterOrder = false; f.stormInjuries = 0
     f.sponsorOffers = []
     s.parkOpen = true; s.speed = 1;
-    return { ok: true, message: 'Festivalzeit gestartet. Vorlauf und Ablauf richten sich nach eurer Tagesplanung.' }
+    return { ok: true, message: de('Festivalzeit gestartet. Vorlauf und Ablauf richten sich nach eurer Tagesplanung.') }
   }
   if (action.type === 'sponsor') return signSponsor(s, action.id)
   if (action.type === 'shelter') {
     const storm = stormAt(f, s.day, s.minute)
-    if (storm.phase === 'none') return fail('Gerade droht kein Unwetter')
-    if (f.shelterOrder) return fail('Schutz ist bereits angeordnet')
+    if (storm.phase === 'none') return fail(de('Gerade droht kein Unwetter'))
+    if (f.shelterOrder) return fail(de('Schutz ist bereits angeordnet'))
     f.shelterOrder = true
-    return { ok: true, message: 'Schutz angeordnet: Auftritte pausieren, Gäste suchen Deckung' }
+    return { ok: true, message: de('Schutz angeordnet: Auftritte pausieren, Gäste suchen Deckung') }
   }
-  if(f.finished)return fail('Zuerst die nächste Ausgabe vorbereiten')
+  if(f.finished)return fail(de('Zuerst die nächste Ausgabe vorbereiten'))
   if (action.type === 'book'||action.type==='moveBooking') {
     const previous=action.type==='moveBooking'?f.bookings.find(b=>b.id===action.id):undefined
-    if(action.type==='moveBooking'&&(!previous||previous.day*1440+previous.start<=now))return fail('Nur zukünftige Buchungen verschieben')
+    if(action.type==='moveBooking'&&(!previous||previous.day*1440+previous.start<=now))return fail(de('Nur zukünftige Buchungen verschieben'))
     const band = BANDS.find(b => b.id === (action.type==='book'?action.bandId:previous?.bandId))
-    if (!band || !s.buildings.some(b => b.id === action.stageId && b.kind === 'stage')) return fail('Band und vorhandene Bühne wählen')
+    if (!band || !s.buildings.some(b => b.id === action.stageId && b.kind === 'stage')) return fail(de('Band und vorhandene Bühne wählen'))
     if (!Number.isInteger(action.day)||!(action.day >= f.startDay + s.dayPlan.leadDays && action.day < f.startDay + s.dayPlan.leadDays + s.dayPlan.festivalDays) || !Number.isInteger(action.start) ||
         action.start < 8 * 60 || ![60, 90, 120].includes(action.duration) || action.start + action.duration > 24 * 60 ||
-        action.day * 1440 + action.start <= now) return fail('Freie Zeit an einem geplanten Festivaltag wählen (08–24 Uhr)')
-    if(!bookingHoursOpen(s,action.start,action.duration))return fail('Bühnen sind in diesem Zeitfenster laut Tagesplanung geschlossen')
-    if (f.reputation.music < band.reputation) return fail(`Diese Band verlangt mindestens ${band.reputation} Musikruf`)
+        action.day * 1440 + action.start <= now) return fail(de('Freie Zeit an einem geplanten Festivaltag wählen (08–24 Uhr)'))
+    if(!bookingHoursOpen(s,action.start,action.duration))return fail(de('Bühnen sind in diesem Zeitfenster laut Tagesplanung geschlossen'))
+    if (f.reputation.music < band.reputation) return fail(de`Diese Band verlangt mindestens ${num(band.reputation)} Musikruf`)
     if (isFiveStarBand(band) && !(f.headlinerPool ?? []).includes(band.id)) {
-      return fail('Diese 5-Sterne-Band steht in dieser Planung nicht zur Verfügung')
+      return fail(de('Diese 5-Sterne-Band steht in dieser Planung nicht zur Verfügung'))
     }
     if (f.bookings.some(b => b.id!==previous?.id && b.day === action.day && (b.bandId === band.id || (b.stageId === action.stageId &&
-        action.start < b.start + b.duration + 30 && action.start + action.duration + 30 > b.start)))) return fail('Band bereits gebucht oder Bühne belegt (30 Minuten Umbauzeit)')
-    if(previous){Object.assign(previous,{stageId:action.stageId,day:action.day,start:action.start,duration:action.duration});return {ok:true,message:'Auftritt verschoben – keine zusätzliche Gage'}}
-    if (!pay(band.fee, 'bands')) return fail('Nicht genug Geld für die Gage')
+        action.start < b.start + b.duration + 30 && action.start + action.duration + 30 > b.start)))) return fail(de('Band bereits gebucht oder Bühne belegt (30 Minuten Umbauzeit)'))
+    if(previous){Object.assign(previous,{stageId:action.stageId,day:action.day,start:action.start,duration:action.duration});return {ok:true,message:de('Auftritt verschoben – keine zusätzliche Gage')}}
+    if (!pay(band.fee, 'bands')) return fail(de('Nicht genug Geld für die Gage'))
     f.bookings.push({ id: `booking-${f.nextId++}`, bandId: band.id, stageId: action.stageId, day: action.day,
       start: action.start, duration: action.duration, fee: band.fee })
-    return { ok: true, message: `${band.name} gebucht – Gage bezahlt` }
+    return { ok: true, message: de`${verbatim(band.name)} gebucht – Gage bezahlt` }
   }
   if (action.type === 'autoLineup') {
-    if (!s.buildings.some(building => building.kind === 'stage')) return fail('Zuerst eine Bühne bauen')
+    if (!s.buildings.some(building => building.kind === 'stage')) return fail(de('Zuerst eine Bühne bauen'))
     const duration = autoLineupDuration(action.duration)
     const plan = planAutoLineup(s, duration, {
       minStars: action.minStars,
       maxStars: action.maxStars,
     })
-    if (!plan.length) return fail('Keine freien Slots, passenden Bands oder genug Budget für eine automatische Füllung')
+    if (!plan.length) return fail(de('Keine freien Slots, passenden Bands oder genug Budget für eine automatische Füllung'))
     let booked = 0
     let spent = 0
     for (const item of plan) {
@@ -449,32 +456,32 @@ export function festivalAction(s: GameSnapshot, action: FestivalAction): ActionR
       booked += 1
       spent += BANDS.find(band => band.id === item.bandId)?.fee ?? 0
     }
-    if (!booked) return fail('Keine freien Slots, passenden Bands oder genug Budget für eine automatische Füllung')
-    return { ok: true, message: `${booked} Auftritt${booked === 1 ? '' : 'e'} automatisch gebucht · ${spent} € Gagen` }
+    if (!booked) return fail(de('Keine freien Slots, passenden Bands oder genug Budget für eine automatische Füllung'))
+    return { ok: true, message: plural(booked, de`${num(booked)} Auftritt automatisch gebucht · ${eur(spent)} Gagen`, de`${num(booked)} Auftritte automatisch gebucht · ${eur(spent)} Gagen`) }
   }
   if (action.type === 'cancel') {
     const b = f.bookings.find(b => b.id === action.id)
-    if (!b || b.day * 1440 + b.start <= now) return fail('Nur zukünftige Auftritte können storniert werden')
+    if (!b || b.day * 1440 + b.start <= now) return fail(de('Nur zukünftige Auftritte können storniert werden'))
     bookFinance(s, 'bands', b.fee / 2); f.bookings = f.bookings.filter(item => item.id !== b.id)
-    return { ok: true, message: 'Buchung storniert, 50 % der Gage erstattet' }
+    return { ok: true, message: de('Buchung storniert, 50 % der Gage erstattet') }
   }
   if (action.type === 'upgradeStep') {
     const upgrade = TIERED_UPGRADES[action.kind]
     const level = upgrade ? upgradeLevel(f, action.kind) : 0
     const step = upgrade?.steps[level]
-    if (!step) return fail('Höchste Stufe bereits erreicht')
-    if (!pay(step.cost, 'construction')) return fail('Nicht genug Geld für diesen Ausbau')
+    if (!step) return fail(de('Höchste Stufe bereits erreicht'))
+    if (!pay(step.cost, 'construction')) return fail(de('Nicht genug Geld für diesen Ausbau'))
     f.upgradeLevels = { ...(f.upgradeLevels ?? {}), [action.kind]: level + 1 }
-    return { ok: true, message: `${upgrade.name} · Stufe ${level + 1}: Ladung ×${step.factor}` }
+    return { ok: true, message: upgrade.stepDone(level + 1, step.factor) }
   }
   if (action.type === 'upgrade') {
     const upgrade = UPGRADES[action.kind]
-    if (!upgrade || f.upgrades[action.kind]) return fail('Ausbau bereits vorhanden oder unbekannt')
-    if (!pay(upgrade.cost, 'construction')) return fail('Nicht genug Geld für diesen Ausbau')
+    if (!upgrade || f.upgrades[action.kind]) return fail(de('Ausbau bereits vorhanden oder unbekannt'))
+    if (!pay(upgrade.cost, 'construction')) return fail(de('Nicht genug Geld für diesen Ausbau'))
     f.upgrades[action.kind] = true
-    return { ok: true, message: `${upgrade.name} eingerichtet` }
+    return { ok: true, message: de`${nested(upgrade.name)} eingerichtet` }
   }
-  return fail('Unbekannte Festivalaktion')
+  return fail(de('Unbekannte Festivalaktion'))
 }
 /**
  * How content the guests were over the festival days of the current edition: the
@@ -565,7 +572,7 @@ export function updateFestival(s: GameSnapshot): void {
   })
   for (const stage of s.buildings) {
     if (stage.kind !== 'stage') continue
-    stage.bandName = shows.find(show => show.stage.id === stage.id)?.band.name ?? 'Umbau / Pause'
+    stage.bandName = shows.find(show => show.stage.id === stage.id)?.band.name ?? CHANGEOVER_LABEL
   }
   f.playedMusic??={}
   for(const show of shows){const genre=bandGenre(show.band.id);const played=Math.max(0,Math.min(s.minute,show.booking.start+show.booking.duration)-Math.max(s.minute-minutes,show.booking.start));f.playedMusic[genre]=(f.playedMusic[genre]??0)+played*(.5+show.band.draw/100)}
@@ -583,7 +590,7 @@ export function updateFestival(s: GameSnapshot): void {
       visitor.needs.energy = clamp(visitor.needs.energy - minutes * SIMULATION_CONFIG.storm.drainPerMinute * exposure)
       visitor.needs.fun = clamp(visitor.needs.fun - minutes * SIMULATION_CONFIG.storm.drainPerMinute * exposure)
       weatherImpact += minutes * SIMULATION_CONFIG.storm.impactPerMinute * exposure
-      if (exposure > 0 && visitor.state !== 'partying') visitor.thought = f.shelterOrder ? 'Unwetter! Wir warten unter dem Vordach.' : 'Unwetter! Ich werde klatschnass.'
+      if (exposure > 0 && visitor.state !== 'partying') visitor.thought = f.shelterOrder ? de('Unwetter! Wir warten unter dem Vordach.') : de('Unwetter! Ich werde klatschnass.')
     }
     if (!sheltered && storm.phase !== 'active' && (f.weather === 'rain' || f.weather === 'heat')) {
       weatherImpact = minutes * 0.12 * (1 - cover)
@@ -600,14 +607,14 @@ export function updateFestival(s: GameSnapshot): void {
         f.metrics.concertMinutes += minutes
         if ((visitor.toplessMinutes ?? 0) > 0) visitor.thought = CONCERT_TOPLESS_THOUGHT
         else if (!(toplessOnSite && visitor.thought === CONCERT_TOPLESS_CROWD_THOUGHT)) {
-          visitor.thought = `${show.band.name} spielen live – ${match ? 'genau mein Geschmack!' : 'gute Stimmung!'}`
+          visitor.thought = match ? de`${verbatim(show.band.name)} spielen live – genau mein Geschmack!` : de`${verbatim(show.band.name)} spielen live – gute Stimmung!`
         }
         break
       }
       if (distance < 12 && sheltered && s.minute >= 21 * 60 && !f.upgrades.quiet) {
         visitor.needs.energy = clamp(visitor.needs.energy - minutes * 0.5 * show.noise)
         visitor.needs.fun = clamp(visitor.needs.fun - minutes * 0.4 * show.noise)
-        visitor.thought = 'Die Bühne neben meinem Zelt lässt mich nicht schlafen.'
+        visitor.thought = de('Die Bühne neben meinem Zelt lässt mich nicht schlafen.')
       }
     }
     if (visitor.audience === 'comfort' || visitor.audience === 'family') {
@@ -620,7 +627,7 @@ export function updateFestival(s: GameSnapshot): void {
         (visitor.toplessMinutes ?? 0) <= 0 &&
         visitor.thought !== CONCERT_TOPLESS_CROWD_THOUGHT
       ) {
-        visitor.thought = 'Meine Lieblingsbands spielen gleichzeitig – ich verpasse einen Auftritt.'
+        visitor.thought = de('Meine Lieblingsbands spielen gleichzeitig – ich verpasse einen Auftritt.')
       }
     }
     happiness += moodNeedAverage(visitor)

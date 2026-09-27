@@ -1,3 +1,4 @@
+import { de } from '../../i18n/marker'
 import { COASTER_TYPE_IDS, TRACK_PIECE_KINDS } from '../coasters'
 import {
   COURSE_PIECE_CATALOG,
@@ -57,7 +58,7 @@ export const ATTRACTION_DEFINITIONS: Record<string, AttractionDefinition> = {
   'course:treeToTree': courseTrackDefinition('treeToTree'),
   waterSlide: {
     id: 'waterSlide',
-    name: 'Wasserrutsche',
+    name: de('Wasserrutsche'),
     layoutKind: 'track',
     accessMode: 'queuedEntrance',
     topology: 'openExit',
@@ -75,7 +76,7 @@ export const ATTRACTION_DEFINITIONS: Record<string, AttractionDefinition> = {
   },
   swimArea: {
     id: 'swimArea',
-    name: 'Schwimmfläche',
+    name: de('Schwimmfläche'),
     layoutKind: 'area',
     accessMode: 'entranceExit',
     pieceKinds: [],
@@ -84,7 +85,7 @@ export const ATTRACTION_DEFINITIONS: Record<string, AttractionDefinition> = {
   },
   camping: {
     id: 'camping',
-    name: 'Campingfläche',
+    name: de('Campingfläche'),
     layoutKind: 'area',
     accessMode: 'free',
     pieceKinds: [],
@@ -94,7 +95,7 @@ export const ATTRACTION_DEFINITIONS: Record<string, AttractionDefinition> = {
   },
   partyArea: {
     id: 'partyArea',
-    name: 'Partyfläche',
+    name: de('Partyfläche'),
     layoutKind: 'area',
     accessMode: 'free',
     pieceKinds: [],
@@ -103,14 +104,14 @@ export const ATTRACTION_DEFINITIONS: Record<string, AttractionDefinition> = {
   },
   carousel: {
     id: 'carousel',
-    name: 'Karussell',
+    name: de('Karussell'),
     layoutKind: 'scripted',
     accessMode: 'queuedEntrance',
     pieceKinds: ['base'],
   },
   bungee: {
     id: 'bungee',
-    name: 'Bungee-Turm',
+    name: de('Bungee-Turm'),
     layoutKind: 'scripted',
     accessMode: 'queuedEntrance',
     pieceKinds: ['base', 'towerSegment'],

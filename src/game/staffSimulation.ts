@@ -1,3 +1,4 @@
+import { de } from '../i18n/marker'
 import { STAFF_DEFINITIONS } from './staff'
 import type { StaffMember } from './staff'
 import type { GroundIncident } from './incidents'
@@ -800,7 +801,7 @@ export class StaffSimulation {
         patient.state = 'medical-transport'
         patient.injuryVehicleId = null
         patient.route = []
-        patient.thought = 'Ein Sanitäter bringt mich zur Krankenstation.'
+        patient.thought = de('Ein Sanitäter bringt mich zur Krankenstation.')
         member.route = nearest.route
         return
       }
@@ -811,7 +812,7 @@ export class StaffSimulation {
         patient.x = member.medicalCell.x + 0.5
         patient.y = member.medicalCell.elevation
         patient.z = member.medicalCell.z + 0.5
-        patient.thought = 'Hier werde ich medizinisch versorgt.'
+        patient.thought = de('Hier werde ich medizinisch versorgt.')
         return this.reset(member)
       }
     }

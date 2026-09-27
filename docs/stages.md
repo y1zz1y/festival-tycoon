@@ -8,7 +8,7 @@ gelten Footprint, Strom, Vorplatz und Buchungen.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Design, Teile, Phasen, Footprint | `src/game/stageDesign.ts` | `StageDesign`, `stageStats`, `buildingFootprint`, `stageFrontRank` |
+| Design, Teile, Phasen, Footprint | `src/game/stageDesign.ts` | `StageDesign`, `stageStats`, `buildingFootprint`, `stageFrontRank`; Teilenamen und Prüftexte kanonisch mit `de`, Marken und `PHASE_NAMES` in `keep()`, Standardname `DEFAULT_STAGE_DESIGN_NAME` (`Meine Traumbühne`, Anzeige mit `localizeName`, [i18n.md](i18n.md)) |
 | Platzierung im Raster | `src/game/stagePlacement.ts` | `stagePlacement` |
 | Standortprüfung | `src/game/stageSite.ts` | `stageSiteIssue` |
 | Vorplatz / Tanzdichte | `src/game/festivalAreas.ts`, `src/game/GameState.ts` | Forecourt-Zellen, `designateStageForecourt` |
@@ -70,6 +70,11 @@ gelten Footprint, Strom, Vorplatz und Buchungen.
   `economy.inactiveFestivalStageMultiplier` (5 %); technische Kosten der
   Ausstattung sind dann 0. Berechnung in `src/game/upkeep.ts`.
 - Designs in Snapshot, Base64 und lokalem Vorlagen-Store halten.
+- Der Standardname `Meine Traumbühne` bleibt kanonisch (`docs/i18n.md`): Die
+  Werkstatt zeigt das Namensfeld dann leer mit übersetztem Platzhalter,
+  Speichern/Bauen schreibt `Eingabe.trim() || 'Meine Traumbühne'`. Die
+  Vorlagenauswahl behält den gespeicherten Namen als `value` und zeigt ihn über
+  `localizeName`; Musikplaner und Werkstatt zeigen Bühnennamen ebenso.
 - Alte 2D-Designs ohne Höhenwerte werden vor dem Regridding auf `y=0` je Teil
   und die Standard-Bauhöhe ergänzt. Dadurch bleiben alte Traversen erhalten und
   erzeugen keine NaN-Vertices/Bounding-Spheres. Der ursprüngliche Save bleibt

@@ -1,3 +1,4 @@
+import { de, named, numberedName } from '../../i18n/marker'
 import type { CampInstallation, CampingCell } from '../camping'
 import type { Coaster, TrackAnchor, TrackPiece } from '../coasters'
 import {
@@ -256,7 +257,7 @@ function migratePool(course: CourseAttraction): Attraction[] {
     result.push({
       id: `${course.id}-slide-${index + 1}`,
       definitionId: 'waterSlide',
-      name: `${course.name} Rutsche ${index + 1}`,
+      name: numberedName(de`${named(course.name)} Rutsche`, index + 1),
       layout: {
         kind: 'track',
         topology: 'openExit',
@@ -296,7 +297,7 @@ export function migrateCamping(
   return [{
     id: 'camping-area',
     definitionId: 'camping',
-    name: 'Campingfläche',
+    name: de('Campingfläche'),
     layout: {
       kind: 'area',
       accessMode: 'free',
@@ -321,7 +322,7 @@ export function migratePartyAreas(cells: readonly StageForecourtCell[]): Attract
   return [...grouped].map(([stageId, areaCells]) => ({
     id: `party-area-${stageId}`,
     definitionId: 'partyArea',
-    name: 'Partyfläche',
+    name: de('Partyfläche'),
     layout: {
       kind: 'area' as const,
       accessMode: 'free' as const,
@@ -350,7 +351,7 @@ function migrateScriptedRide(building: PlacedBuilding): Attraction {
   return {
     id: building.id,
     definitionId: rideKind,
-    name: rideKind === 'bungee' ? 'Bungee-Turm' : 'Karussell',
+    name: rideKind === 'bungee' ? de('Bungee-Turm') : de('Karussell'),
     layout: {
       kind: 'scripted',
       anchor: point(building.x, building.z, building.elevation),

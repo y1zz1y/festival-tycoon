@@ -12,7 +12,6 @@ import {
   createEmptyCourse,
   createSeededCourse,
   describeCourseAppendIssue,
-  formatCourseInspect,
   isCourseReadyToOperate,
   isCourseSwimCell,
   listCourseDirectionChoices,
@@ -20,6 +19,7 @@ import {
   validateCourse,
   type CoursePiece,
 } from '../src/game/courseAttractions'
+import { formatCourseInspect } from '../src/game/courseAttractionText'
 import { migrateCourse } from '../src/game/attractions/migration'
 import { GameState } from '../src/game/GameState'
 import { applyGameCommand } from '../src/net/commands'

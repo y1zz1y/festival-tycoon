@@ -1,3 +1,5 @@
+import { de } from '../i18n/marker'
+
 export const COMPLAINT_TOPICS = [
   'no-campsite',
   'overcrowding',
@@ -16,18 +18,18 @@ export const COMPLAINT_LABELS: Record<
   ComplaintTopic,
   { icon: string; name: string }
 > = {
-  'no-campsite': { icon: '⛺', name: 'Kein Campingplatz verfügbar' },
-  overcrowding: { icon: '👥', name: 'Extremes Gedränge' },
-  'dirty-grounds': { icon: '🤢', name: 'Stark verschmutztes Gelände' },
+  'no-campsite': { icon: '⛺', name: de('Kein Campingplatz verfügbar') },
+  overcrowding: { icon: '👥', name: de('Extremes Gedränge') },
+  'dirty-grounds': { icon: '🤢', name: de('Stark verschmutztes Gelände') },
   'security-confiscation': {
     icon: '🛂',
-    name: 'Beschwerde über Beschlagnahmung',
+    name: de('Beschwerde über Beschlagnahmung'),
   },
-  'no-parking': { icon: '🅿️', name: 'Kein Parkplatz verfügbar' },
-  'bus-wait': { icon: '⌛', name: 'Zu lange auf den Bus gewartet' },
-  'bus-full': { icon: '🚌', name: 'Bus überfüllt' },
-  'long-walk-to-camp': { icon: '🥾', name: 'Zu langer Weg zum Zelt' },
-  'traffic-accident': { icon: '⚠️', name: 'Verkehrsunfall' },
+  'no-parking': { icon: '🅿️', name: de('Kein Parkplatz verfügbar') },
+  'bus-wait': { icon: '⌛', name: de('Zu lange auf den Bus gewartet') },
+  'bus-full': { icon: '🚌', name: de('Bus überfüllt') },
+  'long-walk-to-camp': { icon: '🥾', name: de('Zu langer Weg zum Zelt') },
+  'traffic-accident': { icon: '⚠️', name: de('Verkehrsunfall') },
 }
 
 export type ComplaintCounts = Record<ComplaintTopic, number>

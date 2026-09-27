@@ -1,3 +1,4 @@
+import { dropLegacyAttractionRecords } from './attractions/projections'
 import { BUILDINGS, type BuildingKind } from './catalog'
 import { isQueuedFacilityKind } from './shopGoods'
 import { bookFinance, canAfford } from './finance'
@@ -21,12 +22,29 @@ import {
 } from './wayElevation'
 import { WAY_TYPES, wayIssue, type WayType } from './wayTypes'
 import { ENTRANCE_PATH_ID } from './snapshotBootstrap'
+import { NOTHING_TO_DEMOLISH } from './sentinels'
 import { THEMED_BIN_KINDS } from './decorationWalls'
+import { de, named, num } from '../i18n/marker'
 
 const PATH_COMPATIBLE_KINDS = new Set<BuildingKind>([
   'path', 'fence', 'bench', 'lighting', 'lightBalloon', 'securityGate',
   'busStop', 'wasteBin', ...THEMED_BIN_KINDS,
 ])
+
+type DepotKind = 'ambulanceGarage' | 'busDepot' | 'wasteDepot' | 'specialDepot'
+
+/** Demolition refusal for a depot that still houses vehicles, one sentence per depot. */
+const DEPOT_IN_USE: Record<DepotKind, string> = {
+  ambulanceGarage: de('Vor dem Abriss müssen alle Krankenwagen entfernt werden'),
+  busDepot: de('Vor dem Abriss müssen alle Busse entfernt werden'),
+  wasteDepot: de('Vor dem Abriss müssen alle Müllfahrzeuge entfernt werden'),
+  specialDepot: de('Vor dem Abriss müssen alle Spezialfahrzeuge entfernt werden'),
+}
+
+/** A finished ramp; the direction picks the whole sentence. */
+function rampBuilt(slope: number): string {
+  return slope > 0 ? de('Aufwärts-Rampe gebaut') : de('Abwärts-Rampe gebaut')
+}
 
 export type PlacementServiceContext = {
   state: GameSnapshot
@@ -90,25 +108,25 @@ export class PlacementService {
   ): ActionResult {
     const c = this.context
     if (wayType && WAY_TYPES[wayType]?.mode !== 'road') {
-      return { ok: false, message: 'Gültigen Straßenbelag wählen' }
+      return { ok: false, message: de('Gültigen Straßenbelag wählen') }
     }
-    if (!c.isInWorld(x, z)) return { ok: false, message: 'Außerhalb des Geländes' }
+    if (!c.isInWorld(x, z)) return { ok: false, message: de('Außerhalb des Geländes') }
     const terrain = c.getTerrainHeight(x, z)
     elevation = snapWayElevation(elevation)
     slope = snapWayElevation(slope)
     const direction = ((slopeDirection % 4) + 4) % 4 as Direction
     const rampStart = elevation - slope
     if (elevation < terrain - WAY_LEVEL_MATCH || rampStart < terrain - WAY_LEVEL_MATCH) {
-      return { ok: false, message: 'Die Straße kann nicht unter das Gelände' }
+      return { ok: false, message: de('Die Straße kann nicht unter das Gelände') }
     }
     if (
       elevation > maxRoadElevation(terrain) + WAY_ELEVATION_EPSILON ||
       rampStart > maxRoadElevation(terrain) + WAY_ELEVATION_EPSILON
     ) {
-      return { ok: false, message: 'Autos dürfen höchstens eine Höhenstufe über dem Gelände fahren' }
+      return { ok: false, message: de('Autos dürfen höchstens eine Höhenstufe über dem Gelände fahren') }
     }
     if (c.isWaterTerrain(x, z) && elevation <= c.getWaterLevel()) {
-      return { ok: false, message: 'Im Wasser kann keine Straße gebaut werden' }
+      return { ok: false, message: de('Im Wasser kann keine Straße gebaut werden') }
     }
     if (
       c.getRideAccessAt(x, z) ||
@@ -117,7 +135,7 @@ export class PlacementService {
       c.getMedicalCellAt(x, z) ||
       c.getStageForecourtCellAt(x, z)
     ) {
-      return { ok: false, message: 'Hier konnte keine Straße gebaut werden' }
+      return { ok: false, message: de('Hier konnte keine Straße gebaut werden') }
     }
     const candidateBase = Math.min(elevation, rampStart)
     const candidateTop = Math.max(elevation, rampStart) + 0.28
@@ -135,7 +153,7 @@ export class PlacementService {
       }) ||
       c.coasterOccupiesVolume(x, z, candidateBase, candidateTop - candidateBase)
     ) {
-      return { ok: false, message: 'Auf dieser Höhe ist nicht genug Platz' }
+      return { ok: false, message: de('Auf dieser Höhe ist nicht genug Platz') }
     }
     const offsets = DIRECTION_OFFSETS[direction]
     const layersHere = c.getRoadCellsAt(x, z)
@@ -157,7 +175,7 @@ export class PlacementService {
           ),
         )
       if (!previous && !existing) {
-        return { ok: false, message: 'Eine Rampe muss an eine bestehende Straße anschließen' }
+        return { ok: false, message: de('Eine Rampe muss an eine bestehende Straße anschließen') }
       }
     } else if (!c.isAtTerrainLevel(x, z, elevation)) {
       const hasNeighbor = DIRECTIONS.some((neighborDirection) => {
@@ -170,7 +188,7 @@ export class PlacementService {
         )
       })
       if (!hasNeighbor && !existing && !hasLowerRoad) {
-        return { ok: false, message: 'Eine erhöhte Straße muss anschließen' }
+        return { ok: false, message: de('Eine erhöhte Straße muss anschließen') }
       }
     }
     if (wayType && elevation <= terrain) {
@@ -187,7 +205,7 @@ export class PlacementService {
         ? 0
         : roadCost
     if (!canAfford(c.state, extra + clearCost)) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
     c.clearTreesAt(x, z, candidateBase, candidateTop - candidateBase)
     if (extra) bookFinance(c.state, 'construction', -extra)
@@ -227,12 +245,12 @@ export class PlacementService {
     return {
       ok: true,
       message: existing
-        ? 'Straße aktualisiert'
+        ? de('Straße aktualisiert')
         : hasLowerRoad
-          ? 'Straße über die Autostraße gebaut'
+          ? de('Straße über die Autostraße gebaut')
           : slope === 0
-            ? `Straße auf Ebene ${elevation} gebaut`
-            : `${slope > 0 ? 'Aufwärts-' : 'Abwärts-'}Rampe gebaut`,
+            ? de`Straße auf Ebene ${num(elevation)} gebaut`
+            : rampBuilt(slope),
     }
   }
 
@@ -248,7 +266,7 @@ export class PlacementService {
       : elevation
     const road = c.getRoadCellAt(x, z, layerElevation)
     if (!road) {
-      return { ok: false, message: 'Dieses Straßenstück kann nicht zurückgenommen werden' }
+      return { ok: false, message: de('Dieses Straßenstück kann nicht zurückgenommen werden') }
     }
     if (previousRoad) Object.assign(road, structuredClone(previousRoad))
     else {
@@ -261,7 +279,7 @@ export class PlacementService {
     c.emit()
     return {
       ok: true,
-      message: previousRoad ? 'Vorheriges Straßenfeld' : 'Straße zurückgenommen',
+      message: previousRoad ? de('Vorheriges Straßenfeld') : de('Straße zurückgenommen'),
     }
   }
 
@@ -278,16 +296,16 @@ export class PlacementService {
     elevation = snapWayElevation(elevation)
     slope = snapWayElevation(slope)
     if (wayType && WAY_TYPES[wayType]?.mode !== 'foot') {
-      return { ok: false, message: 'Gültigen Fußwegbelag wählen' }
+      return { ok: false, message: de('Gültigen Fußwegbelag wählen') }
     }
     if (wayType && elevation <= c.getTerrainHeight(x, z)) {
       const issue = wayIssue(c.state, x, z, wayType)
       if (issue) return { ok: false, message: issue }
     }
     const pathCost = wayType ? WAY_TYPES[wayType].cost : BUILDINGS.path.cost
-    if (!c.isInWorld(x, z)) return { ok: false, message: 'Außerhalb des Geländes' }
+    if (!c.isInWorld(x, z)) return { ok: false, message: de('Außerhalb des Geländes') }
     if (c.hasLiveParkingOccupancy(x, z) || c.isLogisticsBuildingCell(x, z)) {
-      return { ok: false, message: 'Hier liegt bereits eine Logistikfläche' }
+      return { ok: false, message: de('Hier liegt bereits eine Logistikfläche') }
     }
     const road = c.getRoadCellsAt(x, z).find((layer) =>
       wayOverlapsRoadGrade(
@@ -297,16 +315,16 @@ export class PlacementService {
       ),
     )
     if (road && pathType === 'queue') {
-      return { ok: false, message: 'Eine Warteschlange kann nicht auf der Autostraße liegen' }
+      return { ok: false, message: de('Eine Warteschlange kann nicht auf der Autostraße liegen') }
     }
     if (c.getCampingCellAt(x, z) && elevation < 1.2) {
-      return { ok: false, message: 'Durch einen Zeltplatz kann kein Weg führen' }
+      return { ok: false, message: de('Durch einen Zeltplatz kann kein Weg führen') }
     }
     if (c.getMedicalCellAt(x, z) && elevation < 1.2) {
-      return { ok: false, message: 'Durch den Krankenbereich kann kein Weg führen' }
+      return { ok: false, message: de('Durch den Krankenbereich kann kein Weg führen') }
     }
     if (c.getStageForecourtCellAt(x, z) && elevation < 1.2) {
-      return { ok: false, message: 'Durch den Bühnenvorplatz kann kein Weg führen' }
+      return { ok: false, message: de('Durch den Bühnenvorplatz kann kein Weg führen') }
     }
     const rampStartElevation = elevation - slope
     const candidateBase = Math.min(elevation, rampStartElevation)
@@ -316,7 +334,7 @@ export class PlacementService {
       | { point: { y: number } }
       | undefined
     if (gate && gate.point.y < candidateTop && candidateBase < gate.point.y + 0.8) {
-      return { ok: false, message: 'Hier steht ein Ein- oder Ausgang – den Weg daneben anschließen' }
+      return { ok: false, message: de('Hier steht ein Ein- oder Ausgang – den Weg daneben anschließen') }
     }
     const occupants = c.state.buildings.filter((building) => {
       if (!occupiesBuildingCell(building, x, z)) return false
@@ -338,13 +356,13 @@ export class PlacementService {
       blocking ||
       c.coasterOccupiesVolume(x, z, candidateBase, candidateTop - candidateBase)
     ) {
-      return { ok: false, message: 'Auf dieser Höhe ist nicht genug Platz' }
+      return { ok: false, message: de('Auf dieser Höhe ist nicht genug Platz') }
     }
     if (c.isWaterTerrain(x, z) && elevation <= c.getWaterLevel()) {
-      return { ok: false, message: 'Im Wasser kann kein Weg gebaut werden' }
+      return { ok: false, message: de('Im Wasser kann kein Weg gebaut werden') }
     }
     if (elevation < c.getWaterLevel() || elevation > MAX_PATH_ELEVATION) {
-      return { ok: false, message: 'Diese Bauhöhe ist nicht möglich' }
+      return { ok: false, message: de('Diese Bauhöhe ist nicht möglich') }
     }
     const directions = [
       { x: 0, z: 1 },
@@ -358,11 +376,11 @@ export class PlacementService {
       (!direction ||
         !c.getPathAt(x - direction.x, z - direction.z, elevation - slope))
     ) {
-      return { ok: false, message: 'Eine Rampe muss an einen bestehenden Weg anschließen' }
+      return { ok: false, message: de('Eine Rampe muss an einen bestehenden Weg anschließen') }
     }
     const clearCost = c.getTreeClearCost(x, z, candidateBase, candidateTop - candidateBase)
     if (!canAfford(c.state, pathCost + clearCost)) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
     c.clearTreesAt(x, z, candidateBase, candidateTop - candidateBase)
     c.clearDesignatedOccupancyAt(x, z, false, { preserveMedical: true })
@@ -411,14 +429,14 @@ export class PlacementService {
     return {
       ok: true,
       message: existingPath
-        ? `${pathType === 'queue' ? 'Warteschlange' : 'Weg'} ersetzt`
+        ? pathType === 'queue' ? de('Warteschlange ersetzt') : de('Weg ersetzt')
         : crossing
-          ? 'Übergang über die Autostraße gebaut'
+          ? de('Übergang über die Autostraße gebaut')
           : overRoad
-            ? 'Gehweg über die Straße gebaut'
+            ? de('Gehweg über die Straße gebaut')
             : slope === 0
-              ? `Weg auf Ebene ${elevation} gebaut`
-              : `${slope > 0 ? 'Aufwärts-' : 'Abwärts-'}Rampe gebaut`,
+              ? de`Weg auf Ebene ${num(elevation)} gebaut`
+              : rampBuilt(slope),
     }
   }
 
@@ -431,7 +449,7 @@ export class PlacementService {
     const c = this.context
     const path = c.getPathAt(x, z, elevation)
     if (!path || path.kind !== 'path' || (path.id === ENTRANCE_PATH_ID && !previousPath)) {
-      return { ok: false, message: 'Dieses Wegstück kann nicht zurückgenommen werden' }
+      return { ok: false, message: de('Dieses Wegstück kann nicht zurückgenommen werden') }
     }
     if (previousPath) {
       const index = c.state.buildings.findIndex((building) => building.id === path.id)
@@ -453,8 +471,8 @@ export class PlacementService {
     return {
       ok: true,
       message: previousPath
-        ? 'Vorheriger Weg wiederhergestellt'
-        : 'Letztes Wegstück zurückgenommen',
+        ? de('Vorheriger Weg wiederhergestellt')
+        : de('Letztes Wegstück zurückgenommen'),
     }
   }
 
@@ -463,7 +481,7 @@ export class PlacementService {
     if (!buildingId && c.removeAccessControlsAt(x, z) > 0) {
       c.evaluateAccessSignals()
       c.emit()
-      return { ok: true, message: 'Kontrolle entfernt' }
+      return { ok: true, message: de('Kontrolle entfernt') }
     }
     const busStop = c.state.logistics.busStops.find(
       (stop) => stop.x === x && stop.z === z,
@@ -476,20 +494,20 @@ export class PlacementService {
         (line) => !line.stopIds.includes(busStop.id),
       )
       c.emit()
-      return { ok: true, message: 'Bushaltestelle entfernt' }
+      return { ok: true, message: de('Bushaltestelle entfernt') }
     }
     const building = buildingId
       ? c.state.buildings.find((candidate) => candidate.id === buildingId)
       : c.getAt(x, z)
     if (!building) return this.bulldozeDesignationOrRoad(x, z)
     if (building.id === ENTRANCE_PATH_ID) {
-      return { ok: false, message: 'Der Parkeingang kann nicht abgerissen werden' }
+      return { ok: false, message: de('Der Parkeingang kann nicht abgerissen werden') }
     }
     if (
       building.kind === 'tree' &&
       !canAfford(c.state, SIMULATION_CONFIG.economy.treeClearCost)
     ) {
-      return { ok: false, message: 'Nicht genug Geld, um den Baum zu entfernen' }
+      return { ok: false, message: de('Nicht genug Geld, um den Baum zu entfernen') }
     }
     if (building.kind === 'path') {
       c.relocateVisitorsFromPath(building)
@@ -506,15 +524,7 @@ export class PlacementService {
               ? Boolean(c.state.logistics.specialDepots.find((item) => item.id === building.id)?.vehicleIds.length)
               : false
     if (occupiedDepot) {
-      const noun =
-        building.kind === 'ambulanceGarage'
-          ? 'Krankenwagen'
-          : building.kind === 'busDepot'
-            ? 'Busse'
-            : building.kind === 'wasteDepot'
-              ? 'Müllfahrzeuge'
-              : 'Spezialfahrzeuge'
-      return { ok: false, message: `Vor dem Abriss müssen alle ${noun} entfernt werden` }
+      return { ok: false, message: DEPOT_IN_USE[building.kind as DepotKind] }
     }
     if (building.kind === 'ambulanceGarage') {
       c.state.logistics.ambulanceGarages = c.state.logistics.ambulanceGarages.filter(
@@ -534,6 +544,9 @@ export class PlacementService {
       )
     }
     c.state.buildings = c.state.buildings.filter((item) => item.id !== building.id)
+    // A ride building may own a scripted record the v30 loader migrated; the
+    // signature gate does not watch buildings, so drop that projection here.
+    if (building.kind === 'ride') dropLegacyAttractionRecords(c.state, building.id)
     if (building.stageDesign) syncStageAudience(c.state)
     if (
       building.kind === 'path' ||
@@ -559,14 +572,14 @@ export class PlacementService {
       visitor.targetId = null
       visitor.route = []
       visitor.state = 'exploring'
-      visitor.thought = 'Mein Ziel ist verschwunden.'
+      visitor.thought = de('Mein Ziel ist verschwunden.')
     })
     // A path that is torn up takes the rubbish lying on it with it.
     c.clearStrandedGroundDirt()
     c.recalculatePark()
     c.refreshPower()
     c.emit()
-    return { ok: true, message: `${BUILDINGS[building.kind].name} abgerissen` }
+    return { ok: true, message: de`${named(BUILDINGS[building.kind].name)} abgerissen` }
   }
 
   private bulldozeDesignationOrRoad(x: number, z: number): ActionResult {
@@ -592,7 +605,7 @@ export class PlacementService {
         x <= 2 &&
         layers.length === 1
       ) {
-        return { ok: false, message: 'Die Einfahrtsstraße kann nicht entfernt werden' }
+        return { ok: false, message: de('Die Einfahrtsstraße kann nicht entfernt werden') }
       }
       if (
         c.state.logistics.roadVehicles.some((vehicle) => {
@@ -604,7 +617,7 @@ export class PlacementService {
           )
         })
       ) {
-        return { ok: false, message: 'Auf der Straße befindet sich ein Fahrzeug' }
+        return { ok: false, message: de('Auf der Straße befindet sich ein Fahrzeug') }
       }
       c.state.logistics.roadCells = c.state.logistics.roadCells.filter(
         (cell) => cell !== road,
@@ -612,7 +625,7 @@ export class PlacementService {
       c.invalidateRoadGraph()
       if (c.getRoadCellsAt(x, z).length === 0) c.removeAccessControlsAt(x, z)
       c.emit()
-      return { ok: true, message: 'Straße entfernt' }
+      return { ok: true, message: de('Straße entfernt') }
     }
     if (c.getCampingCellAt(x, z)) {
       const given = c.designateCampingCell(x, z, false)
@@ -626,21 +639,21 @@ export class PlacementService {
       )
       c.refreshPower()
       c.emit()
-      return { ok: true, message: 'Kabel entfernt' }
+      return { ok: true, message: de('Kabel entfernt') }
     }
     const wasteDump = c.state.wasteDumpCells.find((cell) => cell.x === x && cell.z === z)
     if (wasteDump) {
       if (wasteDump.stored > 0) {
         return {
           ok: false,
-          message: 'Die Müllablage ist noch beladen und kann nicht aufgehoben werden',
+          message: de('Die Müllablage ist noch beladen und kann nicht aufgehoben werden'),
         }
       }
       c.state.wasteDumpCells = c.state.wasteDumpCells.filter(
         (cell) => cell.x !== x || cell.z !== z,
       )
       c.emit()
-      return { ok: true, message: 'Müllablage aufgehoben' }
+      return { ok: true, message: de('Müllablage aufgehoben') }
     }
     const forecourt = c.state.stageForecourtCells.find(
       (cell) => cell.x === x && cell.z === z,
@@ -649,7 +662,7 @@ export class PlacementService {
       if (forecourt.stageId) {
         return {
           ok: false,
-          message: 'Die Zuschauerfläche gehört zur Bühne und lässt sich nicht einzeln entfernen',
+          message: de('Die Zuschauerfläche gehört zur Bühne und lässt sich nicht einzeln entfernen'),
         }
       }
       c.state.stageForecourtCells = c.state.stageForecourtCells.filter(
@@ -662,8 +675,8 @@ export class PlacementService {
       })
       c.recalculateQueueDirections()
       c.emit()
-      return { ok: true, message: 'Bühnenvorplatz aufgehoben' }
+      return { ok: true, message: de('Bühnenvorplatz aufgehoben') }
     }
-    return { ok: false, message: 'Hier gibt es nichts abzureißen' }
+    return { ok: false, message: NOTHING_TO_DEMOLISH }
   }
 }

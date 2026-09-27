@@ -1,4 +1,5 @@
 import { WORLD_SIZE } from './catalog'
+import { de } from '../i18n/marker'
 import { findWeightedPath } from './pathfinding'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import {
@@ -109,18 +110,19 @@ export type RoadVehicle = {
   housed?: boolean
 }
 
+/** Canonical German names; the UI shows them through localize(). */
 export const ROAD_VEHICLE_KIND_LABELS: Record<
   RoadVehicleKind,
   { icon: string; name: string }
 > = {
-  visitorCar: { icon: '🚗', name: 'Besucherauto' },
-  ambulance: { icon: '🚑', name: 'Krankenwagen' },
-  bus: { icon: '🚌', name: 'Bus' },
-  garbageTruck: { icon: '🚛', name: 'Müllfahrzeug' },
-  sweeper: { icon: '🧹', name: 'Saugreiniger' },
-  deliveryTruck: { icon: '🚚', name: 'Lieferfahrzeug' },
-  tourBus: { icon: '🚌', name: 'Tourbus' },
-  fireTruck: { icon: '🚒', name: 'Feuerwehrwagen' },
+  visitorCar: { icon: '🚗', name: de('Besucherauto') },
+  ambulance: { icon: '🚑', name: de('Krankenwagen') },
+  bus: { icon: '🚌', name: de('Bus') },
+  garbageTruck: { icon: '🚛', name: de('Müllfahrzeug') },
+  sweeper: { icon: '🧹', name: de('Saugreiniger') },
+  deliveryTruck: { icon: '🚚', name: de('Lieferfahrzeug') },
+  tourBus: { icon: '🚌', name: de('Tourbus') },
+  fireTruck: { icon: '🚒', name: de('Feuerwehrwagen') },
 }
 
 export function isPlayerOwnedFleetVehicle(vehicle: Pick<RoadVehicle, 'kind'>): boolean {
@@ -146,62 +148,6 @@ export function isVehicleReversing(vehicle: RoadVehicle): boolean {
     move !== null &&
     move === oppositeDirection(vehicleFacingDirection(vehicle.facing))
   )
-}
-
-export function describeRoadVehicleActivity(vehicle: RoadVehicle): string {
-  if ((vehicle.stuckMinutes ?? 0) > 0) return 'Steckt im Schlamm fest'
-  if (vehicle.kind === 'visitorCar' && vehicle.waitMinutes > 0 &&
-    (vehicle.state === 'parked' || (vehicle.state === 'returning' && vehicle.route.length === 0))) {
-    return 'Keine Ausfahrtroute – Straßenpfeile und Verbindungen prüfen'
-  }
-  if (isVehicleReversing(vehicle)) return 'Setzt zurück'
-  const queued =
-    vehicle.route.length > 0 &&
-    vehicle.waitMinutes > 0 &&
-    (vehicle.state === 'driving' ||
-      vehicle.state === 'responding' ||
-      vehicle.state === 'returning' ||
-      vehicle.state === 'parking')
-  if (queued) return 'Wartet, bis die Fahrbahn oder Ampel frei ist'
-  switch (vehicle.state) {
-    case 'parked':
-      return 'Steht auf dem Parkplatz'
-    case 'parking':
-      return 'Rangiert auf den Parkplatz'
-    case 'waiting':
-      return vehicle.resumeState
-        ? 'Wartet nach einem Zwischenfall'
-        : vehicle.parkingCell || vehicle.target?.kind === 'parking'
-          ? 'Wartet auf die Zufahrt zum Parkplatz'
-          : 'Wartet auf der Straße'
-    case 'driving':
-      if (vehicle.kind === 'deliveryTruck') return 'Fährt zur Anlieferung'
-      if (vehicle.target?.kind === 'parking') return 'Fährt zum Parkplatz'
-      if (vehicle.target?.kind === 'hold') return 'Sucht einen freien Parkplatz'
-      if (vehicle.target?.kind === 'cruise') {
-        return 'Fährt auf der Straße und sucht einen Parkplatz'
-      }
-      if (vehicle.target?.kind === 'busStop') return 'Fährt zur nächsten Haltestelle'
-      if (vehicle.target?.kind === 'wasteDump') return 'Fährt zur Müllkippe'
-      if (vehicle.target?.kind === 'sealedWasteContainer') return 'Fährt zum Müllcontainer'
-      if (vehicle.target?.kind === 'depot') return 'Fährt zum Betriebshof'
-      if (vehicle.target?.kind === 'garage') return 'Fährt zur Garage'
-      if (vehicle.target?.kind === 'cell') return 'Fährt zum Ziel'
-      return 'Unterwegs'
-    case 'responding':
-      return 'Fährt zum Einsatz'
-    case 'returning':
-      if (vehicle.pendingSale && vehicle.kind === 'ambulance') {
-        return 'Fährt zur Garage und wird verkauft'
-      }
-      return vehicle.kind === 'visitorCar' || vehicle.kind === 'deliveryTruck'
-        ? 'Fährt vom Gelände ab'
-        : 'Fährt zurück'
-    case 'at-stop':
-      return 'Hält an der Haltestelle'
-    case 'idle':
-      return 'Wartet auf den nächsten Auftrag'
-  }
 }
 
 export function roadVehicleCarriesPeople(kind: RoadVehicleKind): boolean {
@@ -373,62 +319,6 @@ export function roadVehicleWasteCapacity(kind: RoadVehicleKind): number | null {
   if (kind === 'garbageTruck') return SIMULATION_CONFIG.logistics.garbageTruckCapacity
   if (kind === 'sweeper') return SIMULATION_CONFIG.logistics.sweeperCapacity
   return null
-}
-
-export type RoadVehicleInspectStat = {
-  label: string
-  value: string
-}
-
-export function formatRoadVehicleInspectLoad(
-  vehicle: Pick<RoadVehicle, 'kind' | 'passengerIds' | 'cargo'>,
-  expectedPassengers?: number,
-): RoadVehicleInspectStat[] {
-  const stats: RoadVehicleInspectStat[] = []
-  if (roadVehicleCarriesPeople(vehicle.kind)) {
-    const seated = vehicle.passengerIds.length
-    stats.push({
-      label: 'Insassen',
-      value:
-        expectedPassengers && expectedPassengers > 0
-          ? `${seated} / ${expectedPassengers}`
-          : String(seated),
-    })
-  }
-  const wasteCapacity = roadVehicleWasteCapacity(vehicle.kind)
-  if (wasteCapacity !== null) {
-    const percent =
-      wasteCapacity <= 0
-        ? 0
-        : Math.min(100, Math.round((vehicle.cargo / wasteCapacity) * 100))
-    stats.push({
-      label: 'Müll',
-      value: `${vehicle.cargo} / ${wasteCapacity} (${percent} %)`,
-    })
-    return stats
-  }
-  if (vehicle.kind === 'deliveryTruck') {
-    stats.push({ label: 'Ladung', value: String(vehicle.cargo) })
-  }
-  return stats
-}
-
-export function describeRoadVehicleDestination(vehicle: RoadVehicle): string | null {
-  if (vehicle.parkingCell && vehicle.state !== 'parked') {
-    return `Parkplatz ${vehicle.parkingCell.x}, ${vehicle.parkingCell.z}`
-  }
-  if (vehicle.target?.kind === 'busStop') return 'Nächste Bushaltestelle'
-  if (vehicle.target?.kind === 'tourBusParking') return 'Tourbus-Parkplatz'
-  if (vehicle.target?.kind === 'sealedWasteContainer') return 'Müllcontainer'
-  if (vehicle.target?.kind === 'wasteDump') return 'Müllablage'
-  if (vehicle.kind === 'deliveryTruck' && vehicle.target?.kind === 'depot') {
-    return 'Anlieferungsplatz'
-  }
-  if (vehicle.target?.kind === 'cell') {
-    return `Feld ${vehicle.target.x}, ${vehicle.target.z}`
-  }
-  const last = vehicle.route.at(-1)
-  return last ? `Feld ${last.x}, ${last.z}` : null
 }
 
 export type ServiceGarage = RoadPosition & {

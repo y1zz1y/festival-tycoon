@@ -1,3 +1,4 @@
+import { de, keep } from '../i18n/marker'
 import { SIMULATION_CONFIG } from './simulationConfig'
 
 export const TRACK_PIECE_KINDS = [
@@ -280,83 +281,83 @@ export type CoasterTypeDefinition = {
 }
 
 export const TRACK_PIECES: Record<TrackPieceKind, TrackPieceDefinition> = {
-  sBendLeft: { kind: 'sBendLeft', name: 'S-Kurve links', cost: 240, special: true },
-  sBendRight: { kind: 'sBendRight', name: 'S-Kurve rechts', cost: 240, special: true },
-  verticalLoop: { kind: 'verticalLoop', name: 'Vertikaler Looping', cost: 900, special: true },
-  halfLoopUp: { kind: 'halfLoopUp', name: 'Halber Looping aufwärts', cost: 550, special: true },
-  halfLoopDown: { kind: 'halfLoopDown', name: 'Halber Looping abwärts', cost: 550, special: true },
-  photo: { kind: 'photo', name: 'Fotostation', cost: 280, special: true },
-  splash: { kind: 'splash', name: 'Wassersplash', cost: 450, special: true },
-  brakes: { kind: 'brakes', name: 'Bremsstrecke', cost: 150, special: true },
-  helixLeft: { kind: 'helixLeft', name: 'Helix links', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.helixLeft, special: true },
-  helixRight: { kind: 'helixRight', name: 'Helix rechts', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.helixRight, special: true },
-  station: { kind: 'station', name: 'Stationsplattform', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.station, station: true },
-  straight: { kind: 'straight', name: 'Gerade', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.straight },
+  sBendLeft: { kind: 'sBendLeft', name: de('S-Kurve links'), cost: 240, special: true },
+  sBendRight: { kind: 'sBendRight', name: de('S-Kurve rechts'), cost: 240, special: true },
+  verticalLoop: { kind: 'verticalLoop', name: de('Vertikaler Looping'), cost: 900, special: true },
+  halfLoopUp: { kind: 'halfLoopUp', name: de('Halber Looping aufwärts'), cost: 550, special: true },
+  halfLoopDown: { kind: 'halfLoopDown', name: de('Halber Looping abwärts'), cost: 550, special: true },
+  photo: { kind: 'photo', name: de('Fotostation'), cost: 280, special: true },
+  splash: { kind: 'splash', name: de('Wassersplash'), cost: 450, special: true },
+  brakes: { kind: 'brakes', name: de('Bremsstrecke'), cost: 150, special: true },
+  helixLeft: { kind: 'helixLeft', name: de('Helix links'), cost: SIMULATION_CONFIG.coasters.trackPieceCosts.helixLeft, special: true },
+  helixRight: { kind: 'helixRight', name: de('Helix rechts'), cost: SIMULATION_CONFIG.coasters.trackPieceCosts.helixRight, special: true },
+  station: { kind: 'station', name: de('Stationsplattform'), cost: SIMULATION_CONFIG.coasters.trackPieceCosts.station, station: true },
+  straight: { kind: 'straight', name: de('Gerade'), cost: SIMULATION_CONFIG.coasters.trackPieceCosts.straight },
   slopeGentleUp: {
     kind: 'slopeGentleUp',
-    name: 'Sanfte Steigung',
+    name: de('Sanfte Steigung'),
     cost: SIMULATION_CONFIG.coasters.trackPieceCosts.slopeGentleUp,
     targetPitch: TRACK_PITCHES.gentleUp,
     chainAllowed: true,
   },
   slopeUp: {
     kind: 'slopeUp',
-    name: 'Steile Steigung',
+    name: de('Steile Steigung'),
     cost: SIMULATION_CONFIG.coasters.trackPieceCosts.slopeUp,
     targetPitch: TRACK_PITCHES.steepUp,
     chainAllowed: true,
   },
   slopeGentleDown: {
     kind: 'slopeGentleDown',
-    name: 'Sanftes Gefälle',
+    name: de('Sanftes Gefälle'),
     cost: SIMULATION_CONFIG.coasters.trackPieceCosts.slopeGentleDown,
     targetPitch: TRACK_PITCHES.gentleDown,
   },
   slopeDown: {
     kind: 'slopeDown',
-    name: 'Steiles Gefälle',
+    name: de('Steiles Gefälle'),
     cost: SIMULATION_CONFIG.coasters.trackPieceCosts.slopeDown,
     targetPitch: TRACK_PITCHES.steepDown,
   },
   pitchTransition: {
     kind: 'pitchTransition',
-    name: 'Höhenübergang',
+    name: de('Höhenübergang'),
     cost: SIMULATION_CONFIG.coasters.trackPieceCosts.pitchTransition,
     chainAllowed: true,
   },
   bankTransition: {
     kind: 'bankTransition',
-    name: 'Neigungsübergang',
+    name: de('Neigungsübergang'),
     cost: SIMULATION_CONFIG.coasters.trackPieceCosts.bankTransition,
   },
-  curveLeft1: { kind: 'curveLeft1', name: 'Kurve links 1×1', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveLeft1, radius: 1, turn: -1 },
+  curveLeft1: { kind: 'curveLeft1', name: de('Kurve links 1×1'), cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveLeft1, radius: 1, turn: -1 },
   curveRight1: {
     kind: 'curveRight1',
-    name: 'Kurve rechts 1×1',
+    name: de('Kurve rechts 1×1'),
     cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveRight1,
     radius: 1,
     turn: 1,
   },
-  curveLeft2: { kind: 'curveLeft2', name: 'Kurve links 2×2', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveLeft2, radius: 2, turn: -1 },
+  curveLeft2: { kind: 'curveLeft2', name: de('Kurve links 2×2'), cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveLeft2, radius: 2, turn: -1 },
   curveRight2: {
     kind: 'curveRight2',
-    name: 'Kurve rechts 2×2',
+    name: de('Kurve rechts 2×2'),
     cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveRight2,
     radius: 2,
     turn: 1,
   },
-  curveLeft3: { kind: 'curveLeft3', name: 'Kurve links 3×3', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveLeft3, radius: 3, turn: -1 },
+  curveLeft3: { kind: 'curveLeft3', name: de('Kurve links 3×3'), cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveLeft3, radius: 3, turn: -1 },
   curveRight3: {
     kind: 'curveRight3',
-    name: 'Kurve rechts 3×3',
+    name: de('Kurve rechts 3×3'),
     cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveRight3,
     radius: 3,
     turn: 1,
   },
-  curveLeft4: { kind: 'curveLeft4', name: 'Kurve links 4×4', cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveLeft4, radius: 4, turn: -1 },
+  curveLeft4: { kind: 'curveLeft4', name: de('Kurve links 4×4'), cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveLeft4, radius: 4, turn: -1 },
   curveRight4: {
     kind: 'curveRight4',
-    name: 'Kurve rechts 4×4',
+    name: de('Kurve rechts 4×4'),
     cost: SIMULATION_CONFIG.coasters.trackPieceCosts.curveRight4,
     radius: 4,
     turn: 1,
@@ -422,7 +423,7 @@ function defineCoasterType(
 export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   classicSteel: defineCoasterType(
     'classicSteel',
-    'Klassische Stahlachterbahn',
+    de('Klassische Stahlachterbahn'),
     { color: 0xd53945, railColor: 0xf2d35c, carColor: 0x2876c7, accentColor: 0xe8c45a },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, NO_HELIX),
@@ -433,7 +434,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   wooden: defineCoasterType(
     'wooden',
-    'Holzachterbahn',
+    de('Holzachterbahn'),
     { color: 0x8b5a2b, railColor: 0xd4a574, carColor: 0xc45c26, accentColor: 0xf0d090 },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['halfLoopUp', 'halfLoopDown', ...NO_ONE_TILE_TURNS, ...NO_HELIX]),
@@ -444,7 +445,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   looping: defineCoasterType(
     'looping',
-    'Looping-Stahlachterbahn',
+    de('Looping-Stahlachterbahn'),
     { color: 0x2f6fed, railColor: 0xf4f0e6, carColor: 0x1d4ed8, accentColor: 0xfbbf24 },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash', ...NO_HELIX]),
@@ -455,7 +456,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   corkscrew: defineCoasterType(
     'corkscrew',
-    'Corkscrew',
+    keep('Corkscrew'),
     { color: 0x0f766e, railColor: 0x99f6e4, carColor: 0x115e59, accentColor: 0xf59e0b },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash', ...NO_HELIX]),
@@ -466,7 +467,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   hyper: defineCoasterType(
     'hyper',
-    'Hyperachterbahn',
+    de('Hyperachterbahn'),
     { color: 0x1e3a5f, railColor: 0xe2e8f0, carColor: 0x0ea5e9, accentColor: 0xf97316 },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, 'splash', ...NO_HELIX]),
@@ -478,7 +479,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   twister: defineCoasterType(
     'twister',
-    'Twister (B&M)',
+    keep('Twister (B&M)'),
     { color: 0x4c1d95, railColor: 0xc4b5fd, carColor: 0x6d28d9, accentColor: 0xfde68a },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash']),
@@ -489,7 +490,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   hyperTwister: defineCoasterType(
     'hyperTwister',
-    'Hyper-Twister',
+    de('Hyper-Twister'),
     { color: 0x1e1b4b, railColor: 0xa5b4fc, carColor: 0x4338ca, accentColor: 0xfda4af },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, 'splash']),
@@ -500,7 +501,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   verticalDrop: defineCoasterType(
     'verticalDrop',
-    'Vertical Drop',
+    keep('Vertical Drop'),
     { color: 0x3f3f46, railColor: 0xfafafa, carColor: 0x18181b, accentColor: 0xef4444 },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, 'splash', ...NO_HELIX]),
@@ -511,7 +512,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   giga: defineCoasterType(
     'giga',
-    'Giga-Coaster',
+    de('Giga-Coaster'),
     { color: 0x0c4a6e, railColor: 0xe0f2fe, carColor: 0x0369a1, accentColor: 0xfbbf24 },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, 'splash', ...NO_HELIX]),
@@ -523,7 +524,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   lsmLaunched: defineCoasterType(
     'lsmLaunched',
-    'LSM-Abschussachterbahn',
+    de('LSM-Abschussachterbahn'),
     { color: 0x7c2d12, railColor: 0xfed7aa, carColor: 0xea580c, accentColor: 0x1e293b },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash', ...NO_HELIX]),
@@ -535,7 +536,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   limLaunched: defineCoasterType(
     'limLaunched',
-    'LIM-Abschussachterbahn',
+    de('LIM-Abschussachterbahn'),
     { color: 0x14532d, railColor: 0xbbf7d0, carColor: 0x16a34a, accentColor: 0x0f172a },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash', ...NO_HELIX]),
@@ -547,7 +548,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   inverted: defineCoasterType(
     'inverted',
-    'Inverted',
+    keep('Inverted'),
     { color: 0x1f2937, railColor: 0x94a3b8, carColor: 0x334155, accentColor: 0xf43f5e },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash']),
@@ -558,7 +559,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   compactInverted: defineCoasterType(
     'compactInverted',
-    'Kompakte Inverted',
+    de('Kompakte Inverted'),
     { color: 0x111827, railColor: 0xcbd5e1, carColor: 0x1e293b, accentColor: 0x22d3ee },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash']),
@@ -569,7 +570,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   flying: defineCoasterType(
     'flying',
-    'Flying Coaster',
+    keep('Flying Coaster'),
     { color: 0x312e81, railColor: 0xc7d2fe, carColor: 0x4f46e5, accentColor: 0xf472b6 },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash']),
@@ -580,7 +581,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   standUp: defineCoasterType(
     'standUp',
-    'Stehende Achterbahn',
+    de('Stehende Achterbahn'),
     { color: 0x7f1d1d, railColor: 0xfecaca, carColor: 0xb91c1c, accentColor: 0xfacc15 },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, ['splash', ...NO_HELIX]),
@@ -591,7 +592,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   junior: defineCoasterType(
     'junior',
-    'Juniorachterbahn',
+    de('Juniorachterbahn'),
     { color: 0x166534, railColor: 0x86efac, carColor: 0x22c55e, accentColor: 0xfde047 },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, ...NO_STEEP, 'splash', ...NO_HELIX]),
@@ -604,7 +605,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   steelWildMouse: defineCoasterType(
     'steelWildMouse',
-    'Wilde Maus (Stahl)',
+    de('Wilde Maus (Stahl)'),
     { color: 0xa16207, railColor: 0xfde68a, carColor: 0xf59e0b, accentColor: 0x1f2937 },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [
@@ -625,7 +626,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   woodenWildMouse: defineCoasterType(
     'woodenWildMouse',
-    'Wilde Maus (Holz)',
+    de('Wilde Maus (Holz)'),
     { color: 0x78350f, railColor: 0xfbbf24, carColor: 0xb45309, accentColor: 0x44403c },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [
@@ -647,7 +648,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   mineTrain: defineCoasterType(
     'mineTrain',
-    'Minenachterbahn',
+    de('Minenachterbahn'),
     { color: 0x5b3a1a, railColor: 0xc4a574, carColor: 0x7c2d12, accentColor: 0xd6d3d1 },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, 'splash']),
@@ -658,7 +659,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   bobsled: defineCoasterType(
     'bobsled',
-    'Bobbahn',
+    de('Bobbahn'),
     { color: 0x1e3a8a, railColor: 0x93c5fd, carColor: 0x1d4ed8, accentColor: 0xf8fafc },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [
@@ -676,7 +677,7 @@ export const COASTER_TYPES: Record<CoasterTypeId, CoasterTypeDefinition> = {
   ),
   suspendedSwinging: defineCoasterType(
     'suspendedSwinging',
-    'Hängende Schaukelachterbahn',
+    de('Hängende Schaukelachterbahn'),
     { color: 0x365314, railColor: 0xa3e635, carColor: 0x3f6212, accentColor: 0xfef08a },
     {
       supportedPieces: withoutPieces(TRACK_PIECE_KINDS, [...NO_INVERSIONS, ...NO_BANKING, 'splash']),

@@ -1,6 +1,7 @@
 import { TUTORIAL_PRESET_ID, tutorialSteps } from '../game/tutorial'
 import type { GameSnapshot } from '../game/types/snapshot'
 import { escapeHtml } from './format'
+import { t } from '../i18n'
 
 /**
  * The first-steps checklist (A9): a small window top right that shows up only in the
@@ -15,12 +16,12 @@ export function mountTutorialChecklist(): { update(snapshot: Readonly<GameSnapsh
   panel.className = 'tutorial-checklist panel'
   panel.hidden = true
   panel.setAttribute('aria-labelledby', 'tutorial-checklist-title')
-  panel.innerHTML = `<div class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 id="tutorial-checklist-title" class="panel-header-title">Erste Schritte</h2><span class="panel-drag-line" aria-hidden="true"></span><button type="button" class="panel-close-button" data-tutorial-fold aria-label="Checkliste einklappen">–</button></div><ol class="tutorial-steps"></ol><p class="tutorial-next scenario-hint"></p>`
+  panel.innerHTML = `<div class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 id="tutorial-checklist-title" class="panel-header-title">${t('Erste Schritte')}</h2><span class="panel-drag-line" aria-hidden="true"></span><button type="button" class="panel-close-button" data-tutorial-fold aria-label="${t('Checkliste einklappen')}">–</button></div><ol class="tutorial-steps"></ol><p class="tutorial-next scenario-hint"></p>`
   const reopen = document.createElement('button')
   reopen.type = 'button'
   reopen.className = 'tutorial-reopen'
   reopen.hidden = true
-  reopen.textContent = '📋 Erste Schritte'
+  reopen.textContent = `📋 ${t('Erste Schritte')}`
   shell.append(panel, reopen)
   const list = panel.querySelector<HTMLOListElement>('.tutorial-steps')!
   const next = panel.querySelector<HTMLElement>('.tutorial-next')!
@@ -41,7 +42,8 @@ export function mountTutorialChecklist(): { update(snapshot: Readonly<GameSnapsh
       const steps = tutorialSteps(snapshot)
       const open = steps.find((step) => !step.done)
       const html = steps.map((step) => `<li class="scenario-goal scenario-goal-${step.done ? 'done' : 'open'}"><span aria-hidden="true">${step.done ? '✔' : '○'}</span><span>${escapeHtml(step.title)}</span></li>`).join('')
-      const hint = open ? `Als Nächstes: ${open.hint}` : 'Geschafft! Euer erstes Festival läuft. Die Checkliste kann jetzt eingeklappt werden.'
+      // Step titles and hints come translated from the client-text module game/tutorial.ts.
+      const hint = open ? t`Als Nächstes: ${open.hint}` : t('Geschafft! Euer erstes Festival läuft. Die Checkliste kann jetzt eingeklappt werden.')
       if (html + hint === markup) return
       markup = html + hint
       list.innerHTML = html

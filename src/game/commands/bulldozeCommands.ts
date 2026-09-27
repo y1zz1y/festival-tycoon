@@ -1,4 +1,6 @@
 import { groundKey } from '../ground'
+import { NOTHING_TO_DEMOLISH } from '../sentinels'
+import { de, num, plural } from '../../i18n/marker'
 import { occupiesBuildingCell } from '../stageDesign'
 import type { PlacedBuilding } from '../types/entities'
 import type { ActionResult, GameSnapshot } from '../types/snapshot'
@@ -33,13 +35,13 @@ export function bulldozeCommand(
         (visitor) => visitor.targetId === gate.building.id && visitor.state === 'using',
       )
     ) {
-      return { ok: false, message: 'Bitte die laufende Fahrt abwarten' }
+      return { ok: false, message: de('Bitte die laufende Fahrt abwarten') }
     }
     delete gate.building[gate.type === 'entrance' ? 'rideEntrance' : 'rideExit']
     context.invalidateBuildingIndex()
     context.recalculateQueueDirections()
     context.emit()
-    return { ok: true, message: 'Zugang entfernt' }
+    return { ok: true, message: de('Zugang entfernt') }
   }
   if (!buildingId) {
     const coaster = context.getRemovableCoasterAt(x, z)
@@ -52,7 +54,7 @@ export function bulldozeCommand(
     )
   ) {
     const cleared = context.clearDesignatedOccupancy(x, z)
-    return cleared ?? { ok: false, message: 'Objekt nicht mehr vorhanden' }
+    return cleared ?? { ok: false, message: de('Objekt nicht mehr vorhanden') }
   }
   const result = context.bulldozeAt(x, z, buildingId)
   const ground = context.state.festival.infrastructure.ground[groundKey(x, z)]
@@ -81,14 +83,14 @@ export function bulldozeAreaCommand(
 ): ActionResult {
   const unique = new Map(cells.map((cell) => [`${cell.x},${cell.z}`, cell]))
   let removed = 0
-  let lastIssue = 'Auf der Fläche gibt es nichts abzureißen'
+  let lastIssue: string = de('Auf der Fläche gibt es nichts abzureißen')
   for (const cell of unique.values()) {
     const limit = buildingCountAt(cell.x, cell.z) + 1
     for (let index = 0; index < limit; index += 1) {
       const result = bulldoze(cell.x, cell.z)
       if (result.ok) removed += 1
       else {
-        if (result.message !== 'Hier gibt es nichts abzureißen') lastIssue = result.message
+        if (result.message !== NOTHING_TO_DEMOLISH) lastIssue = result.message
         break
       }
     }
@@ -96,7 +98,7 @@ export function bulldozeAreaCommand(
   return removed > 0
     ? {
         ok: true,
-        message: `${removed} ${removed === 1 ? 'Element' : 'Elemente'} entfernt`,
+        message: plural(removed, de`${num(removed)} Element entfernt`, de`${num(removed)} Elemente entfernt`),
       }
     : { ok: false, message: lastIssue }
 }

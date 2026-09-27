@@ -1,9 +1,11 @@
+// i18n: client-text
 import type { GameSnapshot } from './GameState'
 import { BANDS, editionSatisfaction, festivalReputation, isHeadlinerBand } from './festivalManagement'
 import { moodNeedAverage } from './visitorNeeds'
 import { isWasteBin } from './decorationWalls'
 import { isSealedWasteContainer } from './waste'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import { formatMoney, joinList, joinParts, keep, plural, t } from '../i18n'
 
 export type MagazineVerdict = 'cult' | 'success' | 'mixed' | 'flop'
 
@@ -90,20 +92,20 @@ export function buildHeadlineMagazine(s: Readonly<GameSnapshot>): HeadlineMagazi
   return {
     edition: f.edition,
     weekendKey: festivalWeekendKey(s),
-    masthead: 'HEADLINE',
-    kicker: 'Headliner Magazin',
-    issueLine: `Nr. ${String(Math.max(1, f.edition)).padStart(2, '0')} · Das Wochenende im Urteil`,
-    dateLine: `Festivalsonntag · Tag ${firstDay}–${lastDay}`,
+    masthead: keep('HEADLINE'),
+    kicker: keep('Headliner Magazin'),
+    issueLine: joinParts(t`Nr. ${String(Math.max(1, f.edition)).padStart(2, '0')}`, t('Das Wochenende im Urteil')),
+    dateLine: joinParts(t('Festivalsonntag'), t`Tag ${String(firstDay)}–${String(lastDay)}`),
     score,
     stars,
     verdict,
-    verdictLine: VERDICT_LINE[verdict],
+    verdictLine: VERDICT_LINE[verdict](),
     lede: verdictLede(verdict, f.admissions, satisfaction, balance, headliner),
     pullQuote: pull,
     heroCaption: headliner
-      ? `${headliner} auf der Titelseite – und das Gelände drumherum.`
-      : 'Das Gelände nach der letzten Zugabe, bevor der Staub sich legt.',
-    coverStamp: COVER_STAMP[verdict],
+      ? t`${headliner} auf der Titelseite – und das Gelände drumherum.`
+      : t('Das Gelände nach der letzten Zugabe, bevor der Staub sich legt.'),
+    coverStamp: COVER_STAMP[verdict](),
     pros,
     cons,
   }
@@ -215,167 +217,170 @@ function collectCandidates(s: Readonly<GameSnapshot>, stats: SiteStats): Candida
   const add = (candidate: Candidate) => items.push(candidate)
 
   if (stats.satisfaction >= 85) {
-    add(blurb('pro', 'happy-guests', 96, 'Strahlende Gesichter bis zum Abspann',
-      'Die Gäste gehen mit vollen Herzen. HEADLINE hat selten so viele zufriedene Stimmen aus einem Feld gehört.'))
+    add(blurb('pro', 'happy-guests', 96, t('Strahlende Gesichter bis zum Abspann'),
+      t('Die Gäste gehen mit vollen Herzen. HEADLINE hat selten so viele zufriedene Stimmen aus einem Feld gehört.')))
   } else if (stats.satisfaction >= 72) {
-    add(blurb('pro', 'happy-enough', 78, 'Gute Laune, ehrlich verdient',
-      'Kein Hochglanzmärchen, aber ein Wochenende, das sich warm anfühlt. Die Leute würden wiederkommen.'))
+    add(blurb('pro', 'happy-enough', 78, t('Gute Laune, ehrlich verdient'),
+      t('Kein Hochglanzmärchen, aber ein Wochenende, das sich warm anfühlt. Die Leute würden wiederkommen.')))
   } else if (stats.satisfaction < 50) {
-    add(blurb('con', 'unhappy', 92, 'Die Stimmung kippte früh',
-      'Zu viele müde Augen, zu wenig Festivallust. Das Publikum hat das Wochenende nicht verziehen.'))
+    add(blurb('con', 'unhappy', 92, t('Die Stimmung kippte früh'),
+      t('Zu viele müde Augen, zu wenig Festivallust. Das Publikum hat das Wochenende nicht verziehen.')))
   } else if (stats.satisfaction < f.goals.satisfaction) {
-    add(blurb('con', 'sat-miss', 74, 'Zufriedenheit unter der Zielmarke',
-      'Die Gäste blieben höflich, nicht begeistert. Ein paar fehlende Prozent trennen hier Alltag von Jubel.'))
+    add(blurb('con', 'sat-miss', 74, t('Zufriedenheit unter der Zielmarke'),
+      t('Die Gäste blieben höflich, nicht begeistert. Ein paar fehlende Prozent trennen hier Alltag von Jubel.')))
   }
 
   if (stats.motivation >= 78) {
-    add(blurb('pro', 'motivation', 80, 'Die Festivallust hielt bis Sonntag',
-      'Selbst nach der letzten Zugabe wollten sie noch tanzen. Das ist die Währung, die kein Ticketpreis ersetzt.'))
+    add(blurb('pro', 'motivation', 80, t('Die Festivallust hielt bis Sonntag'),
+      t('Selbst nach der letzten Zugabe wollten sie noch tanzen. Das ist die Währung, die kein Ticketpreis ersetzt.')))
   } else if (stats.motivation < 42 && s.visitors.length) {
-    add(blurb('con', 'low-motivation', 76, 'Die Lust war früher zu Ende als das Programm',
-      'Gedränge, leere Bedürfnisse, dunkle Bühnen – die Festivallust sickerte weg, bevor der letzte Slot begann.'))
+    add(blurb('con', 'low-motivation', 76, t('Die Lust war früher zu Ende als das Programm'),
+      t('Gedränge, leere Bedürfnisse, dunkle Bühnen – die Festivallust sickerte weg, bevor der letzte Slot begann.')))
   }
 
   if (stats.headlinerName) {
-    add(blurb('pro', 'headliner', 94, `${stats.headlinerName} als Titelgeschichte`,
-      'Der große Name hat geliefert. Vorplatz voll, Stimmen rau, genau die Ausgabe, die man sich rahmt.'))
+    add(blurb('pro', 'headliner', 94, t`${stats.headlinerName} als Titelgeschichte`,
+      t('Der große Name hat geliefert. Vorplatz voll, Stimmen rau, genau die Ausgabe, die man sich rahmt.')))
   } else if (stats.bookingCount >= 6) {
-    add(blurb('pro', 'lineup-depth', 70, 'Ein Spielplan mit Atem',
-      'Keine einzelne Sensation, dafür ein durchgehendes Band. Das Feld hatte immer irgendwo Musik.'))
+    add(blurb('pro', 'lineup-depth', 70, t('Ein Spielplan mit Atem'),
+      t('Keine einzelne Sensation, dafür ein durchgehendes Band. Das Feld hatte immer irgendwo Musik.')))
   } else if (stats.bookingCount === 0) {
-    add(blurb('con', 'no-lineup', 95, 'Leere Slots, leere Gesichter',
-      'Ohne verbindliches Programm bleibt ein Festival ein Picknick mit Eintritt. HEADLINE war unerbittlich.'))
+    add(blurb('con', 'no-lineup', 95, t('Leere Slots, leere Gesichter'),
+      t('Ohne verbindliches Programm bleibt ein Festival ein Picknick mit Eintritt. HEADLINE war unerbittlich.')))
   } else if (stats.bookingCount < 3) {
-    add(blurb('con', 'thin-lineup', 68, 'Zu dünn für ein Wochenende',
-      'Ein, zwei Sets tragen keinen ganzen Samstag. Zwischen den Auftritten wurde das Feld still.'))
+    add(blurb('con', 'thin-lineup', 68, t('Zu dünn für ein Wochenende'),
+      t('Ein, zwei Sets tragen keinen ganzen Samstag. Zwischen den Auftritten wurde das Feld still.')))
   }
 
   if (stats.concerts >= 800) {
-    add(blurb('pro', 'concerts', 86, 'Stundenlang vor der Bühne',
-      'Konzertminuten ohne Ende. Wer wollte, fand seinen Slot – und blieb.'))
+    add(blurb('pro', 'concerts', 86, t('Stundenlang vor der Bühne'),
+      t('Konzertminuten ohne Ende. Wer wollte, fand seinen Slot – und blieb.')))
   } else if (stats.concerts < 80 && stats.bookingCount > 0) {
-    add(blurb('con', 'empty-pit', 72, 'Die Vorplätze blieben höflich leer',
-      'Gebucht war etwas. Gesehen wurde wenig. Strom, Vorplatz oder Timing haben die Sets ausgebremst.'))
+    add(blurb('con', 'empty-pit', 72, t('Die Vorplätze blieben höflich leer'),
+      t('Gebucht war etwas. Gesehen wurde wenig. Strom, Vorplatz oder Timing haben die Sets ausgebremst.')))
   }
 
   if (stats.showQuality >= 1) {
-    add(blurb('pro', 'backstage', 84, 'Backstage wie im Hochglanzheft',
-      'Catering, Ruhe, Ankunft: Die Bands klangen, als hätte jemand an sie gedacht. Das hört man.'))
+    add(blurb('pro', 'backstage', 84, t('Backstage wie im Hochglanzheft'),
+      t('Catering, Ruhe, Ankunft: Die Bands klangen, als hätte jemand an sie gedacht. Das hört man.')))
   } else if (stats.backstageTiles === 0 && stats.bookingCount > 0) {
-    add(blurb('con', 'bare-stage', 80, 'Bare Stage, nackte Nerven',
-      'Ohne Backstage tragen sich die Acts selbst. Die Shows liefen, aber sie glänzten nicht.'))
+    add(blurb('con', 'bare-stage', 80, t('Bare Stage, nackte Nerven'),
+      t('Ohne Backstage tragen sich die Acts selbst. Die Shows liefen, aber sie glänzten nicht.')))
   } else if (stats.showQuality <= BARE_SHOW + 0.04 && stats.bookingCount > 0) {
-    add(blurb('con', 'weak-supply', 73, 'Die Bandversorgung blieb Stückwerk',
-      'Ein Vorplatz allein macht noch keine Ausgabe. Catering und Tourbus hätten den Unterschied gemacht.'))
+    add(blurb('con', 'weak-supply', 73, t('Die Bandversorgung blieb Stückwerk'),
+      t('Ein Vorplatz allein macht noch keine Ausgabe. Catering und Tourbus hätten den Unterschied gemacht.')))
   }
 
   if (f.admissions >= f.goals.guests * 1.15) {
-    add(blurb('pro', 'crowds', 88, 'Das Feld war voll – im besten Sinn',
-      `${f.admissions} Anreisen, Ziel klar übertroffen. Ticketrollen leer, Wege voll, Kasse warm.`))
+    add(blurb('pro', 'crowds', 88, t('Das Feld war voll – im besten Sinn'), plural(
+      f.admissions,
+      t`${f.admissions} Anreise, Ziel klar übertroffen. Ticketrollen leer, Wege voll, Kasse warm.`,
+      t`${f.admissions} Anreisen, Ziel klar übertroffen. Ticketrollen leer, Wege voll, Kasse warm.`,
+    )))
   } else if (f.admissions >= f.goals.guests) {
-    add(blurb('pro', 'guests-met', 64, 'Die Anreisen haben die Marke gehalten',
-      'Kein Ansturm der Superlative, aber die Tore drehten sich oft genug. Das Wochenende hatte Publikum.'))
+    add(blurb('pro', 'guests-met', 64, t('Die Anreisen haben die Marke gehalten'),
+      t('Kein Ansturm der Superlative, aber die Tore drehten sich oft genug. Das Wochenende hatte Publikum.')))
   } else if (f.admissions < Math.max(40, f.goals.guests * 0.4)) {
-    add(blurb('con', 'empty-park', 90, 'Leere Wege, teure Stille',
-      'Zu wenig Gäste für so viel Gelände. HEADLINE fragt sich, für wen die Bühnen eigentlich leuchteten.'))
+    add(blurb('con', 'empty-park', 90, t('Leere Wege, teure Stille'),
+      t('Zu wenig Gäste für so viel Gelände. HEADLINE fragt sich, für wen die Bühnen eigentlich leuchteten.')))
   } else {
-    add(blurb('con', 'guest-miss', 66, 'Unter dem Anreiseziel',
-      'Die Kontingente hätten mehr vertragen. Ein Wochenende ohne Masse bleibt eine Generalprobe.'))
+    add(blurb('con', 'guest-miss', 66, t('Unter dem Anreiseziel'),
+      t('Die Kontingente hätten mehr vertragen. Ein Wochenende ohne Masse bleibt eine Generalprobe.')))
   }
 
   if (stats.balance >= Math.max(400, f.goals.profit + 200)) {
-    add(blurb('pro', 'profit', 82, 'Die Kasse schreibt mit',
-      'Einnahmen vor Gagen und Bratwurst. Diese Ausgabe trägt sich – und die nächste gleich mit.'))
+    add(blurb('pro', 'profit', 82, t('Die Kasse schreibt mit'),
+      t('Einnahmen vor Gagen und Bratwurst. Diese Ausgabe trägt sich – und die nächste gleich mit.')))
   } else if (stats.balance >= f.goals.profit) {
-    add(blurb('pro', 'broke-even', 58, 'Schwarze Zahlen, ruhige Nächte',
-      'Kein Vermögen, aber auch kein Loch. Die Bilanz lässt die nächste Buchung zu.'))
+    add(blurb('pro', 'broke-even', 58, t('Schwarze Zahlen, ruhige Nächte'),
+      t('Kein Vermögen, aber auch kein Loch. Die Bilanz lässt die nächste Buchung zu.')))
   } else if (stats.balance < 0) {
-    add(blurb('con', 'loss', 88, 'Das Wochenende hat Geld gekostet',
-      'Gagen, Ware, Personal – und zu wenig Gegenverkehr an der Kasse. Die Ausgabe bleibt ein teurer Satz.'))
+    add(blurb('con', 'loss', 88, t('Das Wochenende hat Geld gekostet'),
+      t('Gagen, Ware, Personal – und zu wenig Gegenverkehr an der Kasse. Die Ausgabe bleibt ein teurer Satz.')))
   }
 
   if (stats.dumpRatio < 0.25 && stats.litter + stats.vomit < 8 && stats.dirtyComplaints < 3) {
-    add(blurb('pro', 'clean', 83, 'Sauberes Feld nach der letzten Nacht',
-      'Kaum Säcke, kaum Scherben. Wer morgens über das Gelände geht, findet Festival – nicht Müllhalde.'))
+    add(blurb('pro', 'clean', 83, t('Sauberes Feld nach der letzten Nacht'),
+      t('Kaum Säcke, kaum Scherben. Wer morgens über das Gelände geht, findet Festival – nicht Müllhalde.')))
   } else if (stats.dumpRatio >= SIMULATION_CONFIG.waste.dumpFullRatio || stats.litter + stats.vomit >= 18 || stats.dirtyComplaints >= 8) {
-    add(blurb('con', 'trash', 93, 'Müllberge statt Afterglow',
-      'Ablagen voll, Wege klebrig, Beschwerden über Dreck. Das Bild bleibt, wenn die Musik längst weg ist.'))
+    add(blurb('con', 'trash', 93, t('Müllberge statt Afterglow'),
+      t('Ablagen voll, Wege klebrig, Beschwerden über Dreck. Das Bild bleibt, wenn die Musik längst weg ist.')))
   } else if (stats.dumpRatio >= 0.55 || stats.litter + stats.vomit >= 8) {
-    add(blurb('con', 'messy', 70, 'Das Gelände braucht eine zweite Schicht',
-      'Nicht die Katastrophe, aber auch kein Postkartenmotiv. Eimer und Ablagen kamen nicht hinterher.'))
+    add(blurb('con', 'messy', 70, t('Das Gelände braucht eine zweite Schicht'),
+      t('Nicht die Katastrophe, aber auch kein Postkartenmotiv. Eimer und Ablagen kamen nicht hinterher.')))
   }
 
   if (f.reputation.atmosphere >= 72 || stats.party >= 55 || stats.attractiveness >= 45) {
-    add(blurb('pro', 'atmosphere', 76, 'Licht, Lärm, genau die richtige Nacht',
-      'Partystimmung und Attraktivität haben das Feld zusammengehalten. Man hat es gehört, bevor man es sah.'))
+    add(blurb('pro', 'atmosphere', 76, t('Licht, Lärm, genau die richtige Nacht'),
+      t('Partystimmung und Attraktivität haben das Feld zusammengehalten. Man hat es gehört, bevor man es sah.')))
   }
   if (f.reputation.atmosphere < 40 && stats.party < 20) {
-    add(blurb('con', 'flat-air', 71, 'Die Luft blieb flach',
-      'Zu wenig Licht, zu wenig Lärm an den richtigen Stellen. Atmosphäre ist kein Zufall – hier fehlte sie.'))
+    add(blurb('con', 'flat-air', 71, t('Die Luft blieb flach'),
+      t('Zu wenig Licht, zu wenig Lärm an den richtigen Stellen. Atmosphäre ist kein Zufall – hier fehlte sie.')))
   }
 
   if (stats.unpoweredStages === 0 && s.buildings.some((building) => building.kind === 'stage')) {
-    add(blurb('pro', 'power', 62, 'Die Bühnen blieben wach',
-      'Strom bis zum letzten Slot. Kein dunkles Gerüst, keine abgebrochene Zugabe aus der Steckdose.'))
+    add(blurb('pro', 'power', 62, t('Die Bühnen blieben wach'),
+      t('Strom bis zum letzten Slot. Kein dunkles Gerüst, keine abgebrochene Zugabe aus der Steckdose.')))
   } else if (stats.unpoweredStages > 0 && stats.bookingCount > 0) {
-    add(blurb('con', 'no-power', 86, 'Dunkle Bühnen, laute Fragen',
-      'Ohne Netz kein Set. Mindestens eine Bühne stand ohne Strom – und das Programm gleich mit.'))
+    add(blurb('con', 'no-power', 86, t('Dunkle Bühnen, laute Fragen'),
+      t('Ohne Netz kein Set. Mindestens eine Bühne stand ohne Strom – und das Programm gleich mit.')))
   }
 
   if (stats.panic >= 3 || stats.crowdComplaints >= 6) {
-    add(blurb('con', 'panic', 97, 'Panik statt Refrains',
-      'Zu eng, zu unsicher, zu spät reagiert. Ein Festival, das Angst macht, verliert jede Zugabe.'))
+    add(blurb('con', 'panic', 97, t('Panik statt Refrains'),
+      t('Zu eng, zu unsicher, zu spät reagiert. Ein Festival, das Angst macht, verliert jede Zugabe.')))
   } else if (stats.security >= 2 && stats.panic === 0 && f.admissions >= 40) {
-    add(blurb('pro', 'security', 60, 'Security, die man nicht sieht',
-      'Keine Massenpanik, keine Schlagzeile von der falschen Sorte. Die Absperrung hat ihre Arbeit getan.'))
+    add(blurb('pro', 'security', 60, t('Security, die man nicht sieht'),
+      t('Keine Massenpanik, keine Schlagzeile von der falschen Sorte. Die Absperrung hat ihre Arbeit getan.')))
   } else if (stats.security === 0 && f.admissions >= f.goals.guests) {
-    add(blurb('con', 'no-security', 63, 'Volle Tore, leere Westen',
-      'Viel Publikum, keine sichtbare Security. Das geht gut – bis es nicht mehr geht.'))
+    add(blurb('con', 'no-security', 63, t('Volle Tore, leere Westen'),
+      t('Viel Publikum, keine sichtbare Security. Das geht gut – bis es nicht mehr geht.')))
   }
 
   if (stats.injured + stats.medicalOccupied >= 3) {
-    add(blurb('con', 'medical', 89, 'Die Sanizelte liefen über',
-      'Verletzte, belegte Betten, Schlangen vor der Hilfe. Das Wochenende hatte eine medizinische Fußnote zu viel.'))
+    add(blurb('con', 'medical', 89, t('Die Sanizelte liefen über'),
+      t('Verletzte, belegte Betten, Schlangen vor der Hilfe. Das Wochenende hatte eine medizinische Fußnote zu viel.')))
   } else if (stats.medics >= 1 && stats.injured === 0 && stats.medicalOccupied === 0 && f.admissions >= 40) {
-    add(blurb('pro', 'medics', 57, 'Sanität im Leerlauf – perfekt so',
-      'Personal war da, der Ernstfall nicht. Genau so soll ein Festivalsonntag aussehen.'))
+    add(blurb('pro', 'medics', 57, t('Sanität im Leerlauf – perfekt so'),
+      t('Personal war da, der Ernstfall nicht. Genau so soll ein Festivalsonntag aussehen.')))
   } else if (stats.medics === 0 && (stats.injured > 0 || f.admissions >= f.goals.guests)) {
-    add(blurb('con', 'no-medics', 69, 'Hilfe erst nach der Frage',
-      'Ohne Sanitäter bleibt jeder Sturz eine Geschichte. HEADLINE hätte gern eine weiße Weste gesehen.'))
+    add(blurb('con', 'no-medics', 69, t('Hilfe erst nach der Frage'),
+      t('Ohne Sanitäter bleibt jeder Sturz eine Geschichte. HEADLINE hätte gern eine weiße Weste gesehen.')))
   }
 
   if (stats.fire >= 1) {
-    add(blurb('con', 'fire', 91, 'Feuer auf dem Feld',
-      'Kein Effekt, ein Vorfall. Pyro gehört auf die Bühne, nicht in den Boden.'))
+    add(blurb('con', 'fire', 91, t('Feuer auf dem Feld'),
+      t('Kein Effekt, ein Vorfall. Pyro gehört auf die Bühne, nicht in den Boden.')))
   }
 
   if (stats.stockouts >= 12) {
-    add(blurb('con', 'stockout', 85, 'Theken leer, Gesichter leer',
-      'Ausverkaufte Stände, gescheiterte Käufe. Wer Hunger hat, bewertet keine Lichtshow.'))
+    add(blurb('con', 'stockout', 85, t('Theken leer, Gesichter leer'),
+      t('Ausverkaufte Stände, gescheiterte Käufe. Wer Hunger hat, bewertet keine Lichtshow.')))
   } else if (stats.stockouts <= 2 && f.admissions >= 50) {
-    add(blurb('pro', 'stocked', 61, 'Die Stände haben durchgehalten',
-      'Essen, Getränke, Souvenirs: Nachschub kam, bevor die Schlangen kippten.'))
+    add(blurb('pro', 'stocked', 61, t('Die Stände haben durchgehalten'),
+      t('Essen, Getränke, Souvenirs: Nachschub kam, bevor die Schlangen kippten.')))
   }
 
   if (stats.weatherImpact > 140 && !f.upgrades.shelter) {
-    add(blurb('con', 'weather', 77, 'Das Wetter hat das Feld geschrieben',
-      'Regen oder Hitze ohne Schutz. Nasse Wege, müde Beine – die Vorsorge kam zu spät.'))
+    add(blurb('con', 'weather', 77, t('Das Wetter hat das Feld geschrieben'),
+      t('Regen oder Hitze ohne Schutz. Nasse Wege, müde Beine – die Vorsorge kam zu spät.')))
   } else if (stats.weatherImpact > 80 && (f.upgrades.shelter || f.upgrades.water || f.upgrades.drainage)) {
-    add(blurb('pro', 'weather-ready', 59, 'Trotz Wetter: das Feld blieb stehen',
-      'Die Vorsorge hat gehalten. Matsch und Hitze waren da, die Gäste auch.'))
+    add(blurb('pro', 'weather-ready', 59, t('Trotz Wetter: das Feld blieb stehen'),
+      t('Die Vorsorge hat gehalten. Matsch und Hitze waren da, die Gäste auch.')))
   }
 
   if (f.reputation.music >= 70) {
-    add(blurb('pro', 'music-rep', 67, 'Der Musikruf wächst hörbar',
-      'Größere Namen werden möglich. Diese Ausgabe hat die Tür einen Spalt weiter aufgemacht.'))
+    add(blurb('pro', 'music-rep', 67, t('Der Musikruf wächst hörbar'),
+      t('Größere Namen werden möglich. Diese Ausgabe hat die Tür einen Spalt weiter aufgemacht.')))
   } else if (f.reputation.organization < 38) {
-    add(blurb('con', 'chaos', 75, 'Organisation als Gerücht',
-      'Ausverkäufe, Wartezeiten, unklare Wege. Der Ruf für Organisation ist der, den man zuletzt verliert – und hier wackelt er.'))
+    add(blurb('con', 'chaos', 75, t('Organisation als Gerücht'),
+      t('Ausverkäufe, Wartezeiten, unklare Wege. Der Ruf für Organisation ist der, den man zuletzt verliert – und hier wackelt er.')))
   }
 
   if (f.reputation.comfort >= 70) {
-    add(blurb('pro', 'comfort', 56, 'Komfort, der nicht nachgibt',
-      'Familien und Ruhesuchende blieben. Schatten, Wege, ein Platz zum Atmen – das zählt in der Ausgabe danach.'))
+    add(blurb('pro', 'comfort', 56, t('Komfort, der nicht nachgibt'),
+      t('Familien und Ruhesuchende blieben. Schatten, Wege, ein Platz zum Atmen – das zählt in der Ausgabe danach.')))
   }
 
   return items
@@ -386,27 +391,36 @@ function pickBlurbs(candidates: Candidate[], side: 'pro' | 'con'): MagazineBlurb
     .filter((item) => item.side === side)
     .sort((left, right) => right.strength - left.strength || left.id.localeCompare(right.id))
   const picked = sorted.slice(0, MAX_ITEMS)
-  if (side === 'con') {
-    for (const filler of CON_FILLERS) {
-      if (picked.length >= MIN_ITEMS) break
-      if (picked.some((item) => item.id === filler.id)) continue
-      picked.push(filler)
-    }
-  } else {
-    for (const filler of PRO_FILLERS) {
-      if (picked.length >= MIN_ITEMS) break
-      if (picked.some((item) => item.id === filler.id)) continue
-      picked.push(filler)
-    }
+  for (const filler of side === 'con' ? conFillers() : proFillers()) {
+    if (picked.length >= MIN_ITEMS) break
+    if (picked.some((item) => item.id === filler.id)) continue
+    picked.push(filler)
   }
   return picked.slice(0, MAX_ITEMS).map(({ id, headline, body }) => ({ id, headline, body }))
 }
 
+/** The pull quote; the »…« marks stay outside the catalog keys. */
 function strongestQuote(pros: MagazineBlurb[], cons: MagazineBlurb[], verdict: MagazineVerdict): string {
   if (verdict === 'flop' && cons[0]) return `»${cons[0].headline}«`
   if (pros[0]) return `»${pros[0].headline}«`
   if (cons[0]) return `»${cons[0].headline}«`
-  return '»Ein Wochenende, das nach der letzten Zugabe weiterredet.«'
+  return `»${t('Ein Wochenende, das nach der letzten Zugabe weiterredet.')}«`
+}
+
+/** One full sentence per verdict, with and without the headliner sentence (docs/i18n.md). */
+const LEDES: Record<MagazineVerdict, (figures: string, headliner: string | null) => string> = {
+  cult: (figures, headliner) => headliner
+    ? t`Kultstatus nach einem einzigen Wochenende: ${figures}. ${headliner} standen für den großen Satz. So schreibt man eine Ausgabe, die man weiterreicht.`
+    : t`Kultstatus nach einem einzigen Wochenende: ${figures}. So schreibt man eine Ausgabe, die man weiterreicht.`,
+  success: (figures, headliner) => headliner
+    ? t`Ein Wochenende mit Haltung: ${figures}. ${headliner} standen für den großen Satz. Nicht makellos – aber klar mehr als die Summe seiner Slots.`
+    : t`Ein Wochenende mit Haltung: ${figures}. Nicht makellos – aber klar mehr als die Summe seiner Slots.`,
+  mixed: (figures, headliner) => headliner
+    ? t`Zwischentöne statt Hymne: ${figures}. ${headliner} standen für den großen Satz. Größe und Kratzer liegen in derselben Kolumne.`
+    : t`Zwischentöne statt Hymne: ${figures}. Größe und Kratzer liegen in derselben Kolumne.`,
+  flop: (figures, headliner) => headliner
+    ? t`Die Kritik bleibt hart: ${figures}. ${headliner} standen für den großen Satz. Nächstes Jahr muss das Feld neu gedacht werden.`
+    : t`Die Kritik bleibt hart: ${figures}. Nächstes Jahr muss das Feld neu gedacht werden.`,
 }
 
 function verdictLede(
@@ -416,20 +430,12 @@ function verdictLede(
   balance: number,
   headliner: string | null,
 ): string {
-  const guests = `${admissions} Anreisen`
-  const mood = `${Math.round(satisfaction)} Prozent Zufriedenheit`
-  const cash = `${Math.round(balance).toLocaleString('de-DE')} € Bilanz`
-  const act = headliner ? ` ${headliner} standen für den großen Satz.` : ''
-  if (verdict === 'cult') {
-    return `Kultstatus nach einem einzigen Wochenende: ${guests}, ${mood}, ${cash}.${act} So schreibt man eine Ausgabe, die man weiterreicht.`
-  }
-  if (verdict === 'success') {
-    return `Ein Wochenende mit Haltung: ${guests}, ${mood}, ${cash}.${act} Nicht makellos – aber klar mehr als die Summe seiner Slots.`
-  }
-  if (verdict === 'mixed') {
-    return `Zwischentöne statt Hymne: ${guests}, ${mood}, ${cash}.${act} Größe und Kratzer liegen in derselben Kolumne.`
-  }
-  return `Die Kritik bleibt hart: ${guests}, ${mood}, ${cash}.${act} Nächstes Jahr muss das Feld neu gedacht werden.`
+  const figures = joinList([
+    plural(admissions, t`${admissions} Anreise`, t`${admissions} Anreisen`),
+    t`${Math.round(satisfaction)} Prozent Zufriedenheit`,
+    t`${formatMoney(Math.round(balance))} Bilanz`,
+  ])
+  return LEDES[verdict](figures, headliner)
 }
 
 function blurb(side: 'pro' | 'con', id: string, strength: number, headline: string, body: string): Candidate {
@@ -440,34 +446,35 @@ function clamp(n: number): number {
   return Math.max(0, Math.min(100, n))
 }
 
-const VERDICT_LINE: Record<MagazineVerdict, string> = {
-  cult: 'Kultstatus. Diese Ausgabe schreiben die Leute weiter.',
-  success: 'Ein Wochenende, das sich sehen lassen kann.',
-  mixed: 'Zwischentöne: großes Herz, raue Kanten.',
-  flop: 'Die Kritik bleibt hart. Nächstes Jahr neu denken.',
+const VERDICT_LINE: Record<MagazineVerdict, () => string> = {
+  cult: () => t('Kultstatus. Diese Ausgabe schreiben die Leute weiter.'),
+  success: () => t('Ein Wochenende, das sich sehen lassen kann.'),
+  mixed: () => t('Zwischentöne: großes Herz, raue Kanten.'),
+  flop: () => t('Die Kritik bleibt hart. Nächstes Jahr neu denken.'),
 }
 
-const COVER_STAMP: Record<MagazineVerdict, string> = {
-  cult: 'KULT',
-  success: 'HIT',
-  mixed: 'MIX',
-  flop: 'FLOP',
+const COVER_STAMP: Record<MagazineVerdict, () => string> = {
+  cult: () => t('KULT'),
+  success: () => t('HIT'),
+  mixed: () => t('MIX'),
+  flop: () => t('FLOP'),
 }
 
-const CON_FILLERS: Candidate[] = [
-  blurb('con', 'could-better', 12, 'Die nächste Ausgabe darf schärfer werden',
-    'Nichts Dramatisches, aber HEADLINE bleibt hungrig. Ein klarerer Knaller, ein saubererer Satz – dann wird daraus eine Titelstory.'),
-  blurb('con', 'thin-kontra', 10, 'Noch Luft im Layout',
-    'Das Wochenende hat Seiten, die unbedruckt wirken. Mehr Risiko im Spielplan, mehr Kante auf dem Feld.'),
-  blurb('con', 'comfort-room', 8, 'Komfort als Fußnote',
-    'Schatten, Sitzkanten, ein stiller Winkel: kleine Dinge, die aus einem guten Samstag einen großen machen.'),
+/** Fillers are built when the magazine is, so they come out in the viewer's language. */
+const conFillers = (): Candidate[] => [
+  blurb('con', 'could-better', 12, t('Die nächste Ausgabe darf schärfer werden'),
+    t('Nichts Dramatisches, aber HEADLINE bleibt hungrig. Ein klarerer Knaller, ein saubererer Satz – dann wird daraus eine Titelstory.')),
+  blurb('con', 'thin-kontra', 10, t('Noch Luft im Layout'),
+    t('Das Wochenende hat Seiten, die unbedruckt wirken. Mehr Risiko im Spielplan, mehr Kante auf dem Feld.')),
+  blurb('con', 'comfort-room', 8, t('Komfort als Fußnote'),
+    t('Schatten, Sitzkanten, ein stiller Winkel: kleine Dinge, die aus einem guten Samstag einen großen machen.')),
 ]
 
-const PRO_FILLERS: Candidate[] = [
-  blurb('pro', 'field-stands', 11, 'Das Gelände steht noch',
-    'Wege, Bühnen, der ganze Apparat: Ihr habt ein Festival hingestellt, das man betreten kann. Das ist die erste Seite.'),
-  blurb('pro', 'they-tried', 9, 'Durchgezogen bis Sonntag',
-    'Kein Abbruch, kein leeres Versprechen. Die Ausgabe fand statt – und das zählt, bevor die Note kommt.'),
-  blurb('pro', 'next-ink', 7, 'Papier für die nächste Nummer',
-    'Ruf, Ausbauten, das Feld bleibt. HEADLINE blättert schon voraus: Die nächste Ausgabe startet nicht bei null.'),
+const proFillers = (): Candidate[] => [
+  blurb('pro', 'field-stands', 11, t('Das Gelände steht noch'),
+    t('Wege, Bühnen, der ganze Apparat: Ihr habt ein Festival hingestellt, das man betreten kann. Das ist die erste Seite.')),
+  blurb('pro', 'they-tried', 9, t('Durchgezogen bis Sonntag'),
+    t('Kein Abbruch, kein leeres Versprechen. Die Ausgabe fand statt – und das zählt, bevor die Note kommt.')),
+  blurb('pro', 'next-ink', 7, t('Papier für die nächste Nummer'),
+    t('Ruf, Ausbauten, das Feld bleibt. HEADLINE blättert schon voraus: Die nächste Ausgabe startet nicht bei null.')),
 ]

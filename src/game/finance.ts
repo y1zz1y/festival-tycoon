@@ -7,6 +7,8 @@
  * the festival. Everything spent while an edition is being prepared and run lands
  * in that edition's column, which is also the unit the scenario goals count in.
  */
+import { dc, de } from '../i18n/marker'
+
 export const FINANCE_CATEGORIES = [
   'tickets',
   'camping',
@@ -23,19 +25,21 @@ export const FINANCE_CATEGORIES = [
 ] as const
 export type FinanceCategory = (typeof FINANCE_CATEGORIES)[number]
 
+/** Canonical German column names; the ledger shows them with localize(name, 'finance'). */
 export const FINANCE_CATEGORY_NAMES: Record<FinanceCategory, string> = {
-  tickets: 'Tagestickets',
-  camping: 'Campingtickets',
-  rides: 'Fahrgeschäfte',
-  sales: 'Essen & Getränke',
-  sponsors: 'Sponsoren',
-  stock: 'Wareneinkauf',
-  construction: 'Bau & Anschaffung',
-  landscaping: 'Gelände',
-  upkeep: 'Betriebskosten',
-  staff: 'Personal',
-  bands: 'Gagen',
-  interest: 'Kreditzinsen',
+  tickets: de('Tagestickets'),
+  camping: de('Campingtickets'),
+  rides: de('Fahrgeschäfte'),
+  sales: de('Essen & Getränke'),
+  sponsors: de('Sponsoren'),
+  stock: de('Wareneinkauf'),
+  construction: de('Bau & Anschaffung'),
+  // Homonym (terrain / grounds): the UI shows every name with localize(name, 'finance').
+  landscaping: dc('finance', 'Gelände'),
+  upkeep: de('Betriebskosten'),
+  staff: de('Personal'),
+  bands: de('Gagen'),
+  interest: de('Kreditzinsen'),
 }
 
 export type FinanceEntries = Partial<Record<FinanceCategory, number>>

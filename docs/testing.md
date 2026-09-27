@@ -10,8 +10,39 @@ Performance-Arbeit zusätzlich wie in `docs/performance.md`.
 Wiederverbindung und erneute Start→End-Reihenfolge, Loop-/Shuttle-/
 Start-End-/Open-Exit-Validierung, Preview/Command-Parität, Area-Konnektivität,
 Referenz-Allowlisten, Wasserlandung und die gemeinsame Builder-Palette.
+Außerdem friert es das Doppelmodell ein (`testDualModel`, Regel in
+`docs/attractions.md`): `assertDualModel` (eindeutige IDs, jeder
+Bahn-/Kurs-Datensatz gleich seiner Projektion, keine Waisen, Camping/Party
+gleich den Live-Overlays) läuft nach jedem Schritt einer Bahn-Sequenz (Start,
+Anhängen, Undo, Löschen, Schließen, Eingang setzen/verschieben, Ausgang,
+`open` → `test`, Preis, Dispatch, Ticks, Stationsabriss), auch in einem Park mit
+≥ 300 Campingzellen, und einer Kurs-Sequenz (Stücke, Undo, Flächen, Eingang,
+Teamgröße, Betrieb, Preis, Camping, Vorplatz, Abriss).
+`testSignatureDetectsEveryEditClass` prüft, dass die Signatur bei 1000 Zellen
+endlich bleibt und auf jede Änderungsklasse reagiert. Weitere Tests: eindeutige
+Kurs-IDs auch bei Pause und nach dem Laden, dieselbe Kurs-ID auf Host und
+optimistischem Client; keine Waisen nach Undo bis leer,
+Pool-Abriss mit `-slide-`, Ride-Abriss und optimistischem Client-Abriss;
+eine Legacy-ID-Regel ohne Doppelsimulation; `testLegacyGuestsRideOnce`
+(Tick-Ebene: ein Gast in der Queue einer offenen Rundkurs-Bahn und einer im
+Kurs zahlen je genau einmal über `CoasterSimulation` bzw. `stepCourses`, die
+veralteten Queue-/Rider-Kopien ihrer Datensätze bleiben unberührt);
+`testCrowdRidersIgnoreProjectionRecords` (Fahrgast-Sichtbarkeit von
+`WorldView` über `crowdRiderIds`); Queue-Richtung vom Live-Eingang und
+`testSharedQueueKeepsItsClaimOrder` (die ältere Anlage behält eine geteilte
+Queue-Kachel, auch nach dem Laden); idempotente Save-Runde, Reparatur eines
+gemischten Stands samt Freigabe der Gäste verworfener Waisen und
+`removedAttractionIds`-Semantik; `testVersionOneParkKeepsTheDualModel`
+(v1-Park mit Bahn, Kurs, Pool mit Rutsche, `ride`-Gebäude, Camping und
+Vorplatz); `testCollidingIdsAreRepairedOnLoad` (doppelte Kurs-/Bahn-IDs aus
+0.2.11 werden beim Laden umbenannt, Queue-Gäste ziehen mit); MP-Vollsync und
+Deltas mit identischen Live-Zeilen, Attractions-only-Delta ohne Änderung
+bestehender Client-Zeilen; Ablehnung von Legacy-IDs durch die kanonischen
+Commands; `testNewCanonicalKindsAreNoOrphans` (eine künftige kanonische Art
+mit eigener `runtime.kind` übersteht Refresh, Editieren und Laden);
+festgeschriebene Verluste der Rückprojektion.
 `tests/snapshotModules.ts` deckt v30→v31 einschließlich Pool-Aufteilung und
-gemeldeter Entfernung eines nicht konvertierbaren Kurses sowie v31→v32 mit
+gemeldeter (nicht entfernter) nicht konvertierbarer Kurse sowie v31→v32 mit
 Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 
 ## Kommandos
@@ -22,6 +53,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `npm run lint` | ESLint für TypeScript; Fehlerregeln plus SonarJS-Komplexitätswarnungen |
 | `npm run quality:dead-code` | Knip: verwaiste Dateien, unbenutzte/fehlende Abhängigkeiten und nicht auflösbare Imports |
 | `npm run quality:duplicates` | jscpd: Duplikate in `src`, `server` und `scripts`; maximal 15 % |
+| `npm run test:i18n` | Textschicht-Prüfung `scripts/check-i18n.mjs` (Teil von `npm run quality`): Marker, Schlüssel, Katalog, Platzhalter, Sentinels, Boot und nackte Texte (seit 0.2.16 ohne Baseline, jeder Fund ist ein Fehler); `--missing`, `--stats`, `--update-baseline`, `--self-test` siehe [i18n.md](i18n.md) |
 | `npm test` | gesamte Suite über `scripts/test.mjs` / `tests/regression.ts` |
 | `npm run test:docs` | dokumentierte Pfade, Regression-Suite, Snapshot-Version und kritische Modulzuordnung |
 | `npm run build` | `tsc` + Vite-Produktion |
@@ -30,6 +62,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `npm run test:performance:fixtures` | alle in `tests/fixtures/performance/manifest.json` registrierten Referenz-Saves |
 | `npm run test:install` | PWA/Homescreen-Artefakte |
 | `$env:PROFILE_METHODS='1'` | inklusive Methodenzeiten (PowerShell) |
+| `$env:I18N_COVERAGE_DUMP='1'` | `npm test` listet jede noch deutsche Stelle der englischen Abdeckung (PowerShell) |
 
 ## Qualitätsgrenzen
 
@@ -37,6 +70,13 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
   Komplexität über 50 und identische Funktionen als Warnung; echte
   Korrektheits-/Unused-Verstöße schlagen fehl. Der bestehende Warnungs-Budget
   ist 36 (`--max-warnings 36`): senken ist erwünscht, erhöhen nicht.
+  `.claude/**` (Agent-Worktrees) ist ausgenommen, sonst zählten dieselben
+  Warnungen je Worktree noch einmal.
+- `scripts/check-i18n.mjs` läuft in `quality` vor den Tests, als
+  `node --experimental-strip-types`, weil es `src/i18n/pattern.ts` direkt lädt
+  (Node 22.6+). Nackte Texte (I18N-E1–E3) dürfen je Datei nur sinken;
+  `--update-baseline` senkt die Baseline und verweigert jede Erhöhung. Fehlt die
+  Baseline-Datei, muss jede Datei 0 haben (Ende der Migration).
 - `knip.json` kennt Browser-, Server-, Test- und Script-Einstiege. Der
   Abschlusscheck beschränkt Knip bewusst auf Dateien und Abhängigkeiten;
   öffentliche Fach-Exports werden nicht als Fehler behandelt.
@@ -49,7 +89,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 
 | Datei | Inhalt |
 | --- | --- |
-| `tests/regression.ts` | Orchestrierung, Tick-Partition, Multiplayer-Sockets, Saves, Abreise durch Camping-Ausweisungen nach Festivalende |
+| `tests/regression.ts` | Orchestrierung, Tick-Partition, Multiplayer-Sockets (inkl. Reconnect mit Standard-Übernahmefrist), Saves, Abreise durch Camping-Ausweisungen nach Festivalende; ruft zuletzt die Host-Übernahme-Tests auf |
 | `tests/accounts.ts` | Registrierung, Sessions, Passwort-Hashes und Rate-Limit |
 | `tests/saves.ts` | kontoabhängige und öffentliche Server-Spielstände |
 | `tests/finance.ts` | Bücher, Kredite, vorbereitete Szenarien, Ziele, aufklappbare Kostenaufschlüsselung, Leerlauf-Unterhalt aktiv vs. inaktiv |
@@ -65,6 +105,7 @@ Default-Nachfrage-Tuning und v32→v33 mit Legacy-Vorplatztiefe ab.
 | `tests/scenarioOutcome.ts` | Szenario-Ausgang: Ausgabeziele mit Serien, Sieg/Niederlage, Insolvenzfrist, Stichtag mit Pause + Planung, mitwachsende Wochenendziele, Ticker-Meldungen zu Zielen, Gesamtnote |
 | `tests/scenarioEditor.ts` | Szenario-Editor: Export-Datei lädt, Startgeld/Schulden/Tickets/Nachfrage greifen, Listing inkl. Beschreibung, Bauen ohne Geldlimit |
 | `tests/multiplayerChat.ts` | Chat-Sanitizing, Ping-TTL, Edge-Arrow-Projektion; Roundtrip in `regression.ts` |
+| `tests/hostTakeover.ts` | Host-Übernahme: Server-Weltkopie gleich `asWire(host)` und in Gast-Besucherreihenfolge, Größengrenze je Nachricht und über viele Deltas, kaputte Patches ohne Wurf, `gameFromNetworkWorld` (RNG, Raumcode, Werkzeug-Reset), Bau-Pause bei abwesendem Host, Wahlreihenfolge inkl. Spielversion, deutsche Texte, Sicherungs-Slot, Schnellspeicher-Slot (`findQuickSlot`), kein Fortschritt für übernommene Parks; echte Sockets mit eigenem `WebSocketServer`: Übernahme, zurückgestufter alter Host mit Sicherung, Rückkehr in der Frist, keine Beförderung ohne Welt, sofortige Übergabe, verworfene unbestätigte Bauten statt Geisterbau, ausfallender/scheiternder Kandidat, Solo-Weiterspiel nach `closed`. `testTakeoverHardening` (eigener Server): feindliches Host-Delta ohne Absturz, allein zurückgekehrter Host ohne alte Kopie, schweigender Kandidat nach dem Wächter aufgegeben (alter Host bekommt seinen Sitz zurück), Befehl mit alter Epoche abgelehnt, Übernahme-Markierung nach Schnellladen und erneutem Hosten. Setzt `roomsForTest.setTakeoverDelay`/`setPromotionTimeout` nur lokal |
 | `tests/hotkeys.ts` | Tastenbelegung: Standardbelegung kollisionsfrei, Numpad zählt als Ziffernreihe, eine Taste gehört einer Aktion (der vorherige Halter wird frei), reservierte Tasten gesperrt, Beschriftungen, Speichern/Laden inkl. kaputtem Eintrag |
 | `tests/performanceGuards.ts` | Budgets, Multi-Goal-Camp, Cache, Batches, endliche Festivalmodell-Bounds/Picking, Lights, Achterbahnwagen, Logistik-Modelle; Grafikstandard: jede Katalogart hat ein gebündeltes Modell, Bündeln nach Geometrie und Material mit verschachtelten Picking-IDs, `MATERIAL_CEILINGS` je Datei in `src/view` |
 | `tests/festival.ts` | Wochenendablauf, Buchung, Lager, Ruf, Live-Show-Festivallust, vordere Konzertplätze |
@@ -94,7 +135,8 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/scenery.ts` | Deko-Slots, Kanten-Fahnen, Tageslichtballon als Vollfeld, neue Arten, Attraktivität je Kind, Stapel/Reichweite, unbekannte Katalog-Arten |
 | `tests/pedestrianBarriers.ts` | Hecke/Wand/Zaun blockieren Fußgänger; Wandtür passierbar; Vollfeld vs. Kante; Nav-Invalidierung bei Setzen/Abriss |
 | `tests/decoration.ts` | Themenliste 8–12 inkl. Klassik/Arktis/Steampunk, Filter ohne Themen-Leaks, Legacy-Vollfeld, Platzierung über `scenery.ts`, Licht-Deskriptor je Lampenart, N Lampen → N Quellen, Abriss entfernt Licht |
-| `tests/picking.ts` | Abriss-Raycast: Instanz-IDs, getroffenes Mesh vs. Nachbar/Kachelmitte, Reittor-Zelle |
+| `tests/picking.ts` | Abriss-Raycast: Instanz-IDs, getroffenes Mesh vs. Nachbar/Kachelmitte, Reittor-Zelle; `accessIdFromObject` mit `accessIds[instanceId]`, `instanceOwnerId` |
+| `tests/renderBatching.ts` | Instanz-Batches (B8): Crew-Pool gleiche Batchzahl für 34/500 Personen, Teile-Summen, Müllsack/Ladung nur wenn fällig, `staffIds`-Picking, Logistikmodus, bildratenunabhängige Drehung, Instanz-Träger = `createPorterModel`; Fahrzeuge ≤ 10 Batches für 204/1.000, `housed` nicht instanziert, `vehicleIds`, Einrasten/Gleiten; Vorplatz ein Batch, gleiche Felder ohne Neuschreiben, Höhe schreibt neu; Ampeln/Tore ≤ 6 Batches, Signalwechsel behält Batches, Bodenhöhe, Picking; festivalmittel-Zensus der Draw-Objekte (vorher 1.008) |
 | `tests/buildMenu.ts` | Jedes platzierbare Tool außer `inspect` genau einmal im Baumenü; Deko/Attraktionen/Logistik als Katalog; Achterbahn-Kacheln mit Zugstil/`coasterVehiclePreview`; Camping-, Krankenhaus- und Bandversorgung-Tabs (`backstageArea`, `tourBusParking`); Bauhöhe bleibt beim gleichen Tool und fällt bei neuem `setTool` auf 0; Deko-Gruppen kommen aus `decoration.ts` |
 | `tests/blueprints.ts` | 2×2 mit zwei Dekos stempeln, Preview ohne Mutation, Parkplätze kopieren, Bibliothek-Roundtrip ohne `SAVE_KEY` |
 | `tests/buildUndo.ts` | Host-Bau-Stack: Place, Parkplatz, Stempel inkl. Parkplatz, Weg; vollständige Kostenerstattung |
@@ -108,16 +150,18 @@ auch aus der nahen Schlange / gegenüber (`busBoardingRadiusTiles` 4, 10 Wartend
 | `tests/wayElevation.ts` | Halbstufen-Rampen für Fußweg und Straße, Autodach 1.0, Legacy-Höhe 1 bleibt 1.0, Shift-Ausgang bleibt beim Rampenstreichen, Fußweg auf Autostraße behält die Straße, gestapelte Autostraße / Brücke, ein Straßenfeld übermalen löscht keine Nachbarn, Klippe 0→1 blockiert, 0,5-Hang und Weg-Rampe begehbar, Bewegung ohne Y-Warp |
 | `tests/pixelPeople.ts` | Personen-Batches |
 | `tests/visitorDance.ts` | Two-Step-Pose: gepflanzte Knie, Hände hoch, Phase je Gast |
-| `tests/carrierModels.ts` | Träger: geteilte Gästeteile, Warnweste, Karren |
+| `tests/carrierModels.ts` | Träger: geteilte Gästeteile, Warnweste, Karren (Einzelmodell für Vorschau; im Spiel Crew-Pool, siehe `tests/renderBatching.ts`) |
 | `tests/campingModels.ts` | Zelt-/Pavillon-Batches |
-| `tests/attractionFoundation.ts` | Camping-/Vorplatz-Ausweisung bleibt nach Attraction-Commands, Save/Load und MP-Deltas; Placement-Sperre (Gebäude/Weg/Deko), Fence/Delay-Ausnahme, Forecourt-Preview |
+| `tests/attractionFoundation.ts` | Camping-/Vorplatz-Ausweisung bleibt nach Attraction-Commands, Save/Load und MP-Deltas; Placement-Sperre (Gebäude/Weg/Deko), Fence/Delay-Ausnahme, Forecourt-Preview; Doppelmodell-Invarianten (`assertDualModel`, Signatur, Waisen samt Gast-Freigabe, IDs samt Reparatur doppelter IDs, Tick-Doppelsimulation, Queue-Reihenfolge, v1-Park, Save/MP, kanonische Commands, neue kanonische Arten) |
 | `tests/mobileTouch.ts` | Touch-Kamera / Gesten |
 | `tests/audio.ts` | Kamera-Listener (Look-At, nicht Gäste), Range-Skip, One-Shot-Cap; Jubel nur bei Konzert-Kandidaten + Cooldown/Chance; Fahrzeuge nur Start/Halt/Pass-by; Musik looped solange Quelle + in Range, eine Schleife je Genre; Ogg-Pfade, `public/sfx/` und `public/music/` vorhanden, Loader-Fallback |
 | `tests/progress.ts` | Fortschritt: Best-of-Merge, lokaler Speicher, Konto-Endpunkt mit Anmeldung, Client-Abgleich und Offline-Rückfall |
 | `tests/festivalExtras.ts` | Unwetter (Planung, Phasen, Schutz, Auftritte, Blitz, Verlauf), Sponsoren (Angebote, Unterschrift, Abrechnung), Schwierigkeit, Erste Schritte, Erfolge |
 | `tests/visitorNeeds.ts` | Durst und Hygiene: Startwerte aus der ID, Hitze, Camper-Hygiene, Trinkwasserstelle mit Wasserverbrauch, Limo am Getränkestand, Dusche, alte Stände |
 | `tests/flatRides.ts` | Flat Rides: Baumenü, Grundfläche, Typkosten, Tore neben jedem Feld, Fahrtdauer und Spaß je Typ, Speichern, unbekannte Typen, Mehrspieler-Befehl, animierte Modelle mit geteilter Geometrie |
-| `tests/playerSettings.ts` | Spielereinstellungen: kaputte oder fremde Werte reparieren, Speichern/Lesen, Auflösungsstufen, Effektdichte |
+| `tests/playerSettings.ts` | Spielereinstellungen: kaputte oder fremde Werte reparieren (auch `language`), Speichern/Lesen, Auflösungsstufen, Effektdichte |
+| `tests/i18n.ts` | Textschicht: Node ist Deutsch, Marker liefern den alten Text, Formatierer de/en, `t`/`tc`/`plural`, `localize` (exakt, Kontext, Muster, verschachtelt, Fehlschlag), `qps`, `localizeName`; je Katalog Rundreise mit feindlichen Beispielen, Rangsicherheit, Idempotenz und Arbeitsgrenze (Skelett-Hinweis, Cache an/aus gleich); kein Cache überlebt `setLocale` (auch zwischen zwei englischen Katalogen); Text-Rekorder; Inline-Resolver aus `index.html` gegen `detectLocale`; Sprachwahl (`resolveLocale`, `planLanguageChange`, `isInMultiplayerRoom`, `suppressBeforeUnloadOnce`); `testLanguageSwitch` prüft jeden Zweig von `switchLanguage` (bestätigen, abbrechen, verweigertes Schreiben, im Raum nur speichern) |
+| `tests/i18nCoverage.ts` | Englische Abdeckung: `festivalmittel` 120 Ticks, Command-Durchlauf über jede `GameCommand`-Art, Ticker, Magazin, Baumenü, Ziele, HTML-Bausteine; der englische Lauf zählt über den Text-Rekorder jeden verfehlten Schlüssel, Zahlformatierung allein gilt nicht als Übersetzung (`checkJudge`); höchstens `MISS_BUDGET` Texte noch deutsch (sinkt je Umstellungsgruppe bis 0) |
 | `tests/performance.ts` | synthetische Last |
 | `tests/people-preview.html` | visuelle Personen-Fixture |
 | `tests/carrier-preview.html` | visuelle Träger neben Gästen |

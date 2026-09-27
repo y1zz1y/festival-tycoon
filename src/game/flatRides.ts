@@ -1,3 +1,4 @@
+import { de } from '../i18n/marker'
 import { BUILDINGS } from './catalog'
 import { SIMULATION_CONFIG } from './simulationConfig'
 
@@ -12,11 +13,11 @@ export type FlatRideType = (typeof FLAT_RIDE_TYPES)[number]
 export type RideType = 'bungee' | FlatRideType
 
 export const FLAT_RIDES: Record<FlatRideType, { name: string; icon: string; thought: string }> = {
-  chainSwing: { name: 'Kettenkarussell', icon: '🌀', thought: 'Das Kettenkarussell hat mich richtig durchgeschwungen!' },
-  freefall: { name: 'Freefall-Turm', icon: '🗼', thought: 'Freier Fall – mein Magen ist noch oben!' },
-  ferrisWheel: { name: 'Riesenrad', icon: '🎡', thought: 'Vom Riesenrad aus sieht man das ganze Festival!' },
-  bumperCars: { name: 'Autoscooter', icon: '🚗', thought: 'Autoscooter! Ich habe alle gerammt.' },
-  swingShip: { name: 'Schiffschaukel', icon: '⛵', thought: 'Die Schiffschaukel war wild!' },
+  chainSwing: { name: de('Kettenkarussell'), icon: '🌀', thought: de('Das Kettenkarussell hat mich richtig durchgeschwungen!') },
+  freefall: { name: de('Freefall-Turm'), icon: '🗼', thought: de('Freier Fall – mein Magen ist noch oben!') },
+  ferrisWheel: { name: de('Riesenrad'), icon: '🎡', thought: de('Vom Riesenrad aus sieht man das ganze Festival!') },
+  bumperCars: { name: de('Autoscooter'), icon: '🚗', thought: de('Autoscooter! Ich habe alle gerammt.') },
+  swingShip: { name: de('Schiffschaukel'), icon: '⛵', thought: de('Die Schiffschaukel war wild!') },
 }
 
 export function isFlatRideType(value: unknown): value is FlatRideType {
@@ -53,16 +54,16 @@ export function rideProfile(ride: { rideType?: RideType; bungeeHeight?: number }
     energyCost: SIMULATION_CONFIG.needs.ride.energyCost,
     nausea: SIMULATION_CONFIG.nausea.carouselIntensity,
     defaultPrice: base.defaultPrice,
-    thought: 'Das Karussell war großartig!',
+    thought: de('Das Karussell war großartig!'),
   }
   if (ride.rideType === 'bungee') {
     return {
       ...carousel,
-      name: 'Bungee-Turm',
+      name: de('Bungee-Turm'),
       icon: '🪂',
       cost: base.cost + (ride.bungeeHeight ?? 20) * 25,
       capacity: 1,
-      thought: 'Was für ein Bungeesprung!',
+      thought: de('Was für ein Bungeesprung!'),
     }
   }
   if (!isFlatRideType(ride.rideType)) return carousel

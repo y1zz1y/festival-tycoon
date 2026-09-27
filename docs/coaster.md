@@ -25,15 +25,26 @@ gegangen waren und erhalten bleiben müssen:
   `stepAttractions` geben; `legacyIds` überspringt Bahnen und Kurse dort.
 - `updateCoasters` läuft immer, auch wenn kanonische Attraktionen existieren.
 - Besucher zielen über `findReachableCoaster` / `findReachableCourse` /
-  `findReachableRide`; `findReachableAttraction` überspringt IDs, die zu einer
-  Bahn, einem Kurs oder einem Fahrgeschäft-Gebäude gehören.
-- `state.coasters` bleibt die editierte Wahrheit; der kanonische
-  `attractions`-Datensatz wird danach nachgezogen
-  (`refreshLegacyAttractionRecords`), sonst verliert ein Save Bahnen.
-  Ein MP-Attractions-Delta darf `state.coasters` / `state.courses` nicht
-  verwerfen; Occupancy und Entity bleiben nach dem Host-Ack zusammen.
-  `closed` wird dabei wie im Editor über `isCoasterCircuitClosed` bestimmt,
-  nicht aus Graph-Knoten geraten.
+  `findReachableRide`; `findReachableAttraction` bietet nur kanonische
+  Datensätze an (`isCanonicalAttractionRecord` aus
+  `src/game/attractions/dualModel.ts`, ohne Gebäude-Scan pro Entscheidung) und
+  überspringt damit alles, was zu einer Bahn, einem Kurs oder einem
+  Fahrgeschäft-Gebäude gehört.
+- **Doppelmodell** (offizielle Regel:
+  [attractions.md → Doppelmodell](attractions.md#doppelmodell-offizielle-regel-bewusst-ohne-migration)):
+  `state.coasters` bleibt die editierte Wahrheit; der `attractions`-Datensatz
+  ist eine Projektion und wird über `refreshLegacyAttractionRecords`
+  nachgezogen, sonst verliert ein Save Bahnen. Jede Editoränderung
+  (Stück-ID/-art/-anker, Tor-Koordinaten, `open` ↔ `test`, Preis, Name, Typ,
+  Dispatch) ändert `legacyAttractionSignature`. Neue Bahn-IDs kommen aus
+  `nextAttractionId`. Kanonische Commands (`startAttraction('coaster:*')`,
+  `setAttractionPrice` usw.) lehnen Bahnen ab; gebaut und geändert wird nur
+  über die Achterbahn-Commands. Ein MP-Attractions-Delta darf
+  `state.coasters` / `state.courses` weder verwerfen noch ändern; es ergänzt
+  nur fehlende IDs. `closed` wird dabei wie im Editor über
+  `isCoasterCircuitClosed` bestimmt, nicht aus Graph-Knoten geraten.
+- Ein neuer `CoasterTypeId` ist eine erlaubte Erweiterung des Live-Systems und
+  bekommt automatisch die Definition `coaster:<typ>`.
 
 ## Current vs target
 
@@ -66,14 +77,14 @@ RCT2 60° is not mixed into comments or the palette. Gentle is `atan(0.5)`.
 | Playable type catalog + styles | `src/game/coasterTypes.ts` | `COASTER_CATALOG`, `resolveSupportedTrackPieces`, `resolveCoasterTypeId`, `coasterVehiclePreview`, `resolveCoasterEditorMode` (`editorMode`, Default `palette`) |
 | Editor-Modus | `src/game/trackEditorMode.ts` | `palette` (großer Build-Button) vs `directionArrows` (Weg-Pfeile) |
 | Live type table / helix geometry | `src/game/coasters.ts` | `COASTER_TYPES`, `getCoasterType`, `createHelixTrack` |
-| Connection / palette legality | `src/game/coasterConnections.ts` | `describeTrackAppendIssue`, `resolveNextTrackPiece`, `applyConstructionPitch` / `Bank` / `Kind`, `listTrackPalettePieces` (type-supported + `enabled`) |
-| Schienen-Baucommands | `src/game/commands/coasterCommands.ts`, `src/game/GameState.ts` | Services `startCoasterCommand`, `appendCoasterPieceCommand`, `undoCoasterPieceCommand`, `deleteCoasterPieceCommand`; gleichnamige Fassadenmethoden bleiben für Netz/UI |
+| Connection / palette legality | `src/game/coasterConnections.ts` | `describeTrackAppendIssue` (canonical German `de` messages, shown via `localize()`), `resolveNextTrackPiece`, `applyConstructionPitch` / `Bank` / `Kind`, `listTrackPalettePieces` (type-supported + `enabled`) |
+| Schienen-Baucommands | `src/game/commands/coasterCommands.ts`, `src/game/GameState.ts` | Services `startCoasterCommand`, `appendCoasterPieceCommand`, `undoCoasterPieceCommand`, `deleteCoasterPieceCommand`; gleichnamige Fassadenmethoden bleiben für Netz/UI; Standardname `numberedName(type.name, n)` (Basis im `names`-Export von `src/i18n/en/attractions.ts`) |
 | Abriss, Tore, Betrieb | `src/game/GameState.ts` | `removeCoaster`, `setCoasterAccess`, `setCoasterOperationMode` |
 | Commands | `src/net/protocol.ts`, `src/net/commands.ts`, `src/net/bind.ts` | `GameCommand` coaster variants |
 | Balancing / SI physics | `src/game/simulationConfig.ts` | `coasters`, `classicSteel.physics` (shared SI baseline + per-type overrides), `trackPieceCosts.helixLeft/Right`, `physicsSimulation`, `trackJoinSmoothing`. Speed keys: `stationLaunchSpeed` 22.4, `stationDriveSpeed` 6.72, `chainSpeed` 10.4, `dragArea` 0.53, `maximumSpeed` 90; gravity stays 9.81 |
 | Construction window | `src/ui/coasterBuilderPanel.ts`, `src/main.ts` (`#coaster-builder`) | `updateCoasterBuilderPanel` owns rendering/preview; the composition root supplies typed state and DOM groups |
 | Full-ride demolish confirm | `src/ui/confirmDialog.ts` | `rideDemolishPrompt` / `confirmAction` before `removeCoaster`; also inspect `#demolish-coaster` and bulldoze on station/access |
-| Legacy-Datensatz-Sync | `src/game/attractions/projections.ts` | `refreshLegacyAttractionRecords`, `dropLegacyAttractionRecords`, `legacyAttractionSignature` |
+| Legacy-Datensatz-Sync | `src/game/attractions/projections.ts`, `src/game/attractions/dualModel.ts` | `refreshLegacyAttractionRecords`, `dropLegacyAttractionRecords`, `legacyAttractionSignature`, `legacyAttractionIds` |
 | Palette mount helper | `src/game/coasterConstructionUI.ts` | `updateCoasterConstruction` / `coasterConstructionViewKey`, `syncCoasterPalette`, stable ids, `coasterConstructionPreviewKey` |
 | Catalog train tiles | `src/view/WorldView.ts` | `coasterTrainThumbnail` — same `createCoasterCar` family as in-world trains |
 | Track styles | `src/view/coasterTrack.ts` | one merged vertex-color mesh per piece; family rails / ties / supports; posts stop at land or a solid and skip if the bay is filled |

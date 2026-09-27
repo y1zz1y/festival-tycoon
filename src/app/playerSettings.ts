@@ -1,14 +1,19 @@
 /**
- * What the player sets for this device: graphics, interface size and volume. Kept in
- * localStorage next to the other device settings, never in the save and never sent to
- * other players; none of it may change what the simulation decides.
+ * What the player sets for this device: language, graphics, interface size and volume.
+ * Kept in localStorage next to the other device settings, never in the save and never
+ * sent to other players; none of it may change what the simulation decides.
  */
+import { keep, t, tc } from '../i18n'
+import { PLAYER_SETTINGS_KEY, isDevBuild, normalizeLanguageSetting, type LanguageSetting } from '../i18n/locale'
+
 export type ShadowQuality = 'off' | 'normal' | 'high'
 export type ResolutionLevel = 'low' | 'standard' | 'high'
 export type EffectDensity = 'low' | 'medium' | 'high'
 export type VolumeChannel = 'master' | 'music' | 'effects' | 'ambient'
 
 export type PlayerSettings = {
+  /** Takes effect on the next page load (src/boot.ts); 'auto' follows the browser. */
+  language: LanguageSetting
   shadows: ShadowQuality
   resolution: ResolutionLevel
   effects: EffectDensity
@@ -18,29 +23,37 @@ export type PlayerSettings = {
   volume: Record<VolumeChannel, number>
 }
 
-export const PLAYER_SETTINGS_KEY = 'festival-player-settings'
+export { PLAYER_SETTINGS_KEY }
+
+/** Endonyms stay untranslated; the pseudo-locale is offered in dev builds only. */
+export const LANGUAGE_OPTIONS: readonly { value: LanguageSetting; label: string }[] = [
+  { value: 'auto', label: t('Automatisch (Browser)') },
+  { value: 'de', label: keep('Deutsch') },
+  { value: 'en', label: keep('English') },
+  ...(isDevBuild() ? [{ value: 'qps' as const, label: keep('Pseudo (qps)') }] : []),
+]
 
 export const SHADOW_OPTIONS: readonly { value: ShadowQuality; label: string }[] = [
-  { value: 'off', label: 'Aus' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'high', label: 'Hoch' },
+  { value: 'off', label: t('Aus') },
+  { value: 'normal', label: t('Normal') },
+  { value: 'high', label: tc('quality', 'Hoch') },
 ]
 export const RESOLUTION_OPTIONS: readonly { value: ResolutionLevel; label: string }[] = [
-  { value: 'low', label: 'Niedrig' },
-  { value: 'standard', label: 'Standard' },
-  { value: 'high', label: 'Hoch' },
+  { value: 'low', label: tc('quality', 'Niedrig') },
+  { value: 'standard', label: t('Standard') },
+  { value: 'high', label: tc('quality', 'Hoch') },
 ]
 export const EFFECT_OPTIONS: readonly { value: EffectDensity; label: string }[] = [
-  { value: 'low', label: 'Niedrig' },
-  { value: 'medium', label: 'Mittel' },
-  { value: 'high', label: 'Hoch' },
+  { value: 'low', label: tc('quality', 'Niedrig') },
+  { value: 'medium', label: tc('quality', 'Mittel') },
+  { value: 'high', label: tc('quality', 'Hoch') },
 ]
 export const UI_SCALE_OPTIONS = [0.9, 1, 1.1, 1.2, 1.3] as const
 export const VOLUME_CHANNELS: readonly { value: VolumeChannel; label: string }[] = [
-  { value: 'master', label: 'Gesamt' },
-  { value: 'music', label: 'Musik' },
-  { value: 'effects', label: 'Effekte' },
-  { value: 'ambient', label: 'Umgebung' },
+  { value: 'master', label: t('Gesamt') },
+  { value: 'music', label: t('Musik') },
+  { value: 'effects', label: t('Effekte') },
+  { value: 'ambient', label: tc('sound', 'Umgebung') },
 ]
 
 /** Shadow map edge in texels per quality; 0 means the sun casts none. */
@@ -51,6 +64,7 @@ export const RESOLUTION_SCALE: Record<ResolutionLevel, number> = { low: 0.75, st
 export const EFFECT_SHARE: Record<EffectDensity, number> = { low: 1 / 3, medium: 0.5, high: 1 }
 
 export const DEFAULT_PLAYER_SETTINGS: PlayerSettings = {
+  language: 'auto',
   shadows: 'normal',
   resolution: 'standard',
   effects: 'high',
@@ -73,6 +87,7 @@ export function normalizePlayerSettings(raw: unknown): PlayerSettings {
   const defaults = DEFAULT_PLAYER_SETTINGS
   const scale = typeof source.uiScale === 'number' ? source.uiScale : defaults.uiScale
   return {
+    language: normalizeLanguageSetting(source.language),
     shadows: pick(source.shadows, SHADOW_OPTIONS, defaults.shadows),
     resolution: pick(source.resolution, RESOLUTION_OPTIONS, defaults.resolution),
     effects: pick(source.effects, EFFECT_OPTIONS, defaults.effects),

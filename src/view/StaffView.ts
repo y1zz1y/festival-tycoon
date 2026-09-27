@@ -1,24 +1,51 @@
-import {
-  BoxGeometry,
-  ConeGeometry,
-  CylinderGeometry,
-  Group,
-  Mesh,
-  MeshStandardMaterial,
-} from 'three'
-import { createNudeAnatomy, createPersonGeometry, createPersonDetails, personSeed, personStyle } from './pixelPeople'
+import { Color, Group, Matrix4 } from 'three'
+import { personSeed, personStyle } from './pixelPeople'
 import { STAFF_DEFINITIONS } from '../game/staff'
-import type { StaffMember } from '../game/staff'
-import { disposeObject3D } from './disposeObject3D'
+import type { StaffMember, StaffRole } from '../game/staff'
+import { CrewInstances, type CrewArms, type CrewLook } from './crewInstances'
+import { placementMatrix } from './instanceBatch'
 
 type StaffPose = { x: number; y: number; z: number }
 
+/** What a staff member looks like and where they turn; the figure itself is instanced. */
+type StaffRecord = {
+  role: StaffRole
+  look: CrewLook
+  hat: 'hatCylinder' | 'hatCone'
+  hatColor: Color
+  /** Desynchronises the walk cycle: the last digits of the id, as before. */
+  phaseOffset: number
+  width: number
+  height: number
+  yaw: number
+}
+
+const STAFF_PANTS = new Color(0x3c4c55)
+/** The share of the remaining turn made per 60-Hz frame; scaled to the real frame time. */
+const YAW_EASING_PER_FRAME = 0.22
+
 export class StaffView {
   readonly group = new Group()
-  private models = new Map<string, Group>()
+  private readonly records = new Map<string, StaffRecord>()
   private prevPos = new Map<string, StaffPose>()
   private currPos = new Map<string, StaffPose>()
   private interpolatedTick = -1
+  private lastTime: number | null = null
+  private visible = true
+  private readonly crew: CrewInstances
+  private readonly ownsCrew: boolean
+  private readonly pose = new Matrix4()
+  private readonly arms: CrewArms = { leftX: 0, leftZ: 0, rightX: 0, rightZ: 0 }
+
+  /**
+   * `crew` is the instanced pool shared with the carriers; WorldView opens and closes
+   * it around both views. Without one the view keeps a pool of its own (tests).
+   */
+  constructor(crew?: CrewInstances) {
+    this.crew = crew ?? new CrewInstances()
+    this.ownsCrew = !crew
+    if (this.ownsCrew) this.group.add(this.crew.group)
+  }
 
   invalidate(): void {
     this.prevPos.clear()
@@ -26,11 +53,17 @@ export class StaffView {
     this.interpolatedTick = -1
   }
 
+  /** Staff stay out of the logistics view; they are simply not written into the pool. */
+  setVisible(visible: boolean): void {
+    this.visible = visible
+  }
+
   update(
     staff: readonly StaffMember[],
     renderAlpha = 1,
     simTick = 0,
     terrainHeight?: (x: number, z: number, y: number) => number,
+    time = performance.now(),
   ): void {
     if (simTick !== this.interpolatedTick) {
       this.prevPos = this.currPos
@@ -42,115 +75,70 @@ export class StaffView {
       )
       this.interpolatedTick = simTick
     }
-    const ids = new Set(staff.map((member) => member.id))
-    this.models.forEach((model, id) => {
-      if (!ids.has(id)) {
-        this.group.remove(model)
-        disposeObject3D(model)
-        this.models.delete(id)
-      }
-    })
-    staff.forEach((member) => {
-      let model = this.models.get(member.id)
-      if (!model) {
-        model = this.createModel(member)
-        model.traverse(object => object.userData.staffId = member.id)
-        this.models.set(member.id, model)
-        this.group.add(model)
-      }
-      const moving = member.route.length > 0
-      const phase = performance.now() * 0.009 + Number(member.id.replace(/\D/g, '').slice(-3))
-      const pose = this.interpolatedPose(member, renderAlpha)
-      model.position.set(pose.x, (terrainHeight?.(pose.x, pose.z, pose.y) ?? pose.y) + 0.04, pose.z)
-      model.rotation.y +=
-        Math.atan2(
-          Math.sin(member.facing - model.rotation.y),
-          Math.cos(member.facing - model.rotation.y),
-        ) * 0.22
-      model.traverse((object) => {
-        if (typeof object.userData.walkLimb === 'number') {
-          object.rotation.x =
-            (moving ? Math.sin(phase) : 0) * 0.65 * object.userData.walkLimb
-        }
-        if (object.userData.cleaningTool) {
-          object.rotation.z =
-            member.state === 'working' ? Math.sin(phase * 1.7) * 0.35 : -0.16
-        }
-        if (object.userData.wasteBag) {
-          object.visible = member.carryingWaste > 0
-        }
-      })
-    })
+    const seconds = this.lastTime === null ? 0 : Math.min(0.25, Math.max(0, (time - this.lastTime) / 1000))
+    this.lastTime = time
+    const turn = 1 - Math.pow(1 - YAW_EASING_PER_FRAME, seconds * 60)
+    this.forgetDeparted(staff)
+    if (this.ownsCrew) this.crew.begin()
+    for (const member of staff) {
+      const record = this.recordOf(member)
+      record.yaw += Math.atan2(Math.sin(member.facing - record.yaw), Math.cos(member.facing - record.yaw)) * turn
+      if (this.visible) this.draw(member, record, renderAlpha, time, terrainHeight)
+    }
+    if (this.ownsCrew) this.crew.finish()
   }
 
-  private createModel(member: StaffMember): Group {
+  private forgetDeparted(staff: readonly StaffMember[]): void {
+    if (this.records.size === 0) return
+    const ids = new Set(staff.map((member) => member.id))
+    for (const id of this.records.keys()) if (!ids.has(id)) this.records.delete(id)
+  }
+
+  private recordOf(member: StaffMember): StaffRecord {
+    const known = this.records.get(member.id)
+    if (known && known.role === member.role) return known
     const definition = STAFF_DEFINITIONS[member.role]
-    const group = new Group()
     const appearance = personStyle(personSeed(member.id))
-    const uniform = new MeshStandardMaterial({ color: definition.color, vertexColors: true, roughness: 0.9 })
-    const skin = new MeshStandardMaterial({ color: appearance.skin, vertexColors: true, roughness: 0.9 })
-    const pants = new MeshStandardMaterial({ color: 0x3c4c55, vertexColors: true, roughness: .9 })
-    const body = new Mesh(createPersonGeometry(appearance.female ? 'femaleBody' : 'body'), uniform)
-    const head = new Mesh(createPersonGeometry('head'), skin)
-    const leftLeg = new Mesh(createPersonGeometry('leg'), pants)
-    const rightLeg = leftLeg.clone()
-    const leftArm = new Mesh(createPersonGeometry('arm'), skin), rightArm = leftArm.clone()
-    const shoulder = appearance.female ? .11 : .128
-    leftArm.position.set(-shoulder, .485, 0); rightArm.position.set(shoulder, .485, 0)
-    leftArm.userData.walkLimb = -1; rightArm.userData.walkLimb = 1
-    body.position.y = .39
-    head.position.y = .605
-    leftLeg.position.set(-.044, .275, 0)
-    rightLeg.position.set(.044, .275, 0)
-    leftLeg.userData.walkLimb = 1
-    rightLeg.userData.walkLimb = -1
-    const hat =
-      member.role === 'firefighter'
-        ? new ConeGeometry(0.13, 0.15, 8)
-        : new CylinderGeometry(0.12, 0.1, 0.08, 10)
-    const hatMesh = new Mesh(
-      hat,
-      new MeshStandardMaterial({ color: definition.hatColor, roughness: 0.7 }),
-    )
-    hatMesh.position.y = .72
-    const details = new Mesh(createPersonDetails(appearance.variant, false), new MeshStandardMaterial({vertexColors:true, roughness:.9}))
-    group.add(leftLeg, rightLeg, body, head, leftArm, rightArm, details, hatMesh)
-    if (appearance.female) {
-      const bust = new Mesh(createNudeAnatomy('bust'), uniform)
-      bust.position.y = .39
-      group.add(bust)
+    const record: StaffRecord = {
+      role: member.role,
+      look: {
+        female: appearance.female,
+        variant: appearance.variant,
+        shirt: new Color(definition.color),
+        skin: new Color(appearance.skin),
+        pants: STAFF_PANTS,
+      },
+      hat: member.role === 'firefighter' ? 'hatCone' : 'hatCylinder',
+      hatColor: new Color(definition.hatColor),
+      phaseOffset: Number(member.id.replace(/\D/g, '').slice(-3)),
+      width: appearance.width,
+      height: appearance.height,
+      // A new face looks where it is going instead of spinning in from north.
+      yaw: known?.yaw ?? member.facing,
     }
-    group.scale.set(appearance.width, appearance.height, appearance.width)
-    if (member.role === 'cleaner') {
-      const broom = new Group()
-      const handle = new Mesh(
-        new CylinderGeometry(0.012, 0.012, 0.65, 6),
-        new MeshStandardMaterial({ color: 0x936239 }),
-      )
-      const brush = new Mesh(
-        new BoxGeometry(0.22, 0.06, 0.08),
-        new MeshStandardMaterial({ color: 0xe1c062 }),
-      )
-      handle.position.y = 0.36
-      brush.position.y = 0.04
-      broom.position.set(0.16, 0, 0.06)
-      broom.rotation.z = -0.16
-      broom.userData.cleaningTool = true
-      broom.add(handle, brush)
-      group.add(broom)
-      const bag = new Mesh(
-        new BoxGeometry(0.1, 0.12, 0.08),
-        new MeshStandardMaterial({ color: 0x6b5a32, roughness: 1 }),
-      )
-      bag.position.set(-0.14, 0.28, 0.04)
-      bag.userData.wasteBag = true
-      bag.visible = false
-      group.add(bag)
-    }
-    group.traverse((object) => {
-      if (object instanceof Mesh) object.castShadow = false
-    })
-    return group
+    this.records.set(member.id, record)
+    return record
+  }
+
+  private draw(
+    member: StaffMember,
+    record: StaffRecord,
+    renderAlpha: number,
+    time: number,
+    terrainHeight?: (x: number, z: number, y: number) => number,
+  ): void {
+    const position = this.interpolatedPose(member, renderAlpha)
+    const y = (terrainHeight?.(position.x, position.z, position.y) ?? position.y) + 0.04
+    const pose = placementMatrix(this.pose, position.x, y, position.z, record.yaw, record.width, record.height)
+    const phase = time * 0.009 + record.phaseOffset
+    const swing = member.route.length > 0 ? Math.sin(phase) * 0.65 : 0
+    this.arms.leftX = -swing
+    this.arms.rightX = swing
+    this.crew.figure(pose, record.look, member.id, swing, this.arms)
+    this.crew.extra(record.hat, pose, member.id, record.hatColor)
+    if (member.role !== 'cleaner') return
+    this.crew.broom(pose, member.state === 'working' ? Math.sin(phase * 1.7) * 0.35 : -0.16, member.id)
+    if (member.carryingWaste > 0) this.crew.extra('wasteBag', pose, member.id)
   }
 
   private interpolatedPose(

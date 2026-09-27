@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { de } from './i18nMarker.ts'
 
 const REPO_PUBLIC = resolve(fileURLToPath(new URL('../public/scenarios', import.meta.url)))
 
@@ -60,21 +61,21 @@ export async function handleScenarioRequest(
     return true
   }
   if (request.method !== 'POST') {
-    json(response, 405, { error: 'Nur GET oder POST' })
+    json(response, 405, { error: de('Nur GET oder POST') })
     return true
   }
   try {
     const raw = JSON.parse(await readBody(request)) as { id?: string }
     const id = typeof raw.id === 'string' ? safeScenarioId(raw.id) : null
     if (!id) {
-      json(response, 400, { error: 'Szenario braucht eine id' })
+      json(response, 400, { error: de('Szenario braucht eine id') })
       return true
     }
     await mkdir(dir, { recursive: true })
     await writeFile(join(dir, `${id}.json`), `${JSON.stringify(raw, null, 2)}\n`, 'utf8')
     json(response, 200, { ok: true, id, path: `${id}.json` })
   } catch {
-    json(response, 400, { error: 'Szenario konnte nicht gespeichert werden' })
+    json(response, 400, { error: de('Szenario konnte nicht gespeichert werden') })
   }
   return true
 }

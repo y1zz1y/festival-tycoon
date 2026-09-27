@@ -33,6 +33,7 @@ feature you touch. Keep detailed file maps and feature history in topic docs.
 | Festival SFX / camera listener | `docs/audio.md` |
 | Rendering / batching | `docs/rendering.md` |
 | UI / input | `docs/ui.md` |
+| Languages, texts, translation | `docs/i18n.md` |
 | Multiplayer commands / deltas | `docs/multiplayer.md` |
 | Saves / snapshot fields | `docs/saves.md` |
 | Tests / how to run checks | `docs/testing.md` |
@@ -65,6 +66,10 @@ Do not leave new modules, commands or kinds undocumented.
 - Keep terrain, crowding, staff/load penalties and alternate routes functional. Do not improve benchmarks by freezing visitors, skipping admissions, disabling effects or slowing game time.
 - Static model details use shared, merged geometry/vertex colors and instancing. Never add a material/draw call per plank, bottle, bolt or visitor. Keep animated stages, lighting, picking and overlays outside static batches.
 - Scenery uses optional `decorationSlot` (four quarters or edges). Missing slots are legacy full-tile objects; never silently shrink old saves. Placement, previews, collision checks and multiplayer must use the shared `scenery.ts` rules. Instanced scenery carries building IDs for picking.
+- Player-visible text follows `docs/i18n.md`: authoritative code (`src/game`, `src/net`,
+  `server`) writes canonical German with `de` and typed wrappers and never translates;
+  UI code uses `t`/`localize`; nothing compares against German literals
+  (`src/game/sentinels.ts`). `npm run test:i18n` enforces it with a ratchet baseline.
 - Before completing any change run `npm run validate`. It checks ESLint/complexity,
   unused files and dependencies, duplication, regressions, TypeScript/Vite build
   and documentation consistency. Frame-partition determinism, camp multi-goal

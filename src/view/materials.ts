@@ -17,6 +17,20 @@ export function shared<T extends Material>(material: T): T {
 /** The house style: vertex colours from ModelKit, a matte finish, a hint of metal. */
 export const HOUSE_MATERIAL = shared(new MeshStandardMaterial({ vertexColors: true, roughness: .85, metalness: .05 }))
 
+/**
+ * A copy of the house material for instanced batches of one kind, with its own
+ * finish. Batches with an instance colour and batches without one each need their
+ * own material object, and neither may share it with plain meshes: every switch
+ * between those would rebuild the shader program. The copies are fixed in number
+ * (one per call site, made at module load), never one per object.
+ */
+export function houseVariant(roughness: number, metalness: number): MeshStandardMaterial {
+  const material = shared(HOUSE_MATERIAL.clone())
+  material.roughness = roughness
+  material.metalness = metalness
+  return material
+}
+
 const palette = new Map<string, MeshStandardMaterial>()
 function cachedStandard(key: string, params: ConstructorParameters<typeof MeshStandardMaterial>[0]): MeshStandardMaterial {
   const cached = palette.get(key)

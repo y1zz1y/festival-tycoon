@@ -13,13 +13,9 @@ import {
 import { Box3, Color, InstancedMesh, Matrix4, Mesh, Vector3 } from 'three'
 import type { PlacedBuilding } from '../src/game/GameState'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
-import { formatRoadVehicleInspectLoad } from '../src/game/logistics'
-import {
-  connectedWasteDumpStats,
-  formatWasteDumpAreaHover,
-  formatWasteDumpAreaInspect,
-  type WasteDumpCell,
-} from '../src/game/waste'
+import { formatRoadVehicleInspectLoad } from '../src/game/logisticsText'
+import { connectedWasteDumpStats, type WasteDumpCell } from '../src/game/waste'
+import { formatWasteDumpAreaHover, formatWasteDumpAreaInspect } from '../src/game/wasteText'
 import { rollsBungeeNude, visitorLooksFemale } from '../src/game/rng'
 import { applyGameCommand } from '../src/net/commands'
 import { enableMultiplayerCommands } from '../src/net/bind'

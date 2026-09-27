@@ -42,11 +42,15 @@ erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
 | Logistik-Einbahn-Overlay | `src/view/LogisticsView.ts`, `src/view/roadDirectionArrow.ts` | Weiße StVO-Pfeile nach den Fahrzeugen; kompaktes InstancedMesh-Overlay nur bei Werkzeug Fahrtrichtung. Parkflächen: geteiltes Asphaltmaterial plus `parkingTexture` (Stelllinien in der Textur); Asphalt und das gemalte P sind statisch und gebündelt. Straßendecks, Zebrastreifen, Sperren und Richtungspfeile teilen Geometrie (`sharedBox`, `sharedPlane`) und Material (`sharedMaterial` je Oberfläche und Farbe) und laufen durch `batchRetroBuildings`; nur die umschaltbaren Bauhilfen (Tempo-Tönung, frei/belegt) bleiben einzelne Meshes. Grün/Orange und das P nur in der Autostraßen-Bauansicht oder im Logistik-Overlay (`showParkingHelpers`) |
 | Weggraph-Debug | `src/view/PathGraphView.ts` | Eine `LineSegments`-Gruppe, nicht `retroStatic`; nur bei 🐞 → Weggraph |
 | Buslinien-Planerroute | `src/view/LogisticsView.ts` `setPlannerRoute` | Eine `Line` / ein Material für die Stoppfolge plus ein Mesh mit geteiltem Zahlenatlas (1, 2, 3 …) an den Halten; weg beim Schließen des Reiters |
-| Logistik-Modelle | `src/view/logisticsModels.ts` | ModelKit-Gebäude und Fahrzeuge; Besucherautos teilen Geometrie je Lackfarbe |
+| Logistik-Modelle | `src/view/logisticsModels.ts` | ModelKit-Gebäude und Fahrzeuge; `createRoadVehicleModel` (Einzelmodell, Besucherautos je Lackfarbe) für Vorschau/Tests/Lieferwagen; `roadVehicleParts` liefert für die Batches je Art eine Geometrie, Besucherautos als weiße Lackhülle (Instanzfarbe) plus gemeinsame Details |
+| Straßenfahrzeuge | `src/view/LogisticsView.ts` | ein `InstancedMesh` je Fahrzeuggeometrie (höchstens 10), Instanzfarbe, `userData.vehicleIds`, Posen je ID; `getVehiclePickRoot()` enthält nur die Batches |
+| Instanz-Batches | `src/view/instanceBatch.ts` | `InstanceBatch` (begin/add/finish, Zweierpotenz-Kapazität, `DynamicDrawUsage`, nur benutzter Bereich hochgeladen, `boundingSphere = null` nach jedem Füllen, ID-Array je Instanz), `placementMatrix` |
+| Personal und Träger | `src/view/crewInstances.ts`, `src/view/StaffView.ts`, `src/view/SupplyChainView.ts` | `CrewInstances`: ein fester Satz Batches (Torso m/w, Büste, Kopf, Beine, Arme, 16 Haarvarianten, zwei Mützen, Besen, Müllsack, Warnweste, Karren, Ladung), jedes Bild neu gefüllt; `staffIds` für Picking |
+| Bühnenvorplätze | `src/view/ForecourtView.ts`, `src/view/coverOverlay.ts` | Steinrahmen als ein `AreaEdgeBatch` (InstancedMesh), Innenbereich offen; Signatur `x:z:elevation` |
 | Straßenrampen | `src/view/LogisticsView.ts` | Deck kippt um `roadSlope`; Stützen bei Erhöhung; Fahrzeuge folgen `waySurfaceY` |
-| Depot-Träger | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts` | dieselbe Personen-Geometrie wie Gäste; eine gemergte Warnwesten-/Mützen-Kit, ein Handkarren, ein Ladungsstapel |
-| Ampeln / Wegschranken | `src/view/AccessControlView.ts` | Geteilte Geometrie, Signalfarbe, Picking über `accessId`. Ampeln rechts an der Fahrbahn, Lampe zum Gegenverkehr. Personentor auf der Ausgangskante (`gateEdgeWorldPosition`), Flügel klappen in die erlaubte Richtung auf |
-| Personaleingang | `src/view/SupplyChainView.ts` | Goldene Pfosten auf derselben Kante via `staffGateWorldPosition`; fehlendes `staffGateDirection` bleibt Legacy-Mitte |
+| Depot-Träger | `src/view/carrierModels.ts`, `src/view/SupplyChainView.ts` | dieselbe Personen-Geometrie wie Gäste; eine gemergte Warnwesten-/Mützen-Kit, ein Handkarren, ein Ladungsstapel; im Spiel Instanzen im Crew-Pool, Einzelmodelle nur für Vorschau und Tests |
+| Ampeln / Wegschranken | `src/view/AccessControlView.ts` | Sechs Instanz-Batches (Ampelkörper, Torrahmen, Torflügel, Lampe grün, Lampe rot, Einbahnpfeil), Picking über `accessIds[instanceId]`. Ampeln rechts an der Fahrbahn, Lampe zum Gegenverkehr. Personentor auf der Ausgangskante (`gateEdgeWorldPosition`), Flügel klappen in die erlaubte Richtung auf |
+| Personaleingang | `src/view/SupplyChainView.ts` | Goldene Pfosten auf derselben Kante via `staffGateWorldPosition`, alle Tore ein Instanz-Batch; fehlendes `staffGateDirection` bleibt Legacy-Mitte |
 | Müllablagen / Eimer-Füllstand | `src/view/WasteView.ts` | Instanced Tiles, Ablage-Säcke und Kartons um Eimer; Füllstand nur über Kartonzahl |
 | Backstage-Overlay | `src/view/BackstageView.ts` | ein `InstancedMesh` (aktiv teal / getrennt amber); außerhalb der Gebäude-Batches |
 | Band-Akteure | `src/view/BandActorView.ts`, `src/view/bandMemberMesh.ts` | dieselbe gemergte Musiker-Geometrie wie `stageBand.ts`; mindestens Publikum-Auflösung; Backstage nicht klobiger als die Bühne |
@@ -104,9 +108,17 @@ Snapshot nicht autoritativ schreiben.
   `injured`, `sleeping` und `medical-transport` liegen fest (Tilt π/2, keine
   Flucht- oder Tanzpose), bis die Simulation den Zustand wechselt.
 - Sechs Visitor-Instance-Batches bleiben die Picking-Ziele. Accessoires in
-  zusätzlichen kompakten Batches, unabhängig von der Population.
+  zusätzlichen kompakten Batches, unabhängig von der Population. Nach jedem
+  Schreiben setzt `updateVisitors` `boundingSphere = null`: `InstancedMesh`
+  rechnet die Kugel beim Raycast nur einmal aus, und Gäste außerhalb der
+  Kugel vom ersten Klick wären sonst nicht mehr anklickbar.
+  `ensureVisitorInstances` verwendet beim Wachsen dieselben zwei Materialien
+  weiter (früher zwei neue je Wachstum). Die Crew-Batches von Personal und
+  Trägern sind keine Visitor-Picking-Ziele; sie haben `CrewInstances.pick`.
   Abriss/Info wählen zuerst das nächste Mesh mit `buildingId` /
-  `buildingIds[instanceId]` bzw. `accessId`; ein unbeschrifteter Treffer
+  `buildingIds[instanceId]` bzw. `accessIds[instanceId]` (Einzelmodelle:
+  `accessId` an einem Vorfahren), aufgelöst über
+  `accessIdFromObject(object, hit.instanceId)`; ein unbeschrifteter Treffer
   (Straße, Parkfeld) beendet die Suche, damit nichts dahinter fällt.
   Maskottchen und gekaufte Shirts sind solche Accessoire-Batches (kein Mesh
   pro Figur). Darstellung interpoliert nur aus dem Snapshot.
@@ -138,12 +150,14 @@ Snapshot nicht autoritativ schreiben.
   verwenden dasselbe Modell transparent als 3D-Ghost.
 - Depot-Träger teilen die Gäste-Körperteile. Warnweste, Handkarren und
   Ladung sind je eine gemergte, vertex-gefärbte Geometrie — kein Mesh
-  pro Latte, Schloss oder Kiste. Picking bleibt `staffId` auf der Figur.
+  pro Latte, Schloss oder Kiste. Picking bleibt die Träger-ID (`staffIds`
+  je Instanz im Crew-Pool; Einzelmodelle tragen weiter `staffId`).
 
 ## Tests
 
 `tests/performanceGuards.ts`, `tests/pixelPeople.ts`, `tests/visitorDance.ts`,
-`tests/carrierModels.ts`,
+`tests/carrierModels.ts`, `tests/renderBatching.ts` (Crew-Pool, Fahrzeuge,
+Ampeln/Tore, festivalmittel-Zensus),
 `tests/campingModels.ts`, `tests/coverOverlay.ts`, `tests/terrainSurface.ts`, `tests/picking.ts`. Messungen: `docs/performance.md`.
 
 ## Bei Änderungen dieses Dokument
@@ -269,10 +283,12 @@ Gemessen mit `tests/render-performance.html` und festivalmittel sind Draw-Calls 
   und einen Billboard-Batch und schreibt bei Belegungswechseln nur Instanzen um.
 - **Farbraum.** Jede Canvas-Textur setzt `SRGBColorSpace` (0.2.0).
 
-Noch nicht gebündelt, nach Messung die nächsten Kandidaten: Personal
-(`StaffView`, 335 Einzel-Meshes, 217 Materialien), Träger (`SupplyChainView`,
-335), fahrende Fahrzeuge (204), Bühnenvorplätze (`ForecourtView`, 81) und
-Zugangsobjekte (`AccessControlView`, 53).
+Die damals noch einzeln gezeichneten Objekte (Personal 335 Meshes mit 217
+Materialien, Träger 335, Fahrzeuge 204, Bühnenvorplätze 81, Zugangsobjekte
+53) sind seit Phase 6 (B8) gebündelt, siehe „Personal, Träger, Fahrzeuge
+und Zugänge gebündelt“. Noch einzeln: Band-Akteure (`BandActorView`, eine
+Gruppe je Musiker), Besucher-Bollerwagen (eine geteilte Gruppe je Wagen) und
+die Titelmenge.
 
 ## Grafikeinstellungen (0.2.4)
 
@@ -308,3 +324,84 @@ nach einem festen Muster der Simulationszeit; die Zahl der Lichter bleibt gleich
 `src/view/RainView.ts` zeichnet Regen als einen InstancedMesh-Batch um den
 Blickpunkt, ausgedünnt durch die Effektdichte; Regen fällt mit der Simulationszeit
 und steht bei Pause. Das Wetter-Overlay (`festival.css`) hat `data-storm`.
+
+## Personal, Träger, Fahrzeuge und Zugänge gebündelt (0.2.12, Phase 6, B8)
+
+Die letzten Objekte mit Mesh (und oft Material) pro Figur, Fahrzeug oder Feld
+zeichnen jetzt feste Instanz-Batches. Headless-Zensus auf festivalmittel
+(sichtbare Meshes plus InstancedMeshes mit Instanzen, kameraunabhängig):
+1.008 → 45 Objekte (Personal 335 und Warenkette 335 → Crew-Pool 28 plus
+4 für Balken, Tore und Depots; Fahrzeuge 204 → 6, Vorplatz 81 → 1,
+Ampeln/Tore 53 → 6). Im Browser (1280×720) fallen die Draw-Calls in der
+Standardkamera von 844 auf 342, bei Zoom 0,55 von 1.288 auf 476 und in der
+Parkplatzansicht von 375 auf 204. Die Szene hat danach 1.334 statt 1.745
+Materialien. Details stehen in [performance.md](performance.md).
+
+**Dynamische Batches** (`src/view/instanceBatch.ts`, `InstanceBatch`):
+
+- `begin` setzt den Zähler auf null, `add` hängt eine Instanz an (Matrix,
+  optional ID und Farbe), `finish` setzt `count`, lädt nur den benutzten
+  Bereich hoch (`addUpdateRange`) und setzt `boundingSphere = null`, damit
+  Frustum-Culling und Raycasts die Kugel für die neuen Positionen neu rechnen.
+- Kapazität in Zweierpotenzen ab 16, `DynamicDrawUsage`; beim Wachsen wandern
+  die schon geschriebenen Instanzen mit, das alte Mesh wird mit `dispose()`
+  freigegeben (Geometrie und Material bleiben geteilt).
+- Ein leerer Batch kostet keinen Draw-Call: `finish` blendet ihn aus
+  (`visible = count > 0`), sodass three ihn nicht einmal vorbereitet. Der
+  Shader-Compile beim Laden läuft auch über ausgeblendete Objekte; Views legen
+  ihre Batches deshalb im Konstruktor an, zur Laufzeit wird nie die ganze Szene
+  kompiliert.
+- Picking-IDs je Instanz in `userData.staffIds` / `vehicleIds` / `accessIds`
+  (Index = `instanceId`), gelesen über `instanceOwnerId` bzw.
+  `accessIdFromObject(object, instanceId)` in `src/view/picking.ts`.
+
+**Materialien:** Ein Material bedient entweder nur Instanz-Batches mit
+Instanzfarbe oder nur solche ohne, und nie zusätzlich ein normales Mesh —
+jeder Wechsel baut sonst das Shaderprogramm neu. `houseVariant(roughness,
+metalness)` in `materials.ts` liefert dafür feste Kopien des Hausmaterials
+(Klone zählen nicht in `MATERIAL_CEILINGS`, sind aber pro Aufrufstelle genau
+eine). Die Obergrenzen sinken: `StaffView.ts` 8 → 0, `ForecourtView.ts`
+1 → 0, `AccessControlView.ts` 7 → 2, `SupplyChainView.ts` 2 → 1.
+
+**Crew-Pool** (`src/view/crewInstances.ts`, `CrewInstances`): Personal und
+Träger teilen einen festen Satz von 29 Batches: Torso männlich/weiblich,
+Büste, Kopf, Beine (zwei Instanzen je Person), Arme (zwei), 16 Haar-/
+Detailvarianten, zwei Mützen (Zylinder, Kegel für die Feuerwehr), Besen,
+Müllsack, Warnweste, Handkarren und Ladung. Uniform, Haut, Hose und Mütze
+kommen aus der Instanzfarbe (weiße Vertexfarben mal Instanzfarbe), Haare,
+Besen und Sack aus ihren Vertexfarben, Weste/Karren/Ladung aus einer Kopie
+des Träger-Kit-Materials. `WorldView` ruft `crew.begin()` vor
+`StaffView.update` und `crew.finish()` nach `SupplyChainView.animate`, vor den
+Personen-Vorschauen. Ohne übergebenen Pool legt eine View ihren eigenen an
+(Tests). Die Glieder setzt `composeLimb` (`pixelPeople.ts`), dieselbe
+Pose × Gelenk-Rechnung wie bei den Gästen. Zustand zwischen Frames liegt in
+schlichten Datensätzen je ID (Interpolation, Blickrichtung, Glättung,
+`getCarrierPosition`), nicht in Object3D-Bäumen.
+
+**Fahrzeuge:** siehe [logistics.md](logistics.md); höchstens zehn Batches
+(sieben Arten, zwei Lackhüllen, eine Autodetail-Geometrie), eigene Kopie des
+Fahrzeugmaterials mit Instanzfarbe, Schatten wie zuvor. Geplant waren
+höchstens neun Batches mit einem angenäherten grauen Dach für alle Autos.
+Das silberne Auto hat stattdessen eine eigene Hülle. So bleibt das dunklere
+Dach exakt, und die Dächer aller anderen Farben bleiben ebenfalls exakt.
+Das kostet einen Batch mehr.
+
+**Warenkette:** Füllstandsbalken sind ein Batch aus einem weißen
+Einheitswürfel (Rahmen und Füllung je eine Instanz), neu geschrieben nur bei
+Datenänderung oder gedrehter Kamera; Personaltore ein Batch; Depotgebäude
+über `batchRetroBuildings`.
+
+**Vorplatz und Zugänge:** `ForecourtView` ist ein Overlay-Batch mit
+`overlayMaterial` (schreibt wie Sanität und Backstage keine Tiefe mehr).
+`AccessControlView` trennt Layout (ID, Lage, Richtung, Durchgang und
+Bodenhöhe) von den Signalen: ein Signalwechsel verschiebt nur Lampen
+zwischen dem grünen und roten Batch und dreht die Torflügel, Batches und
+Layout bleiben.
+
+**Kleine sichtbare Abweichungen:** Mützen, Besen und Säcke sind jetzt so matt
+wie die Figuren (Rauheit 0,9 statt 0,7 bzw. 1), das Trägerhemd 0,9 statt
+0,85, Ampel- und Torkörper nutzen die Hausstil-Rauheit 0,85 statt 0,55–0,78.
+Formen, Farben, Maße, Animationen und Picking sind unverändert; ein
+Headless-Vergleich der alten Einzelmodelle mit den Instanzen (Personal aller
+Rollen, Ampeln, offene/geschlossene Tore) ergab höchstens 1e-6 Abweichung in
+den Vertex-Bounds.

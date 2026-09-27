@@ -55,8 +55,8 @@ Reihenfolge bleiben getrennt und unverändert; es gibt keine Datenmigration.
 Server-Slots brauchen ein Konto (`/api/saves`, SQLite). `GET /api/saves`
 legt zuerst die Account-Tabellen an — sonst scheitert der `users`-Join
 für Gäste mit „no such table: users“. Gäste und Fehler (kein Server,
-keine JSON-Antwort, 401) zeigen eine deutsche Meldung; lokale Slots
-bleiben sichtbar. Persönliche Saves niemals committen oder überschreiben.
+keine JSON-Antwort, 401) zeigen eine Meldung (kanonisch deutsch, beim
+Betrachter übersetzt); lokale Slots bleiben sichtbar. Persönliche Saves niemals committen oder überschreiben.
 Die UI-Zusammenführung in `ui/saveArchive.ts` verändert keine Snapshots:
 Server- und Browser-Slots behalten ihre Quelle, werden nur für Listen sortiert,
 und fremde Namen werden vor dem Einsetzen in HTML escaped.
@@ -81,6 +81,29 @@ laden** weiterhin öffnen, solange es den neuen Slot noch nicht gibt.
 Schnellstand und benannte Slots schreiben immer den vollen Snapshot — keine
 gekürzte Variante ohne Personen oder Objekte.
 
+**Host-Übernahme im Mehrspieler** ([multiplayer.md](multiplayer.md)): Ein Gast,
+der einen Raum übernommen hat, spielt den Park eines anderen. Solange dieser
+Park läuft (`MultiplayerSession.inheritedHost`), schreiben **Schnell speichern**
+und **Autospeichern** in den eigenen Slot „Übernommen {Code}“
+(`takeoverSaveName`, Kontext-Hook `takeoverSlotName` in
+`src/ui/saveController.ts`), gesucht über den Namen wie der Schnellstand — nie
+über das eigene „Schnellspeichern“. **Schnell laden** liest dann genau diesen
+Slot zurück (`findQuickSlot` in `src/ui/saveArchive.ts` wählt für Speichern und
+Laden denselben); gibt es ihn noch nicht, lädt es nichts („Noch kein Stand
+„Übernommen {Code}“ gespeichert“), statt den eigenen Schnellstand in den Raum
+zu laden. Der so geladene Stand bleibt übernommen (Kontext-Hook `keepTakeover`
+→ `MultiplayerSession.markInherited`), speichert also weiter in seinen Slot.
+Benannte Slots („Speichern unter“) bleiben frei wählbar; ein aus der Liste
+geladener „Übernommen“-Stand zählt wie jeder geladene Stand. Der
+übernommene Park wird wie ein geladener Spielstand aufgebaut
+(`GameState.fromJSON`); das Werkzeug fällt wie nach jedem Laden auf „Ansehen“
+zurück. Ein Host, dessen Raum übernommen wurde, während er weg war, bekommt beim
+Zurückkommen seine offline weitergespielte Welt als **lokalen** Browser-Slot
+„Vor Host-Wechsel {Code}“ (`SaveController.backupLocally` über
+`GameState.saveSnapshotSlot`, bei Platzmangel IndexedDB wie jeder Slot); ein
+zweiter Wechsel ersetzt diese Sicherung, und sie wird nicht zum
+„Fortsetzen“-Stand. Kein neues Snapshot-Feld, keine Versionsänderung.
+
 ## Wichtige Regeln
 
 Die Extraktion von Besucher-Orchestrierung und Bau-/Abriss-/Coaster-Services
@@ -96,7 +119,12 @@ Camp und Müll rekonstruiert.
   nicht und bekommen beim ersten Hosten einen. Als einziges Feld geht er
   bewusst **nicht** über die Leitung (`packWorld` nimmt ihn heraus wie
   `selectedTool`): Ein Gast behält seinen eigenen, sonst würde er später mit dem
-  Code eines fremden Raums hosten wollen.
+  Code eines fremden Raums hosten wollen. Ausnahme Host-Übernahme: Der neue Host
+  baut die Welt mit dem Raumcode (`gameFromNetworkWorld(world, local, code)`),
+  und `attach` stempelt ihn zusätzlich (`rememberMultiplayerCode`). Alter und
+  neuer Stand tragen dann denselben Code; wer zuerst hostet, bekommt ihn
+  (`codeFor`), der andere einen neuen. Ein Gast, der nach dem Ende eines Raums
+  allein weiterspielt, behält seinen eigenen Code.
   Optionale `scenario.title` / `scenario.detail` halten Name und
   Beschreibung eines Drop-in-Szenarios; fehlend bleibt die Anzeige beim
   Preset bzw. „Freies Spiel“. Optionales `scenario.authoring` markiert den
@@ -120,18 +148,37 @@ Camp und Müll rekonstruiert.
   widersprüchliche Schwellen werden beim Laden normalisiert.
   v31 führt `attractions: Attraction[]` und optional
   `migrationReport.removedAttractionIds` ein. `track`, `area` und `scripted`
-  sind die kanonischen Layouts. Der v30→v31-Lader konvertiert Achterbahnen,
-  Kurse, Camping-/Partyflächen und Rides einmalig. Pool wird in `swimArea`
-  plus eigenständige Wasserrutschen aufgeteilt; nicht sicher konvertierbare
-  Anlagen werden gemeldet und entfernt.
-  `coasters` und `courses` werden beim Laden aus `attractions`
-  projiziert. `campingCells`, `campInstallations` und
-  `stageForecourtCells` bleiben die gespeicherten Live-Arrays, wenn
-  sie im Stand stehen; nur fehlende Arrays fallen auf die
-  `camping`-/`partyArea`-Projektion zurück. Anschließend schreibt
-  `refreshLegacyAttractionRecords` die Overlay-Datensätze nach, und
-  `syncStageAudience` baut bühnenzugehörige Vorplätze neu. Snapshot-
-  Version bleibt 33.
+  sind die kanonischen Layouts. Der v30→v31-Lader (auch ein Stand mit leerem
+  `attractions`) konvertiert Achterbahnen, Kurse, Camping-/Partyflächen und
+  `ride`-Gebäude einmalig in Datensätze. Pool wird in `swimArea` plus
+  eigenständige Wasserrutschen aufgeteilt. `removedAttractionIds` **meldet**
+  Anlagen, die sich nicht in einen Datensatz konvertieren lassen (z. B. ein
+  Kurs ohne Stücke); entfernt wird nichts, die Live-Zeile bleibt unverändert in
+  `coasters`/`courses` und hat nur keinen Datensatz.
+  **Doppelmodell** (offizielle Regel:
+  [attractions.md → Doppelmodell](attractions.md#doppelmodell-offizielle-regel-bewusst-ohne-migration)):
+  `coasters` und `courses` sind die gespeicherte Wahrheit. Nur wenn eines
+  dieser Arrays im Stand fehlt oder leer ist (v31-Stände), wird es beim Laden
+  aus `attractions` projiziert; sonst gewinnen die gespeicherten Live-Zeilen.
+  `campingCells`, `campInstallations` und `stageForecourtCells` bleiben die
+  gespeicherten Live-Arrays, wenn sie im Stand stehen; nur fehlende Arrays
+  fallen auf die `camping`-/`partyArea`-Projektion zurück.
+  `refreshLegacyAttractionRecords` leitet die Datensätze in `migrateSnapshot`
+  und noch einmal in `repairSnapshotEntities` nach der Reparatur der
+  Live-Arrays ab. Dabei wird ein gemischter Stand repariert: ein Bahn- oder
+  Kurs-Datensatz ohne Live-Zeile und ein Ride-Datensatz ohne `ride`-Gebäude
+  werden verworfen, eine Live-Zeile ohne Datensatz bekommt einen. Kanonische
+  Datensätze aus `startAttraction` (`attraction-…`) bleiben unverändert, auch
+  bei einer künftigen eigenen `runtime.kind`. Gäste, die laut Stand für eine
+  verworfene Waise anstehen oder mit ihr fahren (bis 0.2.11 bediente
+  `stepAttractions` Waisen), setzt `releaseGuestsOfOrphans` auf `exploring`
+  zurück (`targetId = null`, leere Route); das geschieht nur beim Laden.
+  Vorher benennt `renameDuplicateLiveIds` doppelte Bahn-/Kurs-IDs um, die
+  0.2.11 bei Pause vergeben konnte (zweite Zeile → `${id}-2` usw.; Gäste in
+  deren Queue, Zug oder Rider-Liste ziehen mit). Kein neues Snapshot-Feld.
+  `syncStageAudience` baut bühnenzugehörige Vorplätze neu. Aktuelle
+  Snapshot-Version ist 34; das Einfrieren des Doppelmodells ändert kein
+  Snapshot-Feld.
   `courses` (Kurs-Attraktionen): fehlend = `[]` via `normalizeCourses`.
   Neues Kind `waterSlide` (eigene Strecke, startet mit Leitern).
   `normalizeCourses` teilt Legacy-`waterSlide`-Stücke auf Pool-Kursen in
@@ -253,6 +300,39 @@ Camp und Müll rekonstruiert.
   `busIds` bleiben die gespeicherte Reihenfolge und Flotte; neue
   Commands `setBusLineStops` und `addBusToLine` ändern nur diese Felder.
 
+## Sprachen
+
+Die Textschicht ([i18n.md](i18n.md)) ändert nichts an gespeicherten oder
+gesendeten Daten:
+
+- **Keine Änderung an persistierten oder gesendeten Daten.** Kein neuer
+  `GameCommand`, kein neues Snapshot-Feld, die Snapshot-Version bleibt. Codec,
+  Deltas und Sim-Hash bleiben unverändert; der Sim-Hash enthält keinen Text, und
+  es kommt keiner hinzu.
+- **Inhalt.** Spielstände, Deltas, `commandResult`, `result`, `error` und `closed`
+  tragen kanonisches Deutsch. Command-Payloads tragen kanonische deutsche Defaults
+  oder Nutzertext.
+- **Übersetzt wird nur beim Betrachter.** Ein deutscher Host und ein englischer Gast
+  teilen einen Raum. Optimistische Gast-Commands erzeugen dasselbe Deutsch wie der
+  Host, weil autoritativer Code nie übersetzt.
+- **Chat, Spielernamen und Lobbynamen** erscheinen wörtlich, nie übersetzt.
+- **Versionsschiefe.** Ein Text eines neueren Hosts, den der Katalog des Gastes nicht
+  kennt, erscheint auf Deutsch. Das ist akzeptiert.
+- **Laden.** Jede Client-Sprache lädt jeden Spielstand. Alte Spielstände können
+  Deutsch aus der Zeit vor der Normalisierung enthalten; Legacy-Schlüssel
+  (`src/i18n/en/legacy.ts`) decken persistierte Namen und Status ab, alte Gedanken
+  erneuern sich.
+- **Geräteeinstellung.** Die Sprache liegt in `festival-player-settings`, einer
+  Geräteeinstellung. Sie wird nie gespeichert oder synchronisiert.
+- Kanonische Defaults wie der Schnellspeicher-Slot `Schnellspeichern`, die
+  Bühnenvorlage `Meine Traumbühne` oder die Buslinie `Festival-Shuttle` bleiben
+  deutsche Schlüssel; nur ihre Anzeige wird übersetzt. Dasselbe gilt für die
+  Übernahme-Slots `Übernommen <Code>` und `Vor Host-Wechsel <Code>`.
+- Fehlermeldungen von `src/game/saveText.ts` und `src/game/serverSaves.ts` sind
+  `new Error(de(…))`; die Save-API des Servers (`server/saveSlots.ts`) antwortet
+  in `error` ebenfalls kanonisch. Die Senken in `src/ui/saveController.ts`
+  lokalisieren `error.message` (Katalog `src/i18n/en/net.ts` bzw. `server.ts`).
+
 ## Tests
 
 Die Routing-Auftragsqueue ist Laufzeitzustand und fügt keine Snapshot-Felder hinzu.
@@ -271,6 +351,11 @@ Besucher/Gebäude; Liste ohne `fromJSON`; gemockter Server-Client stürzt bei
 HTML/401 nicht ab).
 `tests/saves.ts` (Konto-API). Roundtrips in `tests/terrainSurface.ts`,
 `tests/rideAccess.ts`, `tests/festival.ts`, `tests/scenery.ts`.
+`tests/hostTakeover.ts` (Sicherungs-Slot „Vor Host-Wechsel“ über
+`GameState.saveSnapshotSlot` inkl. Ersetzen, übernommene Welt über
+`GameState.fromJSON` mit Raumcode und RNG, Sicherung des zurückgestuften Hosts,
+Schnellspeicher-Slot über `findQuickSlot` — übernommener Park nie im eigenen
+Schnellstand —, Markierung bleibt nach `markInherited` und erneutem Hosten).
 
 ## Bei Änderungen dieses Dokument
 

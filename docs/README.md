@@ -70,6 +70,7 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | Festival-SFX, Kamera-Listener | [audio.md](audio.md) | Pools, Distanz, Cluster, Mute |
 | Darstellung, Batches, Licht | [rendering.md](rendering.md) | `WorldView`, Instancing, Lights |
 | UI, Eingaben, Mobile | [ui.md](ui.md) | `main.ts`, Fenster, Touch |
+| Sprachen, Texte, Übersetzung | [i18n.md](i18n.md) | Sprachwahl, `t`/`de`/`localize`, Katalog, Prüfskript, Glossar |
 | Mehrspieler, Host, Deltas | [multiplayer.md](multiplayer.md) | Commands, Codec, Server |
 | Spielstände, Version, Export | [saves.md](saves.md) | Snapshot-Version, Slots, Base64 |
 | Tests und Prüfkommandos | [testing.md](testing.md) | Welche Suite was abdeckt |
@@ -87,6 +88,7 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | Bau-Menü-Kategorien | `src/game/buildMenu.ts` |
 | UI-Bootstrap / Orchestrierung | `src/main.ts`, `src/app/gameLoop.ts`, `src/input/toolRouter.ts`, `src/ui/*.ts` |
 | 3D-Szene | `src/view/WorldView.ts` |
+| Instanz-Batches, Crew-Pool (Personal/Träger) | `src/view/instanceBatch.ts` (`InstanceBatch`), `src/view/crewInstances.ts` (`CrewInstances`); siehe [rendering.md](rendering.md) |
 | Fassaden, Dächer, Themen-Eimer | `src/game/decorationWalls.ts` (`WALL_KINDS`, `wallSpec`, `ROOF_KINDS`, `roofSpec`) |
 | Wegmöbel-Ausrichtung | `src/game/pathFurniture.ts` (`pathFurnitureRotation`) |
 | Track-Editor-Modus | `src/game/trackEditorMode.ts` (`palette` / `directionArrows`) |
@@ -97,7 +99,9 @@ Qualitätsgrenzen stehen in [testing.md](testing.md).
 | Netzwerk-Protokoll | `src/net/protocol.ts` |
 | Command-Anwendung | `src/net/commands.ts` |
 | Host-Server | `server/serve.ts`, `server/rooms.ts` |
+| Host-Übernahme | `server/worldCache.ts`, `src/net/takeover.ts`, `src/ui/hostTakeover.ts` ([multiplayer.md](multiplayer.md#host-übernahme)) |
 | Test-Einstieg | `tests/regression.ts` |
+| Texte und Übersetzung | `src/i18n/index.ts`, `src/i18n/en/index.ts`, `scripts/check-i18n.mjs` |
 
 Fachmodule unter `src/game/*.ts` und Views unter `src/view/*.ts` sind in den
 Themen-MDs einzeln zugeordnet.

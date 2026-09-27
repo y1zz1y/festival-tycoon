@@ -1,6 +1,7 @@
 import type { GameSnapshot } from './game/GameState'
 import { buildHeadlineMagazine, type HeadlineMagazine } from './game/headlineMagazine'
 import { isLoadingOverlayVisible } from './ui/loadingOverlay'
+import { keep, t, tc } from './i18n'
 import './headlineMagazine.css'
 
 const escape = (value: string) =>
@@ -23,20 +24,20 @@ function magazineMarkup(mag: HeadlineMagazine): string {
         <figcaption>${escape(mag.heroCaption)}</figcaption>
       </figure>
       <div class="headline-magazine-scorebox">
-        <p class="headline-magazine-stars" aria-label="${mag.stars} von 5 Sternen">${stars(mag.stars)}</p>
-        <p class="headline-magazine-note">${mag.score}<small>Punkte · ${escape(mag.verdictLine)}</small></p>
+        <p class="headline-magazine-stars" aria-label="${t`${mag.stars} von 5 Sternen`}">${stars(mag.stars)}</p>
+        <p class="headline-magazine-note">${mag.score}<small>${t('Punkte')} · ${escape(mag.verdictLine)}</small></p>
         <blockquote class="headline-magazine-quote">${escape(mag.pullQuote)}</blockquote>
         <p class="headline-magazine-lede">${escape(mag.lede)}</p>
-        <p class="headline-magazine-verdict">Pro ${mag.pros.length} · Kontra ${mag.cons.length}</p>
+        <p class="headline-magazine-verdict">${t('Pro')} ${mag.pros.length} · ${t('Kontra')} ${mag.cons.length}</p>
       </div>
     </section>
     <div class="headline-magazine-columns">
-      <section class="headline-magazine-col headline-magazine-pro"><h2>Pro</h2>${column(mag.pros)}</section>
-      <section class="headline-magazine-col headline-magazine-con"><h2>Kontra</h2>${column(mag.cons)}</section>
+      <section class="headline-magazine-col headline-magazine-pro"><h2>${t('Pro')}</h2>${column(mag.pros)}</section>
+      <section class="headline-magazine-col headline-magazine-con"><h2>${t('Kontra')}</h2>${column(mag.cons)}</section>
     </div>
     <footer class="headline-magazine-footer">
-      <span>HEADLINE · Ausgabe ${String(mag.edition).padStart(2, '0')}</span>
-      <button type="button" data-magazine-close>Weiter / Schließen</button>
+      <span>${keep('HEADLINE')} · ${tc('issue', 'Ausgabe')} ${String(mag.edition).padStart(2, '0')}</span>
+      <button type="button" data-magazine-close>${t('Weiter / Schließen')}</button>
     </footer>`
 }
 

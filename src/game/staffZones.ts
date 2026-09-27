@@ -1,3 +1,5 @@
+import { de } from '../i18n/marker'
+
 // The map is globally partitioned into fixed 3x3-cell zones (independent of
 // any single staff member), identified by a "zx:zz" key. Math.floor gives a
 // correct partition for negative coordinates too, since the map is centered
@@ -68,7 +70,7 @@ export function setAssignedWorkZones(
   if (active === has) return { ok: true, next: current, changed: false }
   if (active) {
     if (current.length && !isZoneAdjacentToAny(key, current)) {
-      return { ok: false, message: 'Bereiche müssen zusammenhängend sein' }
+      return { ok: false, message: de('Bereiche müssen zusammenhängend sein') }
     }
     return { ok: true, next: [...current, key], changed: true }
   }
@@ -76,7 +78,7 @@ export function setAssignedWorkZones(
   if (!zonesConnected(next)) {
     return {
       ok: false,
-      message: 'Bereiche müssen zusammenhängend bleiben - zuerst die trennende Seite entfernen',
+      message: de('Bereiche müssen zusammenhängend bleiben - zuerst die trennende Seite entfernen'),
     }
   }
   return { ok: true, next, changed: true }

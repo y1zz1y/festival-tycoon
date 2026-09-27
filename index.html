@@ -12,6 +12,38 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/app-icons/apple-touch-icon.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/app-icons/icon-192.png" />
     <title>Headliner Tycoon</title>
+    <script>
+      // The language of this page load, before any module arrives. Mirrors
+      // src/i18n/locale.ts step for step (tests/i18n.ts runs both on the same cases):
+      // readLanguageSetting — the device setting `language` in festival-player-settings,
+      // anything unreadable counts as 'auto' — then detectLocale/resolveLocale — 'auto'
+      // follows the browser, English is the fallback, a failing navigator means German.
+      (function () {
+        var setting = 'auto'
+        try {
+          var stored = localStorage.getItem('festival-player-settings')
+          var parsed = stored ? JSON.parse(stored) : null
+          if (parsed && typeof parsed === 'object') setting = parsed.language
+        } catch (error) {
+          setting = 'auto'
+        }
+        var locale = 'de'
+        try {
+          if (setting === 'de' || setting === 'en') locale = setting
+          else {
+            locale = 'en'
+            var languages = navigator.languages || []
+            for (var i = 0; i < languages.length; i++) {
+              var primary = languages[i].toLowerCase().split('-')[0]
+              if (primary === 'de' || primary === 'en') { locale = primary; break }
+            }
+          }
+        } catch (error) {
+          locale = 'de'
+        }
+        document.documentElement.lang = locale
+      })()
+    </script>
     <style>
       /* Inline and independent of style.css on purpose: this has to paint the instant the
          raw HTML parses, before the module graph (main.ts and everything it imports,
@@ -75,6 +107,10 @@
         text-transform: uppercase;
         color: #efcf86;
       }
+      /* Both captions ship; <html lang> set by the script above picks one. */
+      .boot-caption [lang] { display: none; }
+      html:not([lang="en"]) .boot-caption [lang="de"],
+      html[lang="en"] .boot-caption [lang="en"] { display: inline; }
       .boot-bar {
         width: 220px;
         height: 8px;
@@ -100,11 +136,11 @@
     <div id="boot-loader" role="status" aria-live="polite">
       <div class="boot-ring"><div class="boot-mark">H</div></div>
       <div class="boot-title">Headliner Tycoon</div>
-      <div class="boot-caption">Wird geladen …</div>
+      <div class="boot-caption"><span lang="de">Wird geladen …</span><span lang="en">Loading …</span></div>
       <div class="boot-bar"><div class="boot-bar-fill"></div></div>
     </div>
     <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/boot.ts"></script>
     <script>
       // Safety net: if boot ever fails to reach the point where main.ts removes this
       // itself, don't leave the player staring at a spinner forever.

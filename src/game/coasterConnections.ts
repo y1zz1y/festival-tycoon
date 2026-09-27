@@ -1,3 +1,4 @@
+import { de } from '../i18n/marker'
 import {
   TRACK_BANK_ANGLE,
   TRACK_PIECES,
@@ -86,7 +87,7 @@ function specialEntryBank(kind: TrackPieceKind): number {
 
 /**
  * Current Headliner append gate. Used by `GameState.appendCoasterPiece`.
- * Messages stay German to match the live construction UI.
+ * Messages are canonical German (`de`); the construction UI shows them through `localize()`.
  */
 function isGentleFromFlatException(end: Pick<TrackAnchor, 'pitch' | 'bank'>, kind: TrackPieceKind): boolean {
   return (kind === 'slopeGentleUp' || kind === 'slopeGentleDown') && isNearlyFlat(end.pitch) && isNearlyUnbanked(end.bank)
@@ -99,7 +100,7 @@ export function describeTrackAppendIssue(
   typeId = 'classicSteel',
 ): string | null {
   if (!catalogAllowsTrackPiece(typeId, kind)) {
-    return 'Dieser Achterbahntyp unterstützt das Element nicht'
+    return de('Dieser Achterbahntyp unterstützt das Element nicht')
   }
   const definition = TRACK_PIECES[kind]
   const catalogId = isCoasterCatalogTypeId(typeId) ? typeId : 'classicSteel'
@@ -108,46 +109,46 @@ export function describeTrackAppendIssue(
     const discrete = describeDiscreteConnectionIssue(start, kind, options, catalogId)
     if (discrete) {
       if (discrete === 'begin slope mismatch') {
-        return 'Diese Neigung muss zuerst übergeleitet werden'
+        return de('Diese Neigung muss zuerst übergeleitet werden')
       }
       if (discrete === 'begin bank mismatch') {
-        return 'Die Seitenneigung muss zuerst ausgeleitet werden'
+        return de('Die Seitenneigung muss zuerst ausgeleitet werden')
       }
       if (discrete === 'cannot skip slope states') {
-        return 'Diese Neigung kann nicht in einem Stück überführt werden'
+        return de('Diese Neigung kann nicht in einem Stück überführt werden')
       }
       if (discrete === 'bank must pass through none') {
-        return 'Die Seitenneigung muss zuerst neutral ausgeleitet werden'
+        return de('Die Seitenneigung muss zuerst neutral ausgeleitet werden')
       }
       if (discrete === 'type does not allow this slope') {
-        return 'Dieser Achterbahntyp unterstützt diese Neigung nicht'
+        return de('Dieser Achterbahntyp unterstützt diese Neigung nicht')
       }
       if (discrete === 'type does not allow this bank' || discrete === 'type does not allow banking') {
-        return 'Dieser Achterbahntyp unterstützt keine Seitenneigung'
+        return de('Dieser Achterbahntyp unterstützt keine Seitenneigung')
       }
       if (discrete === 'type does not allow inversions') {
-        return 'Dieser Achterbahntyp unterstützt keine Inversionen'
+        return de('Dieser Achterbahntyp unterstützt keine Inversionen')
       }
       if (discrete === 'type does not allow 1-tile turns') {
-        return 'Dieser Achterbahntyp unterstützt keine 1-Feld-Kurven'
+        return de('Dieser Achterbahntyp unterstützt keine 1-Feld-Kurven')
       }
       if (discrete === 'type does not allow banked sloped curves') {
-        return 'Dieser Achterbahntyp erlaubt keine geneigten Kurven mit Seitenneigung'
+        return de('Dieser Achterbahntyp erlaubt keine geneigten Kurven mit Seitenneigung')
       }
       if (discrete === 'type does not allow sloped curves') {
-        return 'Dieser Achterbahntyp erlaubt keine Kurven in der Steigung'
+        return de('Dieser Achterbahntyp erlaubt keine Kurven in der Steigung')
       }
       if (discrete === 'type does not allow banked steep') {
-        return 'Dieser Achterbahntyp erlaubt keine steile Strecke mit Seitenneigung'
+        return de('Dieser Achterbahntyp erlaubt keine steile Strecke mit Seitenneigung')
       }
       if (discrete === 'type does not allow helix') {
-        return 'Dieser Achterbahntyp unterstützt keine Helix'
+        return de('Dieser Achterbahntyp unterstützt keine Helix')
       }
       if (discrete === 'type does not allow water splash') {
-        return 'Dieser Achterbahntyp unterstützt keinen Wassersplash'
+        return de('Dieser Achterbahntyp unterstützt keinen Wassersplash')
       }
       if (discrete === 'type does not enable this piece') {
-        return 'Dieser Achterbahntyp unterstützt das Element nicht'
+        return de('Dieser Achterbahntyp unterstützt das Element nicht')
       }
     }
   }
@@ -155,36 +156,36 @@ export function describeTrackAppendIssue(
     kind === 'pitchTransition' &&
     !canTransitionTrackPitch(end.pitch, options.targetPitch ?? end.pitch)
   ) {
-    return 'Diese Neigung kann nicht in einem Stück überführt werden'
+    return de('Diese Neigung kann nicht in einem Stück überführt werden')
   }
   if (kind === 'pitchTransition' && isCoasterCatalogTypeId(typeId)) {
     const target = classifyTrackPitch(options.targetPitch ?? end.pitch)
     if (target && catalogBlocksPitch(typeId, target)) {
-      return 'Dieser Achterbahntyp unterstützt diese Neigung nicht'
+      return de('Dieser Achterbahntyp unterstützt diese Neigung nicht')
     }
   }
   if (
     kind === 'bankTransition' &&
     Math.abs((options.targetBank ?? end.bank) - end.bank) > TRACK_BANK_ANGLE + 0.001
   ) {
-    return 'Die Seitenneigung muss zuerst neutral ausgeleitet werden'
+    return de('Die Seitenneigung muss zuerst neutral ausgeleitet werden')
   }
   if (kind === 'station' && (!isNearlyFlat(end.pitch) || !isNearlyUnbanked(end.bank))) {
-    return 'Vor einer Station müssen Steigung und Seitenneigung ausgeleitet werden'
+    return de('Vor einer Station müssen Steigung und Seitenneigung ausgeleitet werden')
   }
   if (
     definition.special &&
     (!isNearlyFlat(end.pitch) || Math.abs(end.bank - specialEntryBank(kind)) > 0.001)
   ) {
     return specialNeedsInvertedEntry(kind)
-      ? 'Dieses Element benötigt einen waagerechten Anschluss auf dem Kopf'
-      : 'Dieses Element benötigt einen waagerechten, ungekippten Anschluss'
+      ? de('Dieses Element benötigt einen waagerechten Anschluss auf dem Kopf')
+      : de('Dieses Element benötigt einen waagerechten, ungekippten Anschluss')
   }
   if (isInvertedTrackBank(end.bank) && kind !== 'straight' && kind !== 'halfLoopDown') {
-    return 'Kopfüber: Gerade oder halben Looping abwärts verwenden'
+    return de('Kopfüber: Gerade oder halben Looping abwärts verwenden')
   }
   if (definition.turn && !isNearlyUnbanked(end.bank) && Math.sign(end.bank) !== definition.turn) {
-    return 'Die Seitenneigung zeigt für diese Kurve in die falsche Richtung'
+    return de('Die Seitenneigung zeigt für diese Kurve in die falsche Richtung')
   }
   return null
 }

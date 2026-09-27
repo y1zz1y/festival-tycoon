@@ -1,3 +1,4 @@
+import { de, num, plural } from '../i18n/marker'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import type { RngSource } from './rng'
 
@@ -191,12 +192,12 @@ export class CampingSystem {
 
   designateCell(x: number, z: number, enabled = true): CampingAreaResult {
     if (!this.context.isInWorld(x, z)) {
-      return { ok: false, message: 'Außerhalb des Geländes', displacedVisitors: [] }
+      return { ok: false, message: de('Außerhalb des Geländes'), displacedVisitors: [] }
     }
     const existing = this.getCellAt(x, z)
     if (!enabled) {
       if (!existing) {
-        return { ok: false, message: 'Hier ist kein Zeltbereich', displacedVisitors: [] }
+        return { ok: false, message: de('Hier ist kein Zeltbereich'), displacedVisitors: [] }
       }
       this.context.setCells(
         this.context.getCells().filter((cell) => cell.x !== x || cell.z !== z),
@@ -218,23 +219,23 @@ export class CampingSystem {
         if (visitor.state === 'camping') {
           visitor.state = 'exploring'
           visitor.route = []
-          visitor.thought = 'Mein Zeltplatz wurde aufgehoben.'
+          visitor.thought = de('Mein Zeltplatz wurde aufgehoben.')
         }
       })
-      return { ok: true, message: 'Zeltbereich aufgehoben', displacedVisitors }
+      return { ok: true, message: de('Zeltbereich aufgehoben'), displacedVisitors }
     }
     if (existing) {
-      return { ok: true, message: 'Hier ist bereits Zeltbereich', displacedVisitors: [] }
+      return { ok: true, message: de('Hier ist bereits Zeltbereich'), displacedVisitors: [] }
     }
     if (this.context.isGroundOccupied(x, z)) {
       return {
         ok: false,
-        message: 'Zeltbereiche brauchen eine freie Bodenfläche',
+        message: de('Zeltbereiche brauchen eine freie Bodenfläche'),
         displacedVisitors: [],
       }
     }
     this.context.setCells([...this.context.getCells(), { x, z, elevation: 0 }])
-    return { ok: true, message: 'Zeltbereich ausgewiesen', displacedVisitors: [] }
+    return { ok: true, message: de('Zeltbereich ausgewiesen'), displacedVisitors: [] }
   }
 
   designateArea(cells: ReadonlyArray<{ x: number; z: number }>): CampingPaintResult {
@@ -258,14 +259,18 @@ export class CampingSystem {
     if (additions.length === 0) {
       return {
         ok: false,
-        message: 'In dieser Fläche gibt es keine freien Zeltfelder',
+        message: de('In dieser Fläche gibt es keine freien Zeltfelder'),
         placed: 0,
       }
     }
     this.context.setCells([...this.context.getCells(), ...additions])
     return {
       ok: true,
-      message: `${additions.length} Felder als Zeltbereich ausgewiesen`,
+      message: plural(
+        additions.length,
+        de`${num(additions.length)} Feld als Zeltbereich ausgewiesen`,
+        de`${num(additions.length)} Felder als Zeltbereich ausgewiesen`,
+      ),
       placed: additions.length,
     }
   }
@@ -307,7 +312,7 @@ export class CampingSystem {
       visitor.targetId = null
       visitor.route = route
       visitor.hasHandcart = true
-      visitor.thought = 'Ich ziehe meine Campingsachen zum Zeltplatz.'
+      visitor.thought = de('Ich ziehe meine Campingsachen zum Zeltplatz.')
       return true
     }
     return false
@@ -572,7 +577,7 @@ export class CampingSystem {
         visitor.campingPhase = 'packing'
         visitor.interactionRemaining = 0
         visitor.route = route
-        visitor.thought = 'Das Festival ist für mich vorbei. Ich gehe mein Zelt abbauen.'
+        visitor.thought = de('Das Festival ist für mich vorbei. Ich gehe mein Zelt abbauen.')
         return
       }
     }
@@ -589,6 +594,6 @@ export class CampingSystem {
         [entrance],
         true,
       ) ?? []
-    visitor.thought = 'Ich mache mich auf den Heimweg.'
+    visitor.thought = de('Ich mache mich auf den Heimweg.')
   }
 }

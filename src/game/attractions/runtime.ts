@@ -1,6 +1,8 @@
+import { de } from '../../i18n/marker'
 import { SIMULATION_CONFIG } from '../simulationConfig'
 import { grantAttractionFun } from '../attractionFun'
 import type { Visitor } from '../types/entities'
+import { isLegacyAttractionId } from './dualModel'
 import { orderTrackFromStart, sampleTrackPoint } from './trackGraph'
 import type { Attraction, AttractionPoint } from './types'
 
@@ -12,9 +14,10 @@ export type AttractionRuntimeHooks = {
   injure: (visitor: Visitor, point: AttractionPoint) => void
   isWater: (x: number, z: number, elevation: number) => boolean
   /**
-   * Attractions that a dedicated system already drives this tick. Coasters run
-   * on `CoasterSimulation` (SI physics) and courses on `stepCourses`; stepping
-   * them here as well would admit and move the same guests twice.
+   * Attractions that a dedicated system already drives this tick
+   * (`legacyAttractionIds`). Coasters run on `CoasterSimulation` (SI physics),
+   * courses on `stepCourses` and rides on the building pipeline; stepping them
+   * here as well would admit and move the same guests twice.
    */
   legacyIds?: ReadonlySet<string>
 }
@@ -27,10 +30,15 @@ export function stepAttractions(
   attractions: Attraction[],
   hooks: AttractionRuntimeHooks,
 ): void {
-  const visitors = new Map(hooks.visitors.map((visitor) => [visitor.id, visitor]))
+  // Most parks only hold projection and overlay records, which step nothing
+  // here; the visitor index is built once, on the first record that runs.
+  let visitors: Map<string, Visitor> | undefined
   attractions.forEach((attraction) => {
     if (attraction.operationMode === 'closed') return
-    if (hooks.legacyIds?.has(attraction.id)) return
+    // Camping/party overlays have no riders and no capacity.
+    if (attraction.runtime.kind === 'camping' || attraction.runtime.kind === 'party') return
+    if (isLegacyAttractionId(attraction.id, hooks.legacyIds)) return
+    visitors ??= new Map(hooks.visitors.map((visitor) => [visitor.id, visitor]))
     admitQueuedVisitors(attraction, visitors, hooks)
     if (attraction.layout.kind === 'track') {
       if (attraction.runtime.kind === 'course') {
@@ -78,7 +86,7 @@ function admitQueuedVisitors(
       if (visitor) {
         visitor.state = 'exploring'
         visitor.targetId = null
-        visitor.thought = 'Das ist mir zu teuer.'
+        visitor.thought = de('Das ist mir zu teuer.')
       }
       continue
     }
@@ -169,8 +177,8 @@ function finishTrackRider(
   visitor.targetId = null
   grantAttractionFun(visitor, SIMULATION_CONFIG.courses.funGain)
   visitor.thought = layout.agentKind === 'slider'
-    ? 'Die Wasserrutsche war großartig!'
-    : 'Der Parcours war großartig!'
+    ? de('Die Wasserrutsche war großartig!')
+    : de('Der Parcours war großartig!')
 }
 
 function stepAreaCourse(
@@ -212,8 +220,8 @@ function stepAreaCourse(
       visitor.targetId = null
       grantAttractionFun(visitor, SIMULATION_CONFIG.courses.funGain)
       visitor.thought = runtime.courseKind === 'paintball'
-        ? 'Was für ein Paintballspiel!'
-        : 'Das Wasser war herrlich!'
+        ? de('Was für ein Paintballspiel!')
+        : de('Das Wasser war herrlich!')
       return false
     }
     const cellIndex = Math.abs(Math.floor(simTick / 20) + index * 7) % layout.cells.length
@@ -224,8 +232,8 @@ function stepAreaCourse(
       elevation: cell.elevation,
     })
     visitor.thought = runtime.courseKind === 'paintball'
-      ? 'Deckung! Ich markiere das andere Team!'
-      : 'Das Wasser ist herrlich!'
+      ? de('Deckung! Ich markiere das andere Team!')
+      : de('Das Wasser ist herrlich!')
     return true
   })
   if (runtime.match?.remainingTicks === 0) runtime.match = undefined
@@ -262,8 +270,8 @@ function stepScriptedRide(
     visitor.targetId = null
     grantAttractionFun(visitor, SIMULATION_CONFIG.needs.ride.funGain)
     visitor.thought = runtime.rideKind === 'bungee'
-      ? 'Was für ein Bungeesprung!'
-      : 'Das Karussell war großartig!'
+      ? de('Was für ein Bungeesprung!')
+      : de('Das Karussell war großartig!')
   })
 }
 
@@ -280,19 +288,19 @@ function thoughtForTrackEdge(kind: string | undefined): string {
   switch (kind) {
     case 'ropeSwing':
     case 'treeSwing':
-      return 'Ich schwinge am Seil!'
+      return de('Ich schwinge am Seil!')
     case 'jump':
-      return 'Jetzt springen!'
+      return de('Jetzt springen!')
     case 'climbWall':
     case 'treeObstacle':
-      return 'Das ist eine echte Kletterherausforderung!'
+      return de('Das ist eine echte Kletterherausforderung!')
     case 'hangingBridge':
-      return 'Die Hängebrücke wackelt!'
+      return de('Die Hängebrücke wackelt!')
     case 'treeZip':
-      return 'Mit der Seilbahn durch die Bäume!'
+      return de('Mit der Seilbahn durch die Bäume!')
     case 'crawlTunnel':
-      return 'Durch den Tunnel!'
+      return de('Durch den Tunnel!')
     default:
-      return 'Weiter durch den Parcours!'
+      return de('Weiter durch den Parcours!')
   }
 }

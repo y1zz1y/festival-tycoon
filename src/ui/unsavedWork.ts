@@ -3,9 +3,13 @@
  * closing the tab, loading another save or walking back to the title screen can ask
  * first instead of quietly throwing the session away.
  */
+import { plural, t } from '../i18n'
+
 export const WARN_AFTER_MS = 5 * 60 * 1000
 
 let warningsOn = true
+/** Set right before a reload the game itself asked for and the player already confirmed. */
+let skipNextUnloadPrompt = false
 let editRevisionOf: () => number = () => 0
 let gameIsRunning: () => boolean = () => false
 /** A joined guest holds no save of their own; the host owns the world. */
@@ -61,14 +65,35 @@ export function unsavedWarningsEnabled(): boolean {
 export function confirmDiscardingWork(action: string): boolean {
   if (!warningsOn || !hasUnsavedWork()) return true
   const since = minutesSinceSave()
-  const age = since >= 1 ? ` Zuletzt gespeichert vor ${since} Minute${since === 1 ? '' : 'n'}.` : ''
-  return window.confirm(`${action}\n\nNicht gespeicherte Änderungen gehen dabei verloren.${age}`)
+  const lost = t('Nicht gespeicherte Änderungen gehen dabei verloren.')
+  const age = since >= 1
+    ? plural(since, t`Zuletzt gespeichert vor ${since} Minute.`, t`Zuletzt gespeichert vor ${since} Minuten.`)
+    : ''
+  const warning = age ? `${lost} ${age}` : lost
+  return window.confirm(`${action}\n\n${warning}`)
+}
+
+/**
+ * The next unload is one the game started after its own confirmation (the language
+ * switch reloads the page), so the browser's "leave site?" dialog must not ask again.
+ */
+export function suppressBeforeUnloadOnce(): void {
+  skipNextUnloadPrompt = true
+}
+
+/** Whether the guard would prompt now; consumes a pending suppression. */
+export function shouldPromptBeforeUnload(): boolean {
+  if (skipNextUnloadPrompt) {
+    skipNextUnloadPrompt = false
+    return false
+  }
+  return warningsOn && hasUnsavedWork()
 }
 
 /** The browser's own "leave site?" prompt, for closing or reloading the tab. */
 export function installUnsavedWorkGuard(): void {
   window.addEventListener('beforeunload', (event) => {
-    if (!warningsOn || !hasUnsavedWork()) return
+    if (!shouldPromptBeforeUnload()) return
     // Browsers show their own wording; setting returnValue is what asks at all.
     event.preventDefault()
     event.returnValue = ''

@@ -250,27 +250,6 @@ export function connectedWasteDumpStats(
   return { cells, stored, capacity, remaining, percent }
 }
 
-export function formatWasteDumpAreaInspect(stats: WasteDumpAreaStats): {
-  status: string
-  lines: Array<{ label: string; value: string }>
-} {
-  return {
-    status:
-      stats.cells === 1
-        ? 'Zusammenhängende Fläche · 1 Feld'
-        : `Zusammenhängende Fläche · ${stats.cells} Felder`,
-    lines: [
-      { label: 'Gelagert', value: `${stats.stored} / ${stats.capacity}` },
-      { label: 'Frei', value: String(stats.remaining) },
-      { label: 'Auslastung', value: `${stats.percent} %` },
-    ],
-  }
-}
-
-export function formatWasteDumpAreaHover(stats: WasteDumpAreaStats): string {
-  return `Müllablage · ${stats.stored}/${stats.capacity} gelagert · ${stats.remaining} frei`
-}
-
 /** Park-wide dump fill (every designated tile). Missing dumps yield null. */
 export function parkWasteDumpFill(
   dumps: readonly WasteDumpCell[],
@@ -389,36 +368,6 @@ export function clampSealedContainerStored(
   capacity = SIMULATION_CONFIG.waste.sealedContainerCapacity,
 ): number {
   return Math.min(capacity, Math.max(0, Number(stored) || 0))
-}
-
-export function formatSealedContainerInspect(container: {
-  stored: number
-  capacity?: number
-  onRoad: boolean
-  truckReachable: boolean
-}): {
-  status: string
-  lines: Array<{ label: string; value: string }>
-} {
-  const capacity = container.capacity ?? SIMULATION_CONFIG.waste.sealedContainerCapacity
-  const remaining = Math.max(0, capacity - container.stored)
-  const percent =
-    capacity <= 0 ? 0 : Math.min(100, Math.round((container.stored / capacity) * 100))
-  const truck =
-    container.onRoad && container.truckReachable
-      ? 'Müllwagen kann entleeren · sonst trägt die Reinigung'
-      : container.onRoad
-        ? 'Straße ohne Zufahrt · Reinigung trägt zur Ablage'
-        : 'Nicht an der Straße · Reinigung trägt zur Ablage'
-  return {
-    status: truck,
-    lines: [
-      { label: 'Gelagert', value: `${container.stored} / ${capacity}` },
-      { label: 'Frei', value: String(remaining) },
-      { label: 'Auslastung', value: `${percent} %` },
-      { label: 'Abfuhr', value: truck },
-    ],
-  }
 }
 
 /** Destination cells for one multi-goal haul: dumps and sealed containers with room. */

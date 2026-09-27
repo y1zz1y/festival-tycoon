@@ -1,3 +1,4 @@
+import { de, keep } from '../i18n/marker'
 import {
   COASTER_TYPES,
   TRACK_PIECE_KINDS,
@@ -215,7 +216,7 @@ function vanillaCaps(
 export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> = {
   classicSteel: {
     id: 'classicSteel',
-    name: 'Klassische Stahlachterbahn',
+    name: de('Klassische Stahlachterbahn'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'default',
@@ -244,12 +245,12 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'steelLattice',
     trainStyle: 'sitDownSteel',
-    notes:
+    notes: // i18n-ignore developer note, never displayed
       'Default / save-fallback type. Parametric family kinds plus discrete connection state. Steep is labelled Steil and stays 45° so existing classicSteel saves keep their rise-per-tile. One train; cars = station tiles × carCapacity. Helix is not in this type’s groups.',
   },
   wooden: {
     id: 'wooden',
-    name: 'Holzachterbahn',
+    name: de('Holzachterbahn'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'default',
@@ -279,11 +280,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'wooden',
     trainStyle: 'wooden',
-    notes: 'Vanilla: 25/60, banking, loop, water splash, reverse-incline shuttle. No 90°, no corkscrew by default.',
+    notes: 'Vanilla: 25/60, banking, loop, water splash, reverse-incline shuttle. No 90°, no corkscrew by default.', // i18n-ignore developer note, never displayed
   },
   looping: {
     id: 'looping',
-    name: 'Looping-Stahlachterbahn',
+    name: de('Looping-Stahlachterbahn'),
     playable: true,
     capabilities: vanillaCaps({
       vertical: 'extra',
@@ -315,11 +316,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'steelLattice',
     trainStyle: 'sitDownSteel',
-    notes: 'Vertical loop by default. Powered launch. 90° is an OpenRCT2 extra, not vanilla.',
+    notes: 'Vertical loop by default. Powered launch. 90° is an OpenRCT2 extra, not vanilla.', // i18n-ignore developer note, never displayed
   },
   corkscrew: {
     id: 'corkscrew',
-    name: 'Corkscrew',
+    name: keep('Corkscrew'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'default',
@@ -349,11 +350,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'steelLattice',
     trainStyle: 'sitDownSteel',
-    notes: 'Loop, half-loop, corkscrew. Corkscrew family is catalogued but not yet placeable.',
+    notes: 'Loop, half-loop, corkscrew. Corkscrew family is catalogued but not yet placeable.', // i18n-ignore developer note, never displayed
   },
   hyper: {
     id: 'hyper',
-    name: 'Hyperachterbahn',
+    name: de('Hyperachterbahn'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'none',
@@ -380,11 +381,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'gigaLattice',
     trainStyle: 'sitDownSteel',
-    notes: 'Corkscrew-style layout without inversion pieces. Taller supports / drop than looping steel.',
+    notes: 'Corkscrew-style layout without inversion pieces. Taller supports / drop than looping steel.', // i18n-ignore developer note, never displayed
   },
   twister: {
     id: 'twister',
-    name: 'Twister (B&M)',
+    name: keep('Twister (B&M)'),
     playable: true,
     capabilities: vanillaCaps({
       vertical: 'vanilla',
@@ -422,12 +423,12 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'boxSpine',
     trainStyle: 'bmSitdown',
-    notes:
+    notes: // i18n-ignore developer note, never displayed
       'Full modern inversions, vanilla 90°, circuit + block-sectioned only, no launch. Floorless is this vehicle, not a separate ride type. Helix is placeable.',
   },
   hyperTwister: {
     id: 'hyperTwister',
-    name: 'Hyper-Twister',
+    name: de('Hyper-Twister'),
     playable: true,
     capabilities: vanillaCaps({
       vertical: 'vanilla',
@@ -458,11 +459,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'boxSpine',
     trainStyle: 'bmSitdown',
-    notes: 'Twister without inversion pieces. Circuit + block only. Helix is placeable.',
+    notes: 'Twister without inversion pieces. Circuit + block only. Helix is placeable.', // i18n-ignore developer note, never displayed
   },
   verticalDrop: {
     id: 'verticalDrop',
-    name: 'Vertical Drop',
+    name: keep('Vertical Drop'),
     playable: true,
     capabilities: vanillaCaps({
       vertical: 'vanilla',
@@ -487,11 +488,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'gigaLattice',
     trainStyle: 'giga',
-    notes: 'Brake-for-drop, steep chain, boxed supports. No default inversions.',
+    notes: 'Brake-for-drop, steep chain, boxed supports. No default inversions.', // i18n-ignore developer note, never displayed
   },
   giga: {
     id: 'giga',
-    name: 'Giga-Coaster',
+    name: de('Giga-Coaster'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'extra',
@@ -517,11 +518,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'cable',
     trackStyle: 'gigaLattice',
     trainStyle: 'giga',
-    notes: 'Cable lift. Inversions are an OpenRCT2 extra only — do not enable them as vanilla.',
+    notes: 'Cable lift. Inversions are an OpenRCT2 extra only — do not enable them as vanilla.', // i18n-ignore developer note, never displayed
   },
   lsmLaunched: {
     id: 'lsmLaunched',
-    name: 'LSM-Abschussachterbahn',
+    name: de('LSM-Abschussachterbahn'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'default',
@@ -552,11 +553,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'powered',
     trackStyle: 'launchedSteel',
     trainStyle: 'launched',
-    notes: 'Boosters, inversions on. Chain lift is an extra, not the default launch style.',
+    notes: 'Boosters, inversions on. Chain lift is an extra, not the default launch style.', // i18n-ignore developer note, never displayed
   },
   limLaunched: {
     id: 'limLaunched',
-    name: 'LIM-Abschussachterbahn',
+    name: de('LIM-Abschussachterbahn'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'default',
@@ -585,11 +586,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'none',
     trackStyle: 'launchedSteel',
     trainStyle: 'launched',
-    notes: 'No lift hill. Launch only.',
+    notes: 'No lift hill. Launch only.', // i18n-ignore developer note, never displayed
   },
   inverted: {
     id: 'inverted',
-    name: 'Inverted',
+    name: keep('Inverted'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'default',
@@ -617,11 +618,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'invertedBox',
     trainStyle: 'invertV',
-    notes: 'Suspended trains, quarter helices, dive. Helix is placeable; corkscrew remains catalog-only.',
+    notes: 'Suspended trains, quarter helices, dive. Helix is placeable; corkscrew remains catalog-only.', // i18n-ignore developer note, never displayed
   },
   compactInverted: {
     id: 'compactInverted',
-    name: 'Kompakte Inverted',
+    name: de('Kompakte Inverted'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'default',
@@ -651,11 +652,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'invertedBox',
     trainStyle: 'invertV',
-    notes: 'Smaller inverted with reverse-incline shuttle. Helix is placeable.',
+    notes: 'Smaller inverted with reverse-incline shuttle. Helix is placeable.', // i18n-ignore developer note, never displayed
   },
   flying: {
     id: 'flying',
-    name: 'Flying Coaster',
+    name: keep('Flying Coaster'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'default',
@@ -682,11 +683,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'flyingSpine',
     trainStyle: 'flying',
-    notes: 'Starts inverted in RCT2. Headliner still starts from a flat station; fly↔lie drawers are not ported. Helix is placeable.',
+    notes: 'Starts inverted in RCT2. Headliner still starts from a flat station; fly↔lie drawers are not ported. Helix is placeable.', // i18n-ignore developer note, never displayed
   },
   standUp: {
     id: 'standUp',
-    name: 'Stehende Achterbahn',
+    name: de('Stehende Achterbahn'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'default',
@@ -713,11 +714,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'steelLattice',
     trainStyle: 'standUp',
-    notes: 'Loop / half-loop / corkscrew. No default 90°. Corkscrew kind is not yet placeable.',
+    notes: 'Loop / half-loop / corkscrew. No default 90°. Corkscrew kind is not yet placeable.', // i18n-ignore developer note, never displayed
   },
   junior: {
     id: 'junior',
-    name: 'Juniorachterbahn',
+    name: de('Juniorachterbahn'),
     playable: true,
     capabilities: vanillaCaps({
       steep: false,
@@ -734,11 +735,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'curved',
     trackStyle: 'juniorTubular',
     trainStyle: 'junior',
-    notes: '25° only, no inversions, curved lift, low height limit.',
+    notes: '25° only, no inversions, curved lift, low height limit.', // i18n-ignore developer note, never displayed
   },
   steelWildMouse: {
     id: 'steelWildMouse',
-    name: 'Wilde Maus (Stahl)',
+    name: de('Wilde Maus (Stahl)'),
     playable: true,
     capabilities: vanillaCaps({
       banking: false,
@@ -770,11 +771,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'wildMouse',
     trainStyle: 'mouse',
-    notes: 'No banking. 1-tile turns. Individual cars, not trains.',
+    notes: 'No banking. 1-tile turns. Individual cars, not trains.', // i18n-ignore developer note, never displayed
   },
   woodenWildMouse: {
     id: 'woodenWildMouse',
-    name: 'Wilde Maus (Holz)',
+    name: de('Wilde Maus (Holz)'),
     playable: true,
     capabilities: vanillaCaps({
       banking: false,
@@ -797,11 +798,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'woodenMouse',
     trainStyle: 'mouse',
-    notes: 'No brakes track group. Circuit only. No banking.',
+    notes: 'No brakes track group. Circuit only. No banking.', // i18n-ignore developer note, never displayed
   },
   mineTrain: {
     id: 'mineTrain',
-    name: 'Minenachterbahn',
+    name: de('Minenachterbahn'),
     playable: true,
     capabilities: vanillaCaps({
       inversions: 'none',
@@ -827,11 +828,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'wooden',
     trainStyle: 'mine',
-    notes: 'Banking allowed, but no slopeCurveBanked group. No inversions. Helix is placeable.',
+    notes: 'Banking allowed, but no slopeCurveBanked group. No inversions. Helix is placeable.', // i18n-ignore developer note, never displayed
   },
   bobsled: {
     id: 'bobsled',
-    name: 'Bobbahn',
+    name: de('Bobbahn'),
     playable: true,
     capabilities: vanillaCaps({
       steep: false,
@@ -851,11 +852,11 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'bobsledTrough',
     trainStyle: 'bobsled',
-    notes: '25° only. Trough-style banking. No large or sloped curves.',
+    notes: '25° only. Trough-style banking. No large or sloped curves.', // i18n-ignore developer note, never displayed
   },
   suspendedSwinging: {
     id: 'suspendedSwinging',
-    name: 'Hängende Schaukelachterbahn',
+    name: de('Hängende Schaukelachterbahn'),
     playable: true,
     capabilities: vanillaCaps({
       banking: false,
@@ -882,7 +883,7 @@ export const COASTER_CATALOG: Record<CoasterCatalogTypeId, CoasterCatalogEntry> 
     liftStyle: 'chain',
     trackStyle: 'suspendedSpine',
     trainStyle: 'swinging',
-    notes: 'No roll banking. Unbanked helix. Swinging cars. Vehicle flags also forbid banked track.',
+    notes: 'No roll banking. Unbanked helix. Swinging cars. Vehicle flags also forbid banked track.', // i18n-ignore developer note, never displayed
   },
 }
 

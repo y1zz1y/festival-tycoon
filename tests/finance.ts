@@ -9,7 +9,8 @@ import {
   renderFinanceLedger,
   toggleFinanceCategory,
 } from '../src/ui/financePanel'
-import { goalName, updateScenarioProgress } from '../src/game/scenarioGoals'
+import { goalName } from '../src/game/scenarioGoalText'
+import { updateScenarioProgress } from '../src/game/scenarioGoals'
 import { createBlankSnapshot } from '../src/game/snapshotBootstrap'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { courseHourlyUpkeep } from '../src/game/courseAttractions'

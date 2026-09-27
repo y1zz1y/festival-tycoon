@@ -1,3 +1,4 @@
+import { de } from '../i18n/marker'
 import type { BuildingKind } from './catalog'
 import type { Supply } from './festivalManagement'
 
@@ -7,23 +8,23 @@ export const SHIRT_STYLES = ['basic', 'tank', 'hoodie', 'polo'] as const
 export type ShirtStyle = (typeof SHIRT_STYLES)[number]
 
 export const SHIRT_STYLE_LABELS: Record<ShirtStyle, string> = {
-  basic: 'Klassisch',
-  tank: 'Tanktop',
-  hoodie: 'Kapuze',
-  polo: 'Polo',
+  basic: de('Klassisch'),
+  tank: de('Tanktop'),
+  hoodie: de('Kapuze'),
+  polo: de('Polo'),
 }
 
 export const SHIRT_COLORS = [
-  { id: 'red', color: 0xe23b3b, name: 'Rot' },
-  { id: 'orange', color: 0xe67a22, name: 'Orange' },
-  { id: 'yellow', color: 0xe8c547, name: 'Gelb' },
-  { id: 'green', color: 0x3d9b5c, name: 'Grün' },
-  { id: 'teal', color: 0x2a9d8f, name: 'Petrol' },
-  { id: 'blue', color: 0x2f6fdb, name: 'Blau' },
-  { id: 'purple', color: 0x7b4db8, name: 'Violett' },
-  { id: 'pink', color: 0xd95b8a, name: 'Pink' },
-  { id: 'black', color: 0x2a2d33, name: 'Schwarz' },
-  { id: 'white', color: 0xf4f1ea, name: 'Weiß' },
+  { id: 'red', color: 0xe23b3b, name: de('Rot') },
+  { id: 'orange', color: 0xe67a22, name: de('Orange') },
+  { id: 'yellow', color: 0xe8c547, name: de('Gelb') },
+  { id: 'green', color: 0x3d9b5c, name: de('Grün') },
+  { id: 'teal', color: 0x2a9d8f, name: de('Petrol') },
+  { id: 'blue', color: 0x2f6fdb, name: de('Blau') },
+  { id: 'purple', color: 0x7b4db8, name: de('Violett') },
+  { id: 'pink', color: 0xd95b8a, name: de('Pink') },
+  { id: 'black', color: 0x2a2d33, name: de('Schwarz') },
+  { id: 'white', color: 0xf4f1ea, name: de('Weiß') },
 ] as const
 
 export type WornShirt = {
@@ -131,49 +132,49 @@ export function mascotTint(variant: number): number {
 export function stockoutThought(kind: string, waiting: boolean): string {
   if (kind === 'food') {
     return waiting
-      ? 'Hier ist kein Essen mehr. Ich warte noch kurz.'
-      : 'Ich schaue kurz, ob noch Essen da ist.'
+      ? de('Hier ist kein Essen mehr. Ich warte noch kurz.')
+      : de('Ich schaue kurz, ob noch Essen da ist.')
   }
   if (kind === 'alcohol') {
     return waiting
-      ? 'Hier sind keine Getränke mehr. Ich warte noch kurz.'
-      : 'Ich schaue kurz, ob noch Getränke da sind.'
+      ? de('Hier sind keine Getränke mehr. Ich warte noch kurz.')
+      : de('Ich schaue kurz, ob noch Getränke da sind.')
   }
   if (kind === 'mascot') {
     return waiting
-      ? 'Die Maskottchen sind alle. Ich warte noch kurz.'
-      : 'Ich schaue kurz, ob noch Maskottchen da sind.'
+      ? de('Die Maskottchen sind alle. Ich warte noch kurz.')
+      : de('Ich schaue kurz, ob noch Maskottchen da sind.')
   }
   if (kind === 'shirt') {
     return waiting
-      ? 'Die T-Shirts sind ausverkauft. Ich warte noch kurz.'
-      : 'Ich schaue kurz, ob noch Shirts da sind.'
+      ? de('Die T-Shirts sind ausverkauft. Ich warte noch kurz.')
+      : de('Ich schaue kurz, ob noch Shirts da sind.')
   }
   if (kind === 'waterPoint') {
     return waiting
-      ? 'Hier kommt kein Wasser mehr. Ich warte noch kurz.'
-      : 'Ich schaue kurz, ob noch Wasser kommt.'
+      ? de('Hier kommt kein Wasser mehr. Ich warte noch kurz.')
+      : de('Ich schaue kurz, ob noch Wasser kommt.')
   }
   if (kind === 'shower') {
     return waiting
-      ? 'Die Duschen haben kein Wasser. Ich warte noch kurz.'
-      : 'Ich schaue kurz, ob die Duschen Wasser haben.'
+      ? de('Die Duschen haben kein Wasser. Ich warte noch kurz.')
+      : de('Ich schaue kurz, ob die Duschen Wasser haben.')
   }
-  return waiting ? 'Ausverkauft! Ich warte noch kurz.' : 'Ich schaue kurz, ob noch etwas da ist.'
+  return waiting ? de('Ausverkauft! Ich warte noch kurz.') : de('Ich schaue kurz, ob noch etwas da ist.')
 }
 
 export function souvenirSeekThought(kind: string): string {
-  if (kind === 'mascot') return 'Ich hole mir ein Maskottchen als Andenken.'
-  if (kind === 'shirt') return 'Ich kaufe mir ein Festival-Shirt.'
-  return 'Ich schaue bei den Ständen vorbei.'
+  if (kind === 'mascot') return de('Ich hole mir ein Maskottchen als Andenken.')
+  if (kind === 'shirt') return de('Ich kaufe mir ein Festival-Shirt.')
+  return de('Ich schaue bei den Ständen vorbei.')
 }
 
 export function souvenirPurchaseThought(kind: string, holdingMascot: boolean): string {
   if (kind === 'mascot') {
     return holdingMascot
-      ? 'Mein Maskottchen kommt mit auf den Weg.'
-      : 'Ich habe ein Maskottchen gekauft.'
+      ? de('Mein Maskottchen kommt mit auf den Weg.')
+      : de('Ich habe ein Maskottchen gekauft.')
   }
-  if (kind === 'shirt') return 'Das neue Shirt sitzt. Weiter geht’s.'
-  return 'Ich habe ein Andenken gekauft.'
+  if (kind === 'shirt') return de('Das neue Shirt sitzt. Weiter geht’s.')
+  return de('Ich habe ein Andenken gekauft.')
 }

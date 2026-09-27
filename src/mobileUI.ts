@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import './mobile.css'
 
 export function mountMobileUI(actions: {
@@ -11,12 +12,12 @@ export function mountMobileUI(actions: {
   const topbar = document.querySelector<HTMLElement>('.topbar')!
   const menu = document.createElement('button')
   menu.className = 'mobile-menu-toggle'
-  menu.textContent = '☰ Menü'
+  menu.textContent = `☰ ${t('Menü')}`
   menu.setAttribute('aria-expanded', 'false')
   menu.setAttribute('aria-controls', 'mobile-actions')
   const iconToolbar = document.querySelector<HTMLElement>('.rct-toolbar')!
   iconToolbar.id = 'mobile-actions'
-  iconToolbar.insertAdjacentHTML('beforeend', '<p class="mobile-instructions">Antippen baut oder wählt aus. Zwei Finger verschieben und zoomen. Mit ✋ verschiebst du mit einem Finger. Die Leisten oben und unten lassen sich seitlich scrollen. Bands: erst Band, dann Zeitslot antippen.</p>')
+  iconToolbar.insertAdjacentHTML('beforeend', `<p class="mobile-instructions">${t('Antippen baut oder wählt aus. Zwei Finger verschieben und zoomen. Mit ✋ verschiebst du mit einem Finger. Die Leisten oben und unten lassen sich seitlich scrollen. Bands: erst Band, dann Zeitslot antippen.')}</p>`)
   topbar.querySelector('.brand')!.append(menu)
   const setMenu = (open: boolean) => {
     topbar.classList.toggle('mobile-menu-open', open)
@@ -25,17 +26,17 @@ export function mountMobileUI(actions: {
   menu.addEventListener('click', () => setMenu(menu.getAttribute('aria-expanded') !== 'true'))
   const toolbar = document.createElement('nav')
   toolbar.className = 'mobile-controls panel'
-  toolbar.setAttribute('aria-label', 'Touch-Steuerung')
-  toolbar.innerHTML = `<button data-mobile="build">🏗 Bauen</button>
-    <button data-mobile="pan" aria-pressed="false" title="Verschieben statt Bauen">✋ Schieben</button>
-    <button data-mobile="left" aria-label="Kamera nach links drehen">↶</button>
-    <button data-mobile="right" aria-label="Kamera nach rechts drehen">↷</button>
-    <button data-mobile="rotate" aria-label="Bauteil drehen">⟳ Teil</button>
-    <button data-mobile="out" aria-label="Verkleinern">−</button>
-    <button data-mobile="in" aria-label="Vergrößern">+</button>
-    <button data-mobile="down" aria-label="Bauhöhe senken">H−</button>
-    <button data-mobile="up" aria-label="Bauhöhe erhöhen">H+</button>`
-  toolbar.insertAdjacentHTML('beforeend', '<button data-mobile="overlays" aria-expanded="false">Ansichten</button>')
+  toolbar.setAttribute('aria-label', t('Touch-Steuerung'))
+  toolbar.innerHTML = `<button data-mobile="build">🏗 ${t('Bauen')}</button>
+    <button data-mobile="pan" aria-pressed="false" title="${t('Verschieben statt Bauen')}">✋ ${t('Schieben')}</button>
+    <button data-mobile="left" aria-label="${t('Kamera nach links drehen')}">↶</button>
+    <button data-mobile="right" aria-label="${t('Kamera nach rechts drehen')}">↷</button>
+    <button data-mobile="rotate" aria-label="${t('Bauteil drehen')}">⟳ ${t('Teil')}</button>
+    <button data-mobile="out" aria-label="${t('Verkleinern')}">−</button>
+    <button data-mobile="in" aria-label="${t('Vergrößern')}">+</button>
+    <button data-mobile="down" aria-label="${t('Bauhöhe senken')}">H−</button>
+    <button data-mobile="up" aria-label="${t('Bauhöhe erhöhen')}">H+</button>`
+  toolbar.insertAdjacentHTML('beforeend', `<button data-mobile="overlays" aria-expanded="false">${t('Ansichten')}</button>`)
   document.querySelector('.game-shell')!.append(toolbar)
   const pan = toolbar.querySelector<HTMLButtonElement>('[data-mobile=pan]')!
   const setPan = (enabled: boolean) => { actions.panMode(enabled); pan.setAttribute('aria-pressed', String(enabled)) }

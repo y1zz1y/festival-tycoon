@@ -6,38 +6,68 @@
  * when the layout changes. The numpad digits are folded onto the row above, so
  * a player who reaches for the pad still gets their tool.
  */
+import { t } from '../i18n'
+
 export type HotkeyAction =
   | 'toolPath' | 'toolFood' | 'toolToilet' | 'toolRide' | 'toolAlcohol'
   | 'toolSecurityGate' | 'toolCamping' | 'toolBulldoze' | 'toolInspect' | 'toolCoaster'
   | 'cameraLeft' | 'cameraRight' | 'rotateBuild' | 'elevationUp' | 'elevationDown'
   | 'togglePause'
 
+/** Stable id of the heading a key is listed under; compare this, never the shown label. */
+type HotkeyGroup = 'tools' | 'camera' | 'game'
+
 export type HotkeyDefinition = {
-  action: HotkeyAction
-  label: string
-  group: string
+  readonly action: HotkeyAction
+  readonly groupId: HotkeyGroup
+  /** Shown texts are getters: they translate when read, not when this module loads. */
+  readonly label: string
+  readonly group: string
   /** What the key does, for the title on the row. */
-  hint: string
-  code: string
+  readonly hint: string
+  readonly code: string
+}
+
+const GROUP_LABELS: Record<HotkeyGroup, () => string> = {
+  tools: () => t('Werkzeuge'),
+  camera: () => t('Kamera & Bau'),
+  game: () => t('Spiel'),
+}
+
+function hotkey(
+  action: HotkeyAction,
+  groupId: HotkeyGroup,
+  code: string,
+  label: () => string,
+  hint: () => string,
+): HotkeyDefinition {
+  return {
+    action,
+    groupId,
+    code,
+    get label() { return label() },
+    get group() { return GROUP_LABELS[groupId]() },
+    get hint() { return hint() },
+  }
 }
 
 export const HOTKEYS: readonly HotkeyDefinition[] = [
-  { action: 'toolPath', label: 'Weg', group: 'Werkzeuge', hint: 'Wege bauen', code: 'Digit1' },
-  { action: 'toolFood', label: 'Essensstand', group: 'Werkzeuge', hint: 'Essensstand bauen', code: 'Digit2' },
-  { action: 'toolToilet', label: 'Toilette', group: 'Werkzeuge', hint: 'Toilette bauen', code: 'Digit3' },
-  { action: 'toolRide', label: 'Fahrgeschäft', group: 'Werkzeuge', hint: 'Fahrgeschäft bauen', code: 'Digit4' },
-  { action: 'toolAlcohol', label: 'Getränkestand', group: 'Werkzeuge', hint: 'Getränkestand bauen', code: 'Digit5' },
-  { action: 'toolSecurityGate', label: 'Sicherheitstor', group: 'Werkzeuge', hint: 'Sicherheitstor bauen', code: 'Digit6' },
-  { action: 'toolCamping', label: 'Camping', group: 'Werkzeuge', hint: 'Campingfläche ausweisen', code: 'Digit7' },
-  { action: 'toolBulldoze', label: 'Abriss', group: 'Werkzeuge', hint: 'Abrissbirne', code: 'Digit8' },
-  { action: 'toolInspect', label: 'Info', group: 'Werkzeuge', hint: 'Gebäude ansehen', code: 'Digit9' },
-  { action: 'toolCoaster', label: 'Achterbahn', group: 'Werkzeuge', hint: 'Achterbahn-Baumenü öffnen', code: 'Digit0' },
-  { action: 'cameraLeft', label: 'Kamera links', group: 'Kamera & Bau', hint: 'Ansicht gegen den Uhrzeigersinn', code: 'KeyQ' },
-  { action: 'cameraRight', label: 'Kamera rechts', group: 'Kamera & Bau', hint: 'Ansicht im Uhrzeigersinn', code: 'KeyE' },
-  { action: 'rotateBuild', label: 'Drehen', group: 'Kamera & Bau', hint: 'Bauobjekt oder Wegrichtung drehen', code: 'KeyR' },
-  { action: 'elevationUp', label: 'Bauhöhe höher', group: 'Kamera & Bau', hint: 'Eine Stufe nach oben', code: 'PageUp' },
-  { action: 'elevationDown', label: 'Bauhöhe tiefer', group: 'Kamera & Bau', hint: 'Eine Stufe nach unten', code: 'PageDown' },
-  { action: 'togglePause', label: 'Pause / Weiter', group: 'Spiel', hint: 'Zeit anhalten und weiterlaufen lassen', code: 'Space' },
+  hotkey('toolPath', 'tools', 'Digit1', () => t('Weg'), () => t('Wege bauen')),
+  hotkey('toolFood', 'tools', 'Digit2', () => t('Essensstand'), () => t('Essensstand bauen')),
+  hotkey('toolToilet', 'tools', 'Digit3', () => t('Toilette'), () => t('Toilette bauen')),
+  hotkey('toolRide', 'tools', 'Digit4', () => t('Fahrgeschäft'), () => t('Fahrgeschäft bauen')),
+  hotkey('toolAlcohol', 'tools', 'Digit5', () => t('Getränkestand'), () => t('Getränkestand bauen')),
+  hotkey('toolSecurityGate', 'tools', 'Digit6', () => t('Sicherheitstor'), () => t('Sicherheitstor bauen')),
+  hotkey('toolCamping', 'tools', 'Digit7', () => t('Camping'), () => t('Campingfläche ausweisen')),
+  hotkey('toolBulldoze', 'tools', 'Digit8', () => t('Abriss'), () => t('Abrissbirne')),
+  hotkey('toolInspect', 'tools', 'Digit9', () => t('Info'), () => t('Gebäude ansehen')),
+  hotkey('toolCoaster', 'tools', 'Digit0', () => t('Achterbahn'), () => t('Achterbahn-Baumenü öffnen')),
+  hotkey('cameraLeft', 'camera', 'KeyQ', () => t('Kamera links'), () => t('Ansicht gegen den Uhrzeigersinn')),
+  hotkey('cameraRight', 'camera', 'KeyE', () => t('Kamera rechts'), () => t('Ansicht im Uhrzeigersinn')),
+  hotkey('rotateBuild', 'camera', 'KeyR', () => t('Drehen'), () => t('Bauobjekt oder Wegrichtung drehen')),
+  hotkey('elevationUp', 'camera', 'PageUp', () => t('Bauhöhe höher'), () => t('Eine Stufe nach oben')),
+  hotkey('elevationDown', 'camera', 'PageDown', () => t('Bauhöhe tiefer'), () => t('Eine Stufe nach unten')),
+  hotkey('togglePause', 'game', 'Space', () => t('Pause / Weiter'), () => t('Zeit anhalten und weiterlaufen lassen')),
 ]
 
 const STORAGE_KEY = 'festival-hotkeys'
@@ -54,9 +84,9 @@ export function normalizeCode(code: string): string {
 
 /** What a key is called on the button, rather than what the browser calls it. */
 export function hotkeyLabel(code: string): string {
-  if (code === 'Space') return 'Leertaste'
-  if (code === 'PageUp') return 'Bild ↑'
-  if (code === 'PageDown') return 'Bild ↓'
+  if (code === 'Space') return t('Leertaste')
+  if (code === 'PageUp') return t('Bild ↑')
+  if (code === 'PageDown') return t('Bild ↓')
   if (code === 'ArrowUp') return '↑'
   if (code === 'ArrowDown') return '↓'
   if (code === 'ArrowLeft') return '←'

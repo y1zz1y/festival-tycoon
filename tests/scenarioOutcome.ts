@@ -5,10 +5,9 @@ import { SCENARIO_PRESETS } from '../src/game/scenarioPresets'
 import { weekendGoals } from '../src/game/festivalManagement'
 import { SIMULATION_CONFIG } from '../src/game/simulationConfig'
 import { createTickerWatchState, observeTickerEvents, pruneResolvedTicker, type TickerSource } from '../src/game/ticker'
+import { goalName, goalProgressText } from '../src/game/scenarioGoalText'
 import {
   createScenarioProgress,
-  goalName,
-  goalProgressText,
   insolvencyDaysLeft,
   isEditionOverdue,
   normalizeScenarioProgress,

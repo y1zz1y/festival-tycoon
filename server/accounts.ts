@@ -2,6 +2,7 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { DatabaseSync } from 'node:sqlite'
 import { closeDatabase, db as sharedDatabase } from './database.ts'
+import { de, verbatim } from './i18nMarker.ts'
 
 /**
  * Player accounts, kept in the server's SQLite database alongside the saves that
@@ -53,7 +54,8 @@ const SCHEMA = {
 const db = (): DatabaseSync => sharedDatabase(SCHEMA)
 
 const normalizeName = (name: string): string => name.trim().replace(/\s+/g, ' ')
-const nameKey = (name: string): string => normalizeName(name).toLocaleLowerCase()
+// Canonical, not the server's default locale: the same name must key the same account everywhere.
+const nameKey = (name: string): string => normalizeName(name).toLocaleLowerCase('de-DE')
 const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex')
 const derive = (password: string, salt: string): string =>
   scryptSync(password, salt, SCRYPT.keylen, SCRYPT).toString('hex')
@@ -152,7 +154,7 @@ async function bodyOf(request: IncomingMessage): Promise<{ name?: unknown; passw
   let body = ''
   for await (const chunk of request) {
     body += String(chunk)
-    if (Buffer.byteLength(body, 'utf8') > MAX_BODY_BYTES) throw new Error('Anfrage zu groß')
+    if (Buffer.byteLength(body, 'utf8') > MAX_BODY_BYTES) throw new Error(de('Anfrage zu groß'))
   }
   return JSON.parse(body || '{}') as { name?: unknown; password?: unknown }
 }
@@ -160,9 +162,9 @@ async function bodyOf(request: IncomingMessage): Promise<{ name?: unknown; passw
 function readCredentials(body: { name?: unknown; password?: unknown }): { name: string; password: string } | string {
   const name = typeof body.name === 'string' ? normalizeName(body.name) : ''
   const password = typeof body.password === 'string' ? body.password : ''
-  if (!NAME_PATTERN.test(name)) return 'Name: 3 bis 24 Zeichen, Buchstaben, Ziffern, Leer- und Satzzeichen'
-  if (password.length < 8) return 'Passwort: mindestens 8 Zeichen'
-  if (password.length > 200) return 'Passwort: höchstens 200 Zeichen'
+  if (!NAME_PATTERN.test(name)) return de('Name: 3 bis 24 Zeichen, Buchstaben, Ziffern, Leer- und Satzzeichen')
+  if (password.length < 8) return de('Passwort: mindestens 8 Zeichen')
+  if (password.length > 200) return de('Passwort: höchstens 200 Zeichen')
   return { name, password }
 }
 
@@ -179,7 +181,7 @@ export async function handleAccountRequest(request: IncomingMessage, response: S
     if (request.method === 'POST' && action === 'logout') {
       const token = cookieOf(request, SESSION_COOKIE)
       if (token) db().prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token))
-      send(response, 200, { ok: true, message: 'Abgemeldet' }, clearedCookie())
+      send(response, 200, { ok: true, message: de('Abgemeldet') }, clearedCookie())
       return true
     }
     if (request.method === 'POST' && (action === 'register' || action === 'login')) {
@@ -189,18 +191,18 @@ export async function handleAccountRequest(request: IncomingMessage, response: S
       const key = nameKey(name)
       if (action === 'register') {
         const taken = db().prepare('SELECT id FROM users WHERE name_key = ?').get(key)
-        if (taken) { send(response, 409, { ok: false, message: 'Diesen Namen gibt es schon' }); return true }
+        if (taken) { send(response, 409, { ok: false, message: de('Diesen Namen gibt es schon') }); return true }
         const salt = randomBytes(16).toString('hex')
         const id = randomUUID()
         db()
           .prepare('INSERT INTO users (id, name, name_key, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?, ?)')
           .run(id, name, key, derive(password, salt), salt, Date.now())
-        send(response, 201, { ok: true, message: `Konto angelegt · angemeldet als ${name}`, name }, sessionCookie(createSession(id)))
+        send(response, 201, { ok: true, message: de`Konto angelegt · angemeldet als ${verbatim(name)}`, name }, sessionCookie(createSession(id)))
         return true
       }
       const throttleKey = `${key}|${originOf(request)}`
       if (tooManyAttempts(throttleKey)) {
-        send(response, 429, { ok: false, message: 'Zu viele Fehlversuche · bitte später erneut probieren' })
+        send(response, 429, { ok: false, message: de('Zu viele Fehlversuche · bitte später erneut probieren') })
         return true
       }
       const user = db()
@@ -210,16 +212,16 @@ export async function handleAccountRequest(request: IncomingMessage, response: S
       // nothing an unauthenticated caller gets to learn.
       if (!user || !sameHash(derive(password, user.salt), user.passwordHash)) {
         noteFailure(throttleKey)
-        send(response, 401, { ok: false, message: 'Name oder Passwort stimmt nicht' })
+        send(response, 401, { ok: false, message: de('Name oder Passwort stimmt nicht') })
         return true
       }
       attempts.delete(throttleKey)
-      send(response, 200, { ok: true, message: `Angemeldet als ${user.name}`, name: user.name }, sessionCookie(createSession(user.id)))
+      send(response, 200, { ok: true, message: de`Angemeldet als ${verbatim(user.name)}`, name: user.name }, sessionCookie(createSession(user.id)))
       return true
     }
-    send(response, 405, { ok: false, message: 'Methode nicht erlaubt' })
+    send(response, 405, { ok: false, message: de('Methode nicht erlaubt') })
   } catch (error) {
-    send(response, 400, { ok: false, message: error instanceof Error ? error.message : 'Anfrage konnte nicht verarbeitet werden' })
+    send(response, 400, { ok: false, message: error instanceof Error ? error.message : de('Anfrage konnte nicht verarbeitet werden') })
   }
   return true
 }

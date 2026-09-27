@@ -14,19 +14,20 @@ Finanzen ([finance.md](finance.md)).
 | --- | --- | --- |
 | Szenario-Einstellungen, Zielarten | `src/game/scenario.ts` | `ScenarioSettings`, `ScenarioGoal`, `PARK_GOAL_KINDS`, `EDITION_GOAL_KINDS`, `normalizeScenarioSettings` |
 | Gelände-Import → Szenario-Datei | `src/game/terrainImport.ts`, `scripts/import-terrain.mjs`, `scripts/import-terrain-entry.ts` | Skizze oder OSM+DEM nach `public/scenarios/*.json` |
-| Vorbereitete Szenarien | `src/game/scenarioPresets.ts` | `SCENARIO_PRESETS`, `scenarioPreset`, `setExtraScenarioPresets` |
+| Vorbereitete Szenarien | `src/game/scenarioPresets.ts` | `SCENARIO_PRESETS`, `scenarioPreset`, `setExtraScenarioPresets`; Namen und Briefings kanonisch `de` (echte Festivals `keep`, Wortspielnamen mit englischer Fassung im Katalog `src/i18n/en/clientText.ts`) |
 | Drop-in-Dateien, Editor-Export | `src/game/scenarioFile.ts` | `ScenarioFile`, `parseScenarioFile`, `exportScenarioFile`, `createSnapshotFromScenarioFile` |
 | Katalog (eingebaut + Dateien) | `src/game/scenarioCatalog.ts` | `listedScenarioPresets`, `mergeScenarioCatalog`, `fetchFileScenarios` |
 | Szenarien-Ordner | `public/scenarios/` | JSON-Dateien; nach dem Build `dist/scenarios/`; optional `HEADLINER_SCENARIOS_DIR` |
 | Server-Liste / Speichern | `server/scenarios.ts` | `GET`/`POST` `/api/scenarios` |
 | Szenario-Editor-Fenster | `src/ui/scenarioEditor.ts` | `createScenarioEditorController`, Export-Download |
-| Fortschritt, Ausgang, Insolvenz, Stichtag | `src/game/scenarioGoals.ts` | `ScenarioProgress`, `updateScenarioProgress`, `recordEditionResult`, `updateInsolvency`, `isEditionOverdue`, `normalizeScenarioProgress`, `scenarioScore` |
+| Fortschritt, Ausgang, Insolvenz, Stichtag | `src/game/scenarioGoals.ts` | `ScenarioProgress`, `updateScenarioProgress`, `recordEditionResult`, `updateInsolvency`, `isEditionOverdue`, `normalizeScenarioProgress`, `scenarioScore`, `editionRun` |
+| Zielnamen und Fortschrittszeilen (Client-Text, [i18n.md](i18n.md)) | `src/game/scenarioGoalText.ts` | `goalName`, `goalWithDeadline` („… bis zur 3. Ausgabe“), `goalProgressText`; nur UI, Ticker und Tests importieren es |
 | Anbindung an den Tick | `src/game/GameState.ts` | `updateScenarioDay` (Tageswechsel), `recordFinishedEdition` (Ausgabeende nach `updateFestival`) |
 | Mitwachsende Wochenendziele | `src/game/festivalManagement.ts` | `weekendGoals`, gesetzt in `prepare` und `start`; `editionSatisfaction`, `festivalReputation` |
 | Ticker-Meldungen | `src/game/ticker.ts` | `goalDone`, `goalFailed`, `goalDeadline`, `insolvency`, `editionDue` |
 | Zielanzeige, Endbildschirm, Stichtag-Übersicht | `src/ui/scenarioStatus.ts` | `mountScenarioStatus`, `goalListMarkup`, `editionTableMarkup` |
 | Briefing, Szenariostart | `src/ui/titleScreen.ts` | `briefingMarkup`, `openTitleBriefing`, `startScenario`, `leaveToTitle` |
-| Ziele im freien Spiel, Zusammenfassung | `src/ui/scenarioScreen.ts` | `readGoals`, `fillGoals`, `updateSummary` |
+| Ziele im freien Spiel, Zusammenfassung | `src/ui/scenarioScreen.ts` | `readGoals`, `fillGoals`, `updateSummary`; `scenarioDisplayName` (Name des laufenden Szenarios für Zusammenfassung und Endbildschirm), `presetText` (eingebaute Presets über `localize`, Szenarien aus Dateien wörtlich) |
 | Balancing | `src/game/simulationConfig.ts` | `scenario.firstEditionDays`, `scenario.insolvencyGraceDays`, `scenario.weekendGoals`, `scenario.weekendGoalGrowth` |
 | Tests | `tests/scenarioOutcome.ts`, `tests/scenarioEditor.ts`, `tests/terrainImport.ts` | `testScenarioOutcome`, `testScenarioEditor`, Import-Skizzen und Drop-ins |
 

@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { db as sharedDatabase } from './database.ts'
 import { accountOfRequest, ensureAccountsSchema } from './accounts.ts'
 import { bodyOf, send } from './saveSlots.ts'
+import { de } from './i18nMarker.ts'
 import { emptyProgress, mergeProgress, normalizeProgress, type ProgressRecords } from './progressProtocol.ts'
 
 /**
@@ -41,7 +42,7 @@ export async function handleProgressRequest(request: IncomingMessage, response: 
   ensureAccountsSchema()
   const account = accountOfRequest(request)
   if (!account) {
-    send(response, 401, { error: 'Dafür musst du angemeldet sein' })
+    send(response, 401, { error: de('Dafür musst du angemeldet sein') })
     return true
   }
   try {
@@ -58,9 +59,9 @@ export async function handleProgressRequest(request: IncomingMessage, response: 
       send(response, 200, { records: merged })
       return true
     }
-    send(response, 405, { error: 'Methode nicht erlaubt' })
+    send(response, 405, { error: de('Methode nicht erlaubt') })
   } catch (error) {
-    send(response, 400, { error: error instanceof Error ? error.message : 'Fortschritt konnte nicht verarbeitet werden' })
+    send(response, 400, { error: error instanceof Error ? error.message : de('Fortschritt konnte nicht verarbeitet werden') })
   }
   return true
 }

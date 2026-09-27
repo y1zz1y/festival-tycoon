@@ -1,10 +1,10 @@
+import { formatMoney, joinParts, localize, localizeName, plural, t } from '../i18n'
 import {
   COURSE_PIECE_CATALOG,
   COURSE_PIECE_COST,
   COURSE_PIECE_ICONS,
   COURSE_PIECE_LABELS,
   COURSE_SPECS,
-  courseBuilderHint,
   courseNextBuildTarget,
   coursePaintMode,
   courseTeamSize,
@@ -19,6 +19,7 @@ import {
   type CourseKind,
   type CoursePieceKind,
 } from '../game/courseAttractions'
+import { courseBuilderHint } from '../game/courseAttractionText'
 
 export type CourseBuilderState = {
   kind: CourseKind
@@ -36,7 +37,7 @@ export function orderedCourseLineTargets(
   cells: readonly CourseAreaCell[],
 ): CourseAreaCell[] | string {
   const end = courseTrackEnd(course)
-  if (!end) return 'Setze zuerst den Eingang der Strecke.'
+  if (!end) return t('Setze zuerst den Eingang der Strecke.')
   if (cells.length === 0) return []
   const key = (cell: CourseAreaCell): string => `${cell.x}:${cell.z}`
   const endKey = key(end)
@@ -47,13 +48,13 @@ export function orderedCourseLineTargets(
     ordered = ordered.reverse()
   }
   if (key(ordered[0]!) !== endKey) {
-    return `Ziehe die Strecke ab dem Streckenende ${end.x}/${end.z}.`
+    return t`Ziehe die Strecke ab dem Streckenende ${end.x}/${end.z}.`
   }
   for (let index = 1; index < ordered.length; index += 1) {
     const previous = ordered[index - 1]!
     const current = ordered[index]!
     if (Math.abs(current.x - previous.x) + Math.abs(current.z - previous.z) !== 1) {
-      return 'Die Strecke muss Feld für Feld ohne Sprünge gebaut werden.'
+      return t('Die Strecke muss Feld für Feld ohne Sprünge gebaut werden.')
     }
   }
   return ordered.slice(1)
@@ -65,7 +66,7 @@ export function defaultCoursePiece(kind: CourseKind): CourseBuilderTool {
 }
 
 export function courseBuilderTitle(kind: CourseKind, course: CourseAttraction | null): string {
-  return course ? `${course.name} Konstruktion` : `${COURSE_SPECS[kind].name} bauen`
+  return course ? t`${localizeName(course.name)} Konstruktion` : t`${localize(COURSE_SPECS[kind].name)} bauen`
 }
 
 export function courseDirectionIcon(rotation: number, cameraQuarter: number): string {
@@ -92,8 +93,8 @@ export function syncCourseDirectionGrid(
     button.hidden = choices.length === 0
     button.setAttribute('aria-disabled', String(!enabled))
     button.title = enabled
-      ? `Stück nach ${courseDirectionIcon(heading, cameraQuarter)} bauen`
-      : choice?.issue ?? 'Diese Richtung ist nicht frei.'
+      ? t`Stück nach ${courseDirectionIcon(heading, cameraQuarter)} bauen`
+      : choice?.issue ? localize(choice.issue) : t('Diese Richtung ist nicht frei.')
     const icon = button.querySelector('span')
     if (icon) icon.textContent = courseDirectionIcon(heading, cameraQuarter)
   })
@@ -116,19 +117,26 @@ export function isCourseBuildReady(state: CourseBuilderState): boolean {
 export function courseBuilderStatus(state: CourseBuilderState): string {
   if (!state.course) {
     return state.kind === 'paintball'
-      ? 'Klicke oder ziehe, um das Spielfeld zu markieren.'
+      ? t('Klicke oder ziehe, um das Spielfeld zu markieren.')
       : state.kind === 'waterSlide'
-        ? 'Klicke auf das Gelände, um die erste Leiter zu setzen.'
-        : 'Klicke auf das Gelände, um den Eingang zu setzen.'
+        ? t('Klicke auf das Gelände, um die erste Leiter zu setzen.')
+        : t('Klicke auf das Gelände, um den Eingang zu setzen.')
   }
   const issue = validateCourse(state.course)
-  if (issue) return issue
+  if (issue) return localize(issue)
   const end = courseTrackEnd(state.course)
-  if (!end) return `${state.course.areaCells.length} Felder · bereit zum Öffnen`
+  const cells = state.course.areaCells.length
+  if (!end) return joinParts(plural(cells, t`${cells} Feld`, t`${cells} Felder`), t('bereit zum Öffnen'))
   const arrowHint = courseUsesDirectionArrows(state.kind)
-    ? ' · Pfeil wählt die nächste freie Richtung'
-    : ` · Richtung ${courseDirectionIcon(state.buildRotation, state.cameraQuarter)}`
-  return `Bauanker: ${end.x}, ${end.z} · Höhe ${end.elevation}${arrowHint} · ${state.course.pieces.length} Stücke`
+    ? t('Pfeil wählt die nächste freie Richtung')
+    : t`Richtung ${courseDirectionIcon(state.buildRotation, state.cameraQuarter)}`
+  const pieces = state.course.pieces.length
+  return joinParts(
+    t`Bauanker: ${end.x}, ${end.z}`,
+    t`Höhe ${end.elevation}`,
+    arrowHint,
+    plural(pieces, t`${pieces} Stück`, t`${pieces} Stücke`),
+  )
 }
 
 export function normalizeCourseRotation(rotation: number): 0 | 1 | 2 | 3 {
@@ -136,17 +144,18 @@ export function normalizeCourseRotation(rotation: number): 0 | 1 | 2 | 3 {
 }
 
 export function coursePaletteHtml(kind: CourseKind, selected: CourseBuilderTool): string {
+  const areaCost = COURSE_PIECE_COST[kind === 'pool' ? 'poolBasin' : 'paintballField']
   const areaButton =
     kind === 'pool' || kind === 'paintball'
-      ? `<button type="button" class="tool${selected === 'area' ? ' active' : ''}" data-course-piece="area" title="Fläche ziehen">
+      ? `<button type="button" class="tool${selected === 'area' ? ' active' : ''}" data-course-piece="area" title="${t('Fläche ziehen')}">
           <span>${kind === 'pool' ? '🏊' : '🟩'}</span>
-          <strong>Anlagenfläche</strong>
-          <small>${COURSE_PIECE_COST[kind === 'pool' ? 'poolBasin' : 'paintballField']} €/Feld</small>
+          <strong>${t('Anlagenfläche')}</strong>
+          <small>${t`${formatMoney(areaCost)}/Feld`}</small>
         </button>
-        <button type="button" class="tool${selected === 'areaErase' ? ' active' : ''}" data-course-piece="areaErase" title="Fläche entfernen">
+        <button type="button" class="tool${selected === 'areaErase' ? ' active' : ''}" data-course-piece="areaErase" title="${t('Fläche entfernen')}">
           <span>✂️</span>
-          <strong>Fläche entfernen</strong>
-          <small>Fläche ziehen</small>
+          <strong>${t('Fläche entfernen')}</strong>
+          <small>${t('Fläche ziehen')}</small>
         </button>`
       : ''
   const pieces = COURSE_PIECE_CATALOG[kind].filter(
@@ -156,11 +165,11 @@ export function coursePaletteHtml(kind: CourseKind, selected: CourseBuilderTool)
     .map((piece) => {
       const cost = COURSE_PIECE_COST[piece]
       const paint = coursePaintMode(piece)
-      const hint = paint === 'area' ? 'Fläche ziehen' : paint === 'line' ? 'Weg ziehen' : 'Klicken'
+      const hint = paint === 'area' ? t('Fläche ziehen') : paint === 'line' ? t('Weg ziehen') : t('Klicken')
       return `<button type="button" class="tool${piece === selected ? ' active' : ''}" data-course-piece="${piece}" title="${hint}">
         <span>${COURSE_PIECE_ICONS[piece]}</span>
-        <strong>${COURSE_PIECE_LABELS[piece]}</strong>
-        <small>${cost ? `${cost} €${isCourseTrackPiece(kind, piece) ? '/Feld' : ''}` : hint}</small>
+        <strong>${localize(COURSE_PIECE_LABELS[piece])}</strong>
+        <small>${cost ? isCourseTrackPiece(kind, piece) ? t`${formatMoney(cost)}/Feld` : formatMoney(cost) : hint}</small>
       </button>`
     })
     .join('')

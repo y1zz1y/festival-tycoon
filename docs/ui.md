@@ -36,9 +36,9 @@ Eingang/Ausgang.
 | Bootstrap / Verdrahtung | `src/main.ts` | RCT-Iconleiste `.rct-toolbar`, erzeugt Controller und verbindet Callbacks; `#undo-last-build` |
 | Bau-Undo-Stack | `src/game/buildUndo.ts`, `src/game/GameState.ts` | `undoLastBuild`, Marker/Diff, max. 40 Einträge, nicht im Snapshot |
 | Festival-Preise / Bandplaner | `src/festivalUI.ts`, `src/musicPlanner.ts`, `src/festival.css` | Ticket-Slider + Schätzung; Kaufbereitschaft über `--range-accent` (Thumb/Track); Sterne-Tabs und Auto-Plan-Filter |
-| Stabile App-Shell / DOM-Vertrag | `src/app/shell.ts` | `mountAppShell`; vollständiges statisches Markup und Autosave-Konstanten |
+| Stabile App-Shell / DOM-Vertrag | `src/app/shell.ts` | `mountAppShell`; vollständiges statisches Markup und Autosave-Konstanten; kanonische Defaults `QUICKSAVE_NAME`, `LEGACY_AUTOSAVE_NAME`, `BUS_LINE_DEFAULT_NAME` (`de`). Texte über `t`/`tip`, Spieltabellen über `localize`/`localizeName` ([i18n.md](i18n.md)) |
 | Titel, Szenario und Saves | `src/ui/titleScreen.ts`, `src/ui/scenarioScreen.ts`, `src/ui/saveController.ts` | Controller mit injiziertem `GameState`-/Multiplayer-/Lade-Kontext; Briefing vor Presets (`openTitleBriefing`), Zielzeilen im freien Spiel (`readGoals`/`fillGoals`); Hauptmenü **Szenario-Editor**, dynamische Liste aus `src/game/scenarioCatalog.ts` |
-| Szenario-Editor-Fenster | `src/ui/scenarioEditor.ts` | `#scenario-editor-panel`: Name, Beschreibung, Startgeld, Schulden, Verteilungen, Ticket-Mix, Nachfrage-Basis; Export |
+| Szenario-Editor-Fenster | `src/ui/scenarioEditor.ts` | `#scenario-editor-panel`: Name, Beschreibung, Startgeld, Schulden, Verteilungen, Ticket-Mix, Nachfrage-Basis; Export. Die Defaults `Szenario` / `Ein selbst gebautes Szenario.` bleiben kanonisch deutsch (die Export-ID entsteht aus dem Namen); steht ein Default im Stand, bleibt das Feld leer und ein leeres Feld exportiert wieder den Default |
 | Szenario-Oberfläche | `src/ui/scenarioStatus.ts` | Zielanzeige `#scenario-goals-stat` in der Statusleiste, Endbildschirm als HEADLINE-Sonderausgabe, Stichtag-Übersicht; öffnen nur bei Änderung von `outcome.state`/`dueReminderDay`. Regeln: [scenarios.md](scenarios.md) |
 | Objekt- und Besucheranzeige | `src/ui/entityPanel.ts`, `src/ui/visitorPanel.ts` | Vollständige Objektpanel-Orchestrierung, Achterbahn-Telemetrie, Kurs-/Paintball-/Pool-Betrieb sowie zustandsbehaftete Besucher-Inspektion |
 | UI-Formatierung | `src/ui/format.ts` | HTML-Escaping, Geld-, Uhrzeit- und Speicherzeitformat |
@@ -49,17 +49,19 @@ Eingang/Ausgang.
 | Achterbahn-Baufenster | `src/ui/coasterBuilderPanel.ts` | `updateCoasterBuilderPanel`; stabile Palette und Ghost-/Auswahlvorschau |
 | Kurs-Baufenster | `src/ui/courseBuilderPanel.ts` | `renderCourseBuilderPanel`; `editorMode` schaltet Palette+**Am Ende bauen** gegen Weg-Richtungspfeile; atomare Werkzeuge **Anlagenfläche** und **Fläche entfernen** für Pool/Paintball, Endpunkt-Palette und Ebene für Mudmasters/Tree-to-Tree/Wasserrutsche, Paintball-Teamgröße. Wasserrutsche beginnt mit Leiter-Klick, Stapel auf derselben Kachel. Betrieb (Öffnen/Schließen) sitzt nicht hier, sondern im Infofenster |
 | Kontexthilfe | `src/ui/contextHelp.ts` | `contextHelpText`; verwendet das autoritative `PlacementPreviewResult` |
-| Nachfrage-Dialog | `src/ui/confirmDialog.ts` | `confirmAction` (`<dialog>`, wie Spielstand-Text); `rideDemolishPrompt` vor `removeCoaster` / `removeCourse` |
+| Nachfrage-Dialog | `src/ui/confirmDialog.ts` | `confirmAction` (`<dialog>`, wie Spielstand-Text); `rideDemolishPrompt` vor `removeCoaster` / `removeCourse`; `chooseAction` für mehrere Antworten plus „Abbrechen“ (Esc, Fokus auf Abbrechen, `data-primary`/`data-confirm`), `confirmAction` baut darauf auf |
+| Mehrspieler: Host-Übernahme | `src/ui/hostTakeover.ts` | `mountHostTakeoverUi`: Banner `.mp-host-banner` mit Countdown „Host ist weg – Übernahme in {n} s“, Binden der neu aufgebauten Welt hinter dem Ladeoverlay (verborgener Tab sofort), Sicherung „Vor Host-Wechsel {Code}“, **Trennen** als Host mit Gästen: „An {Name} übergeben“ / „Spiel für alle beenden“ / „Abbrechen“; die Spielerliste (`renderMultiplayerStatus` in `src/main.ts`) nennt bei leerem Host-Sitz „{Name} · Host ist weg“ aus `MultiplayerStatus.hostName`; Regeln in [multiplayer.md](multiplayer.md) |
 | Baukatalog / stabile Statusanzeige | `src/ui/buildCatalog.ts` | `createBuildCatalog`, `catalogTileHtml` |
 | Spielstand-Archivdarstellung | `src/ui/saveArchive.ts` | Zusammenführen Server/Browser, sichere Zeilen, Speicherhinweis |
 | Differentielle UI-Updates | `src/ui/differentialUpdates.ts` | `DifferentialUpdates`, `listFingerprint` |
 | Rechteck-Flächenvertrag | `src/ui/areaDesignation.ts` | `AreaDesignationSpec`, `normalizeRectangle`, Preview/Execute-Adapter |
 | Ton stumm | `src/main.ts`, `src/view/FestivalAudio.ts` | `#toggle-mute`, `#setting-mute-audio`; CC0-Dateien, Synth-Rückfall; [audio.md](audio.md) |
 | Grafik, Oberfläche, Lautstärke | `src/app/playerSettings.ts`, `src/ui/playerSettingsPanel.ts` | `readPlayerSettings`, `normalizePlayerSettings`, `installPlayerSettings`; Abschnitt „Spielereinstellungen“ |
+| Sprache, Texte, Übersetzung | `src/i18n/index.ts`, `src/ui/playerSettingsPanel.ts`, `src/boot.ts` | `t`, `localize`, `localizeName`, `planLanguageChange`, `switchLanguage`, `isInMultiplayerRoom`, `#setting-language`; Abschnitt „Sprache und Textsenken“, [i18n.md](i18n.md) |
 | Oberflächengröße | `src/ui/uiScale.ts`, `src/style.css` | `setUiScale`, `toUiPx`, `zoom: var(--ui-scale)` |
 | Abriss-/Info-Picking | `src/view/WorldView.ts`, `src/view/picking.ts` | `pickPlacedObject`, `resolvePickedBuilding` |
-| Infofenster Müllwagen / Ablage / Container | `src/main.ts`, `src/game/logistics.ts`, `src/game/waste.ts` | `formatRoadVehicleInspectLoad`, `connectedWasteDumpStats`, `formatSealedContainerInspect` |
-| Infofenster Backstage | `src/main.ts`, `src/game/bandSupply.ts` | `formatBackstageInspect`, Klick auf Backstage-Kachel |
+| Infofenster Müllwagen / Ablage / Container | `src/main.ts`, `src/game/logisticsText.ts`, `src/game/wasteText.ts`, `src/game/waste.ts` | `formatRoadVehicleInspectLoad`, `connectedWasteDumpStats`, `formatSealedContainerInspect` |
+| Infofenster Backstage | `src/main.ts`, `src/game/bandSupplyText.ts` | `formatBackstageInspect`, Klick auf Backstage-Kachel |
 | Meldungs-Ticker | `src/tickerUI.ts`, `src/game/ticker.ts` | `mountTickerUI`, `observeTickerEvents` |
 | Bau-Kategorien und Raster | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` |
 | Kopieren / Baubibliothek | `src/main.ts`, `src/game/blueprints.ts`, [blueprints.md](blueprints.md) | Kategorie **Kopieren**, Rechteck wie Gelände, Geistervorschau, `stampBlueprint`, lokale Bibliothek |
@@ -106,7 +108,7 @@ Eingang/Ausgang.
   `main.ts` stellt die typisierte Anfrage zusammen und `contextHelp.ts`
   formuliert daraus den Text; `WorldView` berechnet
   keine Platzierungsregeln.
-  `describeRoadVehicleActivity` zeigt bei einem geparkten Besucherauto mit
+  `describeRoadVehicleActivity` (`src/game/logisticsText.ts`) zeigt bei einem geparkten Besucherauto mit
   fehlgeschlagenem Abfahrtsversuch sowie einem abfahrenden Auto ohne Route
   (`waitMinutes > 0`) die fehlende
   Ausfahrtroute samt Hinweis auf Straßenpfeile und Verbindungen. Die Anzeige
@@ -167,8 +169,8 @@ Eingang/Ausgang.
   `SAVE_KEY`-Slot (voller Snapshot inkl. Besucher und Gebäude; IndexedDB
   wenn `localStorage` nicht reicht) neben benannten Ständen, Base64-Export
   und -Import. Das Archiv listet Server-Stände (Konto) und lokale Browser-
-  Stände getrennt; fehlt der Server, steht eine deutsche Fehlermeldung
-  statt einer leeren Liste. Auf dem Titelbildschirm lädt
+  Stände getrennt; fehlt der Server, steht eine Fehlermeldung (kanonisch
+  deutsch, in der Senke übersetzt) statt einer leeren Liste. Auf dem Titelbildschirm lädt
   **Schnell laden** denselben Einzelspielstand, ohne das Archiv.
   Debug-Käfer und FPS-/Versionszeile sind standardmäßig sichtbar;
   unter Einstellungen → Debug abschaltbar
@@ -474,6 +476,67 @@ Bildschirmmessung setzt (`getBoundingClientRect`, `clientX`), rechnet deshalb mi
 `--debug-view-gap`, das Personal-Detailfenster und das Menü im Bühneneditor. Neue
 Stellen dieser Art brauchen dasselbe. Nach einem Wechsel misst `onUiScale` die
 Leisten neu und löst ein `resize` aus.
+
+## Sprache und Textsenken (C10)
+
+Einstellungen → **Sprache / Language** (`#setting-language`, ganz oben im
+Einstellungsfenster): Automatisch (Browser), Deutsch, English; in Dev-Builds
+zusätzlich die Pseudo-Sprache `qps`. Der Wert `language` liegt in
+`festival-player-settings` (Gerät, nie im Spielstand), Standard `auto`. Die Sprache
+gilt pro Seitenladen: `src/boot.ts` legt sie vor `main.ts` fest.
+`installPlayerSettings` liefert die Ports, `switchLanguage` führt den Ablauf aus und
+entscheidet über `planLanguageChange`:
+
+- Titelbildschirm oder nichts Ungespeichertes: schreiben und neu laden.
+- In einem Mehrspielerraum (`isInMultiplayerRoom(multiplayer.status)`: Modus nicht
+  `solo` oder verbunden — auch ein Gast oder Host, dessen Verbindung gerade neu
+  wählt): nur schreiben; `#setting-language-note` sagt „Gilt ab dem nächsten
+  Start.“, `#setting-language-reload` („Jetzt neu laden“) bleibt gesperrt, bis der
+  Raum verlassen ist (`refreshLanguage` bei jedem `multiplayer.onStatus`).
+- Einzelspiel mit ungespeicherter Arbeit: immer `confirmAction`, auch bei
+  abgeschalteten Warnungen; danach schreiben, `suppressBeforeUnloadOnce()` aus
+  `src/ui/unsavedWork.ts` und `location.reload()`. Abbrechen setzt die Auswahl zurück.
+- Liest der nächste Start die Wahl nicht zurück (Speicher voll oder gesperrt), lädt
+  nichts neu: die Auswahl springt auf den gespeicherten Wert, der Hinweis sagt „Die
+  Sprache ließ sich auf diesem Gerät nicht speichern.“
+
+**Senken, die selbst lokalisieren** (idempotent; Aufrufer reichen deutschen
+Spieltext oder schon übersetzten UI-Text): `showToast`, `multiplayer.onToast`,
+`joinErrorSink`, `renderMultiplayerStatus` (`status.message`), `accountMessage` im
+Titelbildschirm, Titel und Nachricht von `confirmAction` und die acht
+`error.message`-Pfade in `src/ui/saveController.ts`. Queued-Commands erkennt die UI
+über `COMMAND_QUEUED` aus `src/game/sentinels.ts`, nie über den Text. Alles Weitere
+(Formate, Schlüssel, Umstellungsregeln) steht in [i18n.md](i18n.md).
+
+**Fenster, Werkzeuge und Canvas** (`src/ui/**` außer den Titel-Dateien,
+`src/input/**`, `src/view/**`; Katalogbereich `src/i18n/en/ui.ts`): eigener Text
+über `t`/`tc`/`plural`, Zahlen, Geld und Prozente über die Format-Helfer
+(`formatNumber`, `formatMoney`, `formatPercent`), ` · `-Zusätze über `joinParts`.
+Spieltext aus `src/game` (Tabellennamen wie `BUILDINGS`, `SUPPLIES`,
+`INVENTORY_ITEMS`, `TRACK_PIECES`, `COURSE_PIECE_LABELS`, Issues wie
+`validateCourse`, `getRideAccessIssue`, `PlacementPreviewResult.message`) läuft
+durch `localize()`, Entitätsnamen (Achterbahnen, Kurse, Fahrgeschäfte, Personal,
+Bühnenvorlagen) durch `localizeName()`; Besuchernamen und Bandnamen bleiben wörtlich.
+Ausgaben der Client-Text-Module (`logisticsText`, `wasteText`, `bandSupplyText`,
+`courseAttractionText`) zeigt die UI so, wie sie kommen. Gedanken im Besucherfenster
+stehen in den Anführungszeichen der Sprache („…“ / “…”). Die Canvas-Beschriftungen
+der Telemetrie laufen über `t`, der schwebende Geldbetrag in `WorldView` über
+`formatMoney` (der Textur-Cache nach Betrag bleibt gültig, weil die Sprache pro
+Seitenladen fest ist). Das Fahrzeugziel im Objektfenster ist `tc('destination', 'Ziel')`,
+weil `Ziel` sonst das Szenarioziel ist.
+`src/main.ts` (Bereich `src/i18n/en/main.ts`) zeigt Spieldaten nur übersetzt an:
+Tabellennamen (`WEATHER_NAMES`, `SUPPLIES`, `DAY_PLAN_OFFER_LABELS`,
+`FESTIVAL_PHASE_LABELS`, `COMPLAINT_LABELS`, `STAFF_DEFINITIONS`, `TRACK_PIECES`,
+`BUILDINGS`, Fahrgeschäftsprofile) und Status über `localize`, Personal-, Saugroboter-,
+Haltestellen-, Buslinien-, Bühnenvorlagen- und Bibliotheksnamen über `localizeName`;
+Ergebnisse der Client-Text-Module (`describeBlueprint`, `describeRoadVehicleActivity`,
+`areaPreviewText`, `previewLabel`, `ACCESS_SCHEDULE_TIME_LABELS`) kommen schon
+übersetzt. Die Besucherübersicht gruppiert, filtert (`toLocaleLowerCase(localeTag())`)
+und sortiert (`collator()`) auf `localize(thought)`, damit zwei deutsche Gedanken mit
+derselben Übersetzung eine Zeile bilden. Zahlen und Geld laufen über `formatNumber`,
+`formatMoney`, `formatPercent`; ` · `-Zeilen über `joinParts`. Der Mehrspielername
+`Spieler NN` entsteht mit `t` beim Anlegen und bleibt danach wörtlich; ein geleertes
+Buslinien-Namensfeld fällt auf `BUS_LINE_DEFAULT_NAME` zurück.
 
 ## Phase 4 in der Oberfläche (0.2.10)
 

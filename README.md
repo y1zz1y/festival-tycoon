@@ -306,7 +306,30 @@ am Weltzustand. Besucher werden feldweise aktualisiert; unveränderte Weltbereic
 nicht erneut übertragen. Beim Beitritt oder erneuten Abgleich wird ein vollständiger
 Zustand übertragen. WebSocket-Kompression und eine Sendepuffergrenze am Host reduzieren
 Übertragungsaufwand und Rückstau. Alle Teilnehmer müssen dieselbe Spielversion verwenden.
-Der Host muss geöffnet bleiben; eine automatische Host-Übernahme ist nicht enthalten.
+
+**Host-Übernahme:** Fällt der Host weg (Tab zu, Absturz, Netz weg), hält der Server den
+Raum und den letzten Weltstand fest. Gäste sehen oben ein Banner „Host ist weg – Übernahme
+in … s“ (die Spielerliste nennt, wer weg ist) und können so lange nicht bauen („Host ist
+weg – Bauen pausiert“). Kommt der Host innerhalb von 20 Sekunden zurück, läuft alles weiter
+wie vorher. Sonst übernimmt ein Gast — bevorzugt einer mit derselben Spielversion, sonst
+der, der am längsten im Raum sitzt: Die Welt läuft ab dann auf seinem Rechner weiter, alle
+anderen spielen ohne Neustart mit. Meldet sich der Gewählte nicht binnen 30 Sekunden mit
+der Welt, ist der Nächste dran. Aktionen, die der alte Host nicht mehr bestätigt hat,
+werden verworfen und gemeldet („… unbestätigte Aktion verworfen – bitte prüfen“), nie
+doppelt ausgeführt — auch keine, die gerade noch unterwegs war („Host hat gewechselt –
+Aktion verworfen“). Wer übernommen hat, sollte den Tab offen lassen und speichern:
+Schnell- und Autospeichern landen dann im eigenen Slot „Übernommen <Code>“ und überschreiben
+nie den eigenen „Schnellspeichern“-Stand; **Schnell laden** holt genau diesen Slot zurück.
+Szenario-Siege und Erfolge gibt es für einen übernommenen Park nicht, auch nicht, wenn man
+ihn später selbst wieder hostet. Kommt der alte Host im selben Tab zurück (die Verbindung
+war nur weg), spielt er als Gast weiter; seine zwischenzeitlich allein weitergespielte Welt
+liegt als lokaler Spielstand „Vor Host-Wechsel <Code>“ bereit. Nach Neuladen, Schließen des
+Tabs oder Absturz gibt es diese Rückkehr nicht: Wer seinen Spielstand dann lädt und neu
+hostet, bekommt seinen Raum nur zurück, solange noch niemand übernommen hat — sonst einen
+neuen Raum mit neuem Code, und die Sicherung ist nur, was er selbst gespeichert hat. Klickt
+ein Host mit Mitspielern auf **Trennen**, fragt das Spiel: **An <Name> übergeben** (sofort,
+ohne Wartezeit), **Spiel für alle beenden** oder **Abbrechen** (auch Esc). Endet ein Raum,
+spielt ein Gast den Park allein weiter.
 
 **Live-Chat:** Der Chat ist ein eigenes Fenster unten links, das nur im
 Mehrspieler und nur bei eingeschaltetem **Chat anzeigen** erscheint. Es lässt sich
@@ -494,6 +517,7 @@ Buchungsregeln, Schutzmaßnahmen, Lager, Lieferungen, Konzertkapazitäten und Ru
 - Idle-Krankenwagen fahren zur Garage zurück statt auf der Straße zu warten; **RTW verkaufen** in der Logistikübersicht oder im Infofenster (sofort an der Garage, sonst nach der Rückfahrt)
 - deutlich erkennbare Personalmodelle mit rollenabhängigen Uniformen und Mützen
 - Träger (Transportkräfte) in derselben Figurenqualität wie Besucher, mit gelber Warnweste und Handkarren
+- Personal, Träger, Straßenfahrzeuge, Bühnenvorplätze, Füllstandsbalken, Personaltore, Ampeln und Personentore werden gebündelt gezeichnet: gleiches Aussehen und Anklicken, aber nur noch eine feste Handvoll Draw-Calls statt einem pro Figur, Fahrzeug oder Feld. Bühnenvorplätze verhalten sich dabei wie Kranken- und Backstage-Flächen (halbtransparente Bodenmarkierung, die nichts verdeckt).
 - gerichtete normale Wege mit dreh- und entfernbaren Bodenmarkierungen
 - automatisch besetzte Einbahn-Sicherheitsschleusen mit konfigurierbaren Verboten und Kontrollgründlichkeit
 - ausweisbare Krankenbereiche mit drei Liegen pro Feld und Sanitätertransport für Bewusstlose; Dächer dürfen die Liegen überdecken, Gebäude nicht ersetzen
@@ -599,6 +623,7 @@ wie bei Achterbahnen, nicht im Baumenü.
 - **Headliner** sind die 5-Sterne-Bands; jedes Genre hat mindestens einen.
 - Neue Szenarien: Wackelstein Open Air, Kutschella, Glastonbauer und Verschmelzung.
 - Einstellungen → **Grafik**: Schatten (Aus/Normal/Hoch), Auflösung (Niedrig/Standard/Hoch), Effekte (Niedrig/Mittel/Hoch) und Oberflächengröße (90–130 %). Gilt nur für dieses Gerät.
+- Einstellungen → **Sprache / Language**: Automatisch (folgt der Browsersprache), Deutsch oder English. Die Wahl gilt für dieses Gerät und ab dem nächsten Laden: auf dem Titelbildschirm lädt das Spiel sofort neu, mit ungespeicherten Änderungen fragt es vorher, in einer Mehrspieler-Sitzung (auch während die Verbindung neu aufgebaut wird) gilt sie erst beim nächsten Start. Kann das Gerät die Wahl nicht speichern, lädt nichts neu und ein Hinweis sagt es. Im Mehrspieler sieht jede Person ihre eigene Sprache; Chat und Namen bleiben, wie sie getippt wurden. Die englische Fassung wird schrittweise vervollständigt, noch nicht übersetzte Texte erscheinen auf Deutsch.
 - **Finanzen** in der Sitzungsleiste: Ausgaben und Einnahmen je Festivalausgabe. Ein Klick auf **Betriebskosten**, **Personal**, **Gagen** oder **Kreditzinsen** klappt die aktuelle Aufschlüsselung auf (Stände, Attraktionen, Bühnen, Löhne, Darlehen, Buchungen); ein weiterer Klick schließt sie. Mehrere Zeilen können gleichzeitig offen sein.
 - R: Gebäude, Deko oder Kopiervorlage um 90 Grad drehen
 - Shift halten und Maus hoch/runter (oder Mausrad / Bild hoch/runter): Bauhöhe in halben Stufen (0.5, 0–6) ändern. Um das Gebäude erscheint ein 7×7-Baugitter auf dieser Ebene. Die Bodenkachel unter dem Zeiger bleibt immer gelb umrandet, auch wenn das Objekt angehoben ist. Shift loslassen behält die Höhe; ein neues Bauwerkzeug setzt sie auf 0.
@@ -665,8 +690,7 @@ Verbindliche Simulationsregeln: [AGENTS.md](AGENTS.md).
 
 ## Nächste Ausbaustufen
 
-1. Personal, Träger und Fahrzeuge gebündelt zeichnen
-2. Technik vor 1.0 festziehen
+1. Technik vor 1.0 festziehen
 
 RollerCoaster Tycoon 2 dient nur als Referenz für Spielprinzipien. Namen, Grafiken, Sounds, Daten und sonstige geschützte Inhalte sollten nicht übernommen werden.
 

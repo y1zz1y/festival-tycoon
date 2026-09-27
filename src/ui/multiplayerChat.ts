@@ -1,4 +1,5 @@
 import { escapeHtml } from './format'
+import { t } from '../i18n'
 import { makeDraggable, makeResizable } from '../dragPanel'
 import {
   CHAT_PING_TTL_MS,
@@ -111,15 +112,15 @@ export function mountMultiplayerChat(options: {
   root.innerHTML = `
     <div class="panel-header">
       <span class="panel-drag-line" aria-hidden="true"></span>
-      <h2 class="panel-header-title">Chat</h2>
+      <h2 class="panel-header-title">${t('Chat')}</h2>
       <span class="panel-drag-line" aria-hidden="true"></span>
-      <button type="button" class="panel-close-button mp-chat-close" aria-label="Chat schließen">×</button>
+      <button type="button" class="panel-close-button mp-chat-close" aria-label="${t('Chat schließen')}">×</button>
     </div>
     <div class="mp-chat-log" role="log" aria-live="polite" aria-relevant="additions"></div>
     <form class="mp-chat-compose">
-      <button type="button" class="mp-chat-ping" aria-pressed="false" title="Karten-Ping mitsenden">📍</button>
-      <input class="mp-chat-input" type="text" maxlength="${CHAT_TEXT_LIMIT}" autocomplete="off" spellcheck="true" placeholder="Nachricht …" aria-label="Chat-Nachricht" />
-      <button type="submit" class="mp-chat-send">Senden</button>
+      <button type="button" class="mp-chat-ping" aria-pressed="false" title="${t('Karten-Ping mitsenden')}">📍</button>
+      <input class="mp-chat-input" type="text" maxlength="${CHAT_TEXT_LIMIT}" autocomplete="off" spellcheck="true" placeholder="${t('Nachricht …')}" aria-label="${t('Chat-Nachricht')}" />
+      <button type="submit" class="mp-chat-send">${t('Senden')}</button>
     </form>
   `
 
@@ -196,8 +197,9 @@ export function mountMultiplayerChat(options: {
     const jump = document.createElement('button')
     jump.type = 'button'
     jump.className = 'mp-chat-jump'
-    jump.title = 'Zum Ping springen'
-    jump.setAttribute('aria-label', 'Zum Ping springen')
+    const jumpLabel = t('Zum Ping springen')
+    jump.title = jumpLabel
+    jump.setAttribute('aria-label', jumpLabel)
     jump.textContent = '📍'
     jump.addEventListener('click', () => options.view.focusWorld(ping.x, ping.z))
     return jump
@@ -227,7 +229,7 @@ export function mountMultiplayerChat(options: {
     } else {
       row.classList.add('mp-chat-row-action')
       nick.textContent = `* ${message.name}`
-      text.textContent = 'markiert einen Punkt auf der Karte'
+      text.textContent = t('markiert einen Punkt auf der Karte')
     }
     row.append(nick, text)
     if (message.ping) row.append(makeJumpButton(message.ping))

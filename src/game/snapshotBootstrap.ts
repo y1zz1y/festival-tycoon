@@ -32,6 +32,7 @@ export function createBlankSnapshot(
     festival: {
       ...createFestivalManagement(),
       goals: weekendGoals(1, settings.festivalGoals),
+      // i18n-ignore: 'frei' is part of the offer hash seed and must never change.
       sponsorOffers: rollSponsorOffers(`${settings.preset ?? 'frei'}:${settings.worldSize}:${settings.startingMoney}`, 1),
     },
     version: 34,

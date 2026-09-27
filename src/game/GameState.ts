@@ -93,6 +93,7 @@ import {
 } from './buildUndo';
 import type { GameCommand, SimSnapshot, WorldSnapshot } from '../net/protocol';
 import { applySim, applyWorld } from '../net/codec';
+import { mergeVisitorPatches } from '../net/worldUpdates';
 import { AtmosphereSystem, collectBuiltAtmosphereCells } from './atmosphere';
 import { FestivalAreaSystem } from './festivalAreas';
 import type { StageForecourtCell } from './festivalAreas';
@@ -132,12 +133,12 @@ import type { AttractionConstructionRequest } from './attractions/construction';
 import type { Attraction, AttractionOperationMode } from './attractions/types';
 import { stepAttractions } from './attractions/runtime';
 import {
+  adoptMissingLiveRows,
   dropLegacyAttractionRecords,
   legacyAttractionSignature,
-  mergeLiveRecords,
-  refreshAttractionProjections,
   refreshLegacyAttractionRecords,
 } from './attractions/projections';
+import { isCanonicalAttractionRecord, isLegacyAttractionId, legacyAttractionIds } from './attractions/dualModel';
 import { placeBuildingCommand, previewPlacementCommand } from './commands/placementCommands';
 import { bulldozeAreaCommand, bulldozeCommand } from './commands/bulldozeCommands';
 import type { ArrivalGroup, Direction, FindRoadRouteOptions, ParkingCell, ParkingDisembarkCandidate, RoadCell, RoadPosition, RoadGraph, RoadVehicle, SpeedLimit } from './logistics';
@@ -150,6 +151,8 @@ import { migrateSnapshot } from './snapshotMigration';
 import type { PlacementPreviewRequest, PlacementPreviewResult } from './placementPreview';
 import type { Cell, PlacedBuilding, Visitor } from './types/entities';
 import type { ActionResult, GameSnapshot, LocalSaveSlot, SimTurn } from './types/snapshot';
+import { COMMAND_QUEUED } from './sentinels';
+import { de, eur, hhmm, keep, named, nested, num, numberedName, plural, verbatim } from '../i18n/marker';
 
 
 export type {
@@ -173,7 +176,28 @@ type StoredSaveSlot = LocalSaveSlot & { snapshot?: string }
 type Listener = (snapshot: Readonly<GameSnapshot>) => void
 
 const SIMULATION_SPEED_MULTIPLIERS = SIMULATION_CONFIG.time.speedMultipliers
-const BAND_NAMES = ['Neon Echo', 'Festival Riot', 'Moonlight Avenue', 'Bassgarten']
+/** Fallback band names for placed stages: proper nouns, never translated. */
+export const BAND_NAMES = keep(['Neon Echo', 'Festival Riot', 'Moonlight Avenue', 'Bassgarten'])
+
+/** `Nicht genug Geld (… € für … Felder)`, singular for one field. */
+function fieldsTooExpensive(cost: number, fields: number): string {
+  return plural(fields, de`Nicht genug Geld (${eur(cost)} für ${num(fields)} Feld)`, de`Nicht genug Geld (${eur(cost)} für ${num(fields)} Felder)`)
+}
+
+const terrainRaised = (fields: number, cost: number): string =>
+  plural(fields, de`Gelände erhöht (${num(fields)} Feld, ${eur(cost)})`, de`Gelände erhöht (${num(fields)} Felder, ${eur(cost)})`)
+const terrainLowered = (fields: number, cost: number): string =>
+  plural(fields, de`Gelände abgesenkt (${num(fields)} Feld, ${eur(cost)})`, de`Gelände abgesenkt (${num(fields)} Felder, ${eur(cost)})`)
+/** One complete sentence per terrain edit mode (no verb fragments, docs/i18n.md). */
+const TERRAIN_EDIT_MESSAGE: Record<TerrainEditMode, (fields: number, cost: number) => string> = {
+  raise: terrainRaised,
+  raiseCorner: terrainRaised,
+  lower: terrainLowered,
+  lowerCorner: terrainLowered,
+  water: terrainLowered,
+  smooth: (fields, cost) => plural(fields, de`Gelände geglättet (${num(fields)} Feld, ${eur(cost)})`, de`Gelände geglättet (${num(fields)} Felder, ${eur(cost)})`),
+  flatten: (fields, cost) => plural(fields, de`Gelände eingeebnet (${num(fields)} Feld, ${eur(cost)})`, de`Gelände eingeebnet (${num(fields)} Felder, ${eur(cost)})`),
+}
 
 export class GameState {
   private state: GameSnapshot
@@ -308,6 +332,12 @@ export class GameState {
   /** Local diagnostic counter; deliberately excluded from saves and network state. */
   executedLogicTicks = 0
   networkMode: 'solo' | 'host' | 'client' = 'solo'
+  /**
+   * Set on a guest while the room cannot take commands (the host is away). Its
+   * text is the refusal: building then is not shown optimistically, because
+   * nobody would ever confirm it.
+   */
+  networkPause: string | null = null
   commandOutbox: ((command: GameCommand) => void) | null = null
   onTurnCommit: ((turn: SimTurn) => void) | null = null
   onDesync: ((expected: number, actual: number) => void) | null = null
@@ -730,6 +760,7 @@ export class GameState {
     if (this.applyingCommand) return null
     if (this.networkMode === 'solo') return null
     if (this.networkMode === 'host') return this.executeHostCommand(command)
+    if (this.networkMode === 'client' && this.networkPause) return { ok: false, message: this.networkPause }
     if (this.networkMode === 'client' && isOptimisticCommand(command)) {
       const commandId = `client-${Date.now().toString(36)}-${++this.optimisticCommandSequence}`
       command.clientCommandId = commandId
@@ -746,11 +777,23 @@ export class GameState {
       return result
     }
     this.commandOutbox?.(command)
-    return { ok: true, message: 'Befehl eingeplant' }
+    return { ok: true, message: COMMAND_QUEUED }
   }
 
   resolveOptimisticCommand(commandId: string): boolean {
     return this.optimisticCommands.delete(commandId)
+  }
+
+  /**
+   * Forgets every optimistic command still waiting for its host: that host is
+   * gone and will never answer. They are not replayed onto later worlds any more
+   * and not sent again (a loan would be booked twice); the next full world shows
+   * what really happened. Returns their ids so the session can say how many.
+   */
+  discardOptimisticCommands(): string[] {
+    const ids = [...this.optimisticCommands.keys()]
+    this.optimisticCommands.clear()
+    return ids
   }
 
   private replayOptimisticCommands(): void {
@@ -812,6 +855,41 @@ export class GameState {
   private nextId(prefix: string): string {
     this.idCounter += 1
     return `${prefix}-${this.state.simTick}-${this.idCounter}`
+  }
+
+  /**
+   * Coaster, course and canonical attraction ids share one namespace: the dual
+   * model pairs a live row and its projection record by id. `nextId` alone can
+   * repeat after a load, which restores `idCounter` from entity counts, so ids
+   * that are already taken are skipped.
+   */
+  private nextAttractionId(prefix: string): string {
+    let id = this.nextId(prefix)
+    while (this.isAttractionIdTaken(id)) id = this.nextId(prefix)
+    return id
+  }
+
+  /**
+   * Course ids stay derived from the synced state (`simTick`, course count), so
+   * an optimistic MP client names a new course exactly like the host and its
+   * follow-up piece commands find it. Taken ids are skipped: the old plain
+   * `course-${simTick}-${courses.length + 1}` repeated while paused (start A,
+   * start B, remove A, start C) and paired one record with two courses.
+   */
+  private nextCourseId(): string {
+    let suffix = (this.state.courses ?? []).length + 1
+    let id = `course-${this.state.simTick}-${suffix}`
+    while (this.isAttractionIdTaken(id)) {
+      suffix += 1
+      id = `course-${this.state.simTick}-${suffix}`
+    }
+    return id
+  }
+
+  private isAttractionIdTaken(id: string): boolean {
+    return this.state.coasters.some((coaster) => coaster.id === id) ||
+      (this.state.courses ?? []).some((course) => course.id === id) ||
+      this.state.attractions.some((attraction) => attraction.id === id)
   }
 
   private takeScheduledCommands(tick: number): GameCommand[] {
@@ -954,9 +1032,9 @@ export class GameState {
 
   private buildWayAreaUntracked(from: { x: number; z: number }, to: { x: number; z: number }, kind: WayType): ActionResult {
     const type = WAY_TYPES[kind]
-    if (!type) return { ok: false, message: 'Unbekannter Wegtyp' }
+    if (!type) return { ok: false, message: de('Unbekannter Wegtyp') }
     const cells = groundRectangle(this.state, from, to)
-    let changed = 0, reason = 'Keine geeigneten Felder'; const money = this.state.money
+    let changed = 0, reason: string = de('Keine geeigneten Felder'); const money = this.state.money
     for (const c of cells) {
       const key = groundKey(c.x, c.z), work = this.state.festival.infrastructure.ground[key]
       const property = type.mode === 'foot' ? 'footway' : 'roadway'
@@ -967,14 +1045,14 @@ export class GameState {
       const base = type.mode === 'foot' ? BUILDINGS.path.cost : SIMULATION_CONFIG.logistics.roadBuildCost
       const extra = existing ? type.cost : type.cost - base
       const clear = existing ? 0 : this.getTreeClearCost(c.x, c.z, this.getTerrainHeight(c.x, c.z), 1)
-      if (this.lacksFunds(type.cost + clear)) { reason = 'Budget erschöpft'; continue }
+      if (this.lacksFunds(type.cost + clear)) { reason = de('Budget erschöpft'); continue }
       if (!existing) {
         const result = type.mode === 'foot' ? this.placePathSegment(c.x, c.z, this.getTerrainHeight(c.x, c.z)) : this.designateRoad([c])
         if (!result.ok) { reason = result.message; continue }
       }
       const path = type.mode === 'foot' ? this.getPathAt(c.x, c.z, this.getTerrainHeight(c.x, c.z)) : undefined
       const road = type.mode === 'road' ? this.getRoadCellAt(c.x, c.z) : undefined
-      if (!path && !road) { reason = 'Weg konnte an dieser Stelle nicht angelegt werden'; continue }
+      if (!path && !road) { reason = de('Weg konnte an dieser Stelle nicht angelegt werden'); continue }
       bookFinance(this.state, 'construction', -extra)
       const cell = this.state.festival.infrastructure.ground[key] ??= {}
       cell[property] = kind
@@ -983,7 +1061,11 @@ export class GameState {
       changed++
     }
     if (changed) this.invalidateRoadGraph()
-    return { ok: changed > 0, message: changed ? `${changed} × ${type.name} · ${money - this.state.money} €${cells.length > changed ? ` · ${cells.length - changed} übersprungen: ${reason}` : ''}` : reason }
+    if (!changed) return { ok: false, message: reason }
+    const spent = money - this.state.money, skipped = cells.length - changed
+    return { ok: true, message: skipped > 0
+      ? de`Teilweise gebaut: ${num(changed)} × ${named(type.name)} für ${eur(spent)} · ${num(skipped)} übersprungen: ${nested(reason)}`
+      : de`${num(changed)} × ${named(type.name)} für ${eur(spent)} gebaut` }
   }
 
   applyNetworkUpdate(
@@ -991,20 +1073,12 @@ export class GameState {
     visitors: Array<{ id: string; changes: Partial<Visitor> }> = [],
     removed: string[] = [],
   ): void {
-    const liveCourses = this.state.courses
-    const liveCoasters = this.state.coasters
     Object.assign(this.state, world)
     if (world.attractions) {
-      refreshAttractionProjections(this.state)
-      // Courses/coasters are the edited truth, like camping overlays. An
-      // attractions-only delta must not drop a just-placed course the host
-      // still occupies but could not yet project (entrance-only tracks).
-      this.state.courses = world.courses
-        ? world.courses
-        : mergeLiveRecords(this.state.courses, liveCourses)
-      this.state.coasters = world.coasters
-        ? world.coasters
-        : mergeLiveRecords(this.state.coasters, liveCoasters)
+      // Coasters and courses are the edited truth, like camping overlays: an
+      // existing live row always wins over its projection record. Records only
+      // add rows for ids whose live key this delta did not carry.
+      adoptMissingLiveRows(this.state, { coasters: !world.coasters, courses: !world.courses })
     }
     if (
       world.attractions ||
@@ -1019,12 +1093,7 @@ export class GameState {
       this.legacyRecordSignature = legacyAttractionSignature(this.state)
     }
     const byId = new Map(this.state.visitors.map(visitor => [visitor.id, visitor]))
-    for (const id of removed) byId.delete(id)
-    for (const patch of visitors) {
-      const existing = byId.get(patch.id)
-      if (existing) Object.assign(existing, patch.changes)
-      else byId.set(patch.id, patch.changes as Visitor)
-    }
+    mergeVisitorPatches(byId, visitors, removed)
     this.state.visitors = [...byId.values()]
     this.tickAccumulator = 0
     this.indexedVisitorCount = -1
@@ -1144,12 +1213,7 @@ export class GameState {
     if (!planned.ok) return planned
     const changedCells = planned.changes.length
     const cost = Math.max(1, changedCells) * SIMULATION_CONFIG.terrain.editCost
-    if (this.lacksFunds(cost)) {
-      return {
-        ok: false,
-        message: `Nicht genug Geld (${cost} € für ${Math.max(1, changedCells)} Felder)`,
-      }
-    }
+    if (this.lacksFunds(cost)) return { ok: false, message: fieldsTooExpensive(cost, Math.max(1, changedCells)) }
     bookFinance(this.state, 'landscaping', -cost)
     applyTerrainChanges(this.state.terrain, planned.changes, planned.cornerChanges)
     for (const c of planned.changes) {
@@ -1177,21 +1241,7 @@ export class GameState {
       })
     })
     this.emit()
-    const verb =
-      mode === 'raise' || mode === 'raiseCorner'
-        ? 'erhöht'
-        : mode === 'lower' || mode === 'lowerCorner' || mode === 'water'
-          ? 'abgesenkt'
-          : mode === 'smooth'
-            ? 'geglättet'
-            : 'eingeebnet'
-    const fields = Math.max(1, changedCells)
-    return {
-      ok: true,
-      message: `Gelände ${verb} (${fields} Feld${
-        fields === 1 ? '' : 'er'
-      }, ${cost} €)`,
-    }
+    return { ok: true, message: TERRAIN_EDIT_MESSAGE[mode](Math.max(1, changedCells), cost) }
   }
 
   paintGroundCover(x: number, z: number, cover: GroundCover): ActionResult {
@@ -1235,9 +1285,9 @@ export class GameState {
   }
 
   setParkOpen(open: boolean): ActionResult {
-    if (open && (this.state.festival.planning || this.state.festival.finished)) return { ok: false, message: 'Zuerst das Festival im Festivalmenü starten' }
+    if (open && (this.state.festival.planning || this.state.festival.finished)) return { ok: false, message: de('Zuerst das Festival im Festivalmenü starten') }
     if (this.state.parkOpen === open) {
-      return { ok: true, message: open ? 'Der Park ist bereits geöffnet' : 'Der Park ist bereits geschlossen' }
+      return { ok: true, message: open ? de('Der Park ist bereits geöffnet') : de('Der Park ist bereits geschlossen') }
     }
     this.state.parkOpen = open
     if (!open) {
@@ -1249,8 +1299,8 @@ export class GameState {
     return {
       ok: true,
       message: open
-        ? 'Der Park ist wieder geöffnet'
-        : 'Der Park ist geschlossen – die Besucher reisen ab',
+        ? de('Der Park ist wieder geöffnet')
+        : de('Der Park ist geschlossen – die Besucher reisen ab'),
     }
   }
 
@@ -1260,7 +1310,7 @@ export class GameState {
 
   undoLastBuild(): ActionResult {
     const entry = this.buildUndoStack.pop()
-    if (!entry) return { ok: false, message: 'Nichts zum Rückgängigmachen' }
+    if (!entry) return { ok: false, message: de('Nichts zum Rückgängigmachen') }
     this.buildUndoDepth += 1
     try {
       const result = applyBuildUndo(entry, {
@@ -1413,7 +1463,7 @@ export class GameState {
     if (this.routeVisitorToParkedCar(visitor)) return
     if (this.getVisitorArrivalGroup(visitor)?.mode === 'car') {
       visitor.route = []
-      visitor.thought = 'Ich warte auf unser Auto.'
+      visitor.thought = de('Ich warte auf unser Auto.')
       return
     }
     if (visitor.route.length > 0) return
@@ -1430,7 +1480,7 @@ export class GameState {
         true,
         true,
       ) ?? [this.getEntrance()]
-    visitor.thought = 'Der Park ist geschlossen – ich gehe jetzt zum Ausgang.'
+    visitor.thought = de('Der Park ist geschlossen – ich gehe jetzt zum Ausgang.')
   }
 
   private getVisitorArrivalGroup(visitor: Visitor): ArrivalGroup | undefined {
@@ -1485,7 +1535,7 @@ export class GameState {
     if (!path) return false
     visitor.targetId = vehicle.id
     visitor.route = path
-    visitor.thought = 'Ich gehe zurück zu unserem Auto.'
+    visitor.thought = de('Ich gehe zurück zu unserem Auto.')
     return true
   }
 
@@ -1536,14 +1586,14 @@ export class GameState {
     visitor.z = vehicle.position.z + 0.5
     visitor.cellX = vehicle.position.x
     visitor.cellZ = vehicle.position.z
-    visitor.thought = 'Ich sitze im Auto und warte auf die Abfahrt.'
+    visitor.thought = de('Ich sitze im Auto und warte auf die Abfahrt.')
     return true
   }
 
   hireStaff(role: StaffRole): ActionResult {
     const definition = STAFF_DEFINITIONS[role]
     if (this.lacksFunds(definition.hireCost)) {
-      return { ok: false, message: 'Nicht genug Geld für diese Einstellung' }
+      return { ok: false, message: de('Nicht genug Geld für diese Einstellung') }
     }
     bookFinance(this.state, 'staff', -definition.hireCost)
     const member = createStaffMember(this.nextId('staff'), role, this.getEntrance())
@@ -1555,17 +1605,17 @@ export class GameState {
     )
     let number = 1
     while (usedNumbers.has(number)) number += 1
-    member.name = `${definition.name} ${number}`
+    member.name = numberedName(definition.name, number)
     member.hiredDay = this.state.day
     member.hiredMinute = this.state.minute
     this.state.staff.push(member)
     this.emit()
-    return { ok: true, message: `${definition.name} eingestellt` }
+    return { ok: true, message: de`${named(definition.name)} eingestellt` }
   }
 
   toggleStaffZone(staffId: string, key: string): ActionResult {
     const assignee = this.findStaffZoneAssignee(staffId)
-    if (!assignee) return { ok: false, message: 'Personal nicht gefunden' }
+    if (!assignee) return { ok: false, message: de('Personal nicht gefunden') }
     return this.setStaffZone(staffId, key, zonePaintActive(assignee.workZones, key))
   }
 
@@ -1577,11 +1627,11 @@ export class GameState {
           (vehicle) => vehicle.id === staffId && vehicle.kind === 'sweeper',
         )
     const assignee = member ?? sweeper
-    if (!assignee) return { ok: false, message: 'Personal nicht gefunden' }
+    if (!assignee) return { ok: false, message: de('Personal nicht gefunden') }
     const result = setAssignedWorkZones(assignee.workZones, key, active)
     if (!result.ok) return result
     if (!result.changed) {
-      return { ok: true, message: active ? 'Bereich bereits zugewiesen' : 'Bereich bereits entfernt' }
+      return { ok: true, message: active ? de('Bereich bereits zugewiesen') : de('Bereich bereits entfernt') }
     }
     assignee.workZones = result.next
     if (member && member.state === 'patrolling') member.route = []
@@ -1590,7 +1640,7 @@ export class GameState {
       sweeper.state = 'idle'
     }
     this.emit()
-    return { ok: true, message: active ? 'Bereich zugewiesen' : 'Bereich entfernt' }
+    return { ok: true, message: active ? de('Bereich zugewiesen') : de('Bereich entfernt') }
   }
 
   private findStaffZoneAssignee(staffId: string) {
@@ -1603,12 +1653,12 @@ export class GameState {
 
   placeStaffAt(staffId: string, x: number, z: number): ActionResult {
     const member = this.state.staff.find((p) => p.id === staffId)
-    if (!member) return { ok: false, message: 'Personal nicht gefunden' }
+    if (!member) return { ok: false, message: de('Personal nicht gefunden') }
     const half = this.getWorldSize() / 2
     if (!Number.isInteger(x) || !Number.isInteger(z) || x < -half || x >= half || z < -half || z >= half) {
-      return { ok: false, message: 'Ziel liegt außerhalb der Karte' }
+      return { ok: false, message: de('Ziel liegt außerhalb der Karte') }
     }
-    if (this.isWaterTerrain(x, z)) return { ok: false, message: 'Dort ist Wasser' }
+    if (this.isWaterTerrain(x, z)) return { ok: false, message: de('Dort ist Wasser') }
     const elevation = this.getTerrainHeight(x, z)
     member.cellX = x
     member.cellZ = z
@@ -1619,7 +1669,7 @@ export class GameState {
     member.route = []
     member.targetId = null
     this.emit()
-    return { ok: true, message: `${member.name} platziert` }
+    return { ok: true, message: de`${named(member.name)} platziert` }
   }
 
   fireStaff(role: StaffRole): ActionResult {
@@ -1635,13 +1685,13 @@ export class GameState {
         break
       }
     }
-    if (index < 0) return { ok: false, message: 'Kein verfügbares Personal dieser Rolle' }
+    if (index < 0) return { ok: false, message: de('Kein verfügbares Personal dieser Rolle') }
     const [removed] = this.state.staff.splice(index, 1)
     if (removed?.medicalCell && removed.targetId) {
       this.medical.releaseBed(this.state.medicalCells, removed.targetId)
     }
     this.emit()
-    return { ok: true, message: `${STAFF_DEFINITIONS[role].name} entlassen` }
+    return { ok: true, message: de`${named(STAFF_DEFINITIONS[role].name)} entlassen` }
   }
 
   fireStaffMember(staffId: string): ActionResult {
@@ -1650,17 +1700,17 @@ export class GameState {
     )
     if (sweeper) return this.removeSweeper(sweeper.id)
     const index = this.state.staff.findIndex((p) => p.id === staffId)
-    if (index < 0) return { ok: false, message: 'Personal nicht gefunden' }
+    if (index < 0) return { ok: false, message: de('Personal nicht gefunden') }
     const member = this.state.staff[index]!
     if (member.state === 'carrying' || (member.carryingWaste ?? 0) > 0) {
-      return { ok: false, message: 'Person trägt noch Fracht und kann gerade nicht entlassen werden' }
+      return { ok: false, message: de('Person trägt noch Fracht und kann gerade nicht entlassen werden') }
     }
     const [removed] = this.state.staff.splice(index, 1)
     if (removed?.medicalCell && removed.targetId) {
       this.medical.releaseBed(this.state.medicalCells, removed.targetId)
     }
     this.emit()
-    return { ok: true, message: `${removed!.name} entlassen` }
+    return { ok: true, message: de`${named(removed!.name)} entlassen` }
   }
 
   designateMedicalArea(
@@ -1682,8 +1732,8 @@ export class GameState {
       ok: result.placed > 0,
       message:
         result.placed > 0
-          ? `${result.placed} Felder als Krankenbereich ausgewiesen`
-          : 'Keine freien Felder für den Krankenbereich',
+          ? plural(result.placed, de`${num(result.placed)} Feld als Krankenbereich ausgewiesen`, de`${num(result.placed)} Felder als Krankenbereich ausgewiesen`)
+          : de('Keine freien Felder für den Krankenbereich'),
     }
   }
 
@@ -1808,7 +1858,7 @@ export class GameState {
       visitor.medicalSlot = null
       if (visitor.state === 'medical' || visitor.state === 'medical-transport') {
         visitor.state = 'exploring'
-        visitor.thought = 'Die Liege ist verschwunden.'
+        visitor.thought = de('Die Liege ist verschwunden.')
         this.visitorBehavior.decideNextAction(visitor)
       }
     }
@@ -1844,7 +1894,7 @@ export class GameState {
       this.state.logistics.parkingCells =
         this.state.logistics.parkingCells.filter((cell) => cell !== parking)
       this.invalidateDesignatedOccupancy()
-      return { ok: true, message: 'Parkplatz aufgehoben' }
+      return { ok: true, message: de('Parkplatz aufgehoben') }
     }
     if (options?.preserveMedical) return null
     const medical = this.state.medicalCells.find(
@@ -1862,7 +1912,7 @@ export class GameState {
         (cell) => cell.x !== x || cell.z !== z,
       )
       this.invalidateDesignatedOccupancy()
-      return { ok: true, message: 'Krankenbereich aufgehoben' }
+      return { ok: true, message: de('Krankenbereich aufgehoben') }
     }
     return null
   }
@@ -1998,10 +2048,10 @@ export class GameState {
       ok: result.placed > 0,
       message:
         result.placed > 0
-          ? `${result.placed} Felder als Müllablage ausgewiesen`
+          ? plural(result.placed, de`${num(result.placed)} Feld als Müllablage ausgewiesen`, de`${num(result.placed)} Felder als Müllablage ausgewiesen`)
           : this.lacksFunds(SIMULATION_CONFIG.waste.dumpDesignationCost)
-            ? 'Nicht genug Geld für eine Müllablage'
-            : 'Keine freien Felder für eine Müllablage',
+            ? de('Nicht genug Geld für eine Müllablage')
+            : de('Keine freien Felder für eine Müllablage'),
     }
   }
 
@@ -2041,8 +2091,8 @@ export class GameState {
       ok: result.placed > 0,
       message:
         result.placed > 0
-          ? `${result.placed} Bühnenvorplatz-Felder ausgewiesen`
-          : 'Keine freien oder bezahlbaren Felder für den Bühnenvorplatz',
+          ? plural(result.placed, de`${num(result.placed)} Bühnenvorplatz-Feld ausgewiesen`, de`${num(result.placed)} Bühnenvorplatz-Felder ausgewiesen`)
+          : de('Keine freien oder bezahlbaren Felder für den Bühnenvorplatz'),
     }
   }
 
@@ -2099,13 +2149,13 @@ export class GameState {
       message:
         result.changed > 0
           ? enabled
-            ? `${result.changed} Backstage-Felder ausgewiesen`
-            : `${result.changed} Backstage-Felder entfernt`
+            ? plural(result.changed, de`${num(result.changed)} Backstage-Feld ausgewiesen`, de`${num(result.changed)} Backstage-Felder ausgewiesen`)
+            : plural(result.changed, de`${num(result.changed)} Backstage-Feld entfernt`, de`${num(result.changed)} Backstage-Felder entfernt`)
           : enabled
             ? this.lacksFunds(SIMULATION_CONFIG.bandSupply.backstageDesignationCost)
-              ? 'Nicht genug Geld für Backstage'
-              : 'Keine neuen Backstage-Felder'
-            : 'Keine Backstage-Felder zum Entfernen',
+              ? de('Nicht genug Geld für Backstage')
+              : de('Keine neuen Backstage-Felder')
+            : de('Keine Backstage-Felder zum Entfernen'),
     }
   }
 
@@ -2122,7 +2172,7 @@ export class GameState {
   ): ActionResult {
     const path = this.getPathAt(x, z, elevation)
     if (!path || path.pathType !== 'normal') {
-      return { ok: false, message: 'Nur normale Wege können eine Laufrichtung erhalten' }
+      return { ok: false, message: de('Nur normale Wege können eine Laufrichtung erhalten') }
     }
     path.flowDirection = normalizeFlowDirection(direction)
     this.emit()
@@ -2130,37 +2180,37 @@ export class GameState {
       ok: true,
       message:
         path.flowDirection == null
-          ? 'Bewegungsrichtung entfernt'
-          : 'Bewegungsrichtung des Weges gesetzt',
+          ? de('Bewegungsrichtung entfernt')
+          : de('Bewegungsrichtung des Weges gesetzt'),
     }
   }
 
   placeTrafficLight(x: number, z: number, direction: Direction): ActionResult {
     if (!this.getRoadCellAt(x, z)) {
-      return { ok: false, message: 'Ampeln stehen nur auf einer Straße' }
+      return { ok: false, message: de('Ampeln stehen nur auf einer Straße') }
     }
     const existing = this.state.accessControls.trafficLights.find(
       (light) => light.x === x && light.z === z && light.direction === direction,
     )
     if (existing) {
-      return { ok: false, message: 'Hier steht bereits eine Ampel in dieser Richtung', placedId: existing.id }
+      return { ok: false, message: de('Hier steht bereits eine Ampel in dieser Richtung'), placedId: existing.id }
     }
     const cost = SIMULATION_CONFIG.logistics.trafficLightCost
     if (this.lacksFunds(cost)) {
-      return { ok: false, message: `Die Ampel kostet ${cost} €` }
+      return { ok: false, message: de`Die Ampel kostet ${eur(cost)}` }
     }
     bookFinance(this.state, 'construction', -cost)
     const light = createTrafficLight(this.nextId('light'), x, z, direction)
     this.state.accessControls.trafficLights.push(light)
     this.evaluateAccessSignals()
     this.emit()
-    return { ok: true, message: 'Ampel gebaut', placedId: light.id }
+    return { ok: true, message: de('Ampel gebaut'), placedId: light.id }
   }
 
   placePathBarrier(x: number, z: number, elevation: number, direction: Direction): ActionResult {
     const path = this.getPathAt(x, z, elevation) ?? this.getPathAt(x, z)
     if (!path || path.pathType !== 'normal') {
-      return { ok: false, message: 'Schranken stehen nur auf normalen Wegen' }
+      return { ok: false, message: de('Schranken stehen nur auf normalen Wegen') }
     }
     const existing = this.state.accessControls.pathBarriers.find(
       (barrier) =>
@@ -2170,11 +2220,11 @@ export class GameState {
         barrier.direction === direction,
     )
     if (existing) {
-      return { ok: false, message: 'Hier steht bereits eine Schranke in dieser Richtung', placedId: existing.id }
+      return { ok: false, message: de('Hier steht bereits eine Schranke in dieser Richtung'), placedId: existing.id }
     }
     const cost = SIMULATION_CONFIG.logistics.pathBarrierCost
     if (this.lacksFunds(cost)) {
-      return { ok: false, message: `Die Schranke kostet ${cost} €` }
+      return { ok: false, message: de`Die Schranke kostet ${eur(cost)}` }
     }
     bookFinance(this.state, 'construction', -cost)
     const barrier = createPathBarrier(
@@ -2187,7 +2237,7 @@ export class GameState {
     this.state.accessControls.pathBarriers.push(barrier)
     this.evaluateAccessSignals()
     this.emit()
-    return { ok: true, message: 'Wegschranke gebaut', placedId: barrier.id }
+    return { ok: true, message: de('Wegschranke gebaut'), placedId: barrier.id }
   }
 
   configureAccessControl(
@@ -2195,7 +2245,7 @@ export class GameState {
     patch: AccessControlPatch,
   ): ActionResult {
     const control = this.getAccessControl(id)
-    if (!control) return { ok: false, message: 'Kontrolle nicht gefunden' }
+    if (!control) return { ok: false, message: de('Kontrolle nicht gefunden') }
     if (patch.mode) control.mode = patch.mode
     if (patch.openSlots) {
       control.openSlots = Array.from({ length: 6 }, (_, index) =>
@@ -2248,7 +2298,7 @@ export class GameState {
     }
     this.evaluateAccessSignals()
     this.emit()
-    return { ok: true, message: 'Kontrolle gespeichert' }
+    return { ok: true, message: de('Kontrolle gespeichert') }
   }
 
   toggleAccessControlArea(
@@ -2257,20 +2307,20 @@ export class GameState {
     to: { x: number; z: number },
   ): ActionResult {
     const control = this.getAccessControl(id)
-    if (!control) return { ok: false, message: 'Kontrolle nicht gefunden' }
+    if (!control) return { ok: false, message: de('Kontrolle nicht gefunden') }
     control.area = toggleAreaCells(control.area, from, to)
     this.evaluateAccessSignals()
     this.emit()
-    return { ok: true, message: 'Gebiet aktualisiert' }
+    return { ok: true, message: de('Gebiet aktualisiert') }
   }
 
   clearAccessControlArea(id: string): ActionResult {
     const control = this.getAccessControl(id)
-    if (!control) return { ok: false, message: 'Kontrolle nicht gefunden' }
+    if (!control) return { ok: false, message: de('Kontrolle nicht gefunden') }
     control.area = []
     this.evaluateAccessSignals()
     this.emit()
-    return { ok: true, message: 'Gebiet geleert' }
+    return { ok: true, message: de('Gebiet geleert') }
   }
 
   getAccessControl(id: string): AccessControl | undefined {
@@ -2426,7 +2476,7 @@ export class GameState {
     const gate = this.state.buildings.find(
       (building) => building.id === id && building.kind === 'securityGate',
     )
-    if (!gate) return { ok: false, message: 'Sicherheitsschleuse nicht gefunden' }
+    if (!gate) return { ok: false, message: de('Sicherheitsschleuse nicht gefunden') }
     gate.securityConfig = {
       ...(gate.securityConfig ?? DEFAULT_SECURITY_CONFIG),
       ...config,
@@ -2440,7 +2490,7 @@ export class GameState {
       ),
     }
     this.emit()
-    return { ok: true, message: 'Sicherheitseinstellungen gespeichert' }
+    return { ok: true, message: de('Sicherheitseinstellungen gespeichert') }
   }
 
   getAt(x: number, z: number, elevation?: number, localX?: number, localZ?: number): PlacedBuilding | undefined {
@@ -2508,12 +2558,12 @@ export class GameState {
 
   designateCampingCell(x: number, z: number, enabled = true): ActionResult {
     if (enabled && this.isWaterTerrain(x, z)) {
-      return { ok: false, message: 'Im Wasser kann kein Zeltbereich entstehen' }
+      return { ok: false, message: de('Im Wasser kann kein Zeltbereich entstehen') }
     }
     if (enabled) {
       const clearCost = this.getTreeClearCost(x, z, 0, 1)
       if (this.lacksFunds(clearCost)) {
-        return { ok: false, message: 'Nicht genug Geld, um den Baum zu entfernen' }
+        return { ok: false, message: de('Nicht genug Geld, um den Baum zu entfernen') }
       }
       this.clearTreesAt(x, z, 0, 1)
     }
@@ -2535,7 +2585,7 @@ export class GameState {
       0,
     )
     if (this.lacksFunds(clearCost)) {
-      return { ok: false, message: 'Nicht genug Geld, um Bäume zu entfernen' }
+      return { ok: false, message: de('Nicht genug Geld, um Bäume zu entfernen') }
     }
     landCells.forEach((cell) => this.clearTreesAt(cell.x, cell.z, 0, 1))
     const result = this.camping.designateArea(landCells)
@@ -2584,7 +2634,7 @@ export class GameState {
   private attractionCommandContext(): AttractionCommandContext {
     return {
       state: this.state,
-      nextId: (prefix) => this.nextId(prefix),
+      nextId: (prefix) => this.nextAttractionId(prefix),
       getPlaceElevation: (x, z) => this.getPlaceElevation(x, z),
       recalculateQueues: () => this.recalculateQueueDirections(),
       emit: () => this.emit(),
@@ -2652,6 +2702,7 @@ export class GameState {
     return {
       state: this.state,
       nextId: (prefix) => this.nextId(prefix),
+      nextAttractionId: (prefix) => this.nextAttractionId(prefix),
       getPlaceElevation: (x, z) => this.getPlaceElevation(x, z),
       isInWorld: (x, z) => this.isInWorld(x, z),
       canBuildTrackPiece: (piece, options) => this.canBuildTrackPiece(piece, options),
@@ -2703,11 +2754,11 @@ export class GameState {
   startCourse(kind: CourseKind, x: number, z: number): ActionResult & { id?: string } {
     this.state.courses ??= []
     if (this.getAt(x, z) || this.getCourseAt(x, z)) {
-      return { ok: false, message: 'Dieses Feld ist belegt.' }
+      return { ok: false, message: de('Dieses Feld ist belegt.') }
     }
     const cost = courseStartCost(kind)
-    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für den Kurs.' }
-    const id = `course-${this.state.simTick}-${this.state.courses.length + 1}`
+    if (this.lacksFunds(cost)) return { ok: false, message: de('Nicht genug Geld für den Kurs.') }
+    const id = this.nextCourseId()
     const course = createEmptyCourse(id, kind)
     const first = courseUsesArea(kind)
       ? appendCourseAreaCell(course, x, z)
@@ -2725,26 +2776,26 @@ export class GameState {
     this.worldRevision += 1
     this.editRevision += 1
     this.emit()
-    return { ok: true, message: `${course.name} angelegt. Jetzt den Kurs bauen.`, id }
+    return { ok: true, message: de`${named(course.name)} angelegt. Jetzt den Kurs bauen.`, id }
   }
 
   startCourseArea(
     kind: CourseKind,
     cells: readonly CourseAreaCell[],
   ): ActionResult & { id?: string } {
-    if (!courseUsesArea(kind)) return { ok: false, message: 'Dieser Kurstyp besitzt keine Anlagenfläche.' }
+    if (!courseUsesArea(kind)) return { ok: false, message: de('Dieser Kurstyp besitzt keine Anlagenfläche.') }
     const unique = [...new Map(cells.map((cell) => [`${cell.x}:${cell.z}`, cell])).values()]
-    if (unique.length === 0) return { ok: false, message: 'Ziehe zuerst eine Anlagenfläche auf.' }
+    if (unique.length === 0) return { ok: false, message: de('Ziehe zuerst eine Anlagenfläche auf.') }
     for (const cell of unique) {
       if (this.getAt(cell.x, cell.z) || this.getCourseAt(cell.x, cell.z)) {
-        return { ok: false, message: 'Die Anlagenfläche überdeckt ein anderes Objekt.' }
+        return { ok: false, message: de('Die Anlagenfläche überdeckt ein anderes Objekt.') }
       }
     }
     const areaKind = kind === 'pool' ? 'poolBasin' : 'paintballField'
     const cost = courseStartCost(kind) + Math.max(0, unique.length - 1) * COURSE_PIECE_COST[areaKind]
-    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für diese Anlagenfläche.' }
+    if (this.lacksFunds(cost)) return { ok: false, message: de('Nicht genug Geld für diese Anlagenfläche.') }
     this.state.courses ??= []
-    const id = `course-${this.state.simTick}-${this.state.courses.length + 1}`
+    const id = this.nextCourseId()
     const course = createEmptyCourse(id, kind)
     const added = appendCourseAreaCells(course, unique)
     if (typeof added === 'string') return { ok: false, message: added }
@@ -2753,66 +2804,66 @@ export class GameState {
     this.worldRevision += 1
     this.editRevision += 1
     this.emit()
-    return { ok: true, message: `${course.name} mit ${added} Flächenfeldern angelegt.`, id }
+    return { ok: true, message: plural(added, de`${named(course.name)} mit ${num(added)} Flächenfeld angelegt.`, de`${named(course.name)} mit ${num(added)} Flächenfeldern angelegt.`), id }
   }
 
   addCourseAreaCell(courseId: string, x: number, z: number): ActionResult {
     const course = this.getCourse(courseId)
-    if (!course) return { ok: false, message: 'Anlage nicht gefunden.' }
+    if (!course) return { ok: false, message: de('Anlage nicht gefunden.') }
     const occupying = this.getCourseAt(x, z)
     if (this.getAt(x, z) || (occupying && occupying.id !== courseId)) {
-      return { ok: false, message: 'Dieses Feld ist belegt.' }
+      return { ok: false, message: de('Dieses Feld ist belegt.') }
     }
     const cost = COURSE_PIECE_COST[course.kind === 'pool' ? 'poolBasin' : 'paintballField']
-    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für die Fläche.' }
+    if (this.lacksFunds(cost)) return { ok: false, message: de('Nicht genug Geld für die Fläche.') }
     const added = appendCourseAreaCell(course, x, z)
     if (typeof added === 'string') return { ok: false, message: added }
     bookFinance(this.state, 'construction', -cost)
     this.worldRevision += 1
     this.editRevision += 1
     this.emit()
-    return { ok: true, message: 'Anlagenfläche erweitert.' }
+    return { ok: true, message: de('Anlagenfläche erweitert.') }
   }
 
   addCourseAreaCells(courseId: string, cells: readonly CourseAreaCell[]): ActionResult {
     const course = this.getCourse(courseId)
-    if (!course) return { ok: false, message: 'Anlage nicht gefunden.' }
+    if (!course) return { ok: false, message: de('Anlage nicht gefunden.') }
     const additions = [...new Map(
       cells
         .filter((cell) => !courseAreaContains(course, cell.x, cell.z))
         .map((cell) => [`${cell.x}:${cell.z}`, cell]),
     ).values()]
-    if (additions.length === 0) return { ok: false, message: 'Diese Fläche gehört bereits zur Anlage.' }
+    if (additions.length === 0) return { ok: false, message: de('Diese Fläche gehört bereits zur Anlage.') }
     for (const cell of additions) {
       const occupying = this.getCourseAt(cell.x, cell.z)
       if (this.getAt(cell.x, cell.z) || (occupying && occupying.id !== courseId)) {
-        return { ok: false, message: 'Die Anlagenfläche überdeckt ein anderes Objekt.' }
+        return { ok: false, message: de('Die Anlagenfläche überdeckt ein anderes Objekt.') }
       }
     }
     const areaKind = course.kind === 'pool' ? 'poolBasin' : 'paintballField'
     const cost = additions.length * COURSE_PIECE_COST[areaKind]
-    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für diese Anlagenfläche.' }
+    if (this.lacksFunds(cost)) return { ok: false, message: de('Nicht genug Geld für diese Anlagenfläche.') }
     const added = appendCourseAreaCells(course, additions)
     if (typeof added === 'string') return { ok: false, message: added }
     bookFinance(this.state, 'construction', -cost)
     this.worldRevision += 1
     this.editRevision += 1
     this.emit()
-    return { ok: true, message: `${added} Flächenfelder ergänzt.` }
+    return { ok: true, message: plural(added, de`${num(added)} Flächenfeld ergänzt.`, de`${num(added)} Flächenfelder ergänzt.`) }
   }
 
   removeCourseAreaCells(courseId: string, cells: readonly CourseAreaCell[]): ActionResult {
     const course = this.getCourse(courseId)
-    if (!course) return { ok: false, message: 'Anlage nicht gefunden.' }
+    if (!course) return { ok: false, message: de('Anlage nicht gefunden.') }
     const removed = removeCourseAreaCellsFromCourse(course, cells)
     if (typeof removed === 'string') return { ok: false, message: removed }
-    if (removed === 0) return { ok: false, message: 'Auf der Auswahl liegt keine Anlagenfläche.' }
+    if (removed === 0) return { ok: false, message: de('Auf der Auswahl liegt keine Anlagenfläche.') }
     const areaKind = course.kind === 'pool' ? 'poolBasin' : 'paintballField'
     bookFinance(this.state, 'construction', removed * COURSE_PIECE_COST[areaKind])
     this.worldRevision += 1
     this.editRevision += 1
     this.emit()
-    return { ok: true, message: `${removed} Flächenfelder entfernt.` }
+    return { ok: true, message: plural(removed, de`${num(removed)} Flächenfeld entfernt.`, de`${num(removed)} Flächenfelder entfernt.`) }
   }
 
   addCoursePiece(
@@ -2823,17 +2874,17 @@ export class GameState {
     elevation?: number,
   ): ActionResult {
     const course = this.getCourse(courseId)
-    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    if (!course) return { ok: false, message: de('Kurs nicht gefunden.') }
     const occupying = this.getCourseAt(x, z)
     if (this.getAt(x, z) || (occupying && occupying.id !== courseId)) {
-      return { ok: false, message: 'Dieses Feld ist belegt.' }
+      return { ok: false, message: de('Dieses Feld ist belegt.') }
     }
     const start = courseTrackEnd(course)
     if (start) {
       for (const cell of courseSpanCells(start, { x, z })) {
         const crossedCourse = this.getCourseAt(cell.x, cell.z)
         if (this.getAt(cell.x, cell.z) || (crossedCourse && crossedCourse.id !== courseId)) {
-          return { ok: false, message: 'Die Strecke würde ein anderes Objekt durchqueren.' }
+          return { ok: false, message: de('Die Strecke würde ein anderes Objekt durchqueren.') }
         }
       }
     }
@@ -2841,7 +2892,7 @@ export class GameState {
       ? Math.max(1, Math.ceil(Math.hypot(x - start.x, z - start.z, (elevation ?? COURSE_PIECE_ELEVATION[kind]) - start.elevation)))
       : 1
     const cost = COURSE_PIECE_COST[kind] * length
-    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld für dieses Streckenelement.' }
+    if (this.lacksFunds(cost)) return { ok: false, message: de('Nicht genug Geld für dieses Streckenelement.') }
     const added = appendCoursePiece(
       course,
       kind,
@@ -2856,12 +2907,12 @@ export class GameState {
     this.worldRevision += 1
     this.editRevision += 1
     this.emit()
-    return { ok: true, message: 'Kursstück gesetzt.' }
+    return { ok: true, message: de('Kursstück gesetzt.') }
   }
 
   undoCoursePiece(courseId: string): ActionResult {
     const course = this.getCourse(courseId)
-    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    if (!course) return { ok: false, message: de('Kurs nicht gefunden.') }
     if (course.pieces.length === 0 && course.areaCells.length > 0) {
       course.areaCells.pop()
       const areaKind = course.kind === 'pool' ? 'poolBasin' : 'paintballField'
@@ -2873,7 +2924,7 @@ export class GameState {
       this.worldRevision += 1
     this.editRevision += 1
       this.emit()
-      return { ok: true, message: 'Letztes Flächenfeld entfernt.' }
+      return { ok: true, message: de('Letztes Flächenfeld entfernt.') }
     }
     const removed = removeLastCoursePiece(course)
     if (typeof removed === 'string') return { ok: false, message: removed }
@@ -2896,47 +2947,47 @@ export class GameState {
     this.worldRevision += 1
     this.editRevision += 1
     this.emit()
-    return { ok: true, message: 'Letztes Kursstück entfernt.' }
+    return { ok: true, message: de('Letztes Kursstück entfernt.') }
   }
 
   setCourseTeamSize(courseId: string, teamSize: number): ActionResult {
     const course = this.getCourse(courseId)
-    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
-    if (course.kind !== 'paintball') return { ok: false, message: 'Nur Paintball hat Teams.' }
+    if (!course) return { ok: false, message: de('Kurs nicht gefunden.') }
+    if (course.kind !== 'paintball') return { ok: false, message: de('Nur Paintball hat Teams.') }
     course.teamSize = Math.max(1, Math.min(8, Math.round(teamSize)))
     this.emit()
-    return { ok: true, message: `${course.teamSize} Personen pro Team.` }
+    return { ok: true, message: plural(course.teamSize, de`${num(course.teamSize)} Person pro Team.`, de`${num(course.teamSize)} Personen pro Team.`) }
   }
 
   setCourseOperating(courseId: string, operating: boolean): ActionResult {
     const course = this.getCourse(courseId)
-    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    if (!course) return { ok: false, message: de('Kurs nicht gefunden.') }
     if (operating) {
       const issue = validateCourse(course)
       if (issue) return { ok: false, message: issue }
     }
     course.operating = operating
     this.emit()
-    return { ok: true, message: operating ? 'Kurs geöffnet.' : 'Kurs geschlossen.' }
+    return { ok: true, message: operating ? de('Kurs geöffnet.') : de('Kurs geschlossen.') }
   }
 
   setCoursePrice(courseId: string, price: number): ActionResult {
     const course = this.getCourse(courseId)
-    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    if (!course) return { ok: false, message: de('Kurs nicht gefunden.') }
     course.price = Math.max(0, Math.round(price))
     this.emit()
-    return { ok: true, message: 'Kurspreis übernommen.' }
+    return { ok: true, message: de('Kurspreis übernommen.') }
   }
 
   removeCourse(courseId: string): ActionResult {
     const course = this.getCourse(courseId)
-    if (!course) return { ok: false, message: 'Kurs nicht gefunden.' }
+    if (!course) return { ok: false, message: de('Kurs nicht gefunden.') }
     for (const rider of course.riders) {
       const visitor = this.getVisitor(rider.visitorId)
       if (visitor && visitor.state === 'riding') {
         visitor.state = 'exploring'
         visitor.targetId = null
-        visitor.thought = 'Die Attraktion wurde geschlossen.'
+        visitor.thought = de('Die Attraktion wurde geschlossen.')
       }
     }
     this.state.courses = this.state.courses.filter((entry) => entry.id !== courseId)
@@ -2945,7 +2996,7 @@ export class GameState {
     this.worldRevision += 1
     this.editRevision += 1
     this.emit()
-    return { ok: true, message: `${course.name} abgerissen.` }
+    return { ok: true, message: de`${named(course.name)} abgerissen.` }
   }
 
   appendCoasterPiece(
@@ -2979,28 +3030,29 @@ export class GameState {
 
   getRideAccessIssue(building: PlacedBuilding): string | null {
     if (building.kind !== 'ride') return null
-    if (!building.rideEntrance) return 'Eingang fehlt – im Konstruktionsfenster bauen'
-    if (!building.rideExit) return 'Ausgang fehlt – im Konstruktionsfenster bauen'
-    if (!this.getAccessPathNeighbors(building.rideEntrance).some(c => this.getPathAt(c.x, c.z, c.elevation)?.pathType === 'queue')) return 'Warteweg mit dem Eingang verbinden'
-    if (!this.getAccessPathNeighbors(building.rideExit).some(c => this.getPathAt(c.x, c.z, c.elevation)?.pathType !== 'queue')) return 'Ausgang mit einem normalen Gehweg verbinden'
+    if (!building.rideEntrance) return de('Eingang fehlt – im Konstruktionsfenster bauen')
+    if (!building.rideExit) return de('Ausgang fehlt – im Konstruktionsfenster bauen')
+    if (!this.getAccessPathNeighbors(building.rideEntrance).some(c => this.getPathAt(c.x, c.z, c.elevation)?.pathType === 'queue')) return de('Warteweg mit dem Eingang verbinden')
+    if (!this.getAccessPathNeighbors(building.rideExit).some(c => this.getPathAt(c.x, c.z, c.elevation)?.pathType !== 'queue')) return de('Ausgang mit einem normalen Gehweg verbinden')
     return null
   }
 
   canPlaceRideAccess(buildingId: string, type: 'entrance' | 'exit', x: number, z: number): ActionResult {
     const building = this.state.buildings.find(b => b.id === buildingId && b.kind === 'ride')
-    if (!building || !['entrance', 'exit'].includes(type)) return { ok: false, message: 'Fahrgeschäft nicht gefunden' }
+    if (!building || !['entrance', 'exit'].includes(type)) return { ok: false, message: de('Fahrgeschäft nicht gefunden') }
     // Next to any field of the ride (flat rides cover several), never on it.
     const footprint = buildingFootprint(building)
     const beside = footprint.some(cell => Math.abs(x-cell.x)+Math.abs(z-cell.z)===1) && !footprint.some(cell => cell.x===x && cell.z===z)
-    if (!Number.isInteger(x) || !Number.isInteger(z) || !this.isInWorld(x,z) || !beside) return { ok: false, message: 'Ein- und Ausgang direkt neben das Fahrgeschäft setzen' }
+    if (!Number.isInteger(x) || !Number.isInteger(z) || !this.isInWorld(x,z) || !beside) return { ok: false, message: de('Ein- und Ausgang direkt neben das Fahrgeschäft setzen') }
     const own = type === 'entrance' ? building.rideEntrance : building.rideExit
-    if (own && this.state.visitors.some(v => v.targetId === building.id && v.state === 'using')) return { ok: false, message: 'Bitte die laufende Fahrt abwarten' }
+    if (own && this.state.visitors.some(v => v.targetId === building.id && v.state === 'using')) return { ok: false, message: de('Bitte die laufende Fahrt abwarten') }
     const occupied = this.getRideAccessAt(x,z,building.elevation)
-    if ((occupied && (occupied.building.id !== buildingId || occupied.type !== type)) || this.findCollision('ride',x,z,building.elevation) || this.coasterOccupiesVolume(x,z,building.elevation,.8) || this.state.coasters.some(c => [c.entrance,c.exit].some(a=>a && a.x===x && a.z===z && Math.abs(a.y-building.elevation)<.8))) return { ok: false, message: 'Ein- und Ausgang brauchen eigene, freie Felder' }
-    if (this.getTerrainHeight(x,z)>building.elevation || this.isWaterTerrain(x,z) || this.getCampingCellAt(x,z) || this.getRoadCellAt(x,z) || this.getMedicalCellAt(x,z) || this.getWasteDumpAt(x,z) || this.getStageForecourtCellAt(x,z) || this.state.festival.infrastructure.depots.some(d=>d.x===x&&d.z===z)) return { ok: false, message: 'Dieses Feld ist für einen Zugang ungeeignet' }
+    if ((occupied && (occupied.building.id !== buildingId || occupied.type !== type)) || this.findCollision('ride',x,z,building.elevation) || this.coasterOccupiesVolume(x,z,building.elevation,.8) || this.state.coasters.some(c => [c.entrance,c.exit].some(a=>a && a.x===x && a.z===z && Math.abs(a.y-building.elevation)<.8))) return { ok: false, message: de('Ein- und Ausgang brauchen eigene, freie Felder') }
+    if (this.getTerrainHeight(x,z)>building.elevation || this.isWaterTerrain(x,z) || this.getCampingCellAt(x,z) || this.getRoadCellAt(x,z) || this.getMedicalCellAt(x,z) || this.getWasteDumpAt(x,z) || this.getStageForecourtCellAt(x,z) || this.state.festival.infrastructure.depots.some(d=>d.x===x&&d.z===z)) return { ok: false, message: de('Dieses Feld ist für einen Zugang ungeeignet') }
     const cost = own ? 0 : SIMULATION_CONFIG.economy.coasterAccessCost
-    if (this.state.logistics.parkingCells.some(c=>c.x===x && c.z===z)) return {ok:false,message:'Hier liegt bereits eine Parkfläche'}
-    return this.lacksFunds(cost) ? {ok:false,message:'Nicht genug Geld'} : {ok:true,message:`${type==='entrance'?'Eingang':'Ausgang'} bauen · ${cost} €`}
+    if (this.state.logistics.parkingCells.some(c=>c.x===x && c.z===z)) return {ok:false,message:de('Hier liegt bereits eine Parkfläche')}
+    if (this.lacksFunds(cost)) return {ok:false,message:de('Nicht genug Geld')}
+    return {ok:true,message:type==='entrance'?de`Eingang für ${eur(cost)} bauen`:de`Ausgang für ${eur(cost)} bauen`}
   }
 
   setRideAccess(buildingId: string, type: 'entrance' | 'exit', x: number, z: number): ActionResult {
@@ -3012,7 +3064,7 @@ export class GameState {
     building[key] = {x,y:building.elevation,z}
     this.indexedBuildingCount = -1
     this.recalculateQueueDirections(); this.emit()
-    return {ok:true,message:type==='entrance'?'Eingang angebaut – Warteweg anschließen':'Ausgang angebaut – Gehweg anschließen'}
+    return {ok:true,message:type==='entrance'?de('Eingang angebaut – Warteweg anschließen'):de('Ausgang angebaut – Gehweg anschließen')}
   }
 
   setCoasterAccess(
@@ -3022,32 +3074,32 @@ export class GameState {
     z: number,
   ): ActionResult {
     const coaster = this.getCoaster(coasterId)
-    if (!coaster) return { ok: false, message: 'Achterbahn nicht gefunden' }
+    if (!coaster) return { ok: false, message: de('Achterbahn nicht gefunden') }
     const stations = coaster.pieces.filter((piece) => piece.kind === 'station')
     const station = stations.find(
       (piece) => Math.abs(piece.start.x - x) + Math.abs(piece.start.z - z) === 1,
     )
     if (!station) {
-      return { ok: false, message: 'Ein- und Ausgang müssen neben einer Stationsplattform liegen' }
+      return { ok: false, message: de('Ein- und Ausgang müssen neben einer Stationsplattform liegen') }
     }
     if (this.findCollision('path', x, z, station.start.elevation) || this.getRideAccessAt(x, z, station.start.elevation)) {
-      return { ok: false, message: 'Dieses Feld ist belegt' }
+      return { ok: false, message: de('Dieses Feld ist belegt') }
     }
     const other = accessType === 'entrance' ? coaster.exit : coaster.entrance
     if (other && Math.round(other.x) === x && Math.round(other.z) === z) {
-      return { ok: false, message: 'Ein- und Ausgang benötigen getrennte Felder' }
+      return { ok: false, message: de('Ein- und Ausgang benötigen getrennte Felder') }
     }
     const accessCost = coaster[accessType]
       ? 0
       : SIMULATION_CONFIG.economy.coasterAccessCost
-    if (this.lacksFunds(accessCost)) return { ok: false, message: 'Nicht genug Geld' }
+    if (this.lacksFunds(accessCost)) return { ok: false, message: de('Nicht genug Geld') }
     coaster[accessType] = { x, y: station.start.elevation, z }
     bookFinance(this.state, 'construction', -accessCost)
     this.recalculateQueueDirections()
     this.emit()
     return {
       ok: true,
-      message: accessType === 'entrance' ? 'Eingang angebaut' : 'Ausgang angebaut',
+      message: accessType === 'entrance' ? de('Eingang angebaut') : de('Ausgang angebaut'),
     }
   }
 
@@ -3098,12 +3150,12 @@ export class GameState {
   ): ActionResult {
     const building = this.state.buildings.find((item) => item.id === buildingId)
     if (!building || building.kind !== 'shirt') {
-      return { ok: false, message: 'T-Shirt-Stand wählen' }
+      return { ok: false, message: de('T-Shirt-Stand wählen') }
     }
     if (settings.color !== undefined) building.shirtColor = normalizeShirtColor(settings.color)
     if (settings.style !== undefined) building.shirtStyle = normalizeShirtStyle(settings.style)
     this.emit()
-    return { ok: true, message: 'Shirt-Angebot gespeichert' }
+    return { ok: true, message: de('Shirt-Angebot gespeichert') }
   }
 
   updateEntryPrice(price: number): void {
@@ -3135,7 +3187,7 @@ export class GameState {
       return {
         ok: false,
         message:
-          'Tagesgäste benötigen ein Einlassfenster und mindestens eine geschlossene Stunde.',
+          de('Tagesgäste benötigen ein Einlassfenster und mindestens eine geschlossene Stunde.'),
       }
     }
     this.state.dayPlan.dayVisitorEntryHour = entry
@@ -3144,7 +3196,7 @@ export class GameState {
     this.emit()
     return {
       ok: true,
-      message: `Tagesgäste dürfen von ${String(entry).padStart(2, '0')}:00 bis ${String(exit).padStart(2, '0')}:00 bleiben.`,
+      message: de`Tagesgäste dürfen von ${hhmm(entry * 60)} bis ${hhmm(exit * 60)} bleiben.`,
     }
   }
 
@@ -3165,7 +3217,7 @@ export class GameState {
     this.emit()
     return {
       ok: true,
-      message: `Neuer Zyklus: ${lead} Vorlauf-, ${festival} Festival- und ${pause} Pausentage.`,
+      message: de`Neuer Zyklus: ${num(lead)} Vorlauf-, ${num(festival)} Festival- und ${num(pause)} Pausentage.`,
     }
   }
 
@@ -3175,9 +3227,10 @@ export class GameState {
       Math.min(50, Math.floor(percent)),
     )
     this.emit()
+    const buffer = this.state.dayPlan.campingCapacityBufferPercent, places = this.getBookableCampingCapacity()
     return {
       ok: true,
-      message: `Camping-Sicherheitsabschlag: ${this.state.dayPlan.campingCapacityBufferPercent}% · ${this.getBookableCampingCapacity()} Plätze buchbar.`,
+      message: plural(places, de`Camping-Sicherheitsabschlag: ${num(buffer)}% · ${num(places)} Platz buchbar.`, de`Camping-Sicherheitsabschlag: ${num(buffer)}% · ${num(places)} Plätze buchbar.`),
     }
   }
 
@@ -3243,7 +3296,7 @@ export class GameState {
       visitor.state = 'injured'
       visitor.targetId = null
       visitor.route = []
-      visitor.thought = 'Im Sturm bin ich gestürzt!'
+      visitor.thought = de('Im Sturm bin ich gestürzt!')
       f.stormInjuries = (f.stormInjuries ?? 0) + 1
     }
     if (f.upgrades.rigging) return
@@ -3328,21 +3381,21 @@ export class GameState {
    */
   manageLoan(action: { type: 'borrow' | 'repay'; amount: number }): ActionResult {
     const amount = Math.round(Number(action.amount))
-    if (!Number.isFinite(amount) || amount <= 0) return { ok: false, message: 'Betrag wählen' }
+    if (!Number.isFinite(amount) || amount <= 0) return { ok: false, message: de('Betrag wählen') }
     const finance = this.state.finance
     if (action.type === 'borrow') {
       const limit = loanLimit(this.parkValue())
       if (finance.loan + amount > limit) {
-        return { ok: false, message: `Die Bank gibt derzeit höchstens ${limit.toLocaleString('de-DE')} € — davon laufen bereits ${Math.round(finance.loan).toLocaleString('de-DE')} €` }
+        return { ok: false, message: de`Die Bank gibt derzeit höchstens ${eur(limit)} — davon laufen bereits ${eur(Math.round(finance.loan))}` }
       }
       finance.loan += amount
       this.state.money += amount
       this.emit()
-      return { ok: true, message: `${amount.toLocaleString('de-DE')} € aufgenommen · ${(LOAN.interestPerDay * 100).toFixed(1)} % Zinsen pro Tag` }
+      return { ok: true, message: de`${eur(amount)} aufgenommen · ${num(LOAN.interestPerDay * 100, 1)} % Zinsen pro Tag` }
     }
-    if (finance.loan <= 0) return { ok: false, message: 'Es läuft kein Darlehen' }
+    if (finance.loan <= 0) return { ok: false, message: de('Es läuft kein Darlehen') }
     const payment = Math.min(amount, Math.floor(finance.loan), Math.floor(this.state.money))
-    if (payment <= 0) return { ok: false, message: 'Nicht genug Geld für eine Tilgung' }
+    if (payment <= 0) return { ok: false, message: de('Nicht genug Geld für eine Tilgung') }
     finance.loan = Math.round((finance.loan - payment) * 100) / 100
     this.state.money -= payment
     if (updateScenarioProgress(this.state, financeEdition(this.state), { parkValue: this.parkValue() })) this.state.speed = 0
@@ -3350,8 +3403,8 @@ export class GameState {
     return {
       ok: true,
       message: finance.loan > 0
-        ? `${payment.toLocaleString('de-DE')} € getilgt · noch ${Math.round(finance.loan).toLocaleString('de-DE')} € offen`
-        : `${payment.toLocaleString('de-DE')} € getilgt · Darlehen vollständig zurückgezahlt`,
+        ? de`${eur(payment)} getilgt · noch ${eur(Math.round(finance.loan))} offen`
+        : de`${eur(payment)} getilgt · Darlehen vollständig zurückgezahlt`,
     }
   }
 
@@ -3392,7 +3445,7 @@ export class GameState {
       age: 0,
     })
     this.emit()
-    return { ok: true, message: 'Debug: 100.000 € hinzugefügt' }
+    return { ok: true, message: de('Debug: 100.000 € hinzugefügt') }
   }
 
   removeVisitorCarsForDebug(): ActionResult {
@@ -3479,12 +3532,12 @@ export class GameState {
       }
       this.beginVisitorDeparture(visitor)
       visitor.thought =
-        'Mein Auto wurde entfernt. Ich gehe zu Fuß nach Hause.'
+        de('Mein Auto wurde entfernt. Ich gehe zu Fuß nach Hause.')
     })
     this.emit()
     return {
       ok: true,
-      message: `Debug: ${cars.length} Autos entfernt, alle Parkplätze freigegeben; die Gäste gehen zu Fuß nach Hause`,
+      message: de`Debug: ${num(cars.length)} Autos entfernt, alle Parkplätze freigegeben; die Gäste gehen zu Fuß nach Hause`,
     }
   }
 
@@ -3515,22 +3568,22 @@ export class GameState {
       this.recalculateQueueDirections()
       this.recalculatePark()
       this.emit()
-      return { ok: true, message: `${profile.name} gebaut` }
+      return { ok: true, message: de`${named(profile.name)} gebaut` }
     })
   }
 
   canPlaceRide(rideType: FlatRideType, x: number, z: number): ActionResult {
-    if (!isFlatRideType(rideType)) return { ok: false, message: 'Unbekanntes Fahrgeschäft' }
+    if (!isFlatRideType(rideType)) return { ok: false, message: de('Unbekanntes Fahrgeschäft') }
     const profile = rideProfile({ rideType })
     const cells = buildingFootprint({ kind: 'ride', x, z, rotation: this.state.buildRotation, rideType })
     const elevation = this.getPlaceElevation(x, z)
     for (const cell of cells) {
-      if (Math.abs(this.getPlaceElevation(cell.x, cell.z) - elevation) > 0.01) return { ok: false, message: `${profile.name} braucht eine ebene Fläche` }
+      if (Math.abs(this.getPlaceElevation(cell.x, cell.z) - elevation) > 0.01) return { ok: false, message: de`${named(profile.name)} braucht eine ebene Fläche` }
       const result = this.canPlace('ride', cell.x, cell.z)
       if (!result.ok) return result
     }
-    if (this.lacksFunds(profile.cost)) return { ok: false, message: 'Nicht genug Geld' }
-    return { ok: true, message: `${profile.name} bauen · ${profile.cost.toLocaleString('de-DE')} €` }
+    if (this.lacksFunds(profile.cost)) return { ok: false, message: de('Nicht genug Geld') }
+    return { ok: true, message: de`${named(profile.name)} für ${eur(profile.cost)} bauen` }
   }
 
   placeBungee(x: number, z: number, height: number): ActionResult {
@@ -3542,28 +3595,28 @@ export class GameState {
     tower.rideType = 'bungee'; tower.bungeeHeight = height
     bookFinance(this.state, 'construction', -(height * 25))
     this.emit()
-    return { ok: true, message: `Bungee-Turm (${height} m) gebaut` }
+    return { ok: true, message: de`Bungee-Turm (${num(height)} m) gebaut` }
   }
 
   private canPlaceBungee(x: number, z: number, height: number): ActionResult {
-    if (!Number.isInteger(height) || height < 4 || height > 200) return { ok: false, message: 'Turmhöhe: 4 bis 200 Meter in Meterschritten' }
+    if (!Number.isInteger(height) || height < 4 || height > 200) return { ok: false, message: de('Turmhöhe: 4 bis 200 Meter in Meterschritten') }
     const elevation = this.getPlaceElevation(x, z)
     const top = height / 4 + .4
-    if (this.coasterOccupiesVolume(x, z, elevation, top) || this.state.buildings.some(b => b.x === x && b.z === z && this.volumesOverlap(b, elevation, top))) return { ok: false, message: 'Über der Turmfläche muss Platz frei bleiben' }
-    if (this.lacksFunds(BUILDINGS.ride.cost + height * 25)) return { ok: false, message: 'Nicht genug Geld für diese Turmhöhe' }
+    if (this.coasterOccupiesVolume(x, z, elevation, top) || this.state.buildings.some(b => b.x === x && b.z === z && this.volumesOverlap(b, elevation, top))) return { ok: false, message: de('Über der Turmfläche muss Platz frei bleiben') }
+    if (this.lacksFunds(BUILDINGS.ride.cost + height * 25)) return { ok: false, message: de('Nicht genug Geld für diese Turmhöhe') }
     return this.canPlace('ride', x, z)
   }
 
   setBungeeHeight(id: string, height: number): ActionResult {
     const tower = this.state.buildings.find(b => b.id === id && b.rideType === 'bungee')
-    if (!tower || !Number.isInteger(height) || height < 4 || height > 200) return { ok: false, message: 'Turmhöhe: 4 bis 200 Meter' }
-    if (this.state.visitors.some(v => v.targetId === id && v.state === 'using')) return { ok: false, message: 'Bitte den laufenden Sprung abwarten' }
+    if (!tower || !Number.isInteger(height) || height < 4 || height > 200) return { ok: false, message: de('Turmhöhe: 4 bis 200 Meter') }
+    if (this.state.visitors.some(v => v.targetId === id && v.state === 'using')) return { ok: false, message: de('Bitte den laufenden Sprung abwarten') }
     const top = height / 4 + .4
-    if (this.coasterOccupiesVolume(tower.x, tower.z, tower.elevation, top) || this.state.buildings.some(b => b.id !== id && b.x === tower.x && b.z === tower.z && this.volumesOverlap(b, tower.elevation, top))) return { ok: false, message: 'Über der Turmfläche muss Platz frei bleiben' }
+    if (this.coasterOccupiesVolume(tower.x, tower.z, tower.elevation, top) || this.state.buildings.some(b => b.id !== id && b.x === tower.x && b.z === tower.z && this.volumesOverlap(b, tower.elevation, top))) return { ok: false, message: de('Über der Turmfläche muss Platz frei bleiben') }
     const cost = Math.max(0, height - (tower.bungeeHeight ?? 20)) * 25
-    if (this.lacksFunds(cost)) return { ok: false, message: 'Nicht genug Geld' }
+    if (this.lacksFunds(cost)) return { ok: false, message: de('Nicht genug Geld') }
     bookFinance(this.state, 'construction', -cost); tower.bungeeHeight = height; this.emit()
-    return { ok: true, message: `Turmhöhe auf ${height} m geändert` }
+    return { ok: true, message: de`Turmhöhe auf ${num(height)} m geändert` }
   }
 
   clearWasteForDebug(): ActionResult {
@@ -3587,7 +3640,7 @@ export class GameState {
     }
     this.updateAtmosphere()
     this.emit()
-    return { ok: true, message: `Debug: ${dirty.length} Müllstellen und ${removed.size} alte Gegenstände entfernt; Müllbehälter geleert` }
+    return { ok: true, message: de`Debug: ${num(dirty.length)} Müllstellen und ${num(removed.size)} alte Gegenstände entfernt; Müllbehälter geleert` }
   }
 
   placeSceneryLine(
@@ -3605,8 +3658,8 @@ export class GameState {
     slot: number,
     rotation = this.state.buildRotation,
   ): ActionResult {
-    if (!isScenery(kind) || cells.length > this.getWorldSize() * 2 || !Number.isInteger(slot) || slot < 0 || slot > (isLargeScenery(kind) ? 4 : 3)) return { ok: false, message: 'Ungültige Dekolinie' }
-    if (!Number.isInteger(rotation) || rotation < 0 || rotation > 3) return { ok: false, message: 'Ungültige Dekolinie' }
+    if (!isScenery(kind) || cells.length > this.getWorldSize() * 2 || !Number.isInteger(slot) || slot < 0 || slot > (isLargeScenery(kind) ? 4 : 3)) return { ok: false, message: de('Ungültige Dekolinie') }
+    if (!Number.isInteger(rotation) || rotation < 0 || rotation > 3) return { ok: false, message: de('Ungültige Dekolinie') }
     let placed = 0
     const visited = new Set<string>()
     const previousRotation = this.state.buildRotation
@@ -3621,7 +3674,8 @@ export class GameState {
     } finally {
       this.state.buildRotation = previousRotation
     }
-    return { ok: placed > 0, message: `${placed} Dekorationen platziert · ${cells.length - placed} übersprungen` }
+    const skipped = cells.length - placed
+    return { ok: placed > 0, message: plural(placed, de`${num(placed)} Dekoration platziert · ${num(skipped)} übersprungen`, de`${num(placed)} Dekorationen platziert · ${num(skipped)} übersprungen`) }
   }
 
   getRoadCellsAt(x: number, z: number): RoadCell[] {
@@ -3697,8 +3751,8 @@ export class GameState {
       ok: placed > 0,
       message:
         placed > 0
-          ? `${placed} Straßenfeld${placed === 1 ? '' : 'er'} gebaut`
-          : 'Hier konnte keine Straße gebaut werden',
+          ? plural(placed, de`${num(placed)} Straßenfeld gebaut`, de`${num(placed)} Straßenfelder gebaut`)
+          : de('Hier konnte keine Straße gebaut werden'),
     }
   }
 
@@ -3758,8 +3812,8 @@ export class GameState {
       ok: placed > 0,
       message:
         placed > 0
-          ? `${placed} Parkplatz${placed === 1 ? '' : 'felder'} ausgewiesen`
-          : 'Hier konnte kein Parkplatz ausgewiesen werden',
+          ? plural(placed, de`${num(placed)} Parkplatz ausgewiesen`, de`${num(placed)} Parkplatzfelder ausgewiesen`)
+          : de('Hier konnte kein Parkplatz ausgewiesen werden'),
     }
   }
 
@@ -3769,7 +3823,7 @@ export class GameState {
     direction: Direction,
   ): ActionResult {
     const road = this.getRoadCellAt(x, z)
-    if (!road) return { ok: false, message: 'Hier liegt keine Straße' }
+    if (!road) return { ok: false, message: de('Hier liegt keine Straße') }
     road.allowedDirections =
       road.allowedDirections === directionBit(direction)
         ? null
@@ -3786,8 +3840,8 @@ export class GameState {
       ok: true,
       message:
         road.allowedDirections === null
-          ? 'Straße wieder in beide Richtungen freigegeben'
-          : 'Fahrtrichtung gesetzt',
+          ? de('Straße wieder in beide Richtungen freigegeben')
+          : de('Fahrtrichtung gesetzt'),
     }
   }
 
@@ -3798,13 +3852,13 @@ export class GameState {
    */
   clearRoadDirection(x: number, z: number): ActionResult {
     const road = this.getRoadCellAt(x, z)
-    if (!road) return { ok: false, message: 'Hier liegt keine Straße' }
-    if (road.allowedDirections === null) return { ok: false, message: 'Diese Straße ist bereits in beide Richtungen frei' }
+    if (!road) return { ok: false, message: de('Hier liegt keine Straße') }
+    if (road.allowedDirections === null) return { ok: false, message: de('Diese Straße ist bereits in beide Richtungen frei') }
     road.allowedDirections = null
     this.invalidateRoadGraph()
     this.realignVehiclesOnRoad(x, z, null, roadLayerElevation(road))
     this.emit()
-    return { ok: true, message: 'Straße wieder in beide Richtungen freigegeben' }
+    return { ok: true, message: de('Straße wieder in beide Richtungen freigegeben') }
   }
 
   toggleRoadSeparator(
@@ -3813,7 +3867,7 @@ export class GameState {
     direction: Direction,
   ): ActionResult {
     const road = this.getRoadCellAt(x, z)
-    if (!road) return { ok: false, message: 'Hier liegt keine Straße' }
+    if (!road) return { ok: false, message: de('Hier liegt keine Straße') }
     const bit = directionBit(direction)
     road.blockedEdges ^= bit
     const offset = [
@@ -3831,29 +3885,29 @@ export class GameState {
     }
     this.invalidateRoadGraph()
     this.emit()
-    return { ok: true, message: 'Straßentrennlinie geändert' }
+    return { ok: true, message: de('Straßentrennlinie geändert') }
   }
 
   setRoadSpeed(x: number, z: number, speedLimit: SpeedLimit): ActionResult {
     const road = this.getRoadCellAt(x, z)
-    if (!road) return { ok: false, message: 'Hier liegt keine Straße' }
-    if (speedLimit > roadGroundLimit(this.state, x, z)) return { ok: false, message: speedLimit === 50 ? 'Tempo 50 benötigt eine gepflasterte Fahrbahn' : 'Tempo 30 benötigt mindestens eine Schotterdecke' }
+    if (!road) return { ok: false, message: de('Hier liegt keine Straße') }
+    if (speedLimit > roadGroundLimit(this.state, x, z)) return { ok: false, message: speedLimit === 50 ? de('Tempo 50 benötigt eine gepflasterte Fahrbahn') : de('Tempo 30 benötigt mindestens eine Schotterdecke') }
     road.speedLimit = speedLimit
     this.invalidateRoadGraph()
     this.emit()
-    return { ok: true, message: `Geschwindigkeitszone ${speedLimit} gesetzt` }
+    return { ok: true, message: de`Geschwindigkeitszone ${num(speedLimit)} gesetzt` }
   }
 
   toggleCrosswalk(x: number, z: number): ActionResult {
     const road = this.getRoadCellAt(x, z)
-    if (!road) return { ok: false, message: 'Hier liegt keine Straße' }
+    if (!road) return { ok: false, message: de('Hier liegt keine Straße') }
     road.crosswalk = !road.crosswalk
     this.emit()
     return {
       ok: true,
       message: road.crosswalk
-        ? 'Zebrastreifen gebaut'
-        : 'Zebrastreifen entfernt',
+        ? de('Zebrastreifen gebaut')
+        : de('Zebrastreifen entfernt'),
     }
   }
 
@@ -3904,25 +3958,25 @@ export class GameState {
 
   designatePowerCable(x: number, z: number, enabled = true): ActionResult {
     if (!this.isInWorld(x, z)) {
-      return { ok: false, message: 'Außerhalb des Geländes' }
+      return { ok: false, message: de('Außerhalb des Geländes') }
     }
     if (enabled && this.isWaterTerrain(x, z)) {
-      return { ok: false, message: 'Im Wasser können keine Kabel liegen' }
+      return { ok: false, message: de('Im Wasser können keine Kabel liegen') }
     }
     const existing = this.getPowerCableAt(x, z)
     if (!enabled) {
-      if (!existing) return { ok: false, message: 'Hier liegt kein Kabel' }
+      if (!existing) return { ok: false, message: de('Hier liegt kein Kabel') }
       this.state.power.cableCells = this.state.power.cableCells.filter(
         (cell) => cell.x !== x || cell.z !== z,
       )
       this.refreshPower()
       this.emit()
-      return { ok: true, message: 'Kabel entfernt' }
+      return { ok: true, message: de('Kabel entfernt') }
     }
-    if (existing) return { ok: true, message: 'Hier liegt bereits ein Kabel' }
+    if (existing) return { ok: true, message: de('Hier liegt bereits ein Kabel') }
     const cost = SIMULATION_CONFIG.power.cableCost
     if (this.lacksFunds(cost)) {
-      return { ok: false, message: `Nicht genug Geld (${cost} €)` }
+      return { ok: false, message: de`Nicht genug Geld (${eur(cost)})` }
     }
     bookFinance(this.state, 'construction', -cost)
     this.state.power.cableCells = [
@@ -3931,7 +3985,7 @@ export class GameState {
     ]
     this.refreshPower()
     this.emit()
-    return { ok: true, message: 'Stromkabel verlegt' }
+    return { ok: true, message: de('Stromkabel verlegt') }
   }
 
   designatePowerCableArea(
@@ -3945,21 +3999,16 @@ export class GameState {
     )
     const cost = result.placed * costEach
     if (result.placed === 0) {
-      return { ok: false, message: 'In dieser Fläche gibt es keine freien Kabelfelder' }
+      return { ok: false, message: de('In dieser Fläche gibt es keine freien Kabelfelder') }
     }
-    if (this.lacksFunds(cost)) {
-      return {
-        ok: false,
-        message: `Nicht genug Geld (${cost} € für ${result.placed} Felder)`,
-      }
-    }
+    if (this.lacksFunds(cost)) return { ok: false, message: fieldsTooExpensive(cost, result.placed) }
     bookFinance(this.state, 'construction', -cost)
     this.state.power.cableCells = result.cells
     this.refreshPower()
     this.emit()
     return {
       ok: true,
-      message: `${result.placed} Kabel verlegt (${cost} €)`,
+      message: de`${num(result.placed)} Kabel für ${eur(cost)} verlegt`,
     }
   }
 
@@ -3985,12 +4034,12 @@ export class GameState {
     mode: CoasterOperationMode,
   ): ActionResult {
     const coaster = this.getCoaster(coasterId)
-    if (!coaster) return { ok: false, message: 'Achterbahn nicht gefunden' }
+    if (!coaster) return { ok: false, message: de('Achterbahn nicht gefunden') }
     if (mode !== 'closed' && !coaster.closed) {
-      return { ok: false, message: 'Die Strecke muss zuerst vollständig geschlossen werden' }
+      return { ok: false, message: de('Die Strecke muss zuerst vollständig geschlossen werden') }
     }
     if (mode === 'open' && (!coaster.entrance || !coaster.exit)) {
-      return { ok: false, message: 'Für den Betrieb fehlen Eingang oder Ausgang' }
+      return { ok: false, message: de('Für den Betrieb fehlen Eingang oder Ausgang') }
     }
     if (coaster.operationMode !== mode) this.recallCoasterTrainInternal(coaster)
     coaster.operationMode = mode
@@ -3999,19 +4048,19 @@ export class GameState {
       ok: true,
       message:
         mode === 'open'
-          ? 'Achterbahn geöffnet'
+          ? de('Achterbahn geöffnet')
           : mode === 'test'
-            ? 'Testbetrieb gestartet'
-            : 'Achterbahn geschlossen',
+            ? de('Testbetrieb gestartet')
+            : de('Achterbahn geschlossen'),
     }
   }
 
   recallCoasterTrain(coasterId: string): ActionResult {
     const coaster = this.getCoaster(coasterId)
-    if (!coaster) return { ok: false, message: 'Achterbahn nicht gefunden' }
+    if (!coaster) return { ok: false, message: de('Achterbahn nicht gefunden') }
     this.recallCoasterTrainInternal(coaster)
     this.emit()
-    return { ok: true, message: 'Wagen sicher zur Station zurückgeholt' }
+    return { ok: true, message: de('Wagen sicher zur Station zurückgeholt') }
   }
 
   getRemovableCoasterAt(x: number, z: number): Coaster | undefined {
@@ -4021,7 +4070,7 @@ export class GameState {
 
   removeCoaster(coasterId: string): ActionResult {
     const coaster = this.getCoaster(coasterId)
-    if (!coaster) return { ok: false, message: 'Achterbahn nicht gefunden' }
+    if (!coaster) return { ok: false, message: de('Achterbahn nicht gefunden') }
 
     const queueCells = this.getCoasterQueueCells(coaster)
     const queuePaths = queueCells
@@ -4050,7 +4099,7 @@ export class GameState {
       if (visitor.state === 'riding' || visitor.state === 'queuing') {
         visitor.state = 'exploring'
       }
-      visitor.thought = 'Mein Ziel ist verschwunden.'
+      visitor.thought = de('Mein Ziel ist verschwunden.')
     })
 
     const investment =
@@ -4093,7 +4142,7 @@ export class GameState {
     this.recalculateQueueDirections()
     this.recalculatePark()
     this.emit()
-    return { ok: true, message: `${coaster.name} abgerissen` }
+    return { ok: true, message: de`${named(coaster.name)} abgerissen` }
   }
 
   private coasterStationOrAccessAt(coaster: Coaster, x: number, z: number): boolean {
@@ -4123,10 +4172,10 @@ export class GameState {
   private checkStageSite(design:StageDesign,x:number,z:number,rotation:number,elevation:number,ignoreId?:string):string|null {
     const issue=stageSiteIssue(this.state,design,x,z,rotation,ignoreId)
     if(issue)return issue
-    if(design.audience?.length&&Math.abs(elevation-this.getTerrainHeight(x,z))>.01)return 'Bühnen mit Zuschauerflächen müssen auf Geländehöhe stehen'
+    if(design.audience?.length&&Math.abs(elevation-this.getTerrainHeight(x,z))>.01)return de('Bühnen mit Zuschauerflächen müssen auf Geländehöhe stehen')
     for(const c of buildingFootprint({x,z,rotation,stageDesign:design})){
-      if(this.isWaterTerrain(c.x,c.z))return 'Bühnenfläche darf nicht im Wasser liegen'
-      if(this.getRideAccessAt(c.x,c.z,elevation)||this.isLogisticsBuildingCell(c.x,c.z)||this.coasterOccupiesVolume(c.x,c.z,elevation,BUILDINGS.stage.height))return 'Bühnenfläche überschneidet sich mit einer Anlage'
+      if(this.isWaterTerrain(c.x,c.z))return de('Bühnenfläche darf nicht im Wasser liegen')
+      if(this.getRideAccessAt(c.x,c.z,elevation)||this.isLogisticsBuildingCell(c.x,c.z)||this.coasterOccupiesVolume(c.x,c.z,elevation,BUILDINGS.stage.height))return de('Bühnenfläche überschneidet sich mit einer Anlage')
     }
     return null
   }
@@ -4193,30 +4242,30 @@ export class GameState {
 
   private canPlaceStaffGate(x: number, z: number, elevation: number): ActionResult {
     const path = this.getPathAt(x, z, elevation)
-    if (!path) return { ok: false, message: 'Personaltor auf einem Fußweg platzieren' }
-    if (path.staffOnly) return { ok: true, message: 'Personaltor entfernen' }
+    if (!path) return { ok: false, message: de('Personaltor auf einem Fußweg platzieren') }
+    if (path.staffOnly) return { ok: true, message: de('Personaltor entfernen') }
     return this.lacksFunds(80)
-      ? { ok: false, message: 'Personaltor kostet 80 €' }
-      : { ok: true, message: 'Personaltor setzen' }
+      ? { ok: false, message: de('Personaltor kostet 80 €') }
+      : { ok: true, message: de('Personaltor setzen') }
   }
 
   private previewCampingDesignation(x: number, z: number): ActionResult {
     const clearCost = this.getTreeClearCost(x, z, 0, 1)
     if (this.isWaterTerrain(x, z)) {
-      return { ok: false, message: 'Im Wasser kann kein Zeltbereich entstehen' }
+      return { ok: false, message: de('Im Wasser kann kein Zeltbereich entstehen') }
     }
     if (this.getCampingCellAt(x, z)) {
-      return { ok: false, message: 'Dieses Feld gehört bereits zum Zeltbereich' }
+      return { ok: false, message: de('Dieses Feld gehört bereits zum Zeltbereich') }
     }
     if (this.lacksFunds(clearCost)) {
-      return { ok: false, message: 'Nicht genug Geld, um den Baum zu entfernen' }
+      return { ok: false, message: de('Nicht genug Geld, um den Baum zu entfernen') }
     }
-    return { ok: true, message: 'Zeltbereich ausweisen' }
+    return { ok: true, message: de('Zeltbereich ausweisen') }
   }
 
   private previewStageForecourtDesignation(x: number, z: number): ActionResult {
     if (this.getStageForecourtCellAt(x, z)) {
-      return { ok: false, message: 'Dieses Feld gehört bereits zum Bühnenvorplatz' }
+      return { ok: false, message: de('Dieses Feld gehört bereits zum Bühnenvorplatz') }
     }
     const occupied = this.getAt(x, z)
     const free =
@@ -4231,9 +4280,9 @@ export class GameState {
       !free ||
       this.lacksFunds(SIMULATION_CONFIG.atmosphere.forecourtDesignationCost)
     ) {
-      return { ok: false, message: 'Keine freien oder bezahlbaren Felder für den Bühnenvorplatz' }
+      return { ok: false, message: de('Keine freien oder bezahlbaren Felder für den Bühnenvorplatz') }
     }
-    return { ok: true, message: 'Bühnenvorplatz ausweisen' }
+    return { ok: true, message: de('Bühnenvorplatz ausweisen') }
   }
 
   private previewToolPlacement(
@@ -4248,15 +4297,15 @@ export class GameState {
     } else if (tool === 'medicalArea') {
       const valid = this.canDesignateMedicalCell(x, z)
       result = valid
-        ? { ok: true, message: 'Krankenbereich ausweisen' }
-        : { ok: false, message: 'Keine freien Felder für den Krankenbereich' }
+        ? { ok: true, message: de('Krankenbereich ausweisen') }
+        : { ok: false, message: de('Keine freien Felder für den Krankenbereich') }
     } else if (tool === 'wasteDump') {
       const valid = this.canDesignateWasteDumpCell(x, z)
       result = !valid
-        ? { ok: false, message: 'Keine freien Felder für eine Müllablage' }
+        ? { ok: false, message: de('Keine freien Felder für eine Müllablage') }
         : this.lacksFunds(SIMULATION_CONFIG.waste.dumpDesignationCost)
-          ? { ok: false, message: 'Nicht genug Geld für eine Müllablage' }
-          : { ok: true, message: 'Müllablage ausweisen' }
+          ? { ok: false, message: de('Nicht genug Geld für eine Müllablage') }
+          : { ok: true, message: de('Müllablage ausweisen') }
     } else if (tool === 'stageForecourt') {
       result = this.previewStageForecourtDesignation(x, z)
     } else if (tool === 'backstageArea') {
@@ -4265,26 +4314,26 @@ export class GameState {
         ? this.canDesignateBackstageCell(x, z) && !existing
         : existing
       result = !valid
-        ? { ok: false, message: enabled ? 'Keine neuen Backstage-Felder' : 'Keine Backstage-Felder zum Entfernen' }
+        ? { ok: false, message: enabled ? de('Keine neuen Backstage-Felder') : de('Keine Backstage-Felder zum Entfernen') }
         : enabled && this.lacksFunds(SIMULATION_CONFIG.bandSupply.backstageDesignationCost)
-          ? { ok: false, message: 'Nicht genug Geld für Backstage' }
-          : { ok: true, message: enabled ? 'Backstage ausweisen' : 'Backstage entfernen' }
+          ? { ok: false, message: de('Nicht genug Geld für Backstage') }
+          : { ok: true, message: enabled ? de('Backstage ausweisen') : de('Backstage entfernen') }
     } else if (tool === 'deliveryYard' || tool === 'supplyDepot') {
       result = this.canPlaceSupplyDepot(x, z, tool === 'deliveryYard' ? 'delivery' : 'storage')
     } else if (tool === 'trafficLight') {
       result = this.getRoadCellAt(x, z)
-        ? { ok: true, message: 'Ampel bauen' }
-        : { ok: false, message: 'Ampeln stehen nur auf einer Straße' }
+        ? { ok: true, message: de('Ampel bauen') }
+        : { ok: false, message: de('Ampeln stehen nur auf einer Straße') }
     } else if (tool === 'pathBarrier') {
       const path = this.getPathAt(x, z, this.state.buildElevation) ?? this.getPathAt(x, z)
       result = path?.pathType === 'normal'
-        ? { ok: true, message: 'Wegschranke bauen' }
-        : { ok: false, message: 'Schranken stehen nur auf normalen Wegen' }
+        ? { ok: true, message: de('Wegschranke bauen') }
+        : { ok: false, message: de('Schranken stehen nur auf normalen Wegen') }
     } else if (tool === 'staffGate') {
       const path = this.getPathAt(x, z)
       result = this.canPlaceStaffGate(x, z, path?.elevation ?? 0)
     } else {
-      result = { ok: true, message: 'Platzierung möglich' }
+      result = { ok: true, message: de('Platzierung möglich') }
     }
     return {
       ...result,
@@ -4302,7 +4351,7 @@ export class GameState {
     role: 'delivery' | 'storage',
   ): ActionResult {
     if (!Number.isInteger(x) || !Number.isInteger(z) || !this.isInWorld(x, z)) {
-      return { ok: false, message: 'Außerhalb des Geländes' }
+      return { ok: false, message: de('Außerhalb des Geländes') }
     }
     if (
       this.getTerrainHeight(x, z) < 0 ||
@@ -4320,26 +4369,26 @@ export class GameState {
       this.isLogisticsBuildingCell(x, z) ||
       this.coasterOccupiesVolume(x, z, this.getTerrainHeight(x, z), 1)
     ) {
-      return { ok: false, message: 'Depot benötigt ein freies, trockenes Feld' }
+      return { ok: false, message: de('Depot benötigt ein freies, trockenes Feld') }
     }
     if (groundInfo(this.state, x, z).bearing < 2) {
-      return { ok: false, message: 'Depot benötigt verdichteten Untergrund' }
+      return { ok: false, message: de('Depot benötigt verdichteten Untergrund') }
     }
-    if (this.lacksFunds(400)) return { ok: false, message: 'Depot kostet 400 €' }
+    if (this.lacksFunds(400)) return { ok: false, message: de('Depot kostet 400 €') }
     if (role === 'delivery' && this.getAdjacentRoadPositions({ x, z }).length === 0) {
-      return { ok: false, message: 'Anlieferungsplatz direkt neben einer Straße setzen' }
+      return { ok: false, message: de('Anlieferungsplatz direkt neben einer Straße setzen') }
     }
-    return { ok: true, message: 'Depot bauen' }
+    return { ok: true, message: de('Depot bauen') }
   }
 
   canPlace(kind: BuildingKind, x: number, z: number, decorationSlot?: number, preserveLegacySlot = false): ActionResult {
-    if (this.getRideAccessAt(x,z,this.getPlaceElevation(x,z))) return {ok:false,message:'Hier befindet sich ein Fahrgeschäft-Zugang'}
+    if (this.getRideAccessAt(x,z,this.getPlaceElevation(x,z))) return {ok:false,message:de('Hier befindet sich ein Fahrgeschäft-Zugang')}
     if (isScenery(kind)) {
       if (!(preserveLegacySlot && decorationSlot === undefined)) {
         decorationSlot ??= isLargeScenery(kind) ? 4 : isEdgeScenery(kind) ? this.state.buildRotation : 0
-        if (!Number.isInteger(decorationSlot) || decorationSlot < 0 || decorationSlot > (isLargeScenery(kind) ? 4 : 3)) return { ok: false, message: 'Ungültige Dekoposition' }
+        if (!Number.isInteger(decorationSlot) || decorationSlot < 0 || decorationSlot > (isLargeScenery(kind) ? 4 : 3)) return { ok: false, message: de('Ungültige Dekoposition') }
       }
-    } else if (decorationSlot !== undefined) return { ok: false, message: 'Dieses Objekt benötigt ein ganzes Feld' }
+    } else if (decorationSlot !== undefined) return { ok: false, message: de('Dieses Objekt benötigt ein ganzes Feld') }
     if (kind === 'ambulanceGarage') {
       return this.canPlaceLogisticsFootprint(this.createFootprint(x, z, 2), BUILDINGS.ambulanceGarage.cost)
     }
@@ -4361,10 +4410,10 @@ export class GameState {
     const selected = kind==='stage' ? this.state.festival.stageTemplates?.find(t=>t.name===this.state.festival.selectedStageTemplate) : undefined
     if(selected){const issue=this.checkStageSite(selected,x,z,this.state.buildRotation,this.getPlaceElevation(x,z));if(issue)return {ok:false,message:issue}}
 
-    if (!this.isInWorld(x, z)) return { ok: false, message: 'Außerhalb des Geländes' }
-    if (this.state.festival.infrastructure.depots.some(d => d.x === x && d.z === z)) return { ok: false, message: 'Hier steht ein Warendepot' }
-    if (kind === 'stage' && groundInfo(this.state, x, z).bearing < 2) return { ok: false, message: 'Bühnen brauchen tragfähigen Untergrund: zuerst verdichten' }
-    if (kind === 'ride' && groundInfo(this.state, x, z).bearing < 3) return { ok: false, message: 'Große Fahrgeschäfte brauchen ein entwässertes, gepflastertes Fundament' }
+    if (!this.isInWorld(x, z)) return { ok: false, message: de('Außerhalb des Geländes') }
+    if (this.state.festival.infrastructure.depots.some(d => d.x === x && d.z === z)) return { ok: false, message: de('Hier steht ein Warendepot') }
+    if (kind === 'stage' && groundInfo(this.state, x, z).bearing < 2) return { ok: false, message: de('Bühnen brauchen tragfähigen Untergrund: zuerst verdichten') }
+    if (kind === 'ride' && groundInfo(this.state, x, z).bearing < 3) return { ok: false, message: de('Große Fahrgeschäfte brauchen ein entwässertes, gepflastertes Fundament') }
     if (
       (this.getRoadCellAt(x, z) &&
         kind !== 'path' &&
@@ -4372,34 +4421,34 @@ export class GameState {
         !isSealedWasteContainer(kind)) ||
       this.isLogisticsBuildingCell(x, z)
     ) {
-      return { ok: false, message: 'Diese Fläche wird für die Logistik genutzt' }
+      return { ok: false, message: de('Diese Fläche wird für die Logistik genutzt') }
     }
     if (
       kind !== 'fence' &&
       this.hasLiveParkingOccupancy(x, z)
     ) {
-      return { ok: false, message: 'Diese Fläche wird für die Logistik genutzt' }
+      return { ok: false, message: de('Diese Fläche wird für die Logistik genutzt') }
     }
     if (this.getCampingCellAt(x, z) && this.state.buildElevation < 1.2 && kind !== 'fence') {
-      return { ok: false, message: 'Diese Fläche ist als Zeltbereich ausgewiesen' }
+      return { ok: false, message: de('Diese Fläche ist als Zeltbereich ausgewiesen') }
     }
     if (this.getMedicalCellAt(x, z) && !allowsMedicalOverlay(kind)) {
-      return { ok: false, message: 'Diese Fläche gehört zum Krankenbereich' }
+      return { ok: false, message: de('Diese Fläche gehört zum Krankenbereich') }
     }
     // A delay tower belongs out in the crowd — it takes the audience ground it stands on with it
     // (see place), rather than being kept off the forecourt like everything else.
     if (this.getStageForecourtCellAt(x, z) && this.state.buildElevation < 1.2 && kind !== 'fence' && kind !== 'delayTower') {
-      return { ok: false, message: 'Diese Fläche gehört zum Bühnenvorplatz' }
+      return { ok: false, message: de('Diese Fläche gehört zum Bühnenvorplatz') }
     }
     if (this.getWasteDumpAt(x, z) && this.state.buildElevation < 1.2 && kind !== 'fence') {
-      return { ok: false, message: 'Diese Fläche ist als Müllablage ausgewiesen' }
+      return { ok: false, message: de('Diese Fläche ist als Müllablage ausgewiesen') }
     }
     if (isBandSupplyKind(kind) && !this.getBackstageCellAt(x, z)) {
-      return { ok: false, message: 'Bandversorgung nur auf ausgewiesenem Backstage' }
+      return { ok: false, message: de('Bandversorgung nur auf ausgewiesenem Backstage') }
     }
     const placeElevation = this.getPlaceElevation(x, z)
     if (this.isWaterTerrain(x, z) && placeElevation <= this.getWaterLevel()) {
-      return { ok: false, message: 'Im Wasser kann nicht gebaut werden' }
+      return { ok: false, message: de('Im Wasser kann nicht gebaut werden') }
     }
     const collision = this.findCollision(kind, x, z, placeElevation, decorationSlot)
     if (
@@ -4412,12 +4461,12 @@ export class GameState {
         ok: false,
         message:
           isWasteBin(kind)
-            ? 'Hier steht bereits ein Mülleimer'
+            ? de('Hier steht bereits ein Mülleimer')
             : isPathSeat(kind)
               ? kind === 'table'
-                ? 'Hier steht bereits ein Tisch'
-                : 'Hier steht bereits eine Bank'
-              : 'Hier steht bereits eine Sicherheitsschleuse',
+                ? de('Hier steht bereits ein Tisch')
+                : de('Hier steht bereits eine Bank')
+              : de('Hier steht bereits eine Sicherheitsschleuse'),
       }
     }
     if (
@@ -4431,7 +4480,7 @@ export class GameState {
           Math.abs(building.elevation - placeElevation) < 0.01,
       )
     ) {
-      return { ok: false, message: 'Auf dieser Seite steht bereits ein Bauzaun' }
+      return { ok: false, message: de('Auf dieser Seite steht bereits ein Bauzaun') }
     }
     const furnitureRoad =
       (isPathSeat(kind) || isSealedWasteContainer(kind)) &&
@@ -4442,17 +4491,17 @@ export class GameState {
         message:
           isPathSeat(kind)
             ? kind === 'table'
-              ? 'Ein Tisch muss an einem Weg oder einer Straße aufgestellt werden'
-              : 'Eine Bank muss an einem Weg oder einer Straße aufgestellt werden'
-            : 'Eine Sicherheitsschleuse muss auf einem Weg stehen',
+              ? de('Ein Tisch muss an einem Weg oder einer Straße aufgestellt werden')
+              : de('Eine Bank muss an einem Weg oder einer Straße aufgestellt werden')
+            : de('Eine Sicherheitsschleuse muss auf einem Weg stehen'),
       }
     }
     if (isPathSeat(kind) && this.findBenchRotation(x, z) === null) {
       return {
         ok: false,
         message: kind === 'table'
-          ? 'An diesem Weg oder dieser Straße ist keine freie Außenkante für einen Tisch'
-          : 'An diesem Weg oder dieser Straße ist keine freie Außenkante für eine Bank',
+          ? de('An diesem Weg oder dieser Straße ist keine freie Außenkante für einen Tisch')
+          : de('An diesem Weg oder dieser Straße ist keine freie Außenkante für eine Bank'),
       }
     }
     const allowedOverlap =
@@ -4468,7 +4517,7 @@ export class GameState {
       (collision && !allowedOverlap) ||
       (!wallSpec(kind) && this.coasterOccupiesVolume(x, z, placeElevation, BUILDINGS[kind].height))
     ) {
-      return { ok: false, message: 'Auf dieser Höhe ist nicht genug Platz' }
+      return { ok: false, message: de('Auf dieser Höhe ist nicht genug Platz') }
     }
     const clearCost = isScenery(kind) ? 0 : this.getTreeClearCost(
       x,
@@ -4478,17 +4527,15 @@ export class GameState {
     )
     const design = kind === 'stage' ? this.state.festival.stageTemplates?.find(t=>t.name===this.state.festival.selectedStageTemplate) : undefined
     if (this.lacksFunds(BUILDINGS[kind].cost + clearCost + (design ? stageStats(design).cost : 0))) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
-    if (design) return {ok:true,message:`${design.name} bauen · ${BUILDINGS[kind].cost + clearCost + stageStats(design).cost} €`}
+    if (design) return {ok:true,message:de`${named(design.name)} für ${eur(BUILDINGS[kind].cost + clearCost + stageStats(design).cost)} bauen`}
     return {
       ok: true,
       message:
         clearCost > 0
-          ? `${BUILDINGS[kind].name} bauen und Baum entfernen (${
-              BUILDINGS[kind].cost + clearCost
-            } €)`
-          : `${BUILDINGS[kind].name} auf Ebene ${placeElevation} bauen`,
+          ? de`${named(BUILDINGS[kind].name)} für ${eur(BUILDINGS[kind].cost + clearCost)} bauen und Baum entfernen`
+          : de`${named(BUILDINGS[kind].name)} auf Ebene ${num(placeElevation)} bauen`,
     }
   }
 
@@ -4578,12 +4625,12 @@ export class GameState {
       placements,
       message:
         placements.length === 0
-          ? 'Die Auswahl ist leer'
+          ? de('Die Auswahl ist leer')
           : this.lacksFunds(charge)
-            ? `Nicht genug Geld (${charge} €)`
+            ? de`Nicht genug Geld (${eur(charge)})`
             : ok
-              ? `${valid} Objekt${valid === 1 ? '' : 'e'} für ${charge} € kopieren`
-              : `${valid} von ${placements.length} passen hier`,
+              ? plural(valid, de`${num(valid)} Objekt für ${eur(charge)} kopieren`, de`${num(valid)} Objekte für ${eur(charge)} kopieren`)
+              : de`${num(valid)} von ${num(placements.length)} passen hier`,
     }
   }
 
@@ -4593,10 +4640,10 @@ export class GameState {
 
   private stampBlueprintUntracked(originX: number, originZ: number, rotation: number, items: readonly BlueprintItem[]): ActionResult {
     const transformed = transformBlueprintItems(items, rotation)
-    if (transformed.length === 0) return { ok: false, message: 'Die Auswahl ist leer' }
+    if (transformed.length === 0) return { ok: false, message: de('Die Auswahl ist leer') }
     const charge = blueprintStampCharge(transformed)
     if (this.lacksFunds(charge)) {
-      return { ok: false, message: `Nicht genug Geld (${charge} €)` }
+      return { ok: false, message: de`Nicht genug Geld (${eur(charge)})` }
     }
     const preview = this.previewBlueprint(originX, originZ, rotation, items)
     if (!preview.placements.every((entry) => entry.valid)) {
@@ -4650,13 +4697,13 @@ export class GameState {
     }
     if (placed === 0) {
       if (credit > 0) bookFinance(this.state, 'construction', -credit)
-      return { ok: false, message: 'Hier konnte nichts kopiert werden' }
+      return { ok: false, message: de('Hier konnte nichts kopiert werden') }
     }
     if (transformed.some((item) => item.type === 'parking')) this.invalidateDesignatedOccupancy()
     this.emit()
     return {
       ok: true,
-      message: `${placed} Objekt${placed === 1 ? '' : 'e'} kopiert · ${charge} €`,
+      message: plural(placed, de`${num(placed)} Objekt für ${eur(charge)} kopiert`, de`${num(placed)} Objekte für ${eur(charge)} kopiert`),
     }
   }
 
@@ -4724,7 +4771,7 @@ export class GameState {
       price: 0,
     })
     this.emit()
-    return { ok: true, message: '2×2-Krankenwagengarage gebaut' }
+    return { ok: true, message: de('2×2-Krankenwagengarage gebaut') }
   }
 
   private placeFireStation(x: number, z: number): ActionResult {
@@ -4754,7 +4801,7 @@ export class GameState {
       price: 0,
     })
     this.emit()
-    return { ok: true, message: '2×2-Feuerwache gebaut' }
+    return { ok: true, message: de('2×2-Feuerwache gebaut') }
   }
 
   private placeBusDepot(x: number, z: number): ActionResult {
@@ -4781,7 +4828,7 @@ export class GameState {
       price: 0,
     })
     this.emit()
-    return { ok: true, message: '3×3-Busdepot gebaut' }
+    return { ok: true, message: de('3×3-Busdepot gebaut') }
   }
 
   private placeWasteDepot(x: number, z: number): ActionResult {
@@ -4821,7 +4868,7 @@ export class GameState {
     })
     this.refreshPower()
     this.emit()
-    return { ok: true, message: '2×2-Mülldepot gebaut' }
+    return { ok: true, message: de('2×2-Mülldepot gebaut') }
   }
 
   private placeSpecialDepot(x: number, z: number): ActionResult {
@@ -4850,7 +4897,7 @@ export class GameState {
     })
     this.refreshPower()
     this.emit()
-    return { ok: true, message: '3×3-Betriebshof gebaut. Saugreiniger fahren von hier auf den Wegen und Bühnenvorplätzen, halten vor Besuchern und machen beim Fahren Lärm.' }
+    return { ok: true, message: de('3×3-Betriebshof gebaut. Saugreiniger fahren von hier auf den Wegen und Bühnenvorplätzen, halten vor Besuchern und machen beim Fahren Lärm.') }
   }
 
   private placeBusStop(x: number, z: number): ActionResult {
@@ -4863,11 +4910,11 @@ export class GameState {
       id,
       x,
       z,
-      name: `Haltestelle ${this.state.logistics.busStops.length + 1}`,
+      name: numberedName(de('Haltestelle'), this.state.logistics.busStops.length + 1),
       roadCell: { ...adjacentRoads[0]! },
     })
     this.emit()
-    return { ok: true, message: 'Bushaltestelle gebaut' }
+    return { ok: true, message: de('Bushaltestelle gebaut') }
   }
 
   private canPlaceBusStop(x: number, z: number): ActionResult {
@@ -4879,14 +4926,14 @@ export class GameState {
     ) {
       return {
         ok: false,
-        message: 'Eine Haltestelle muss auf einem Gehweg neben einer Straße stehen',
+        message: de('Eine Haltestelle muss auf einem Gehweg neben einer Straße stehen'),
       }
     }
     const adjacentRoads = this.getAdjacentRoadPositions({ x, z })
     if (adjacentRoads.length === 0) {
       return {
         ok: false,
-        message: 'Direkt neben der Haltestelle muss eine Straße verlaufen',
+        message: de('Direkt neben der Haltestelle muss eine Straße verlaufen'),
       }
     }
     if (
@@ -4894,12 +4941,12 @@ export class GameState {
         (stop) => stop.x === x && stop.z === z,
       )
     ) {
-      return { ok: false, message: 'Hier steht bereits eine Haltestelle' }
+      return { ok: false, message: de('Hier steht bereits eine Haltestelle') }
     }
     if (this.lacksFunds(BUILDINGS.busStop.cost)) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
-    return { ok: true, message: 'Bushaltestelle bauen' }
+    return { ok: true, message: de('Bushaltestelle bauen') }
   }
 
   /** A tour bus needs its own length, not just a single field: two cells long, and a road along
@@ -4910,12 +4957,12 @@ export class GameState {
     if (!clear.ok) return clear
     const hasRoad = footprint.some((cell) => this.getAdjacentRoadPositions(cell).length > 0)
     if (!hasRoad) {
-      return { ok: false, message: 'Der Tourbus-Parkplatz braucht eine angrenzende Straße' }
+      return { ok: false, message: de('Der Tourbus-Parkplatz braucht eine angrenzende Straße') }
     }
     if (this.lacksFunds(BUILDINGS.tourBusParking.cost)) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
-    return { ok: true, message: 'Tourbus-Parkplatz bauen' }
+    return { ok: true, message: de('Tourbus-Parkplatz bauen') }
   }
 
   /**
@@ -4927,9 +4974,9 @@ export class GameState {
     const clear = this.checkBandSupplyFootprint(kind, footprint)
     if (!clear.ok) return clear
     if (this.lacksFunds(BUILDINGS[kind].cost)) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
-    return { ok: true, message: `${BUILDINGS[kind].name} bauen` }
+    return { ok: true, message: de`${named(BUILDINGS[kind].name)} bauen` }
   }
 
   private checkBandSupplyFootprint(
@@ -4937,28 +4984,28 @@ export class GameState {
     footprint: ReadonlyArray<{ x: number; z: number }>,
   ): ActionResult {
     for (const cell of footprint) {
-      if (!this.isInWorld(cell.x, cell.z)) return { ok: false, message: 'Außerhalb des Geländes' }
+      if (!this.isInWorld(cell.x, cell.z)) return { ok: false, message: de('Außerhalb des Geländes') }
       if (!this.getBackstageCellAt(cell.x, cell.z)) {
-        return { ok: false, message: 'Bandversorgung nur auf ausgewiesenem Backstage' }
+        return { ok: false, message: de('Bandversorgung nur auf ausgewiesenem Backstage') }
       }
       const placeElevation = this.getPlaceElevation(cell.x, cell.z)
       if (this.isWaterTerrain(cell.x, cell.z) && placeElevation <= this.getWaterLevel()) {
-        return { ok: false, message: 'Im Wasser kann nicht gebaut werden' }
+        return { ok: false, message: de('Im Wasser kann nicht gebaut werden') }
       }
       if (this.getRoadCellAt(cell.x, cell.z) || this.isLogisticsBuildingCell(cell.x, cell.z)) {
-        return { ok: false, message: 'Diese Fläche wird für die Logistik genutzt' }
+        return { ok: false, message: de('Diese Fläche wird für die Logistik genutzt') }
       }
       if (this.hasLiveParkingOccupancy(cell.x, cell.z)) {
-        return { ok: false, message: 'Diese Fläche wird für die Logistik genutzt' }
+        return { ok: false, message: de('Diese Fläche wird für die Logistik genutzt') }
       }
-      if (this.getCampingCellAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche ist als Zeltbereich ausgewiesen' }
-      if (this.getMedicalCellAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche gehört zum Krankenbereich' }
-      if (this.getStageForecourtCellAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche gehört zum Bühnenvorplatz' }
-      if (this.getWasteDumpAt(cell.x, cell.z)) return { ok: false, message: 'Diese Fläche ist als Müllablage ausgewiesen' }
+      if (this.getCampingCellAt(cell.x, cell.z)) return { ok: false, message: de('Diese Fläche ist als Zeltbereich ausgewiesen') }
+      if (this.getMedicalCellAt(cell.x, cell.z)) return { ok: false, message: de('Diese Fläche gehört zum Krankenbereich') }
+      if (this.getStageForecourtCellAt(cell.x, cell.z)) return { ok: false, message: de('Diese Fläche gehört zum Bühnenvorplatz') }
+      if (this.getWasteDumpAt(cell.x, cell.z)) return { ok: false, message: de('Diese Fläche ist als Müllablage ausgewiesen') }
       const collision = this.findCollision(kind, cell.x, cell.z, placeElevation)
-      if (collision && collision.kind !== 'tree') return { ok: false, message: 'Die gesamte Fläche muss frei sein' }
+      if (collision && collision.kind !== 'tree') return { ok: false, message: de('Die gesamte Fläche muss frei sein') }
     }
-    return { ok: true, message: 'Bau möglich' }
+    return { ok: true, message: de('Bau möglich') }
   }
 
   private createFootprint(
@@ -5016,7 +5063,7 @@ export class GameState {
       0,
     )
     if (this.lacksFunds(cost + clearCost)) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
     if (
       footprint.some(
@@ -5037,7 +5084,7 @@ export class GameState {
           Boolean(this.getWasteDumpAt(cell.x, cell.z)),
       )
     ) {
-      return { ok: false, message: 'Die gesamte Fläche muss frei sein' }
+      return { ok: false, message: de('Die gesamte Fläche muss frei sein') }
     }
     const adjacentAccess = footprint.some((cell) =>
       [
@@ -5061,13 +5108,13 @@ export class GameState {
       }),
     )
     return adjacentAccess
-      ? { ok: true, message: 'Bau möglich' }
+      ? { ok: true, message: de('Bau möglich') }
       : {
           ok: false,
           message:
             access === 'path'
-              ? 'Das Gebäude benötigt einen Wegeanschluss'
-              : 'Das Gebäude benötigt einen Straßenanschluss',
+              ? de('Das Gebäude benötigt einen Wegeanschluss')
+              : de('Das Gebäude benötigt einen Straßenanschluss'),
         }
   }
 
@@ -5075,14 +5122,14 @@ export class GameState {
     const garage = this.state.logistics.ambulanceGarages.find(
       (candidate) => candidate.id === garageId,
     )
-    if (!garage) return { ok: false, message: 'Garage nicht gefunden' }
+    if (!garage) return { ok: false, message: de('Garage nicht gefunden') }
     const bay = garage.bays.findIndex((vehicleId) => vehicleId === null)
-    if (bay < 0) return { ok: false, message: 'In dieser Garage stehen bereits zwei Krankenwagen' }
+    if (bay < 0) return { ok: false, message: de('In dieser Garage stehen bereits zwei Krankenwagen') }
     if (this.lacksFunds(SIMULATION_CONFIG.logistics.ambulanceCost)) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
     const access = this.getLogisticsBuildingAccess(garage, 2)
-    if (!access) return { ok: false, message: 'Die Garage hat keinen befahrbaren Anschluss' }
+    if (!access) return { ok: false, message: de('Die Garage hat keinen befahrbaren Anschluss') }
     const id = this.nextId('ambulance')
     bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.ambulanceCost)
     garage.bays[bay] = id
@@ -5090,19 +5137,19 @@ export class GameState {
       this.createRoadVehicle(id, 'ambulance', { x: garage.x, z: garage.z }),
     )
     this.emit()
-    return { ok: true, message: `Krankenwagen ${bay + 1} gekauft` }
+    return { ok: true, message: de`Krankenwagen ${num(bay + 1)} gekauft` }
   }
 
   buyFireTruck(stationId: string): ActionResult {
     const station = this.state.logistics.fireStations.find((candidate) => candidate.id === stationId)
-    if (!station) return { ok: false, message: 'Feuerwache nicht gefunden' }
+    if (!station) return { ok: false, message: de('Feuerwache nicht gefunden') }
     const bay = station.bays.findIndex((vehicleId) => vehicleId === null)
-    if (bay < 0) return { ok: false, message: 'In dieser Wache stehen bereits zwei Feuerwehrwagen' }
+    if (bay < 0) return { ok: false, message: de('In dieser Wache stehen bereits zwei Feuerwehrwagen') }
     if (this.lacksFunds(SIMULATION_CONFIG.logistics.fireTruckCost)) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
     const access = this.getLogisticsBuildingAccess(station, 2)
-    if (!access) return { ok: false, message: 'Die Wache hat keinen befahrbaren Anschluss' }
+    if (!access) return { ok: false, message: de('Die Wache hat keinen befahrbaren Anschluss') }
     const id = this.nextId('firetruck')
     bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.fireTruckCost)
     station.bays[bay] = id
@@ -5110,16 +5157,16 @@ export class GameState {
       this.createRoadVehicle(id, 'fireTruck', { x: station.x, z: station.z }),
     )
     this.emit()
-    return { ok: true, message: `Feuerwehrwagen ${bay + 1} gekauft` }
+    return { ok: true, message: de`Feuerwehrwagen ${num(bay + 1)} gekauft` }
   }
 
   sellAmbulance(garageId: string): ActionResult {
     const garage = this.state.logistics.ambulanceGarages.find(
       (candidate) => candidate.id === garageId,
     )
-    if (!garage) return { ok: false, message: 'Garage nicht gefunden' }
+    if (!garage) return { ok: false, message: de('Garage nicht gefunden') }
     const vehicleId = [...garage.bays].reverse().find((id): id is string => Boolean(id))
-    if (!vehicleId) return { ok: false, message: 'In dieser Garage gibt es keinen Krankenwagen' }
+    if (!vehicleId) return { ok: false, message: de('In dieser Garage gibt es keinen Krankenwagen') }
     return this.requestAmbulanceSale(vehicleId)
   }
 
@@ -5131,15 +5178,15 @@ export class GameState {
     const depot = this.state.logistics.busDepots.find(
       (candidate) => candidate.id === depotId,
     )
-    if (!depot) return { ok: false, message: 'Busdepot nicht gefunden' }
+    if (!depot) return { ok: false, message: de('Busdepot nicht gefunden') }
     if (depot.busIds.length >= 3) {
-      return { ok: false, message: 'Dieses Depot besitzt bereits drei Busse' }
+      return { ok: false, message: de('Dieses Depot besitzt bereits drei Busse') }
     }
     if (this.lacksFunds(SIMULATION_CONFIG.logistics.busCost)) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
     const access = this.getLogisticsBuildingAccess(depot, 3)
-    if (!access) return { ok: false, message: 'Das Depot hat keinen befahrbaren Anschluss' }
+    if (!access) return { ok: false, message: de('Das Depot hat keinen befahrbaren Anschluss') }
     const id = this.nextId('bus')
     bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.busCost)
     depot.busIds.push(id)
@@ -5147,36 +5194,36 @@ export class GameState {
       this.createRoadVehicle(id, 'bus', access),
     )
     this.emit()
-    return { ok: true, message: `Bus ${depot.busIds.length} gekauft` }
+    return { ok: true, message: de`Bus ${num(depot.busIds.length)} gekauft` }
   }
 
   /** A depot or a works yard: both keep garbage trucks and take their loads. */
   private findGarbageTruckHost(depotId: string):
-    | { host: { id: string; x: number; z: number; truckIds?: string[]; gateDirection?: Direction }; size: number; name: string }
+    | { host: { id: string; x: number; z: number; truckIds?: string[]; gateDirection?: Direction }; size: number; noAccess: string }
     | null {
     const depot = this.state.logistics.wasteDepots.find((candidate) => candidate.id === depotId)
-    if (depot) return { host: depot, size: 2, name: 'Mülldepot' }
+    if (depot) return { host: depot, size: 2, noAccess: de('Der Mülldepot hat keinen befahrbaren Anschluss') }
     const yard = this.state.logistics.specialDepots.find((candidate) => candidate.id === depotId)
-    if (yard) return { host: yard, size: 3, name: 'Betriebshof' }
+    if (yard) return { host: yard, size: 3, noAccess: de('Der Betriebshof hat keinen befahrbaren Anschluss') }
     return null
   }
 
   buyGarbageTruck(depotId: string): ActionResult {
     const found = this.findGarbageTruckHost(depotId)
-    if (!found) return { ok: false, message: 'Mülldepot nicht gefunden' }
-    const { host, size, name } = found
+    if (!found) return { ok: false, message: de('Mülldepot nicht gefunden') }
+    const { host, size, noAccess } = found
     host.truckIds ??= []
     if (host.truckIds.length >= SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot) {
       return {
         ok: false,
-        message: `Hier stehen bereits ${SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot} Müllautos`,
+        message: de`Hier stehen bereits ${num(SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot)} Müllautos`,
       }
     }
     if (this.lacksFunds(SIMULATION_CONFIG.logistics.garbageTruckCost)) {
-      return { ok: false, message: 'Nicht genug Geld' }
+      return { ok: false, message: de('Nicht genug Geld') }
     }
     const access = this.getLogisticsBuildingAccess(host, size)
-    if (!access) return { ok: false, message: `Der ${name} hat keinen befahrbaren Anschluss` }
+    if (!access) return { ok: false, message: noAccess }
     const id = this.nextId('garbage')
     bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.garbageTruckCost)
     host.truckIds.push(id)
@@ -5184,16 +5231,16 @@ export class GameState {
       this.createRoadVehicle(id, 'garbageTruck', { x: host.x, z: host.z }),
     )
     this.emit()
-    return { ok: true, message: `Müllauto ${host.truckIds.length} gekauft` }
+    return { ok: true, message: de`Müllauto ${num(host.truckIds.length)} gekauft` }
   }
 
   sellGarbageTruck(depotId: string): ActionResult {
     const found = this.findGarbageTruckHost(depotId)
-    if (!found) return { ok: false, message: 'Mülldepot nicht gefunden' }
+    if (!found) return { ok: false, message: de('Mülldepot nicht gefunden') }
     const depot = found.host
     depot.truckIds ??= []
     const truckId = depot.truckIds.at(-1)
-    if (!truckId) return { ok: false, message: 'Hier steht kein Müllauto' }
+    if (!truckId) return { ok: false, message: de('Hier steht kein Müllauto') }
     const truck = this.state.logistics.roadVehicles.find(
       (vehicle) => vehicle.id === truckId && vehicle.kind === 'garbageTruck',
     )
@@ -5201,7 +5248,7 @@ export class GameState {
       truck && this.isOffMapRoadExit(truck.cell ?? truck.position),
     )
     if (truck && !offMap && (truck.state !== 'idle' || truck.cargo > 0)) {
-      return { ok: false, message: 'Das Müllauto ist unterwegs oder noch beladen' }
+      return { ok: false, message: de('Das Müllauto ist unterwegs oder noch beladen') }
     }
     depot.truckIds = depot.truckIds.filter((id) => id !== truckId)
     this.state.logistics.roadVehicles =
@@ -5214,8 +5261,8 @@ export class GameState {
     return {
       ok: true,
       message: truck
-        ? 'Müllauto verkauft'
-        : 'Müllauto war nicht mehr vorhanden und wurde verkauft',
+        ? de('Müllauto verkauft')
+        : de('Müllauto war nicht mehr vorhanden und wurde verkauft'),
     }
   }
 
@@ -5223,15 +5270,15 @@ export class GameState {
     const depot = this.state.logistics.specialDepots.find(
       (candidate) => candidate.id === depotId,
     )
-    if (!depot) return { ok: false, message: 'Betriebshof nicht gefunden' }
+    if (!depot) return { ok: false, message: de('Betriebshof nicht gefunden') }
     if (depot.vehicleIds.length >= 4) {
-      return { ok: false, message: 'In diesem Betriebshof stehen bereits vier Spezialfahrzeuge' }
+      return { ok: false, message: de('In diesem Betriebshof stehen bereits vier Spezialfahrzeuge') }
     }
     if (this.lacksFunds(SIMULATION_CONFIG.logistics.sweeperCost)) {
-      return { ok: false, message: 'Nicht genug Geld für den Saugreiniger' }
+      return { ok: false, message: de('Nicht genug Geld für den Saugreiniger') }
     }
     const access = this.getLogisticsPathAccess(depot, 3)
-    if (!access) return { ok: false, message: 'Der Betriebshof hat keinen Wegeanschluss' }
+    if (!access) return { ok: false, message: de('Der Betriebshof hat keinen Wegeanschluss') }
     const id = this.nextId('sweeper')
     bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.sweeperCost)
     depot.vehicleIds.push(id)
@@ -5239,16 +5286,16 @@ export class GameState {
       this.createRoadVehicle(id, 'sweeper', access),
     )
     this.emit()
-    return { ok: true, message: `Saugreiniger ${depot.vehicleIds.length} gekauft` }
+    return { ok: true, message: de`Saugreiniger ${num(depot.vehicleIds.length)} gekauft` }
   }
 
   sellSweeper(depotId: string): ActionResult {
     const depot = this.state.logistics.specialDepots.find(
       (candidate) => candidate.id === depotId,
     )
-    if (!depot) return { ok: false, message: 'Betriebshof nicht gefunden' }
+    if (!depot) return { ok: false, message: de('Betriebshof nicht gefunden') }
     const vehicleId = depot.vehicleIds.at(-1)
-    if (!vehicleId) return { ok: false, message: 'Hier steht kein Spezialfahrzeug' }
+    if (!vehicleId) return { ok: false, message: de('Hier steht kein Spezialfahrzeug') }
     return this.removeSweeper(vehicleId)
   }
 
@@ -5256,9 +5303,9 @@ export class GameState {
     const sweeper = this.state.logistics.roadVehicles.find(
       (vehicle) => vehicle.id === vehicleId && vehicle.kind === 'sweeper',
     )
-    if (!sweeper) return { ok: false, message: 'Personal nicht gefunden' }
+    if (!sweeper) return { ok: false, message: de('Personal nicht gefunden') }
     if (sweeper.state !== 'idle' || sweeper.cargo > 0) {
-      return { ok: false, message: 'Der Saugreiniger ist unterwegs oder noch beladen' }
+      return { ok: false, message: de('Der Saugreiniger ist unterwegs oder noch beladen') }
     }
     for (const depot of this.state.logistics.specialDepots) {
       depot.vehicleIds = depot.vehicleIds.filter((id) => id !== vehicleId)
@@ -5270,23 +5317,23 @@ export class GameState {
         SIMULATION_CONFIG.logistics.busResaleFraction,
     ))
     this.emit()
-    return { ok: true, message: 'Saugreiniger verkauft' }
+    return { ok: true, message: de('Saugreiniger verkauft') }
   }
 
   sellBus(depotId: string): ActionResult {
     const depot = this.state.logistics.busDepots.find(
       (candidate) => candidate.id === depotId,
     )
-    if (!depot) return { ok: false, message: 'Busdepot nicht gefunden' }
+    if (!depot) return { ok: false, message: de('Busdepot nicht gefunden') }
     const busId = depot.busIds.at(-1)
-    if (!busId) return { ok: false, message: 'In diesem Depot gibt es keinen Bus' }
+    if (!busId) return { ok: false, message: de('In diesem Depot gibt es keinen Bus') }
     const bus = this.state.logistics.roadVehicles.find(
       (vehicle) => vehicle.id === busId && vehicle.kind === 'bus',
     )
     if (!bus) {
       depot.busIds = depot.busIds.filter((id) => id !== busId)
       this.emit()
-      return { ok: false, message: 'Der Bus war nicht mehr vorhanden und wurde bereinigt' }
+      return { ok: false, message: de('Der Bus war nicht mehr vorhanden und wurde bereinigt') }
     }
     const position = bus.cell ?? bus.position
     bus.passengerIds.forEach((visitorId) => {
@@ -5317,7 +5364,7 @@ export class GameState {
         visitor.targetId = resumeTargetId
         visitor.route = route
         visitor.thought =
-          'Der Bus wurde verkauft. Ich gehe den Rest des Weges zu Fuß.'
+          de('Der Bus wurde verkauft. Ich gehe den Rest des Weges zu Fuß.')
       } else {
         visitor.state = 'exploring'
         visitor.route = []
@@ -5344,7 +5391,7 @@ export class GameState {
       age: 0,
     })
     this.emit()
-    return { ok: true, message: `Bus für ${refund.toLocaleString('de-DE')} € verkauft` }
+    return { ok: true, message: de`Bus für ${eur(refund)} verkauft` }
   }
 
   createBusLine(
@@ -5363,7 +5410,7 @@ export class GameState {
     if (!depot || validStops.length < 2) {
       return {
         ok: false,
-        message: 'Eine Linie benötigt ein Depot und mindestens zwei Haltestellen',
+        message: de('Eine Linie benötigt ein Depot und mindestens zwei Haltestellen'),
       }
     }
     const alreadyAssigned = new Set(
@@ -5373,12 +5420,12 @@ export class GameState {
       .filter((id) => !alreadyAssigned.has(id))
       .slice(0, Math.max(1, Math.min(3, Math.floor(busCount))))
     if (buses.length === 0) {
-      return { ok: false, message: 'Im Depot ist kein freier Bus verfügbar' }
+      return { ok: false, message: de('Im Depot ist kein freier Bus verfügbar') }
     }
     const id = this.nextId('bus-line')
     this.state.logistics.busLines.push({
       id,
-      name: name.trim() || `Buslinie ${this.state.logistics.busLines.length + 1}`,
+      name: name.trim() || numberedName(de('Buslinie'), this.state.logistics.busLines.length + 1),
       depotId,
       stopIds: validStops,
       busIds: buses,
@@ -5393,31 +5440,31 @@ export class GameState {
       if (bus) bus.lineId = id
     })
     this.emit()
-    return { ok: true, message: 'Buslinie angelegt' }
+    return { ok: true, message: de('Buslinie angelegt') }
   }
 
   addBusToLine(lineId: string): ActionResult {
     const line = this.state.logistics.busLines.find(
       (candidate) => candidate.id === lineId,
     )
-    if (!line) return { ok: false, message: 'Buslinie nicht gefunden' }
+    if (!line) return { ok: false, message: de('Buslinie nicht gefunden') }
     const depot = this.state.logistics.busDepots.find(
       (candidate) => candidate.id === line.depotId,
     )
-    if (!depot) return { ok: false, message: 'Busdepot nicht gefunden' }
+    if (!depot) return { ok: false, message: de('Busdepot nicht gefunden') }
     const assigned = new Set(
       this.state.logistics.busLines.flatMap((candidate) => candidate.busIds),
     )
     let busId = depot.busIds.find((id) => !assigned.has(id))
     if (!busId) {
       if (depot.busIds.length >= 3) {
-        return { ok: false, message: 'Dieses Depot besitzt bereits drei Busse' }
+        return { ok: false, message: de('Dieses Depot besitzt bereits drei Busse') }
       }
       if (this.lacksFunds(SIMULATION_CONFIG.logistics.busCost)) {
-        return { ok: false, message: 'Nicht genug Geld' }
+        return { ok: false, message: de('Nicht genug Geld') }
       }
       const access = this.getLogisticsBuildingAccess(depot, 3)
-      if (!access) return { ok: false, message: 'Das Depot hat keinen befahrbaren Anschluss' }
+      if (!access) return { ok: false, message: de('Das Depot hat keinen befahrbaren Anschluss') }
       busId = this.nextId('bus')
       bookFinance(this.state, 'construction', -SIMULATION_CONFIG.logistics.busCost)
       depot.busIds.push(busId)
@@ -5426,7 +5473,7 @@ export class GameState {
       )
     }
     if (line.busIds.includes(busId)) {
-      return { ok: false, message: 'Dieser Bus fährt bereits auf der Linie' }
+      return { ok: false, message: de('Dieser Bus fährt bereits auf der Linie') }
     }
     line.busIds.push(busId)
     const bus = this.state.logistics.roadVehicles.find(
@@ -5434,7 +5481,7 @@ export class GameState {
     )
     if (bus) bus.lineId = line.id
     this.emit()
-    return { ok: true, message: 'Bus zur Linie hinzugefügt' }
+    return { ok: true, message: de('Bus zur Linie hinzugefügt') }
   }
 
   setBusLineStops(lineId: string, stopIds: string[]): ActionResult {
@@ -5444,11 +5491,11 @@ export class GameState {
     const validStops = stopIds.filter((id) =>
       this.state.logistics.busStops.some((stop) => stop.id === id),
     )
-    if (!line) return { ok: false, message: 'Buslinie nicht gefunden' }
+    if (!line) return { ok: false, message: de('Buslinie nicht gefunden') }
     if (validStops.length < 2) {
       return {
         ok: false,
-        message: 'Eine Linie benötigt mindestens zwei Haltestellen',
+        message: de('Eine Linie benötigt mindestens zwei Haltestellen'),
       }
     }
     line.stopIds = validStops
@@ -5459,7 +5506,7 @@ export class GameState {
       if (bus && bus.nextStopIndex >= validStops.length) bus.nextStopIndex = 0
     })
     this.emit()
-    return { ok: true, message: 'Haltestellenreihenfolge gespeichert' }
+    return { ok: true, message: de('Haltestellenreihenfolge gespeichert') }
   }
 
   previewBusLineRoute(stopIds: string[]): RoadPosition[] {
@@ -5501,7 +5548,7 @@ export class GameState {
     const line = this.state.logistics.busLines.find(
       (candidate) => candidate.id === lineId,
     )
-    if (!line) return { ok: false, message: 'Buslinie nicht gefunden' }
+    if (!line) return { ok: false, message: de('Buslinie nicht gefunden') }
     line.busIds.forEach((busId) => {
       const bus = this.state.logistics.roadVehicles.find(
         (vehicle) => vehicle.id === busId,
@@ -5517,7 +5564,7 @@ export class GameState {
         (candidate) => candidate.id !== lineId,
       )
     this.emit()
-    return { ok: true, message: 'Buslinie gelöscht' }
+    return { ok: true, message: de('Buslinie gelöscht') }
   }
 
   private createRoadVehicle(
@@ -6361,7 +6408,7 @@ export class GameState {
     launches.forEach(({ visitorId, effect, startsFire }) => {
       const visitor = this.getVisitor(visitorId)
       if (visitor) {
-        visitor.thought = 'Ich habe einen Feuerwerkskörper gezündet!'
+        visitor.thought = de('Ich habe einen Feuerwerkskörper gezündet!')
         visitor.emotion = 'excited'
         visitor.emotionMinutes = SIMULATION_CONFIG.fireworks.emotionMinutes
         visitor.needs.fun = Math.min(
@@ -6841,40 +6888,48 @@ export class GameState {
   save(): ActionResult {
     try {
       localStorage.setItem(SAVE_KEY, serializeSnapshot(this.state))
-      return { ok: true, message: 'Spiel gespeichert' }
+      return { ok: true, message: de('Spiel gespeichert') }
     } catch (error) {
-      return { ok: false, message: storageErrorMessage(error, 'Schnellspeichern ist fehlgeschlagen') }
+      return { ok: false, message: storageErrorMessage(error, de('Schnellspeichern ist fehlgeschlagen')) }
     }
   }
 
   saveSlot(name: string, id?: string): ActionResult {
+    return GameState.saveSnapshotSlot(this.state, name, id)
+  }
+
+  /**
+   * Writes any snapshot into a local slot, not only the running game's — the
+   * backup a demoted multiplayer host keeps of the world it ran offline.
+   */
+  static saveSnapshotSlot(snapshot: Readonly<GameSnapshot>, name: string, id?: string): ActionResult {
     const trimmed = name.trim().replace(/\s+/g, ' ').slice(0, 40)
-    if (!trimmed) return { ok: false, message: 'Bitte einen Namen für den Spielstand eingeben' }
+    if (!trimmed) return { ok: false, message: de('Bitte einen Namen für den Spielstand eingeben') }
     try {
       const slots = GameState.readSlotIndex()
       const target = id ? slots.find(slot => slot.id === id) : undefined
-      if (!target && slots.length >= 20) return { ok: false, message: 'Maximal 20 lokale Spielstände möglich' }
+      if (!target && slots.length >= 20) return { ok: false, message: de('Maximal 20 lokale Spielstände möglich') }
       const savedAt = Date.now()
       const next: LocalSaveSlot = {
         id: target?.id ?? `slot-${savedAt}-${Math.random().toString(36).slice(2, 8)}`,
         name: trimmed,
         savedAt,
-        edition: this.state.festival.edition,
-        day: this.state.day,
-        minute: this.state.minute,
+        edition: snapshot.festival.edition,
+        day: snapshot.day,
+        minute: snapshot.minute,
       }
       const updated = target
         ? slots.map(slot => slot.id === target.id ? next : slot)
         : [...slots, next]
       localStorage.setItem(SAVE_SLOTS_KEY, JSON.stringify(updated))
       try {
-        localStorage.setItem(saveSlotDataKey(next.id), serializeSnapshot(this.state))
-        return { ok: true, message: `Spielstand „${trimmed}“ gespeichert`, slotId: next.id }
+        localStorage.setItem(saveSlotDataKey(next.id), serializeSnapshot(snapshot))
+        return { ok: true, message: de`Spielstand „${verbatim(trimmed)}“ gespeichert`, slotId: next.id }
       } catch (error) {
-        return { ok: false, message: storageErrorMessage(error, 'Lokaler Spielstandsspeicher ist nicht verfügbar'), slotId: next.id }
+        return { ok: false, message: storageErrorMessage(error, de('Lokaler Spielstandsspeicher ist nicht verfügbar')), slotId: next.id }
       }
     } catch (error) {
-      return { ok: false, message: storageErrorMessage(error, 'Lokaler Spielstandsspeicher ist nicht verfügbar') }
+      return { ok: false, message: storageErrorMessage(error, de('Lokaler Spielstandsspeicher ist nicht verfügbar')) }
     }
   }
 
@@ -6890,12 +6945,12 @@ export class GameState {
   static deleteSaveSlot(id: string): ActionResult {
     try {
       const slots = GameState.readSlotIndex()
-      if (!slots.some(slot => slot.id === id)) return { ok: false, message: 'Spielstand nicht gefunden' }
+      if (!slots.some(slot => slot.id === id)) return { ok: false, message: de('Spielstand nicht gefunden') }
       localStorage.setItem(SAVE_SLOTS_KEY, JSON.stringify(slots.filter(slot => slot.id !== id)))
       try { localStorage.removeItem(saveSlotDataKey(id)) } catch { /* index already dropped the row */ }
-      return { ok: true, message: 'Spielstand gelöscht' }
+      return { ok: true, message: de('Spielstand gelöscht') }
     } catch (error) {
-      return { ok: false, message: storageErrorMessage(error, 'Lokaler Spielstandsspeicher ist nicht verfügbar') }
+      return { ok: false, message: storageErrorMessage(error, de('Lokaler Spielstandsspeicher ist nicht verfügbar')) }
     }
   }
 
@@ -7194,7 +7249,7 @@ export class GameState {
       for (const visitorId of [...queue]) {
         const visitor = this.getVisitor(visitorId)
         if (!visitor || visitor.targetId !== buildingId) continue
-        this.leaveQueueOnFoot(visitor, 'Dieses Angebot ist nicht mehr da.')
+        this.leaveQueueOnFoot(visitor, de('Dieses Angebot ist nicht mehr da.'))
       }
       this.facilityQueues.delete(buildingId)
     })
@@ -7216,7 +7271,7 @@ export class GameState {
           existingQueue?.forEach((visitorId) => {
             const visitor = this.getVisitor(visitorId)
             if (!visitor || visitor.targetId !== building.id) return
-            this.leaveQueueOnFoot(visitor, 'Dieses Angebot hat inzwischen geschlossen.')
+            this.leaveQueueOnFoot(visitor, de('Dieses Angebot hat inzwischen geschlossen.'))
           })
           this.facilityQueues.delete(building.id)
           return
@@ -7264,7 +7319,7 @@ export class GameState {
               this.state.festival.metrics.stockouts++
               visitor.emotion = 'sad'
               visitor.emotionMinutes = 45
-              this.leaveQueueOnFoot(visitor, 'Ausverkauft! Hier fehlt Nachschub.')
+              this.leaveQueueOnFoot(visitor, de('Ausverkauft! Hier fehlt Nachschub.'))
               continue
             }
             visitor.thought = waitingThought
@@ -7394,7 +7449,7 @@ export class GameState {
     target: PlacedBuilding,
   ): void {
     if (isShopServiceKind(target.kind) && !this.isVisitorAtShopCounter(visitor, target)) {
-      this.leaveQueueOnFoot(visitor, 'Ich gehe zur Vorderseite des Ladens.')
+      this.leaveQueueOnFoot(visitor, de('Ich gehe zur Vorderseite des Ladens.'))
       return
     }
     if (target.kind === 'ride' && this.getRideAccessIssue(target)) {
@@ -7414,7 +7469,7 @@ export class GameState {
         const queue = this.facilityQueues.get(target.id) ?? []
         if (!queue.includes(visitor.id)) queue.push(visitor.id)
         this.facilityQueues.set(target.id, queue)
-        visitor.state = 'queuing'; visitor.thought = 'Ich warte auf meinen Bungeesprung.'
+        visitor.state = 'queuing'; visitor.thought = de('Ich warte auf meinen Bungeesprung.')
         return
       }
       target.bungeeVisitorId = visitor.id
@@ -7442,7 +7497,8 @@ export class GameState {
               : target.kind === 'shirt'
                 ? interaction.shirt
                 : interaction.food
-    visitor.thought = target.rideType === 'bungee' ? 'Jetzt geht es hoch zum Bungeesprung!' : `Ich besuche ${target.kind === 'ride' ? rideProfile(target).name : BUILDINGS[target.kind].name}.`
+    const visited = target.kind === 'ride' ? rideProfile(target).name : BUILDINGS[target.kind].name
+    visitor.thought = target.rideType === 'bungee' ? de('Jetzt geht es hoch zum Bungeesprung!') : de`Ich besuche ${named(visited)}.`
   }
 
   private recallCoasterTrainInternal(coaster: Coaster): void {
@@ -7545,11 +7601,11 @@ export class GameState {
         visitor.state = 'injured'
         visitor.targetId = null
         visitor.route = []
-        visitor.thought = 'Ich bin neben dem Becken aufgeschlagen!'
+        visitor.thought = de('Ich bin neben dem Becken aufgeschlagen!')
       },
     })
     stepAttractions(this.state.attractions, {
-      legacyIds: this.legacyAttractionIds(),
+      legacyIds: legacyAttractionIds(this.state),
       visitors: this.state.visitors,
       simTick: this.state.simTick,
       minutes,
@@ -7570,7 +7626,7 @@ export class GameState {
         visitor.state = 'injured'
         visitor.targetId = null
         visitor.route = []
-        visitor.thought = 'Ich bin neben dem Becken aufgeschlagen!'
+        visitor.thought = de('Ich bin neben dem Becken aufgeschlagen!')
       },
     })
   }
@@ -7924,10 +7980,10 @@ export class GameState {
       }
     }
 
-    this.state.attractions.forEach((attraction) => {
-      const entrance = attraction.access.entrance
-      if (!entrance || attraction.access.mode !== 'queuedEntrance') return
-      const access = { x: entrance.x, y: entrance.elevation, z: entrance.z }
+    const claimFrom = (
+      access: { x: number; y: number; z: number },
+      target: { x: number; z: number },
+    ): void => {
       claimQueue(
         this.getAccessPathNeighbors(access)
           .map((cell) => this.getPathAt(cell.x, cell.z, cell.elevation))
@@ -7935,45 +7991,34 @@ export class GameState {
             (path): path is PlacedBuilding =>
               Boolean(path && path.pathType === 'queue' && !claimed.has(path.id)),
           )
-          .map((path) => ({
-            path,
-            target: { x: entrance.x, z: entrance.z },
-          })),
+          .map((path) => ({ path, target: { x: target.x, z: target.z } })),
       )
+    }
+
+    // Records claim first, in their (creation) order, as before C5: a queue
+    // between two entrances keeps its direction in existing saves. A record a
+    // live system owns claims at the live entrance, because this runs before
+    // `emit` refreshes the projection, which may still hold the old one.
+    const legacyIds = legacyAttractionIds(this.state)
+    const liveEntrances = this.liveQueueEntrances()
+    this.state.attractions.forEach((attraction) => {
+      if (attraction.access.mode !== 'queuedEntrance') return
+      const recordEntrance = attraction.access.entrance
+      const entrance = isLegacyAttractionId(attraction.id, legacyIds)
+        ? liveEntrances.get(attraction.id)
+        : recordEntrance && { x: recordEntrance.x, y: recordEntrance.elevation, z: recordEntrance.z }
+      if (entrance) claimFrom(entrance, entrance)
     })
 
+    // Live rows without a queued record (not yet projected, pools, rides
+    // without a migrated record) claim afterwards in the historical order.
     this.state.coasters.forEach((coaster) => {
-      if (!coaster.entrance) return
-      claimQueue(
-        this.getAccessPathNeighbors(coaster.entrance)
-          .map((cell) => this.getPathAt(cell.x, cell.z, cell.elevation))
-          .filter(
-            (path): path is PlacedBuilding =>
-              Boolean(path && path.pathType === 'queue' && !claimed.has(path.id)),
-          )
-          .map((path) => ({
-            path,
-            target: { x: coaster.entrance!.x, z: coaster.entrance!.z },
-          })),
-      )
+      if (coaster.entrance) claimFrom(coaster.entrance, coaster.entrance)
     })
 
     ;(this.state.courses ?? []).forEach((course) => {
       const entrance = courseEntrance(course)
-      if (!entrance) return
-      const access = { x: entrance.x, y: entrance.elevation, z: entrance.z }
-      claimQueue(
-        this.getAccessPathNeighbors(access)
-          .map((cell) => this.getPathAt(cell.x, cell.z, cell.elevation))
-          .filter(
-            (path): path is PlacedBuilding =>
-              Boolean(path && path.pathType === 'queue' && !claimed.has(path.id)),
-          )
-          .map((path) => ({
-            path,
-            target: { x: entrance.x, z: entrance.z },
-          })),
-      )
+      if (entrance) claimFrom({ x: entrance.x, y: entrance.elevation, z: entrance.z }, entrance)
     })
 
     this.state.buildings
@@ -7982,10 +8027,7 @@ export class GameState {
       )
       .forEach((building) => {
         if (building.kind === 'ride') {
-          if (building.rideEntrance) claimQueue(this.getAccessPathNeighbors(building.rideEntrance)
-            .map(c=>this.getPathAt(c.x,c.z,c.elevation))
-            .filter((p): p is PlacedBuilding=>Boolean(p && p.pathType==='queue' && !claimed.has(p.id)))
-            .map(path=>({path,target:building.rideEntrance!})))
+          if (building.rideEntrance) claimFrom(building.rideEntrance, building.rideEntrance)
           return
         }
         const seeds = this.getFacilityAccessCells(building)
@@ -8050,6 +8092,22 @@ export class GameState {
         })
       path.queueEntryDirection = normalNeighbors[0]?.entryDirection
     })
+  }
+
+  /** Entrance of every live coaster, course and `ride` building, by id. */
+  private liveQueueEntrances(): Map<string, { x: number; y: number; z: number }> {
+    const entrances = new Map<string, { x: number; y: number; z: number }>()
+    for (const coaster of this.state.coasters) {
+      if (coaster.entrance) entrances.set(coaster.id, coaster.entrance)
+    }
+    for (const course of this.state.courses ?? []) {
+      const entrance = courseEntrance(course)
+      if (entrance) entrances.set(course.id, { x: entrance.x, y: entrance.elevation, z: entrance.z })
+    }
+    for (const building of this.state.buildings) {
+      if (building.kind === 'ride' && building.rideEntrance) entrances.set(building.id, building.rideEntrance)
+    }
+    return entrances
   }
 
   private getAdjacentQueuePaths(path: PlacedBuilding): PlacedBuilding[] {
@@ -8139,7 +8197,7 @@ export class GameState {
       visitor.state = 'exiting'
       visitor.movementBoostMinutes =
         SIMULATION_CONFIG.visitors.movement.evacuationBoostMinutes
-      visitor.thought = 'Der Weg ist weg – ich suche schnell sicheren Boden!'
+      visitor.thought = de('Der Weg ist weg – ich suche schnell sicheren Boden!')
     })
   }
 
@@ -8150,9 +8208,13 @@ export class GameState {
     this.state.courses.forEach((course) => {
       course.queue = course.queue.filter((queuedId) => queuedId !== visitorId)
     })
-    this.state.attractions.forEach((attraction) => {
+    // Only canonical records own their queue; a projection record's queue is a
+    // stale copy that the next refresh overwrites and must not be written.
+    // The shape check needs no building scan on this per-visitor path.
+    for (const attraction of this.state.attractions) {
+      if (!isCanonicalAttractionRecord(attraction) || !attraction.queue.includes(visitorId)) continue
       attraction.queue = attraction.queue.filter((queuedId) => queuedId !== visitorId)
-    })
+    }
     this.facilityQueues.forEach((queue) => {
       const index = queue.indexOf(visitorId)
       if (index >= 0) queue.splice(index, 1)
@@ -9226,12 +9288,12 @@ export class GameState {
       components: this.bandSupplyComponents,
       usableParkingIdsByComponent: parkingByComponent,
     })
-    const keep = new Set(planned.map((item) => item.bandId))
+    const plannedBands = new Set(planned.map((item) => item.bandId))
     for (const actor of this.state.bandActors) {
-      if (!keep.has(actor.bandId)) actor.state = 'leaving'
+      if (!plannedBands.has(actor.bandId)) actor.state = 'leaving'
     }
     this.state.bandActors = this.state.bandActors.filter(
-      (actor) => keep.has(actor.bandId) || actor.state === 'leaving',
+      (actor) => plannedBands.has(actor.bandId) || actor.state === 'leaving',
     )
     this.state.logistics.roadVehicles = this.state.logistics.roadVehicles.filter((vehicle) => {
       if (vehicle.kind !== 'tourBus') return true
@@ -9710,7 +9772,7 @@ export class GameState {
       visitor.backstageIntrusion = true
       visitor.backstageLingerMinutes = SIMULATION_CONFIG.bandSupply.fanLingerMinutes
       visitor.targetId = null
-      visitor.thought = 'Ich schaue mal hinter die Bühne – nur ganz kurz.'
+      visitor.thought = de('Ich schaue mal hinter die Bühne – nur ganz kurz.')
     }
   }
 
@@ -9720,7 +9782,9 @@ export class GameState {
     if (reason === 'mutate' && this.networkMode !== 'client') {
       this.worldRevision += 1
     this.editRevision += 1
-      this.syncLegacyAttractionRecords()
+      // A way-area batch emits per cell but never touches attractions; the
+      // closing emit after the batch syncs once.
+      if (!this.wayBatch) this.syncLegacyAttractionRecords()
     }
     if (!this.wayBatch) this.listeners.forEach((listener) => listener(this.state))
   }
@@ -9733,19 +9797,5 @@ export class GameState {
     refreshLegacyAttractionRecords(this.state)
   }
 
-  /**
-   * Attractions a dedicated system already drives: coasters run on
-   * `CoasterSimulation`, courses on `stepCourses` and rides on the building
-   * pipeline. `stepAttractions` must not admit or move those guests again.
-   */
-  private legacyAttractionIds(): ReadonlySet<string> {
-    const ids = new Set<string>()
-    for (const coaster of this.state.coasters ?? []) ids.add(coaster.id)
-    for (const course of this.state.courses ?? []) ids.add(course.id)
-    for (const building of this.state.buildings) {
-      if (building.kind === 'ride') ids.add(building.id)
-    }
-    return ids
-  }
 }
 

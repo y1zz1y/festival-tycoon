@@ -9,51 +9,55 @@ import {
   fairTicketPrices,
   priceAcceptance,
 } from '../game/ticketDemand'
+import { formatMoney, formatNumber, formatPercent, joinParts, t } from '../i18n'
 
 type Field = readonly [path: string, label: string, step?: number]
 type Group = readonly [title: string, fields: readonly Field[]]
 
 const willingnessFields = (prefix: string): Field[] => [
-  [`${prefix}.base`, 'Grundwert'],
-  [`${prefix}.beauty`, 'Schönheit'],
-  [`${prefix}.history`, 'Festivalhistorie'],
-  [`${prefix}.size`, 'Festivalgröße'],
-  [`${prefix}.lineupDraw`, 'Line-up-Zugkraft'],
-  [`${prefix}.lineupPrice`, 'Line-up-Preiswert'],
-  [`${prefix}.attractions`, 'Attraktionen'],
-  [`${prefix}.complaints`, 'Beschwerden'],
+  [`${prefix}.base`, t('Grundwert')],
+  [`${prefix}.beauty`, t('Schönheit')],
+  [`${prefix}.history`, t('Festivalhistorie')],
+  [`${prefix}.size`, t('Festivalgröße')],
+  [`${prefix}.lineupDraw`, t('Line-up-Zugkraft')],
+  [`${prefix}.lineupPrice`, t('Line-up-Preiswert')],
+  [`${prefix}.attractions`, t('Attraktionen')],
+  [`${prefix}.complaints`, t('Beschwerden')],
 ]
 
 const GROUPS: readonly Group[] = [
-  ['Zahlungsbereitschaft · Tag', willingnessFields('willingness.day')],
-  ['Zahlungsbereitschaft · Camping', willingnessFields('willingness.camping')],
-  ['Faire Preise', [
-    ['fairPrice.dayBaseFactor', 'Tag · Basisfaktor'],
-    ['fairPrice.dayWillingnessFactor', 'Tag · Bereitschaftsfaktor'],
-    ['fairPrice.campingBaseFactor', 'Camping · Basisfaktor'],
-    ['fairPrice.campingWillingnessFactor', 'Camping · Bereitschaftsfaktor'],
+  [joinParts(t('Zahlungsbereitschaft'), t('Tag')), willingnessFields('willingness.day')],
+  [joinParts(t('Zahlungsbereitschaft'), t('Camping')), willingnessFields('willingness.camping')],
+  [t('Faire Preise'), [
+    ['fairPrice.dayBaseFactor', joinParts(t('Tag'), t('Basisfaktor'))],
+    ['fairPrice.dayWillingnessFactor', joinParts(t('Tag'), t('Bereitschaftsfaktor'))],
+    ['fairPrice.campingBaseFactor', joinParts(t('Camping'), t('Basisfaktor'))],
+    ['fairPrice.campingWillingnessFactor', joinParts(t('Camping'), t('Bereitschaftsfaktor'))],
   ]],
-  ['Preisakzeptanz', [
-    ['priceAcceptance.fullUntilRatio', 'Volle Akzeptanz bis Preis/Fair'],
-    ['priceAcceptance.floorFromRatio', 'Minimum ab Preis/Fair'],
-    ['priceAcceptance.minimum', 'Minimale Akzeptanz'],
+  [t('Preisakzeptanz'), [
+    ['priceAcceptance.fullUntilRatio', t('Volle Akzeptanz bis Preis/Fair')],
+    ['priceAcceptance.floorFromRatio', t('Minimum ab Preis/Fair')],
+    ['priceAcceptance.minimum', t('Minimale Akzeptanz')],
   ]],
-  ['Teilnahme', [
-    ['attendance.dayBaseGuests', 'Tag · Basisgäste', 1],
-    ['attendance.dayLineupGuests', 'Tag · Gäste durch Line-up', 1],
-    ['attendance.daySizeGuests', 'Tag · Gäste durch Größe', 1],
-    ['attendance.dayBaseShare', 'Tag · Basisanteil'],
-    ['attendance.dayAcceptanceShare', 'Tag · Akzeptanzanteil'],
-    ['attendance.campingBaseGuests', 'Camping · Basisgäste', 1],
-    ['attendance.campingAcceptanceShare', 'Camping · Akzeptanzanteil'],
+  [t('Teilnahme'), [
+    ['attendance.dayBaseGuests', joinParts(t('Tag'), t('Basisgäste')), 1],
+    ['attendance.dayLineupGuests', joinParts(t('Tag'), t('Gäste durch Line-up')), 1],
+    ['attendance.daySizeGuests', joinParts(t('Tag'), t('Gäste durch Größe')), 1],
+    ['attendance.dayBaseShare', joinParts(t('Tag'), t('Basisanteil'))],
+    ['attendance.dayAcceptanceShare', joinParts(t('Tag'), t('Akzeptanzanteil'))],
+    ['attendance.campingBaseGuests', joinParts(t('Camping'), t('Basisgäste')), 1],
+    ['attendance.campingAcceptanceShare', joinParts(t('Camping'), t('Akzeptanzanteil'))],
   ]],
-  ['Anreise', [
-    ['arrivals.minimum', 'Minimum'],
-    ['arrivals.base', 'Basis'],
-    ['arrivals.acceptanceFactor', 'Akzeptanzfaktor'],
-    ['arrivals.maximum', 'Maximum'],
+  [t('Anreise'), [
+    ['arrivals.minimum', t('Minimum')],
+    ['arrivals.base', t('Basis')],
+    ['arrivals.acceptanceFactor', t('Akzeptanzfaktor')],
+    ['arrivals.maximum', t('Maximum')],
   ]],
 ]
+
+/** A 0–1 share as a percentage with one decimal. */
+const percent = (share: number): string => formatPercent(Math.round(share * 1000) / 10)
 
 const readPath = (root: TicketDemandTuning, path: string): number =>
   path.split('.').reduce<unknown>(
@@ -121,11 +125,11 @@ export function setupDemandDebugUI(options: {
       priceAcceptance(snapshot.campingTicketPrice, fair.camping, draft) *
       estimate.willingness.camping
     results.innerHTML = `
-      <div><dt>Zahlungsbereitschaft</dt><dd>Tag ${(estimate.willingness.day * 100).toFixed(1)} % · Camping ${(estimate.willingness.camping * 100).toFixed(1)} %</dd></div>
-      <div><dt>Faire Preise</dt><dd>${fair.day.toLocaleString('de-DE')} € · ${fair.camping.toLocaleString('de-DE')} €</dd></div>
-      <div><dt>Gesamtakzeptanz</dt><dd>Tag ${(dayAcceptance * 100).toFixed(1)} % · Camping ${(campingAcceptance * 100).toFixed(1)} %</dd></div>
-      <div><dt>Erwartete Teilnehmer</dt><dd>${estimate.expectedDayGuests.toLocaleString('de-DE')} Tag · ${estimate.expectedCampers.toLocaleString('de-DE')} Camping</dd></div>
-      <div><dt>Erwarteter Erlös</dt><dd>${(estimate.expectedDayRevenue + estimate.expectedCampingRevenue).toLocaleString('de-DE')} €</dd></div>
+      <div><dt>${t('Zahlungsbereitschaft')}</dt><dd>${joinParts(t`Tag ${percent(estimate.willingness.day)}`, t`Camping ${percent(estimate.willingness.camping)}`)}</dd></div>
+      <div><dt>${t('Faire Preise')}</dt><dd>${joinParts(formatMoney(fair.day), formatMoney(fair.camping))}</dd></div>
+      <div><dt>${t('Gesamtakzeptanz')}</dt><dd>${joinParts(t`Tag ${percent(dayAcceptance)}`, t`Camping ${percent(campingAcceptance)}`)}</dd></div>
+      <div><dt>${t('Erwartete Teilnehmer')}</dt><dd>${joinParts(t`${formatNumber(estimate.expectedDayGuests)} Tag`, t`${formatNumber(estimate.expectedCampers)} Camping`)}</dd></div>
+      <div><dt>${t('Erwarteter Erlös')}</dt><dd>${formatMoney(estimate.expectedDayRevenue + estimate.expectedCampingRevenue)}</dd></div>
     `
   }
 
@@ -144,7 +148,7 @@ export function setupDemandDebugUI(options: {
     getGame().updateDemandTuning(draft)
     syncInputs()
     refresh()
-    showToast('Nachfrage-Tuning übernommen')
+    showToast(t('Nachfrage-Tuning übernommen'))
   })
   panel.querySelector('#reset-demand-debug')!.addEventListener('click', () => {
     draft = createTicketDemandTuning()

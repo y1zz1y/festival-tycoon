@@ -17,7 +17,8 @@ sind abgeleitete Darstellung desselben Zustands.
 | Festivallust / Gedränge | `src/game/visitorCrowdingSimulation.ts`, `src/game/simulationConfig.ts` | `Visitor.motivation`, Crowd-/Panikpass, `crowding.motivation*` |
 | Festival-Schlafrhythmus | `src/game/visitorSleep.ts`, `src/game/simulationConfig.ts` | `camping.sleepSchedule`, `sampleFestivalSleepRhythm`, `isMinuteInSleepWindow` |
 | Inventar (Zelt, Essen, Pyro, …) | `src/game/inventory.ts` | Inventarfelder und Verbrauch |
-| Gedanken gruppieren | `src/game/visitorThoughts.ts` | `groupVisitorsByThought` |
+| Gedanken gruppieren | `src/game/visitorThoughts.ts` | `groupVisitorsByThought` (sortiert kanonisch deutsch); `CONCERT_TOPLESS_*` sind kanonische `de`-Konstanten |
+| Gedankentexte übersetzen | `src/i18n/en/visitors.ts` | Gedanken sind kanonisches Deutsch (`de` + `named`/`verbatim`/`num`/`listOf`, Plural über `plural`); die UI zeigt sie mit `localize()`, siehe `docs/i18n.md` |
 | Statusblasen / Panik-Schwellen | `src/game/visitorBubbles.ts` | `visitorBubbleKind`, `spontaneousPanicChance` |
 | Musikgeschmack | `src/game/musicTaste.ts` | `GENRES`, `musicAppeal` |
 | Beschwerden | `src/game/complaints.ts` | `COMPLAINT_TOPICS`, Zähler |
@@ -62,7 +63,8 @@ sind abgeleitete Darstellung desselben Zustands.
 - Attraktionsziele sind aufgeteilt: `findReachableRide`, `findReachableCoaster`
   und `findReachableCourse` kennen Ride-Angebot, Queue-Kapazität und die von
   einem Gast gemiedene Bahn. `findReachableAttraction` bedient nur kanonische
-  Attraktionen **ohne** Legacy-Besitzer und überspringt IDs aus
+  Attraktionen **ohne** Legacy-Besitzer (`isCanonicalAttractionRecord`, reine
+  Formprüfung ohne Gebäude-Scan) und überspringt so Datensätze von
   `state.coasters`, `state.courses` und Ride-Gebäuden, sonst wird eine Bahn
   zweimal angeboten und die Fachregeln fallen weg.
 - Gäste erreichen Imbiss und Getränkestand ausschließlich an der gedrehten

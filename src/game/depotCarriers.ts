@@ -1,3 +1,4 @@
+import { de } from '../i18n/marker'
 import { getTerrainHeight } from './terrain'
 import { bookFinance, CARRIER_WAGE_PER_MINUTE } from './finance'
 import type { GameSnapshot } from './GameState'
@@ -63,7 +64,7 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
     if (!r.job && r.phase === 'idle' && !byCell.has(key(r.position))) r.position=access(home)[0] ?? r.position
     if (r.path.length) {
       const next=r.path[0]!, path=byCell.get(key(next))
-      if (!path || !canStep(r.position,next)) { r.path=[]; r.status='Verbindung unterbrochen; warte auf erreichbaren Weg'; continue }
+      if (!path || !canStep(r.position,next)) { r.path=[]; r.status=de('Verbindung unterbrochen; warte auf erreichbaren Weg'); continue }
       const way=wayInfo(s,next.x,next.z,'foot',path.wayType)
       const weight=r.cargo ? 3:2
       const density=((occupancy.get(key(next))??0) - (key(next)===key(r.position)?weight:0)+weight-1)/way.capacity
@@ -73,15 +74,15 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
         occupancy.set(old,Math.max(0,(occupancy.get(old)??0)-weight)); occupancy.set(dest,(occupancy.get(dest)??0)+weight)
         r.position=r.path.shift()!;r.progress=0
       }
-      r.status=density>=.75?'Mit Ladung durch Gedränge':r.job?.phase==='pickup'?'Hole Waren ab':'Liefere Waren'
+      r.status=density>=.75?de('Mit Ladung durch Gedränge'):r.job?.phase==='pickup'?de('Hole Waren ab'):de('Liefere Waren')
       continue
     }
     if (r.job) {
       const job=r.job, kind=r.kind as Supply
       const destination = job.phase==='pickup' ? i.depots.find(d=>d.id===job.sourceId) : job.phase==='home' ? home : job.destinationKind==='depot' ? i.depots.find(d=>d.id===job.destinationId) : s.buildings.find(b=>b.id===job.destinationId)
-      if (!destination) { job.phase='home'; r.status='Ziel fehlt; bringe Ladung zurück'; continue }
+      if (!destination) { job.phase='home'; r.status=de('Ziel fehlt; bringe Ladung zurück'); continue }
       const goals=access(destination)
-      if(!goals.some(p=>key(p)===key(r.position))) { if(!go(r,goals)) r.status='Warte auf Wegverbindung'; continue }
+      if(!goals.some(p=>key(p)===key(r.position))) { if(!go(r,goals)) r.status=de('Warte auf Wegverbindung'); continue }
       if(job.phase==='pickup') {
         const source=destination as Depot
         const quantity=Math.min(job.quantity,Math.max(0,source.stock[kind]))
@@ -92,7 +93,7 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
         else { const stock=i.shops[destination.id]??=emptyStock();stock[kind]+=r.cargo }
         r.cargo=0;job.phase='home'
       } else {
-        home.stock[kind]+=r.cargo;r.cargo=0;delete r.job;r.phase='idle';r.targetId='';r.status='Warte auf Transportbedarf'
+        home.stock[kind]+=r.cargo;r.cargo=0;delete r.job;r.phase='idle';r.targetId='';r.status=de('Warte auf Transportbedarf')
       }
       continue
     }
@@ -105,7 +106,7 @@ export function updateDepotCarriers(s: GameSnapshot, dt: number, findPath: (from
       const sourceAccess=access(source), targetAccess=access(destination)
       const route=findPath(r.position,sourceAccess)
       if(route===null || !targetAccess.length || findPath(route.at(-1)??r.position,targetAccess)===null) return false
-      r.kind=kind;r.targetId=destination.id;r.path=route;r.phase='outbound';r.job={sourceId:source.id,destinationId:destination.id,destinationKind,quantity,phase:'pickup'};r.status='Hole Waren ab'
+      r.kind=kind;r.targetId=destination.id;r.path=route;r.phase='outbound';r.job={sourceId:source.id,destinationId:destination.id,destinationKind,quantity,phase:'pickup'};r.status=de('Hole Waren ab')
       return true
     }
     const nearer=(a:{x:number;z:number},b:{x:number;z:number})=>Math.abs(a.x-home.x)+Math.abs(a.z-home.z)-Math.abs(b.x-home.x)-Math.abs(b.z-home.z)

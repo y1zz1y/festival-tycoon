@@ -1,5 +1,6 @@
 import type { GameState, ActionResult } from '../game/GameState'
 import type { GameCommand } from './protocol'
+import { de, num, verbatim } from '../i18n/marker'
 
 export function applyGameCommand(game: GameState, command: GameCommand): ActionResult {
   switch (command.type) {
@@ -126,7 +127,7 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       return game.undoLastBuild()
     case 'setSpeed':
       game.setSpeed(command.speed)
-      return { ok: true, message: `Tempo ${command.speed}` }
+      return { ok: true, message: de`Tempo ${num(command.speed)}` }
     case 'hireStaff':
       return game.hireStaff(command.role)
     case 'fireStaff':
@@ -228,10 +229,10 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
         command.dispatchMode,
         command.intervalMinutes,
       )
-      return { ok: true, message: 'Achterbahn-Einstellungen gespeichert' }
+      return { ok: true, message: de('Achterbahn-Einstellungen gespeichert') }
     case 'updateCoasterPrice':
       game.updateCoasterPrice(command.coasterId, command.price)
-      return { ok: true, message: 'Preis geändert' }
+      return { ok: true, message: de('Preis geändert') }
     case 'setCoasterOperationMode':
       return game.setCoasterOperationMode(command.coasterId, command.mode)
     case 'recallCoasterTrain':
@@ -242,7 +243,7 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
         command.price,
         command.allOfKind,
       )
-      return { ok: true, message: 'Preis geändert' }
+      return { ok: true, message: de('Preis geändert') }
     case 'configureShirtStall':
       return game.configureShirtStall(command.buildingId, {
         color: command.color,
@@ -250,18 +251,18 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
       })
     case 'updateEntryPrice':
       game.updateEntryPrice(command.price)
-      return { ok: true, message: 'Tagesticketpreis geändert' }
+      return { ok: true, message: de('Tagesticketpreis geändert') }
     case 'updateCampingTicketPrice':
       game.updateCampingTicketPrice(command.price)
-      return { ok: true, message: 'Campingticketpreis geändert' }
+      return { ok: true, message: de('Campingticketpreis geändert') }
     case 'updateDemandTuning':
       game.updateDemandTuning(command.tuning)
-      return { ok: true, message: 'Nachfrage-Tuning geändert' }
+      return { ok: true, message: de('Nachfrage-Tuning geändert') }
     case 'updateSecurityGate':
       return game.updateSecurityGate(command.id, command.config)
     case 'setDayPlanHour':
       game.setDayPlanHour(command.offer, command.hour, command.active)
-      return { ok: true, message: 'Tagesplan geändert' }
+      return { ok: true, message: de('Tagesplan geändert') }
     case 'updateDayVisitorWindow':
       return game.updateDayVisitorWindow(command.entryHour, command.exitHour)
     case 'updateCampingCapacityBuffer':
@@ -286,5 +287,5 @@ export function applyGameCommand(game: GameState, command: GameCommand): ActionR
 }
 
 function assertUnhandledCommand(command: never): never {
-  throw new Error(`Unbekannter Spielbefehl: ${JSON.stringify(command)}`)
+  throw new Error(de`Unbekannter Spielbefehl: ${verbatim(JSON.stringify(command))}`)
 }

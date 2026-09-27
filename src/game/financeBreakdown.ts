@@ -6,6 +6,7 @@ import { rideProfile } from './flatRides'
  * the same sources the hourly running costs already use, without changing
  * how the simulation books money.
  */
+import { de, num } from '../i18n/marker'
 import { BUILDINGS, type BuildingKind } from './catalog'
 import { COURSE_SPECS, courseHourlyUpkeep } from './courseAttractions'
 import {
@@ -31,14 +32,14 @@ import {
 const BOOTH_KINDS = new Set<BuildingKind>(['food', 'alcohol', 'shirt', 'mascot', 'toilet', 'waterPoint', 'shower'])
 
 export const FINANCE_BREAKDOWN_SECTION_NAMES = {
-  stands: 'Stände',
-  attractions: 'Attraktionen',
-  stages: 'Bühnen',
-  other: 'Sonstiges',
-  wages: 'Löhne',
-  carriers: 'Träger',
-  loan: 'Darlehen',
-  bookings: 'Buchungen',
+  stands: de('Stände'),
+  attractions: de('Attraktionen'),
+  stages: de('Bühnen'),
+  other: de('Sonstiges'),
+  wages: de('Löhne'),
+  carriers: de('Träger'),
+  loan: de('Darlehen'),
+  bookings: de('Buchungen'),
 } as const
 
 export type FinanceBreakdownSectionId = keyof typeof FINANCE_BREAKDOWN_SECTION_NAMES
@@ -66,8 +67,8 @@ export type FinanceCategoryBreakdown = {
 export type FinanceBreakdown = Partial<Record<FinanceCategory, FinanceCategoryBreakdown>>
 
 const RUNNING_HINT =
-  'Aktuelle Tageskosten — entspricht der Spalte Prognose morgen.'
-const BANDS_HINT = 'Gebuchte Gagen, bereits bei der Buchung gezahlt.'
+  de('Aktuelle Tageskosten — entspricht der Spalte Prognose morgen.')
+const BANDS_HINT = de('Gebuchte Gagen, bereits bei der Buchung gezahlt.')
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100
@@ -177,12 +178,12 @@ function collectUpkeep(state: GameSnapshot): FinanceCategoryBreakdown | undefine
   const truckRate = SIMULATION_CONFIG.logistics.garbageTruckUpkeepPerHour
   for (let n = 0; n < garbageTruckCount(state); n++) {
     hourlyTotal += truckRate
-    addHourlyItem(buckets.other, 'garbageTruck', 'Müllwagen', truckRate)
+    addHourlyItem(buckets.other, 'garbageTruck', de('Müllwagen'), truckRate)
   }
   if (state.power?.backupActive) {
     const hourly = (SIMULATION_CONFIG.power.backupFuelPerHour) * factor
     hourlyTotal += hourly
-    addHourlyItem(buckets.other, 'backupFuel', 'Notstromaggregat (Brennstoff)', hourly)
+    addHourlyItem(buckets.other, 'backupFuel', de('Notstromaggregat (Brennstoff)'), hourly)
   }
 
   const sections = (['stands', 'attractions', 'stages', 'other'] as const)
@@ -224,7 +225,7 @@ function collectStaff(state: GameSnapshot): FinanceCategoryBreakdown | undefined
           label: FINANCE_BREAKDOWN_SECTION_NAMES.carriers,
           items: [{
             id: 'carriers',
-            label: 'Träger',
+            label: de('Träger'),
             count: carriers,
             amount: dailyFromHourly(carrierHourly),
           }],
@@ -252,7 +253,7 @@ function collectInterest(state: GameSnapshot): FinanceCategoryBreakdown | undefi
       label: FINANCE_BREAKDOWN_SECTION_NAMES.loan,
       items: [{
         id: 'loan',
-        label: `Offenes Darlehen · ${(LOAN.interestPerDay * 100).toFixed(1)} % / Tag`,
+        label: de`Offenes Darlehen · ${num(LOAN.interestPerDay * 100, 1)} % / Tag`,
         count: 1,
         amount: daily,
       }],

@@ -1,3 +1,4 @@
+import { keep } from '../i18n/marker'
 import { normalizeAccessControls } from './accessControl'
 import { normalizeBackstageCell, emptyBandSupplySnapshot, type BackstageCell } from './bandSupply'
 import { normalizeBandActor, type BandActor } from './bandActors'
@@ -20,7 +21,8 @@ import { DEFAULT_SECURITY_CONFIG } from './security'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import { defaultShirtSettings, normalizeShirtColor, normalizeShirtStyle, normalizeWornShirt } from './shopGoods'
 import { isWasteBin } from './decorationWalls'
-import { refreshLegacyAttractionRecords } from './attractions/projections'
+import { refreshLegacyAttractionRecords, releaseGuestsOfOrphans } from './attractions/projections'
+import { renameDuplicateLiveIds } from './attractions/dualModel'
 import { syncStageAudience } from './stageAudience'
 import { normalizeTerrain, normalizeWaterLevel } from './terrain'
 import type { Cell, Visitor } from './types/entities'
@@ -94,7 +96,6 @@ export function normalizeSnapshotForRuntime(context: SnapshotRepairContext): voi
   )
   state.waterLevel = normalizeWaterLevel(state.waterLevel)
   syncStageAudience(state)
-  refreshLegacyAttractionRecords(state)
   state.attractiveness ??= { average: 0, maximum: 0, minimum: 0, cells: [] }
   state.partyMood ??= { average: 0, maximum: 0, minimum: 0, cells: [] }
   state.dayPlan = normalizeDayPlan(state.dayPlan)
@@ -155,7 +156,7 @@ export function repairSnapshotEntities(context: SnapshotRepairContext): number {
       building.securityConfig.flowShare ??= DEFAULT_SECURITY_CONFIG.flowShare
     }
     if (building.kind === 'stage') {
-      const names = ['Neon Echo', 'Festival Riot', 'Moonlight Avenue', 'Bassgarten']
+      const names = keep(['Neon Echo', 'Festival Riot', 'Moonlight Avenue', 'Bassgarten'])
       building.bandName ??= names[Math.abs(building.x + building.z) % names.length]
     }
     if (isWasteBin(building.kind)) building.wasteFill ??= 0
@@ -169,6 +170,15 @@ export function repairSnapshotEntities(context: SnapshotRepairContext): number {
     }
   })
   migrateLegacyCampInstallations(state)
+  // 0.2.11 saves can hold one course id twice; the dual model pairs rows and
+  // records by id, so later duplicates get their own id first.
+  renameDuplicateLiveIds(state)
+  // Projection records are derived only now, from the repaired live rows
+  // (normalized courses, `queue ??= []`, resolved coaster types, known ride
+  // types, migrated camp installations). The same pass drops orphans of a
+  // mixed save, so they are repaired before anything could simulate them,
+  // and releases the guests an orphan still held.
+  releaseGuestsOfOrphans(state, refreshLegacyAttractionRecords(state))
   state.visitors.forEach((visitor) => repairVisitor(visitor, context))
   state.staff.forEach((member) => {
     member.route ??= []

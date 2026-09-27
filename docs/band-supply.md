@@ -41,7 +41,8 @@ Implemented. Concerts stay legal on a bare stage; supply scales show quality.
 
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
-| Graph, stats, designation, inspect text | `src/game/bandSupply.ts` | `buildBandSupplyGraph`, `computeBandSupplyStats`, `designateBackstageAreas`, `formatBackstageInspect` |
+| Graph, stats, designation | `src/game/bandSupply.ts` | `buildBandSupplyGraph`, `computeBandSupplyStats`, `designateBackstageAreas`; stage fallback name `de('Bühne')` (shown with `localizeName`) |
+| Inspect and hover text (client text, `t`) | `src/game/bandSupplyText.ts` | `formatBackstageInspect`, `formatBackstageHover`, `clockLabel`; imported only by `src/ui/entityPanel.ts` and `src/ui/contextHelp.ts` ([i18n.md](i18n.md)) |
 | Band actors / arrival plan | `src/game/bandActors.ts` | `planBandPresence`, `createTourBusVehicle`, `createBandActor` |
 | Costume / lineup | `src/game/bandLooks.ts` | `bandCostumeId`, `bandLook`, `bandRoles` (genre palette + per-act accent) |
 | Tick / place / inspect | `src/game/GameState.ts` | `designateBackstageArea`, `syncBandSupply`, `showQualityForStage`, `canPlace` lock |

@@ -1,4 +1,5 @@
 import { SIMULATION_CONFIG } from './simulationConfig'
+import { de } from '../i18n/marker'
 
 /**
  * Leicht / Normal / Schwer, chosen when a game starts and kept in its scenario
@@ -10,7 +11,7 @@ import { SIMULATION_CONFIG } from './simulationConfig'
 export const DIFFICULTIES = ['easy', 'normal', 'hard'] as const
 export type Difficulty = (typeof DIFFICULTIES)[number]
 
-export const DIFFICULTY_NAMES: Record<Difficulty, string> = { easy: 'Leicht', normal: 'Normal', hard: 'Schwer' }
+export const DIFFICULTY_NAMES: Record<Difficulty, string> = { easy: de('Leicht'), normal: de('Normal'), hard: de('Schwer') }
 
 export type DifficultyProfile = (typeof SIMULATION_CONFIG.difficulty)[Difficulty]
 

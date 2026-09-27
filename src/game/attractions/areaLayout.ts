@@ -1,4 +1,6 @@
+import { de } from '../../i18n/marker'
 import { getAttractionDefinition } from './definitions'
+import { AREA_REFERENCE_FORBIDDEN } from '../sentinels'
 import type {
   AreaCell,
   AreaLayout,
@@ -92,14 +94,14 @@ export function canPlaceAreaReference(
   reference: AreaReference,
 ): { ok: boolean; message: string } {
   if (attraction.layout.kind !== 'area') {
-    return { ok: false, message: 'Diese Attraktion besitzt keine Fläche.' }
+    return { ok: false, message: de('Diese Attraktion besitzt keine Fläche.') }
   }
   const definition = getAttractionDefinition(attraction.definitionId)
   if (!definition?.allowedReferences?.includes(reference.kind)) {
-    return { ok: false, message: 'Dieses Objekt ist auf der Fläche nicht erlaubt.' }
+    return { ok: false, message: AREA_REFERENCE_FORBIDDEN }
   }
   if (!attraction.layout.cells.some((cell) => areaCellKey(cell) === areaCellKey(reference))) {
-    return { ok: false, message: 'Das Objekt muss innerhalb der Attraktionsfläche liegen.' }
+    return { ok: false, message: de('Das Objekt muss innerhalb der Attraktionsfläche liegen.') }
   }
   return { ok: true, message: '' }
 }
@@ -127,17 +129,17 @@ export function validateAreaAttraction(attraction: Attraction): AreaValidationIs
   const definition = getAttractionDefinition(attraction.definitionId)
   const issues: AreaValidationIssue[] = []
   if (attraction.layout.cells.length === 0) {
-    issues.push({ code: 'empty', message: 'Die Attraktionsfläche ist leer.' })
+    issues.push({ code: 'empty', message: de('Die Attraktionsfläche ist leer.') })
   }
   if (definition?.requiresConnectedArea && areaComponents(attraction.layout.cells).length > 1) {
-    issues.push({ code: 'disconnected', message: 'Die Attraktionsfläche muss zusammenhängend sein.' })
+    issues.push({ code: 'disconnected', message: de('Die Attraktionsfläche muss zusammenhängend sein.') })
   }
   if (attraction.layout.accessMode !== 'free') {
     for (const point of [attraction.access.entrance, attraction.access.exit]) {
       if (point && !isAreaBoundaryCell(attraction.layout, point)) {
         issues.push({
           code: 'access-off-boundary',
-          message: 'Ein- und Ausgang müssen am Rand der Fläche liegen.',
+          message: de('Ein- und Ausgang müssen am Rand der Fläche liegen.'),
         })
       }
     }
@@ -146,7 +148,7 @@ export function validateAreaAttraction(attraction: Attraction): AreaValidationIs
     const result = canPlaceAreaReference(attraction, reference)
     if (result.ok) return
     issues.push({
-      code: result.message.includes('nicht erlaubt') ? 'reference-forbidden' : 'reference-outside',
+      code: result.message === AREA_REFERENCE_FORBIDDEN ? 'reference-forbidden' : 'reference-outside',
       message: result.message,
       referenceId: reference.id,
     })

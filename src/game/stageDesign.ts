@@ -1,20 +1,21 @@
+import { de, keep, nested, num } from '../i18n/marker'
 export const COMPONENTS = {
-  deck: {name:'Bühnenpodest',cost:80,party:0,beauty:1,power:0},
-  truss: {name:'Traversensystem',cost:110,party:0,beauty:1,power:0},
-  fireworks: {name:'Feuerwerk',cost:1000,party:12,beauty:6,power:.4},
-  sparks: {name:'Funkensprüher',cost:390,party:6,beauty:3,power:.5},
-  spot: {name:'Moving Head',cost:180,party:5,beauty:2,power:.4},
-  lineArray: {name:'Line Array',cost:230,party:8,beauty:2,power:.7},
-  fullRange: {name:'Full-Range-Lautsprecher',cost:260,party:9,beauty:-1,power:1.2},
-  subwoofer: {name:'Subwoofer',cost:340,party:11,beauty:-2,power:1.6},
-  fog: {name:'Nebelmaschine',cost:160,party:4,beauty:1,power:.8},
-  laser: {name:'Laser',cost:340,party:7,beauty:3,power:.6},
-  screen: {name:'Pixel-LED-Wand',cost:420,party:5,beauty:5,power:1.5},
-  discoBall: {name:'Diskokugel',cost:250,party:4,beauty:5,power:.1},
-  star: {name:'Deko-Stern',cost:200,party:1,beauty:4,power:0},
-  palm: {name:'Pixel-Palme',cost:120,party:1,beauty:7,power:0},
-  foh: {name:'FOH-Pult',cost:900,party:2,beauty:1,power:.6},
-  delay: {name:'Delayline',cost:520,party:7,beauty:0,power:1.4},
+  deck: {name:de('Bühnenpodest'),cost:80,party:0,beauty:1,power:0},
+  truss: {name:de('Traversensystem'),cost:110,party:0,beauty:1,power:0},
+  fireworks: {name:de('Feuerwerk'),cost:1000,party:12,beauty:6,power:.4},
+  sparks: {name:de('Funkensprüher'),cost:390,party:6,beauty:3,power:.5},
+  spot: {name:de('Moving Head'),cost:180,party:5,beauty:2,power:.4},
+  lineArray: {name:de('Line Array'),cost:230,party:8,beauty:2,power:.7},
+  fullRange: {name:de('Full-Range-Lautsprecher'),cost:260,party:9,beauty:-1,power:1.2},
+  subwoofer: {name:de('Subwoofer'),cost:340,party:11,beauty:-2,power:1.6},
+  fog: {name:de('Nebelmaschine'),cost:160,party:4,beauty:1,power:.8},
+  laser: {name:de('Laser'),cost:340,party:7,beauty:3,power:.6},
+  screen: {name:de('Pixel-LED-Wand'),cost:420,party:5,beauty:5,power:1.5},
+  discoBall: {name:de('Diskokugel'),cost:250,party:4,beauty:5,power:.1},
+  star: {name:de('Deko-Stern'),cost:200,party:1,beauty:4,power:0},
+  palm: {name:de('Pixel-Palme'),cost:120,party:1,beauty:7,power:0},
+  foh: {name:de('FOH-Pult'),cost:900,party:2,beauty:1,power:.6},
+  delay: {name:de('Delayline'),cost:520,party:7,beauty:0,power:1.4},
 } as const
 export type BrandTier = 'budget'|'touring'|'premium'
 export type Brand = {name:string;cost:number;quality:number}
@@ -29,15 +30,17 @@ const tiers=(budget:string,touring:string,premium:string):Record<BrandTier,Brand
   touring:{name:touring,cost:1.7,quality:1.2},
   premium:{name:premium,cost:2.8,quality:1.7},
 })
-const single=(quality:number):{budget:Brand}=>({budget:{name:'Standard',cost:1,quality}})
-/** One catalogue for everything with a cone in it: line arrays, tops and subs. */
-const AUDIO_BRANDS=tiers('A-Z Audio','JPK','EL-Akustisch')
-export const TRUSS_BRANDS = {
+const single=(quality:number):{budget:Brand}=>({budget:{name:keep('Standard'),cost:1,quality}})
+/** One catalogue for everything with a cone in it: line arrays, tops and subs. Brand names are proper nouns. */
+const AUDIO_BRANDS=keep(tiers('A-Z Audio','JPK','EL-Akustisch'))
+export const TRUSS_BRANDS = keep({
   budget: {name:'AluTraverse',cost:1,quality:.8},
   touring: {name:'Worldwide Truss',cost:1.6,quality:1.15},
   premium: {name:'Prolight',cost:2.3,quality:1.55},
-} as const
-export const COMPONENT_BRANDS:Record<ComponentKind,Partial<Record<BrandTier,Brand>>> = {
+} as const)
+/** Laser tiers are descriptive names, not brands: canonical German, shown with localize(). */
+const LASER_TIERS=tiers(de('Grüner Laser'),de('Bunter Laser'),de('Super-Laser'))
+export const COMPONENT_BRANDS:Record<ComponentKind,Partial<Record<BrandTier,Brand>>> = keep({
   deck:tiers('Manfred','DarkMinn','StageChill'),
   truss:TRUSS_BRANDS,
   fireworks:single(1.5),
@@ -47,14 +50,14 @@ export const COMPONENT_BRANDS:Record<ComponentKind,Partial<Record<BrandTier,Bran
   fullRange:AUDIO_BRANDS,
   subwoofer:AUDIO_BRANDS,
   fog:tiers('NebelVersand48','Nebelwerke H. Schmidt','SmokeFogFactory'),
-  laser:tiers('Grüner Laser','Bunter Laser','Super-Laser'),
+  laser:LASER_TIERS,
   screen:tiers('<no-name>','SuperLumen','LK'),
   discoBall:single(1.2),
   star:single(1.3),
   palm:single(1.1),
   foh:single(1),
   delay:single(1),
-}
+})
 export function brandsFor(kind:ComponentKind):Partial<Record<BrandTier,Brand>>{return COMPONENT_BRANDS[kind]}
 /** The make a part is sold in by default — the cheapest one, and for single-make parts the only one. */
 export function defaultBrand(kind:ComponentKind):BrandTier{return Object.keys(brandsFor(kind))[0] as BrandTier}
@@ -99,10 +102,11 @@ export type StagePart = {id:string;kind:ComponentKind;brand:BrandTier;x:number;y
 /** How the decoration lamps — a star's tubes, a palm's festoon — behave during a phase. Their tempo follows the phase's own speed fader. */
 export const DECO_PATTERNS = ['chase','sparkle','pulse','static'] as const
 export type DecoPattern = typeof DECO_PATTERNS[number]
-export const DECO_PATTERN_NAMES:Record<DecoPattern,string> = {chase:'Lauflicht',sparkle:'Funkeln',pulse:'Puls',static:'Dauerlicht'}
+export const DECO_PATTERN_NAMES:Record<DecoPattern,string> = {chase:de('Lauflicht'),sparkle:de('Funkeln'),pulse:de('Puls'),static:de('Dauerlicht')}
 export type ShowPhase = {movement?:number;pyro?:number;deco?:DecoPattern;intensity:number;speed:number;fog:number;volume:number;color:string}
 export type StageDesign = {audience?:Array<{x:number;z:number}>;tileWidth?:number;tileDepth?:number;tileHeight?:number;forecourtDepth?:number;name:string;width:number;depth:number;height:number;parts:StagePart[];linked:boolean;phases:[ShowPhase,ShowPhase,ShowPhase]}
-export const PHASE_NAMES = ['Warm-up','Main','Finale'] as const
+/** Show phase names: the same loanwords in every language. */
+export const PHASE_NAMES = keep(['Warm-up','Main','Finale'] as const)
 /**
  * Build cells per map tile, in each axis: one, so a cell of the workshop grid is a field
  * of the map, and a part standing on it is as wide as that field. Finer grids made the
@@ -128,9 +132,11 @@ export function stageForecourtDepth(d:{tileWidth?:number;forecourtDepth?:number}
 }
 /** How far the chosen audience area reaches in front of the stage, in build cells. */
 export function stageApronDepth(d:{tileWidth?:number;forecourtDepth?:number}){return stageForecourtDepth(d)*STAGE_TILE_DETAIL}
+/** Canonical default name of a new stage design; stored as is and shown with localizeName. */
+export const DEFAULT_STAGE_DESIGN_NAME = de('Meine Traumbühne')
 export function defaultStageDesign():StageDesign {
   const tileWidth=5,tileDepth=2,tileHeight=STAGE_TILE_HEIGHT
-  return {tileWidth,tileDepth,tileHeight,forecourtDepth:tileWidth*2,name:'Meine Traumbühne',...stageDetailSize(tileWidth,tileDepth,tileHeight),linked:false,parts:[],phases:[
+  return {tileWidth,tileDepth,tileHeight,forecourtDepth:tileWidth*2,name:DEFAULT_STAGE_DESIGN_NAME,...stageDetailSize(tileWidth,tileDepth,tileHeight),linked:false,parts:[],phases:[
     {movement:20,pyro:0,deco:'pulse',intensity:40,speed:25,fog:15,volume:50,color:'#ffc369'},
     {movement:55,pyro:35,deco:'chase',intensity:75,speed:55,fog:40,volume:80,color:'#7f8cff'},
     {movement:100,pyro:100,deco:'sparkle',intensity:100,speed:85,fog:65,volume:100,color:'#ef66cd'}]}
@@ -146,66 +152,66 @@ export function stageStats(d:StageDesign) {
   return {cost:Math.round(cost),upkeep:Math.round(cost*.008*10)/10,party:Math.round(party),beauty:Math.round(beauty),power:Math.round(power*10)/10,speakers}
 }
 export function stageDesignIssue(d:StageDesign):string|null {
-  if(!d || typeof d.name!=='string'||d.name.length>60||typeof d.linked!=='boolean'||!Array.isArray(d.parts)) return 'Name mit höchstens 60 Zeichen wählen'
-  if(![d.tileWidth??1,d.tileDepth??1].every(n=>Number.isInteger(n)&&n>=1&&n<=8))return 'Kartengrundfläche zwischen 1 und 8 Feldern wählen'
-  if(!Number.isInteger(d.tileHeight??1)||(d.tileHeight??1)<1||(d.tileHeight??1)>STAGE_TILE_HEIGHT)return `Bühnenhöhe zwischen 1 und ${STAGE_TILE_HEIGHT} Kacheln wählen`
-  if(d.forecourtDepth!==undefined&&(!Number.isInteger(d.forecourtDepth)||d.forecourtDepth<MIN_STAGE_FORECOURT_DEPTH||d.forecourtDepth>MAX_STAGE_FORECOURT_DEPTH))return `Vorplatztiefe zwischen ${MIN_STAGE_FORECOURT_DEPTH} und ${MAX_STAGE_FORECOURT_DEPTH} Feldern wählen`
+  if(!d || typeof d.name!=='string'||d.name.length>60||typeof d.linked!=='boolean'||!Array.isArray(d.parts)) return de('Name mit höchstens 60 Zeichen wählen')
+  if(![d.tileWidth??1,d.tileDepth??1].every(n=>Number.isInteger(n)&&n>=1&&n<=8))return de('Kartengrundfläche zwischen 1 und 8 Feldern wählen')
+  if(!Number.isInteger(d.tileHeight??1)||(d.tileHeight??1)<1||(d.tileHeight??1)>STAGE_TILE_HEIGHT)return de`Bühnenhöhe zwischen 1 und ${num(STAGE_TILE_HEIGHT)} Kacheln wählen`
+  if(d.forecourtDepth!==undefined&&(!Number.isInteger(d.forecourtDepth)||d.forecourtDepth<MIN_STAGE_FORECOURT_DEPTH||d.forecourtDepth>MAX_STAGE_FORECOURT_DEPTH))return de`Vorplatztiefe zwischen ${num(MIN_STAGE_FORECOURT_DEPTH)} und ${num(MAX_STAGE_FORECOURT_DEPTH)} Feldern wählen`
   const grid=stageDetailSize(d.tileWidth,d.tileDepth,d.tileHeight)
-  if(d.width!==grid.width||d.depth!==grid.depth||d.height!==grid.height)return 'Bühnenraster muss zur Kartengrundfläche passen'
+  if(d.width!==grid.width||d.depth!==grid.depth||d.height!==grid.height)return de('Bühnenraster muss zur Kartengrundfläche passen')
   const audience=d.audience??[],aw=d.tileWidth??1,ad=d.tileDepth??1
-  if(!Array.isArray(audience)||audience.length>=aw*ad||audience.some(c=>!c||![c.x,c.z].every(Number.isInteger)||c.x<0||c.z<0||c.x>=aw||c.z>=ad))return 'Zuschauerfläche muss im Bühnenareal liegen; mindestens ein Technikfeld bleibt frei'
+  if(!Array.isArray(audience)||audience.length>=aw*ad||audience.some(c=>!c||![c.x,c.z].every(Number.isInteger)||c.x<0||c.z<0||c.x>=aw||c.z>=ad))return de('Zuschauerfläche muss im Bühnenareal liegen; mindestens ein Technikfeld bleibt frei')
   const audienceKeys=new Set(audience.map(c=>`${c.x},${c.z}`))
-  if(audienceKeys.size!==audience.length)return 'Zuschauerfelder dürfen nicht doppelt vorkommen'
+  if(audienceKeys.size!==audience.length)return de('Zuschauerfelder dürfen nicht doppelt vorkommen')
   const reachable=new Set<string>(),queue=audience.filter(c=>c.x===0||c.z===0||c.x===aw-1||c.z===ad-1)
   for(let i=0;i<queue.length;i++){const c=queue[i]!,key=`${c.x},${c.z}`;if(reachable.has(key))continue;reachable.add(key);for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){const n={x:c.x+dx!,z:c.z+dz!};if(audienceKeys.has(`${n.x},${n.z}`)&&!reachable.has(`${n.x},${n.z}`))queue.push(n)}}
-  if(reachable.size!==audience.length)return 'Jede Zuschauerfläche braucht einen durchgehenden Zugang zum äußeren Rand'
+  if(reachable.size!==audience.length)return de('Jede Zuschauerfläche braucht einen durchgehenden Zugang zum äußeren Rand')
   const ids=new Set<string>()
   for(const p of d.parts){
-    if(!p||typeof p.id!=='string'||p.id.length>80||ids.has(p.id)||!Object.hasOwn(COMPONENTS,p.kind)||!Object.hasOwn(brandsFor(p.kind),p.brand)||![p.x,p.y,p.z,p.rotation].every(Number.isInteger)||p.x<0||p.x>=d.width||p.y<0||p.y>=d.height||p.z<0||p.z>=d.depth+(AUDIENCE_KINDS.includes(p.kind)?stageApronDepth(d):0)||p.rotation<0||p.rotation>5||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.axis!==undefined&&!['x','y','z'].includes(p.axis)))return 'Ungültiges Bühnenelement'
+    if(!p||typeof p.id!=='string'||p.id.length>80||ids.has(p.id)||!Object.hasOwn(COMPONENTS,p.kind)||!Object.hasOwn(brandsFor(p.kind),p.brand)||![p.x,p.y,p.z,p.rotation].every(Number.isInteger)||p.x<0||p.x>=d.width||p.y<0||p.y>=d.height||p.z<0||p.z>=d.depth+(AUDIENCE_KINDS.includes(p.kind)?stageApronDepth(d):0)||p.rotation<0||p.rotation>5||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.axis!==undefined&&!['x','y','z'].includes(p.axis)))return de('Ungültiges Bühnenelement')
     ids.add(p.id)
     if(p.attachedTo===null){
-      if(p.kind!=='truss'&&!GROUND_ONLY_KINDS.includes(p.kind)&&!GROUND_OR_TRUSS_KINDS.includes(p.kind))return 'Dieses Bauteil braucht eine Traverse als Träger'
+      if(p.kind!=='truss'&&!GROUND_ONLY_KINDS.includes(p.kind)&&!GROUND_OR_TRUSS_KINDS.includes(p.kind))return de('Dieses Bauteil braucht eine Traverse als Träger')
     }else{
       const host=d.parts.find(q=>q?.id===p.attachedTo)
-      if(!host)return 'Fehlende Trägertraverse'
+      if(!host)return de('Fehlende Trägertraverse')
       const dx=p.x-host.x,dy=p.y-host.y,dz=p.z-host.z
-      if(!NEIGHBOR_STEPS.some(s=>s.x===dx&&s.y===dy&&s.z===dz))return 'Bauteile müssen direkt an ihrer Trägertraverse anliegen'
+      if(!NEIGHBOR_STEPS.some(s=>s.x===dx&&s.y===dy&&s.z===dz))return de('Bauteile müssen direkt an ihrer Trägertraverse anliegen')
       if(isTruss(host.kind)){
-        if(GROUND_ONLY_KINDS.includes(p.kind))return 'Dieses Bauteil steht auf dem Boden, nicht an einer Traverse'
+        if(GROUND_ONLY_KINDS.includes(p.kind))return de('Dieses Bauteil steht auf dem Boden, nicht an einer Traverse')
         // A mirror ball hangs off its motor, so it only ever goes under the truss, never beside it.
-        if(p.kind==='discoBall'&&(dx!==0||dz!==0||dy!==-1))return 'Eine Diskokugel hängt nur unter einer Traverse'
+        if(p.kind==='discoBall'&&(dx!==0||dz!==0||dy!==-1))return de('Eine Diskokugel hängt nur unter einer Traverse')
       }else if(host.kind==='subwoofer'&&p.kind!=='subwoofer'&&!GROUND_ONLY_KINDS.includes(p.kind)){
         // A subwoofer is a stable platform for anything that doesn't have to stand on the
         // ground itself — but only balanced on top, never hung underneath or bolted to a side.
-        if(dx!==0||dz!==0||dy!==1)return 'Dieses Bauteil kann nur oben auf dem Subwoofer stehen'
+        if(dx!==0||dz!==0||dy!==1)return de('Dieses Bauteil kann nur oben auf dem Subwoofer stehen')
       }else if(p.kind==='screen'&&host.kind==='screen'){
         // A Pixel-LED-Wand module only ever attaches to a truss directly (any of its six sides,
         // handled above) to anchor the very first module of a wall — every further module grows
         // the wall by docking onto an already-connected module instead, in any of the four
         // directions that stay in the same flat plane (never front/back, which would stack
         // modules into each other instead of tiling them side by side).
-        if(p.rotation!==host.rotation)return 'Ein Pixel-LED-Wand-Modul kann nur an ein gleich ausgerichtetes Modul anbauen'
+        if(p.rotation!==host.rotation)return de('Ein Pixel-LED-Wand-Modul kann nur an ein gleich ausgerichtetes Modul anbauen')
         const facing=partFacing(p)
-        if(dx*facing.x+dy*facing.y+dz*facing.z!==0)return 'Pixel-LED-Wand-Module wachsen nur seitlich und übereinander, nicht in die Tiefe'
+        if(dx*facing.x+dy*facing.y+dz*facing.z!==0)return de('Pixel-LED-Wand-Module wachsen nur seitlich und übereinander, nicht in die Tiefe')
       }else if(STACKABLE_KINDS.includes(p.kind)&&host.kind===p.kind){
         // Line arrays hang and extend downward, element by element; stacked speakers/subs grow upward instead.
         const downward=p.kind==='lineArray'
-        if(dx!==0||dz!==0||dy!==(downward?-1:1))return downward?'Line-Array-Elemente docken nur unten am vorherigen Element an':'Dieses Bauteil kann nur oben auf dem vorherigen Element andocken'
+        if(dx!==0||dz!==0||dy!==(downward?-1:1))return downward?de('Line-Array-Elemente docken nur unten am vorherigen Element an'):de('Dieses Bauteil kann nur oben auf dem vorherigen Element andocken')
       }else{
-        return 'Dieses Bauteil kann nicht an diesem Trägerobjekt andocken'
+        return de('Dieses Bauteil kann nicht an diesem Trägerobjekt andocken')
       }
     }
     // Anything that works straight up has to do so into open sky: a part standing in the same
     // column above it — a truss most of all — is something it would fire into.
-    if(SKYWARD_KINDS.includes(p.kind)&&d.parts.some(q=>q!==p&&q.x===p.x&&q.z===p.z&&q.y>p.y))return `${COMPONENTS[p.kind].name} arbeitet nach oben und braucht freien Himmel — darüber darf nichts stehen`
-    if(p.attachedTo===null&&p.y===0&&!AUDIENCE_KINDS.includes(p.kind)&&partOnAudience(d,p))return 'Zuschauerflächen bleiben frei von Bodenaufbauten'
+    if(SKYWARD_KINDS.includes(p.kind)&&d.parts.some(q=>q!==p&&q.x===p.x&&q.z===p.z&&q.y>p.y))return de`${nested(COMPONENTS[p.kind].name)} arbeitet nach oben und braucht freien Himmel — darüber darf nichts stehen`
+    if(p.attachedTo===null&&p.y===0&&!AUDIENCE_KINDS.includes(p.kind)&&partOnAudience(d,p))return de('Zuschauerflächen bleiben frei von Bodenaufbauten')
     // A FOH stand and a delay tower are as big as the field they stand on, so nothing else shares
     // that field with them — everything else claims only its own build cell.
     if(d.parts.some(q=>q!==p&&q.y===p.y&&(TILE_KINDS.includes(p.kind)||TILE_KINDS.includes(q.kind)
       ?stagePartTile(q).x===stagePartTile(p).x&&stagePartTile(q).z===stagePartTile(p).z
-      :q.x===p.x&&q.z===p.z)))return 'Dieser Platz ist bereits belegt'
+      :q.x===p.x&&q.z===p.z)))return de('Dieser Platz ist bereits belegt')
   }
-  if(!Array.isArray(d.phases)||d.phases.length!==3||d.phases.some(p=>!p||![p.intensity,p.speed,p.fog,p.volume,p.movement??0,p.pyro??0].every(n=>Number.isFinite(n)&&n>=0&&n<=100)||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.deco!==undefined&&!DECO_PATTERNS.includes(p.deco))))return 'Ungültige Showregler'
+  if(!Array.isArray(d.phases)||d.phases.length!==3||d.phases.some(p=>!p||![p.intensity,p.speed,p.fog,p.volume,p.movement??0,p.pyro??0].every(n=>Number.isFinite(n)&&n>=0&&n<=100)||!/^#[0-9a-f]{6}$/i.test(p.color)||(p.deco!==undefined&&!DECO_PATTERNS.includes(p.deco))))return de('Ungültige Showregler')
   return null
 }
 export function stagePhase(d:StageDesign,progress:number):ShowPhase {return d.phases[d.linked?0:progress<.2?0:progress<.8?1:2]}

@@ -1,3 +1,4 @@
+import { de, keep } from '../i18n/marker'
 import { difficultyProfile } from './difficulty'
 import { assignAudience, BANDS, bandVisitorDraw } from './festivalManagement'
 import { arrivalPriceMultiplier } from './ticketDemand'
@@ -11,14 +12,14 @@ import type { Cell, Visitor } from './types/entities'
 import type { GameSnapshot } from './types/snapshot'
 import { initialThirstAndHygiene } from './visitorNeeds'
 
-export const FEMALE_VISITOR_NAMES = [
+export const FEMALE_VISITOR_NAMES = keep([
   'Mia', 'Emma', 'Lea', 'Lina', 'Sofia', 'Mila', 'Nina', 'Marie',
   'Hannah', 'Clara', 'Ida', 'Greta', 'Lara', 'Pia', 'Anna', 'Luisa',
-]
-export const MALE_VISITOR_NAMES = [
+])
+export const MALE_VISITOR_NAMES = keep([
   'Noah', 'Finn', 'Ben', 'Elias', 'Jonas', 'Paul', 'Leon', 'Max',
   'Theo', 'Otto', 'Jan', 'Felix', 'Luis', 'Oskar', 'Karl', 'Tim',
-]
+])
 
 export function visitorGivenName(id: string, salt = 0): string {
   const names = visitorLooksFemale(id) ? FEMALE_VISITOR_NAMES : MALE_VISITOR_NAMES
@@ -166,8 +167,8 @@ export class VisitorSpawning {
     context.dispatchIncomingVisitorCar(vehicle)
     members.forEach((visitor) => {
       visitor.thought = vehicle.parkingCell
-        ? 'Wir suchen mit dem Auto einen Parkplatz.'
-        : 'Kein freier Parkplatz – wir fahren erstmal weiter.'
+        ? de('Wir suchen mit dem Auto einen Parkplatz.')
+        : de('Kein freier Parkplatz – wir fahren erstmal weiter.')
     })
   }
 
@@ -238,7 +239,7 @@ export class VisitorSpawning {
       cellElevation: entrance.elevation,
       color: Math.floor(rng.next() * 0xffffff),
       state: 'entering',
-      thought: 'Ich bin gespannt auf den Park!',
+      thought: de('Ich bin gespannt auf den Park!'),
       needs: {
         hunger: initialNeeds.hungerMinimum + rng.next() * initialNeeds.hungerRandomRange,
         toilet: initialNeeds.toiletMinimum + rng.next() * initialNeeds.toiletRandomRange,
@@ -371,7 +372,7 @@ export class VisitorSpawning {
         SIMULATION_CONFIG.camping.unplacedRetryIntervalMinutes
       visitor.emotion = 'sad'
       visitor.thought =
-        'Alle Campingflächen wirken belegt. Ich warte auf einen freien Platz.'
+        de('Alle Campingflächen wirken belegt. Ich warte auf einen freien Platz.')
     }
     return visitor
   }

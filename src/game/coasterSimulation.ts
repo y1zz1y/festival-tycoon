@@ -1,3 +1,4 @@
+import { de, named } from '../i18n/marker'
 import { getCoasterType, sampleCoasterTrack, type Coaster, type TrackSample } from './coasters'
 import { grantAttractionFun } from './attractionFun'
 import { SIMULATION_CONFIG } from './simulationConfig'
@@ -138,13 +139,13 @@ export class CoasterSimulation {
             visitor.avoidanceMinutes = SIMULATION_CONFIG.coasters.paymentAvoidanceMinutes
             visitor.emotion = 'sad'
             visitor.emotionMinutes = 45
-            visitor.thought = 'Dafür reicht mein Budget nicht.'
+            visitor.thought = de('Dafür reicht mein Budget nicht.')
             continue
           }
           train.passengerIds.push(visitor.id)
           train.passengers = train.passengerIds.length
           visitor.state = 'riding'
-          visitor.thought = `Ich fahre mit ${coaster.name}!`
+          visitor.thought = de`Ich fahre mit ${named(coaster.name)}!`
         }
         train.waitMinutes = train.passengers > 0 ? train.waitMinutes + minutes : 0
         const full = train.passengers >= train.capacity
@@ -197,7 +198,7 @@ export class CoasterSimulation {
       visitor.targetId = null
       visitor.avoidedCoasterId = coaster.id
       visitor.avoidanceMinutes = SIMULATION_CONFIG.coasters.recallAvoidanceMinutes
-      visitor.thought = 'Die Achterbahn ist derzeit nicht verfügbar.'
+      visitor.thought = de('Die Achterbahn ist derzeit nicht verfügbar.')
     })
     coaster.queue = []
     coaster.train.passengerIds.forEach((visitorId) => {
@@ -207,7 +208,7 @@ export class CoasterSimulation {
       else {
         visitor.state = 'exploring'
         visitor.targetId = null
-        visitor.thought = 'Die Fahrt wurde sicher beendet.'
+        visitor.thought = de('Die Fahrt wurde sicher beendet.')
       }
     })
     coaster.train.passengerIds = []
@@ -332,7 +333,7 @@ export class CoasterSimulation {
         for (const id of train.passengerIds) {
           const visitor = this.context.getVisitor(id)
           if (visitor && this.context.chargeVisitor(visitor, 2, sample.point)) {
-            visitor.thought = 'Ein Erinnerungsfoto von der Achterbahn!'
+            visitor.thought = de('Ein Erinnerungsfoto von der Achterbahn!')
           }
         }
       }
@@ -558,7 +559,7 @@ export class CoasterSimulation {
     this.context.addRideNausea(visitor)
     visitor.emotion = 'excited'
     visitor.emotionMinutes = 90
-    visitor.thought = `${coaster.name} war großartig!`
+    visitor.thought = de`${named(coaster.name)} war großartig!`
   }
 
   private positionTrain(coaster: Coaster): void {

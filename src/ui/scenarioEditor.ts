@@ -7,6 +7,14 @@ import {
   type ScenarioFile,
 } from '../game/scenarioFile'
 import { formatMoney } from './format'
+import { de, t } from '../i18n'
+
+/**
+ * Canonical defaults of an exported scenario. They stay German in every language: the
+ * export id is derived from the name (`scenarioFileSlug`), and the file is shared content.
+ */
+const DEFAULT_SCENARIO_NAME = de('Szenario')
+const DEFAULT_SCENARIO_DETAIL = de('Ein selbst gebautes Szenario.')
 
 function downloadJson(filename: string, text: string): void {
   const blob = new Blob([text], { type: 'application/json' })
@@ -28,11 +36,13 @@ async function publishScenario(file: ScenarioFile): Promise<{ ok: boolean; messa
     })
     if (!response.ok) {
       const payload = (await response.json().catch(() => null)) as { error?: string } | null
-      return { ok: false, message: payload?.error || 'Szenario-Ordner nicht beschreibbar — Datei wurde heruntergeladen.' }
+      // The server's refusal is canonical German; the toast sink translates it.
+      return { ok: false, message: payload?.error || t('Szenario-Ordner nicht beschreibbar — Datei wurde heruntergeladen.') }
     }
-    return { ok: true, message: `Gespeichert als ${file.id}.json im Szenarien-Ordner` }
+    const filename = `${file.id}.json`
+    return { ok: true, message: t`Gespeichert als ${filename} im Szenarien-Ordner` }
   } catch {
-    return { ok: false, message: 'Kein Server — Datei wurde heruntergeladen. Lege sie in public/scenarios/.' }
+    return { ok: false, message: t('Kein Server — Datei wurde heruntergeladen. Lege sie in public/scenarios/.') }
   }
 }
 
@@ -76,8 +86,8 @@ export function createScenarioEditorController(options: {
       },
     })
     return {
-      name: nameInput.value.trim() || 'Szenario',
-      detail: detailInput.value.trim() || 'Ein selbst gebautes Szenario.',
+      name: nameInput.value.trim() || DEFAULT_SCENARIO_NAME,
+      detail: detailInput.value.trim() || DEFAULT_SCENARIO_DETAIL,
       startingMoney: Number(moneyInput.value),
       startingLoan: Number(loanInput.value),
       carArrivalShare: Number(carInput.value) / 100,
@@ -101,8 +111,12 @@ export function createScenarioEditorController(options: {
   function fillFromGame(): void {
     const snapshot = getGame().snapshot
     const settings = snapshot.scenario
-    nameInput.value = settings.title ?? settings.preset ?? ''
-    detailInput.value = settings.detail ?? ''
+    // A field holding the canonical default stays empty, so no German default shows up
+    // as typed text; exporting an empty field writes the default back.
+    const name = settings.title ?? settings.preset ?? ''
+    const detail = settings.detail ?? ''
+    nameInput.value = name === DEFAULT_SCENARIO_NAME ? '' : name
+    detailInput.value = detail === DEFAULT_SCENARIO_DETAIL ? '' : detail
     moneyInput.value = String(settings.startingMoney)
     loanInput.value = String(settings.startingLoan)
     carInput.value = String(Math.round(settings.carArrivalShare * 100))
@@ -135,5 +149,5 @@ export function createScenarioEditorController(options: {
 }
 
 export function editorMoneyLabel(authoring: boolean, money: number): string {
-  return authoring ? 'unbegrenzt' : formatMoney(money)
+  return authoring ? t('unbegrenzt') : formatMoney(money)
 }

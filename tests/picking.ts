@@ -3,8 +3,10 @@ import { Group, InstancedMesh, Mesh } from 'three'
 import { GameState } from '../src/game/GameState'
 import { createRetroBuilding, batchRetroBuildings } from '../src/view/retroBuildings'
 import {
+  accessIdFromObject,
   buildingIdFromObject,
   buildingIdFromUserData,
+  instanceOwnerId,
   isVisibleInScene,
   resolveMeshPick,
   resolvePickedBuilding,
@@ -39,6 +41,20 @@ export function testPicking(fixture: (count?: number) => GameState): void {
   parent.userData.buildingId = 'hedge-7'
   parent.add(nested)
   assert.equal(buildingIdFromObject(nested, undefined), 'hedge-7', 'child meshes inherit the placed building id')
+
+  // Traffic lights and gates are instanced: the batch names each instance's owner.
+  const accessBatch = new Mesh()
+  accessBatch.userData.accessIds = ['light-a', 'gate-b']
+  assert.equal(accessIdFromObject(accessBatch, 1), 'gate-b', 'an instanced access hit resolves through accessIds')
+  assert.equal(accessIdFromObject(accessBatch, 5), undefined, 'an instance without an owner names none')
+  const accessRoot = new Group()
+  accessRoot.userData.accessId = 'legacy-light'
+  const accessPart = new Mesh()
+  accessRoot.add(accessPart)
+  assert.equal(accessIdFromObject(accessPart), 'legacy-light', 'a plain model still resolves through its root')
+  assert.equal(instanceOwnerId({ vehicleIds: ['car-1'] }, 'vehicleIds', 0), 'car-1')
+  assert.equal(instanceOwnerId({ vehicleIds: ['car-1'] }, 'vehicleIds', undefined), undefined, 'no instance, no owner')
+  assert.equal(instanceOwnerId({ staffIds: [undefined] }, 'staffIds', 0), undefined, 'unclickable crew instances name nobody')
 
   // three.js raycasts hidden objects too, so a vehicle housed in its depot would
   // keep catching the clicks meant for the building unless it is filtered out.

@@ -26,7 +26,8 @@ Achterbahnen bleiben in [`coaster.md`](coaster.md) / [`attractions.md`](attracti
 | Eigener Kurseditor | `src/ui/courseBuilderPanel.ts` | Palette, Ebene, `editorMode`, `courseDirectionIcon`, `courseDirectionChoicesForPanel`, `isCourseBuildReady`, `normalizeCourseRotation` |
 | Bauanker / Ghost / Pfeile | `src/game/courseAttractions.ts` | `courseTrackEnd`, `courseNextBuildTarget`, `courseGhostSpan`, `COURSE_HEADINGS`, `listCourseDirectionChoices`, `describeCourseAppendIssue`, `COURSE_SPECS.editorMode` |
 | Editor-Modus | `src/game/trackEditorMode.ts` | `editorMode: 'palette' \| 'directionArrows'` |
-| Typen, Katalog, Validierung, Tick | `src/game/courseAttractions.ts` | `appendCourseAreaCell`, `appendCoursePiece`, `courseTrackEnd`, `validateCourse`, `isCourseReadyToOperate`, `formatCourseInspect`, `stepCourses`, `COURSE_RIDER_THOUGHTS` |
+| Typen, Katalog, Validierung, Tick | `src/game/courseAttractions.ts` | `appendCourseAreaCell`, `appendCoursePiece`, `courseTrackEnd`, `validateCourse`, `isCourseReadyToOperate`, `stepCourses`, `COURSE_RIDER_THOUGHTS`; Meldungen, Gedanken und Standardnamen kanonisch deutsch (`de`), Kursmarken in `keep()` |
+| Infozeilen / Bauhinweis (Client-Text) | `src/game/courseAttractionText.ts` | `formatCourseInspect`, `courseBuilderHint` mit `t()`; `validateCourse`-Meldung über `localize()`, Namen über `localizeName()` (docs/i18n.md) |
 | Platzieren / Betrieb / Preis / Team | `src/game/GameState.ts` | `startCourseArea`, `addCourseAreaCells`, `removeCourseAreaCells`, `startCourse`, `addCoursePiece`, `undoCoursePiece`, `setCourseOperating`, `setCoursePrice`, `setCourseTeamSize`, `removeCourse` |
 | Balancing | `src/game/simulationConfig.ts` | `courses` (`paintballTeamSize*`, `slideLaunchSpeed`, `slideGravity`, `capacity.waterSlide`); Leerlauf `economy.pauseUpkeepMultiplier` |
 | Abschlussbelohnung | `src/game/attractionFun.ts`, `src/game/attractions/runtime.ts`, `src/game/courseAttractions.ts` | `courses.funGain`, gemeinsame Runtime und Legacy-Projektion |
@@ -149,18 +150,34 @@ nicht der Spieler-Baupfad.
 
 ## Wichtige Invarianten
 
-- Snapshot v31 speichert Kurse in `attractions`. `courses` ist die editierte
-  und getickte Form; der kanonische Datensatz wird danach über
-  `refreshLegacyAttractionRecords` nachgezogen, `removeCourse` räumt ihn über
+- **Doppelmodell** (offizielle Regel:
+  [attractions.md → Doppelmodell](attractions.md#doppelmodell-offizielle-regel-bewusst-ohne-migration)):
+  `courses` ist die editierte und getickte Wahrheit, der `attractions`-
+  Datensatz eine Projektion. Er wird über `refreshLegacyAttractionRecords`
+  nachgezogen; `removeCourse` und Undo bis leer räumen ihn über
   `dropLegacyAttractionRecords` ab (inklusive abgeleiteter
-  `-slide-`-Rutschen). `migrateCourse` schreibt auch Eingangs-only-Kurse
-  (leerer Graph, Access vom Eingang), sonst wirft ein Attractions-Delta den
-  Live-Kurs weg: Kachel bleibt beim Host belegt, der Client findet keine
-  Entity. `applyNetworkUpdate` behandelt `courses`/`coasters` wie Camping —
-  Live-Array gewinnt, eine Projektion merget fehlende IDs nach.
-  `stepAttractions` überspringt Kurs-IDs, sonst laufen Kurse doppelt.
+  `-slide-`-Rutschen), und ein Kurs ohne projizierbare Fläche/Strecke
+  verliert ihn. `migrateCourse` schreibt auch Eingangs-only-Kurse (leerer
+  Graph, Access vom Eingang), sonst wirft ein Attractions-Delta den Live-Kurs
+  weg: Kachel bleibt beim Host belegt, der Client findet keine Entity.
+  `applyNetworkUpdate` behandelt `courses`/`coasters` wie Camping: die
+  bestehende Live-Zeile gewinnt immer, `adoptMissingLiveRows` ergänzt nur
+  fehlende IDs. Kanonische Commands (`startAttraction('paintball')` usw.)
+  lehnen Kurse ab. `stepAttractions` überspringt Kurs-IDs und
+  `{poolId}-slide-N` (`isLegacyAttractionId`), sonst laufen Kurse doppelt.
+  Kurs-IDs kommen aus `nextCourseId`: `course-${simTick}-${n}` aus dem
+  synchronisierten Zustand (Host und optimistischer Client rechnen dieselbe
+  ID), belegte IDs über Bahnen, Kurse und Datensätze werden übersprungen.
+  Früher wiederholte sich die ID bei Pause (A, B, A abreißen, C); solche
+  Stände repariert der Lader (`renameDuplicateLiveIds`: das spätere Duplikat
+  heißt `${id}-2`, seine Queue- und Rider-Gäste ziehen mit), sonst deckte ein
+  Datensatz zwei Kurse ab und `removeCourse` riss beide ab.
+  Eine neue `CourseKind` ist eine erlaubte Erweiterung: Definition
+  `course:<kind>` in `ATTRACTION_DEFINITIONS` und Zuordnung in
+  `migrateCourse`/`projectCourses` ergänzen.
   v30-Pool/Paintball werden einmalig konvertiert; nicht eindeutig
-  konvertierbare Anlagen stehen in `migrationReport.removedAttractionIds`.
+  konvertierbare Anlagen stehen in `migrationReport.removedAttractionIds`,
+  bleiben aber als Live-Zeile in `courses` (ohne Datensatz).
 - Host-autoritative Commands, keine Render-Mutation.
 - Verbundene Details werden in ein statisches Vertex-Color-Mesh
   zusammengeführt; Flächen und Punktobjekte bleiben instanziert. Die
@@ -212,7 +229,8 @@ Wasserrutsche: Startleiter, Stapel, keine Leiter nach der Rutsche,
 Auslauf-Wasser, Infofenster. MP-Command-Roundtrip `startCourse` /
 `startCoaster` über `applyGameCommand` + `WorldUpdates`/`applyNetworkWorld`
 hält Occupancy und Entity nach Host-Ack und nach einem stale
-Attractions-Delta zusammen. Zusätzlich Infotext (`formatCourseInspect`) und
+Attractions-Delta zusammen. Zusätzlich Infotext (`formatCourseInspect` aus
+`courseAttractionText.ts`) und
 `isCourseReadyToOperate` für alle Kursarten.
 `tests/uiModules.ts` prüft die Panel-Auswahl der Pfeile und das
 Inspect-Routing (unfertig → Builder, gültig → Infofenster, inkl. Wasserrutsche).

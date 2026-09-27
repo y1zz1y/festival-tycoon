@@ -1,3 +1,4 @@
+import { de } from '../i18n/marker'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import type { RngSource } from './rng'
 
@@ -31,7 +32,7 @@ export type InventoryItemDefinition = {
 export const INVENTORY_ITEMS: Record<InventoryItemKind, InventoryItemDefinition> = {
   tent: {
     kind: 'tent',
-    name: 'Zelt',
+    name: de('Zelt'),
     icon: '⛺',
     securityCategory: 'camping',
     detectionDifficulty: SIMULATION_CONFIG.inventory.tent.detectionDifficulty,
@@ -40,7 +41,7 @@ export const INVENTORY_ITEMS: Record<InventoryItemKind, InventoryItemDefinition>
   },
   chairs: {
     kind: 'chairs',
-    name: 'Campingstuhl',
+    name: de('Campingstuhl'),
     icon: '🪑',
     securityCategory: 'camping',
     detectionDifficulty: SIMULATION_CONFIG.inventory.chairs.detectionDifficulty,
@@ -49,7 +50,7 @@ export const INVENTORY_ITEMS: Record<InventoryItemKind, InventoryItemDefinition>
   },
   pavilion: {
     kind: 'pavilion',
-    name: 'Pavillon',
+    name: de('Pavillon'),
     icon: '⛱️',
     securityCategory: 'camping',
     detectionDifficulty: SIMULATION_CONFIG.inventory.pavilion.detectionDifficulty,
@@ -58,7 +59,7 @@ export const INVENTORY_ITEMS: Record<InventoryItemKind, InventoryItemDefinition>
   },
   musicBox: {
     kind: 'musicBox',
-    name: 'Musikbox',
+    name: de('Musikbox'),
     icon: '🔈',
     securityCategory: 'camping',
     detectionDifficulty:
@@ -68,7 +69,7 @@ export const INVENTORY_ITEMS: Record<InventoryItemKind, InventoryItemDefinition>
   },
   alcohol: {
     kind: 'alcohol',
-    name: 'Alkohol',
+    name: de('Alkohol'),
     icon: '🍺',
     securityCategory: 'drink',
     detectionDifficulty: SIMULATION_CONFIG.inventory.alcohol.detectionDifficulty,
@@ -77,7 +78,7 @@ export const INVENTORY_ITEMS: Record<InventoryItemKind, InventoryItemDefinition>
   },
   food: {
     kind: 'food',
-    name: 'Essen',
+    name: de('Essen'),
     icon: '🥪',
     securityCategory: 'food',
     detectionDifficulty: SIMULATION_CONFIG.inventory.food.detectionDifficulty,
@@ -86,7 +87,7 @@ export const INVENTORY_ITEMS: Record<InventoryItemKind, InventoryItemDefinition>
   },
   fireworks: {
     kind: 'fireworks',
-    name: 'Feuerwerkskörper',
+    name: de('Feuerwerkskörper'),
     icon: '🧨',
     securityCategory: 'hazard',
     detectionDifficulty: SIMULATION_CONFIG.inventory.fireworks.detectionDifficulty,

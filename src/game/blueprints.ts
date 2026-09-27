@@ -218,18 +218,6 @@ export function blueprintStampCharge(items: readonly BlueprintItem[]): number {
   return Math.ceil(blueprintCatalogCost(items) * SIMULATION_CONFIG.economy.blueprintCopyCostFactor)
 }
 
-export function describeBlueprint(blueprint: Blueprint): string {
-  const buildings = blueprint.items.filter((item) => item.type === 'building').length
-  const roads = blueprint.items.filter((item) => item.type === 'road').length
-  const parking = blueprint.items.filter((item) => item.type === 'parking').length
-  const cost = blueprintStampCharge(blueprint.items)
-  const parts = [`${buildings} Objekt${buildings === 1 ? '' : 'e'}`]
-  if (roads) parts.push(`${roads} Straßenfeld${roads === 1 ? '' : 'er'}`)
-  if (parking) parts.push(`${parking} Parkplatz${parking === 1 ? '' : 'felder'}`)
-  parts.push(`${cost.toLocaleString('de-DE')} €`)
-  return `${blueprint.width}×${blueprint.depth} · ${parts.join(' · ')}`
-}
-
 function captureBuilding(building: CapturedBuilding, originX: number, originZ: number, terrain: number): BlueprintBuildingItem {
   const item: BlueprintBuildingItem = {
     type: 'building',

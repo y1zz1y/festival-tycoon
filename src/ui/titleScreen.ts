@@ -12,16 +12,18 @@ import {
 } from '../game/scenarioCatalog'
 import { scenarioPreset, type ScenarioPreset } from '../game/scenarioPresets'
 import { ENVIRONMENTS } from '../game/environments'
-import { goalName } from '../game/scenarioGoals'
+import { goalName } from '../game/scenarioGoalText'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { mountTitleCrowd } from '../titleCrowd'
 import { isTextEntryTarget } from '../uiFocus'
 import { fetchLobbies } from '../net/lobbies'
 import type { NetLobby } from '../net/protocol'
 import { escapeHtml, formatMoney } from './format'
+import { joinParts, localize, localizeName, plural, t, tc } from '../i18n'
 import { ACHIEVEMENTS, type ProgressRecords } from '../game/progress'
 import { achievementRowsMarkup, scenarioBadgeMarkup } from './titleProgress'
-import { saveProgressText, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
+import { noNamedSavesText, saveProgressText, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
+import { presetText } from './scenarioScreen'
 
 export interface TitleScreenContext {
   getGame(): GameState
@@ -80,34 +82,35 @@ export interface TitleScreenController {
  * you and what it wants. Everything here comes from the preset, so it can be read
  * before a single tile exists.
  */
-function briefingMarkup(preset: ScenarioPreset): string {
+export function briefingMarkup(preset: ScenarioPreset): string {
   const settings = preset.settings
   const rows: [string, string][] = [
-    ['Umgebung', ENVIRONMENTS[settings.environment].name],
-    ['Kartengröße', `${settings.worldSize} × ${settings.worldSize}`],
-    ['Startkapital', formatMoney(settings.startingMoney)],
+    [t('Umgebung'), localize(ENVIRONMENTS[settings.environment].name)],
+    [t('Kartengröße'), `${settings.worldSize} × ${settings.worldSize}`],
+    [t('Startkapital'), formatMoney(settings.startingMoney)],
   ]
-  if (settings.startingLoan > 0) rows.push(['Startdarlehen', formatMoney(settings.startingLoan)])
+  if (settings.startingLoan > 0) rows.push([t('Startdarlehen'), formatMoney(settings.startingLoan)])
   if (settings.goals.length > 0) {
-    rows.push(['Erste Ausgabe', `bis Tag ${1 + (settings.firstEditionDays ?? SIMULATION_CONFIG.scenario.firstEditionDays)}`])
+    rows.push([t('Erste Ausgabe'), t`bis Tag ${1 + (settings.firstEditionDays ?? SIMULATION_CONFIG.scenario.firstEditionDays)}`])
   }
   const goals = settings.goals
-    .map((goal) => `<li class="scenario-goal scenario-goal-open"><span aria-hidden="true">○</span><span>${escapeHtml(goalName(goal))} <small>bis zur ${goal.edition}. Ausgabe</small></span></li>`)
+    .map((goal) => `<li class="scenario-goal scenario-goal-open"><span aria-hidden="true">○</span><span>${escapeHtml(goalName(goal))} <small>${t`bis zur ${goal.edition}. Ausgabe`}</small></span></li>`)
     .join('')
-  return `<p>${escapeHtml(preset.detail)}</p>
+  return `<p>${escapeHtml(presetText(preset, preset.detail))}</p>
     <dl class="scenario-summary">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
     ${settings.goals.length > 0
-      ? `<h3 class="scenario-heading">Ziele</h3>
+      ? `<h3 class="scenario-heading">${t('Ziele')}</h3>
     <ul class="scenario-goal-list">${goals}</ul>
-    <p class="scenario-hint">Geschafft, wenn alle Ziele erreicht sind. Gescheitert, wenn ein Ziel bis zu seiner Ausgabe fehlt oder das Konto zu lange ungedeckt im Minus bleibt.</p>`
-      : '<p class="scenario-hint">Ohne Ziele und ohne Frist: Eine Checkliste oben rechts zeigt, was als Nächstes zu tun ist, und hakt jeden Schritt selbst ab.</p>'}`
+    <p class="scenario-hint">${t('Geschafft, wenn alle Ziele erreicht sind. Gescheitert, wenn ein Ziel bis zu seiner Ausgabe fehlt oder das Konto zu lange ungedeckt im Minus bleibt.')}</p>`
+      : `<p class="scenario-hint">${t('Ohne Ziele und ohne Frist: Eine Checkliste oben rechts zeigt, was als Nächstes zu tun ist, und hakt jeden Schritt selbst ab.')}</p>`}`
 }
 
 export function mountTitleScreen(context: TitleScreenContext): TitleScreenController {
   const { getGame, getMultiplayerMode, scenarioPanel, saveSlotsPanel, setScenarioPanelOpen, setSaveSlotsPanelOpen, fillScenarioForm, readScenarioForm, setEditorPanelOpen, closePathEditor, isPathWindowOpen, hideVisitorPanel, bindGameState, showToast, fetchSaveSlots, findSaveSlot, isOwnSave, readSaveSlot, bindLoadedGame, joinMultiplayer, readMultiplayerName, setMultiplayerName, formatSaveTime } = context
   const requireElement = <T extends Element>(selector: string): T => {
     const element = document.querySelector<T>(selector)
-    if (!element) throw new Error(`Ben?tigtes UI-Element fehlt: ${selector}`)
+    // i18n-ignore: a broken page layout, for developers only; never shown to players.
+    if (!element) throw new Error(`Benötigtes UI-Element fehlt: ${selector}`)
     return element
   }
 
@@ -176,9 +179,9 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   function setAccountMode(mode: 'login' | 'register'): void {
     accountMode = mode
     const register = mode === 'register'
-    accountTitle.textContent = register ? 'Registrieren' : 'Anmelden'
-    accountSubmit.textContent = register ? 'Konto anlegen' : 'Anmelden'
-    accountSwitch.textContent = register ? 'Konto vorhanden? Anmelden' : 'Noch kein Konto? Registrieren'
+    accountTitle.textContent = register ? t('Registrieren') : t('Anmelden')
+    accountSubmit.textContent = register ? t('Konto anlegen') : t('Anmelden')
+    accountSwitch.textContent = register ? t('Konto vorhanden? Anmelden') : t('Noch kein Konto? Registrieren')
     accountRepeatField.hidden = !register
     accountRepeatInput.required = register
     accountPasswordInput.autocomplete = register ? 'new-password' : 'current-password'
@@ -196,7 +199,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   function syncAccountBar(): void {
     const name = currentAccount()
     accountNameLabel.hidden = !name
-    accountNameLabel.textContent = name ? `Angemeldet als ${name}` : ''
+    accountNameLabel.textContent = name ? t`Angemeldet als ${name}` : ''
     titleScreen.querySelectorAll<HTMLButtonElement>('[data-account="login"], [data-account="register"]').forEach((button) => {
       button.hidden = !!name
     })
@@ -208,10 +211,11 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     const name = accountNameInput.value
     const password = accountPasswordInput.value
     accountSubmit.disabled = true
-    accountMessage.textContent = 'Einen Moment …'
+    accountMessage.textContent = t('Einen Moment …')
     const done = (result: { ok: boolean; message: string }): void => {
       accountSubmit.disabled = false
-      accountMessage.textContent = result.message
+      // Sink: the server answers in canonical German.
+      accountMessage.textContent = localize(result.message)
       if (!result.ok) return
       syncAccountBar()
       context.onSignedIn()
@@ -221,7 +225,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     void (accountMode === 'register'
       ? registerAccount(name, password, accountRepeatInput.value)
       : signIn(name, password)
-    ).then(done, () => done({ ok: false, message: 'Konto konnte nicht geprüft werden' }))
+    ).then(done, () => done({ ok: false, message: t('Konto konnte nicht geprüft werden') }))
   })
   
   const titleMenuButtons = [...titleScreen.querySelectorAll<HTMLButtonElement>('[data-title-menu]')]
@@ -255,8 +259,8 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     resumeSlot = (pointer ? findSaveSlot(pointer.id) : undefined) ?? archive.own[0] ?? null
     titleResumeButton.disabled = !resumeSlot
     titleResumeMeta.textContent = resumeSlot
-      ? [resumeSlot.name, saveProgressText(resumeSlot), formatSaveTime(resumeSlot.savedAt)].filter(Boolean).join(' · ')
-      : 'Noch nicht gespielt'
+      ? joinParts(localizeName(resumeSlot.name), saveProgressText(resumeSlot), formatSaveTime(resumeSlot.savedAt))
+      : t('Noch nicht gespielt')
     if (titleResumeButton.disabled && titleResumeButton.classList.contains('selected')) markTitleSelection(0)
   }
   async function resumeLastGame(): Promise<void> {
@@ -264,11 +268,11 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     const loaded = await readSaveSlot(resumeSlot)
     if (!loaded) {
       // It was there when the screen opened and is not any more: say so and re-read.
-      showToast('Dieser Spielstand ist nicht mehr vorhanden', true)
+      showToast(t('Dieser Spielstand ist nicht mehr vorhanden'), true)
       void refreshResumeEntry()
       return
     }
-    bindLoadedGame(loaded, `„${resumeSlot.name}“ fortgesetzt`)
+    bindLoadedGame(loaded, t`„${localizeName(resumeSlot.name)}“ fortgesetzt`)
     setTitleScreenOpen(false)
   }
   const titleScenarioRows = requireElement<HTMLElement>('#title-scenario-rows')
@@ -277,12 +281,16 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
 
   function renderScenarioCatalog(): void {
     const presets = listedScenarioPresets()
-    const freePlay = `<button type="button" data-title-scenario="" aria-haspopup="true"><span class="title-row-text"><span class="title-row-label">Freies Spiel</span><span class="title-row-meta">Gelände, Publikum und Startkapital selbst festlegen — ohne Vorgaben und ohne Ziele.</span></span><span class="title-row-value">frei</span></button>`
+    const freePlay = `<button type="button" data-title-scenario="" aria-haspopup="true"><span class="title-row-text"><span class="title-row-label">${t('Freies Spiel')}</span><span class="title-row-meta">${t('Gelände, Publikum und Startkapital selbst festlegen — ohne Vorgaben und ohne Ziele.')}</span></span><span class="title-row-value">${t('frei')}</span></button>`
     const records = context.progressRecords()
-    const rows = presets.map((entry) => `<button type="button" data-title-scenario="${escapeHtml(entry.id)}"${entry.price ? ` data-title-locked="${escapeHtml(entry.price)}" aria-disabled="true"` : ''}><span class="title-row-text"><span class="title-row-label">${escapeHtml(entry.name)}${scenarioBadgeMarkup(records.scenarios[entry.id])}</span><span class="title-row-meta">${escapeHtml(entry.detail)}</span></span><span class="title-row-value">${entry.price ? `<span class="title-row-lock" aria-hidden="true">🔒</span>${escapeHtml(entry.price)}` : `${entry.settings.worldSize} × ${entry.settings.worldSize}`}</span></button>`).join('')
+    const rows = presets.map((entry) => `<button type="button" data-title-scenario="${escapeHtml(entry.id)}"${entry.price ? ` data-title-locked="${escapeHtml(entry.price)}" aria-disabled="true"` : ''}><span class="title-row-text"><span class="title-row-label">${escapeHtml(presetText(entry, entry.name))}${scenarioBadgeMarkup(records.scenarios[entry.id])}</span><span class="title-row-meta">${escapeHtml(presetText(entry, entry.detail))}</span></span><span class="title-row-value">${entry.price ? `<span class="title-row-lock" aria-hidden="true">🔒</span>${escapeHtml(entry.price)}` : `${entry.settings.worldSize} × ${entry.settings.worldSize}`}</span></button>`).join('')
     titleScenarioRows.innerHTML = `${freePlay}${rows}`
     const won = presets.filter((entry) => records.scenarios[entry.id]?.won).length
-    titleNewMeta.textContent = won > 0 ? `${presets.length + 1} Szenarien · ${won} geschafft` : `${presets.length + 1} Szenarien`
+    const total = presets.length + 1
+    titleNewMeta.textContent = joinParts(
+      plural(total, t`${total} Szenario`, t`${total} Szenarien`),
+      won > 0 && t`${won} geschafft`,
+    )
     renderAchievementMeta()
   }
 
@@ -291,7 +299,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   const titleAchievementsMeta = requireElement<HTMLElement>('#title-achievements-meta')
   function renderAchievementMeta(): void {
     const unlocked = Object.keys(context.progressRecords().achievements).length
-    titleAchievementsMeta.textContent = unlocked > 0 ? `${unlocked} von ${ACHIEVEMENTS.length}` : 'Noch keine'
+    titleAchievementsMeta.textContent = unlocked > 0 ? t`${unlocked} von ${ACHIEVEMENTS.length}` : t('Noch keine')
   }
   function openTitleAchievements(open: boolean): void {
     titleAchievementsMask.hidden = !open
@@ -327,27 +335,42 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
    * puts a copy in your own archive.
    */
   function titleSlotRow(slot: SaveSlotView, withOwner: boolean): string {
-    const meta = [withOwner ? `von ${escapeHtml(slot.owner)}` : '', saveProgressText(slot), formatSaveTime(slot.savedAt)].filter(Boolean).join(' · ')
-    return `<button type="button" data-title-load-slot="${slot.id}"><span class="title-row-text"><span class="title-row-label">${escapeHtml(slot.name)}</span><span class="title-row-meta">${meta}</span></span><span class="title-row-value">Laden</span></button>`
+    const meta = joinParts(withOwner && t`von ${escapeHtml(slot.owner)}`, saveProgressText(slot), formatSaveTime(slot.savedAt))
+    return `<button type="button" data-title-load-slot="${slot.id}"><span class="title-row-text"><span class="title-row-label">${escapeHtml(localizeName(slot.name))}</span><span class="title-row-meta">${meta}</span></span><span class="title-row-value">${tc('verb', 'Laden')}</span></button>`
+  }
+  /** The heading over your own saves: on the server under your account, or in this browser. */
+  function ownSavesHeading(archive: SaveArchiveView): string {
+    return archive.onServer
+      ? joinParts(t('Deine Spielstände'), escapeHtml(archive.account ?? ''))
+      : t('Spielstände in diesem Browser')
+  }
+  /** Nothing to list: the server's complaint if there is one, then how saves come about. */
+  function emptyArchiveText(archive: SaveArchiveView): string {
+    const parts = [
+      archive.serverError ? escapeHtml(localize(archive.serverError)) : '',
+      noNamedSavesText(archive.onServer),
+      t('Im laufenden Spiel legst du sie über „Spielstand“ an.'),
+    ]
+    return parts.filter(Boolean).join(' ')
   }
   async function openTitleLoad(): Promise<void> {
     titleLoadMask.hidden = false
-    titleLoadRows.innerHTML = '<p class="title-load-empty">Spielstände werden gelesen …</p>'
+    titleLoadRows.innerHTML = `<p class="title-load-empty">${t('Spielstände werden gelesen …')}</p>`
     titleLoadNote.textContent = ''
     markTitleSelection(0)
     const archive = await fetchSaveSlots()
     const total = archive.own.length + archive.shared.length
     titleLoadKicker.textContent = total
-      ? `${archive.own.length} eigene · ${archive.shared.length} öffentlich`
-      : 'Archiv leer'
+      ? joinParts(t`${archive.own.length} eigene`, t`${archive.shared.length} öffentlich`)
+      : t('Archiv leer')
     const own = archive.own.length
-      ? `<h3 class="title-submenu-heading">${archive.onServer ? `Deine Spielstände · ${escapeHtml(archive.account ?? '')}` : 'Spielstände in diesem Browser'}</h3>${archive.own.map((slot) => titleSlotRow(slot, false)).join('')}`
+      ? `<h3 class="title-submenu-heading">${ownSavesHeading(archive)}</h3>${archive.own.map((slot) => titleSlotRow(slot, false)).join('')}`
       : ''
     const shared = archive.shared.length
-      ? `<h3 class="title-submenu-heading">Öffentliche Spielstände</h3>${archive.shared.map((slot) => titleSlotRow(slot, true)).join('')}`
+      ? `<h3 class="title-submenu-heading">${t('Öffentliche Spielstände')}</h3>${archive.shared.map((slot) => titleSlotRow(slot, true)).join('')}`
       : ''
     titleLoadRows.innerHTML = own + shared ||
-      `<p class="title-load-empty">${archive.serverError ? `${escapeHtml(archive.serverError)} ` : ''}Noch keine benannten Spielstände ${archive.onServer ? 'unter deinem Konto oder' : ''} in diesem Browser. Im laufenden Spiel legst du sie über „Spielstand“ an.</p>`
+      `<p class="title-load-empty">${emptyArchiveText(archive)}</p>`
     titleLoadNote.textContent = saveStorageNote(archive)
     markTitleSelection(0)
   }
@@ -359,12 +382,12 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     const slot = findSaveSlot(id)
     const loaded = slot ? await readSaveSlot(slot) : null
     if (!slot || !loaded) {
-      titleLoadNote.textContent = 'Dieser Spielstand ist ungültig oder nicht mehr vorhanden.'
+      titleLoadNote.textContent = t('Dieser Spielstand ist ungültig oder nicht mehr vorhanden.')
       void openTitleLoad()
       return
     }
     const foreign = !isOwnSave(id)
-    bindLoadedGame(loaded, foreign ? `Öffentlicher Spielstand von ${slot.owner} geladen` : 'Spielstand geladen')
+    bindLoadedGame(loaded, foreign ? t`Öffentlicher Spielstand von ${slot.owner} geladen` : t('Spielstand geladen'))
     closeTitleLoad()
     setTitleScreenOpen(false)
   }
@@ -375,24 +398,24 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
    * answers, so a wrong code leaves the player where they can try again.
    */
   function lobbyRow(lobby: NetLobby): string {
-    const meta = [
-      `${lobby.players} ${lobby.players === 1 ? 'Spieler' : 'Spieler'}`,
-      lobby.hostAway ? 'Host ist gerade weg' : '',
-    ].filter(Boolean).join(' · ')
+    const meta = joinParts(
+      plural(lobby.players, t('1 Spieler'), t`${lobby.players} Spieler`),
+      lobby.hostAway && t('Host ist gerade weg'),
+    )
     return `<button type="button" data-title-lobby="${escapeHtml(lobby.code)}"><span class="title-row-text"><span class="title-row-label">${escapeHtml(lobby.host)}</span><span class="title-row-meta">${meta}</span></span><span class="title-row-value">${escapeHtml(lobby.code)}</span></button>`
   }
   async function refreshLobbies(): Promise<void> {
-    titleLobbyRows.innerHTML = '<p class="title-load-empty">Offene Lobbys werden gesucht …</p>'
-    titleLobbyKicker.textContent = 'Wird gesucht …'
+    titleLobbyRows.innerHTML = `<p class="title-load-empty">${t('Offene Lobbys werden gesucht …')}</p>`
+    titleLobbyKicker.textContent = t('Wird gesucht …')
     markTitleSelection(0)
     const lobbies = await fetchLobbies()
     if (titleLobbyMask.hidden) return
     titleLobbyKicker.textContent = lobbies.length
-      ? `${lobbies.length} offen`
-      : 'Keine offenen Lobbys'
+      ? t`${lobbies.length} offen`
+      : t('Keine offenen Lobbys')
     titleLobbyRows.innerHTML = lobbies.length
       ? lobbies.map(lobbyRow).join('')
-      : '<p class="title-load-empty">Gerade ist keine öffentliche Lobby offen. Mit einem Code kommst du trotzdem in eine private.</p>'
+      : `<p class="title-load-empty">${t('Gerade ist keine öffentliche Lobby offen. Mit einem Code kommst du trotzdem in eine private.')}</p>`
     markTitleSelection(0)
   }
   function openTitleLobbies(open: boolean): void {
@@ -407,15 +430,16 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   function joinLobby(code: string): void {
     const trimmed = code.trim().toUpperCase()
     if (trimmed.length < 4) {
-      titleLobbyNote.textContent = 'Ein Raumcode hat vier Zeichen.'
+      titleLobbyNote.textContent = t('Ein Raumcode hat vier Zeichen.')
       return
     }
     const name = titleLobbyName.value.trim() || readMultiplayerName()
     setMultiplayerName(name)
-    titleLobbyNote.textContent = `Trete ${trimmed} bei …`
+    titleLobbyNote.textContent = t`Trete ${trimmed} bei …`
     joinMultiplayer(trimmed, name, (message) => {
       if (titleLobbyMask.hidden) return
-      titleLobbyNote.textContent = message
+      // The server's refusal is canonical German.
+      titleLobbyNote.textContent = localize(message)
       void refreshLobbies()
     })
   }
@@ -456,7 +480,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     titleBriefingMask.hidden = !preset
     titleSubmenu.hidden = Boolean(preset)
     if (preset) {
-      titleBriefingName.textContent = preset.name
+      titleBriefingName.textContent = presetText(preset, preset.name)
       titleBriefing.innerHTML = briefingMarkup(preset)
     }
     markTitleSelection(0)
@@ -503,7 +527,7 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     if (target.closest('#title-briefing-start')) {
       if (!briefingPreset) return
       if (getMultiplayerMode() === 'client') {
-        showToast('Nur der Host kann ein neues Szenario starten', true)
+        showToast(t('Nur der Host kann ein neues Szenario starten'), true)
         return
       }
       startCatalogScenario(briefingPreset)
@@ -528,10 +552,10 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
       }
       else if (menu.dataset.titleMenu === 'editor') {
         if (getMultiplayerMode() === 'client') {
-          showToast('Nur der Host kann den Szenario-Editor starten', true)
+          showToast(t('Nur der Host kann den Szenario-Editor starten'), true)
           return
         }
-        startGame(GameState.startAuthoring(), 'Szenario-Editor gestartet')
+        startGame(GameState.startAuthoring(), t('Szenario-Editor gestartet'))
         setEditorPanelOpen(true)
       }
       else if (menu.dataset.titleMenu === 'load') void openTitleLoad()
@@ -543,13 +567,13 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
     const scenario = target.closest<HTMLButtonElement>('[data-title-scenario]')
     if (!scenario) return
     if (getMultiplayerMode() === 'client') {
-      showToast('Nur der Host kann ein neues Szenario starten', true)
+      showToast(t('Nur der Host kann ein neues Szenario starten'), true)
       return
     }
     // A scenario that carries a price is not part of the base game: it is shown, it can
     // be read, and that is all — nothing here charges anyone or collects anything.
     if (scenario.dataset.titleLocked) {
-      showToast(`Dieses Szenario gehört nicht zum Grundspiel · ${scenario.dataset.titleLocked}`, true)
+      showToast(joinParts(t('Dieses Szenario gehört nicht zum Grundspiel'), scenario.dataset.titleLocked), true)
       return
     }
     const preset = scenarioPreset(scenario.dataset.titleScenario || undefined)
@@ -596,21 +620,23 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   }
   function startCatalogScenario(preset: ScenarioPreset): void {
     const file = scenarioFileEntry(preset.id)
+    const started = t`${presetText(preset, preset.name)} gestartet`
     if (file) {
-      startGame(GameState.startFromScenarioFile(file), `${preset.name} gestartet`)
+      startGame(GameState.startFromScenarioFile(file), started)
       return
     }
     const chosen = document.querySelector<HTMLSelectElement>('#title-briefing-difficulty')?.value
+    // Title and detail stay canonical: they are written into the save.
     startFestival(normalizeScenarioSettings({
       ...preset.settings,
       preset: preset.id,
       title: preset.name,
       detail: preset.detail,
       difficulty: isDifficulty(chosen) ? chosen : 'normal',
-    }), `${preset.name} gestartet${chosen && chosen !== 'normal' && isDifficulty(chosen) ? ` · ${DIFFICULTY_NAMES[chosen]}` : ''}`)
+    }), joinParts(started, chosen !== 'normal' && isDifficulty(chosen) && localize(DIFFICULTY_NAMES[chosen])))
   }
   function leaveToTitle(): void {
-    if (!confirmDiscardingWork('Zum Titelbildschirm zurückkehren?')) return
+    if (!confirmDiscardingWork(t('Zum Titelbildschirm zurückkehren?'))) return
     setScenarioPanelOpen(false)
     setTitleScreenOpen(true)
   }
@@ -618,10 +644,10 @@ export function mountTitleScreen(context: TitleScreenContext): TitleScreenContro
   
   requireElement<HTMLButtonElement>('#start-scenario').addEventListener('click', () => {
     if (getMultiplayerMode() === 'client') {
-      showToast('Nur der Host kann ein neues Szenario starten', true)
+      showToast(t('Nur der Host kann ein neues Szenario starten'), true)
       return
     }
-    startFestival(readScenarioForm(), 'Freies Spiel gestartet')
+    startFestival(readScenarioForm(), t('Freies Spiel gestartet'))
   })
   
 

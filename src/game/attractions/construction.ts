@@ -1,3 +1,4 @@
+import { de } from '../../i18n/marker'
 import { getAttractionDefinition } from './definitions'
 import {
   addAreaCells,
@@ -55,25 +56,25 @@ export function resolveAttractionConstruction(
   attraction: Attraction,
   request: AttractionConstructionRequest,
 ): AttractionConstructionResult {
-  if (request.attractionId !== attraction.id) return failure(attraction, 'Falsche Attraktion.')
+  if (request.attractionId !== attraction.id) return failure(attraction, de('Falsche Attraktion.'))
   const definition = getAttractionDefinition(attraction.definitionId)
-  if (!definition) return failure(attraction, 'Die Attraktionsdefinition fehlt.')
+  if (!definition) return failure(attraction, de('Die Attraktionsdefinition fehlt.'))
 
   switch (request.kind) {
     case 'addTrackEdge': {
-      if (attraction.layout.kind !== 'track') return failure(attraction, 'Diese Attraktion besitzt keine Strecke.')
+      if (attraction.layout.kind !== 'track') return failure(attraction, de('Diese Attraktion besitzt keine Strecke.'))
       if (!definition.pieceKinds.includes(request.edge.kind)) {
-        return failure(attraction, 'Dieses Streckenteil ist für die Attraktion nicht erlaubt.')
+        return failure(attraction, de('Dieses Streckenteil ist für die Attraktion nicht erlaubt.'))
       }
       const openNodes = openTrackNodeIds(attraction.layout.graph)
       if (attraction.layout.graph.edges.length > 0 && !openNodes.includes(request.from.id)) {
-        return failure(attraction, 'Neue Streckenteile müssen an einem offenen Ende beginnen.')
+        return failure(attraction, de('Neue Streckenteile müssen an einem offenen Ende beginnen.'))
       }
       if (
         attraction.layout.selectedOpenNodeId &&
         request.from.id !== attraction.layout.selectedOpenNodeId
       ) {
-        return failure(attraction, 'Das Streckenteil beginnt nicht am ausgewählten offenen Ende.')
+        return failure(attraction, de('Das Streckenteil beginnt nicht am ausgewählten offenen Ende.'))
       }
       const occupied = occupiedTrackCells(attraction.layout.graph)
       const collides = request.edge.points.slice(1).some((point) =>
@@ -81,7 +82,7 @@ export function resolveAttractionConstruction(
       )
       const closesAtStart = attraction.layout.topology === 'closedLoop' &&
         request.to.id === attraction.layout.graph.startNodeId
-      if (collides && !closesAtStart) return failure(attraction, 'Das Streckenteil kollidiert mit der Strecke.')
+      if (collides && !closesAtStart) return failure(attraction, de('Das Streckenteil kollidiert mit der Strecke.'))
       try {
         const graph = addTrackEdge(attraction.layout.graph, request.edge, request.from, request.to)
         return success({
@@ -93,13 +94,13 @@ export function resolveAttractionConstruction(
           },
         }, request.edge.cost)
       } catch (error) {
-        return failure(attraction, error instanceof Error ? error.message : 'Das Streckenteil konnte nicht gebaut werden.')
+        return failure(attraction, error instanceof Error ? error.message : de('Das Streckenteil konnte nicht gebaut werden.'))
       }
     }
     case 'removeTrackEdge': {
-      if (attraction.layout.kind !== 'track') return failure(attraction, 'Diese Attraktion besitzt keine Strecke.')
+      if (attraction.layout.kind !== 'track') return failure(attraction, de('Diese Attraktion besitzt keine Strecke.'))
       if (!attraction.layout.graph.edges.some((edge) => edge.id === request.edgeId)) {
-        return failure(attraction, 'Das Streckenteil existiert nicht.')
+        return failure(attraction, de('Das Streckenteil existiert nicht.'))
       }
       const graph = removeTrackEdge(attraction.layout.graph, request.edgeId)
       const selected = attraction.layout.selectedOpenNodeId
@@ -117,9 +118,9 @@ export function resolveAttractionConstruction(
       })
     }
     case 'selectOpenNode': {
-      if (attraction.layout.kind !== 'track') return failure(attraction, 'Diese Attraktion besitzt keine Strecke.')
+      if (attraction.layout.kind !== 'track') return failure(attraction, de('Diese Attraktion besitzt keine Strecke.'))
       if (!openTrackNodeIds(attraction.layout.graph).includes(request.nodeId)) {
-        return failure(attraction, 'Dieser Punkt ist kein offenes Streckenende.')
+        return failure(attraction, de('Dieser Punkt ist kein offenes Streckenende.'))
       }
       return success({
         ...attraction,
@@ -127,11 +128,11 @@ export function resolveAttractionConstruction(
       })
     }
     case 'addAreaCells': {
-      if (attraction.layout.kind !== 'area') return failure(attraction, 'Diese Attraktion besitzt keine Fläche.')
+      if (attraction.layout.kind !== 'area') return failure(attraction, de('Diese Attraktion besitzt keine Fläche.'))
       return success({ ...attraction, layout: addAreaCells(attraction.layout, request.cells) })
     }
     case 'removeAreaCells': {
-      if (attraction.layout.kind !== 'area') return failure(attraction, 'Diese Attraktion besitzt keine Fläche.')
+      if (attraction.layout.kind !== 'area') return failure(attraction, de('Diese Attraktion besitzt keine Fläche.'))
       return success({
         ...attraction,
         operationMode: 'closed',
@@ -144,7 +145,7 @@ export function resolveAttractionConstruction(
       return success(placeAreaReference(attraction, request.reference))
     }
     case 'removeReference': {
-      if (attraction.layout.kind !== 'area') return failure(attraction, 'Diese Attraktion besitzt keine Fläche.')
+      if (attraction.layout.kind !== 'area') return failure(attraction, de('Diese Attraktion besitzt keine Fläche.'))
       return success({
         ...attraction,
         layout: {
@@ -158,9 +159,9 @@ export function resolveAttractionConstruction(
     case 'setExit':
       return success({ ...attraction, access: { ...attraction.access, exit: request.point } })
     case 'addScriptedSegment': {
-      if (attraction.layout.kind !== 'scripted') return failure(attraction, 'Diese Attraktion ist nicht stapelbar.')
+      if (attraction.layout.kind !== 'scripted') return failure(attraction, de('Diese Attraktion ist nicht stapelbar.'))
       if (!definition.pieceKinds.includes(request.segmentKind)) {
-        return failure(attraction, 'Dieses Bauteil ist für die Attraktion nicht erlaubt.')
+        return failure(attraction, de('Dieses Bauteil ist für die Attraktion nicht erlaubt.'))
       }
       const level = attraction.layout.segments.length
       return success({
@@ -176,9 +177,9 @@ export function resolveAttractionConstruction(
       })
     }
     case 'removeScriptedSegment': {
-      if (attraction.layout.kind !== 'scripted') return failure(attraction, 'Diese Attraktion ist nicht stapelbar.')
+      if (attraction.layout.kind !== 'scripted') return failure(attraction, de('Diese Attraktion ist nicht stapelbar.'))
       const index = attraction.layout.segments.findIndex((segment) => segment.id === request.segmentId)
-      if (index < 0) return failure(attraction, 'Das Bauteil existiert nicht.')
+      if (index < 0) return failure(attraction, de('Das Bauteil existiert nicht.'))
       return success({
         ...attraction,
         operationMode: 'closed',
@@ -196,16 +197,16 @@ export function validateAttractionCompletion(
   allAttractions: readonly Attraction[] = [],
 ): AttractionCompletionResult {
   const definition = getAttractionDefinition(attraction.definitionId)
-  if (!definition) return { ok: false, messages: ['Die Attraktionsdefinition fehlt.'] }
+  if (!definition) return { ok: false, messages: [de('Die Attraktionsdefinition fehlt.')] }
   const messages: string[] = []
   if (attraction.access.mode !== 'free' && !attraction.access.entrance) {
-    messages.push('Der Eingang fehlt.')
+    messages.push(de('Der Eingang fehlt.'))
   }
   if (
     attraction.access.mode === 'entranceExit' ||
     (attraction.layout.kind === 'track' && attraction.layout.topology !== 'openExit')
   ) {
-    if (!attraction.access.exit) messages.push('Der Ausgang fehlt.')
+    if (!attraction.access.exit) messages.push(de('Der Ausgang fehlt.'))
   }
   if (attraction.layout.kind === 'track') {
     const layout = attraction.layout
@@ -228,12 +229,12 @@ export function validateAttractionCompletion(
           edge.kind === 'poolBasin' && edge.toNodeId === end.id
         )
       )
-      if (!landsInWater) messages.push('Der Auslauf der Wasserrutsche landet nicht in einer Wasserfläche.')
+      if (!landsInWater) messages.push(de('Der Auslauf der Wasserrutsche landet nicht in einer Wasserfläche.'))
     }
   } else if (attraction.layout.kind === 'area') {
     messages.push(...validateAreaAttraction(attraction).map((issue) => issue.message))
   } else if (attraction.layout.segments.length === 0) {
-    messages.push('Die Attraktion enthält keine Bauteile.')
+    messages.push(de('Die Attraktion enthält keine Bauteile.'))
   }
   return { ok: messages.length === 0, messages: [...new Set(messages)] }
 }

@@ -1,3 +1,5 @@
+import { de, keep } from '../i18n/marker'
+
 export const DAY_PLAN_OFFERS = [
   'food',
   'drinks',
@@ -14,13 +16,13 @@ export const DAY_PLAN_OFFER_LABELS: Record<
   DayPlanOffer,
   { icon: string; name: string }
 > = {
-  food: { icon: '🍔', name: 'Essensbuden' },
-  drinks: { icon: '🍺', name: 'Getränkebuden' },
-  toilets: { icon: '🚻', name: 'Toiletten' },
-  shops: { icon: '🛍️', name: 'Souvenirläden' },
-  rides: { icon: '🎢', name: 'Fahrgeschäfte' },
-  stages: { icon: '🎤', name: 'Bühnen & Beschallung' },
-  lights: { icon: '💡', name: 'Beleuchtung' },
+  food: { icon: '🍔', name: de('Essensbuden') },
+  drinks: { icon: '🍺', name: de('Getränkebuden') },
+  toilets: { icon: '🚻', name: de('Toiletten') },
+  shops: { icon: '🛍️', name: de('Souvenirläden') },
+  rides: { icon: '🎢', name: de('Fahrgeschäfte') },
+  stages: { icon: '🎤', name: de('Bühnen & Beschallung') },
+  lights: { icon: '💡', name: de('Beleuchtung') },
 }
 
 export type DayPlan = {
@@ -39,9 +41,10 @@ export type FestivalPhase = 'lead' | 'festival' | 'break'
 export const FESTIVAL_PHASES = ['lead', 'festival', 'break'] as const
 
 export const FESTIVAL_PHASE_LABELS: Record<FestivalPhase, string> = {
-  lead: 'Vorbereitung',
-  festival: 'Festival',
-  break: 'Pause',
+  lead: de('Vorbereitung'),
+  festival: de('Festival'),
+  // The phase between editions reads the same in English; no catalog key, since 'Pause' is also a key name.
+  break: keep('Pause'),
 }
 
 export type FestivalCycleStatus = {

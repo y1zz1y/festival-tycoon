@@ -4,10 +4,12 @@ import { GameState } from '../game/GameState'
 import { decodeSaveText, encodeSaveText, serializeSnapshot, storageErrorMessage } from '../game/saveText'
 import { deleteServerSave, listServerSaves, loadServerSave, saveServerSave, shareServerSave } from '../game/serverSaves'
 import { AUTOSAVE_DEFAULT_MINUTES, AUTOSAVE_INTERVALS, AUTOSAVE_KEY, LEGACY_AUTOSAVE_NAME, QUICKSAVE_NAME } from '../app/shell'
-import { EMPTY_SAVE_ARCHIVE, composeSaveArchive, findSaveSlot as findArchiveSlot, offlineSaveArchive, saveArchiveHtml, saveAsArchiveHtml, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
+import { EMPTY_SAVE_ARCHIVE, composeSaveArchive, findQuickSlot, findSaveSlot as findArchiveSlot, offlineSaveArchive, saveArchiveHtml, saveAsArchiveHtml, saveStorageNote, type SaveArchiveView, type SaveSlotView } from './saveArchive'
 import { formatSaveTime } from './format'
 import { loadWithOverlay } from './loadingOverlay'
 import { confirmDiscardingWork, markWorkSaved } from './unsavedWork'
+import type { GameSnapshot } from '../game/types/snapshot'
+import { localize, localizeName, t } from '../i18n'
 
 export interface SaveControllerContext {
   getGame(): GameState
@@ -19,6 +21,17 @@ export interface SaveControllerContext {
   bindGameState(game: GameState): void
   fillScenarioForm(settings: GameState['snapshot']['scenario']): void
   showToast(message: string, isError?: boolean): void
+  /**
+   * A slot quick- and autosaving write to instead of the player's own quicksave,
+   * or null for that one. Set while the running park was inherited by a
+   * multiplayer takeover: somebody else's world must not overwrite your game.
+   */
+  takeoverSlotName?(): string | null
+  /**
+   * Called with a game quick-loaded from that takeover slot, before it is bound:
+   * a save of the inherited park is still somebody else's park.
+   */
+  keepTakeover?(game: GameState): void
 }
 
 export interface SaveController {
@@ -31,13 +44,16 @@ export interface SaveController {
   bindLoadedGame(game: GameState, message: string): void
   tryQuickLoad(): Promise<boolean>
   formatSaveTime(value: number): string
+  /** Keeps any snapshot as a local browser save under `name`, replacing one of that name. */
+  backupLocally(name: string, snapshot: Readonly<GameSnapshot>): Promise<string>
 }
 
 export function mountSaveController(context: SaveControllerContext): SaveController {
   const { getGame, getMultiplayerMode, isTitleOpen, rememberLastSave, isPathWindowOpen, closePathEditor, bindGameState, fillScenarioForm, showToast } = context
   const requireElement = <T extends Element>(selector: string): T => {
     const element = document.querySelector<T>(selector)
-    if (!element) throw new Error(`Ben?tigtes UI-Element fehlt: ${selector}`)
+    // i18n-ignore: a broken page layout, for developers only; never shown to players.
+    if (!element) throw new Error(`Benötigtes UI-Element fehlt: ${selector}`)
     return element
   }
 
@@ -77,8 +93,8 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
   const findSaveSlot = (id: string): SaveSlotView | undefined =>
     findArchiveSlot(saveArchive, id)
   function bindLoadedGame(loaded: GameState, message: string): void {
-    if (!confirmDiscardingWork('Einen anderen Spielstand laden?')) return
-    loadWithOverlay('Spielstand wird geladen …', () => {
+    if (!confirmDiscardingWork(t('Einen anderen Spielstand laden?'))) return
+    loadWithOverlay(t('Spielstand wird geladen …'), () => {
       if (isPathWindowOpen()) closePathEditor()
       bindGameState(loaded)
       fillScenarioForm(loaded.snapshot.scenario)
@@ -87,39 +103,58 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
       showToast(message)
     })
   }
+  /** „Übernommen {Code}“ while the running park was inherited by a takeover, else null. */
+  const takeoverSlot = (): string | null => context.takeoverSlotName?.() ?? null
   /**
-   * The slot quick-saving and auto-saving share, as it stands in the archive.
-   * Looked up by name rather than remembered, so it still lines up after a
-   * reload, a sign-in, or the same game being played in another browser.
+   * The slot quick-saving, auto-saving and quick-loading share, as it stands in
+   * the archive (`findQuickSlot`). Looked up by name rather than remembered, so
+   * it still lines up after a reload, a sign-in, or the same game being played
+   * in another browser. An older game's autosave becomes the quicksave rather
+   * than being left beside it: writing into that id renames it, so the newest
+   * save stays the newest.
    */
-  async function quicksaveSlot(): Promise<SaveSlotView | undefined> {
+  async function quicksaveSlot(takeover: string | null): Promise<SaveSlotView | undefined> {
     const archive = await fetchSaveSlots()
-    // An older game's autosave becomes this slot rather than being left beside
-    // it: writing into that id renames it, so the newest save stays the newest.
-    return archive.own.find((slot) => slot.name === QUICKSAVE_NAME)
-      ?? archive.own.find((slot) => slot.name === LEGACY_AUTOSAVE_NAME)
+    return findQuickSlot(archive.own, takeover, [QUICKSAVE_NAME, LEGACY_AUTOSAVE_NAME])
+  }
+
+  /**
+   * Where quick- and autosaving write: the player's own quicksave slot, or — for
+   * a park inherited by a multiplayer takeover — a slot of its own. Quick-loading
+   * reads the same one.
+   */
+  async function persistQuickTarget(): Promise<string> {
+    const takeover = takeoverSlot()
+    const existing = await quicksaveSlot(takeover)
+    return persistNamedSave(
+      takeover ?? QUICKSAVE_NAME,
+      existing?.id,
+      existing?.source ?? (saveArchive.onServer ? 'server' : 'browser'),
+    )
   }
 
   async function persistQuicksave(): Promise<void> {
     try {
-      const existing = await quicksaveSlot()
-      const message = await persistNamedSave(
-        QUICKSAVE_NAME,
-        existing?.id,
-        existing?.source ?? (saveArchive.onServer ? 'server' : 'browser'),
-      )
-      showToast(message)
+      showToast(await persistQuickTarget())
     } catch (error) {
-      showToast(storageErrorMessage(error, 'Schnellspeichern ist fehlgeschlagen'), true)
+      showToast(storageErrorMessage(error, t('Schnellspeichern ist fehlgeschlagen')), true)
     }
   }
   /** Loads the single quick-save slot (`SAVE_KEY` / overflow store), not a named archive entry. */
   async function tryQuickLoad(): Promise<boolean> {
     if (getMultiplayerMode() === 'client') {
-      showToast('Nur der Host kann einen Spielstand laden', true)
+      showToast(t('Nur der Host kann einen Spielstand laden'), true)
       return false
     }
-    const slot = await quicksaveSlot()
+    // An inherited park loads its own takeover slot back. Without one, nothing
+    // is loaded: the player's own quicksave would swap the room's world for an
+    // unrelated park.
+    const takeover = takeoverSlot()
+    const slot = await quicksaveSlot(takeover)
+    if (takeover && !slot) {
+      showToast(t`Noch kein Stand „${localizeName(takeover)}“ gespeichert`, true)
+      return false
+    }
     // Saves written before the two were merged still live in the old single
     // slot; they are read as a fallback so nobody's last game disappears.
     const loaded = slot
@@ -129,10 +164,12 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
         return raw ? GameState.fromJSON(raw) : GameState.load()
       })()
     if (!loaded) {
-      showToast('Kein gültiger Spielstand gefunden', true)
+      showToast(t('Kein gültiger Spielstand gefunden'), true)
       return false
     }
-    bindLoadedGame(loaded, `„${QUICKSAVE_NAME}“ geladen`)
+    if (takeover) context.keepTakeover?.(loaded)
+    const loadedName = localizeName(slot?.name ?? QUICKSAVE_NAME)
+    bindLoadedGame(loaded, t`„${loadedName}“ geladen`)
     return true
   }
   function showSaveSlots(archive: SaveArchiveView): void {
@@ -154,7 +191,7 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     showSaveSlots(archive)
   }
   async function openSaveSlots(): Promise<void> {
-    if (getMultiplayerMode() === 'client') { showToast('Nur der Host kann Spielstände verwalten', true); return }
+    if (getMultiplayerMode() === 'client') { showToast(t('Nur der Host kann Spielstände verwalten'), true); return }
     saveSlotsMessage.textContent = ''
     saveSlotName.value = ''
     setSaveSlotsPanelOpen(true)
@@ -168,7 +205,7 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
       saveSlotsMessage.textContent = await persistNamedSave(saveSlotName.value)
       saveSlotName.value = ''
       await renderSaveSlots()
-    } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht gespeichert werden' }
+    } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? localize(error.message) : t('Spielstand konnte nicht gespeichert werden') }
   })
   /** Reads one slot back, from wherever it came from, and makes it the one to resume. */
   async function readSaveSlot(slot: SaveSlotView): Promise<GameState | null> {
@@ -187,17 +224,40 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     }
   }
   
-  async function persistLocalNamedSave(name: string, id?: string): Promise<string> {
-    const json = serializeSnapshot(getGame().snapshot)
-    const result = getGame().saveSlot(name, id)
-    if (result.ok) {
-      rememberBrowserSave(name)
-      return result.message
-    }
+  /**
+   * Writes a snapshot into a browser slot: localStorage when it fits, the
+   * IndexedDB overflow store otherwise. `overflow` says which one took it.
+   */
+  async function writeLocalSlot(name: string, id: string | undefined, snapshot: Readonly<GameSnapshot>): Promise<{ message: string; slotId?: string; overflow: boolean }> {
+    const json = serializeSnapshot(snapshot)
+    const result = GameState.saveSnapshotSlot(snapshot, name, id)
+    // The game answers in canonical German; the message is shown, so it is translated here.
+    if (result.ok) return { message: localize(result.message), slotId: result.slotId, overflow: false }
     if (!result.slotId) throw new Error(result.message)
     await writeNamedSlotJson(result.slotId, json)
-    rememberLastSave({ id: result.slotId, source: 'browser', name: name.trim().replace(/\s+/g, ' ') })
-    return `Spielstand „${name.trim().replace(/\s+/g, ' ')}“ im erweiterten Browser-Speicher gespeichert`
+    const shownName = localizeName(name.trim().replace(/\s+/g, ' '))
+    return {
+      message: t`Spielstand „${shownName}“ im erweiterten Browser-Speicher gespeichert`,
+      slotId: result.slotId,
+      overflow: true,
+    }
+  }
+
+  async function persistLocalNamedSave(name: string, id?: string): Promise<string> {
+    const written = await writeLocalSlot(name, id, getGame().snapshot)
+    if (!written.overflow) rememberBrowserSave(name)
+    else if (written.slotId) rememberLastSave({ id: written.slotId, source: 'browser', name: name.trim().replace(/\s+/g, ' ') })
+    return written.message
+  }
+
+  /**
+   * A backup kept in this browser only, whatever the archive is — the world a
+   * host ran offline before a takeover. It replaces an older backup of the same
+   * name and does not become the save „Fortsetzen“ offers.
+   */
+  async function backupLocally(name: string, snapshot: Readonly<GameSnapshot>): Promise<string> {
+    const existing = browserSlots().find((slot) => slot.name === name.trim().replace(/\s+/g, ' '))
+    return (await writeLocalSlot(name, existing?.id, snapshot)).message
   }
   
   async function persistNamedSave(name: string, id?: string, source: 'server' | 'browser' = saveArchive.onServer ? 'server' : 'browser'): Promise<string> {
@@ -209,10 +269,12 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
       try {
         const saved = await saveServerSave(name, json, id)
         rememberLastSave({ ...saved, source: 'server' })
-        return `Spielstand „${saved.name}“ unter deinem Konto gespeichert`
+        const savedName = localizeName(saved.name)
+        return t`Spielstand „${savedName}“ unter deinem Konto gespeichert`
       } catch (error) {
         const local = await persistLocalNamedSave(name, undefined)
-        return `${error instanceof Error ? error.message : 'Server-Speichern fehlgeschlagen'} Stattdessen lokal: ${local}`
+        const reason = error instanceof Error ? localize(error.message) : t('Server-Speichern fehlgeschlagen')
+        return t`${reason} Stattdessen lokal: ${local}`
       }
     }
     return persistLocalNamedSave(name, id)
@@ -236,12 +298,12 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     if (autosaveRunning || isTitleOpen() || getMultiplayerMode() === 'client') return
     autosaveRunning = true
     try {
-      const existing = await quicksaveSlot()
       // The same slot quick-saving writes: one latest save, not two competing ones.
-      await persistNamedSave(QUICKSAVE_NAME, existing?.id, existing?.source ?? (saveArchive.onServer ? 'server' : 'browser'))
-      showToast('Automatisch gespeichert')
+      await persistQuickTarget()
+      const takeover = takeoverSlot()
+      showToast(takeover ? t`Automatisch gespeichert als „${localizeName(takeover)}“` : t('Automatisch gespeichert'))
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Automatisches Speichern fehlgeschlagen', true)
+      showToast(error instanceof Error ? localize(error.message) : t('Automatisches Speichern fehlgeschlagen'), true)
     } finally {
       autosaveRunning = false
     }
@@ -268,7 +330,8 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     const minutes = Number(autosaveSelect.value)
     applyAutosaveInterval(minutes)
     try { window.localStorage.setItem(AUTOSAVE_KEY, String(minutes)) } catch { /* then it lasts for this session */ }
-    showToast(minutes > 0 ? `Autospeichern: ${AUTOSAVE_INTERVALS.find((option) => option.minutes === minutes)?.label.toLowerCase()}` : 'Autospeichern aus')
+    const interval = AUTOSAVE_INTERVALS.find((option) => option.minutes === minutes)?.label.toLowerCase() ?? ''
+    showToast(minutes > 0 ? t`Autospeichern: ${interval}` : t('Autospeichern aus'))
   })
   saveSlotsPanel.addEventListener('click', async event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('[data-load-slot],[data-overwrite-slot],[data-share-slot],[data-delete-slot]')
@@ -277,9 +340,9 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     if (button.dataset.loadSlot) {
       const slot = findSaveSlot(id)
       const loaded = slot ? await readSaveSlot(slot) : null
-      if (!slot || !loaded) { saveSlotsMessage.textContent = 'Dieser Spielstand ist ungültig oder nicht mehr vorhanden.'; renderSaveSlots(); return }
+      if (!slot || !loaded) { saveSlotsMessage.textContent = t('Dieser Spielstand ist ungültig oder nicht mehr vorhanden.'); renderSaveSlots(); return }
       const foreign = !saveArchive.own.some((own) => own.id === id)
-      bindLoadedGame(loaded, foreign ? `Öffentlicher Spielstand von ${slot.owner} geladen` : 'Spielstand geladen')
+      bindLoadedGame(loaded, foreign ? t`Öffentlicher Spielstand von ${slot.owner} geladen` : t('Spielstand geladen'))
       setSaveSlotsPanelOpen(false)
       return
     }
@@ -291,20 +354,21 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
       try {
         saveSlotsMessage.textContent = await persistNamedSave(slot.name, id, slot.source)
         await renderSaveSlots()
-      } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht überschrieben werden' }
+      } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? localize(error.message) : t('Spielstand konnte nicht überschrieben werden') }
       return
     }
     if (button.dataset.shareSlot) {
       try {
         const updated = await shareServerSave(id, !slot.public)
+        const sharedName = localizeName(slot.name)
         saveSlotsMessage.textContent = updated.public
-          ? `Spielstand „${slot.name}“ ist jetzt öffentlich — andere können ihn laden, aber nicht überschreiben.`
-          : `Spielstand „${slot.name}“ ist wieder privat`
+          ? t`Spielstand „${sharedName}“ ist jetzt öffentlich — andere können ihn laden, aber nicht überschreiben.`
+          : t`Spielstand „${sharedName}“ ist wieder privat`
         await renderSaveSlots()
-      } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Sichtbarkeit konnte nicht geändert werden' }
+      } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? localize(error.message) : t('Sichtbarkeit konnte nicht geändert werden') }
       return
     }
-    if (!window.confirm(`Spielstand „${slot.name}“ wirklich löschen?`)) return
+    if (!window.confirm(t`Spielstand „${localizeName(slot.name)}“ wirklich löschen?`)) return
     try {
       if (slot.source === 'server') await deleteServerSave(id)
       else {
@@ -312,9 +376,9 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
         if (!result.ok) throw new Error(result.message)
         await deleteNamedSlotJson(id)
       }
-      saveSlotsMessage.textContent = 'Spielstand gelöscht'
+      saveSlotsMessage.textContent = t('Spielstand gelöscht')
       await renderSaveSlots()
-    } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht gelöscht werden' }
+    } catch (error) { saveSlotsMessage.textContent = error instanceof Error ? localize(error.message) : t('Spielstand konnte nicht gelöscht werden') }
   })
   document.querySelector<HTMLButtonElement>('#save-slots')?.addEventListener('click', openSaveSlots)
   
@@ -343,7 +407,7 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     saveAsList.innerHTML = saveAsArchiveHtml(archive, formatSaveTime)
   }
   async function openSaveAs(): Promise<void> {
-    if (getMultiplayerMode() === 'client') { showToast('Nur der Host kann Spielstände verwalten', true); return }
+    if (getMultiplayerMode() === 'client') { showToast(t('Nur der Host kann Spielstände verwalten'), true); return }
     saveAsMessage.textContent = ''
     saveAsName.value = ''
     setSaveAsPanelOpen(true)
@@ -359,7 +423,7 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
       saveAsMessage.textContent = await persistNamedSave(saveAsName.value)
       saveAsName.value = ''
       await renderSaveAsSlots()
-    } catch (error) { saveAsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht gespeichert werden' }
+    } catch (error) { saveAsMessage.textContent = error instanceof Error ? localize(error.message) : t('Spielstand konnte nicht gespeichert werden') }
   })
   saveAsPanel.addEventListener('click', async event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('[data-overwrite-slot]'); if (!button) return
@@ -369,13 +433,13 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     try {
       saveAsMessage.textContent = await persistNamedSave(slot.name, id, slot.source)
       await renderSaveAsSlots()
-    } catch (error) { saveAsMessage.textContent = error instanceof Error ? error.message : 'Spielstand konnte nicht überschrieben werden' }
+    } catch (error) { saveAsMessage.textContent = error instanceof Error ? localize(error.message) : t('Spielstand konnte nicht überschrieben werden') }
   })
   document.querySelector<HTMLButtonElement>('#save-as')?.addEventListener('click', openSaveAs)
   
   const saveTextDialog = document.createElement('dialog')
   saveTextDialog.className = 'save-text-dialog'
-  saveTextDialog.innerHTML = `<h2>Spielstand als Text</h2><p>Base64-Text kopieren oder einen erhaltenen Spielstand einfügen.</p><textarea aria-label="Base64-Spielstand" spellcheck="false"></textarea><p class="save-text-error" role="alert"></p><div><button data-import>Spielstand laden</button><button data-close>Schließen</button></div>`
+  saveTextDialog.innerHTML = `<h2>${t('Spielstand als Text')}</h2><p>${t('Base64-Text kopieren oder einen erhaltenen Spielstand einfügen.')}</p><textarea aria-label="${t('Base64-Spielstand')}" spellcheck="false"></textarea><p class="save-text-error" role="alert"></p><div><button data-import>${t('Spielstand laden')}</button><button data-close>${t('Schließen')}</button></div>`
   document.body.append(saveTextDialog)
   const saveTextArea = saveTextDialog.querySelector('textarea')!
   const saveTextError = saveTextDialog.querySelector('.save-text-error')!
@@ -394,26 +458,26 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     const text = encodeSaveText(serializeSnapshot(getGame().snapshot))
     try {
       await navigator.clipboard.writeText(text)
-      showToast('Base64-Spielstand in die Zwischenablage kopiert')
+      showToast(t('Base64-Spielstand in die Zwischenablage kopiert'))
     } catch {
       openSaveText(text, false)
-      showToast('Text mit Strg+C kopieren')
+      showToast(t('Text mit Strg+C kopieren'))
     }
   })
   document.querySelector('#paste-save')!.addEventListener('click', () => {
-    if (getMultiplayerMode() === 'client') { showToast('Nur der Host kann einen Spielstand laden', true); return }
+    if (getMultiplayerMode() === 'client') { showToast(t('Nur der Host kann einen Spielstand laden'), true); return }
     openSaveText('', true)
     // Manual paste works without clipboard permissions in every browser.
   })
   saveTextImport.addEventListener('click', () => {
-    if (getMultiplayerMode() === 'client') { saveTextError.textContent = 'Nur der Host kann einen Spielstand laden'; return }
+    if (getMultiplayerMode() === 'client') { saveTextError.textContent = t('Nur der Host kann einen Spielstand laden'); return }
     try {
       const loaded = GameState.fromJSON(decodeSaveText(saveTextArea.value))
       if (!loaded) throw new Error('invalid save')
       saveTextDialog.close()
-      bindLoadedGame(loaded, 'Spielstand aus Base64 geladen')
+      bindLoadedGame(loaded, t('Spielstand aus Base64 geladen'))
     } catch {
-      saveTextError.textContent = 'Ungültiger oder unvollständiger Base64-Spielstand.'
+      saveTextError.textContent = t('Ungültiger oder unvollständiger Base64-Spielstand.')
     }
   })
   
@@ -428,5 +492,6 @@ export function mountSaveController(context: SaveControllerContext): SaveControl
     bindLoadedGame,
     tryQuickLoad,
     formatSaveTime,
+    backupLocally,
   }
 }

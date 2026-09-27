@@ -1,3 +1,5 @@
+import { t } from './i18n'
+
 const CHECK_INTERVAL_MS = 5 * 60 * 1000
 // Guards the visibilitychange listener: some environments (background tab
 // throttling, automation tooling) fire that event far more often than an
@@ -9,7 +11,7 @@ export function mountUpdateNotice(): void {
   const notice = document.createElement('div')
   notice.className = 'update-notice panel'
   notice.hidden = true
-  notice.innerHTML = '<span>Eine neue Version ist verfügbar.</span><button type="button" data-reload>🔄 Jetzt aktualisieren</button>'
+  notice.innerHTML = `<span>${t('Eine neue Version ist verfügbar.')}</span><button type="button" data-reload>🔄 ${t('Jetzt aktualisieren')}</button>`
   document.body.append(notice)
   notice.querySelector('[data-reload]')!.addEventListener('click', () => location.reload())
 

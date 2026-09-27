@@ -9,6 +9,7 @@ import {
   Vector3,
   type Object3D,
 } from 'three'
+import { isLegacyAttractionId } from '../game/attractions/dualModel'
 import type { Attraction } from '../game/attractions/types'
 import { disposeObject3D } from './disposeObject3D'
 
@@ -30,8 +31,13 @@ export class AttractionView {
   readonly group = new Group()
   private signature = ''
 
+  /**
+   * Draws canonical records plus the camping/party overlay records. Coasters,
+   * courses and rides have their own views, so their projection records
+   * (`legacyAttractionIds`) are skipped here.
+   */
   update(attractions: readonly Attraction[], legacyIds: ReadonlySet<string> = new Set()): void {
-    const visible = attractions.filter((attraction) => !legacyIds.has(attraction.id))
+    const visible = attractions.filter((attraction) => !isLegacyAttractionId(attraction.id, legacyIds))
     const signature = JSON.stringify(visible.map((attraction) => [
       attraction.id,
       attraction.definitionId,
@@ -158,6 +164,7 @@ function sharedMaterial(color: number): MeshStandardMaterial {
 function referenceScale(kind: string): Vector3 {
   if (kind === 'water') return new Vector3(1.7, 0.08, 1.7)
   if (kind === 'cover') return new Vector3(1.4, 0.8, 0.5)
+  // i18n-ignore: `kind` is a reference kind id, not text
   if (kind.includes('Start')) return new Vector3(1.3, 0.08, 1.3)
   if (kind === 'tree') return new Vector3(0.7, 3, 0.7)
   return new Vector3(1, 1, 1)

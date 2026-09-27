@@ -19,6 +19,7 @@ import {
 import type { CoasterTypeId } from '../game/coasters'
 import type { GameSnapshot } from '../game/types/snapshot'
 import { stageStats } from '../game/stageDesign'
+import { localize, localizeName, t } from '../i18n'
 
 export interface BuildCatalogThumbnails {
   buildingThumbnail(kind: BuildingKind): string
@@ -67,7 +68,7 @@ export function catalogTileHtml(
           (template) => template.name === snapshot.festival.selectedStageTemplate,
         )
       : undefined
-  const name = escapeHtml(stageTemplate ? stageTemplate.name : item.name)
+  const name = escapeHtml(stageTemplate ? localizeName(stageTemplate.name) : item.name)
   const buildingCost =
     item.tool === 'stage'
       ? formatMoney(BUILDINGS.stage.cost + (stageTemplate ? stageStats(stageTemplate).cost : 0))
@@ -136,12 +137,12 @@ export function createBuildCatalog(
 
   const showStatus = (button: HTMLButtonElement | null): void => {
     if (elements.status.hidden) return
-    elements.statusName.textContent = button?.dataset.catalogName ?? 'Objekt wählen'
+    elements.statusName.textContent = button?.dataset.catalogName ?? t('Objekt wählen')
     const detail = button?.dataset.catalogDetail ?? ''
     elements.statusDetail.textContent = detail
     elements.statusDetail.hidden = detail.length === 0
     const cost = button?.dataset.catalogCost ?? ''
-    elements.statusCost.textContent = cost ? `Kosten: ${cost}` : ''
+    elements.statusCost.textContent = cost ? t`Kosten: ${cost}` : ''
   }
 
   const showSelectedStatus = (): void => {
@@ -155,7 +156,7 @@ export function createBuildCatalog(
     if (elements.decorationThemes) {
       elements.decorationThemes.innerHTML = DECORATION_THEMES.map(
         (entry) =>
-          `<button type="button" data-decoration-theme="${entry.id}" aria-pressed="${entry.id === theme}" title="${escapeHtml(entry.rationale)}">${entry.icon}<small>${escapeHtml(entry.label)}</small></button>`,
+          `<button type="button" data-decoration-theme="${entry.id}" aria-pressed="${entry.id === theme}" title="${escapeHtml(localize(entry.rationale))}">${entry.icon}<small>${escapeHtml(localize(entry.label))}</small></button>`,
       ).join('')
     }
     elements.subtabs.hidden = true
@@ -167,12 +168,12 @@ export function createBuildCatalog(
         .map((kind) => catalogTileHtml(buildingMenuItem(kind), true, getSnapshot(), formatMoney))
         .join('')
       return [
-        `<section class="decoration-category" data-decoration-category="${category}"><h3>${DECORATION_CATEGORY_LABELS[category]}</h3><div class="decoration-category-grid">${tiles}</div></section>`,
+        `<section class="decoration-category" data-decoration-category="${category}"><h3>${localize(DECORATION_CATEGORY_LABELS[category])}</h3><div class="decoration-category-grid">${tiles}</div></section>`,
       ]
     })
     elements.grid.innerHTML = sections.length
       ? sections.join('')
-      : '<p class="decoration-empty">Keine Deko in diesem Thema.</p>'
+      : `<p class="decoration-empty">${t('Keine Deko in diesem Thema.')}</p>`
     fillThumbnails()
     showSelectedStatus()
   }

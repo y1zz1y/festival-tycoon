@@ -15,7 +15,7 @@ Konto.
 | Erfolge aus dem Snapshot ablesen | `src/game/achievements.ts` | `earnedAchievements` |
 | Anbindung ans Spiel | `src/ui/progressTracker.ts` | `mountProgressTracker` (`recordDecided`, `checkAchievements`, `sync`) |
 | Titelbildschirm: Häkchen, Erfolge | `src/ui/titleProgress.ts`, `src/ui/titleScreen.ts` | `scenarioBadgeMarkup`, `achievementRowsMarkup`, `refreshProgress` |
-| Tests | `tests/progress.ts`, `tests/festivalExtras.ts` | `testProgress`, `testAchievements` |
+| Tests | `tests/progress.ts`, `tests/festivalExtras.ts`, `tests/hostTakeover.ts` | `testProgress`, `testAchievements`, `testTakeoverNotices` (kein Eintrag für übernommene Parks), `testTakeoverHardening` (Markierung bleibt nach Schnellladen und erneutem Hosten) |
 
 ## Regeln
 
@@ -27,14 +27,25 @@ Konto.
   Abgleichs egal. `PUT /api/progress` antwortet mit dem gemergten Stand.
 - **Wer zählt:** nur der Host oder ein Solo-Spiel, nie ein Gast im fremden Raum,
   nie der Szenario-Editor und nie ein Spiel mit Debug-Geld
-  (`snapshot.debugAssisted`, gesetzt von `addDebugMoney`).
+  (`snapshot.debugAssisted`, gesetzt von `addDebugMoney`). Auch nie ein Park,
+  den ein Gast per Host-Übernahme geerbt hat: Solange genau diese Welt läuft
+  (`MultiplayerSession.inheritedHost`, an das `GameState`-Objekt gebunden, auch
+  nach dem Verlassen des Raums und beim erneuten Hosten — `host()` löscht die
+  Markierung nicht), liefert `isInheritedWorld` in `mountProgressTracker` true.
+  Schnellladen aus dem Slot „Übernommen {Code}“ nimmt die Markierung auf den
+  geladenen Stand mit (`markInherited`). Lädt der Spieler danach einen anderen
+  Stand, tritt einem Raum bei oder startet neu, zählt es wieder. Kein
+  Snapshot-Feld — ein „Übernommen“-Stand, der später aus der Spielstandliste
+  geladen wird, zählt wie jeder geladene Stand.
 - **Szenario-Ergebnis:** beim Übergang laufend → gewonnen/verloren
   (`scenarioStatus` ruft `onDecided`), unter `scenario.preset`, mit
   `scenarioScore`/`scenarioStars` wie im Endbildschirm. Freies Spiel ohne
   Preset wird nicht eingetragen.
 - **Erfolge:** `earnedAchievements` liest nur den Snapshot und die Datensätze;
   der Tracker prüft etwa alle 100 Ticks und meldet Neues per Toast. Die
-  Schwellen stehen in `ACHIEVEMENTS` und in `earnedAchievements`.
+  Schwellen stehen in `ACHIEVEMENTS` und in `earnedAchievements`. Name und
+  Beschreibung sind kanonisches Deutsch (`de` aus `server/i18nMarker.ts`, Katalog
+  `src/i18n/en/server.ts`); die UI lokalisiert sie beim Anzeigen.
 - **Abgleich:** beim Start nach `refreshAccount`, nach Anmelden/Registrieren und
   nach jedem neuen Eintrag. Ohne Konto oder Server bleiben die lokalen Daten.
 - Der Titelbildschirm zeigt bei geschafften Szenarien „✔“ und die besten Sterne,

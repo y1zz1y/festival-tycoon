@@ -66,9 +66,6 @@ type GoalHost = {
 /** Values the pure goal checks cannot work out from the snapshot fields they see. */
 export type GoalContext = { parkValue?: number }
 
-const euro = (value: number): string => `${Math.round(value).toLocaleString('de-DE')} €`
-const count = (value: number): string => Math.round(value).toLocaleString('de-DE')
-
 export function hasScenarioGoals(s: { scenario: { goals: readonly ScenarioGoal[] } }): boolean {
   return s.scenario.goals.length > 0
 }
@@ -163,14 +160,11 @@ function editionValue(kind: EditionGoalKind, result: EditionResult): number {
   return result[kind]
 }
 
-function formatEditionValue(kind: EditionGoalKind, value: number): string {
-  if (kind === 'satisfaction') return `${Math.round(value)} %`
-  if (kind === 'profit') return euro(value)
-  return count(value)
-}
-
-/** The run of editions in a row, ending with the latest, that met the target. */
-function editionRun(goal: EditionGoal, editions: readonly EditionResult[]): number {
+/**
+ * The run of editions in a row, ending with the latest, that met the target. The goal
+ * texts (scenarioGoalText.ts) show it as progress towards a streak.
+ */
+export function editionRun(goal: EditionGoal, editions: readonly EditionResult[]): number {
   let run = 0
   let expected: number | null = null
   for (let index = editions.length - 1; index >= 0; index--) {
@@ -202,30 +196,6 @@ export function goalReached(goal: ScenarioGoal, s: GoalHost, context: GoalContex
   if (goal.kind === 'parkValue') return (context.parkValue ?? 0) >= goal.target
   if (goal.kind === 'loanFree') return s.finance.loan <= 0
   return editionGoalMet(goal, s.scenarioProgress.editions)
-}
-
-export function goalName(goal: ScenarioGoal): string {
-  if (goal.kind === 'guests') return `${count(goal.target)} Besucher gleichzeitig`
-  if (goal.kind === 'money') return `${euro(goal.target)} Guthaben`
-  if (goal.kind === 'parkValue') return `${euro(goal.target)} Festivalwert`
-  if (goal.kind === 'loanFree') return 'Darlehen vollständig getilgt'
-  const within = goal.streak ? ` in ${goal.streak} Ausgaben hintereinander` : ' in einer Ausgabe'
-  if (goal.kind === 'admissions') return `${count(goal.target)} Anreisen${within}`
-  if (goal.kind === 'satisfaction') return `${goal.target} % Zufriedenheit${within}`
-  if (goal.kind === 'reputation') return `Ruf von ${goal.target}${within}`
-  return `${euro(goal.target)} Gewinn${within}`
-}
-
-export function goalProgressText(goal: ScenarioGoal, s: GoalHost, context: GoalContext = {}): string {
-  if (goal.kind === 'guests') return `${count(s.scenarioProgress.peakGuests)} erreicht`
-  if (goal.kind === 'money') return `${euro(s.money)} vorhanden`
-  if (goal.kind === 'parkValue') return `${euro(context.parkValue ?? 0)} erreicht`
-  if (goal.kind === 'loanFree') return s.finance.loan > 0 ? `noch ${euro(s.finance.loan)} offen` : 'getilgt'
-  const editions = s.scenarioProgress.editions
-  const latest = editions.at(-1)
-  if (!latest) return 'noch keine Ausgabe beendet'
-  const last = `zuletzt ${formatEditionValue(goal.kind, editionValue(goal.kind, latest))}`
-  return goal.streak ? `${last} · ${Math.min(goal.streak, editionRun(goal, editions))} von ${goal.streak} in Folge` : last
 }
 
 /** Marks goals reached or missed. Reached is for good; missed once the deadline edition is over. */

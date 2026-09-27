@@ -84,6 +84,9 @@ Kanten-Slots der neuen Arten: `glowTape`, `chainFence`, `trackCurb`, `occultBann
   dunkel. Platzieren, Drehen und Abriss aktualisieren die Quellen.
 - Balancing der neuen Stücke: Kosten/Appeal im Katalog, Reichweite in
   `SIMULATION_CONFIG.atmosphere.sources`.
+- Themen-, Kategorie- und Stil-Beschriftungen (`DECORATION_THEMES`,
+  `DECORATION_CATEGORY_LABELS`, `WALL_STYLES.label`) sind `de`-Text; die UI
+  übersetzt sie mit `localize()`. `WALL_SHAPES` sind IDs (`keep`).
 
 ## Tests
 

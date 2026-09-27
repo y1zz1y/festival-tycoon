@@ -2,6 +2,7 @@ import { bookFinance } from './finance'
 import { hashStringSeed } from './rng'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import type { GameSnapshot } from './types/snapshot'
+import { de, eur, keep, num, plural, verbatim } from '../i18n/marker'
 
 /**
  * Sponsors: before an edition starts the planning offers a few contracts. Signing one
@@ -24,7 +25,8 @@ export type SponsorContract = {
 
 const CONFIG = SIMULATION_CONFIG.sponsors
 
-const BRANDS: readonly { name: string; condition: SponsorCondition }[] = [
+/** Brand names are proper nouns and feed the offer hash: never change or translate them. */
+const BRANDS: readonly { name: string; condition: SponsorCondition }[] = keep([
   { name: 'Brausewerk Limonaden', condition: 'admissions' },
   { name: 'Knallhart Energy', condition: 'headliner' },
   { name: 'Omas Bratwurstbude', condition: 'satisfaction' },
@@ -32,14 +34,9 @@ const BRANDS: readonly { name: string; condition: SponsorCondition }[] = [
   { name: 'Funkturm Mobilfunk', condition: 'banners' },
   { name: 'Matschfest Gummistiefel', condition: 'satisfaction' },
   { name: 'Rostfrei Bier', condition: 'banners' },
-]
+])
 
-export const SPONSOR_CONDITION_TEXT: Record<SponsorCondition, (target: number) => string> = {
-  admissions: (target) => `mindestens ${target.toLocaleString('de-DE')} Anreisen`,
-  satisfaction: (target) => `Zufriedenheit mindestens ${target} %`,
-  banners: (target) => `${target} Festivalbanner auf dem Gelände`,
-  headliner: () => 'ein Headliner (5 Sterne) im Programm',
-}
+// How a condition reads on the contract card: SPONSOR_CONDITION_TEXT in the client-text module sponsorText.ts.
 
 /** Offers for the coming edition, `CONFIG.offers` of them, never the same brand twice. */
 export function rollSponsorOffers(seedText: string, edition: number): SponsorContract[] {
@@ -74,17 +71,17 @@ export function rollSponsorOffers(seedText: string, edition: number): SponsorCon
 /** Signs an offer before the edition starts: the advance is booked at once. */
 export function signSponsor(s: GameSnapshot, id: string): { ok: boolean; message: string } {
   const f = s.festival
-  if (f.enabled && !f.finished) return { ok: false, message: 'Sponsorverträge vor dem Festivalstart unterschreiben' }
+  if (f.enabled && !f.finished) return { ok: false, message: de('Sponsorverträge vor dem Festivalstart unterschreiben') }
   const offer = f.sponsorOffers?.find((entry) => entry.id === id && entry.status === 'offered')
-  if (!offer) return { ok: false, message: 'Dieses Angebot gibt es nicht mehr' }
+  if (!offer) return { ok: false, message: de('Dieses Angebot gibt es nicht mehr') }
   if ((f.sponsors ?? []).filter((entry) => entry.status === 'signed').length >= CONFIG.maximumSigned) {
-    return { ok: false, message: `Höchstens ${CONFIG.maximumSigned} Sponsoren je Ausgabe` }
+    return { ok: false, message: plural(CONFIG.maximumSigned, de`Höchstens ${num(CONFIG.maximumSigned)} Sponsor je Ausgabe`, de`Höchstens ${num(CONFIG.maximumSigned)} Sponsoren je Ausgabe`) }
   }
   offer.status = 'signed'
   f.sponsors = [...(f.sponsors ?? []).filter((entry) => entry.status === 'signed'), { ...offer }]
   f.sponsorOffers = f.sponsorOffers!.filter((entry) => entry.id !== id)
   bookFinance(s, 'sponsors', offer.advance)
-  return { ok: true, message: `${offer.sponsor} unterschrieben · ${offer.advance.toLocaleString('de-DE')} € Vorschuss` }
+  return { ok: true, message: de`${verbatim(offer.sponsor)} unterschrieben · ${eur(offer.advance)} Vorschuss` }
 }
 
 /** Whether a signed contract's condition holds, given what the edition achieved. */

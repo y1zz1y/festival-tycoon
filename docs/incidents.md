@@ -10,6 +10,7 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
 | --- | --- | --- |
 | Übelkeit, Incident-Spawn | `src/game/incidents.ts` | `IncidentSystem`, `GroundIncident` |
 | Müllablagen, Eimer, versiegelte Container | `src/game/waste.ts` | `WasteDumpCell`, `SealedWasteContainerInfo`, `findNearestWasteBin`, `findNearestWasteBinInRange`, `wasteBinHasRoom`, `connectedWasteDumpStats`, `acceptWasteAtDump`, `acceptWasteAtSealedContainer`, `sealedContainerAllowsManualHaul`, `wasteDropGoals`, `parkWasteDumpFill` |
+| Inspektor-/Hover-Zeilen für Ablage und Container (Client-Text, `t`) | `src/game/wasteText.ts` | `formatWasteDumpAreaInspect`, `formatWasteDumpAreaHover`, `formatSealedContainerInspect`; nur UI und Tests importieren das Modul |
 | Meldungs-Ticker | `src/game/ticker.ts`, `src/tickerUI.ts` | `observeTickerEvents`, `mountTickerUI` |
 | Debug-Räumung | `src/game/GameState.ts` | `clearWasteForDebug` |
 | Feuerwerk (Sim) | `src/game/fireworks.ts` | `FireworksSystem` |
@@ -102,7 +103,8 @@ Panik-Schwellen kommen aus Besucherblasen und Crowding, nicht aus der View.
   Verletzten auf der Straße: kein Ticker, kein Sanitäter, kein
   Verkehrs-Blocker. Eine im Fahrzeug gemerkte Verletzung gilt erst auf
   dem Fußweg nach dem Aussteigen.
-- Der Ticker (`src/game/ticker.ts`) leitet Meldungen aus dem Snapshot ab
+- Der Ticker (`src/game/ticker.ts`, Client-Text-Modul mit `t()`, siehe
+  [i18n.md](i18n.md)) leitet Meldungen aus dem Snapshot ab
   (kein neues Protokollfeld): Feuer, Panik/Massenpanik, Müllflächen über
   `waste.dumpFullRatio` (90 % der **gesamten** Ablagekapazität) und neue
   Verletzte. Wiederholungen nur beim Schwellenwechsel bzw. nach

@@ -1,9 +1,13 @@
+import { t } from './i18n'
+
 /**
  * Player accounts, held by the game server (see server/accounts.ts).
  *
  * The password leaves the browser once, over the wire, and is never kept here: what
  * comes back is a session cookie the browser stores on its own. This module only
- * remembers who is signed in, so the title screen can ask without waiting.
+ * remembers who is signed in, so the title screen can ask without waiting. Its own
+ * messages are UI text (`t`); the server's come back canonical German and the title
+ * screen's account line localizes them.
  */
 export type AccountResult = { ok: boolean; message: string; name?: string }
 
@@ -18,15 +22,15 @@ async function post(path: string, body?: unknown): Promise<AccountResult> {
       body: body ? JSON.stringify(body) : undefined,
     })
     const payload = (await response.json().catch(() => null)) as AccountResult | null
-    if (!payload) return { ok: false, message: 'Der Spielserver hat nicht geantwortet' }
+    if (!payload) return { ok: false, message: t('Der Spielserver hat nicht geantwortet') }
     return payload
   } catch {
-    return { ok: false, message: 'Kein Kontakt zum Spielserver — läuft er?' }
+    return { ok: false, message: t('Kein Kontakt zum Spielserver — läuft er?') }
   }
 }
 
 export async function registerAccount(name: string, password: string, repeat: string): Promise<AccountResult> {
-  if (password !== repeat) return { ok: false, message: 'Die beiden Passwörter stimmen nicht überein' }
+  if (password !== repeat) return { ok: false, message: t('Die beiden Passwörter stimmen nicht überein') }
   const result = await post('/api/account/register', { name, password })
   if (result.ok) signedInName = result.name ?? null
   return result

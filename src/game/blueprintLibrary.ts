@@ -9,6 +9,10 @@ import {
   type BlueprintLibraryEntry,
 } from './blueprints'
 import { createBrowserObjectStore, isQuotaError } from './browserPersistence'
+import { de } from '../i18n/marker'
+
+/** Canonical default name; stored as is and shown with localizeName (docs/i18n.md). */
+const UNNAMED_BLUEPRINT = de('Ohne Namen')
 const DB_NAME = 'headliner-tycoon-blueprints'
 const DB_VERSION = 1
 const STORE = 'library'
@@ -22,7 +26,7 @@ function normalizeEntry(raw: unknown): BlueprintLibraryEntry | null {
   if (!blueprint || !data.id || !data.name) return null
   return {
     id: String(data.id),
-    name: String(data.name).trim().replace(/\s+/g, ' ').slice(0, 40) || 'Ohne Namen',
+    name: String(data.name).trim().replace(/\s+/g, ' ').slice(0, 40) || UNNAMED_BLUEPRINT,
     createdAt: Number(data.createdAt) || 0,
     blueprint,
   }
@@ -70,7 +74,7 @@ export async function saveBlueprintLibraryEntry(
 ): Promise<BlueprintLibraryEntry> {
   const entry: BlueprintLibraryEntry = {
     id,
-    name: name.trim().replace(/\s+/g, ' ').slice(0, 40) || 'Ohne Namen',
+    name: name.trim().replace(/\s+/g, ' ').slice(0, 40) || UNNAMED_BLUEPRINT,
     createdAt: Date.now(),
     blueprint: normalizeBlueprint(blueprint) ?? { version: 1, width: 0, depth: 0, items: [] },
   }

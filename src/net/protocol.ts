@@ -316,15 +316,30 @@ export type WorldUpdate = {
   removed: string[]
 }
 
+/**
+ * `version` in a hello is the game build the seat runs (`__APP_VERSION__`); a
+ * host takeover prefers guests on the build the room's world comes from.
+ */
 export type ClientMessage =
   | WorldUpdate
-  | { t: 'host'; name: string; code?: string; public?: boolean }
+  | { t: 'host'; name: string; code?: string; public?: boolean; version?: string }
   | { t: 'lobbies' }
-  | { t: 'join'; code: string; name: string }
-  | { t: 'resume'; code: string; playerId: string; name: string }
-  | { t: 'command'; cmd: GameCommand }
+  | { t: 'join'; code: string; name: string; version?: string }
+  | { t: 'resume'; code: string; playerId: string; name: string; version?: string }
+  /**
+   * `epoch` is the room's takeover count as the guest knows it. A command sent
+   * before the guest heard of a takeover is refused by the server instead of
+   * being run by the new host behind the guest's back.
+   */
+  | { t: 'command'; cmd: GameCommand; epoch?: number }
   | { t: 'commandResult'; to: string; commandId: string; result: ActionResult }
-  | { t: 'leave' }
+  /**
+   * Leaving ends the room for everyone — unless the host hands it over: then a
+   * guest (preferably `to`) is promoted at once and the world carries on there.
+   */
+  | { t: 'leave'; handOver?: boolean; to?: string }
+  /** A promoted guest could not build the world it was handed; the server asks the next one. */
+  | { t: 'takeoverFailed' }
   | { t: 'world'; rev: number; world: WorldSnapshot }
   | { t: 'sim'; sim: SimSnapshot }
   | { t: 'result'; ok: boolean; message: string }
@@ -344,8 +359,52 @@ export type ClientMessage =
 export type ServerMessage =
   | WorldUpdate
   | { t: 'hosted'; code: string; playerId: string; joinUrl: string; players: NetPlayer[] }
-  | { t: 'joined'; code: string; playerId: string; role: 'host' | 'client'; players: NetPlayer[] }
-  | { t: 'players'; players: NetPlayer[]; hostAway?: boolean }
+  | {
+      t: 'joined'
+      code: string
+      playerId: string
+      role: 'host' | 'client'
+      players: NetPlayer[]
+      /** The host's seat is empty right now; see `players`. */
+      hostAway?: boolean
+      takeoverInMs?: number
+      /** This seat was host once and lost the room to a takeover while it was gone. */
+      demoted?: boolean
+      /** Who holds the room (or held it, while the seat is empty); the demoted player's notice names them. */
+      hostName?: string
+      /** Counts takeovers in this room; guests tag their commands with it. */
+      epoch?: number
+    }
+  | {
+      t: 'players'
+      players: NetPlayer[]
+      /** Always set: true while the host's seat is empty, false once it is taken again. */
+      hostAway: boolean
+      /** Who holds the host's seat, named even while it is empty. */
+      hostName?: string
+      /** Milliseconds until the server hands the room to a guest; absent when none is planned. */
+      takeoverInMs?: number
+    }
+  /** To the guest the server chose to carry the room on (host takeover). */
+  | {
+      t: 'promoted'
+      code: string
+      playerId: string
+      joinUrl: string
+      players: NetPlayer[]
+      /** Counts takeovers in this room. */
+      epoch: number
+      public: boolean
+      /** The server's last authoritative world; absent when it keeps none (too big). */
+      world?: WorldSnapshot
+      /** How old that world is, by the server's clock. */
+      worldAgeMs?: number
+    }
+  /**
+   * To everyone else in the room after a takeover. Also to a promoted guest the
+   * server gave up waiting on (no first world in time): it is a guest again.
+   */
+  | { t: 'hostChanged'; hostId: string; hostName: string; players: NetPlayer[]; epoch: number }
   | { t: 'lobbies'; lobbies: NetLobby[] }
   | { t: 'command'; cmd: GameCommand; from: string }
   | { t: 'commandResult'; commandId: string; result: ActionResult }

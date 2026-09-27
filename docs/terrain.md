@@ -28,6 +28,11 @@ ist von Wegbelägen getrennt.
 
 ## Wichtige Regeln
 
+- Meldungen aus `ground.ts`, `terrain.ts` und `wayTypes.ts` sind kanonisches
+  Deutsch mit `de` (docs/i18n.md). Eine Bodenarbeit auf einer Fläche meldet
+  `9 Felder · 315 € Kosten` (mit `· 3 übersprungen (…)`, Einzahl über `plural`);
+  das angehängte „Kosten“ gibt dem Muster ein literales Ende (I18N-B9). Ein
+  gestrichenes Einzelfeld hat je Untergrund einen ganzen Satz (`COVER_PAINTED`).
 - Kachelhöhen rasten auf **0,5** und bleiben autoritativ für Navigation.
   Sichtbare Hänge sind **zwei Dreiecke je Feld**. Angehobenes Land bleibt
   ein Plateau; Nachbarn steigen höchstens **0,5** an, das Ufer fällt

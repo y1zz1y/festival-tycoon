@@ -1,11 +1,13 @@
 import { hashStringSeed } from './rng'
 import type { FestivalManagement } from './festivalManagement'
-export const GENRES = [
+import { keep } from '../i18n/marker'
+/** Genre names are proper nouns (docs/i18n.md). */
+export const GENRES = keep([
   {id:'folk',name:'Folk',color:'#d5b65c'}, {id:'indie',name:'Indie',color:'#92bd66'},
   {id:'rock',name:'Rock',color:'#4db798'}, {id:'metal',name:'Metal',color:'#58a8d1'},
   {id:'electro',name:'Electro',color:'#858be0'}, {id:'dance',name:'Dance',color:'#bc79d3'},
   {id:'pop',name:'Pop',color:'#e580ab'}, {id:'soul',name:'Soul',color:'#e89e72'},
-] as const
+] as const)
 export type MusicGenre=typeof GENRES[number]['id']
 export type MusicMix=Record<MusicGenre,number>
 const bandGenres:Record<string,MusicGenre>={

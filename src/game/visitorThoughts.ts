@@ -1,5 +1,7 @@
-export const CONCERT_TOPLESS_THOUGHT = 'Ich feiere oben frei – die Menge rast!'
-export const CONCERT_TOPLESS_CROWD_THOUGHT = 'Da geht jemand oben ohne – die Stimmung explodiert!'
+import { de } from '../i18n/marker'
+
+export const CONCERT_TOPLESS_THOUGHT = de('Ich feiere oben frei – die Menge rast!')
+export const CONCERT_TOPLESS_CROWD_THOUGHT = de('Da geht jemand oben ohne – die Stimmung explodiert!')
 
 export type ThoughtVisitor = {
   id: string

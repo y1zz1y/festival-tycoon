@@ -142,6 +142,11 @@ export function createCarrierFigure(id: string): Group {
   return group
 }
 
+/**
+ * A porter with cart as ordinary meshes, for previews and tests. On the map the
+ * carriers are instances in the shared crew batches (`crewInstances.ts`), placed the
+ * same way: figure 0.12 behind the rig, cart and crates 0.16 ahead of it.
+ */
 export function createPorterModel(id: string): Group {
   const group = new Group()
   const person = createCarrierFigure(id)
@@ -160,11 +165,4 @@ export function createPorterModel(id: string): Group {
   group.add(person, cart, load, driver)
   group.userData.walkPhase = personSeed(id) % 1000
   return group
-}
-
-export function createCarrierDriver(id: string): Group {
-  const driver = createCarrierFigure(`${id}-driver`)
-  driver.name = 'driver'
-  driver.position.set(0.36, 0, 0.4)
-  return driver
 }

@@ -2,7 +2,10 @@
 
 Der **Host** simuliert. Clients schicken `GameCommand`s (inkl. Bauhöhe und
 Drehung) und empfangen periodische Weltdeltas. Alle Teilnehmer brauchen
-dieselbe Spielversion. Es gibt keine automatische Host-Übernahme.
+dieselbe Spielversion. Fällt der Host weg und kommt nicht innerhalb einer Frist
+zurück, übernimmt ein Gast den Raum mit dem letzten Weltstand, den der Server
+aufbewahrt (Abschnitt „Host-Übernahme“). Autorität bleibt dabei immer genau ein
+Host.
 
 ## Raumleben
 
@@ -84,15 +87,188 @@ sondern ein Aussetzer.
   Raum wartete und gar nichts sendete — Router und Proxys warfen sie als untätig
   weg, und der Raum starb mit ihr.
 - **Host weg:** Der Raum bleibt, `hostAwaySince` wird gesetzt, Gäste behalten
-  ihre Welt und bekommen `players` mit `hostAway: true`. Bauen geht erst wieder,
-  wenn der Host zurück ist.
+  ihre Welt und bekommen `players` mit `hostAway: true` (und `takeoverInMs`,
+  wenn eine Übernahme geplant ist). `players` und `joined` nennen den Host auch
+  bei leerem Sitz (`hostName`, im Client `MultiplayerStatus.hostName`; die
+  Spielerliste zeigt „{Name} · Host ist weg“). Bauen ist für Gäste pausiert: `GameState.gate`
+  lehnt jeden Befehl mit „Host ist weg – Bauen pausiert“ ab, statt ihn
+  optimistisch zu zeigen (`GameState.networkPause`). Nach der Frist übernimmt
+  ein Gast (siehe „Host-Übernahme“).
 - **Zurückkommen:** `resume` (`code`, `playerId`, `name`) holt den Host auf
-  seinen alten Sitz, sodass Gäste weiter über ihn laufen. Jeder andere wird wie
-  ein neuer Beitritt behandelt. Der Client wählt selbst nach, mit Backoff bis
-  15 s und ohne Versuchsgrenze.
+  seinen alten Sitz, sodass Gäste weiter über ihn laufen; der Übernahme-Countdown
+  endet. Jeder andere wird wie ein neuer Beitritt behandelt — auch ein alter
+  Host, dessen Raum inzwischen übernommen wurde (`joined.demoted`). Der Client
+  wählt selbst nach, mit Backoff bis 15 s und ohne Versuchsgrenze. `players`
+  trägt `hostAway` **immer**, also auch `false`, sobald der Sitz wieder besetzt
+  ist.
 - **Aufräumen:** Nur ein Raum, in dem niemand mehr sitzt und dessen Host seit
-  30 Minuten weg ist, wird verworfen. Das ist ein Sicherheitsnetz gegen
-  liegengebliebene Codes, keine Sitzungsdauer.
+  30 Minuten weg ist, wird verworfen — samt Countdown und Weltkopie. Das ist ein
+  Sicherheitsnetz gegen liegengebliebene Codes, keine Sitzungsdauer.
+
+## Host-Übernahme
+
+Der Server wählt allein und deterministisch; eine zweite Autorität gibt es nie.
+Der neue Host ist ein normaler Host auf einem anderen Rechner — weiterhin
+host-autoritativ, dieselben Befehle, dieselben Deltas.
+
+- **Weltkopie (`server/worldCache.ts`):** Solange Gäste im Raum sind, merkt sich
+  der Server jeden Voll-Sync und wendet jedes Delta darauf an — oberste Felder
+  ganz ersetzen, Besucher feldweise mit `mergeVisitorPatches`. Genau diese
+  Funktion benutzt auch `GameState.applyNetworkUpdate` (Re-Export in
+  `src/net/worldUpdates.ts`), die Reihenfolge der Besucher ist also dieselbe wie
+  beim Gast; sie entscheidet über die RNG-Züge des Hosts. Ohne Gäste (ein Host
+  allein sendet nichts) gibt es keine Kopie: Sie fällt weg, wenn der letzte Gast
+  geht, während der Host da ist, und ebenso, wenn der Host allein in seinen Raum
+  zurückkommt (`hostReturned`). Sonst bliebe eine alte Kopie liegen, und ein
+  Fremder, der nach dem nächsten Abriss kommt, bekäme diesen alten Park
+  übergeben. Gehen die Gäste, während der Host weg ist, bleibt die Kopie — ein
+  späterer Gast kann den Raum dann noch weiterführen.
+- **Größengrenze:** `MAX_CACHED_WORLD_BYTES` (48 MiB, Umgebungsvariable gleichen
+  Namens) gilt für die Kopie als Ganzes, nicht nur je Nachricht. Jedes Delta
+  zählt seine Länge auf eine obere Schranke (`bytes + unmeasured`; ein Delta kann
+  die Kopie höchstens um seine eigene Länge wachsen lassen). Erst wenn die
+  Schranke die Grenze überschreitet, wird die Kopie einmal echt vermessen
+  (`JSON.stringify`) und verworfen, falls sie wirklich zu groß ist. Deltas, die
+  ständig neue Besucher oder größere Felder anhängen, können sie so nicht mehr
+  unbegrenzt wachsen lassen. Ohne Kopie baut der Gewählte auf seinem eigenen
+  Spiegel auf.
+- **Fremde Eingaben:** Der Server wendet an, was ein beliebiger Host schickt.
+  `mergeVisitorPatches` überspringt Patches, die kein Objekt mit String-`id`
+  und Objekt-`changes` sind, und ersetzt einen Eintrag, der kein Objekt ist,
+  statt hineinzumischen; ein `world`, das kein Objekt ist, wird ignoriert.
+  Wirft das Nachführen der Kopie trotzdem, verliert nur dieser Raum seine Kopie
+  (`updateCache`), und jede eingehende Nachricht läuft in einem `try/catch`: Eine
+  kaputte Nachricht kostet diese Nachricht, nie den Prozess mit allen Räumen.
+- **Einmal kodiert weiterreichen:** Was der Host sendet (`state`, `sync`, …),
+  geht als derselbe Text an alle Sitze, statt pro Empfänger neu serialisiert zu
+  werden.
+- **Frist:** `HOST_TAKEOVER_SECONDS` (Standard 20, Umgebungsvariable) ab
+  `hostAwaySince`. Der Timer ist `unref`t, läuft nur, wenn jemand weitermachen
+  könnte (Kopie vorhanden oder ein Gast hat die Welt), und endet, sobald der Host
+  zurück ist (`resume` oder Zurückholen per `host`). Die Frist ist länger als
+  die ersten Reconnect-Versuche des Clients (1/2/4/8 s), deckt also einen
+  Verbindungsabriss im selben Tab. Ein Neuladen des Tabs deckt sie nur, wenn der
+  Spieler in der Zeit den Spielstand lädt und wieder hostet (siehe „Grenzen“).
+- **Wahl (`electHost`):** Kandidaten sind Gäste mit offenem Socket, die nicht
+  schon an einer Übernahme gescheitert sind — zuerst die auf derselben
+  Spielversion wie der Host (`version` im `host`/`join`/`resume`-Hello, aus
+  `__APP_VERSION__`; ein veralteter Tab versteht `promoted` womöglich nicht und
+  kommt nur dran, wenn sonst niemand kann), dann die mit Welt (`hasWorld`:
+  einen Voll-Sync bekommen), dann nach Beitrittsreihenfolge. Nennt der Host
+  keine Version, zählt sie nicht. Ohne Serverkopie
+  kommen nur Gäste mit Welt in Frage; hat niemand die Welt, wartet der Raum
+  („Der Host ist weg und niemand hat den Spielstand – warte auf Rückkehr.“).
+  Der Gewählte bekommt `promoted` (`code`, `playerId`, `joinUrl`, `players`,
+  `epoch`, `public`, `world?`, `worldAgeMs?`), alle anderen `hostChanged`
+  (`hostId`, `hostName`, `players`, `epoch`). `epoch` zählt die Übernahmen des
+  Raums. Das Relay-Gate `joined.id === room.hostId` sperrt ab jetzt den alten Sitz.
+- **Kandidat fällt aus:** Trennt sich der Gewählte vor seinem ersten Voll-Sync,
+  geht der Raum an den alten Host zurück (wie unten beim Scheitern), und sofort
+  wird der Nächste gewählt. Kann er die Welt nicht aufbauen
+  (`GameState.fromJSON` liefert `null`), schickt er `takeoverFailed`; der Server
+  setzt den Raum zurück, markiert ihn und fragt den Nächsten
+  (`abandonPromotion`). Schweigt er einfach — ein veralteter Tab, der `promoted`
+  ignoriert, ein halboffener Socket —, läuft nach 30 s ein Wächter ab
+  (`promotionTimeoutMs`, `watchPromotion`; Aufbau dauert unter einer Sekunde, der
+  Rest ist Luft für das Hochladen eines großen Parks). Dann gilt er als
+  gescheitert: Der Raum geht zurück an den alten Host (`previousHost`,
+  `hostAwaySince` neu), der seinen Sitz per `resume` also weiter zurückbekommt,
+  und der Nächste wird gewählt. Der Schweigende bekommt `hostChanged` — bei einer
+  Neuwahl mit allen anderen, sonst allein, vor dem `players` mit `hostAway`.
+  Ein Client, der sich schon für Host hält, wird dadurch wieder Gast
+  (`MultiplayerSession.leavePromotion`: Queue und Markierung weg, `hello` wird
+  `join`, Toast „Übernahme abgebrochen – du spielst als Gast weiter.“, der
+  nächste Voll-Sync ersetzt seine Welt). Ein Sync, der danach noch von ihm kommt,
+  wird verworfen (er ist nicht mehr `hostId`).
+- **Gäste ohne Host:** Ein Gast, der in einen Raum ohne Host kommt, und jedes
+  `resync` ohne Host werden aus der Serverkopie bedient (höchstens alle 4 s je
+  Sitz). Wer so eine Welt bekommt, ist Kandidat; der Countdown läuft weiter ab
+  `hostAwaySince`, ein später Beitritt startet ihn nicht neu.
+- **Übergeben:** `leave { handOver: true, to? }` vom Host mit Gästen wählt sofort,
+  ohne Frist (`to` wird bevorzugt, wenn er die Welt hat oder eine Kopie besteht).
+  Vorher schickt `MultiplayerSession.handOver` einen letzten Voll-Sync, damit die
+  Kopie exakt ist. Ohne möglichen Erben endet der Raum wie bisher.
+- **Befördert (Client):** `MultiplayerSession` verwirft unbestätigte Befehle,
+  baut die Welt mit `gameFromNetworkWorld` (`src/net/takeover.ts`) über
+  `GameState.fromJSON` — derselbe Weg wie beim Laden: migrieren, Konstruktor,
+  Reparatur, RNG aus `rngState`, neuer `idCounter`, Strom/Zugang/Abreisen neu.
+  Kein In-place-Umschalten des Spiegels (veraltetes `rng`, nie aufgebauter
+  Laufzeitzustand). `onPromoted(next)` bindet sie in `main.ts` hinter dem
+  Ladeoverlay (`src/ui/hostTakeover.ts`; ein verborgener Tab bindet sofort);
+  `attach` stempelt den Raumcode und schickt den ersten Voll-Sync. Befehle
+  anderer Gäste, die währenddessen ankommen, warten in einer Queue und laufen
+  nach dem Sync. `hello` wird ein `host`-Hello mit Raumcode, damit ein
+  verschwundener Raum (Serverneustart) mit dieser Welt neu öffnet.
+- **Die anderen Gäste:** `hostChanged` verwirft ihre unbestätigten Befehle
+  (Toast mit Anzahl), der nächste Voll-Sync des neuen Hosts ersetzt die Welt.
+- **Unbestätigte Befehle:** Was beim Wegfall des Hosts noch ohne Antwort ist,
+  wird nie erneut gesendet (ein Kredit würde doppelt gebucht) und nicht mehr
+  nach jedem Voll-Sync erneut abgespielt: `GameState.discardOptimisticCommands`
+  beim Übergang zu `hostAway` und bei `hostChanged`, Toast „{n} unbestätigte
+  Aktion(en) verworfen – bitte prüfen.“, danach `resync` (vom Server aus der
+  Kopie beantwortet). Ein Befehl, der den Server ohne Host erreicht, bekommt ein
+  `commandResult` mit `ok: false` statt eines allgemeinen Fehlers. Das behebt
+  den früheren Geisterbau, bei dem so ein Befehl nach jedem Sync wieder auftauchte.
+- **Epoche an Befehlen:** Jeder `command` eines Gasts trägt `epoch`, die Zahl der
+  Übernahmen, die er kennt (aus `joined.epoch`, `promoted.epoch`,
+  `hostChanged.epoch`). Weicht sie von `room.epoch` ab, war der Befehl unterwegs,
+  bevor der Gast von der Übernahme erfuhr — er hat ihn beim `hostChanged` schon
+  als verworfen gemeldet. Der Server leitet ihn dann nicht an den neuen Host
+  weiter, sondern antwortet `commandResult` mit `ok: false` („Host hat gewechselt
+  – Aktion verworfen“). Sonst liefe z. B. ein Kredit beim neuen Host und ein
+  zweites Mal, wenn der Gast ihn erneut auslöst. Ein Befehl ohne `epoch` (älterer
+  Client) geht wie bisher durch.
+- **Alter Host kommt zurück:** Er hat offline solo weitergerechnet. Per
+  `resume` ist er jetzt Gast (`joined.demoted`, `hostName`);
+  `onDemoted(backup)` sichert seine Welt vorher als lokalen Spielstand
+  „Vor Host-Wechsel {Code}“ (siehe [saves.md](saves.md)), dann ersetzt der
+  Voll-Sync des Raums sie. Sein `hello` wird ein `join`.
+- **Raum endet (`closed`):** Ein Gast spielt allein weiter, aber mit einer über
+  `gameFromNetworkWorld` neu aufgebauten Welt statt des Spiegels in-place
+  (`onContinueSolo`); die Welt behält den eigenen Raumcode des Gasts.
+- **Anzeige:** Banner oben mit „Host ist weg – Übernahme in {n} s“ (Countdown
+  aus `takeoverInMs`), Spielerliste markiert Host und „(du)“, Toasts „{Name} ist
+  jetzt Host. Das Spiel läuft weiter.“ bzw. „Du bist jetzt Host von Raum {Code}.
+  …“ (mit „Stand von vor {n} s übernommen.“ ab 2 s Alter). **Trennen** fragt einen
+  Host mit Gästen: „An {Name} übergeben“ (Standard), „Spiel für alle beenden“,
+  „Abbrechen“ (auch Esc; `chooseAction` in `src/ui/confirmDialog.ts`).
+- **Fortschritt und Speichern:** Wer einen Park übernommen hat, bekommt für ihn
+  keine Szenario-Siege oder Erfolge (`MultiplayerSession.inheritedHost`, siehe
+  [progress.md](progress.md)); Schnell- und Autospeichern gehen in den Slot
+  „Übernommen {Code}“, nie über das eigene „Schnellspeichern“, und
+  Schnellladen liest genau diesen Slot zurück (siehe [saves.md](saves.md)). Die
+  Markierung hängt am `GameState`-Objekt (`WeakMap`): Sie bleibt beim erneuten
+  Hosten (`host()` löscht sie nicht) und geht per `markInherited` auf einen
+  aus dem Übernahme-Slot schnellgeladenen Stand über.
+- **Kein neuer `GameCommand`, kein Snapshot-Feld:** Nur Protokoll-Nachrichten
+  (`promoted`, `hostChanged`, `takeoverFailed`, `leave.handOver`,
+  `players.takeoverInMs`/`hostName`, `joined.hostAway`/`demoted`/`hostName`/
+  `epoch`, `command.epoch`, `version` in `host`/`join`/`resume`).
+- **Grenzen:** Der neue Host rechnet ab dem Übernahmestand deterministisch
+  weiter, aber nicht bitgleich zu dem, was der alte gerechnet hätte — die
+  Leitung rundet Besucherwerte, und Laufzeitzustand außerhalb des Snapshots
+  (Entscheidungsqueues, Routen-Caches, Spawn-Takt, Undo-Stapel) beginnt neu, wie
+  nach dem Laden. Ein stumm toter Host fällt erst nach 25–50 s Keepalive auf,
+  dazu kommt die Frist; eine schnellere Erkennung (eigenes Stille-Timeout oder
+  kürzerer Ping für Hosts) gibt es bewusst nicht, weil ein Host auf langsamer
+  Leitung beim Hochladen eines großen Voll-Syncs zu Recht lange schweigt — ein
+  Pong wartet hinter dem Frame — und sonst fälschlich übernommen würde. Ohne
+  Serverkopie baut der Gewählte auf seinem Spiegel auf, der eigene unbestätigte
+  Bauten noch zeigen kann. Wer den Code hat, kann jetzt auch Host werden — das
+  Rechtemodell bleibt der Code.
+- **Nur derselbe Tab kommt als Gast zurück:** Gastsitz und Sicherung „Vor
+  Host-Wechsel {Code}“ gibt es nur, wenn der alte Host im selben Tab neu
+  verbindet (`resume` mit seiner `playerId`, aus dem Speicher der Session). Nach
+  Neuladen, Tab-Schließen oder Absturz ist diese Sitzung weg: Wer den
+  Spielstand lädt und erneut hostet, schickt `host`; ist der Raum noch ohne Host,
+  holt er ihn damit zurück (siehe „Eigenen Raum zurückholen“, nur wenn der
+  Spielstand den Code schon trägt), ist er inzwischen übernommen, bekommt er
+  einen **neuen** Raum mit neuem Code und sitzt allein darin — ohne Gastsitz und
+  ohne Sicherung; sein Stand liegt dann nur dort, wo er ihn selbst gespeichert
+  hat. Ein Sitz-Merker in `sessionStorage` (`code`, `playerId`) ist nicht
+  umgesetzt: Ein duplizierter Tab kopiert `sessionStorage`, und zwei Tabs mit
+  derselben Host-`playerId` würden sich den Sitz per `resume` gegenseitig
+  wegnehmen; das ginge nur mit einem rotierenden Sitz-Token am Server.
 
 ## Docker-Laufzeit
 
@@ -112,6 +288,58 @@ Bei jeder Server- oder Shared-Änderung prüfen:
 
 Lokal mit Vite kann ein `server/`→`src/`-Import unbemerkt laufen; im Image
 bricht er erst beim Start oder ersten Request.
+
+## Sprachen
+
+Jeder Client zeigt seine eigene Sprache ([i18n.md](i18n.md)); der Host bleibt
+autoritativ:
+
+- **Keine Änderung an persistierten oder gesendeten Daten.** Kein neuer
+  `GameCommand`, kein neues Snapshot-Feld, die Snapshot-Version bleibt. Codec,
+  Deltas und Sim-Hash bleiben unverändert; der Sim-Hash enthält keinen Text, und
+  es kommt keiner hinzu.
+- **Inhalt.** Spielstände, Deltas, `commandResult`, `result`, `error` und `closed`
+  tragen kanonisches Deutsch. Command-Payloads tragen kanonische deutsche Defaults
+  oder Nutzertext.
+- **Übersetzt wird nur beim Betrachter.** Ein deutscher Host und ein englischer Gast
+  teilen einen Raum. Optimistische Gast-Commands erzeugen dasselbe Deutsch wie der
+  Host, weil autoritativer Code nie übersetzt.
+- **Chat, Spielernamen und Lobbynamen** erscheinen wörtlich, nie übersetzt.
+- **Versionsschiefe.** Ein Text eines neueren Hosts, den der Katalog des Gastes nicht
+  kennt, erscheint auf Deutsch. Das ist akzeptiert.
+- **Laden.** Jede Client-Sprache lädt jeden Spielstand. Alte Spielstände können
+  Deutsch aus der Zeit vor der Normalisierung enthalten; Legacy-Schlüssel decken
+  persistierte Namen und Status ab, alte Gedanken erneuern sich.
+- **Geräteeinstellung.** Die Sprache liegt in `festival-player-settings`, einer
+  Geräteeinstellung. Sie wird nie gespeichert oder synchronisiert.
+- Der Server übersetzt nie; seine Meldungen schreibt er mit `de` aus
+  `server/i18nMarker.ts` (keine Imports, Docker-sicher; `src/i18n/marker.ts`
+  re-exportiert ihn). Die Client-Senken (`onToast`, `joinErrorSink`,
+  Statuszeile, Kontomeldung) übersetzen beim Anzeigen. Das gilt für alle
+  Server-Antworten (`rooms.ts`, `accounts.ts`, `saveSlots.ts`, `progress.ts`,
+  `scenarios.ts`, `serve.ts`, `wsPlugin.ts`) und für die Texte der Session
+  (`src/net/session.ts`: Statuszeilen, Toasts, Rückfallnamen `Host`/`Gast`) und der
+  Übernahme (`src/net/takeover.ts`). Katalogbereiche: `src/i18n/en/server.ts` und
+  `src/i18n/en/net.ts`.
+- Zwei Sätze werden nicht aneinandergehängt, sondern je Variante ganz geschrieben,
+  damit ein englischer Client sie wiederfindet: `promotedNotice` (mit/ohne Alter
+  der Weltkopie, mit/ohne verworfene Aktionen), `demotedNotice` (mit/ohne Namen),
+  `hostChangedDroppedNotice` (neuer Host plus verworfene Aktionen, als Plural) und
+  `continueSoloNotice` (Raum beendet, Gast spielt allein weiter). Letztere vergleicht
+  den Grund aus `closed` kanonisch mit `HOST_ENDED_GAME` („Der Host hat das Spiel
+  beendet“, derselbe Text wie in `server/rooms.ts`); ein unbekannter Grund eines
+  neueren Servers erscheint wörtlich vor „– du spielst allein weiter.“
+- Übernahme-Spielstände heißen weiter `Übernommen <Code>` und `Vor Host-Wechsel
+  <Code>`; beide Namen stehen als Namensmuster im `names`-Export von
+  `src/i18n/en/net.ts`, die Anzeige läuft über `localizeName`.
+- Wer in einem Raum sitzt und die Sprache wechselt, lädt nicht neu: die Wahl gilt
+  ab dem nächsten Start (ein Host-Neuladen ließe den Raum im Host-weg-Zustand).
+  „Im Raum“ ist `isInMultiplayerRoom(status)` (`src/ui/playerSettingsPanel.ts`):
+  Modus nicht `solo` oder verbunden. Eine abgerissene Verbindung behält beim
+  Neuverbinden ihren Modus und verliert nur `connected`; sie zählt weiter als Raum,
+  sonst verließe ein Gast den Raum still.
+- Ein Queued-Command (`{ ok: true, message: COMMAND_QUEUED }`) wird über die
+  Konstante aus `src/game/sentinels.ts` erkannt, nicht über den Text.
 
 ## Übers Internet spielen
 
@@ -149,8 +377,29 @@ Was auf einem offen erreichbaren Server sonst noch gilt:
   24 Zeichen und wirft Steuerzeichen raus; die Anzeige escaped sie.
 - `MAX_ROOMS` (Standard 200) deckelt die Räume. Ist es voll, wird erst
   aufgeräumt und dann abgelehnt.
-- Wer den Code hat, kommt rein und darf bauen. Das ist das ganze Rechtemodell —
-  ein privater Raum ist so privat wie sein Code.
+- Wer den Code hat, kommt rein, darf bauen und kann bei einer Host-Übernahme
+  Host werden. Das ist das ganze Rechtemodell — ein privater Raum ist so privat
+  wie sein Code.
+- Eine Weltkopie je Raum kostet Server-Speicher (geschätzt einige zehn MB Heap
+  bei ~4 MB JSON). `MAX_CACHED_WORLD_BYTES` deckelt sie als Ganzes (auch über
+  viele Deltas, siehe „Größengrenze“); Schließen und Aufräumen verwerfen sie.
+  `HOST_TAKEOVER_SECONDS` stellt die Übernahmefrist ein (Standard 20). Beide
+  sind optionale Umgebungsvariablen, ungültige Werte fallen auf den Standard
+  zurück.
+- Was ein Host schickt, ist fremde Eingabe: Die Weltkopie übersteht kaputte
+  Deltas (siehe „Fremde Eingaben“), und eine Nachricht, an der ein Handler
+  scheitert, wird geloggt und verworfen statt den Prozess zu beenden. Die
+  Nachrichtengröße begrenzt `ws` selbst (`maxPayload`, Standard 100 MiB); eine
+  kleinere Grenze ist nicht gesetzt, weil ein großer Park als Voll-Sync legitim
+  mehrere zehn MB haben kann und der Host sonst beim Senden getrennt würde.
+- Gemessen auf `festivalmittel` (830 Besucher, Voll-Sync 4,2 MB, Delta-Median
+  1,4 MB): Kopie anlegen 1,5 ms, Delta anwenden 0,24 ms (p95 0,6 ms). Dafür
+  entfällt das Neuserialisieren je Gast und Delta (Median 3,8 ms, p95 6 ms).
+  `promoted` mit Welt: 4,2 MB, 13 ms `JSON.stringify`; der Gewählte baut sie in
+  etwa 85 ms auf (`gameFromNetworkWorld`). Die Gesamtgrenze kostet eine
+  Nachmessung der Kopie von 12–14 ms etwa alle 31–38 Deltas (bei 5 Deltas/s
+  alle 6–7 s, im Mittel rund 2 ms/s je Raum); das Anwenden eines Deltas bleibt
+  bei 0,2 ms (p95 0,3 ms; 783 Besucher, 150 Deltas).
 
 ## Wo finden
 
@@ -160,15 +409,18 @@ Was auf einem offen erreichbaren Server sonst noch gilt:
 | Vollständige Command-Metadaten | `src/net/commandRegistry.ts` | `COMMAND_METADATA`, `isOptimisticCommand` |
 | Command → `GameState` | `src/net/commands.ts` | `applyGameCommand` |
 | Kompakte Pakete | `src/net/codec.ts` | `packWorld` |
-| Deltas, Ankunft/Abreise | `src/net/worldUpdates.ts` | `WorldUpdates`, `applyWorld` |
-| Client-Session | `src/net/session.ts` | `MultiplayerSession` |
+| Deltas, Ankunft/Abreise | `src/net/worldUpdates.ts` | `WorldUpdates`, `applyWorld`, Re-Export `mergeVisitorPatches` |
+| Client-Session | `src/net/session.ts` | `MultiplayerSession`; Sendepuffergrenze 512 KiB (`bufferedAmount`) in `tick`/`pushSync`; `epoch` an Befehlen, `leavePromotion`, `markInherited`, `status.hostName` |
+| Host-Übernahme: Weltkopie am Server | `server/worldCache.ts` | `cacheFromSync`, `applyDeltaToCache`, `cachedWorld`, `mergeVisitorPatches`, `MAX_CACHED_WORLD_BYTES` |
+| Host-Übernahme: Welt aufbauen, Texte | `src/net/takeover.ts` | `gameFromNetworkWorld`, `hostAwayNotice`, `droppedActionsNotice`, `hostChangedDroppedNotice`, `promotedNotice`, `continueSoloNotice`, `HOST_ENDED_GAME`, `takeoverSaveName`, `demotedBackupName`, `demotedNotice` |
+| Host-Übernahme: Banner, Binden, Sicherung, Übergabe-Dialog | `src/ui/hostTakeover.ts` | `mountHostTakeoverUi` |
 | Lobby-Liste ohne Session | `src/net/lobbies.ts` | `fetchLobbies`, `multiplayerSocketUrl` |
 | Beitreten vom Titlescreen | `src/ui/titleScreen.ts` | `openTitleLobbies`, `joinLobby` |
 | UI-Bindung | `src/net/bind.ts` | `enableMultiplayerCommands` |
 | Live-Chat / Map-Ping | `server/chatProtocol.ts`, `src/net/chatProtocol.ts`, `src/ui/multiplayerChat.ts`, `src/net/session.ts` | Sanitize/Relay in `server/`; Client re-exportiert + UI-Helfer; Fenster unten links, IRC-Log; Enter öffnet/sendet; Ping TTL 10 s |
-| Host-Turns, Optimistic | `src/game/GameState.ts` | `gate`, `receiveTurn`, `applyNetworkWorld` |
-| Server-Räume | `server/rooms.ts` | `attachMultiplayer` |
-| WebSocket-Plugin | `server/wsPlugin.ts` | Kompression, Puffergrenze |
+| Host-Turns, Optimistic | `src/game/GameState.ts` | `gate`, `networkPause`, `discardOptimisticCommands`, `receiveTurn`, `applyNetworkWorld` |
+| Server-Räume | `server/rooms.ts` | `attachMultiplayer`; Handler je Nachricht, `electHost`, `scheduleTakeover`, `watchPromotion`/`abandonPromotion` (Wächter 30 s), `updateCache`, Epochen-Prüfung in `forwardCommand`, `HOST_TAKEOVER_SECONDS` |
+| WebSocket-Plugin (Dev/Preview) | `server/wsPlugin.ts` | Kompression (`perMessageDeflate`, Level 1) |
 
 `commandRegistry.ts` klassifiziert jeden `GameCommand` genau einmal als
 optimistic oder host-bestätigt; `satisfies Record<GameCommand['type'], ...>`
@@ -196,6 +448,13 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   Scripted-Segment. Bau/Abriss/Zugang sind optimistic; Betrieb, Preis und
   Einstellungen werden vom Host bestätigt. `commandRegistry.ts`,
   `commands.ts` und `bind.ts` behandeln alle Varianten exhaustiv.
+  Diese kanonischen Commands ändern nur kanonische Datensätze
+  (`startAttraction`-IDs). Eine Legacy-ID (Bahn, Kurs, `ride`-Gebäude,
+  Camping/Party) und jede Projektionsart (`coaster:*`, `course:*`,
+  `waterSlide`, `paintball`, `swimArea`, `camping`, `partyArea`) lehnt der
+  Host mit `ok: false` ab; Bahnen und Kurse laufen weiter über ihre eigenen
+  Commands. Doppelmodell:
+  [attractions.md → Doppelmodell](attractions.md#doppelmodell-offizielle-regel-bewusst-ohne-migration).
 - Neue persistente Weltfelder: Codec / `worldUpdates` und Join-Vollsync.
   Bühnenvorlagen und platzierte Bühnen übertragen ab v33 optional
   `StageDesign.forecourtDepth` (1–24). Der vorhandene
@@ -210,9 +469,16 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   Datensätze nur nach. Dasselbe gilt für `courses` und `coasters`:
   ein Attractions-Delta ohne den gerade gesetzten Kurs darf die
   Live-Zeile nicht löschen, sonst flackert die Anlage und die Kachel
-  bleibt belegt, ohne dass Inspect eine Entity findet.
-  `applyNetworkUpdate` merget die Live-IDs, `migrateCourse` schreibt
-  auch Eingangs-only-Kurse und die erste Wasserrutschen-Leiter.
+  bleibt belegt, ohne dass Inspect eine Entity findet. Ein Delta, das
+  `attractions` ohne `coasters`/`courses` trägt, ersetzt oder ändert
+  **keine** bestehende Client-Live-Zeile (Objekt und Preis bleiben);
+  `adoptMissingLiveRows` projiziert nur IDs, die der Client noch nicht
+  hat. Danach leitet `refreshLegacyAttractionRecords` die Datensätze aus
+  den Live-Arrays neu ab. `migrateCourse` schreibt auch Eingangs-only-Kurse
+  und die erste Wasserrutschen-Leiter. Gäste einer beim Laden verworfenen
+  Waise gibt nur der Lader des Hosts frei (`releaseGuestsOfOrphans`); der
+  Client bekommt den reparierten Stand im Vollsync und ändert beim Auffrischen
+  der Datensätze keine Besucher, sonst liefe der Lockstep-Hash auseinander.
   Fahrzeugpositionen und Routen behalten das bestehende optionale
   `RoadPosition.elevation` auch beim Laden/Normalisieren. Der Host berechnet
   Straßenbelegung und Vorfahrt pro Ebene; keine zusätzlichen Commands oder
@@ -317,8 +583,11 @@ bleiben unverändert; die Services kennen keinen konkreten `GameState`.
   an den ganzzahligen Zellkoordinaten. Ein neues Fließkommafeld gehört in die
   Tabelle, sonst fällt es auf volle Genauigkeit zurück.
 - Determinismus: gleicher Tick + gleiche Commands → gleicher `hashSim`.
-- Host muss geöffnet bleiben, überlebt aber einen Verbindungsabriss (siehe
-  „Raumleben").
+- Der Host sollte geöffnet bleiben. Er überlebt einen Verbindungsabriss (siehe
+  „Raumleben“); bleibt er länger als die Frist weg, übernimmt ein Gast (siehe
+  „Host-Übernahme“). Ein neuer Client-Zustand nach einer Übernahme entsteht
+  immer über `gameFromNetworkWorld`, nie durch Umschalten des Spiegels.
+- Server-Nachrichten, die den Host betreffen, tragen `hostAway` immer explizit.
 
 ## Tests
 
@@ -328,6 +597,30 @@ verwaister Räume, Raumcode am Spielstand inkl. Rückholen des eigenen Raums,
 öffentliche Lobbyliste mit Spielerzahl und abwesendem Host, Chat-/Ping-
 Roundtrip inkl. leerer Ping-Nachricht). `tests/multiplayerChat.ts`
 (Sanitizing, TTL, Edge-Arrow-Math). Ride-Reconciliation: `tests/rideAccess.ts`.
+`tests/hostTakeover.ts` (Weltkopie gleich `asWire(host)` und in Gast-Reihenfolge,
+Größengrenze je Nachricht und über viele Deltas, kaputte Patches ohne Wurf,
+`gameFromNetworkWorld` mit RNG/Code, Bau-Pause, Wahlreihenfolge inkl.
+Spielversion, Texte, Sicherungs-Slot, Schnellspeicher-Slot (`findQuickSlot`),
+kein Fortschritt für übernommene Parks; echte Sockets: Übernahme durch den
+ältesten Gast, alter Host kommt als Gast mit Sicherung zurück, Rückkehr
+innerhalb der Frist, niemand ohne Welt wird befördert, sofortige Übergabe mit
+verworfenem unbestätigtem Bau, stumm toter Host ohne Geisterbau, ausfallender
+bzw. scheiternder Kandidat, Solo-Weiterspiel nach `closed`;
+`testTakeoverHardening`: feindliches Host-Delta ohne Absturz, allein
+zurückgekehrter Host verwirft die alte Kopie, schweigender Kandidat nach dem
+Wächter aufgegeben und alter Host bekommt seinen Sitz zurück, Befehl mit alter
+Epoche abgelehnt, übernommener Park bleibt markiert nach Schnellladen und
+erneutem Hosten). Die Tests setzen Frist und Wächter lokal über
+`roomsForTest.setTakeoverDelay`/`setPromotionTimeout` und stellen sie wieder
+her; der bestehende Reconnect-Test läuft mit der Standardfrist.
+
+Im Browser geprüft (0.2.12, Produktions-Build, `HOST_TAKEOVER_SECONDS=8`, drei
+Tabs): Banner mit Countdown und „{Name} · Host ist weg“ in der Spielerliste,
+Übernahme hinter dem Ladeoverlay ohne Konsolenfehler, Schnellladen ohne
+Übernahme-Slot lehnt ab, Schnellspeichern schreibt „Übernommen {Code}“,
+Schnellladen liest ihn zurück und der Stand speichert danach weiter dorthin,
+Drei-Wege-Dialog beim **Trennen** (Esc = Abbrechen) und sofortige Übergabe an
+den genannten Gast.
 
 ## Bei Änderungen dieses Dokument
 

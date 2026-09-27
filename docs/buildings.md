@@ -9,7 +9,7 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Arten, Tools, Anzeige | `src/game/catalog.ts` | `BUILDING_KINDS`, `BUILDINGS`, `Tool` (`trafficLight`, `pathBarrier`, `deliveryYard`, `supplyDepot`, `staffGate`, `tourBusParking`, `backstageArea`, `sealedWasteContainer`, `fireStation`, `table`, `course`) |
-| Bau-Menü / Kategorien | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` (keine stillen Fallbacks). Abriss bleibt als Kategorie für die Toolbar, öffnet aber kein Raster. Wege öffnen `#path-construction` mit Schnellzugriff auf `pathBarrier`, `staffGate`, `securityGate`. `isCatalogBuildCategory`: Deko, Attraktionen und Logistik als Bildraster mit Hover-Fußzeile. Camping unter Attraktionen; Krankenhaus (`ambulanceGarage`, `medicalArea`); Bandversorgung (`backstageArea`, `tourBusParking`) unter Logistik. |
+| Bau-Menü / Kategorien | `src/game/buildMenu.ts` | `BUILD_CATEGORIES` (keine stillen Fallbacks; Client-Text: `label`, `name` und `detail` sind Getter und liefern beim Lesen die Sprache des Betrachters, Preise über `formatMoney`). Abriss bleibt als Kategorie für die Toolbar, öffnet aber kein Raster. Wege öffnen `#path-construction` mit Schnellzugriff auf `pathBarrier`, `staffGate`, `securityGate`. `isCatalogBuildCategory`: Deko, Attraktionen und Logistik als Bildraster mit Hover-Fußzeile. Camping unter Attraktionen; Krankenhaus (`ambulanceGarage`, `medicalArea`); Bandversorgung (`backstageArea`, `tourBusParking`) unter Logistik. |
 | Bauhöhe / autoritative Vorschau | `src/game/GameState.ts`, `src/game/placementPreview.ts`, `src/game/commands/placementCommands.ts` | Fassadenmethode `previewPlacement`; Dispatch `previewPlacementCommand`; `PlacementPreviewRequest` / `PlacementPreviewResult`, `GhostRenderMode`; `adjustBuildElevation`, `setBuildElevation` (0–6, **Halbstufen 0.5**, wie Wege); `setBuildRotation` / `rotateBuild` (lokal, für Weg-Pfeile und Palette). |
 | Kosten / Upkeep / Appeal | `src/game/simulationConfig.ts` | `economy.buildings` |
 | Platzieren, prüfen, abräumen | `src/game/placementService.ts`, `src/game/commands/placementCommands.ts`, `src/game/commands/bulldozeCommands.ts`, `src/game/GameState.ts`, `src/view/picking.ts` | `PlacementService` für Weg/Straße/Undo/konkreten Abriss; Commands und stabile Fassaden bleiben erhalten |
@@ -30,6 +30,14 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
 
 ## Wichtige Regeln
 
+- Katalognamen sind kanonisches Deutsch (`de('Imbiss')`, docs/i18n.md); die UI
+  zeigt sie mit `localize()`. Stil-Namen aus `decorationWalls.ts` haben je Form
+  eine eigene Vorlage (`` de`${named(label)} · Wand` ``, `· Schrägdach`, `· Mülleimer`),
+  deren Muster im Katalogbereich `build` steht. Meldungen, die einen Gebäudenamen
+  einbetten (`… gebaut`, `… abgerissen`), nutzen `nested(name)`, damit auch diese
+  zusammengesetzten Namen übersetzt werden. Abrissverbote für belegte Depots stehen
+  als ganze Sätze in `DEPOT_IN_USE` (`placementService.ts`).
+
 - Neuer Gebäude- oder Werkzeugtyp braucht Einträge in `catalog.ts`,
   `SIMULATION_CONFIG.economy.buildings` (falls kostenpflichtig), `canPlace` /
   `place`, `buildMenu.ts`, Rendering und oft einen `GameCommand`.
@@ -46,7 +54,10 @@ Kollision, Höhe, Boden und Spezialregeln. Deko nutzt optionale
   `GameState.canPlace` die gemeinsame autoritative Prüfung für Vorschau und Bau.
   Weg-/Straßenhöhen, Kreuzungen, Rücknahme und die konkreten
   Gebäude-/Overlay-/Straßen-Abrissmutationen liegen in `PlacementService`;
-  `bulldozeCommand` behält Zielauswahl und Flächenorchestrierung.
+  `bulldozeCommand` behält Zielauswahl und Flächenorchestrierung. Der Abriss
+  eines `ride`-Gebäudes entfernt dort auch den vom Lader migrierten
+  `attractions`-Datensatz (`dropLegacyAttractionRecords`, Doppelmodell in
+  `docs/attractions.md`).
 - `BUILDING_GHOST_MODES` im Katalog bestimmt Modell- gegen Footprint-Vorschau.
   Deko verfeinert dies auf Slotmodelle; bestehende Modelle werden als
   transparente 3D-Geister wiederverwendet.

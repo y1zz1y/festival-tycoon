@@ -5,6 +5,7 @@ import { handleSaveRequest } from './saveSlots.ts'
 import { handleProgressRequest } from './progress.ts'
 import { handleAccountRequest } from './accounts.ts'
 import { handleScenarioRequest } from './scenarios.ts'
+import { de } from './i18nMarker.ts'
 
 function bindWebSocket(
   server: ViteDevServer,
@@ -47,7 +48,7 @@ export function festivalMultiplayer(): Plugin {
           (error) => {
             if (!response.headersSent) {
               response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-              response.end(JSON.stringify({ error: 'Spielserver-Fehler beim Lesen der Spielstände' }))
+              response.end(JSON.stringify({ error: de('Spielserver-Fehler beim Lesen der Spielstände') }))
             }
             console.error(error)
           },
@@ -65,7 +66,7 @@ export function festivalMultiplayer(): Plugin {
           (error) => {
             if (!response.headersSent) {
               response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-              response.end(JSON.stringify({ error: 'Spielserver-Fehler beim Lesen der Spielstände' }))
+              response.end(JSON.stringify({ error: de('Spielserver-Fehler beim Lesen der Spielstände') }))
             }
             console.error(error)
           },

@@ -8,7 +8,18 @@ import type { GroundWork } from './game/ground'
 import { SUPPLIES } from './game/festivalManagement'
 import type { FestivalAction } from './game/festivalManagement'
 import { createAreaDesignationHandler } from './ui/areaDesignation'
+import { COMMAND_QUEUED } from './game/sentinels'
+import { formatMoney, formatNumber, joinParts, localize, plural, t, tc } from './i18n'
 import './logistics.css'
+
+type WayInfo = (typeof WAY_TYPES)[WayType]
+const idleHint = () => t('Oben ein Werkzeug wählen und auf dem Gelände ein Rechteck aufziehen.')
+const perTile = (cost: number) => t`${formatMoney(cost)}/Feld`
+const wayLabel = (way: WayInfo) => joinParts(localize(way.name), perTile(way.cost))
+const tileCount = (count: number) => plural(count, t`${count} Feld`, t`${count} Felder`)
+/** A stall's stock in the inspect card: `Essen 12 · Getränke 30`. */
+const stockLine = (stock: Partial<Record<string, number>>) =>
+  joinParts(...Object.entries(stock).map(([kind, amount]) => `${localize(SUPPLIES[kind as keyof typeof SUPPLIES].name)} ${formatNumber(Math.floor(amount ?? 0))}`))
 
 export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toast: (text: string, error?: boolean) => void) {
   let footType: WayType = 'footDirt', roadType: WayType = 'roadDirt'
@@ -18,22 +29,28 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
   // The ground works stand in the Gelände tab of the build menu, not behind a button
   // of their own: opening the tab is what puts the site into planning.
   const groundPanel = document.createElement('section'); groundPanel.className = 'terrain-planner'
-  groundPanel.setAttribute('aria-label', 'Gelände planen')
-  groundPanel.innerHTML = `<p class="terrain-planner-intro">Solange dieser Reiter offen ist, sind die Besucher ausgeblendet und ihr bereitet den Untergrund vor. Die Untergrundfarben (Rasen, Sand, Stein, Acker, Schnee, Felsen, braune Erde, Salzpfanne, Asphalt) stehen in der Palette darüber; Entwässern, Verdichten, Schotter und Pflaster bleiben hier.</p>
-    <nav class="supply-tools"><button data-tool="inspect" aria-pressed="false">Feld prüfen</button>${Object.entries(GROUND_WORK).map(([key, work]) => `<button data-tool="${key}">${work.name} · ${work.cost} €</button>`).join('')}</nav>
-    <p data-hint aria-live="polite">Oben ein Werkzeug wählen und auf dem Gelände ein Rechteck aufziehen.</p><div data-cell class="supply-card">Boden erkennen: Furchen = Acker · rötliche Flecken = Lehm · Körnung = Kies · Grasbüschel = Wiese · Rippeln = Sand · Fugen = Pflaster.<br>Verdichteter Boden ist geglättet. Türkise Markierung: entwässert. Über ein Feld fahren für Tragfähigkeit und Ausbau.</div>`
+  groundPanel.setAttribute('aria-label', t('Gelände planen'))
+  groundPanel.innerHTML = `<p class="terrain-planner-intro">${t('Solange dieser Reiter offen ist, sind die Besucher ausgeblendet und ihr bereitet den Untergrund vor. Die Untergrundfarben (Rasen, Sand, Stein, Acker, Schnee, Felsen, braune Erde, Salzpfanne, Asphalt) stehen in der Palette darüber; Entwässern, Verdichten, Schotter und Pflaster bleiben hier.')}</p>
+    <nav class="supply-tools"><button data-tool="inspect" aria-pressed="false">${t('Feld prüfen')}</button>${Object.entries(GROUND_WORK).map(([key, work]) => `<button data-tool="${key}">${joinParts(localize(work.name), formatMoney(work.cost))}</button>`).join('')}</nav>
+    <p data-hint aria-live="polite">${idleHint()}</p><div data-cell class="supply-card">${t('Boden erkennen: Furchen = Acker · rötliche Flecken = Lehm · Körnung = Kies · Grasbüschel = Wiese · Rippeln = Sand · Fugen = Pflaster.')}<br>${t('Verdichteter Boden ist geglättet. Türkise Markierung: entwässert. Über ein Feld fahren für Tragfähigkeit und Ausbau.')}</div>`
   const groundSlot = document.querySelector<HTMLElement>('#terrain-planner-slot')!
   groundSlot.append(groundPanel)
 
   const qG = <T extends Element = HTMLElement>(selector: string) => groundPanel.querySelector<T>(selector)!
-  const execute = (action: FestivalAction) => { const result = getGame().manageFestival(action); if (result.message !== 'Befehl eingeplant') toast(result.message, !result.ok); return result }
+  const execute = (action: FestivalAction) => { const result = getGame().manageFestival(action); if (result.message !== COMMAND_QUEUED) toast(result.message, !result.ok); return result }
+  /** The active tool's name for the hint: the chosen surface, or the ground work's button. */
+  const toolLabel = () => {
+    if (mode === 'path') return localize(WAY_TYPES[footType].name)
+    if (mode === 'road') return localize(WAY_TYPES[roadType].name)
+    return groundPanel.querySelector(`[data-tool="${mode}"]`)?.textContent ?? ''
+  }
   const choose = (next: string) => {
     mode = next
     view.setGroundAreaTool(next === 'path' || next === 'road' ? createAreaDesignationHandler({
       preview: ({ from, to }) => {
         const kind = next === 'path' ? footType : roadType
         const count = groundRectangle(getGame().snapshot, from, to).length
-        qG('[data-hint]').textContent = `${count} Felder · bis zu ${count * WAY_TYPES[kind].cost} € zzgl. Rodung. Loslassen zum Bauen / Ersetzen.`
+        qG('[data-hint]').textContent = joinParts(tileCount(count), t`bis zu ${formatMoney(count * WAY_TYPES[kind].cost)} zzgl. Rodung. Loslassen zum Bauen / Ersetzen.`)
         document.querySelectorAll('[data-way-estimate]').forEach(el => el.textContent = qG('[data-hint]').textContent)
       },
       execute: ({ from, to }) => {
@@ -43,21 +60,21 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
     }) : groundOpen && next in GROUND_WORK ? createAreaDesignationHandler({
       preview: ({ from, to }) => {
         const estimate = prepareGroundArea(getGame().snapshot as GameSnapshot, from, to, next as GroundWork, true)
-        qG('[data-hint]').textContent = `Loslassen zum Anwenden: ${estimate.message}`
+        qG('[data-hint]').textContent = t`Loslassen zum Anwenden: ${localize(estimate.message)}`
       },
       execute: ({ from, to }) => {
         const result = execute({ type: 'groundArea', from, to, kind: next as GroundWork })
-        qG('[data-hint]').textContent = result.message
+        qG('[data-hint]').textContent = localize(result.message)
       },
     }) : null)
     getGame().setTool(next === 'path' ? 'path' : next === 'road' ? 'road' : next === 'wasteDump' ? 'wasteDump' : 'inspect')
     groundPanel.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.tool === mode)))
-    qG('[data-hint]').textContent = mode === 'inspect' ? 'Feld anklicken: Tragfähigkeit, Nässe und Bestand.' : `${mode === 'path' ? WAY_TYPES[footType].name : mode === 'road' ? WAY_TYPES[roadType].name : groundPanel.querySelector(`[data-tool="${mode}"]`)?.textContent}: Feld anklicken oder mit gedrückter linker Maustaste eine Fläche ziehen.`
+    qG('[data-hint]').textContent = mode === 'inspect' ? t('Feld anklicken: Tragfähigkeit, Nässe und Bestand.') : t`${toolLabel()}: Feld anklicken oder mit gedrückter linker Maustaste eine Fläche ziehen.`
   }
   const releaseTool = () => {
     view.setGroundAreaTool(null); mode = 'none'
     groundPanel.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', 'false'))
-    qG('[data-hint]').textContent = 'Oben ein Werkzeug wählen und auf dem Gelände ein Rechteck aufziehen.'
+    qG('[data-hint]').textContent = idleHint()
   }
   document.querySelector('.build-menu')!.addEventListener('click', event => {
     if ((event.target as Element).closest('[data-tool]')) releaseTool()
@@ -85,7 +102,7 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
   }
   const makePicker = (kind: 'foot' | 'road', compact = false) => {
     const root = document.createElement('section'); root.className = `way-picker integrated-way-picker${compact ? ' compact' : ''}`
-    root.innerHTML = `<div class="way-icon-palette" role="group" aria-label="${kind === 'foot' ? 'Wegbelag wählen' : 'Straßenbelag wählen'}">${Object.entries(WAY_TYPES).filter(([, t]) => t.mode === kind).map(([id, t]) => `<button type="button" class="way-icon" data-way-icon="${id}" data-way-kind="${kind}" aria-label="${t.name}" aria-pressed="false" title="${t.name} · ${t.cost} €/Feld. ${t.detail}"><span class="way-swatch" data-surface="${id}" aria-hidden="true"></span></button>`).join('')}</div><p data-way-detail="${kind}" class="way-selection-label"></p><p data-way-estimate aria-live="polite"></p>`
+    root.innerHTML = `<div class="way-icon-palette" role="group" aria-label="${kind === 'foot' ? t('Wegbelag wählen') : t('Straßenbelag wählen')}">${Object.entries(WAY_TYPES).filter(([, way]) => way.mode === kind).map(([id, way]) => `<button type="button" class="way-icon" data-way-icon="${id}" data-way-kind="${kind}" aria-label="${localize(way.name)}" aria-pressed="false" title="${wayLabel(way)}. ${localize(way.detail)}"><span class="way-swatch" data-surface="${id}" aria-hidden="true"></span></button>`).join('')}</div><p data-way-detail="${kind}" class="way-selection-label"></p><p data-way-estimate aria-live="polite"></p>`
     return root
   }
   const editorPicker = makePicker('foot', true), roadPicker = makePicker('road')
@@ -99,7 +116,7 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
   const refreshTypes = () => {
     for (const [tool, id] of [['path', footType], ['road', roadType]] as const) {
       const label = document.querySelector(`.build-menu [data-tool="${tool}"] em`)
-      if (label) label.innerHTML = `${WAY_TYPES[id].name}<small>${WAY_TYPES[id].cost} €/Feld</small>`
+      if (label) label.innerHTML = `${localize(WAY_TYPES[id].name)}<small>${perTile(WAY_TYPES[id].cost)}</small>`
     }
     const selectedType = editorRoad ? roadType : footType
     const foot = WAY_TYPES[selectedType]
@@ -107,19 +124,19 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
     const previewName = document.querySelector('[data-path-surface-name]')
     const previewCost = document.querySelector('#path-art-cost')
     if (previewSwatch) previewSwatch.setAttribute('data-surface', selectedType)
-    if (previewName) previewName.textContent = foot.name
-    if (previewCost) previewCost.textContent = `Kosten: €${foot.cost}`
+    if (previewName) previewName.textContent = localize(foot.name)
+    if (previewCost) previewCost.textContent = t`Kosten: ${formatMoney(foot.cost)}`
     if (surfacePreview) {
-      surfacePreview.title = `${foot.name} · Gedrückt halten für Wegarten. ${foot.detail}`
+      surfacePreview.title = `${joinParts(localize(foot.name), t('Gedrückt halten für Wegarten.'))} ${localize(foot.detail)}`
     }
     for (const root of pickers) for (const kind of ['foot', 'road'] as const) {
-      const id = kind === 'foot' ? footType : roadType, t = WAY_TYPES[id]
+      const id = kind === 'foot' ? footType : roadType, way = WAY_TYPES[id]
       const icons = root.querySelectorAll<HTMLButtonElement>(`[data-way-kind="${kind}"]`)
       if (!icons.length) continue
       icons.forEach(icon => icon.setAttribute('aria-pressed', String(icon.dataset.wayIcon === id)))
       const detail = root.querySelector<HTMLElement>(`[data-way-detail="${kind}"]`)!
-      detail.textContent = `${t.name} · ${t.cost} €/Feld`
-      detail.title = `${t.detail} ${kind === 'foot' ? `Tempo ${Math.round(t.speed * 100)} %, Kapazität ${t.capacity} Personen/Feld.` : `Höchstens Tempo ${t.limit}.`} Bei voller Nässe ${Math.round(t.rain * 100)} % langsamer.`
+      detail.textContent = wayLabel(way)
+      detail.title = `${localize(way.detail)} ${kind === 'foot' ? t`Tempo ${Math.round(way.speed * 100)} %, Kapazität ${way.capacity} Personen/Feld.` : t`Höchstens Tempo ${way.limit}.`} ${t`Bei voller Nässe ${Math.round(way.rain * 100)} % langsamer.`}`
     }
   }
   const setSurfacePopup = (open: boolean) => {
@@ -214,9 +231,10 @@ export function mountLogisticsUI(getGame: () => GameState, view: WorldView, toas
     if (mode in GROUND_WORK) execute({ type: 'ground', ...cell, kind: mode as GroundWork })
     const ground = groundInfo(s, cell.x, cell.z), b = s.buildings.find(b => b.x === cell.x && b.z === cell.z && b.kind !== 'path')
     const look = ground.cover
-      ? GROUND_COVERS[ground.cover].name
-      : { clay: 'Lehm', field: 'Ackerboden', gravel: 'Kiesboden', sand: 'Sandboden', grass: 'Wiesenboden', urban: 'Befestigter Stadtboden' }[ground.type]
-    qG('[data-cell]').innerHTML = `<b>Feld ${cell.x}, ${cell.z}</b> · ${look}<br>Tragfähigkeit ${ground.bearing}/3 · Tempo ${Math.round(ground.speed * 100)} %<br>Fahrbahn geeignet bis Tempo ${roadGroundLimit(s, cell.x, cell.z)}<br>${ground.drained ? 'Entwässert' : 'Ohne Entwässerung'} · ${ground.surface === 'paved' ? 'Gepflastert' : ground.surface === 'gravel' ? 'Geschottert' : ground.compacted ? 'Verdichtet' : 'Unbefestigt'}${b ? `<br>Gebäudeeffizienz ${Math.round((ground.bearing === 3 ? 1.25 : Math.max(.4, ground.speed)) * 100)} %${s.festival.infrastructure.shops[b.id] ? `<br>Standbestand: ${Object.entries(s.festival.infrastructure.shops[b.id]!).map(([k, n]) => `${SUPPLIES[k as keyof typeof SUPPLIES].name} ${Math.floor(n)}`).join(' · ')}` : ''}` : ''}`
+      ? localize(GROUND_COVERS[ground.cover].name)
+      : { clay: tc('soil', 'Lehm'), field: t('Ackerboden'), gravel: t('Kiesboden'), sand: t('Sandboden'), grass: t('Wiesenboden'), urban: t('Befestigter Stadtboden') }[ground.type]
+    const stock = b && s.festival.infrastructure.shops[b.id]
+    qG('[data-cell]').innerHTML = `<b>${t`Feld ${String(cell.x)}, ${String(cell.z)}`}</b> · ${look}<br>${joinParts(t`Tragfähigkeit ${ground.bearing}/3`, t`Tempo ${Math.round(ground.speed * 100)} %`)}<br>${t`Fahrbahn geeignet bis Tempo ${roadGroundLimit(s, cell.x, cell.z)}`}<br>${ground.drained ? t('Entwässert') : t('Ohne Entwässerung')} · ${ground.surface === 'paved' ? t('Gepflastert') : ground.surface === 'gravel' ? t('Geschottert') : ground.compacted ? t('Verdichtet') : t('Unbefestigt')}${b ? `<br>${t`Gebäudeeffizienz ${Math.round((ground.bearing === 3 ? 1.25 : Math.max(.4, ground.speed)) * 100)} %`}${stock ? `<br>${t`Standbestand: ${stockLine(stock)}`}` : ''}` : ''}`
     return true
   }
   return { update, handleCell, releaseTool, activateWay: (kind: 'path' | 'road') => choose(kind), getFootType: () => footType, getRoadType: () => roadType,

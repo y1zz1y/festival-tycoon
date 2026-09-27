@@ -1,4 +1,5 @@
 import type { GameState } from '../game/GameState'
+import { localizeName, t } from '../i18n'
 import { isCourseReadyToOperate } from '../game/courseAttractions'
 import { isSwimmableHeight, isWaterHeight } from '../game/terrain'
 import { lockShiftElevationOrigin } from '../game/wayElevation'
@@ -37,14 +38,14 @@ export function handleCoasterCell(
   const coaster = game.getCoasterAt(cell.x, cell.z)
   if (coaster && !coaster.closed) {
     actions.continueCoaster(coaster)
-    actions.toast(`${coaster.name} wird weitergebaut`)
+    actions.toast(t`${localizeName(coaster.name)} wird weitergebaut`)
   } else if (coaster) {
     actions.openFinished(coaster.id)
   } else if (!state.coasterId) {
     actions.setStart(cell)
-    actions.toast('Startpunkt gesetzt – ausrichten und im Menü bauen')
+    actions.toast(t('Startpunkt gesetzt – ausrichten und im Menü bauen'))
   } else {
-    actions.toast('Wähle im Achterbahn-Editor das nächste Element')
+    actions.toast(t('Wähle im Achterbahn-Editor das nächste Element'))
   }
   actions.update()
   return true
@@ -80,7 +81,7 @@ export function handlePathEditorCell(
   if (state.road) {
     const existing = game.getRoadCellAt(cell.x, cell.z)
     const result = existing
-      ? { ok: true, message: 'Startpunkt gewählt' }
+      ? { ok: true, message: t('Startpunkt gewählt') }
       : game.manageFestival({ type: 'wayArea', from: cell, to: cell, kind: state.roadType })
     if (!result.ok) return { handled: true, message: result.message, error: true }
     const anchor = { x: cell.x, z: cell.z, elevation: existing?.elevation ?? game.getTerrainHeight(cell.x, cell.z) }
@@ -93,7 +94,7 @@ export function handlePathEditorCell(
   if (existing) {
     const anchor = { x: existing.x, z: existing.z, elevation: existing.elevation }
     return {
-      handled: true, anchor, message: 'Startpunkt gewählt',
+      handled: true, anchor, message: t('Startpunkt gewählt'),
       shiftOrigin: state.shiftHeld ? lockShiftElevationOrigin(state.shiftOrigin, anchor) : state.shiftOrigin,
     }
   }
@@ -144,7 +145,7 @@ export function handleInspectCell(game: GameState, cell: CellPosition, actions: 
     if (coaster.closed) actions.openCoaster(coaster.id)
     else {
       actions.openCoasterBuilder(coaster.id)
-      actions.toast(`${coaster.name} wird am letzten Element fortgesetzt`)
+      actions.toast(t`${localizeName(coaster.name)} wird am letzten Element fortgesetzt`)
     }
     return true
   }
@@ -153,7 +154,7 @@ export function handleInspectCell(game: GameState, cell: CellPosition, actions: 
     if (isCourseReadyToOperate(course)) actions.openCourse(course.id)
     else {
       actions.openCourseBuilder(course.id)
-      actions.toast(`${course.name} wird weitergebaut`)
+      actions.toast(t`${localizeName(course.name)} wird weitergebaut`)
     }
     return true
   }
@@ -166,14 +167,14 @@ export function handleInspectCell(game: GameState, cell: CellPosition, actions: 
   if (building?.kind === 'ride') actions.openRide(building.id)
   else if (building) actions.openBuilding(building.id)
   else if (depot) actions.openDepot(depot.id)
-  else if (game.getCampingCellAt(cell.x, cell.z)) actions.toast('Ausgewiesener Zeltbereich')
+  else if (game.getCampingCellAt(cell.x, cell.z)) actions.toast(t('Ausgewiesener Zeltbereich'))
   else if (game.getWasteDumpAt(cell.x, cell.z)) actions.openWasteDump(cell.x, cell.z)
   else if (game.getBackstageCellAt(cell.x, cell.z)) actions.openBackstage(cell.x, cell.z)
   else {
     const height = game.getTerrainHeight(cell.x, cell.z)
     actions.toast(isWaterHeight(height, game.getWaterLevel())
-      ? isSwimmableHeight(height, game.getWaterLevel()) ? 'Wasser zum Baden' : 'Wasser'
-      : height > 0 ? `Hügel Ebene ${height}` : 'Unbebautes Grundstück')
+      ? isSwimmableHeight(height, game.getWaterLevel()) ? t('Wasser zum Baden') : t('Wasser')
+      : height > 0 ? t`Hügel Ebene ${String(height)}` : t('Unbebautes Grundstück'))
   }
   return true
 }

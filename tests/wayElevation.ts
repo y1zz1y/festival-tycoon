@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { GameState } from '../src/game/GameState'
 import type { GameSnapshot, PlacedBuilding } from '../src/game/GameState'
-import { describeRoadVehicleActivity, findRoadRoute, roadLayerKey, type RoadVehicle, type RoadCell } from '../src/game/logistics'
+import { findRoadRoute, roadLayerKey, type RoadVehicle, type RoadCell } from '../src/game/logistics'
+import { describeRoadVehicleActivity } from '../src/game/logisticsText'
 import { LogisticsView } from '../src/view/LogisticsView'
 import {
   MAX_PATH_ELEVATION,

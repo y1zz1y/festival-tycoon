@@ -149,6 +149,7 @@ export class IconBillboards {
           center.xy += position.xy * size;
           gl_Position = projectionMatrix * center;
         }`,
+      // i18n-ignore: GLSL shader source, not text
       fragmentShader: `
         uniform sampler2D map;
         varying vec2 vUv;

@@ -1,3 +1,4 @@
+import { de, numberedName } from '../i18n/marker'
 import { SIMULATION_CONFIG } from './simulationConfig'
 
 export const STAFF_ROLES = ['cleaner', 'security', 'firefighter', 'medic'] as const
@@ -44,17 +45,18 @@ export type StaffDefinition = {
 }
 
 export const STAFF_DEFINITIONS: Record<StaffRole, StaffDefinition> = {
-  cleaner: { role: 'cleaner', name: 'Reinigungskraft', icon: '🧹', color: 0x4fa86f, hatColor: 0xe8f3de, ...SIMULATION_CONFIG.staff.roles.cleaner },
-  security: { role: 'security', name: 'Sicherheitskraft', icon: '🛡️', color: 0x263f66, hatColor: 0x18283f, ...SIMULATION_CONFIG.staff.roles.security },
-  firefighter: { role: 'firefighter', name: 'Feuerwehrkraft', icon: '🚒', color: 0xc94135, hatColor: 0xf4c542, ...SIMULATION_CONFIG.staff.roles.firefighter },
-  medic: { role: 'medic', name: 'Sanitäter', icon: '⚕️', color: 0xf2f2ed, hatColor: 0xd94841, ...SIMULATION_CONFIG.staff.roles.medic },
+  cleaner: { role: 'cleaner', name: de('Reinigungskraft'), icon: '🧹', color: 0x4fa86f, hatColor: 0xe8f3de, ...SIMULATION_CONFIG.staff.roles.cleaner },
+  security: { role: 'security', name: de('Sicherheitskraft'), icon: '🛡️', color: 0x263f66, hatColor: 0x18283f, ...SIMULATION_CONFIG.staff.roles.security },
+  firefighter: { role: 'firefighter', name: de('Feuerwehrkraft'), icon: '🚒', color: 0xc94135, hatColor: 0xf4c542, ...SIMULATION_CONFIG.staff.roles.firefighter },
+  medic: { role: 'medic', name: de('Sanitäter'), icon: '⚕️', color: 0xf2f2ed, hatColor: 0xd94841, ...SIMULATION_CONFIG.staff.roles.medic },
 }
 
 export const SWEEPER_STAFF_ICON = '🤖'
 
 export function sweeperStaffName(id: string): string {
   const match = /(\d+)$/.exec(id)
-  return match ? `Saugroboter ${Number(match[1])}` : 'Saugroboter'
+  const base = de('Saugroboter')
+  return match ? numberedName(base, Number(match[1])) : base
 }
 
 export function createStaffMember(
@@ -64,7 +66,8 @@ export function createStaffMember(
 ): StaffMember {
   return {
     id,
-    name: `${STAFF_DEFINITIONS[role].name} ${id.replace(/\D/g, '').slice(-3)}`,
+    // Default name: role base (a `names` entry) plus the last three id digits (`Sanitäter 007`).
+    name: numberedName(STAFF_DEFINITIONS[role].name, id.replace(/\D/g, '').slice(-3)),
     role,
     x: entrance.x + 0.5,
     y: entrance.elevation,

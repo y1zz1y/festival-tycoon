@@ -1,3 +1,4 @@
+import { de } from '../../i18n/marker'
 import type { TrackAnchor } from '../coasters'
 import type {
   AttractionPoint,
@@ -56,13 +57,13 @@ export function addTrackEdge(
   to: TrackNode,
 ): TrackGraph {
   if (graph.edges.some((candidate) => candidate.id === edge.id)) {
-    throw new Error(`Track edge ${edge.id} already exists.`)
+    throw new Error(`Track edge ${edge.id} already exists.`) // i18n-ignore internal invariant (callers never add an id twice)
   }
   const nodes = [...graph.nodes]
   if (!nodes.some((node) => node.id === from.id)) nodes.push(from)
   if (!nodes.some((node) => node.id === to.id)) nodes.push(to)
   if (edge.fromNodeId !== from.id || edge.toNodeId !== to.id) {
-    throw new Error('Track edge endpoints do not match the supplied nodes.')
+    throw new Error('Track edge endpoints do not match the supplied nodes.') // i18n-ignore internal invariant
   }
   return {
     ...graph,
@@ -170,34 +171,34 @@ export function validateTrackGraph(
   topology: TrackTopology,
 ): TrackGraphIssue[] {
   const issues: TrackGraphIssue[] = []
-  if (graph.edges.length === 0) issues.push({ code: 'empty', message: 'Die Strecke enthält keine Teile.' })
-  if (!graph.startNodeId) issues.push({ code: 'missing-start', message: 'Der Strecke fehlt ein Startpunkt.' })
+  if (graph.edges.length === 0) issues.push({ code: 'empty', message: de('Die Strecke enthält keine Teile.') })
+  if (!graph.startNodeId) issues.push({ code: 'missing-start', message: de('Der Strecke fehlt ein Startpunkt.') })
   if (topology !== 'closedLoop' && !graph.terminalNodeId) {
-    issues.push({ code: 'missing-terminal', message: 'Der Strecke fehlt ein Endpunkt.' })
+    issues.push({ code: 'missing-terminal', message: de('Der Strecke fehlt ein Endpunkt.') })
   }
   const components = trackComponents(graph)
   if (components.length > 1) {
-    issues.push({ code: 'disconnected', message: 'Die Strecke ist nicht vollständig verbunden.' })
+    issues.push({ code: 'disconnected', message: de('Die Strecke ist nicht vollständig verbunden.') })
   }
   const { outgoing, incoming } = directedTrackAdjacency(graph)
   graph.nodes.forEach((node) => {
     const out = outgoing.get(node.id)?.length ?? 0
     const into = incoming.get(node.id)?.length ?? 0
     if (out > 1 || into > 1) {
-      issues.push({ code: 'branch', message: 'Strecken dürfen sich nicht verzweigen.', nodeId: node.id })
+      issues.push({ code: 'branch', message: de('Strecken dürfen sich nicht verzweigen.'), nodeId: node.id })
     }
   })
   const ordered = orderTrackFromStart(graph)
   if (graph.edges.length > 0 && !ordered.complete) {
-    issues.push({ code: 'disconnected', message: 'Die Streckenreihenfolge ist vom Start aus nicht eindeutig.' })
+    issues.push({ code: 'disconnected', message: de('Die Streckenreihenfolge ist vom Start aus nicht eindeutig.') })
   }
   if (topology === 'closedLoop') {
     const endNode = ordered.nodeIds.at(-1)
     if (!graph.startNodeId || endNode !== graph.startNodeId) {
-      issues.push({ code: 'not-closed', message: 'Die Achterbahn muss einen geschlossenen Rundkurs bilden.' })
+      issues.push({ code: 'not-closed', message: de('Die Achterbahn muss einen geschlossenen Rundkurs bilden.') })
     }
   } else if (graph.terminalNodeId && ordered.nodeIds.at(-1) !== graph.terminalNodeId) {
-    issues.push({ code: 'dead-end', message: 'Die Strecke erreicht ihren Endpunkt nicht.' })
+    issues.push({ code: 'dead-end', message: de('Die Strecke erreicht ihren Endpunkt nicht.') })
   }
   return dedupeIssues(issues)
 }

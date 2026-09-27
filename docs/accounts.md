@@ -25,6 +25,11 @@ nicht ausreichend geschützt.
 - Saves dürfen nur vom Besitzer geschrieben werden; öffentliche Saves sind für
   andere ausschließlich lesbar. Details: [saves.md](saves.md).
 - `ensureAccountsSchema` läuft vor Save-Abfragen mit `users`-Join.
+- Texte ([i18n.md](i18n.md)): Der Server antwortet mit kanonischem Deutsch (`de`
+  aus `server/i18nMarker.ts`, Katalog `src/i18n/en/server.ts`); die Kontozeile des
+  Titelbildschirms lokalisiert `message`. Die eigenen Meldungen von
+  `src/accounts.ts` (keine Antwort, kein Kontakt, Passwörter ungleich) sind UI-Text
+  mit `t` (Katalog `src/i18n/en/net.ts`).
 
 ## Tests
 

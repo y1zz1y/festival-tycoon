@@ -1,5 +1,32 @@
-import { BufferGeometry, DynamicDrawUsage, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial } from 'three'
+import { BufferGeometry, DynamicDrawUsage, Euler, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three'
 import { ModelKit } from './retroBuildings'
+
+const limbPosition = new Vector3()
+const limbRotation = new Euler()
+const limbQuaternion = new Quaternion()
+const limbScale = new Vector3(1, 1, 1)
+const limbMatrix = new Matrix4()
+/**
+ * `pose × translate(x, y, z) × rotate(swingX, swingY, swingZ)` into `out`: where a
+ * body part of an instanced figure goes. `pose` already carries the figure's
+ * position, heading and build; the joint offsets are the ones the single-mesh
+ * figures use (legs hang from the hips, arms from the shoulders).
+ */
+export function composeLimb(
+  out: Matrix4,
+  pose: Matrix4,
+  x: number,
+  y: number,
+  z: number,
+  swingX = 0,
+  swingY = 0,
+  swingZ = 0,
+): Matrix4 {
+  limbPosition.set(x, y, z)
+  limbQuaternion.setFromEuler(limbRotation.set(swingX, swingY, swingZ))
+  limbMatrix.compose(limbPosition, limbQuaternion, limbScale)
+  return out.multiplyMatrices(pose, limbMatrix)
+}
 
 export const PERSON_SKIN = [0xf2cfb0, 0xe3b38d, 0xc68f65, 0xa86e49, 0x815038, 0x593a30]
 const trousers = [0x374e67, 0x48554b, 0x6f5547, 0x31343f, 0x778996, 0x514461]

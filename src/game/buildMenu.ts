@@ -1,3 +1,4 @@
+// i18n: client-text
 import { FLAT_RIDE_TYPES, rideProfile, type FlatRideType } from './flatRides'
 import { BUILDING_KINDS, BUILDINGS } from './catalog'
 import type { BuildingKind, Tool } from './catalog'
@@ -10,6 +11,7 @@ import {
   decorationKindsInCategory,
 } from './decoration'
 import { SIMULATION_CONFIG } from './simulationConfig'
+import { formatMoney, formatNumber, joinParts, localize, t, tc } from '../i18n'
 
 export const BUILD_CATEGORY_IDS = [
   'bulldoze',
@@ -62,25 +64,44 @@ export type BuildCategory = {
   groups: BuildSubgroup[]
 }
 
-export function buildingMenuItem(kind: BuildingKind, detail?: string): BuildMenuItem {
+/**
+ * Menu text is built when it is read, in the viewer's language: `name`, `detail` and
+ * the labels are getters (docs/i18n.md), so the menu stays one static table.
+ */
+type MenuText = () => string
+
+export function buildingMenuItem(kind: BuildingKind, detail?: MenuText): BuildMenuItem {
   const building = BUILDINGS[kind]
   return {
     tool: kind,
-    name: building.name,
+    get name() { return localize(building.name) },
     icon: building.icon,
-    detail: detail ?? `${Math.floor(building.cost).toLocaleString('de-DE')} €`,
+    get detail() { return detail ? detail() : formatMoney(building.cost) },
     previewKind: kind,
   }
 }
 
 function toolItem(
   tool: Tool,
-  name: string,
+  name: MenuText,
   icon: string,
-  detail: string,
+  detail: MenuText,
   extra?: Pick<BuildMenuItem, 'bungee' | 'rideType' | 'previewKind' | 'previewSupply' | 'coasterTypeId' | 'courseKind'>,
 ): BuildMenuItem {
-  return { tool, name, icon, detail, ...extra }
+  return { tool, get name() { return name() }, icon, get detail() { return detail() }, ...extra }
+}
+
+/** A building's price followed by further facts, joined with ` · `. */
+function costWith(kind: BuildingKind, ...facts: MenuText[]): MenuText {
+  return () => joinParts(formatMoney(BUILDINGS[kind].cost), ...facts.map((fact) => fact()))
+}
+
+const COURSE_DETAILS: Record<CourseKind, MenuText> = {
+  mudmasters: () => t('Hindernisparcours'),
+  pool: () => t('Becken mit Wasser'),
+  treeToTree: () => t('Bäume und Seilbahnen'),
+  waterSlide: () => t('Leitern, Rutsche, Auslauf'),
+  paintball: () => t('Spielfeld mit Teams'),
 }
 
 /** Fallback label only — catalog tiles render `coasterVehiclePreview` thumbnails. */
@@ -113,9 +134,8 @@ export function coasterCatalogIcon(typeId: CoasterTypeId): string {
 }
 
 function coasterTypeItems(): BuildMenuItem[] {
-  const stationCost = `${Math.floor(TRACK_PIECES.station.cost).toLocaleString('de-DE')} €`
   return listPlayableCoasterCatalogTypes().map((entry) =>
-    toolItem('coaster', entry.name, COASTER_TYPE_ICONS[entry.id], `ab ${stationCost}`, {
+    toolItem('coaster', () => localize(entry.name), COASTER_TYPE_ICONS[entry.id], () => t`ab ${formatMoney(TRACK_PIECES.station.cost)}`, {
       coasterTypeId: entry.id,
     }),
   )
@@ -124,142 +144,132 @@ function coasterTypeItems(): BuildMenuItem[] {
 export const BUILD_CATEGORIES: readonly BuildCategory[] = [
   {
     id: 'bulldoze',
-    label: 'Abriss',
+    get label() { return t('Abriss') },
     icon: '💣',
     dock: 'left',
     groups: [
       {
         id: 'main',
-        label: 'Abriss',
-        items: [toolItem('bulldoze', 'Abriss', '💣', 'Gebäude und Wege')],
+        get label() { return t('Abriss') },
+        items: [toolItem('bulldoze', () => t('Abriss'), '💣', () => t('Gebäude und Wege'))],
       },
     ],
   },
   {
     id: 'terrain',
-    label: 'Gelände',
+    get label() { return tc('terrain', 'Gelände') },
     icon: '🚜',
     dock: 'left',
     extra: 'terrain',
     groups: [
       {
         id: 'shape',
-        label: 'Form',
+        get label() { return t('Form') },
         items: [
-          toolItem('terrainRaise', 'Anheben', '🔼', '+0,5'),
-          toolItem('terrainLower', 'Absenken', '🔽', '−0,5'),
-          toolItem('terrainSmooth', 'Glätten', '〰️', 'Einebnen'),
+          toolItem('terrainRaise', () => t('Anheben'), '🔼', () => `+${formatNumber(0.5)}`),
+          toolItem('terrainLower', () => t('Absenken'), '🔽', () => `−${formatNumber(0.5)}`),
+          toolItem('terrainSmooth', () => t('Glätten'), '〰️', () => t('Einebnen')),
         ],
       },
       {
         id: 'cover',
-        label: 'Untergrund',
+        get label() { return t('Untergrund') },
         items: [
-          toolItem('terrainCoverGrass', 'Rasen', '🌿', 'Wiese'),
-          toolItem('terrainCoverSand', 'Sand', '🏜️', 'Düne'),
-          toolItem('terrainCoverStone', 'Stein', '🪨', 'Platte'),
-          toolItem('terrainCoverField', 'Acker', '🌾', 'Furchen'),
-          toolItem('terrainCoverSnow', 'Schnee', '❄️', 'Weiß'),
-          toolItem('terrainCoverRock', 'Felsen', '⛰️', 'Fels'),
-          toolItem('terrainCoverEarth', 'Braune Erde', '🟤', 'Erde'),
-          toolItem('terrainCoverSalt', 'Salzpfanne', '⬜', 'Playa'),
-          toolItem('terrainCoverAsphalt', 'Asphalt', '🏁', 'Piste'),
+          toolItem('terrainCoverGrass', () => t('Rasen'), '🌿', () => t('Wiese')),
+          toolItem('terrainCoverSand', () => t('Sand'), '🏜️', () => t('Düne')),
+          toolItem('terrainCoverStone', () => t('Stein'), '🪨', () => t('Platte')),
+          toolItem('terrainCoverField', () => t('Acker'), '🌾', () => t('Furchen')),
+          toolItem('terrainCoverSnow', () => t('Schnee'), '❄️', () => t('Weiß')),
+          toolItem('terrainCoverRock', () => t('Felsen'), '⛰️', () => t('Fels')),
+          toolItem('terrainCoverEarth', () => t('Braune Erde'), '🟤', () => t('Erde')),
+          toolItem('terrainCoverSalt', () => t('Salzpfanne'), '⬜', () => t('Playa')),
+          toolItem('terrainCoverAsphalt', () => t('Asphalt'), '🏁', () => t('Piste')),
         ],
       },
     ],
   },
   {
     id: 'copy',
-    label: 'Kopieren',
+    get label() { return t('Kopieren') },
     icon: '⧉',
     dock: 'left',
     extra: 'copy',
     groups: [
       {
         id: 'main',
-        label: 'Kopieren',
-        items: [toolItem('copy', 'Bereich kopieren', '⧉', 'Rechteck aufziehen')],
+        get label() { return t('Kopieren') },
+        items: [toolItem('copy', () => t('Bereich kopieren'), '⧉', () => t('Rechteck aufziehen'))],
       },
     ],
   },
   {
     id: 'decoration',
-    label: 'Dekoration',
+    get label() { return t('Dekoration') },
     icon: '🪑',
     dock: 'left',
     extra: 'decoration',
     groups: DECORATION_CATEGORY_IDS.map((id) => ({
       id,
-      label: DECORATION_CATEGORY_LABELS[id],
+      get label() { return localize(DECORATION_CATEGORY_LABELS[id]) },
       items: decorationKindsInCategory(id).map((kind) => buildingMenuItem(kind)),
     })),
   },
   {
     id: 'paths',
-    label: 'Wege',
+    get label() { return t('Wege') },
     icon: '🛤️',
     dock: 'left',
     extra: 'paths',
     groups: [
       {
         id: 'main',
-        label: 'Wege',
-        items: [buildingMenuItem('path', 'Linie ziehen')],
+        get label() { return t('Wege') },
+        items: [buildingMenuItem('path', () => t('Linie ziehen'))],
       },
     ],
   },
   {
     id: 'attractions',
-    label: 'Attraktionen',
+    get label() { return t('Attraktionen') },
     icon: '🎡',
     dock: 'left',
     extra: 'attractions',
     groups: [
       {
         id: 'rides',
-        label: 'Fahrgeschäfte',
+        get label() { return t('Fahrgeschäfte') },
         items: [
           buildingMenuItem('ride'),
-          toolItem('ride', 'Bungee-Turm', '🪂', '1.200 € + 25 €/Meter', {
+          toolItem('ride', () => t('Bungee-Turm'), '🪂', () => t`${formatMoney(1200)} + ${formatMoney(25)}/Meter`, {
             bungee: true,
           }),
           ...FLAT_RIDE_TYPES.map((rideType) => {
             const profile = rideProfile({ rideType })
-            return toolItem('ride', profile.name, profile.icon, `${profile.cost.toLocaleString('de-DE')} €`, { rideType })
+            return toolItem('ride', () => localize(profile.name), profile.icon, () => formatMoney(profile.cost), { rideType })
           }),
         ],
       },
       {
         id: 'coasters',
-        label: 'Achterbahn',
+        get label() { return t('Achterbahn') },
         items: coasterTypeItems(),
       },
       {
         id: 'courses',
-        label: 'Kurse',
+        get label() { return t('Kurse') },
         items: COURSE_KINDS.map((kind) =>
           toolItem(
             'course',
-            COURSE_SPECS[kind].name,
+            () => localize(COURSE_SPECS[kind].name),
             COURSE_SPECS[kind].icon,
-            `${COURSE_SPECS[kind].startCost.toLocaleString('de-DE')} € · ${
-              kind === 'mudmasters'
-                ? 'Hindernisparcours'
-                : kind === 'pool'
-                  ? 'Becken mit Wasser'
-                  : kind === 'treeToTree'
-                    ? 'Bäume und Seilbahnen'
-                    : kind === 'waterSlide'
-                      ? 'Leitern, Rutsche, Auslauf'
-                      : 'Spielfeld mit Teams'
-            }`,
+            () => joinParts(formatMoney(COURSE_SPECS[kind].startCost), COURSE_DETAILS[kind]()),
             { courseKind: kind },
           ),
         ),
       },
       {
         id: 'stalls',
-        label: 'Stände',
+        get label() { return t('Stände') },
         items: [
           buildingMenuItem('food'),
           buildingMenuItem('toilet'),
@@ -273,12 +283,12 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
       },
       {
         id: 'camping',
-        label: 'Camping',
-        items: [toolItem('camping', 'Zeltbereich', '⛺', 'Gelände ausweisen')],
+        get label() { return t('Camping') },
+        items: [toolItem('camping', () => t('Zeltbereich'), '⛺', () => t('Gelände ausweisen'))],
       },
       {
         id: 'festival',
-        label: 'Festival',
+        get label() { return t('Festival') },
         items: [
           buildingMenuItem('stage'),
           buildingMenuItem('directionalSpeaker'),
@@ -294,117 +304,102 @@ export const BUILD_CATEGORIES: readonly BuildCategory[] = [
   },
   {
     id: 'roads',
-    label: 'Straßen',
+    get label() { return t('Straßen') },
     icon: '🛣️',
     dock: 'left',
     extra: 'roads',
     groups: [
       {
         id: 'main',
-        label: 'Straße',
+        get label() { return t('Straße') },
         items: [
-          toolItem('road', 'Straße', '▰', 'Linie ziehen'),
-          toolItem('parkingArea', 'Parkplatz', '🅿', 'Fläche ziehen'),
-          toolItem('roadDirection', 'Fahrtrichtung', '➜', 'Pfeil setzen'),
-          toolItem('roadDirectionClear', 'Fahrtrichtung entfernen', '⇄', 'Wieder beide Richtungen'),
-          toolItem('trafficLight', 'Ampel', '🚦', '120 € · eine Richtung'),
-          toolItem('pathBarrier', 'Personentor', '🚧', '70 € · eine Richtung'),
-          toolItem('roadSeparator', 'Trennlinie', '⛔', 'Kante sperren'),
-          toolItem('crosswalk', 'Zebrastreifen', '▥', 'Überweg'),
-          toolItem('roadSpeed10', 'Tempo 10', '10', 'Fahrbahn'),
-          toolItem('roadSpeed30', 'Tempo 30', '30', 'Fahrbahn'),
-          toolItem('roadSpeed50', 'Tempo 50', '50', 'Fahrbahn'),
+          toolItem('road', () => t('Straße'), '▰', () => t('Linie ziehen')),
+          toolItem('parkingArea', () => t('Parkplatz'), '🅿', () => t('Fläche ziehen')),
+          toolItem('roadDirection', () => t('Fahrtrichtung'), '➜', () => t('Pfeil setzen')),
+          toolItem('roadDirectionClear', () => t('Fahrtrichtung entfernen'), '⇄', () => t('Wieder beide Richtungen')),
+          toolItem('trafficLight', () => t('Ampel'), '🚦', () => joinParts(formatMoney(120), t('eine Richtung'))),
+          toolItem('pathBarrier', () => t('Personentor'), '🚧', () => joinParts(formatMoney(70), t('eine Richtung'))),
+          toolItem('roadSeparator', () => t('Trennlinie'), '⛔', () => t('Kante sperren')),
+          toolItem('crosswalk', () => t('Zebrastreifen'), '▥', () => t('Überweg')),
+          toolItem('roadSpeed10', () => t`Tempo ${10}`, '10', () => t('Fahrbahn')),
+          toolItem('roadSpeed30', () => t`Tempo ${30}`, '30', () => t('Fahrbahn')),
+          toolItem('roadSpeed50', () => t`Tempo ${50}`, '50', () => t('Fahrbahn')),
         ],
       },
     ],
   },
   {
     id: 'logistics',
-    label: 'Logistik',
+    get label() { return t('Logistik') },
     icon: '🚚',
     dock: 'left',
     extra: 'logistics',
     groups: [
       {
         id: 'freight',
-        label: 'Waren',
+        get label() { return t('Waren') },
         items: [
-          toolItem('deliveryYard', 'Anlieferungsplatz', '📦', '400 € · an der Straße', {
+          toolItem('deliveryYard', () => t('Anlieferungsplatz'), '📦', () => joinParts(formatMoney(400), t('an der Straße')), {
             previewSupply: 'delivery',
           }),
-          toolItem('supplyDepot', 'Depot', '🏪', '400 € · am Fußweg', {
+          toolItem('supplyDepot', () => t('Depot'), '🏪', () => joinParts(formatMoney(400), t('am Fußweg')), {
             previewSupply: 'supply',
           }),
-          toolItem('staffGate', 'Personaltor', '🛂', '80 € · Personal und Saugroboter'),
+          toolItem('staffGate', () => t('Personaltor'), '🛂', () => joinParts(formatMoney(80), t('Personal und Saugroboter'))),
         ],
       },
       {
         id: 'bus',
-        label: 'Bus',
+        get label() { return t('Bus') },
         items: [buildingMenuItem('busStop'), buildingMenuItem('busDepot')],
       },
       {
         id: 'band',
-        label: 'Bandversorgung',
+        get label() { return t('Bandversorgung') },
         items: [
           toolItem(
             'backstageArea',
-            'Backstage ausweisen',
+            () => t('Backstage ausweisen'),
             '🎤',
-            `${SIMULATION_CONFIG.bandSupply.backstageDesignationCost} € je Feld · begehbar und bebaubar`,
+            () => joinParts(t`${formatMoney(SIMULATION_CONFIG.bandSupply.backstageDesignationCost)} je Feld`, t('begehbar und bebaubar')),
           ),
-          buildingMenuItem(
-            'tourBusParking',
-            `${Math.floor(BUILDINGS.tourBusParking.cost).toLocaleString('de-DE')} € · nur Backstage`,
-          ),
-          buildingMenuItem(
-            'bandFridge',
-            `${Math.floor(BUILDINGS.bandFridge.cost).toLocaleString('de-DE')} € · Pause zwischen den Auftritten`,
-          ),
-          buildingMenuItem(
-            'backstageCouch2',
-            `${Math.floor(BUILDINGS.backstageCouch2.cost).toLocaleString('de-DE')} € · 2 Felder · 2 Sitzplätze`,
-          ),
-          buildingMenuItem(
-            'backstageCouch3',
-            `${Math.floor(BUILDINGS.backstageCouch3.cost).toLocaleString('de-DE')} € · 3 Felder · 3 Sitzplätze`,
-          ),
-          buildingMenuItem(
-            'backstageToilet',
-            `${Math.floor(BUILDINGS.backstageToilet.cost).toLocaleString('de-DE')} € · braucht Trinkwasser`,
-          ),
+          buildingMenuItem('tourBusParking', costWith('tourBusParking', () => t('nur Backstage'))),
+          buildingMenuItem('bandFridge', costWith('bandFridge', () => t('Pause zwischen den Auftritten'))),
+          buildingMenuItem('backstageCouch2', costWith('backstageCouch2', () => t`${2} Felder`, () => t`${2} Sitzplätze`)),
+          buildingMenuItem('backstageCouch3', costWith('backstageCouch3', () => t`${3} Felder`, () => t`${3} Sitzplätze`)),
+          buildingMenuItem('backstageToilet', costWith('backstageToilet', () => t('braucht Trinkwasser'))),
         ],
       },
       {
         id: 'waste',
-        label: 'Müll',
+        get label() { return t('Müll') },
         items: [
-          toolItem('wasteDump', 'Müllablage', '🗑️', 'sehr unattraktiv'),
+          toolItem('wasteDump', () => t('Müllablage'), '🗑️', () => t('sehr unattraktiv')),
           buildingMenuItem(
             'sealedWasteContainer',
-            `${Math.floor(BUILDINGS.sealedWasteContainer.cost).toLocaleString('de-DE')} € · 80 Beutel · braucht Straßenanschluss`,
+            costWith('sealedWasteContainer', () => t`${80} Beutel`, () => t('braucht Straßenanschluss')),
           ),
           buildingMenuItem(
             'wasteDepot',
-            `${Math.floor(BUILDINGS.wasteDepot.cost).toLocaleString('de-DE')} € · Müllwagen starten und laden hier ab · braucht Straßenanschluss`,
+            costWith('wasteDepot', () => t('Müllwagen starten und laden hier ab'), () => t('braucht Straßenanschluss')),
           ),
           buildingMenuItem('specialDepot'),
         ],
       },
       {
         id: 'medical',
-        label: 'Krankenhaus',
+        get label() { return t('Krankenhaus') },
         items: [
           buildingMenuItem('ambulanceGarage'),
           buildingMenuItem('fireStation'),
-          toolItem('medicalArea', 'Krankenbereich', '🏥', '3 Liegen je Feld'),
+          toolItem('medicalArea', () => t('Krankenbereich'), '🏥', () => t`${3} Liegen je Feld`),
         ],
       },
       {
         id: 'power',
-        label: 'Strom',
+        get label() { return t('Strom') },
         items: [
-          toolItem('powerCable', 'Stromkabel', '🔌', '18 € je Feld'),
+          toolItem('powerCable', () => t('Stromkabel'), '🔌', () => t`${formatMoney(18)} je Feld`),
           buildingMenuItem('generator'),
           buildingMenuItem('backupGenerator'),
         ],

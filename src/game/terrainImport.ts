@@ -15,6 +15,7 @@ import {
 } from './scenario'
 import { ENTRANCE_PATH_ID } from './snapshotBootstrap'
 import { snapTerrainHeight } from './terrain'
+import { de, keep } from '../i18n/marker'
 
 export type TerrainBBox = { south: number; west: number; north: number; east: number }
 
@@ -36,16 +37,16 @@ export const TERRAIN_SKETCH_PRESETS: Record<
 > = {
   'burning-man': {
     bbox: { south: 40.764, west: -119.236, north: 40.807, east: -119.176 },
-    name: 'Burning Man · Black Rock City',
+    name: keep('Burning Man · Black Rock City'),
     detail:
-      'Salzpfanne mit Hufeisenstadt und innerer Playastrecke. Das Tor öffnet nach Süden zum Eingang; The Man steht in der Mitte, der Tempel nördlich davon. Wüste, flach, viel Platz für Camps.',
+      de('Salzpfanne mit Hufeisenstadt und innerer Playastrecke. Das Tor öffnet nach Süden zum Eingang; The Man steht in der Mitte, der Tempel nördlich davon. Wüste, flach, viel Platz für Camps.'),
     environment: 'desert',
   },
   'rock-am-ring': {
     bbox: { south: 50.323, west: 6.916, north: 50.359, east: 6.98 },
-    name: 'Rock am Ring · Nürburgring',
+    name: keep('Rock am Ring · Nürburgring'),
     detail:
-      'Hügelland mit Nordschleifen-Schleife und GP-Oval im Süden. Das Festivalgelände liegt in der Infield-Wiese am Eingang; Asphalt und Streckenbegrenzung tragen die Form der Rennstrecke.',
+      de('Hügelland mit Nordschleifen-Schleife und GP-Oval im Süden. Das Festivalgelände liegt in der Infield-Wiese am Eingang; Asphalt und Streckenbegrenzung tragen die Form der Rennstrecke.'),
     environment: 'grassland',
   },
 }
@@ -173,7 +174,7 @@ export function paintRing(
   inner: number,
   outer: number,
   cover: GroundCover,
-  keep?: (x: number, z: number) => boolean,
+  include?: (x: number, z: number) => boolean,
 ): void {
   const outer2 = outer * outer
   const inner2 = inner * inner
@@ -182,7 +183,7 @@ export function paintRing(
       if (!inWorld(x, z, worldSize)) continue
       const d2 = (x - cx) * (x - cx) + (z - cz) * (z - cz)
       if (d2 > outer2 || d2 < inner2) continue
-      if (keep && !keep(x, z)) continue
+      if (include && !include(x, z)) continue
       paintCover(ground, x, z, cover)
     }
   }

@@ -11,6 +11,7 @@ import {
   type TickerItem,
   type TickerWatchState,
 } from './game/ticker'
+import { plural, t } from './i18n'
 
 const DISPLAY_MS = 10000
 
@@ -38,22 +39,22 @@ export function mountTickerUI(options: {
       <strong class="ticker-title"></strong>
       <span class="ticker-message"></span>
     </div>
-    <button type="button" class="ticker-jump" hidden>Hin</button>
-    <button type="button" class="ticker-dismiss" aria-label="Meldung ausblenden">×</button>
+    <button type="button" class="ticker-jump" hidden>${t('Hin')}</button>
+    <button type="button" class="ticker-dismiss" aria-label="${t('Meldung ausblenden')}">×</button>
   `
 
   const panel = document.createElement('aside')
   panel.id = 'ticker-panel'
   panel.className = 'ticker-panel panel'
-  panel.setAttribute('aria-label', 'Meldungen')
+  panel.setAttribute('aria-label', t('Meldungen'))
   panel.innerHTML = `
     <div class="panel-header">
       <span class="panel-drag-line" aria-hidden="true"></span>
-      <h2 class="panel-header-title">Meldungen</h2>
+      <h2 class="panel-header-title">${t('Meldungen')}</h2>
       <span class="panel-drag-line" aria-hidden="true"></span>
-      <button id="close-ticker" class="panel-close-button" aria-label="Meldungen schließen">×</button>
+      <button id="close-ticker" class="panel-close-button" aria-label="${t('Meldungen schließen')}">×</button>
     </div>
-    <p class="ticker-history-summary">Noch keine Vorfälle oder Ereignisse.</p>
+    <p class="ticker-history-summary">${t('Noch keine Vorfälle oder Ereignisse.')}</p>
     <div class="ticker-history-list"></div>
   `
 
@@ -83,11 +84,12 @@ export function mountTickerUI(options: {
 
   const renderHistory = (): void => {
     if (history.length === 0) {
-      summary.textContent = 'Noch keine Vorfälle oder Ereignisse.'
+      summary.textContent = t('Noch keine Vorfälle oder Ereignisse.')
       list.replaceChildren()
       return
     }
-    summary.textContent = `${history.length} letzte Meldung${history.length === 1 ? '' : 'en'}`
+    const count = history.length
+    summary.textContent = plural(count, t`${count} letzte Meldung`, t`${count} letzte Meldungen`)
     list.replaceChildren(
       ...history.map((item) => {
         const row = document.createElement('div')
@@ -104,8 +106,8 @@ export function mountTickerUI(options: {
         if (item.position) {
           const go = document.createElement('button')
           go.type = 'button'
-          go.textContent = 'Hin'
-          go.title = 'Zum Ort springen'
+          go.textContent = t('Hin')
+          go.title = t('Zum Ort springen')
           go.addEventListener('click', () => {
             options.focusWorld(item.position!.x, item.position!.z)
           })
@@ -132,7 +134,7 @@ export function mountTickerUI(options: {
     bar.hidden = false
     if (item.position) {
       jump.hidden = false
-      jump.title = 'Zum Ort springen'
+      jump.title = t('Zum Ort springen')
     } else {
       jump.hidden = true
     }
@@ -152,7 +154,7 @@ export function mountTickerUI(options: {
 
   const syncToggle = (): void => {
     const count = history.length
-    toggle.title = count > 0 ? `Meldungen (${count})` : 'Meldungen'
+    toggle.title = count > 0 ? t`Meldungen (${count})` : t('Meldungen')
     toggle.setAttribute('aria-label', toggle.title)
     toggle.classList.toggle('has-ticker', count > 0)
   }

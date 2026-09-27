@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import { festivalMultiplayer } from './server/wsPlugin.ts'
 import { festivalVersion } from './server/versionPlugin.ts'
+import { bootPreload } from './server/bootPreloadPlugin.ts'
 import packageInfo from './package.json' with { type: 'json' }
 
 // A tracked dependency also restarts Vite after version bumps; readFileSync did not.
@@ -12,7 +13,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(version),
     __BUILD_ID__: JSON.stringify(buildId),
   },
-  plugins: [festivalMultiplayer(), festivalVersion(version, buildId)],
+  plugins: [festivalMultiplayer(), festivalVersion(version, buildId), bootPreload()],
   server: {
     host: true,
     port: 5173,

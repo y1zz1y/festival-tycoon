@@ -1,3 +1,4 @@
+// i18n: client-text
 import { SIMULATION_CONFIG } from './simulationConfig'
 import { collectSeatedPassengerIds } from './logistics'
 import {
@@ -6,8 +7,10 @@ import {
   type WasteDumpCell,
 } from './waste'
 import type { ScenarioGoal } from './scenario'
-import { goalName, insolvencyDaysLeft, type GoalStatus, type ScenarioProgress } from './scenarioGoals'
+import { insolvencyDaysLeft, type GoalStatus, type ScenarioProgress } from './scenarioGoals'
+import { goalName, goalWithDeadline } from './scenarioGoalText'
 import { clockText, stormAt, type StormPhase, type StormPlan } from './storm'
+import { formatRange, formatTime, joinParts, plural, t } from '../i18n'
 
 export type TickerKind =
   | 'fire'
@@ -187,6 +190,23 @@ function fullestDump(
   }, undefined)
 }
 
+/** The storm warning when one is announced, and the storm itself when it breaks. */
+function stormTickerItem(
+  source: TickerSource,
+  phase: Exclude<StormPhase, 'none'>,
+  storm: { start: number; end: number },
+): TickerItem {
+  if (phase === 'warning') {
+    const window = formatRange(clockText(storm.start), clockText(storm.end))
+    return tickerItem('storm', source, t('Unwetterwarnung'), t`Gewitter erwartet ${window}. Im Festivalfenster unter „Wetter & Vorsorge“ Schutz anordnen.`, undefined, 'warning')
+  }
+  const end = clockText(storm.end)
+  const message = source.festival?.shelterOrder
+    ? t`Das Unwetter ist da, alle Auftritte ruhen bis ${end}.`
+    : t`Das Unwetter ist da, alle Auftritte ruhen bis ${end}. Wer im Freien bleibt, kann stürzen.`
+  return tickerItem('storm', source, t('Gewitter'), message, undefined, 'alert')
+}
+
 /**
  * Derive ticker events from the current snapshot. Watch state is UI-only;
  * the same incidents/dumps/panic on every client produce the same items.
@@ -202,10 +222,7 @@ export function observeTickerEvents(
   // Storms: the warning when one is announced, then again when it breaks.
   const storm = source.festival ? stormAt(source.festival, source.day, source.minute) : { phase: 'none' as const }
   if (storm.phase !== watch.stormPhase && storm.phase !== 'none' && 'storm' in storm && storm.storm) {
-    const window = `${clockText(storm.storm.start)}–${clockText(storm.storm.end)}`
-    items.push(storm.phase === 'warning'
-      ? tickerItem('storm', source, 'Unwetterwarnung', `Gewitter erwartet ${window}. Im Festivalfenster unter „Wetter & Vorsorge“ Schutz anordnen.`, undefined, 'warning')
-      : tickerItem('storm', source, 'Gewitter', `Das Unwetter ist da, alle Auftritte ruhen bis ${clockText(storm.storm.end)}.${source.festival?.shelterOrder ? '' : ' Wer im Freien bleibt, kann stürzen.'}`, undefined, 'alert'))
+    items.push(stormTickerItem(source, storm.phase, storm.storm))
   }
   watch.stormPhase = storm.phase
 
@@ -219,10 +236,10 @@ export function observeTickerEvents(
       tickerItem(
         'fire',
         source,
-        newFires.length === 1 ? 'Feuer' : `${newFires.length} Brände`,
+        newFires.length === 1 ? t('Feuer') : t`${newFires.length} Brände`,
         newFires.length === 1
-          ? 'Es brennt auf dem Gelände.'
-          : `Es brennt an ${newFires.length} Stellen.`,
+          ? t('Es brennt auf dem Gelände.')
+          : t`Es brennt an ${newFires.length} Stellen.`,
         cellCenter(latest),
         'alert',
         newFires.map((fire) => fire.id),
@@ -234,10 +251,10 @@ export function observeTickerEvents(
       tickerItem(
         'fire',
         source,
-        'Feuer',
+        t('Feuer'),
         fires.length === 1
-          ? 'Ein Brand dauert noch an.'
-          : `${fires.length} Brände dauern noch an.`,
+          ? t('Ein Brand dauert noch an.')
+          : t`${fires.length} Brände dauern noch an.`,
         fireFocus ? cellCenter(fireFocus) : undefined,
         'alert',
         fires.map((fire) => fire.id),
@@ -260,10 +277,10 @@ export function observeTickerEvents(
       tickerItem(
         'panic',
         source,
-        panicking.length >= 2 ? 'Massenpanik' : 'Panik',
+        panicking.length >= 2 ? t('Massenpanik') : t('Panik'),
         panicking.length >= 2
-          ? `${panicking.length} Gäste fliehen aus dem Gedränge.`
-          : 'Ein Gast flieht aus dem Gedränge.',
+          ? t`${panicking.length} Gäste fliehen aus dem Gedränge.`
+          : t('Ein Gast flieht aus dem Gedränge.'),
         panicPos,
         'alert',
       ),
@@ -274,8 +291,8 @@ export function observeTickerEvents(
       tickerItem(
         'panic',
         source,
-        panicking.length >= 2 ? 'Massenpanik' : 'Panik',
-        `${panicking.length} Gäste sind noch in Panik.`,
+        panicking.length >= 2 ? t('Massenpanik') : t('Panik'),
+        plural(panicking.length, t`${panicking.length} Gast ist noch in Panik.`, t`${panicking.length} Gäste sind noch in Panik.`),
         panicPos,
         'alert',
       ),
@@ -295,8 +312,8 @@ export function observeTickerEvents(
       tickerItem(
         'dumpFull',
         source,
-        'Müllablagen voll',
-        `Alle Müllflächen sind zu ${fill.percent} % belegt.`,
+        t('Müllablagen voll'),
+        t`Alle Müllflächen sind zu ${fill.percent} % belegt.`,
         dumpCenter,
         'warning',
       ),
@@ -307,8 +324,8 @@ export function observeTickerEvents(
       tickerItem(
         'dumpFull',
         source,
-        'Müllablagen voll',
-        `Die Müllflächen bleiben zu ${fill.percent} % belegt.`,
+        t('Müllablagen voll'),
+        t`Die Müllflächen bleiben zu ${fill.percent} % belegt.`,
         dumpCenter,
         'warning',
       ),
@@ -329,10 +346,10 @@ export function observeTickerEvents(
       tickerItem(
         'medical',
         source,
-        newInjured.length === 1 ? 'Verletzte Person' : 'Verletzte',
+        newInjured.length === 1 ? t('Verletzte Person') : t('Verletzte'),
         newInjured.length === 1
-          ? 'Jemand braucht medizinische Hilfe.'
-          : `${newInjured.length} Personen brauchen medizinische Hilfe.`,
+          ? t('Jemand braucht medizinische Hilfe.')
+          : t`${newInjured.length} Personen brauchen medizinische Hilfe.`,
         { x: latest.x, z: latest.z },
         'warning',
         newInjured.map((visitor) => visitor.id),
@@ -369,30 +386,35 @@ function observeScenarioEvents(source: TickerSource, watch: TickerWatchState): T
   goals.forEach((goal, index) => {
     if (before.status[index] === now.status[index]) return
     if (now.status[index] === 'done') {
-      items.push(tickerItem('goalDone', source, 'Ziel erreicht', goalName(goal), undefined, 'info', [`goal:${index}`]))
+      items.push(tickerItem('goalDone', source, t('Ziel erreicht'), goalName(goal), undefined, 'info', [`goal:${index}`]))
     } else if (now.status[index] === 'failed') {
-      items.push(tickerItem('goalFailed', source, 'Ziel verpasst', `${goalName(goal)} bis zur ${goal.edition}. Ausgabe`, undefined, 'alert', [`goal:${index}`]))
+      items.push(tickerItem('goalFailed', source, t('Ziel verpasst'), goalWithDeadline(goal), undefined, 'alert', [`goal:${index}`]))
     }
   })
   if (runningEdition > 0 && runningEdition !== before.runningEdition) {
     const last = goals.filter((goal, index) => goal.edition === runningEdition && now.status[index] === 'open')
     if (last.length > 0) {
-      items.push(tickerItem('goalDeadline', source, 'Letzte Ausgabe für ein Ziel', `Ausgabe ${runningEdition} entscheidet: ${last.map(goalName).join(' · ')}`, undefined, 'warning'))
+      const decided = joinParts(...last.map(goalName))
+      items.push(tickerItem('goalDeadline', source, t('Letzte Ausgabe für ein Ziel'), t`Ausgabe ${String(runningEdition)} entscheidet: ${decided}`, undefined, 'warning'))
     }
   }
   if (now.insolventDays > before.insolventDays) {
     const left = insolvencyDaysLeft(now)
     const scenario = goals.length > 0
     if (now.insolventDays === 1) {
-      items.push(tickerItem('insolvency', source, 'Zahlungsunfähig', scenario
-        ? `Das Konto ist im Minus und der Kreditrahmen deckt es nicht. Noch ${left} Tage, dann ist das Szenario verloren.`
-        : 'Das Konto ist im Minus und der Kreditrahmen deckt es nicht. Im freien Spiel geht es weiter, aber die Kosten laufen.', undefined, 'warning'))
+      items.push(tickerItem('insolvency', source, t('Zahlungsunfähig'), scenario
+        ? plural(
+          left,
+          t`Das Konto ist im Minus und der Kreditrahmen deckt es nicht. Noch ${left} Tag, dann ist das Szenario verloren.`,
+          t`Das Konto ist im Minus und der Kreditrahmen deckt es nicht. Noch ${left} Tage, dann ist das Szenario verloren.`,
+        )
+        : t('Das Konto ist im Minus und der Kreditrahmen deckt es nicht. Im freien Spiel geht es weiter, aber die Kosten laufen.'), undefined, 'warning'))
     } else if (scenario && left === 1) {
-      items.push(tickerItem('insolvency', source, 'Letzter Tag vor der Pleite', 'Bis morgen muss das Konto gedeckt sein, sonst ist das Szenario verloren.', undefined, 'alert'))
+      items.push(tickerItem('insolvency', source, t('Letzter Tag vor der Pleite'), t('Bis morgen muss das Konto gedeckt sein, sonst ist das Szenario verloren.'), undefined, 'alert'))
     }
   }
   if (now.dueReminderDay !== null && now.dueReminderDay !== before.dueReminderDay) {
-    items.push(tickerItem('editionDue', source, 'Stichtag erreicht', 'Die nächste Ausgabe ist fällig. Die Planung ist geöffnet und die Zeit angehalten.', undefined, 'warning'))
+    items.push(tickerItem('editionDue', source, t('Stichtag erreicht'), t('Die nächste Ausgabe ist fällig. Die Planung ist geöffnet und die Zeit angehalten.'), undefined, 'warning'))
   }
   return items
 }
@@ -407,9 +429,7 @@ export function appendTickerHistory(
 }
 
 export function formatTickerClock(item: Pick<TickerItem, 'day' | 'minute'>): string {
-  const hour = Math.floor(item.minute / 60)
-  const minute = Math.floor(item.minute % 60)
-  return `Tag ${item.day} · ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+  return joinParts(t`Tag ${String(item.day)}`, formatTime(item.minute))
 }
 
 const TICKER_ICONS: Record<TickerKind, string> = {

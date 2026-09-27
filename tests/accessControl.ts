@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { GameState, type GameSnapshot } from '../src/game/GameState'
 import { createRoadGraph, findRoadRoute, type RoadCell } from '../src/game/logistics'
 import {
-  areaPreviewText,
   createTrafficLight,
   currentAccessSlot,
   evaluateAccessSignal,
@@ -11,11 +10,11 @@ import {
   minutesUntilAccessScheduleOpen,
   normalizeAccessControls,
   normalizeStaffGateDirection,
-  previewLabel,
   staffGateBlocksVisitor,
   toggleAreaCells,
   usesGateEdgePlacement,
 } from '../src/game/accessControl'
+import { areaPreviewText, previewLabel } from '../src/game/accessControlText'
 import { createDefaultDayPlan, type DayPlan } from '../src/game/dayPlan'
 
 function useFestivalCycle(plan: DayPlan): void {
@@ -652,7 +651,7 @@ export function testAccessControl(fixture: (count?: number) => GameState): void 
   assert.equal(people.getAccessControl(peopleGate.placedId)?.signal, 'closed')
   const peopleStats = people.accessAreaPreview(peopleGate.placedId)!
   assert.equal(peopleStats.people, 1)
-  assert.equal(previewLabel('pathBarrier', 'peopleAbove', peopleStats), '1 Personen im Gebiet')
+  assert.equal(previewLabel('pathBarrier', 'peopleAbove', peopleStats), '1 Person im Gebiet')
 
   const camping = fixture(1)
   const campingState = camping.snapshot as GameSnapshot

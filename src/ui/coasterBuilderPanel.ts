@@ -35,6 +35,7 @@ import {
 } from '../game/coasterConstructionUI'
 import { SIMULATION_CONFIG } from '../game/simulationConfig'
 import { formatMoney } from './format'
+import { formatNumber, joinParts, localize, localizeName, t } from '../i18n'
 import type { CellPosition } from '../view/WorldView'
 
 const PIECE_ICONS: Record<TrackPieceKind, string> = {
@@ -48,16 +49,16 @@ const PIECE_ICONS: Record<TrackPieceKind, string> = {
   brakes: '▥', helixLeft: '↺', helixRight: '↻',
 }
 const PITCH_BUTTONS = [
-  { pitch: TRACK_PITCHES.steepDown, icon: '⇘', title: 'Steil abwärts', label: 'Steil ab' },
-  { pitch: TRACK_PITCHES.gentleDown, icon: '↘', title: 'Sanft abwärts', label: 'Sanft ab' },
-  { pitch: 0, icon: '→', title: 'Flach', label: 'Flach' },
-  { pitch: TRACK_PITCHES.gentleUp, icon: '↗', title: 'Sanft aufwärts', label: 'Sanft auf' },
-  { pitch: TRACK_PITCHES.steepUp, icon: '⇗', title: 'Steil aufwärts', label: 'Steil auf' },
+  { pitch: TRACK_PITCHES.steepDown, icon: '⇘', title: t('Steil abwärts'), label: t('Steil ab') },
+  { pitch: TRACK_PITCHES.gentleDown, icon: '↘', title: t('Sanft abwärts'), label: t('Sanft ab') },
+  { pitch: 0, icon: '→', title: t('Flach'), label: t('Flach') },
+  { pitch: TRACK_PITCHES.gentleUp, icon: '↗', title: t('Sanft aufwärts'), label: t('Sanft auf') },
+  { pitch: TRACK_PITCHES.steepUp, icon: '⇗', title: t('Steil aufwärts'), label: t('Steil auf') },
 ] as const
 const BANK_BUTTONS = [
-  { bank: -TRACK_BANK_ANGLE, icon: '◢', title: 'Neigung links einleiten', label: 'Links' },
-  { bank: 0, icon: '━', title: 'Seitliche Neigung ausleiten', label: 'Neutral' },
-  { bank: TRACK_BANK_ANGLE, icon: '◣', title: 'Neigung rechts einleiten', label: 'Rechts' },
+  { bank: -TRACK_BANK_ANGLE, icon: '◢', title: t('Neigung links einleiten'), label: t('Links') },
+  { bank: 0, icon: '━', title: t('Seitliche Neigung ausleiten'), label: t('Neutral') },
+  { bank: TRACK_BANK_ANGLE, icon: '◣', title: t('Neigung rechts einleiten'), label: t('Rechts') },
 ] as const
 
 export interface CoasterBuilderState {
@@ -122,14 +123,14 @@ function directionIcon(direction: number, cameraQuarter: number): string {
 
 function typeHint(typeId: CoasterTypeId): string {
   const type = getCoasterType(typeId)
-  if (type.liftStyle === 'none') return 'Kein Kettenlift — nur Launch.'
-  if (type.liftStyle === 'cable') return 'Seillift. Kettenlift-Flag ist nicht verfügbar.'
-  if (type.liftStyle === 'powered') return 'Powered Launch. Kettenlift ist kein Standard.'
-  if (type.liftStyle === 'curved') return 'Nur sanfte Steigung, gebogener Lift.'
-  if (type.trainStyle === 'mouse') return 'Einzelwagen, keine Seitenneigung, enge 1-Feld-Kurven.'
-  if (type.id === 'wooden') return 'Holzachterbahn: Looping und Wassersplash, keine 1-Feld-Kurven.'
-  if (type.trackStyle === 'bobsledTrough') return 'Nur sanfte Steigung. Rinnenbahn ohne große Kurven.'
-  return type.name
+  if (type.liftStyle === 'none') return t('Kein Kettenlift — nur Launch.')
+  if (type.liftStyle === 'cable') return t('Seillift. Kettenlift-Flag ist nicht verfügbar.')
+  if (type.liftStyle === 'powered') return t('Powered Launch. Kettenlift ist kein Standard.')
+  if (type.liftStyle === 'curved') return t('Nur sanfte Steigung, gebogener Lift.')
+  if (type.trainStyle === 'mouse') return t('Einzelwagen, keine Seitenneigung, enge 1-Feld-Kurven.')
+  if (type.id === 'wooden') return t('Holzachterbahn: Looping und Wassersplash, keine 1-Feld-Kurven.')
+  if (type.trackStyle === 'bobsledTrough') return t('Nur sanfte Steigung. Rinnenbahn ohne große Kurven.')
+  return localize(type.name)
 }
 
 function pieceSpecs(entries: readonly { kind: TrackPieceKind; enabled: boolean }[], active: TrackPieceKind): CoasterPaletteButtonSpec[] {
@@ -137,8 +138,8 @@ function pieceSpecs(entries: readonly { kind: TrackPieceKind; enabled: boolean }
     const piece = TRACK_PIECES[kind]
     return {
       id: trackPiecePaletteId(kind), enabled, active: kind === active,
-      title: `${piece.name} · ${formatMoney(piece.cost)}`, icon: PIECE_ICONS[kind],
-      label: piece.station ? 'Station' : piece.radius ? `${piece.radius}×${piece.radius}` : piece.name,
+      title: joinParts(localize(piece.name), formatMoney(piece.cost)), icon: PIECE_ICONS[kind],
+      label: piece.station ? t('Station') : piece.radius ? `${piece.radius}×${piece.radius}` : localize(piece.name),
       attrs: { 'data-track-piece': kind },
     }
   })
@@ -180,16 +181,16 @@ export function updateCoasterBuilderPanel(
     const icon = button.querySelector('span')
     if (icon) icon.textContent = directionIcon(heading, state.cameraQuarter)
     button.title = choice?.enabled
-      ? `Stück nach ${directionIcon(heading, state.cameraQuarter)} bauen`
-      : 'Diese Richtung ist nicht frei.'
+      ? t`Stück nach ${directionIcon(heading, state.cameraQuarter)} bauen`
+      : t('Diese Richtung ist nicht frei.')
   })
-  elements.typeName.textContent = type.name
+  elements.typeName.textContent = localize(type.name)
   elements.typeHint.textContent = typeHint(type.id)
-  elements.title.textContent = `${coaster?.name ?? type.name} Konstruktion`
+  elements.title.textContent = t`${coaster ? localizeName(coaster.name) : localize(type.name)} Konstruktion`
   const anchor = coaster?.pieces[editIndex]
   elements.direction.textContent = directionIcon(anchor?.end.heading ?? state.buildRotation, state.cameraQuarter)
   elements.build.disabled = !coaster && !state.startCandidate
-  elements.build.title = coaster ? 'Ausgewähltes Schienenstück bauen' : 'Startplattform bauen'
+  elements.build.title = coaster ? t('Ausgewähltes Schienenstück bauen') : t('Startplattform bauen')
   elements.build.setAttribute('aria-label', elements.build.title)
   elements.rotate.disabled = Boolean(coaster)
   elements.undo.disabled = !coaster || coaster.pieces.length <= 1
@@ -224,7 +225,7 @@ export function updateCoasterBuilderPanel(
       const enabled = pitchEntries.find((choice) => Math.abs(choice.pitch - button.pitch) < 0.001)?.enabled ?? false
       return { id: trackPitchPaletteId(button.pitch), enabled, active: enabled && Math.abs(button.pitch - state.window.targetPitch) < 0.001, title: button.title, icon: button.icon, label: button.label, attrs: { 'data-track-pitch': String(button.pitch) } }
     })
-  if (chainVisible) slopeSpecs.push({ id: TRACK_CHAIN_PALETTE_ID, enabled: chainEnabled, active: chainEnabled && elements.chainLift.checked, title: 'Kettenlift für das nächste geeignete Stück', icon: '⛓', label: 'Kette' })
+  if (chainVisible) slopeSpecs.push({ id: TRACK_CHAIN_PALETTE_ID, enabled: chainEnabled, active: chainEnabled && elements.chainLift.checked, title: t('Kettenlift für das nächste geeignete Stück'), icon: '⛓', label: t('Kette') })
   syncCoasterPaletteElement(elements.slopePalette, slopeSpecs)
   elements.slopePalette.style.gridTemplateColumns = `repeat(${Math.max(1, pitchEntries.length + (chainVisible ? 1 : 0))}, minmax(0, 1fr))`
   const bankEntries = listTrackBankChoices(anchor?.end.bank ?? 0, type.id, anchor?.end.pitch ?? 0)
@@ -239,7 +240,7 @@ export function updateCoasterBuilderPanel(
   const displayed = coaster ? selectedPiece : TRACK_PIECES.station
   elements.piecePreview.textContent = `${PIECE_ICONS[displayed.kind]} ${directionIcon(anchor?.end.heading ?? state.buildRotation, state.cameraQuarter)}`
   elements.chainLift.disabled = !chainVisible || !chainEnabled
-  elements.pieceLabel.textContent = `${displayed.name} · Kosten: ${formatMoney(displayed.cost + (elements.chainLift.checked ? SIMULATION_CONFIG.economy.chainLiftCost : 0))}`
+  elements.pieceLabel.textContent = joinParts(localize(displayed.name), t`Kosten: ${formatMoney(displayed.cost + (elements.chainLift.checked ? SIMULATION_CONFIG.economy.chainLiftCost : 0))}`)
 
   if (!coaster || !anchor) {
     elements.previous.disabled = true; elements.next.disabled = true; elements.deleteTrack.disabled = true
@@ -250,9 +251,13 @@ export function updateCoasterBuilderPanel(
         heading: state.buildRotation, pitch: 0, bank: 0,
       }, false)
       view.setCoasterConstructionPreview(preview.points, { kind: 'station', chainLift: false, styleId: type.trackStyle, railColor: type.railColor, structureColor: type.color })
-      elements.status.textContent = `Startpunkt: ${state.startCandidate.x}, ${state.startCandidate.z} · Ebene ${state.buildElevation} · Richtung ${directionIcon(state.buildRotation, state.cameraQuarter)}. Zum Bestätigen „Startplattform bauen“ drücken.`
+      elements.status.textContent = `${joinParts(
+        t`Startpunkt: ${state.startCandidate.x}, ${state.startCandidate.z}`,
+        t`Ebene ${state.buildElevation}`,
+        t`Richtung ${directionIcon(state.buildRotation, state.cameraQuarter)}`,
+      )}. ${t('Zum Bestätigen „Startplattform bauen“ drücken.')}`
     } else {
-      elements.status.textContent = 'Klicke auf das Gelände, um den Startpunkt als Vorschau zu setzen.'
+      elements.status.textContent = t('Klicke auf das Gelände, um den Startpunkt als Vorschau zu setzen.')
       view.setCoasterConstructionPreview([])
     }
     return { key: construction.key, editIndex, chainLift: elements.chainLift.checked, resolvedKind: resolved.kind }
@@ -261,11 +266,17 @@ export function updateCoasterBuilderPanel(
   elements.previous.disabled = editIndex <= 0
   elements.next.disabled = editIndex >= coaster.pieces.length - 1
   elements.deleteTrack.disabled = editIndex <= 0
-  elements.selection.textContent = selected ? `${editIndex + 1}/${coaster.pieces.length} · ${TRACK_PIECES[selected.kind].name}` : '–'
+  elements.selection.textContent = selected ? joinParts(`${editIndex + 1}/${coaster.pieces.length}`, localize(TRACK_PIECES[selected.kind].name)) : '–'
   view.setCoasterTrackSelection(selected?.points ?? [])
   const preview = createTrackPiece('preview', resolved.kind, anchor.end, resolved.chainLift, resolved.options)
   view.setCoasterConstructionPreview(preview.points, { kind: resolved.kind, chainLift: resolved.chainLift, styleId: type.trackStyle, railColor: type.railColor, structureColor: type.color })
-  const access = `${coaster.entrance ? '✓ Eingang' : '○ Eingang'} · ${coaster.exit ? '✓ Ausgang' : '○ Ausgang'}`
-  elements.status.textContent = `Bauanker: ${anchor.end.x}, ${anchor.end.z} · Höhe ${anchor.end.elevation.toFixed(2)} · Neigung ${(anchor.end.pitch * 180 / Math.PI).toFixed(1)}° · Banking ${(anchor.end.bank * 180 / Math.PI).toFixed(0)}°. ${coaster.closed ? '✓ Strecke geschlossen' : 'Strecke noch offen'} · ${access}`
+  const access = joinParts(`${coaster.entrance ? '✓' : '○'} ${t('Eingang')}`, `${coaster.exit ? '✓' : '○'} ${t('Ausgang')}`)
+  const anchorLine = joinParts(
+    t`Bauanker: ${anchor.end.x}, ${anchor.end.z}`,
+    t`Höhe ${formatNumber(anchor.end.elevation, 2)}`,
+    t`Neigung ${formatNumber(anchor.end.pitch * 180 / Math.PI, 1)}°`,
+    t`Banking ${formatNumber(anchor.end.bank * 180 / Math.PI, 0)}°`,
+  )
+  elements.status.textContent = `${anchorLine}. ${joinParts(coaster.closed ? `✓ ${t('Strecke geschlossen')}` : t('Strecke noch offen'), access)}`
   return { key: construction.key, editIndex, chainLift: elements.chainLift.checked, resolvedKind: resolved.kind }
 }

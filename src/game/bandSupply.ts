@@ -7,6 +7,10 @@ import { SIMULATION_CONFIG } from './simulationConfig'
 import { localStock } from './supplyChain'
 import { BANDS } from './festivalManagement'
 import type { Booking } from './festivalManagement'
+import { de } from '../i18n/marker'
+
+/** Name of a stage without a design or band label (shown with localizeName). */
+const STAGE_FALLBACK_NAME = de('Bühne')
 
 export const BAND_SUPPLY_KINDS = [
   'tourBusParking',
@@ -166,7 +170,7 @@ function samePad(a: number, b: number): boolean {
 }
 
 function stageDisplayName(stage: PlacedBuilding): string {
-  return stage.stageDesign?.name ?? stage.bandName ?? 'Bühne'
+  return stage.stageDesign?.name ?? stage.bandName ?? STAGE_FALLBACK_NAME
 }
 
 export function buildBandSupplyGraph(
@@ -492,7 +496,7 @@ export function computeBandSupplyStats(
         start: booking.start,
         duration: booking.duration,
         stageId: booking.stageId,
-        stageName: stage?.name ?? 'Bühne',
+        stageName: stage?.name ?? STAGE_FALLBACK_NAME,
       }
     })
   return {
@@ -583,116 +587,7 @@ export function bandSupplyAt(
   return supply?.components.find((item) => item.componentId === component.id)
 }
 
-export function clockLabel(minute: number): string {
-  const hours = Math.floor(minute / 60) % 24
-  const minutes = Math.floor(minute % 60)
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
-}
-
-export function formatBackstageInspect(stats: BandSupplyStats): {
-  status: string
-  lines: Array<{ label: string; value: string }>
-} {
-  const parking =
-    !stats.parkingNeeded
-      ? 'nicht nötig'
-      : `${stats.usableSlots} / ${stats.busDemand}${
-          stats.parkingSufficient ? ' · reicht' : ' · nicht max.'
-        }`
-  return {
-    status: stats.active
-      ? stats.bareStage
-        ? 'Aktiv · nur Bühne (schwach versorgt)'
-        : `Aktiv · ${stats.activeTiles} Felder`
-      : 'Inaktiv · keine Verbindung zur Bühne',
-    lines: [
-      {
-        label: 'Status',
-        value: stats.active
-          ? stats.bareStage
-            ? 'Nur Bühne'
-            : 'Verbunden'
-          : 'Getrennt — zählt nicht',
-      },
-      {
-        label: 'Felder',
-        value: `${stats.activeTiles} aktiv / ${stats.designatedTiles} ausgewiesen`,
-      },
-      {
-        label: 'Bühnen',
-        value:
-          stats.stages.length === 0
-            ? 'keine'
-            : stats.stages
-                .map((stage) => stage.bandName ? `${stage.name} · ${stage.bandName}` : stage.name)
-                .join(', '),
-      },
-      {
-        label: 'Heute',
-        value:
-          stats.bookings.length === 0
-            ? 'keine Auftritte'
-            : stats.bookings
-                .map(
-                  (booking) =>
-                    `${booking.bandName} ${clockLabel(booking.start)}–${clockLabel(booking.start + booking.duration)}`,
-                )
-                .join(', '),
-      },
-      {
-        label: 'Ankunft',
-        value:
-          stats.bookings.length === 0
-            ? '—'
-            : [...new Map(stats.bookings.map((booking) => [booking.bandId, booking])).values()]
-                .map(
-                  (booking) =>
-                    `${booking.bandName}: ${
-                      booking.mode === 'tourBus' ? 'Tourbus' : 'Personaleingang'
-                    }`,
-                )
-                .join(', '),
-      },
-      { label: 'Tourbus-Parkplätze', value: parking },
-      { label: 'Attraktivität', value: `${Math.round(stats.attractiveness)} / 100` },
-      {
-        label: 'Davon Deko / Parkplätze / Möbel / Fans',
-        value: `${Math.round(stats.decoScore)} / ${Math.round(stats.parkingTerm)} / ${Math.round(stats.furnitureTerm)} / −${Math.round(stats.fanPenalty)}`,
-      },
-      {
-        label: 'Couchplätze / Kühlschränke / Klo mit Wasser',
-        value: `${stats.couchSeats} / ${stats.fridgeCount} / ${stats.suppliedToilets}`,
-      },
-      { label: 'Verpflegung', value: `${Math.round(stats.catering)} / 100` },
-      {
-        label: 'Imbiss / Getränke / Bandkühlschrank',
-        value: `${stats.foodCount} / ${stats.drinkCount} / ${Math.round(stats.dedicatedCatering)}`,
-      },
-      {
-        label: 'Bandzufriedenheit / Drauf',
-        value: `${Math.round(stats.satisfaction)} / 100`,
-      },
-      {
-        label: 'Nur Bühne',
-        value: stats.bareStage ? 'ja — schwächerer Auftritt' : 'nein',
-      },
-      {
-        label: 'Show-Qualität',
-        value: `× ${stats.showQuality.toFixed(2)}`,
-      },
-      { label: 'Fans auf dem Backstage', value: String(stats.fansOnActiveTiles) },
-      {
-        label: 'Security',
-        value: 'Basis-Leck; in v1 keine Reduktion durch Security oder Zäune',
-      },
-    ],
-  }
-}
-
-export function formatBackstageHover(stats: BandSupplyStats): string {
-  if (!stats.active) return 'Backstage · getrennt von der Bühne'
-  return `Backstage · Drauf ${Math.round(stats.satisfaction)} · Show ×${stats.showQuality.toFixed(2)}`
-}
+// The inspector and hover lines live in the client-text module bandSupplyText.ts.
 
 export function isFanIntrusionEligible(visitor: {
   state: string

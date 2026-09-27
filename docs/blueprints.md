@@ -9,6 +9,7 @@ Browser, nie im Spielstand und nie in Git.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Auswahl, Drehung, Kosten | `src/game/blueprints.ts` | `captureBlueprint`, `transformBlueprintItems`, `blueprintStampCharge`; Item-Typen Gebäude, Straße, Parkplatz |
+| Anzeigetext (Client-Text) | `src/game/blueprintText.ts` | `describeBlueprint` (`2×2 · 3 Objekte · 1 Straßenfeld · 45 €`, `t`/`plural`/`joinParts`, nur UI importiert) |
 | Persönliche Bibliothek | `src/game/blueprintLibrary.ts`, `src/game/browserPersistence.ts` | IndexedDB `headliner-tycoon-blueprints` + `BLUEPRINT_LIBRARY_KEY`, gemeinsamer Browser-Adapter |
 | Stempeln | `src/game/GameState.ts` | `previewPlacement({ type: 'blueprint' })` delegiert an `previewBlueprint`; `stampBlueprint` |
 | Command | `src/net/protocol.ts`, `src/net/commands.ts` | `stampBlueprint` |
@@ -55,6 +56,9 @@ in `localStorage` (`festival-simulator-blueprints-v1`) und IndexedDB
 Snapshot-Felder. Nur der IndexedDB-/Quota-Unterbau ist mit Spielständen
 geteilt; Datenbank, Store, Schlüssel, Normalisierung und Merge-Regeln der
 Bibliothek bleiben fachlich separat.
+
+Ein leerer Name wird zum kanonischen Default `Ohne Namen` (`de`, nie übersetzt
+gespeichert); die UI zeigt ihn mit `localizeName` (docs/i18n.md).
 
 ## Tests
 

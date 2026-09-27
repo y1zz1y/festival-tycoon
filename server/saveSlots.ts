@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { DatabaseSync } from 'node:sqlite'
 import { db as sharedDatabase } from './database.ts'
 import { accountOfRequest, ensureAccountsSchema } from './accounts.ts'
+import { de, num } from './i18nMarker.ts'
 
 /**
  * Saved games, one row each, in the same database the accounts live in.
@@ -30,7 +31,7 @@ type SaveProgress = { edition: number | null; day: number | null; minute: number
 
 const MAX_SAVE_BYTES = 24 * 1024 * 1024
 const SLOTS_PER_USER = 20
-const SIGN_IN_REQUIRED = 'Dafür musst du angemeldet sein'
+const SIGN_IN_REQUIRED = de('Dafür musst du angemeldet sein')
 
 const SCHEMA = {
   name: 'saves',
@@ -56,7 +57,7 @@ const db = (): DatabaseSync => {
   if (!upgraded.has(database)) {
     const present = new Set((database.prepare('PRAGMA table_info(saves)').all() as { name: string }[]).map((column) => column.name))
     for (const column of LATER_COLUMNS) {
-      if (!present.has(column.split(' ')[0]!)) database.exec(`ALTER TABLE saves ADD COLUMN ${column}`)
+      if (!present.has(column.split(' ')[0]!)) database.exec(`ALTER TABLE saves ADD COLUMN ${column}`) // i18n-ignore
     }
     upgraded.add(database)
   }
@@ -83,10 +84,10 @@ function cleanName(value: unknown): string {
 }
 
 function readSnapshot(value: unknown): { snapshot: string; progress: SaveProgress } {
-  if (typeof value !== 'string' || !value) throw new Error('Name und Spielstand sind erforderlich')
-  if (Buffer.byteLength(value, 'utf8') > MAX_SAVE_BYTES) throw new Error('Spielstand ist zu groß')
+  if (typeof value !== 'string' || !value) throw new Error(de('Name und Spielstand sind erforderlich'))
+  if (Buffer.byteLength(value, 'utf8') > MAX_SAVE_BYTES) throw new Error(de('Spielstand ist zu groß'))
   let parsed: { festival?: { edition?: unknown }; day?: unknown; minute?: unknown }
-  try { parsed = JSON.parse(value) } catch { throw new Error('Spielstand ist ungültig') }
+  try { parsed = JSON.parse(value) } catch { throw new Error(de('Spielstand ist ungültig')) }
   const number = (candidate: unknown): number | null => typeof candidate === 'number' && Number.isFinite(candidate) ? Math.floor(candidate) : null
   return {
     snapshot: value,
@@ -119,7 +120,7 @@ export async function bodyOf(request: IncomingMessage, limit = MAX_SAVE_BYTES + 
   let body = ''
   for await (const chunk of request) {
     body += String(chunk)
-    if (Buffer.byteLength(body, 'utf8') > limit) throw new Error('Anfrage zu groß')
+    if (Buffer.byteLength(body, 'utf8') > limit) throw new Error(de('Anfrage zu groß'))
   }
   return JSON.parse(body || '{}')
 }
@@ -156,7 +157,8 @@ export async function handleSaveRequest(request: IncomingMessage, response: Serv
     }
     if (request.method === 'GET' && id) {
       const row = slotRow(id)
-      if (!row || (row.isPublic !== 1 && row.userId !== account?.id)) { send(response, 404, { error: 'Nicht gefunden' }); return true }
+      if (!row || (row.isPublic !== 1 && row.userId !== account?.id)) { send(response, 404, { error: de('Nicht gefunden') }); return true }
+      // i18n-ignore
       const stored = db().prepare('SELECT snapshot FROM saves WHERE id = ?').get(id) as { snapshot: string }
       send(response, 200, { ...publicSlot(row), snapshot: stored.snapshot })
       return true
@@ -165,10 +167,10 @@ export async function handleSaveRequest(request: IncomingMessage, response: Serv
       const userId = mine()
       const body = await bodyOf(request) as { name?: unknown; snapshot?: unknown; public?: unknown }
       const name = cleanName(body.name)
-      if (!name) { send(response, 400, { error: 'Name und Spielstand sind erforderlich' }); return true }
+      if (!name) { send(response, 400, { error: de('Name und Spielstand sind erforderlich') }); return true }
       const { snapshot, progress } = readSnapshot(body.snapshot)
       const { n } = db().prepare('SELECT COUNT(*) AS n FROM saves WHERE user_id = ?').get(userId) as { n: number }
-      if (n >= SLOTS_PER_USER) { send(response, 409, { error: `Maximal ${SLOTS_PER_USER} Spielstände je Konto` }); return true }
+      if (n >= SLOTS_PER_USER) { send(response, 409, { error: de`Maximal ${num(SLOTS_PER_USER)} Spielstände je Konto` }); return true }
       const slotId = randomUUID()
       db()
         .prepare('INSERT INTO saves (id, user_id, name, snapshot, is_public, saved_at, edition, day, minute) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -182,16 +184,16 @@ export async function handleSaveRequest(request: IncomingMessage, response: Serv
     if ((request.method === 'PUT' || request.method === 'PATCH') && id) {
       const userId = mine()
       const row = slotRow(id)
-      if (!row || row.userId !== userId) { send(response, 404, { error: 'Nicht gefunden' }); return true }
+      if (!row || row.userId !== userId) { send(response, 404, { error: de('Nicht gefunden') }); return true }
       const body = await bodyOf(request) as { name?: unknown; snapshot?: unknown; public?: unknown }
       if (request.method === 'PATCH') {
-        if (typeof body.public !== 'boolean') { send(response, 400, { error: 'Sichtbarkeit fehlt' }); return true }
+        if (typeof body.public !== 'boolean') { send(response, 400, { error: de('Sichtbarkeit fehlt') }); return true }
         db().prepare('UPDATE saves SET is_public = ? WHERE id = ?').run(body.public ? 1 : 0, id)
         send(response, 200, publicSlot(slotRow(id)!))
         return true
       }
       const name = cleanName(body.name)
-      if (!name) { send(response, 400, { error: 'Name und Spielstand sind erforderlich' }); return true }
+      if (!name) { send(response, 400, { error: de('Name und Spielstand sind erforderlich') }); return true }
       const { snapshot, progress } = readSnapshot(body.snapshot)
       db().prepare('UPDATE saves SET name = ?, snapshot = ?, saved_at = ?, edition = ?, day = ?, minute = ? WHERE id = ?')
         .run(name, snapshot, Date.now(), progress.edition, progress.day, progress.minute, id)
@@ -201,14 +203,14 @@ export async function handleSaveRequest(request: IncomingMessage, response: Serv
     if (request.method === 'DELETE' && id) {
       const userId = mine()
       const row = slotRow(id)
-      if (!row || row.userId !== userId) { send(response, 404, { error: 'Nicht gefunden' }); return true }
-      db().prepare('DELETE FROM saves WHERE id = ?').run(id)
+      if (!row || row.userId !== userId) { send(response, 404, { error: de('Nicht gefunden') }); return true }
+      db().prepare('DELETE FROM saves WHERE id = ?').run(id) // i18n-ignore
       send(response, 200, { ok: true })
       return true
     }
-    send(response, 405, { error: 'Methode nicht erlaubt' })
+    send(response, 405, { error: de('Methode nicht erlaubt') })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Spielstand konnte nicht verarbeitet werden'
+    const message = error instanceof Error ? error.message : de('Spielstand konnte nicht verarbeitet werden')
     send(response, message === SIGN_IN_REQUIRED ? 401 : 400, { error: message })
   }
   return true

@@ -28,12 +28,6 @@ export const ACCESS_SCHEDULE_TIMES = [
   'dayPlan',
 ] as const
 
-export const ACCESS_SCHEDULE_TIME_LABELS: Record<AccessScheduleTime, string> = {
-  hourlySlots: 'Slots je Stunde',
-  hours: 'Tageszeit',
-  dayPlan: 'Nach Zeitplan',
-}
-
 export type AccessScheduleContext = {
   day: number
   dayPlan: Readonly<DayPlan>
@@ -615,33 +609,6 @@ export function stepUsesClosedEdge(
     }
   }
   return false
-}
-
-export function previewLabel(
-  kind: AccessControlKind,
-  sensorKind: TrafficSensorKind | PathSensorKind,
-  stats: AccessAreaStats,
-): string {
-  if (kind === 'trafficLight') {
-    if (sensorKind === 'freeParking' || sensorKind === 'noFreeParking') {
-      return `${stats.freeParking} freie / ${stats.occupiedParking} belegte Parkplätze`
-    }
-    return `${stats.carsOnRoad} Autos auf Straßen im Gebiet`
-  }
-  if (sensorKind === 'freeCamping' || sensorKind === 'occupiedCamping') {
-    return `${stats.freeCamping} freie / ${stats.occupiedCamping} belegte Campingflächen`
-  }
-  return `${stats.people} Personen im Gebiet`
-}
-
-export function areaPreviewText(
-  kind: AccessControlKind,
-  stats: AccessAreaStats,
-): string {
-  if (kind === 'trafficLight') {
-    return `${stats.freeParking} freie / ${stats.occupiedParking} belegte Parkplätze · ${stats.carsOnRoad} Autos auf Straßen im Gebiet`
-  }
-  return `${stats.freeCamping} freie / ${stats.occupiedCamping} belegte Campingflächen · ${stats.people} Personen im Gebiet`
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

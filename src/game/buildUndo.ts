@@ -1,4 +1,5 @@
 import type { ActionResult } from './types/snapshot'
+import { de } from '../i18n/marker'
 
 export const MAX_BUILD_UNDO = 40
 
@@ -91,7 +92,7 @@ export function diffBuildUndo(before: BuildUndoMarker, state: BuildUndoSnapshot)
 export function applyBuildUndo(entry: BuildUndoEntry, hooks: BuildUndoHooks): ActionResult {
   const expected =
     entry.buildingIds.length + entry.parking.length + entry.roads.length + entry.paths.length
-  if (expected === 0) return { ok: false, message: 'Nichts zum Rückgängigmachen' }
+  if (expected === 0) return { ok: false, message: de('Nichts zum Rückgängigmachen') }
   const moneyBefore = hooks.money()
   let removed = 0
   for (const id of entry.buildingIds) {
@@ -106,8 +107,8 @@ export function applyBuildUndo(entry: BuildUndoEntry, hooks: BuildUndoHooks): Ac
   for (const cell of entry.paths) {
     if (hooks.removePath(cell.x, cell.z, cell.elevation)) removed += 1
   }
-  if (removed === 0) return { ok: false, message: 'Die Änderung ist schon weg' }
+  if (removed === 0) return { ok: false, message: de('Die Änderung ist schon weg') }
   const desired = Math.round(entry.refund * (removed / expected))
   hooks.adjustMoney(desired - (hooks.money() - moneyBefore))
-  return { ok: true, message: 'Letzten Bau zurückgenommen' }
+  return { ok: true, message: de('Letzten Bau zurückgenommen') }
 }

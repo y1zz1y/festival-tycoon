@@ -3,7 +3,7 @@ import { isDecorationCatalogKind } from './game/decoration'
 import { scenerySlot } from './game/scenery'
 import { makeDraggable, makeResizable } from './dragPanel'
 import { toUiPx, uiScale } from './ui/uiScale'
-import { installPlayerSettings } from './ui/playerSettingsPanel'
+import { installPlayerSettings, isInMultiplayerRoom } from './ui/playerSettingsPanel'
 import { mountProgressTracker } from './ui/progressTracker'
 import { mountTutorialChecklist } from './ui/tutorialChecklist'
 import { isFlatRideType, rideProfile, type FlatRideType } from './game/flatRides'
@@ -26,9 +26,9 @@ import { snapStockMinimum } from './game/supplyChain'
 import { BUILDING_KINDS, BUILDINGS, isCopyTool } from './game/catalog'
 import {
   captureBlueprint,
-  describeBlueprint,
   type Blueprint,
 } from './game/blueprints'
+import { describeBlueprint } from './game/blueprintText'
 import {
   deleteBlueprintLibraryEntry,
   listBlueprintLibrary,
@@ -76,13 +76,11 @@ import {
 import type { CoasterOperationMode, DispatchMode, TrackPieceKind } from './game/coasters'
 import { GameState } from './game/GameState'
 import { applyBusPlannerDrag, type BusPlannerColumn } from './game/busPlanner'
+import { ACCESS_SCHEDULE_TIME_LABELS, areaPreviewText, previewLabel } from './game/accessControlText'
 import {
   ACCESS_HOURS_PER_DAY,
-  ACCESS_SCHEDULE_TIME_LABELS,
-  areaPreviewText,
   currentAccessSlot,
   isAccessScheduleOpen,
-  previewLabel,
   resolvedScheduleTime,
   toggleAreaCells,
   type AccessControl,
@@ -93,7 +91,7 @@ import type { PlacedBuilding } from './game/GameState'
 import type { RoadCell } from './game/logistics'
 import {
   describeRoadVehicleActivity,
-} from './game/logistics'
+} from './game/logisticsText'
 import {
   wasteDumpId,
 } from './game/waste'
@@ -101,6 +99,8 @@ import { groupVisitorsByThought } from './game/visitorThoughts'
 import { enableMultiplayerCommands } from './net/bind'
 import { MultiplayerSession } from './net/session'
 import type { MultiplayerStatus } from './net/session'
+import { takeoverSaveName } from './net/takeover'
+import { mountHostTakeoverUi, type HostTakeoverUi } from './ui/hostTakeover'
 import { SIMULATION_CONFIG } from './game/simulationConfig'
 import { INVENTORY_ITEMS } from './game/inventory'
 import { STAFF_DEFINITIONS, STAFF_ROLES, SWEEPER_STAFF_ICON, sweeperStaffName } from './game/staff'
@@ -134,7 +134,7 @@ import { createScenarioEditorController, editorMoneyLabel } from './ui/scenarioE
 import { mountMobileUI } from './mobileUI'
 import { mountUpdateNotice } from './updateNotice'
 import { startGameLoop } from './app/gameLoop'
-import { mountAppShell } from './app/shell'
+import { BUS_LINE_DEFAULT_NAME, mountAppShell } from './app/shell'
 import { applyDirectCellTool } from './input/toolRouter'
 import {
   confirmAction,
@@ -155,6 +155,7 @@ import {
 import { createBuildCatalog } from './ui/buildCatalog'
 import { DifferentialUpdates, listFingerprint } from './ui/differentialUpdates'
 import { escapeHtml, formatMoney, formatTime } from './ui/format'
+import { codeTag, collator, formatNumber, formatPercent, joinParts, keep, localeTag, localize, localizeName, plural, t, tc } from './i18n'
 import {
   updateEntityPanel as renderEntityPanel,
   type EntitySelection,
@@ -182,6 +183,7 @@ import {
 
 function requireElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector)
+  // i18n-ignore: developer error for a broken index.html, never shown to players
   if (!element) throw new Error(`Benötigtes UI-Element fehlt: ${selector}`)
   return element
 }
@@ -236,7 +238,7 @@ TRACK_PIECE_KINDS.forEach((kind) => {
   const piece = TRACK_PIECES[kind]
   trackPieceSelect.insertAdjacentHTML(
     'beforeend',
-    `<option value="${kind}">${piece.name} · ${formatMoney(piece.cost)}</option>`,
+    `<option value="${kind}">${joinParts(localize(piece.name), formatMoney(piece.cost))}</option>`,
   )
 })
 const coasterTypeName = requireElement<HTMLElement>('#coaster-type-name')
@@ -448,8 +450,8 @@ const stageEditor = mountStageEditor(() => game, showToast)
 const stageEditorButton = document.createElement('button')
 stageEditorButton.id = 'open-stage-editor'
 stageEditorButton.textContent = '🏗️'
-stageEditorButton.title = 'Bühnenwerkstatt'
-stageEditorButton.setAttribute('aria-label', 'Bühnenwerkstatt')
+stageEditorButton.title = t('Bühnenwerkstatt')
+stageEditorButton.setAttribute('aria-label', stageEditorButton.title)
 stageEditorButton.setAttribute('aria-expanded', 'false')
 stageEditorButton.addEventListener('click', () => {
   if (stageEditor.isOpen()) stageEditor.close()
@@ -458,7 +460,7 @@ stageEditorButton.addEventListener('click', () => {
 document.querySelector('#action-group-festival')!.append(stageEditorButton)
 const editStageButton = document.createElement('button')
 editStageButton.id = 'edit-selected-stage'
-editStageButton.textContent='Bühne gestalten';editStageButton.hidden=true
+editStageButton.textContent=t('Bühne gestalten');editStageButton.hidden=true
 entityOverview.append(editStageButton)
 editStageButton.addEventListener('click',()=>{if(selectedEntity?.type==='building')stageEditor.open(selectedEntity.id)})
 const multiplayer = new MultiplayerSession(game)
@@ -565,7 +567,7 @@ try {
       coasterSelectedKind = 'straight'
       trackPieceSelect.value = constantPitchPieceKind(coasterTargetPitch)
       updateCoasterBuilder()
-      showToast(`Bauanker auf Element ${coasterEditIndex + 1} gesetzt`)
+      showToast(t`Bauanker auf Element ${coasterEditIndex + 1} gesetzt`)
     },
   )
 } catch (error) {
@@ -573,10 +575,10 @@ try {
   document.body.innerHTML = `
     <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:auto;padding:24px;box-sizing:border-box;background:#17241f;color:#edf7f1;font:14px/1.6 Tahoma, Verdana, system-ui, sans-serif;">
       <div style="max-width:480px;">
-        <h1 style="font-size:20px;margin:0 0 12px;">3D-Grafik nicht verfügbar</h1>
-        <p>Headliner Tycoon benötigt WebGL, das dieser Browser oder dieses System gerade nicht bereitstellt.</p>
-        <p>Mögliche Ursachen: WebGL ist im Browser deaktiviert (in Firefox unter <code>about:config</code> die Einstellung <code>webgl.disabled</code> prüfen), eine Sicherheits- oder Unternehmensrichtlinie blockiert es, oder die Grafiktreiber sind veraltet bzw. von der Blockliste des Browsers betroffen.</p>
-        <p>Bitte aktuelle Grafiktreiber sicherstellen oder einen anderen Browser probieren.</p>
+        <h1 style="font-size:20px;margin:0 0 12px;">${t('3D-Grafik nicht verfügbar')}</h1>
+        <p>${t`${keep('Headliner Tycoon')} benötigt WebGL, das dieser Browser oder dieses System gerade nicht bereitstellt.`}</p>
+        <p>${t`Mögliche Ursachen: WebGL ist im Browser deaktiviert (in Firefox unter ${keep(codeTag('about:config'))} die Einstellung ${keep(codeTag('webgl.disabled'))} prüfen), eine Sicherheits- oder Unternehmensrichtlinie blockiert es, oder die Grafiktreiber sind veraltet bzw. von der Blockliste des Browsers betroffen.`}</p>
+        <p>${t('Bitte aktuelle Grafiktreiber sicherstellen oder einen anderen Browser probieren.')}</p>
       </div>
     </div>
   `
@@ -645,6 +647,8 @@ const tickerUI = mountTickerUI({
 })
 const progressTracker = mountProgressTracker({
   isClient: () => multiplayer.status.mode === 'client',
+  // A park inherited by a host takeover is somebody else's: no wins, no achievements.
+  isInheritedWorld: () => multiplayer.inheritedHost,
   showToast: (message) => showToast(message),
   onChange: () => titleScreenController?.refreshProgress(),
 })
@@ -658,8 +662,8 @@ const scenarioStatus = mountScenarioStatus({
   openPlanning: () => festivalUI.openPlanning(),
   resume: () => game.setSpeed(1),
   restart: (settings) => {
-    if (!confirmDiscardingWork('Das Szenario neu starten?')) return
-    titleScreenController.startScenario(settings, 'Szenario neu gestartet')
+    if (!confirmDiscardingWork(t('Das Szenario neu starten?'))) return
+    titleScreenController.startScenario(settings, t('Szenario neu gestartet'))
   },
   toTitle: () => titleScreenController.leaveToTitle(),
   isClient: () => multiplayer.status.mode === 'client',
@@ -682,7 +686,7 @@ const controlHint = requireElement<HTMLElement>('#control-hint')
 const syncWalkModeUi = (enabled: boolean): void => {
   walkModeButton.setAttribute('aria-pressed', String(enabled))
   // Icon-only, like every other button in the toolbar — the wording lives in the tooltip.
-  const walkLabel = enabled ? 'Zurück zur Karte' : 'Gelände betreten'
+  const walkLabel = enabled ? t('Zurück zur Karte') : t('Gelände betreten')
   walkModeButton.textContent = enabled ? '🗺️' : '🚶'
   walkModeButton.title = walkLabel
   walkModeButton.setAttribute('aria-label', walkLabel)
@@ -693,15 +697,15 @@ const syncWalkModeUi = (enabled: boolean): void => {
   const hint = walkHud.querySelector('p')
   if (hint) {
     hint.textContent = coarse
-      ? 'Stick laufen · Ziehen umsehen · Zurück zur Karte oben'
-      : 'WASD laufen · Umschalt rennen · Klick und Maus umsehen · Esc zurück zur Karte'
+      ? joinParts(t('Stick laufen'), t('Ziehen umsehen'), t('Zurück zur Karte oben'))
+      : joinParts(t('WASD laufen'), t('Umschalt rennen'), t('Klick und Maus umsehen'), t('Esc zurück zur Karte'))
   }
   controlHint.textContent = enabled
-    ? (coarse ? 'Stick laufen · Ziehen umsehen' : 'WASD laufen · Umschalt rennen · Maus umsehen · Esc Karte')
-    : 'Weg ziehen · Shift+Maus: Bauhöhe · R: Gebäude drehen · Q/E: Kamera'
+    ? (coarse ? joinParts(t('Stick laufen'), t('Ziehen umsehen')) : joinParts(t('WASD laufen'), t('Umschalt rennen'), t('Maus umsehen'), t('Esc Karte')))
+    : joinParts(t('Weg ziehen'), t('Shift+Maus: Bauhöhe'), t('R: Gebäude drehen'), t('Q/E: Kamera'))
   contextHelp.textContent = enabled
-    ? 'Du läufst über das Festivalgelände.'
-    : 'Wähle ein Werkzeug und klicke auf das Gelände.'
+    ? t('Du läufst über das Festivalgelände.')
+    : t('Wähle ein Werkzeug und klicke auf das Gelände.')
 }
 const setFestivalWalk = (enabled: boolean): void => {
   if (enabled) {
@@ -741,7 +745,7 @@ const syncMuteUi = (muted: boolean): void => {
   muteAudioToggle.checked = muted
   muteAudioButton.setAttribute('aria-pressed', String(muted))
   muteAudioButton.textContent = muted ? '🔇' : '🔊'
-  const label = muted ? 'Ton einschalten' : 'Ton stumm'
+  const label = muted ? t('Ton einschalten') : t('Ton stumm')
   muteAudioButton.title = label
   muteAudioButton.setAttribute('aria-label', label)
 }
@@ -756,13 +760,14 @@ const setAudioMuted = (muted: boolean): void => {
 syncMuteUi(readAudioMuted())
 muteAudioButton.addEventListener('click', () => setAudioMuted(!festivalAudio.isMuted()))
 muteAudioToggle.addEventListener('change', () => setAudioMuted(muteAudioToggle.checked))
-installPlayerSettings({
+const playerSettingsControl = installPlayerSettings({
   view,
   audio: festivalAudio,
   onUiScale: () => {
     syncTopOffsets()
     window.dispatchEvent(new Event('resize'))
   },
+  inRoom: () => isInMultiplayerRoom(multiplayer.status),
 })
 // The title theme plays while the title screen is up and fades when a game starts.
 {
@@ -850,8 +855,8 @@ function bindGameState(nextGame: GameState): void {
   scenarioStatus.reset()
   unsubscribe = game.subscribe((snapshot) => {
     const stageTool = document.querySelector<HTMLElement>('[data-tool="stage"] em')
-    const template = snapshot.festival.stageTemplates?.find(t=>t.name===snapshot.festival.selectedStageTemplate)
-    const label = `${template ? escapeHtml(template.name) : 'Festivalbühne'}<small>${formatMoney(BUILDINGS.stage.cost+(template?stageStats(template).cost:0))}</small>`
+    const template = snapshot.festival.stageTemplates?.find(stored=>stored.name===snapshot.festival.selectedStageTemplate)
+    const label = `${template ? escapeHtml(localizeName(template.name)) : escapeHtml(localize(BUILDINGS.stage.name))}<small>${formatMoney(BUILDINGS.stage.cost+(template?stageStats(template).cost:0))}</small>`
     if(stageTool && stageTool.innerHTML!==label)stageTool.innerHTML=label
 
     festivalUI.update(snapshot)
@@ -868,7 +873,7 @@ function bindGameState(nextGame: GameState): void {
     money.textContent = editorMoneyLabel(Boolean(snapshot.scenario.authoring), snapshot.money)
     scenarioEditorToggle.hidden = !snapshot.scenario.authoring
     if (!snapshot.scenario.authoring && !scenarioEditorPanel.hidden) setEditorPanelOpen(false)
-    guests.textContent = snapshot.guests.toLocaleString('de-DE')
+    guests.textContent = formatNumber(snapshot.guests)
     reputation.textContent = `${snapshot.reputation}%`
     const powerDemand = Math.round(snapshot.power.demand)
     const powerSupply = Math.round(snapshot.power.supply)
@@ -885,8 +890,8 @@ function bindGameState(nextGame: GameState): void {
     )
     waste.textContent = `${litterPiles}/${dumpedWaste}`
     power.textContent = hasPlant
-      ? `${powerDemand}/${powerSupply} kW${snapshot.power.backupActive ? ' +Notstrom' : ''}`
-      : `${powerDemand} kW`
+      ? `${t`${formatNumber(powerDemand)}/${formatNumber(powerSupply)} kW`}${snapshot.power.backupActive ? ` +${t('Notstrom')}` : ''}`
+      : t`${formatNumber(powerDemand)} kW`
     power.parentElement?.classList.toggle(
       'power-short',
       hasPlant && powerDemand > powerSupply,
@@ -898,23 +903,20 @@ function bindGameState(nextGame: GameState): void {
       snapshot.dayPlan,
       snapshot.day,
     )
-    const festivalPhaseLabel = {
-      lead: 'Vorlauf',
-      festival: 'Festival',
-      break: 'Pause',
-    }[festivalPhase.phase]
-    date.textContent = snapshot.festival.planning ? 'Planung · Festival noch nicht gestartet' :
-      `${dayPhaseIcon} Tag ${snapshot.day} · ${festivalPhaseLabel} ${festivalPhase.phaseDay}/${festivalPhase.phaseLength} · ${formatTime(snapshot.minute)}`
+    const festivalPhaseLabel = HUD_PHASE_LABELS[festivalPhase.phase]()
+    date.textContent = snapshot.festival.planning ? joinParts(t('Planung'), t('Festival noch nicht gestartet')) :
+      `${dayPhaseIcon} ${joinParts(t`Tag ${snapshot.day}`, `${festivalPhaseLabel} ${festivalPhase.phaseDay}/${festivalPhase.phaseLength}`, formatTime(snapshot.minute))}`
     // The weather runs whether a festival does or not, so the bar always has something
     // to report; how soft the ground is goes into the tooltip, where there is room for it.
     const weather = snapshot.festival.weather
     const celsius = temperatureAt(snapshot.festival, snapshot.day, snapshot.minute / 60, weather)
     weatherIcon.textContent = WEATHER_ICONS[weather]
-    weatherName.textContent = WEATHER_NAMES[weather]
+    const weatherLabel = localize(WEATHER_NAMES[weather])
+    weatherName.textContent = weatherLabel
     temperature.textContent = formatTemperature(celsius)
-    weatherStat.title = `Wetter: ${WEATHER_NAMES[weather]} · ${formatTemperature(celsius)} · Bodennässe ${Math.round(snapshot.festival.wetness)} %`
-    undoLastBuildButton.title = 'Rückgängig'
-    undoLastBuildButton.setAttribute('aria-label', 'Rückgängig')
+    weatherStat.title = joinParts(t`Wetter: ${weatherLabel}`, formatTemperature(celsius), t`Bodennässe ${formatPercent(Math.round(snapshot.festival.wetness))}`)
+    undoLastBuildButton.title = t('Rückgängig')
+    undoLastBuildButton.setAttribute('aria-label', undoLastBuildButton.title)
     const crowdingAverage = Math.round(snapshot.crowding.average)
     averageCrowding.textContent = `${crowdingAverage}%`
     averageCrowdingBar.style.width = `${crowdingAverage}%`
@@ -987,12 +989,28 @@ function bindGameState(nextGame: GameState): void {
   })
 }
 
-const STAFF_STATE_LABELS: Record<StaffState, string> = {
-  patrolling: 'Kontrollgang',
-  responding: 'Auf dem Weg zum Einsatz',
-  working: 'Arbeitet',
-  carrying: 'Transportiert',
-  stationed: 'An Sicherheitskontrolle',
+/**
+ * Festival cycle phases in the date line and day plan. Festival and break come from the
+ * game table; the lead-up reads “Vorlauf” here (“Vorbereitung” in the access schedule).
+ */
+const HUD_PHASE_LABELS: Record<FestivalPhase, () => string> = {
+  lead: () => t('Vorlauf'),
+  festival: () => localize(FESTIVAL_PHASE_LABELS.festival),
+  break: () => localize(FESTIVAL_PHASE_LABELS.break),
+}
+
+const STAFF_STATE_LABELS: Record<StaffState, () => string> = {
+  patrolling: () => t('Kontrollgang'),
+  responding: () => t('Auf dem Weg zum Einsatz'),
+  working: () => t('Arbeitet'),
+  carrying: () => t('Transportiert'),
+  stationed: () => t('An Sicherheitskontrolle'),
+}
+
+const CYCLE_DAY_LABELS: Record<FestivalPhase, (day: number) => string> = {
+  lead: (day) => t`Vorlauftag ${day}`,
+  festival: (day) => t`Festivaltag ${day}`,
+  break: (day) => t`Pausentag ${day}`,
 }
 
 let currentStaffRole: StaffRole = STAFF_ROLES[0]
@@ -1026,50 +1044,55 @@ function updateStaffOverview(force = false): void {
   ].sort().join('|')
   if (!force && fingerprint === staffPanelFingerprint && staffList.childElementCount > 0) return
   staffPanelFingerprint = fingerprint
-  requireElement<HTMLElement>('#staff-panel-title').textContent = `Übersicht ${definition.name}`
+  const roleName = localize(definition.name)
+  requireElement<HTMLElement>('#staff-panel-title').textContent = t`Übersicht ${roleName}`
   document.querySelectorAll<HTMLButtonElement>('.staff-role-tabs [data-staff-role]').forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.staffRole === role))
   })
   const staffRows = members.map((member) => {
     const hired = member.hiredDay != null && member.hiredMinute != null
-      ? `Tag ${member.hiredDay} · ${formatTime(member.hiredMinute)}`
+      ? joinParts(t`Tag ${member.hiredDay}`, formatTime(member.hiredMinute))
       : '—'
-    const zoneCount = member.workZones?.length ?? 0
-    return `<tr data-inspect-staff="${member.id}" tabindex="0" role="button" aria-label="${escapeHtml(member.name)} öffnen">
-      <td>${escapeHtml(member.name)}</td>
+    const name = escapeHtml(localizeName(member.name))
+    return `<tr data-inspect-staff="${member.id}" tabindex="0" role="button" aria-label="${t`${name} öffnen`}">
+      <td>${name}</td>
       <td>${hired}</td>
-      <td>${STAFF_STATE_LABELS[member.state]}</td>
-      <td>${zoneCount ? `${zoneCount} Bereich${zoneCount === 1 ? '' : 'e'}` : 'Kein Bereich'}</td>
-      <td><button class="staff-remove" data-fire-member="${member.id}" aria-label="${escapeHtml(member.name)} entlassen">🗑️</button></td>
+      <td>${STAFF_STATE_LABELS[member.state]()}</td>
+      <td>${staffZoneLabel(member.workZones?.length ?? 0)}</td>
+      <td><button class="staff-remove" data-fire-member="${member.id}" aria-label="${t`${name} entlassen`}">🗑️</button></td>
     </tr>`
   })
   const sweeperRows = sweepers.map((vehicle) => {
-    const name = sweeperStaffName(vehicle.id)
-    const zoneCount = vehicle.workZones?.length ?? 0
-    return `<tr data-inspect-staff="${vehicle.id}" tabindex="0" role="button" aria-label="${escapeHtml(name)} öffnen">
-      <td>${SWEEPER_STAFF_ICON} ${escapeHtml(name)}</td>
-      <td>Saugroboter</td>
+    const name = escapeHtml(localizeName(sweeperStaffName(vehicle.id)))
+    return `<tr data-inspect-staff="${vehicle.id}" tabindex="0" role="button" aria-label="${t`${name} öffnen`}">
+      <td>${SWEEPER_STAFF_ICON} ${name}</td>
+      <td>${t('Saugroboter')}</td>
       <td>${escapeHtml(describeRoadVehicleActivity(vehicle))}</td>
-      <td>${zoneCount ? `${zoneCount} Bereich${zoneCount === 1 ? '' : 'e'}` : 'Kein Bereich'}</td>
-      <td><button class="staff-remove" data-fire-member="${vehicle.id}" aria-label="${escapeHtml(name)} verkaufen">🗑️</button></td>
+      <td>${staffZoneLabel(vehicle.workZones?.length ?? 0)}</td>
+      <td><button class="staff-remove" data-fire-member="${vehicle.id}" aria-label="${t`${name} verkaufen`}">🗑️</button></td>
     </tr>`
   })
   const rows = [...staffRows, ...sweeperRows].join('')
   const listed = members.length + sweepers.length
-  const wageText = sweepers.length
-    ? `${listed} · ${formatMoney(members.length * definition.hourlyWage)}/h`
-    : `${members.length} · ${formatMoney(members.length * definition.hourlyWage)}/h`
-  const hint = sweepers.length
-    ? `${working} im Einsatz · ${formatMoney(definition.hourlyWage)}/h je Person · Saugroboter ohne Lohn`
-    : `${working} im Einsatz · ${formatMoney(definition.hourlyWage)}/h je Person`
+  const wageText = `${sweepers.length ? listed : members.length} · ${formatMoney(members.length * definition.hourlyWage)}/h`
+  const hint = joinParts(
+    t`${working} im Einsatz`,
+    t`${formatMoney(definition.hourlyWage)}/h je Person`,
+    sweepers.length > 0 && t('Saugroboter ohne Lohn'),
+  )
   staffList.innerHTML = `
-    <div><span>${definition.icon}</span><strong>${definition.name}</strong><b>${wageText}</b></div>
+    <div><span>${definition.icon}</span><strong>${roleName}</strong><b>${wageText}</b></div>
     <small>${hint}</small>
     <div class="staff-actions">
-      <button data-hire-staff="${role}">Einstellen · ${formatMoney(definition.hireCost)}</button>
+      <button data-hire-staff="${role}">${joinParts(t('Einstellen'), formatMoney(definition.hireCost))}</button>
     </div>
-    ${listed ? `<hr class="staff-divider"><table class="staff-table"><thead><tr><th>Name</th><th>Wann eingestellt</th><th>Aktuelle Tätigkeit</th><th>Bereich zugewiesen</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : ''}
+    ${listed ? `<hr class="staff-divider"><table class="staff-table"><thead><tr><th>${t('Name')}</th><th>${t('Wann eingestellt')}</th><th>${t('Aktuelle Tätigkeit')}</th><th>${t('Bereich zugewiesen')}</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : ''}
   `
+}
+
+function staffZoneLabel(zoneCount: number): string {
+  if (zoneCount === 0) return t('Kein Bereich')
+  return plural(zoneCount, t`${zoneCount} Bereich`, t`${zoneCount} Bereiche`)
 }
 
 function updateDayPlanPanel(force = false): void {
@@ -1112,8 +1135,10 @@ function updateDayPlanPanel(force = false): void {
   const admittedCampers = snapshot.visitors.filter(
     (visitor) => visitor.ticketType === 'camping',
   ).length
-  campingCapacitySummary.textContent =
-    `${game.getBookableCampingCapacity()} von ${snapshot.campingCells.length} Campingfeldern buchbar · ${admittedCampers} Campinggäste aktuell zugelassen. Aufbauten können trotzdem zu Überbuchungen führen.`
+  campingCapacitySummary.textContent = `${joinParts(
+    t`${game.getBookableCampingCapacity()} von ${snapshot.campingCells.length} Campingfeldern buchbar`,
+    plural(admittedCampers, t`${admittedCampers} Campinggast aktuell zugelassen.`, t`${admittedCampers} Campinggäste aktuell zugelassen.`),
+  )} ${t('Aufbauten können trotzdem zu Überbuchungen führen.')}`
   festivalCycleStrip.innerHTML = Array.from(
     { length: cycle.cycleLength },
     (_, dayIndex) => {
@@ -1124,17 +1149,11 @@ function updateDayPlanPanel(force = false): void {
               snapshot.dayPlan.leadDays + snapshot.dayPlan.festivalDays
             ? 'festival'
             : 'break'
-      const label =
-        phase === 'lead'
-          ? 'Vorlauftag'
-          : phase === 'festival'
-            ? 'Festivaltag'
-            : 'Pausentag'
-      return `<span class="${phase} ${dayIndex === cycle.cycleDay ? 'current' : ''}" title="${label} ${dayIndex + 1}">${dayIndex + 1}</span>`
+      return `<span class="${phase} ${dayIndex === cycle.cycleDay ? 'current' : ''}" title="${CYCLE_DAY_LABELS[phase](dayIndex + 1)}">${dayIndex + 1}</span>`
     },
   ).join('')
   const header = [
-    '<span class="day-plan-corner">Angebot / Stunde</span>',
+    `<span class="day-plan-corner">${t('Angebot / Stunde')}</span>`,
     ...Array.from(
       { length: 24 },
       (_, hour) =>
@@ -1143,6 +1162,7 @@ function updateDayPlanPanel(force = false): void {
   ].join('')
   const rows = DAY_PLAN_OFFERS.map((offer) => {
     const label = DAY_PLAN_OFFER_LABELS[offer]
+    const offerName = localize(label.name)
     const hours = snapshot.dayPlan.offers[offer]
       .map(
         (active, hour) =>
@@ -1150,25 +1170,29 @@ function updateDayPlanPanel(force = false): void {
             data-day-plan-offer="${offer}"
             data-day-plan-hour="${hour}"
             class="${active ? 'active' : ''} ${hour === currentHour ? 'current' : ''}"
-            title="${label.name}, ${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00"
+            title="${offerName}, ${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00"
             aria-pressed="${active}"
           >${active ? '●' : ''}</button>`,
       )
       .join('')
-    return `<span class="day-plan-label">${label.icon} ${label.name}</span>${hours}`
+    return `<span class="day-plan-label">${label.icon} ${offerName}</span>${hours}`
   }).join('')
+  const dayVisitorTitles = {
+    open: joinParts(t('Tagesgäste zugelassen'), t('über die Zeiten oben einstellbar')),
+    closed: joinParts(t('Tagesgäste nicht zugelassen'), t('über die Zeiten oben einstellbar')),
+  }
   const dayVisitorHours = Array.from({ length: 24 }, (_, hour) => {
     const active =
       cycle.phase === 'festival' &&
       isDayVisitorAdmissionOpen(snapshot.dayPlan, hour * 60 + 30)
     return `<span
       class="day-visitor-hour ${active ? 'active' : ''} ${hour === currentHour ? 'current' : ''}"
-      title="Tagesgäste ${active ? 'zugelassen' : 'nicht zugelassen'} · über die Zeiten oben einstellbar"
+      title="${active ? dayVisitorTitles.open : dayVisitorTitles.closed}"
     >${active ? '●' : ''}</span>`
   }).join('')
   dayPlanGrid.innerHTML =
     header +
-    `<span class="day-plan-label">🎟️ Tagesgäste</span>${dayVisitorHours}` +
+    `<span class="day-plan-label">🎟️ ${t('Tagesgäste')}</span>${dayVisitorHours}` +
     rows
   const admissionOpen = isDayVisitorAdmissionOpen(
     snapshot.dayPlan,
@@ -1182,14 +1206,12 @@ function updateDayPlanPanel(force = false): void {
       snapshot.day,
     ),
   ).length
-  const phaseLabel =
-    cycle.phase === 'lead'
-      ? `Vorlauf ${cycle.phaseDay}/${cycle.phaseLength}`
-      : cycle.phase === 'festival'
-        ? `Festival ${cycle.phaseDay}/${cycle.phaseLength}`
-        : `Pause ${cycle.phaseDay}/${cycle.phaseLength}`
-  dayPlanStatus.textContent =
-    `${phaseLabel} · ${formatTime(snapshot.minute)} · Tagesgäste ${admissionOpen ? 'dürfen hinein' : 'müssen draußen sein'} · ${activeOffers} von ${DAY_PLAN_OFFERS.length} Angebotsgruppen aktiv`
+  dayPlanStatus.textContent = joinParts(
+    `${HUD_PHASE_LABELS[cycle.phase]()} ${cycle.phaseDay}/${cycle.phaseLength}`,
+    formatTime(snapshot.minute),
+    admissionOpen ? t('Tagesgäste dürfen hinein') : t('Tagesgäste müssen draußen sein'),
+    t`${activeOffers} von ${DAY_PLAN_OFFERS.length} Angebotsgruppen aktiv`,
+  )
 }
 
 function updateComplaintsPanel(force = false): void {
@@ -1212,16 +1234,22 @@ function updateComplaintsPanel(force = false): void {
     (total, topic) => total + complaints.previousSession[topic],
     0,
   )
-  complaintsSummary.textContent =
-    `Festivalsession ${complaints.sessionNumber} · ${currentTotal} aktuelle und ${previousTotal} Beschwerden aus der letzten Session`
+  complaintsSummary.textContent = joinParts(
+    t`Festivalsession ${complaints.sessionNumber}`,
+    t`${currentTotal} aktuelle und ${previousTotal} Beschwerden aus der letzten Session`,
+  )
   complaintsList.innerHTML = COMPLAINT_TOPICS.map((topic) => {
     const label = COMPLAINT_LABELS[topic]
     return `<div>
-      <span>${label.icon} ${label.name}</span>
+      <span>${label.icon} ${localize(label.name)}</span>
       <b>${complaints.currentSession[topic]}</b>
       <b>${complaints.previousSession[topic]}</b>
     </div>`
   }).join('')
+}
+
+function garbageTruckCount(trucks: number): string {
+  return t`${trucks}/${SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot} Müllautos`
 }
 
 function depotWorkerCount(depotId: string): number {
@@ -1264,12 +1292,12 @@ function addPlannedBusStop(stopId: string, announce = true): boolean {
   const stop = game.snapshot.logistics.busStops.find((candidate) => candidate.id === stopId)
   if (!stop) return false
   if (plannedBusStopIds.includes(stopId)) {
-    if (announce) showToast(`${stop.name} ist bereits in der Reihenfolge`)
+    if (announce) showToast(t`${localizeName(stop.name)} ist bereits in der Reihenfolge`)
     return true
   }
   plannedBusStopIds.push(stopId)
   renderBusPlanner()
-  if (announce) showToast(`${stop.name} zur Linie hinzugefügt`)
+  if (announce) showToast(t`${localizeName(stop.name)} zur Linie hinzugefügt`)
   return true
 }
 
@@ -1293,7 +1321,7 @@ function loadBusLineIntoPlanner(lineId: string): void {
   plannedBusStopIds.splice(0, plannedBusStopIds.length, ...line.stopIds)
   renderBusPlanner()
   updateLogisticsPanel(true)
-  showToast(`${line.name}: Reihenfolge bearbeiten`)
+  showToast(t`${localizeName(line.name)}: Reihenfolge bearbeiten`)
 }
 
 function syncBusPlannerOverlay(): void {
@@ -1321,29 +1349,27 @@ function renderBusPlanner(logistics = game.snapshot.logistics): void {
   if (stopKey !== busPlannerStopsFingerprint) {
     busPlannerStopsFingerprint = stopKey
     busStopChoices.innerHTML = logistics.busStops.length === 0
-      ? '<p class="scenario-hint">Noch keine Haltestelle. Unter Logistik → Bus eine Haltestelle an den Gehweg neben die Straße setzen.</p>'
+      ? `<p class="scenario-hint">${t('Noch keine Haltestelle. Unter Logistik → Bus eine Haltestelle an den Gehweg neben die Straße setzen.')}</p>`
       : available.length
         ? available
             .map(
               (stop) =>
-                `<button type="button" class="bus-stop-choice" draggable="true" data-add-stop="${stop.id}" data-stop-id="${stop.id}" data-planner-source="available">${escapeHtml(stop.name)}</button>`,
+                `<button type="button" class="bus-stop-choice" draggable="true" data-add-stop="${stop.id}" data-stop-id="${stop.id}" data-planner-source="available">${escapeHtml(localizeName(stop.name))}</button>`,
             )
             .join('')
-        : '<p class="scenario-hint">Alle Haltestellen sind auf der Linie.</p>'
+        : `<p class="scenario-hint">${t('Alle Haltestellen sind auf der Linie.')}</p>`
     busLinePlanned.innerHTML = plannedBusStopIds.length
       ? plannedBusStopIds
           .map((stopId, index) => {
             const stop = logistics.busStops.find((candidate) => candidate.id === stopId)
-            const name = stop?.name ?? stopId
-            return `<li class="bus-planned-stop" draggable="true" data-stop-id="${stopId}" data-planner-source="active" data-planned-index="${index}"><span>${index + 1}. ${escapeHtml(name)}</span><span class="bus-line-actions"><button type="button" data-move-stop="${index}" data-delta="-1" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" data-move-stop="${index}" data-delta="1" ${index === plannedBusStopIds.length - 1 ? 'disabled' : ''}>↓</button><button type="button" data-remove-stop="${index}">Entfernen</button></span></li>`
+            const name = stop ? localizeName(stop.name) : stopId
+            return `<li class="bus-planned-stop" draggable="true" data-stop-id="${stopId}" data-planner-source="active" data-planned-index="${index}"><span>${index + 1}. ${escapeHtml(name)}</span><span class="bus-line-actions"><button type="button" data-move-stop="${index}" data-delta="-1" ${index === 0 ? 'disabled' : ''}>↑</button><button type="button" data-move-stop="${index}" data-delta="1" ${index === plannedBusStopIds.length - 1 ? 'disabled' : ''}>↓</button><button type="button" data-remove-stop="${index}">${t('Entfernen')}</button></span></li>`
           })
           .join('')
-      : '<li class="scenario-hint">Haltestellen hierher ziehen.</li>'
+      : `<li class="scenario-hint">${t('Haltestellen hierher ziehen.')}</li>`
   }
   applyBusLineStops.hidden = !editingBusLineId
-  applyBusLineStops.textContent = editingBusLineId
-    ? 'Reihenfolge speichern'
-    : 'Reihenfolge speichern'
+  applyBusLineStops.textContent = t('Reihenfolge speichern')
   syncBusPlannerOverlay()
 }
 
@@ -1395,38 +1421,38 @@ function updateLogisticsPanel(force = false): void {
   ).length
   logisticsOverview.innerHTML = `
     <div class="logistics-summary-grid">
-      <span><small>Straßenfelder</small><b>${logistics.roadCells.length}</b></span>
-      <span><small>Parkplätze</small><b>${occupiedParking}/${logistics.parkingCells.length}</b></span>
-      <span><small>Autos auf Parkplatzsuche</small><b>${waitingCars}</b></span>
-      <span><small>Krankenwagen</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'ambulance').length}</b></span>
-      <span><small>Müllfahrzeuge</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'garbageTruck').length}</b></span>
-      <span><small>Saugreiniger</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'sweeper').length}</b></span>
-      <span><small>Busse</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'bus').length}</b></span>
-      <span><small>Aktive Linien</small><b>${logistics.busLines.filter((line) => line.active).length}</b></span>
+      <span><small>${t('Straßenfelder')}</small><b>${logistics.roadCells.length}</b></span>
+      <span><small>${t('Parkplätze')}</small><b>${occupiedParking}/${logistics.parkingCells.length}</b></span>
+      <span><small>${t('Autos auf Parkplatzsuche')}</small><b>${waitingCars}</b></span>
+      <span><small>${t('Krankenwagen')}</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'ambulance').length}</b></span>
+      <span><small>${t('Müllfahrzeuge')}</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'garbageTruck').length}</b></span>
+      <span><small>${t('Saugreiniger')}</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'sweeper').length}</b></span>
+      <span><small>${t('Busse')}</small><b>${logistics.roadVehicles.filter((vehicle) => vehicle.kind === 'bus').length}</b></span>
+      <span><small>${t('Aktive Linien')}</small><b>${logistics.busLines.filter((line) => line.active).length}</b></span>
   </div>
     <div class="vehicle-summary">
       ${logistics.ambulanceGarages
         .map(
           (garage) =>
-            `<span>Garage ${garage.id.slice(-4)} · ${garage.bays.filter(Boolean).length}/2 RTW <button data-buy-ambulance="${garage.id}">RTW kaufen</button>${garage.bays.some(Boolean) ? ` <button data-sell-ambulance="${garage.id}">RTW verkaufen</button>` : ''}</span>`,
+            `<span>${joinParts(t`Garage ${garage.id.slice(-4)}`, t`${garage.bays.filter(Boolean).length}/2 RTW`)} <button data-buy-ambulance="${garage.id}">${t('RTW kaufen')}</button>${garage.bays.some(Boolean) ? ` <button data-sell-ambulance="${garage.id}">${t('RTW verkaufen')}</button>` : ''}</span>`,
         )
         .join('')}
       ${logistics.busDepots
         .map(
           (depot) =>
-            `<span>Depot ${depot.id.slice(-4)} · ${depot.busIds.length}/3 Busse <button data-buy-bus="${depot.id}">Bus kaufen</button>${depot.busIds.length > 0 ? ` <button data-sell-bus="${depot.id}">Bus verkaufen</button>` : ''}</span>`,
+            `<span>${joinParts(t`Depot ${depot.id.slice(-4)}`, t`${depot.busIds.length}/3 Busse`)} <button data-buy-bus="${depot.id}">${t('Bus kaufen')}</button>${depot.busIds.length > 0 ? ` <button data-sell-bus="${depot.id}">${t('Bus verkaufen')}</button>` : ''}</span>`,
         )
         .join('')}
       ${(logistics.wasteDepots ?? [])
         .map(
           (depot) =>
-            `<span>Mülldepot ${depot.id.slice(-4)} · ${depot.truckIds.length}/${SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot} Müllautos · ${Math.round(depot.stored ?? 0)} Müll <button data-buy-garbage="${depot.id}">Müllauto kaufen</button>${depot.truckIds.length > 0 ? ` <button data-sell-garbage="${depot.id}">Müllauto verkaufen</button>` : ''}</span>`,
+            `<span>${joinParts(t`Mülldepot ${depot.id.slice(-4)}`, garbageTruckCount(depot.truckIds.length), t`${Math.round(depot.stored ?? 0)} Müll`)} <button data-buy-garbage="${depot.id}">${t('Müllauto kaufen')}</button>${depot.truckIds.length > 0 ? ` <button data-sell-garbage="${depot.id}">${t('Müllauto verkaufen')}</button>` : ''}</span>`,
         )
         .join('')}
       ${(logistics.specialDepots ?? [])
         .map(
           (depot) =>
-            `<span>Betriebshof ${depot.id.slice(-4)} · ${depot.vehicleIds.length}/4 Saugreiniger · ${(depot.truckIds ?? []).length}/${SIMULATION_CONFIG.logistics.garbageTruckLimitPerDepot} Müllautos · ${Math.round(depot.stored ?? 0)} Müll <button data-buy-sweeper="${depot.id}">Saugreiniger kaufen</button>${depot.vehicleIds.length > 0 ? ` <button data-sell-sweeper="${depot.id}">Saugreiniger verkaufen</button>` : ''} <button data-buy-garbage="${depot.id}">Müllauto kaufen</button>${(depot.truckIds ?? []).length > 0 ? ` <button data-sell-garbage="${depot.id}">Müllauto verkaufen</button>` : ''}</span>`,
+            `<span>${joinParts(t`Betriebshof ${depot.id.slice(-4)}`, t`${depot.vehicleIds.length}/4 Saugreiniger`, garbageTruckCount((depot.truckIds ?? []).length), t`${Math.round(depot.stored ?? 0)} Müll`)} <button data-buy-sweeper="${depot.id}">${t('Saugreiniger kaufen')}</button>${depot.vehicleIds.length > 0 ? ` <button data-sell-sweeper="${depot.id}">${t('Saugreiniger verkaufen')}</button>` : ''} <button data-buy-garbage="${depot.id}">${t('Müllauto kaufen')}</button>${(depot.truckIds ?? []).length > 0 ? ` <button data-sell-garbage="${depot.id}">${t('Müllauto verkaufen')}</button>` : ''}</span>`,
         )
         .join('')}
     </div>`
@@ -1434,7 +1460,7 @@ function updateLogisticsPanel(force = false): void {
   busLineDepot.innerHTML = logistics.busDepots
     .map(
       (depot) =>
-        `<option value="${depot.id}">Depot ${depot.id.slice(-4)} (${depot.busIds.length}/3)</option>`,
+        `<option value="${depot.id}">${t`Depot ${depot.id.slice(-4)}`} (${depot.busIds.length}/3)</option>`,
     )
     .join('')
   if ([...busLineDepot.options].some((option) => option.value === previousBusDepot)) {
@@ -1443,17 +1469,21 @@ function updateLogisticsPanel(force = false): void {
   busLinesList.innerHTML = logistics.busLines
     .map(
       (line) =>
-        `<div class="bus-line-row${editingBusLineId === line.id ? ' selected' : ''}"><span>${escapeHtml(line.name)}</span><span>${line.stopIds.length} Stopps · ${line.busIds.length} Busse · ${line.headway} Min.</span><span class="bus-line-actions"><button type="button" data-edit-line="${line.id}">Reihenfolge</button><button type="button" data-add-bus-line="${line.id}">Bus hinzufügen</button><button type="button" data-delete-line="${line.id}">Löschen</button></span></div>`,
+        `<div class="bus-line-row${editingBusLineId === line.id ? ' selected' : ''}"><span>${escapeHtml(localizeName(line.name))}</span><span>${joinParts(
+          plural(line.stopIds.length, t`${line.stopIds.length} Stopp`, t`${line.stopIds.length} Stopps`),
+          plural(line.busIds.length, t`${line.busIds.length} Bus`, t`${line.busIds.length} Busse`),
+          t`${line.headway} Min.`,
+        )}</span><span class="bus-line-actions"><button type="button" data-edit-line="${line.id}">${t('Reihenfolge')}</button><button type="button" data-add-bus-line="${line.id}">${t('Bus hinzufügen')}</button><button type="button" data-delete-line="${line.id}">${t('Löschen')}</button></span></div>`,
     )
     .join('')
   renderBusPlanner(logistics)
   const previousDepot = supplyDepotSelect.value
   supplyDepotSelect.innerHTML = infrastructure.depots
     .map((depot, index) => {
-      const role = depot.role === 'delivery' ? 'Anlieferung' : 'Depot'
-      return `<option value="${depot.id}">${role} ${index + 1} · ${depot.x}, ${depot.z}</option>`
+      const label = depot.role === 'delivery' ? t`Anlieferung ${index + 1}` : t`Depot ${index + 1}`
+      return `<option value="${depot.id}">${joinParts(label, `${depot.x}, ${depot.z}`)}</option>`
     })
-    .join('') || '<option value="">Noch kein Depot</option>'
+    .join('') || `<option value="">${t('Noch kein Depot')}</option>`
   if ([...supplyDepotSelect.options].some((option) => option.value === previousDepot)) {
     supplyDepotSelect.value = previousDepot
   }
@@ -1465,40 +1495,45 @@ function updateLogisticsPanel(force = false): void {
     supplyDepotDistribution.value = depot?.distribution ?? 'shops'
   }
   supplyDepotStock.textContent = depot
-    ? Object.entries(SUPPLIES)
-        .map(([kind, item]) => `${item.name}: ${Math.floor(depot.stock[kind as Supply])} / Mindestbestand ${depot.minimum[kind as Supply]}`)
-        .join(' · ')
-    : 'Anlieferungsplatz und Depot im Baumenü unter Logistik setzen.'
+    ? joinParts(...Object.entries(SUPPLIES)
+        .map(([kind, item]) => t`${localize(item.name)}: ${Math.floor(depot.stock[kind as Supply])} / Mindestbestand ${depot.minimum[kind as Supply]}`))
+    : t('Anlieferungsplatz und Depot im Baumenü unter Logistik setzen.')
   syncStockSliders(logisticsSupply, 'data-supply-min', depot)
   supplyRemoveDepot.disabled = !depot
-  supplyStatus.textContent = `${infrastructure.status} · ${infrastructure.trucks.length} Lieferwagen · ${infrastructure.routes.length} Träger`
+  supplyStatus.textContent = joinParts(
+    localize(infrastructure.status),
+    t`${infrastructure.trucks.length} Lieferwagen`,
+    t`${infrastructure.routes.length} Träger`,
+  )
   supplyDeliveries.innerHTML = game.snapshot.festival.deliveries
     .map((delivery) => {
       const inbound = infrastructure.trucks.some((truck) => truck.deliveryId === delivery.id)
       const waiting = inbound && infrastructure.trucks.some((truck) => truck.deliveryId === delivery.id && truck.z < -game.snapshot.scenario.worldSize / 2)
-      return `<p>${delivery.quantity} × ${SUPPLIES[delivery.kind].name} · ${
-        waiting ? 'Wartet auf freie Einfahrt' : inbound ? 'Lastwagen auf dem Gelände' : delivery.remaining > 0 ? `Anfahrt: ${Math.ceil(delivery.remaining)} min` : 'Wartet am Kartenrand'
-      }</p>`
+      return `<p>${joinParts(
+        `${delivery.quantity} × ${localize(SUPPLIES[delivery.kind].name)}`,
+        waiting ? t('Wartet auf freie Einfahrt') : inbound ? t('Lastwagen auf dem Gelände') : delivery.remaining > 0 ? t`Anfahrt: ${Math.ceil(delivery.remaining)} min` : t('Wartet am Kartenrand'),
+      )}</p>`
     })
     .join('')
   const components = game.snapshot.bandSupply?.components ?? []
   const cost = SIMULATION_CONFIG.bandSupply.backstageDesignationCost
   bandSupplyPreview.textContent = backstageEraseMode
-    ? 'Modus: Backstage entfernen. Ziehen im Gelände löscht die Auswahl.'
-    : `Modus: Backstage ausweisen · ${cost} € je Feld. Muss an eine Bühne anschließen.`
+    ? t('Modus: Backstage entfernen. Ziehen im Gelände löscht die Auswahl.')
+    : joinParts(t('Modus: Backstage ausweisen'), t`${formatMoney(cost)} je Feld. Muss an eine Bühne anschließen.`)
   bandSupplyList.innerHTML =
     components.length === 0
-      ? '<p class="scenario-hint">Noch kein Backstage ausgewiesen.</p>'
+      ? `<p class="scenario-hint">${t('Noch kein Backstage ausgewiesen.')}</p>`
       : components
           .map((component) => {
             const origin = component.stages[0]
             const parking = !component.parkingNeeded
-              ? 'Parkplätze nicht nötig'
-              : `${component.usableSlots}/${component.busDemand} Tourbus-Plätze`
+              ? t('Parkplätze nicht nötig')
+              : t`${component.usableSlots}/${component.busDemand} Tourbus-Plätze`
+            const state = component.active ? (component.bareStage ? t('Nur Bühne') : t('Aktiv')) : t('Getrennt')
             return `<div class="band-supply-row">
-              <span>${component.active ? (component.bareStage ? 'Nur Bühne' : 'Aktiv') : 'Getrennt'} · ${component.designatedTiles} Felder · Drauf ${Math.round(component.satisfaction)}</span>
-              <span>${parking} · Show ×${component.showQuality.toFixed(2)}</span>
-              ${origin ? `<button type="button" data-band-supply-focus="${origin.id}">Hin</button>` : ''}
+              <span>${joinParts(state, t`${component.designatedTiles} Felder`, t`Drauf ${Math.round(component.satisfaction)}`)}</span>
+              <span>${joinParts(parking, t`Show ×${formatNumber(component.showQuality, 2)}`)}</span>
+              ${origin ? `<button type="button" data-band-supply-focus="${origin.id}">${t('Hin')}</button>` : ''}
             </div>`
           })
           .join('')
@@ -1519,15 +1554,23 @@ type VisitorOverviewSort =
 
 function updateVisitorOverview(force = false): void {
   if (!visitorOverviewPanel.classList.contains('visible')) return
-  const filter = visitorThoughtFilter.value.trim().toLocaleLowerCase('de')
+  const tag = localeTag()
+  const filter = visitorThoughtFilter.value.trim().toLocaleLowerCase(tag)
   const sort = visitorOverviewSort.value as VisitorOverviewSort
-  const filtered = game.snapshot.visitors.filter(
-    (visitor) =>
-      !filter ||
-      visitor.thought.toLocaleLowerCase('de').includes(filter) ||
-      visitor.name.toLocaleLowerCase('de').includes(filter),
-  )
+  // Group, filter and key by the thought as this viewer reads it, so two German thoughts
+  // that share one translation form one row (in German `localize` is the identity).
+  const filtered: typeof game.snapshot.visitors = []
+  for (const visitor of game.snapshot.visitors) {
+    const thought = localize(visitor.thought)
+    if (
+      filter &&
+      !thought.toLocaleLowerCase(tag).includes(filter) &&
+      !visitor.name.toLocaleLowerCase(tag).includes(filter)
+    ) continue
+    filtered.push(thought === visitor.thought ? visitor : { ...visitor, thought })
+  }
   const groups = groupVisitorsByThought(filtered)
+  const compareText = collator().compare
   const value = (group: (typeof groups)[number]): string | number => {
     switch (sort) {
       case 'thought': return group.thought
@@ -1548,7 +1591,7 @@ function updateVisitorOverview(force = false): void {
     const rightValue = value(right)
     const comparison =
       typeof leftValue === 'string' && typeof rightValue === 'string'
-        ? leftValue.localeCompare(rightValue, 'de')
+        ? compareText(leftValue, rightValue)
         : Number(leftValue) - Number(rightValue)
     return visitorOverviewAscending ? comparison : -comparison
   })
@@ -1573,12 +1616,14 @@ function updateVisitorOverview(force = false): void {
   ].join('|')
   if (!force && fingerprint === visitorOverviewFingerprint) return
   visitorOverviewFingerprint = fingerprint
-  visitorOverviewSummary.textContent =
-    `${groups.length.toLocaleString('de-DE')} Gedanken · ${filtered.length.toLocaleString('de-DE')} von ${game.snapshot.visitors.length.toLocaleString('de-DE')} Besuchern`
+  visitorOverviewSummary.textContent = joinParts(
+    plural(groups.length, t`${groups.length} Gedanke`, t`${groups.length} Gedanken`),
+    t`${filtered.length} von ${game.snapshot.visitors.length} Besuchern`,
+  )
   visitorOverviewList.innerHTML = pageGroups
     .map(
       (group) => `<tr data-visitor-overview-id="${group.sample.id}">
-        <td><strong>${group.count.toLocaleString('de-DE')}</strong></td>
+        <td><strong>${formatNumber(group.count)}</strong></td>
         <td title="${escapeHtml(group.thought)}">${escapeHtml(group.thought)}</td>
         <td>${escapeHtml(group.state)}</td>
         <td>${Math.round(group.energy)}%</td>
@@ -1587,7 +1632,7 @@ function updateVisitorOverview(force = false): void {
       </tr>`,
     )
     .join('')
-  visitorPageLabel.textContent = `Seite ${visitorOverviewPage + 1} / ${pageCount}`
+  visitorPageLabel.textContent = t`Seite ${visitorOverviewPage + 1} / ${pageCount}`
   visitorPagePrevious.disabled = visitorOverviewPage === 0
   visitorPageNext.disabled = visitorOverviewPage >= pageCount - 1
   visitorSortDirection.textContent = visitorOverviewAscending ? '↑' : '↓'
@@ -1719,18 +1764,18 @@ function applyCopySelection(cells: ReadonlyArray<{ x: number; z: number }>): voi
   copyClipboard = captureBlueprint(game.snapshot, cells, (x, z) => game.getTerrainHeight(x, z))
   updateCopySelectionSummary()
   if (copyClipboard.items.length === 0) {
-    showToast('In diesem Rechteck liegt nichts zum Kopieren', true)
+    showToast(t('In diesem Rechteck liegt nichts zum Kopieren'), true)
     view.setBlueprintPreview([])
     return
   }
-  showToast(`Auswahl: ${describeBlueprint(copyClipboard)}`)
+  showToast(t`Auswahl: ${describeBlueprint(copyClipboard)}`)
   updateCopyPreview(hoveredCell)
 }
 
 function updateCopySelectionSummary(): void {
   const summary = document.querySelector('#copy-selection-summary')
   if (!summary) return
-  summary.textContent = copyClipboard ? `Auswahl: ${describeBlueprint(copyClipboard)}` : 'Keine Auswahl'
+  summary.textContent = copyClipboard ? t`Auswahl: ${describeBlueprint(copyClipboard)}` : t('Keine Auswahl')
 }
 
 function updateCopyPreview(cell: CellPosition | null): void {
@@ -1782,7 +1827,7 @@ async function renderCopyLibrary(): Promise<void> {
   if (!list) return
   const entries = await listBlueprintLibrary()
   if (entries.length === 0) {
-    list.innerHTML = '<p class="copy-library-empty">Noch keine Vorlagen in der Baubibliothek.</p>'
+    list.innerHTML = `<p class="copy-library-empty">${t('Noch keine Vorlagen in der Baubibliothek.')}</p>`
     return
   }
   list.innerHTML = entries
@@ -1790,12 +1835,12 @@ async function renderCopyLibrary(): Promise<void> {
       (entry) =>
         `<div class="copy-library-item" data-blueprint-id="${entry.id}">
           <div>
-            <strong>${entry.name}</strong>
-            <small>${describeBlueprint(entry.blueprint)}</small>
+            <strong>${escapeHtml(localizeName(entry.name))}</strong>
+            <small>${escapeHtml(describeBlueprint(entry.blueprint))}</small>
           </div>
           <div class="copy-library-actions">
-            <button type="button" data-blueprint-load="${entry.id}">Laden</button>
-            <button type="button" data-blueprint-delete="${entry.id}">Löschen</button>
+            <button type="button" data-blueprint-load="${entry.id}">${tc('verb', 'Laden')}</button>
+            <button type="button" data-blueprint-delete="${entry.id}">${t('Löschen')}</button>
           </div>
         </div>`,
     )
@@ -1830,7 +1875,7 @@ function demolishPathAt(cell: CellPosition, quiet = false): boolean {
     game.getPathAt(cell.x, cell.z, game.snapshot.buildElevation) ??
     game.getPathAt(cell.x, cell.z)
   if (!path) {
-    if (!quiet) showToast('Hier liegt kein Weg', true)
+    if (!quiet) showToast(t('Hier liegt kein Weg'), true)
     return false
   }
   const result = game.bulldoze(path.x, path.z, path.id)
@@ -1937,7 +1982,8 @@ function applyShiftElevationPaint(cell: CellPosition, quiet = false): void {
   const plan = planLockedOriginRamp(shiftElevationOrigin, cell, pathSlope)
   if (plan.direction != null) pathDirection = plan.direction
   let built = 0
-  let lastMessage = 'Rampe vom festen Ausgang'
+  // Only shown once a step was built, and then it holds that step's result.
+  let lastMessage = ''
   for (const step of plan.steps) {
     const result = roadEditorOpen
       ? game.placeRoadSegment(
@@ -2114,21 +2160,22 @@ function undoLastPathSegment(): void {
 
 function updatePathEditor(): void {
   pathConstruction.classList.toggle('road-editor', roadEditorOpen)
-  pathConstruction.querySelector('.panel-header-title')!.textContent = roadEditorOpen ? 'Straßen' : 'Fußwege'
-  pathConstruction.setAttribute('aria-label', roadEditorOpen ? 'Straßen' : 'Fußwege')
+  const editorTitle = roadEditorOpen ? t('Straßen') : t('Fußwege')
+  pathConstruction.querySelector('.panel-header-title')!.textContent = editorTitle
+  pathConstruction.setAttribute('aria-label', editorTitle)
   requireElement<HTMLElement>('#road-editor-tools').hidden = !roadEditorOpen
-  pathDemolishButton.title = roadEditorOpen ? 'Straßen abreißen' : 'Wege abreißen'
-  requireElement<HTMLButtonElement>('#close-path-editor').setAttribute('aria-label', roadEditorOpen ? 'Straßen schließen' : 'Wege schließen')
+  pathDemolishButton.title = roadEditorOpen ? t('Straßen abreißen') : t('Wege abreißen')
+  requireElement<HTMLButtonElement>('#close-path-editor').setAttribute('aria-label', roadEditorOpen ? t('Straßen schließen') : t('Wege schließen'))
   pathConstruction.classList.toggle('visible', pathWindowOpen)
   pathConstruction.classList.toggle('path-mode-construct', pathWindowOpen && pathEditorActive)
   pathConstruction.classList.toggle('path-mode-paint', pathWindowOpen && !pathEditorActive)
   const modeToggle = document.querySelector<HTMLButtonElement>('#toggle-path-editor')
   if (modeToggle) {
     modeToggle.setAttribute('aria-pressed', String(pathEditorActive))
-    modeToggle.title = pathEditorActive ? 'Frei ziehen (zwei Pfeile)' : 'Stückweise bauen (ein Pfeil)'
+    modeToggle.title = pathEditorActive ? t('Frei ziehen (zwei Pfeile)') : t('Stückweise bauen (ein Pfeil)')
     modeToggle.setAttribute(
       'aria-label',
-      pathEditorActive ? 'Frei ziehen' : 'Stückweise bauen',
+      pathEditorActive ? t('Frei ziehen') : t('Stückweise bauen'),
     )
   }
   pathDemolishButton.setAttribute('aria-pressed', String(pathDemolishActive))
@@ -2155,16 +2202,21 @@ function updatePathEditor(): void {
     button.disabled = !pathEditorActive
   })
   constructionStatus.textContent = pathDemolishActive
-    ? 'Weg anklicken oder ziehen zum Abreißen.'
+    ? t('Weg anklicken oder ziehen zum Abreißen.')
     : pathEditorActive
       ? pathAnchor
-        ? `${shiftElevationOrigin ? 'Ausgang fest' : 'Aktuelles Feld'}: ${pathAnchor.x}, ${pathAnchor.z} · Ebene ${pathAnchor.elevation}` +
-          (shiftElevationOrigin ? ' · Shift: Rampe zum Zeiger, Ausgang bleibt' : '') +
-          (pathConstructionType === 'queue' ? ' · Schlange zum Eingang' : '')
-        : 'Feld anklicken: setzt das erste Stück. Bauen setzt das nächste.'
+        ? joinParts(
+            shiftElevationOrigin
+              ? t`Ausgang fest: ${String(pathAnchor.x)}, ${String(pathAnchor.z)}`
+              : t`Aktuelles Feld: ${String(pathAnchor.x)}, ${String(pathAnchor.z)}`,
+            t`Ebene ${pathAnchor.elevation}`,
+            shiftElevationOrigin && t('Shift: Rampe zum Zeiger, Ausgang bleibt'),
+            pathConstructionType === 'queue' && t('Schlange zum Eingang'),
+          )
+        : t('Feld anklicken: setzt das erste Stück. Bauen setzt das nächste.')
       : pathConstructionType === 'queue'
-        ? 'Schlange: Linie ziehen. Belag gedrückt halten.'
-        : 'Belag gedrückt halten, dann eine Linie ziehen.'
+        ? t('Schlange: Linie ziehen. Belag gedrückt halten.')
+        : t('Belag gedrückt halten, dann eine Linie ziehen.')
   document.querySelectorAll<HTMLButtonElement>('[data-slope]').forEach((button) => {
     button.classList.toggle('active', Number(button.dataset.slope) === pathSlope)
   })
@@ -2201,7 +2253,7 @@ function openCoasterBuilder(coasterId: string | null = null, typeId?: CoasterTyp
   }
   trackSpecialPalette.hidden = true
   trackSpecialToggle.setAttribute('aria-expanded', 'false')
-  trackSpecialToggle.textContent = 'Speziell …'
+  trackSpecialToggle.textContent = t('Speziell …')
   coasterBuilderActive = true
   activeCoasterId = coasterId
   coasterStartCandidate = null
@@ -2336,7 +2388,7 @@ function handleCourseCell(cell: CellPosition): boolean {
 
 function placeCourseCells(cells: ReadonlyArray<CellPosition>): void {
   if (!pendingCourseKind) {
-    showToast('Kein Kurstyp gewählt.', true)
+    showToast(t('Kein Kurstyp gewählt.'), true)
     return
   }
   if (selectedCoursePiece === 'area') {
@@ -2351,7 +2403,7 @@ function placeCourseCells(cells: ReadonlyArray<CellPosition>): void {
   }
   if (selectedCoursePiece === 'areaErase') {
     if (!activeCourseId) {
-      showToast('Es gibt noch keine Anlagenfläche.', true)
+      showToast(t('Es gibt noch keine Anlagenfläche.'), true)
       return
     }
     const result = game.removeCourseAreaCells(activeCourseId, cells)
@@ -2371,7 +2423,7 @@ function placeCourseCells(cells: ReadonlyArray<CellPosition>): void {
     }
     const course = activeCourseId ? game.getCourse(activeCourseId) : undefined
     if (!course) {
-      showToast('Kurs nicht gefunden.', true)
+      showToast(t('Kurs nicht gefunden.'), true)
       return
     }
     const targets = orderedCourseLineTargets(course, cells)
@@ -2384,7 +2436,7 @@ function placeCourseCells(cells: ReadonlyArray<CellPosition>): void {
       last = placeCourseAt(cell, true)
       if (!last.ok) break
     }
-    showToast(last?.message ?? 'Die Strecke endet bereits auf diesem Feld.', Boolean(last && !last.ok))
+    showToast(last?.message ?? t('Die Strecke endet bereits auf diesem Feld.'), Boolean(last && !last.ok))
     updateCourseBuilder()
     return
   }
@@ -2408,14 +2460,14 @@ function buildCoursePieceAtEnd(): void {
     courseBuildElevation,
   )
   if (!target) {
-    showToast('Setze zuerst den Eingang der Strecke.', true)
+    showToast(t('Setze zuerst den Eingang der Strecke.'), true)
     return
   }
   placeCourseAt({ x: target.x, z: target.z })
 }
 
 function placeCourseAt(cell: CellPosition, quiet = false): { ok: boolean; message: string } {
-  if (!pendingCourseKind) return { ok: false, message: 'Kein Kurstyp gewählt.' }
+  if (!pendingCourseKind) return { ok: false, message: t('Kein Kurstyp gewählt.') }
   if (!activeCourseId) {
     const started = game.startCourse(pendingCourseKind, cell.x, cell.z)
     if (!started.ok || !started.id) {
@@ -2436,7 +2488,7 @@ function placeCourseAt(cell: CellPosition, quiet = false): { ok: boolean; messag
     return started
   }
   if (selectedCoursePiece === 'area' || selectedCoursePiece === 'areaErase') {
-    return { ok: false, message: 'Flächen werden durch Ziehen bearbeitet.' }
+    return { ok: false, message: t('Flächen werden durch Ziehen bearbeitet.') }
   }
   const result = game.addCoursePiece(
     activeCourseId,
@@ -2737,32 +2789,38 @@ function updateRideBuilder(): void {
   if (!activeRideId) return
   const ride=game.snapshot.buildings.find(b=>b.id===activeRideId && b.kind==='ride')
   if (!ride) { closeRideBuilder(false); return }
-  requireElement('#ride-builder-name').textContent=`${rideProfile(ride).name} bauen`
-  requireElement('#ride-builder-status').textContent=game.getRideAccessIssue(ride) ?? 'Ein- und Ausgang angeschlossen. Konstruktion vollständig.'
+  const rideName = localize(rideProfile(ride).name)
+  requireElement('#ride-builder-name').textContent=t`${rideName} bauen`
+  const accessIssue = game.getRideAccessIssue(ride)
+  requireElement('#ride-builder-status').textContent=accessIssue ? localize(accessIssue) : t('Ein- und Ausgang angeschlossen. Konstruktion vollständig.')
   for (const type of ['entrance','exit'] as const) {
     const access=ride[type==='entrance'?'rideEntrance':'rideExit']
     const button=requireElement<HTMLButtonElement>(`#ride-${type}`)
     button.setAttribute('aria-pressed',String(rideAccessPlacement?.type===type))
     button.classList.toggle('active',rideAccessPlacement?.type===type)
-    requireElement(`#ride-${type}-state`).textContent=access?'Versetzen':`Bauen · ${formatMoney(SIMULATION_CONFIG.economy.coasterAccessCost)}`
+    requireElement(`#ride-${type}-state`).textContent=access?t('Versetzen'):joinParts(t('Bauen'), formatMoney(SIMULATION_CONFIG.economy.coasterAccessCost))
   }
   const mode=rideAccessPlacement?.type
   requireElement('#ride-builder').classList.toggle('placing-access',Boolean(mode))
   requireElement('#ride-placement-help').textContent=mode
-    ? `${mode==='entrance'?'Eingang':'Ausgang'}: freies Feld direkt neben dem Fahrgeschäft wählen. Danach ${mode==='entrance'?'Warteweg':'normalen Gehweg'} anschließen.`
-    : 'Eingang oder Ausgang wählen und auf ein freies Nachbarfeld setzen.'
+    ? (mode==='entrance'
+      ? t('Eingang: freies Feld direkt neben dem Fahrgeschäft wählen. Danach Warteweg anschließen.')
+      : t('Ausgang: freies Feld direkt neben dem Fahrgeschäft wählen. Danach normalen Gehweg anschließen.'))
+    : t('Eingang oder Ausgang wählen und auf ein freies Nachbarfeld setzen.')
   requireElement<HTMLElement>('#cancel-ride-access').hidden=!mode
-  requireElement('#ride-access-status').textContent=`Eingang: ${ride.rideEntrance ? `${ride.rideEntrance.x}, ${ride.rideEntrance.z}`:'fehlt'} · Ausgang: ${ride.rideExit ? `${ride.rideExit.x}, ${ride.rideExit.z}`:'fehlt'}`
-  requireElement('#ride-platform-height').textContent=`Plattform: Ebene ${ride.elevation}. Zugänge werden automatisch auf dieser Höhe gebaut.`
+  const entrance = ride.rideEntrance ? `${ride.rideEntrance.x}, ${ride.rideEntrance.z}` : t('fehlt')
+  const exit = ride.rideExit ? `${ride.rideExit.x}, ${ride.rideExit.z}` : t('fehlt')
+  requireElement('#ride-access-status').textContent=joinParts(t`Eingang: ${entrance}`, t`Ausgang: ${exit}`)
+  requireElement('#ride-platform-height').textContent=t`Plattform: Ebene ${ride.elevation}. Zugänge werden automatisch auf dieser Höhe gebaut.`
   requireElement<HTMLElement>('#ride-tower-construction').hidden=ride.rideType!=='bungee'
   if (ride.rideType==='bungee') {
     const height=Number(requireElement<HTMLInputElement>('#ride-target-height').value), current=ride.bungeeHeight ?? 20
     const valid=Number.isInteger(height) && height>=4 && height<=200
     const cost=Math.max(0,height-current)*25
-    requireElement('#ride-built-height').textContent=`Gebaut: ${current} m · 4–200 m möglich · 25 € pro zusätzlichem Meter`
+    requireElement('#ride-built-height').textContent=joinParts(t`Gebaut: ${current} m`, t('4–200 m möglich'), t`${formatMoney(25)} pro zusätzlichem Meter`)
     const button=requireElement<HTMLButtonElement>('#ride-build-height')
     button.disabled=!valid || height===current || cost>game.snapshot.money
-    button.textContent=!valid?'4–200 Meter wählen':height<current?'Turm verkürzen':`Höhe bauen · ${formatMoney(cost)}`
+    button.textContent=!valid?t('4–200 Meter wählen'):height<current?t('Turm verkürzen'):joinParts(t('Höhe bauen'), formatMoney(cost))
   }
 }
 
@@ -2781,7 +2839,7 @@ function startRideAccessPlacement(id:string,type:'entrance'|'exit'): void {
   if (activeRideId!==id) return
   rideAccessPlacement={id,type}
   game.setTool('ride'); updateRideBuilder(); updateRideAccessPreview(hoveredCell)
-  showToast(`${type==='entrance'?'Eingang':'Ausgang'}: freies Nachbarfeld wählen`)
+  showToast(type==='entrance' ? t('Eingang: freies Nachbarfeld wählen') : t('Ausgang: freies Nachbarfeld wählen'))
 }
 requireElement('#ride-entrance').addEventListener('click',()=>{if(activeRideId)startRideAccessPlacement(activeRideId,'entrance')})
 requireElement('#ride-exit').addEventListener('click',()=>{if(activeRideId)startRideAccessPlacement(activeRideId,'exit')})
@@ -2878,13 +2936,13 @@ function startAccessAreaDraw(): void {
     const next = toggleAreaCells(current.area, from, to)
     view.showAccessArea(next)
     const stats = game.accessAreaStats(next)
-    accessPreview.textContent = `Vorschau: ${areaPreviewText(current.kind, stats)}`
+    accessPreview.textContent = t`Vorschau: ${areaPreviewText(current.kind, stats)}`
     if (preview) return
     const result = game.toggleAccessControlArea(current.id, from, to)
     showToast(result.message, !result.ok)
     updateEntityPanel()
   })
-  accessDrawArea.textContent = 'Zeichnen beenden'
+  accessDrawArea.textContent = t('Zeichnen beenden')
   view.showAccessArea(control.area)
 }
 
@@ -2985,7 +3043,7 @@ function fillAccessScheduleOfferOptions(): void {
     ...DAY_PLAN_OFFERS.map((offer) => {
       const option = document.createElement('option')
       option.value = offer
-      option.textContent = `${DAY_PLAN_OFFER_LABELS[offer].icon} ${DAY_PLAN_OFFER_LABELS[offer].name}`
+      option.textContent = `${DAY_PLAN_OFFER_LABELS[offer].icon} ${localize(DAY_PLAN_OFFER_LABELS[offer].name)}`
       return option
     }),
   )
@@ -2994,7 +3052,7 @@ function fillAccessScheduleOfferOptions(): void {
 function accessScheduleHintText(control: AccessControl): string {
   const snapshot = game.snapshot
   const cycle = getFestivalCycleStatus(snapshot.dayPlan, snapshot.day)
-  const phaseLabel = FESTIVAL_PHASE_LABELS[cycle.phase]
+  const phaseLabel = localize(FESTIVAL_PHASE_LABELS[cycle.phase])
   const open = isAccessScheduleOpen(control, snapshot.minute, {
     day: snapshot.day,
     dayPlan: snapshot.dayPlan,
@@ -3002,9 +3060,12 @@ function accessScheduleHintText(control: AccessControl): string {
   const time = resolvedScheduleTime(control)
   const timeLabel =
     time === 'dayPlan'
-      ? `folgt ${DAY_PLAN_OFFER_LABELS[control.scheduleOffer].name}`
+      ? t`folgt ${localize(DAY_PLAN_OFFER_LABELS[control.scheduleOffer].name)}`
       : ACCESS_SCHEDULE_TIME_LABELS[time]
-  return `Aktuell ${phaseLabel} · ${timeLabel} · ${open ? (control.kind === 'trafficLight' ? 'grün' : 'offen') : control.kind === 'trafficLight' ? 'rot' : 'zu'}`
+  const state = open
+    ? (control.kind === 'trafficLight' ? t('grün') : t('offen'))
+    : control.kind === 'trafficLight' ? t('rot') : t('zu')
+  return joinParts(t`Aktuell ${phaseLabel}`, timeLabel, state)
 }
 
 function fillAccessSensorOptions(kind: AccessControl['kind']): void {
@@ -3013,16 +3074,16 @@ function fillAccessSensorOptions(kind: AccessControl['kind']): void {
   const options =
     kind === 'trafficLight'
       ? [
-          ['freeParking', 'Freier Parkplatz im Gebiet'],
-          ['noFreeParking', 'Kein freier Parkplatz im Gebiet'],
-          ['carsBelow', 'Weniger als X Autos auf der Straße'],
-          ['carsAbove', 'Mehr als X Autos auf der Straße'],
+          ['freeParking', t('Freier Parkplatz im Gebiet')],
+          ['noFreeParking', t('Kein freier Parkplatz im Gebiet')],
+          ['carsBelow', t('Weniger als X Autos auf der Straße')],
+          ['carsAbove', t('Mehr als X Autos auf der Straße')],
         ]
       : [
-          ['freeCamping', 'Freie Campingfläche im Gebiet'],
-          ['occupiedCamping', 'Belegte Campingfläche im Gebiet'],
-          ['peopleBelow', 'Weniger als X Personen im Gebiet'],
-          ['peopleAbove', 'Mehr als X Personen im Gebiet'],
+          ['freeCamping', t('Freie Campingfläche im Gebiet')],
+          ['occupiedCamping', t('Belegte Campingfläche im Gebiet')],
+          ['peopleBelow', t('Weniger als X Personen im Gebiet')],
+          ['peopleAbove', t('Mehr als X Personen im Gebiet')],
         ]
   accessSensorKind.replaceChildren(
     ...options.map(([value, label]) => {
@@ -3035,10 +3096,10 @@ function fillAccessSensorOptions(kind: AccessControl['kind']): void {
 }
 
 function accessModeLabel(mode: AccessControlMode): string {
-  if (mode === 'always') return 'Immer offen'
-  if (mode === 'locked') return 'Immer zu'
-  if (mode === 'schedule') return 'Zeitgesteuert'
-  return 'Sensor'
+  if (mode === 'always') return t('Immer offen')
+  if (mode === 'locked') return t('Immer zu')
+  if (mode === 'schedule') return t('Zeitgesteuert')
+  return t('Sensor')
 }
 
 function accessStatusText(control: AccessControl): string {
@@ -3047,19 +3108,19 @@ function accessStatusText(control: AccessControl): string {
     control.openInEmergency &&
     game.isAccessEmergency()
   ) {
-    return 'Notfall – Tor in beide Richtungen offen'
+    return t('Notfall – Tor in beide Richtungen offen')
   }
   if (control.kind === 'trafficLight') {
     return control.signal === 'open'
-      ? 'Grün – Fahrzeuge dürfen in diese Richtung'
-      : 'Rot – Fahrzeuge warten in dieser Richtung'
+      ? t('Grün – Fahrzeuge dürfen in diese Richtung')
+      : t('Rot – Fahrzeuge warten in dieser Richtung')
   }
   if (control.signal === 'closed') {
-    return 'Geschlossen – Personen müssen umlaufen'
+    return t('Geschlossen – Personen müssen umlaufen')
   }
   return control.passage === 'both'
-    ? 'Offen – Personen dürfen in beide Richtungen'
-    : 'Offen – nur in die gesetzte Richtung'
+    ? t('Offen – Personen dürfen in beide Richtungen')
+    : t('Offen – nur in die gesetzte Richtung')
 }
 
 function renderAccessControlForm(control: AccessControl): void {
@@ -3104,6 +3165,7 @@ function renderAccessControlForm(control: AccessControl): void {
       ),
     )
   })
+  const openWord = control.kind === 'trafficLight' ? t('Grün') : t('Offen')
   const slot = currentAccessSlot(game.snapshot.minute)
   const currentHour = Math.floor(((game.snapshot.minute / 60) % 24 + 24) % 24)
   ensureAccessSlotButtons()
@@ -3113,9 +3175,8 @@ function renderAccessControlForm(control: AccessControl): void {
     button.setAttribute('aria-pressed', String(open))
     button.classList.toggle('current', index === slot)
     const start = index * 10
-    const label = `${String(start).padStart(2, '0')}–${String(start + 10).padStart(2, '0')}${
-      open ? (control.kind === 'trafficLight' ? ' Grün' : ' Offen') : ''
-    }`
+    const range = `${String(start).padStart(2, '0')}–${String(start + 10).padStart(2, '0')}`
+    const label = open ? `${range} ${openWord}` : range
     if (button.textContent !== label) button.textContent = label
   })
   ensureAccessHourButtons()
@@ -3124,9 +3185,7 @@ function renderAccessControlForm(control: AccessControl): void {
     const open = Boolean(control.scheduleHours[hour])
     button.setAttribute('aria-pressed', String(open))
     button.classList.toggle('current', hour === currentHour)
-    const label = `${String(hour).padStart(2, '0')}${
-      open ? (control.kind === 'trafficLight' ? ' Grün' : ' Offen') : ''
-    }`
+    const label = open ? `${String(hour).padStart(2, '0')} ${openWord}` : String(hour).padStart(2, '0')
     if (button.textContent !== label) button.textContent = label
   })
   fillAccessScheduleOfferOptions()
@@ -3148,19 +3207,23 @@ function renderAccessControlForm(control: AccessControl): void {
   accessPreview.textContent = accessAreaDrawing
     ? accessPreview.textContent
     : stats
-      ? `Aktuell: ${areaPreviewText(control.kind, stats)} · Regel: ${previewLabel(control.kind, control.sensorKind, stats)}`
-      : 'Aktuell: keine Messung'
-  accessDrawArea.textContent = accessAreaDrawing ? 'Zeichnen beenden' : 'Gebiet zeichnen'
+      ? joinParts(
+          t`Aktuell: ${areaPreviewText(control.kind, stats)}`,
+          t`Regel: ${previewLabel(control.kind, control.sensorKind, stats)}`,
+        )
+      : t('Aktuell: keine Messung')
+  accessDrawArea.textContent = accessAreaDrawing ? t('Zeichnen beenden') : t('Gebiet zeichnen')
   if (!accessAreaDrawing) view.showAccessArea(control.area)
 }
 
-function showToast(message: string, isError = false): void {
+/** Sink: game, host and server text arrives German and is localized here (idempotent). */
+function showToast(message: string, isError = false, durationMs = 2200): void {
   window.clearTimeout(toastTimer)
-  toast.textContent = message
+  toast.textContent = localize(message)
   toast.className = isError ? 'visible error' : 'visible'
   toastTimer = window.setTimeout(() => {
     toast.className = ''
-  }, 2200)
+  }, durationMs)
 }
 
 document.querySelector('#rotate-scenery')?.addEventListener('click', () => {
@@ -3382,18 +3445,18 @@ buildMenuToggle.addEventListener('click', () => {
 })
 document.querySelector('#copy-save-library')?.addEventListener('click', () => {
   if (!copyClipboard) {
-    showToast('Zuerst einen Bereich markieren', true)
+    showToast(t('Zuerst einen Bereich markieren'), true)
     return
   }
   const name = document.querySelector<HTMLInputElement>('#copy-blueprint-name')?.value ?? ''
   void saveBlueprintLibraryEntry(name, copyClipboard).then((entry) => {
-    showToast(`„${entry.name}“ in der Baubibliothek gespeichert`)
+    showToast(t`„${localizeName(entry.name)}“ in der Baubibliothek gespeichert`)
     void renderCopyLibrary()
   })
 })
 document.querySelector('#copy-new-selection')?.addEventListener('click', () => {
   clearCopyClipboard()
-  showToast('Neue Auswahl: Rechteck aufziehen')
+  showToast(t('Neue Auswahl: Rechteck aufziehen'))
 })
 document.querySelector('#copy-library-list')?.addEventListener('click', (event) => {
   const target = (event.target as Element).closest<HTMLButtonElement>('[data-blueprint-load], [data-blueprint-delete]')
@@ -3408,13 +3471,13 @@ document.querySelector('#copy-library-list')?.addEventListener('click', (event) 
       game.setTool('copy')
       updateCopySelectionSummary()
       updateCopyPreview(hoveredCell)
-      showToast(`Vorlage „${entry.name}“ geladen`)
+      showToast(t`Vorlage „${localizeName(entry.name)}“ geladen`)
     })
     return
   }
   if (deleteId) {
     void deleteBlueprintLibraryEntry(deleteId).then(() => {
-      showToast('Vorlage gelöscht')
+      showToast(t('Vorlage gelöscht'))
       void renderCopyLibrary()
     })
   }
@@ -3471,17 +3534,18 @@ function updateFinancePanel(force = false): void {
     expanded: expandedFinanceRows,
   })
   financeTotals.innerHTML = [
-    ['Guthaben', euro(overview.money)],
-    ['Darlehen', euro(-overview.loan)],
-    ['Festivalwert', euro(overview.parkValue)],
-    ['Firmenwert', euro(overview.companyValue)],
+    [t('Guthaben'), euro(overview.money)],
+    [t('Darlehen'), euro(-overview.loan)],
+    [t('Festivalwert'), euro(overview.parkValue)],
+    [t('Firmenwert'), euro(overview.companyValue)],
   ]
     .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
     .join('')
   const headroom = Math.max(0, overview.loanLimit - overview.loan)
+  const interest = t`${formatNumber(overview.interestPerDay * 100, 1)} % Zinsen pro Tag`
   financeLoanStatus.textContent = overview.loan > 0
-    ? `${euro(overview.loan)} offen · ${(overview.interestPerDay * 100).toFixed(1)} % Zinsen pro Tag · noch ${euro(headroom)} Kreditrahmen frei`
-    : `Kein Darlehen · bis zu ${euro(overview.loanLimit)} möglich · ${(overview.interestPerDay * 100).toFixed(1)} % Zinsen pro Tag`
+    ? joinParts(t`${euro(overview.loan)} offen`, interest, t`noch ${euro(headroom)} Kreditrahmen frei`)
+    : joinParts(t('Kein Darlehen'), t`bis zu ${euro(overview.loanLimit)} möglich`, interest)
   const goals = snapshot.scenario.goals
   financeGoals.hidden = goals.length === 0
   financeGoalList.innerHTML = goalListMarkup(snapshot, game.parkValue())
@@ -3710,30 +3774,33 @@ function setMultiplayerPanelOpen(open: boolean): void {
 }
 
 function readMultiplayerName(): string {
-  const name = multiplayerName.value.trim() || 'Spieler'
+  // A generated player name is identity: made in the creator's language, never localized later.
+  const name = multiplayerName.value.trim() || t('Spieler')
   window.localStorage.setItem(MULTIPLAYER_NAME_KEY, name)
   return name
 }
 
 /** Joining from the title screen names the player there; both fields share one name. */
 function setMultiplayerName(name: string): void {
-  const trimmed = name.trim() || 'Spieler'
+  const trimmed = name.trim() || t('Spieler')
   multiplayerName.value = trimmed
   window.localStorage.setItem(MULTIPLAYER_NAME_KEY, trimmed)
 }
 
 function renderMultiplayerStatus(status: MultiplayerStatus): void {
   const connected = status.connected
-  multiplayerStatusBadge.dataset.state = connected ? 'online' : status.message ? 'disconnected' : 'solo'
+  const hostAway = connected && status.mode === 'client' && status.hostAway
+  multiplayerStatusBadge.dataset.state = hostAway ? 'disconnected' : connected ? 'online' : status.message ? 'disconnected' : 'solo'
   multiplayerStatus.textContent = connected
-    ? `Online · ${status.mode === 'host' ? 'Host' : 'Verbunden'} · Raum ${status.code}`
-    : status.message || 'Singleplayer'
+    ? joinParts(t('Online'), status.mode === 'host' ? t('Host') : hostAway ? t('Host weg') : t('Verbunden'), t`Raum ${status.code}`)
+    : status.message ? localize(status.message) : t('Singleplayer')
+  hostTakeoverUi?.render(status)
   multiplayerToggle.textContent = '🌐'
   const multiplayerLabel = connected
     ? status.mode === 'host'
-      ? `Host ${status.code}`
-      : `Online ${status.code}`
-    : 'Mehrspieler'
+      ? t`Host ${status.code}`
+      : t`Online ${status.code}`
+    : t('Mehrspieler')
   multiplayerToggle.title = multiplayerLabel
   multiplayerToggle.setAttribute('aria-label', multiplayerLabel)
   multiplayerConnectActions.hidden = connected
@@ -3746,12 +3813,20 @@ function renderMultiplayerStatus(status: MultiplayerStatus): void {
   multiplayerJoinUrl.textContent = status.code ? inviteLink(status.code, status.joinUrl) : ''
   // Names come from whoever joined. On a server anyone can reach, that is a
   // stranger's text going into the page, so it is escaped like any other.
-  multiplayerPlayers.innerHTML = status.players
+  // The host is marked; while its seat is empty the list says so instead, by name.
+  const awayLine = joinParts(status.hostName && escapeHtml(status.hostName), t('Host ist weg'))
+  multiplayerPlayers.innerHTML = (hostAway ? `<li class="mp-host-away">${awayLine}</li>` : '') + status.players
     .map(
       (player) =>
-        `<li>${escapeHtml(player.name)}${player.role === 'host' ? ' · Host' : ''}</li>`,
+        `<li>${playerLine(escapeHtml(player.name), player.role === 'host', player.id === status.playerId)}</li>`,
     )
     .join('')
+}
+
+/** A player in the room list: the name as they chose it, marked when host or self. */
+function playerLine(name: string, isHost: boolean, isSelf: boolean): string {
+  const line = joinParts(name, isHost && t('Host'))
+  return isSelf ? t`${line} (du)` : line
 }
 
 /**
@@ -3760,6 +3835,8 @@ function renderMultiplayerStatus(status: MultiplayerStatus): void {
  * screen, so it is handed to the screen as well.
  */
 let joinErrorSink: ((message: string) => void) | null = null
+/** Banner, rebuilt worlds, backup and the hand-over question; mounted with the save controller. */
+let hostTakeoverUi: HostTakeoverUi | undefined
 
 /**
  * A host's machine is the one running the world. Screen off means suspend a few
@@ -3776,7 +3853,7 @@ if (!isWakeLockSupported()) {
   // silently does nothing.
   keepAwakeToggle.disabled = true
   requireElement<HTMLElement>('#setting-keep-awake-field').title =
-    'Dieser Browser kennt keine Bildschirmsperre für Webseiten'
+    t('Dieser Browser kennt keine Bildschirmsperre für Webseiten')
 }
 const keepAwake = keepScreenAwake(() => keepAwakeToggle.checked && multiplayer.status.connected)
 keepAwakeToggle.addEventListener('change', () => {
@@ -3789,6 +3866,7 @@ keepAwakeToggle.addEventListener('change', () => {
 multiplayer.onStatus = (status) => {
   renderMultiplayerStatus(status)
   keepAwake.refresh()
+  playerSettingsControl.refreshLanguage()
   multiplayerChat.setConnected(status.connected)
   syncChatOpenButton()
   if (status.connected) joinErrorSink = null
@@ -3798,17 +3876,19 @@ multiplayer.onStatus = (status) => {
     titleScreenController.setOpen(false)
   }
 }
+// Host and server messages arrive in canonical German; both sinks localize them.
 multiplayer.onToast = (message, isError) => {
   if (!message) return
   if (isError && joinErrorSink) {
     joinErrorSink(message)
     joinErrorSink = null
   }
-  showToast(message, Boolean(isError))
+  // Takeover notices are whole sentences; give them time to be read.
+  showToast(message, Boolean(isError), message.length > 70 ? 7000 : undefined)
 }
 multiplayerName.value =
   window.localStorage.getItem(MULTIPLAYER_NAME_KEY) ??
-  `Spieler ${Math.floor(Math.random() * 90 + 10)}`
+  t`Spieler ${String(Math.floor(Math.random() * 90 + 10))}`
 const MULTIPLAYER_PUBLIC_KEY = 'festival-mp-public'
 try {
   multiplayerPublicToggle.checked = window.localStorage.getItem(MULTIPLAYER_PUBLIC_KEY) === 'on'
@@ -3855,19 +3935,21 @@ makeDraggable(multiplayerPanel.querySelector<HTMLElement>('.panel-header')!, mul
 makeResizable(multiplayerPanel)
 multiplayerHostButton.addEventListener('click', () => {
   multiplayer.host(readMultiplayerName(), multiplayerPublicToggle.checked)
-  showToast(multiplayerPublicToggle.checked ? 'Öffentliche Lobby wird geöffnet…' : 'Verbinde als Host…')
+  showToast(multiplayerPublicToggle.checked ? t('Öffentliche Lobby wird geöffnet…') : t('Verbinde als Host…'))
 })
 multiplayerJoinButton.addEventListener('click', () => {
   const code = multiplayerCode.value.trim().toUpperCase()
   if (code.length < 4) {
-    showToast('Bitte einen 4-stelligen Code eingeben', true)
+    showToast(t('Bitte einen 4-stelligen Code eingeben'), true)
     return
   }
   multiplayer.join(code, readMultiplayerName())
-  showToast(`Trete ${code} bei…`)
+  showToast(t`Trete ${code} bei…`)
 })
 multiplayerLeaveButton.addEventListener('click', () => {
-  multiplayer.disconnect()
+  // A host with guests is asked first: hand the room over, or end it for everyone.
+  if (hostTakeoverUi) void hostTakeoverUi.leave()
+  else multiplayer.disconnect()
 })
 multiplayerCopyButton.addEventListener('click', async () => {
   const code = multiplayer.status.code
@@ -3875,7 +3957,7 @@ multiplayerCopyButton.addEventListener('click', async () => {
   const text = inviteLink(code, multiplayer.status.joinUrl)
   try {
     await navigator.clipboard.writeText(text)
-    showToast('Einladungslink kopiert')
+    showToast(t('Einladungslink kopiert'))
   } catch {
     showToast(code)
   }
@@ -4066,7 +4148,7 @@ depotRemove.addEventListener('click', () => {
 })
 requireElement<HTMLButtonElement>('#create-bus-line').addEventListener('click', () => {
   const result = game.createBusLine(
-    requireElement<HTMLInputElement>('#bus-line-name').value,
+    requireElement<HTMLInputElement>('#bus-line-name').value.trim() || BUS_LINE_DEFAULT_NAME,
     busLineDepot.value,
     [...plannedBusStopIds],
     Number(requireElement<HTMLInputElement>('#bus-line-count').value),
@@ -4084,13 +4166,13 @@ applyBusLineStops.addEventListener('click', () => {
 })
 sortBusLine.addEventListener('click', () => {
   if (plannedBusStopIds.length < 2) {
-    showToast('Mindestens zwei Haltestellen für die kürzeste Route', true)
+    showToast(t('Mindestens zwei Haltestellen für die kürzeste Route'), true)
     return
   }
   const sorted = game.sortBusLineStops([...plannedBusStopIds], busLineDepot.value || undefined)
   plannedBusStopIds.splice(0, plannedBusStopIds.length, ...sorted)
   renderBusPlanner()
-  showToast('Route automatisch sortiert (kürzeste Runde)')
+  showToast(t('Route automatisch sortiert (kürzeste Runde)'))
 })
 busStopChoices.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-add-stop]')
@@ -4430,7 +4512,7 @@ applyPriceToKindButton.addEventListener('click', () => {
     true,
   )
   showToast(
-    `Preis für ${count} ${BUILDINGS[building.kind].name}-Gebäude übernommen`,
+    t`Preis für ${count} ${localize(BUILDINGS[building.kind].name)}-Gebäude übernommen`,
   )
 })
 
@@ -4526,7 +4608,7 @@ document.querySelector<HTMLButtonElement>('#finish-course-builder')?.addEventLis
   const courseId = activeCourseId
   if (courseId) {
     const course = game.getCourse(courseId)
-    const issue = course ? validateCourse(course) : 'Noch kein Kurs.'
+    const issue = course ? validateCourse(course) : t('Noch kein Kurs.')
     if (issue) {
       showToast(issue, true)
       updateCourseBuilder()
@@ -4622,9 +4704,9 @@ function selectCoasterPaletteKind(kind: TrackPieceKind, fromSpecials: boolean): 
   if (fromSpecials) {
     trackSpecialPalette.hidden = true
     trackSpecialToggle.setAttribute('aria-expanded', 'false')
-    trackSpecialToggle.textContent = `Speziell: ${TRACK_PIECES[kind].name}`
+    trackSpecialToggle.textContent = t`Speziell: ${localize(TRACK_PIECES[kind].name)}`
   } else {
-    trackSpecialToggle.textContent = 'Speziell …'
+    trackSpecialToggle.textContent = t('Speziell …')
   }
   updateCoasterBuilder()
 }
@@ -4662,13 +4744,13 @@ trackSlopePalette.addEventListener('click', (event) => {
   }
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-track-pitch]')
   if (!button || button.disabled) return
-  trackSpecialToggle.textContent = 'Speziell …'
+  trackSpecialToggle.textContent = t('Speziell …')
   selectCoasterPitch(Number(button.dataset.trackPitch))
 })
 trackBankPalette.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-track-bank]')
   if (!button || button.disabled) return
-  trackSpecialToggle.textContent = 'Speziell …'
+  trackSpecialToggle.textContent = t('Speziell …')
   selectCoasterBank(Number(button.dataset.trackBank))
 })
 chainLiftInput.addEventListener('change', () => updateCoasterBuilder())
@@ -4696,6 +4778,16 @@ const saveController = mountSaveController({
   closePathEditor,
   bindGameState,
   fillScenarioForm,
+  showToast,
+  // An inherited park saves beside the player's own quicksave, never over it.
+  takeoverSlotName: () => (multiplayer.inheritedHost ? takeoverSaveName(multiplayer.inheritedCode) : null),
+  // Quick-loading that slot back keeps the park somebody else's.
+  keepTakeover: (loaded) => multiplayer.markInherited(loaded),
+})
+hostTakeoverUi = mountHostTakeoverUi({
+  session: multiplayer,
+  bindGameState,
+  backupLocally: saveController.backupLocally,
   showToast,
 })
 const saveSlotsPanel = saveController.panel
@@ -4727,7 +4819,7 @@ titleScreenController = mountTitleScreen({
   readSaveSlot,
   bindLoadedGame,
   joinMultiplayer: (code, name, onError) => {
-    joinErrorSink = onError
+    joinErrorSink = (message) => onError(localize(message))
     multiplayer.join(code, name)
   },
   readMultiplayerName,
@@ -4991,7 +5083,7 @@ demolishCoasterConstructionButton.addEventListener('click', () => {
 })
 
 dispatchIntervalInput.addEventListener('input', () => {
-  dispatchValue.textContent = `${dispatchIntervalInput.value} min`
+  dispatchValue.textContent = t`${dispatchIntervalInput.value} min`
   if (selectedEntity?.type !== 'coaster') return
   game.updateCoasterSettings(
     selectedEntity.id,
@@ -5129,10 +5221,11 @@ mountMobileUI({
 })
 
 const performanceIndicator = document.createElement('div')
-const versionLabel = `v${__APP_VERSION__} · Build ${__BUILD_ID__} UTC`
+// Developer readout: version, build stamp and frame counters read the same in every language.
+const versionLabel = keep(`v${__APP_VERSION__} · Build ${__BUILD_ID__} UTC`)
 performanceIndicator.className = 'performance-indicator'
-performanceIndicator.textContent = `${versionLabel}\nFPS — · TPS —`
-performanceIndicator.title = 'Bilder und lokal ausgeführte Logik-Ticks pro realer Sekunde. Unteraufgaben-Anteile nur mit 🐞 → Sim-Anteile. In Pause und auf Multiplayer-Clients laufen keine lokalen Logik-Ticks.'
+performanceIndicator.textContent = `${versionLabel}\n${keep('FPS — · TPS —')}`
+performanceIndicator.title = t('Bilder und lokal ausgeführte Logik-Ticks pro realer Sekunde. Unteraufgaben-Anteile nur mit 🐞 → Sim-Anteile. In Pause und auf Multiplayer-Clients laufen keine lokalen Logik-Ticks.')
 document.body.append(performanceIndicator)
 // Bottom-left is a stack: the overview overlay sits on the floor, the debug line rides above it,
 // and anything anchored to the bottom edge (the build menu) clears both.
@@ -5188,8 +5281,8 @@ const renderHotkeys = (): void => {
     button.className = 'hotkey-key'
     const code = bindings.get(key.action) ?? ''
     button.textContent = listeningFor === key.action
-      ? 'Taste drücken …'
-      : code ? hotkeyLabel(code) : 'Nicht belegt'
+      ? t('Taste drücken …')
+      : code ? hotkeyLabel(code) : t('Nicht belegt')
     button.classList.toggle('listening', listeningFor === key.action)
     button.classList.toggle('unbound', !code && listeningFor !== key.action)
     button.addEventListener('click', () => {
@@ -5329,7 +5422,7 @@ void (async () => {
   const caption = bootLoader?.querySelector<HTMLElement>('.boot-caption')
   const bar = bootLoader?.querySelector<HTMLElement>('.boot-bar-fill')
   try {
-    if (caption) caption.textContent = 'Modelle werden vorbereitet …'
+    if (caption) caption.textContent = t('Modelle werden vorbereitet …')
     await new Promise((resolve) => requestAnimationFrame(resolve))
     await view.warmUpModels((done, total) => {
       if (bar) bar.style.width = `${Math.round((done / Math.max(1, total)) * 100)}%`

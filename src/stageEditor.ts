@@ -4,23 +4,26 @@ import { createStagePickTargets } from './view/stagePicking'
 import { BUILDINGS } from './game/catalog'
 import { Scene, Color, PerspectiveCamera, WebGLRenderer, AmbientLight, DirectionalLight, GridHelper, Raycaster, Vector2, Plane, Vector3, Group, Mesh, BoxGeometry, PlaneGeometry, MeshBasicMaterial, MeshStandardMaterial, MOUSE } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { COMPONENTS, AUDIENCE_KINDS, stageApronDepth, stageForecourtDepth, MAX_STAGE_FORECOURT_DEPTH, brandsFor, brandOf, defaultBrand, isTruss, GROUND_ONLY_KINDS, STACKABLE_KINDS, PHASE_NAMES, DECO_PATTERNS, STAGE_TILE_DETAIL, DECO_PATTERN_NAMES, STAGE_TILE_HEIGHT, defaultStageDesign, stageDesignIssue, stageDetailSize, stageStats, removeStagePart, migrateStageDesign, type StageDesign, type StagePart, type ComponentKind, type DecoPattern } from './game/stageDesign'
+import { COMPONENTS, DEFAULT_STAGE_DESIGN_NAME, AUDIENCE_KINDS, stageApronDepth, stageForecourtDepth, MAX_STAGE_FORECOURT_DEPTH, brandsFor, brandOf, defaultBrand, isTruss, GROUND_ONLY_KINDS, STACKABLE_KINDS, PHASE_NAMES, DECO_PATTERNS, STAGE_TILE_DETAIL, DECO_PATTERN_NAMES, STAGE_TILE_HEIGHT, defaultStageDesign, stageDesignIssue, stageDetailSize, stageStats, removeStagePart, migrateStageDesign, type StageDesign, type StagePart, type ComponentKind, type DecoPattern } from './game/stageDesign'
 import { createStageModel, animateStageModel, disposeStageModel } from './view/stageModel'
 import { createOrientationGizmo, type OrientationGizmo } from './view/orientationGizmo'
 import type { GameState } from './game/GameState'
 import { makeDraggable, makeResizable } from './dragPanel'
 import { isTextEntryTarget } from './uiFocus'
 import { toUiPx, uiScale } from './ui/uiScale'
+import { formatMoney, formatNumber, formatPercent, joinParts, kbd, localize, localizeName, plural, t, tc, tip } from './i18n'
 import './stageEditor.css'
+/** The canonical template name: stored as is, shown translated as the name field's placeholder. */
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!))
 function stepLabel(step:{x:number;y:number;z:number}){
-  if(step.y>0)return 'oben';if(step.y<0)return 'unten'
-  if(step.x>0)return 'rechts';if(step.x<0)return 'links'
-  return step.z>0?'davor':'dahinter'
+  if(step.y>0)return t('oben');if(step.y<0)return t('unten')
+  if(step.x>0)return t('rechts');if(step.x<0)return t('links')
+  return step.z>0?t('davor'):t('dahinter')
 }
 /** Label for a StagePart's own facing (0-3 = 90° yaw steps, 4/5 = up/down), as picked via the orientation cube. */
-function directionLabel(rotation:number){return rotation===4?'oben':rotation===5?'unten':`${rotation*90}°`}
+function directionLabel(rotation:number){return rotation===4?tc('facing','oben'):rotation===5?tc('facing','unten'):`${rotation*90}°`}
 /** Custom cursor for the delete tool: a small trash-can glyph rendered into an inline SVG data URI. */
+// i18n-ignore
 const ERASE_CURSOR=`url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><text y='22' font-size='22'>🗑️</text></svg>") 4 22, pointer`
 export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:boolean)=>void){
   const paletteEntries=(Object.entries(COMPONENTS) as [ComponentKind,typeof COMPONENTS[ComponentKind]][]).map(([kind,c])=>({id:kind,kind,label:c.name,icon:kind,cost:c.cost,brands:Object.entries(brandsFor(kind))}))
@@ -32,17 +35,17 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
    */
   const paletteNote=(kind:ComponentKind,cost:number)=>{
     const brands=Object.values(brandsFor(kind))
-    if(brands.length>1)return `ab ${cost} € · Qualität ▾`
+    if(brands.length>1)return `${joinParts(t`ab ${formatMoney(cost)}`,t('Qualität'))} ▾`
     const only=brands[0]!
-    return only.quality===1?`${cost} €`:`${cost} € · Wirkung ×${only.quality}`
+    return only.quality===1?formatMoney(cost):joinParts(formatMoney(cost),t`Wirkung ×${only.quality}`)
   }
-  const panel=document.createElement('section');panel.className='stage-editor panel';panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Bühnenwerkstatt')
-  panel.innerHTML=`<header class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 class="panel-header-title">Bühnenwerkstatt</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Bühneneditor schließen">×</button></header>
-  <div class="stage-layout"><aside><label>Name<input data-name maxlength="60"></label><hr class="stage-divider"><label>Gespeicherte Bühnen<select data-template><option value="">Neue Bühne</option></select></label><div class="stage-actions"><button data-save>Bühne speichern</button><button data-load>Laden</button><button data-new>Neu</button></div>
-  <h3 class="stage-heading-tight">Größe</h3><div class="stage-pair"><label>Breite<input data-tiles-width type="number" min="1" max="8"></label><label>Tiefe<input data-tiles-depth type="number" min="1" max="8"></label></div><label>Vorplatztiefe<input data-forecourt-depth type="number" min="1" max="${MAX_STAGE_FORECOURT_DEPTH}"></label><small>Felder vor der Bühne; werden in Werkstatt und Bauvorschau angezeigt.</small><div class="stage-section-header"><h3>Bauteile</h3><div class="stage-section-tools"><button data-undo class="stage-icon-button" title="Rückgängig" aria-label="Rückgängig">↩</button><button data-erase aria-pressed="false" class="stage-icon-button" title="Löschen-Werkzeug" aria-label="Löschen-Werkzeug">🗑️</button></div></div><div class="stage-parts">${paletteEntries.map(({id,kind,label,icon,cost,brands})=>`<div class="stage-component"><button data-part="${id}" aria-pressed="false"${brands.length>1?' aria-expanded="false"':''}><img class="stage-part-icon" src="/stage-icons/${icon}.png" alt=""><span>${label}<small data-part-brand="${id}">${paletteNote(kind,cost)}</small></span></button>${brands.length>1?`<div class="stage-quality panel" data-quality-menu="${id}" hidden>${brands.map(([brand,info])=>`<button data-quality="${brand}" data-quality-part="${id}">${plain(info!.name)}<small>${Math.round(cost*info!.cost)} € · Wirkung ×${info!.quality}</small></button>`).join('')}</div>`:''}</div>`).join('')}</div><button data-audience aria-pressed="false">♟ Zuschauerfläche malen</button><small>Ganze Kartenfelder · vom Rand aus einen Zugang nach innen anlegen.</small><dl class="stage-hotkeys"><div><dt><kbd>R</kbd></dt><dd>Bauteil drehen</dd></div><div><dt><kbd>⇧</kbd><kbd>R</kbd></dt><dd>Zurückdrehen</dd></div><div><dt><kbd>Alt</kbd></dt><dd>Bodenmontage erzwingen</dd></div><div><dt>Rechtsklick</dt><dd>auf Bauteil: drehen</dd></div><div><dt>Rechtsklick + Ziehen</dt><dd>auf Hintergrund: Kamera-Drehpunkt verschieben</dd></div><div><dt>Ziehen</dt><dd>Kamera drehen</dd></div><div><dt>Mausrad</dt><dd>Zoom</dd></div></dl></aside>
-  <div class="stage-center"><div data-viewport><div class="stage-readout"><dl data-stats></dl><p data-hint aria-live="polite">Wähle ein Bauteil und klicke auf einen Rasterplatz.</p></div><label data-color-picker class="stage-color-picker" hidden title="Bauteilfarbe">Farbe<input data-color type="color" value="#e69759"></label><div data-erase-confirm class="stage-delete-confirm panel" hidden><p data-erase-confirm-text></p><div class="stage-delete-confirm-actions"><button data-confirm-delete>Entfernen</button><button data-cancel-delete>Abbrechen</button></div></div></div></div>
-  <aside><h3>Showpult</h3><div class="stage-phases">${PHASE_NAMES.map((p,i)=>`<button data-phase="${i}" aria-pressed="${i===0}">${p}</button>`).join('')}</div><label class="stage-check"><input data-linked type="checkbox">Alle Phasen gleich</label>${[['intensity','Lichtintensität'],['speed','Bewegung / Tempo'],['movement','Traversenhub'],['pyro','Feuerwerk / Funken'],['fog','Nebel'],['volume','Lautstärke']].map(([id,name])=>`<label>${name}<output data-value="${id}"></output><input data-slider="${id}" type="range" min="0" max="100"></label>`).join('')}<label>Lichtfarbe<input data-show-color type="color"></label><span class="stage-field-label">Deko-Licht</span><div class="stage-deco">${DECO_PATTERNS.map(pattern=>`<button data-deco="${pattern}" aria-pressed="false">${DECO_PATTERN_NAMES[pattern]}</button>`).join('')}</div><label class="stage-check"><input data-band-preview type="checkbox" checked>Auftrittsvorschau</label><div class="stage-pair"><button data-preview>Vorschau pausieren</button><button data-dj aria-pressed="false">DJ Modus</button></div><p>Warm-up: erste 20 % · Main: bis 80 % · Finale: letzte 20 % des Auftritts. Effekte laufen auf der Karte nur bei aktiver, versorgter Bühne.</p><p>Leistungsfähigere Marken steigern Party- und Dekowerte, kosten aber mehr. Hohe Lautstärke erhöht die Wirkung und belastet die ruhige Umgebung.</p></aside></div>
-  <footer><span data-cost></span><button data-build>Für Bühnenbau verwenden</button><button data-apply>Bühne umbauen</button></footer>`
+  const panel=document.createElement('section');panel.className='stage-editor panel';panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',t('Bühnenwerkstatt'))
+  panel.innerHTML=`<header class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 class="panel-header-title">${t('Bühnenwerkstatt')}</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="${t('Bühneneditor schließen')}">×</button></header>
+  <div class="stage-layout"><aside><label>${t('Name')}<input data-name maxlength="60" placeholder="${t('Meine Traumbühne')}"></label><hr class="stage-divider"><label>${t('Gespeicherte Bühnen')}<select data-template><option value="">${t('Neue Bühne')}</option></select></label><div class="stage-actions"><button data-save>${t('Bühne speichern')}</button><button data-load>${tc('verb','Laden')}</button><button data-new>${t('Neu')}</button></div>
+  <h3 class="stage-heading-tight">${t('Größe')}</h3><div class="stage-pair"><label>${t('Breite')}<input data-tiles-width type="number" min="1" max="8"></label><label>${t('Tiefe')}<input data-tiles-depth type="number" min="1" max="8"></label></div><label>${t('Vorplatztiefe')}<input data-forecourt-depth type="number" min="1" max="${MAX_STAGE_FORECOURT_DEPTH}"></label><small>${t('Felder vor der Bühne; werden in Werkstatt und Bauvorschau angezeigt.')}</small><div class="stage-section-header"><h3>${tc('stage','Bauteile')}</h3><div class="stage-section-tools"><button data-undo class="stage-icon-button" ${tip(t('Rückgängig'))}>↩</button><button data-erase aria-pressed="false" class="stage-icon-button" ${tip(t('Löschen-Werkzeug'))}>🗑️</button></div></div><div class="stage-parts">${paletteEntries.map(({id,kind,label,icon,cost,brands})=>`<div class="stage-component"><button data-part="${id}" aria-pressed="false"${brands.length>1?' aria-expanded="false"':''}><img class="stage-part-icon" src="/stage-icons/${icon}.png" alt=""><span>${localize(label)}<small data-part-brand="${id}">${paletteNote(kind,cost)}</small></span></button>${brands.length>1?`<div class="stage-quality panel" data-quality-menu="${id}" hidden>${brands.map(([brand,info])=>`<button data-quality="${brand}" data-quality-part="${id}">${plain(localize(info!.name))}<small>${joinParts(formatMoney(Math.round(cost*info!.cost)),t`Wirkung ×${info!.quality}`)}</small></button>`).join('')}</div>`:''}</div>`).join('')}</div><button data-audience aria-pressed="false">♟ ${t('Zuschauerfläche malen')}</button><small>${joinParts(t('Ganze Kartenfelder'),t('vom Rand aus einen Zugang nach innen anlegen.'))}</small><dl class="stage-hotkeys"><div><dt><kbd>R</kbd></dt><dd>${t('Bauteil drehen')}</dd></div><div><dt><kbd>⇧</kbd><kbd>R</kbd></dt><dd>${t('Zurückdrehen')}</dd></div><div><dt>${kbd('Alt')}</dt><dd>${t('Bodenmontage erzwingen')}</dd></div><div><dt>${t('Rechtsklick')}</dt><dd>${t('auf Bauteil: drehen')}</dd></div><div><dt>${t('Rechtsklick + Ziehen')}</dt><dd>${t('auf Hintergrund: Kamera-Drehpunkt verschieben')}</dd></div><div><dt>${t('Ziehen')}</dt><dd>${t('Kamera drehen')}</dd></div><div><dt>${t('Mausrad')}</dt><dd>${t('Zoom')}</dd></div></dl></aside>
+  <div class="stage-center"><div data-viewport><div class="stage-readout"><dl data-stats></dl><p data-hint aria-live="polite">${t('Wähle ein Bauteil und klicke auf einen Rasterplatz.')}</p></div><label data-color-picker class="stage-color-picker" hidden title="${t('Bauteilfarbe')}">${t('Farbe')}<input data-color type="color" value="#e69759"></label><div data-erase-confirm class="stage-delete-confirm panel" hidden><p data-erase-confirm-text></p><div class="stage-delete-confirm-actions"><button data-confirm-delete>${t('Entfernen')}</button><button data-cancel-delete>${t('Abbrechen')}</button></div></div></div></div>
+  <aside><h3>${t('Showpult')}</h3><div class="stage-phases">${PHASE_NAMES.map((p,i)=>`<button data-phase="${i}" aria-pressed="${i===0}">${localize(p)}</button>`).join('')}</div><label class="stage-check"><input data-linked type="checkbox">${t('Alle Phasen gleich')}</label>${[['intensity',t('Lichtintensität')],['speed',t('Bewegung / Tempo')],['movement',t('Traversenhub')],['pyro',t('Feuerwerk / Funken')],['fog',t('Nebel')],['volume',t('Lautstärke')]].map(([id,name])=>`<label>${name}<output data-value="${id}"></output><input data-slider="${id}" type="range" min="0" max="100"></label>`).join('')}<label>${t('Lichtfarbe')}<input data-show-color type="color"></label><span class="stage-field-label">${t('Deko-Licht')}</span><div class="stage-deco">${DECO_PATTERNS.map(pattern=>`<button data-deco="${pattern}" aria-pressed="false">${localize(DECO_PATTERN_NAMES[pattern])}</button>`).join('')}</div><label class="stage-check"><input data-band-preview type="checkbox" checked>${t('Auftrittsvorschau')}</label><div class="stage-pair"><button data-preview>${t('Vorschau pausieren')}</button><button data-dj aria-pressed="false">${t('DJ Modus')}</button></div><p>${t('Warm-up: erste 20 % · Main: bis 80 % · Finale: letzte 20 % des Auftritts. Effekte laufen auf der Karte nur bei aktiver, versorgter Bühne.')}</p><p>${t('Leistungsfähigere Marken steigern Party- und Dekowerte, kosten aber mehr. Hohe Lautstärke erhöht die Wirkung und belastet die ruhige Umgebung.')}</p></aside></div>
+  <footer><span data-cost></span><button data-build>${t('Für Bühnenbau verwenden')}</button><button data-apply>${t('Bühne umbauen')}</button></footer>`
   document.querySelector('.game-shell')!.append(panel)
   makeDraggable(panel.querySelector<HTMLElement>('.panel-header')!, panel)
   makeResizable(panel)
@@ -72,15 +75,15 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
   const remember=()=>{history.push(structuredClone(design));if(history.length>40)history.shift()}
   const phaseIndex=()=>design.linked?0:phase
   function refresh(){
-    q<HTMLInputElement>('[data-name]').value=design.name;q<HTMLInputElement>('[data-linked]').checked=design.linked
+    q<HTMLInputElement>('[data-name]').value=design.name===DEFAULT_STAGE_DESIGN_NAME?'':design.name;q<HTMLInputElement>('[data-linked]').checked=design.linked
     q<HTMLInputElement>('[data-tiles-width]').value=String(design.tileWidth??1);q<HTMLInputElement>('[data-tiles-depth]').value=String(design.tileDepth??1);q<HTMLInputElement>('[data-forecourt-depth]').value=String(stageForecourtDepth(design))
     const p=design.phases[phaseIndex()]
-    panel.querySelectorAll<HTMLInputElement>('[data-slider]').forEach(input=>{const key=input.dataset.slider as 'intensity';input.value=String(p[key]??0);q(`[data-value=${key}]`).textContent=`${p[key]??0} %`})
+    panel.querySelectorAll<HTMLInputElement>('[data-slider]').forEach(input=>{const key=input.dataset.slider as 'intensity';input.value=String(p[key]??0);q(`[data-value=${key}]`).textContent=formatPercent(p[key]??0)})
     q<HTMLInputElement>('[data-show-color]').value=p.color
     panel.querySelectorAll<HTMLButtonElement>('[data-deco]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.deco===(p.deco??'chase'))))
     const stats=stageStats(design),base=stageId?getGame().snapshot.buildings.find(b=>b.id===stageId)?.stageDesign:undefined
-    q('[data-stats]').innerHTML=[['Baupreis',`${stats.cost} €`],['Unterhalt',`${stats.upkeep} €/h`],['Strom',`${stats.power} kW`],['Party',String(stats.party)],['Umgebung',String(stats.beauty)],['Elemente',String(design.parts.length)]].map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')
-    q('[data-cost]').textContent=stageId?`Umbau: ${Math.max(0,stats.cost-(base?stageStats(base).cost:0))} € · keine Erstattung beim Abbau`:`Neubau: ${BUILDINGS.stage.cost+stats.cost} € gesamt · Vorlage kostenlos`
+    q('[data-stats]').innerHTML=[[t('Baupreis'),formatMoney(stats.cost)],[t('Unterhalt'),t`${formatMoney(stats.upkeep)}/h`],[t('Strom'),`${formatNumber(stats.power)} kW`],[t('Party'),formatNumber(stats.party)],[t('Umgebung'),formatNumber(stats.beauty)],[t('Elemente'),formatNumber(design.parts.length)]].map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')
+    q('[data-cost]').textContent=stageId?joinParts(t`Umbau: ${formatMoney(Math.max(0,stats.cost-(base?stageStats(base).cost:0)))}`,t('keine Erstattung beim Abbau')):joinParts(t`Neubau: ${formatMoney(BUILDINGS.stage.cost+stats.cost)} gesamt`,t('Vorlage kostenlos'))
     panel.querySelectorAll<HTMLButtonElement>('[data-phase]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.phase)===phase)))
     panel.querySelectorAll<HTMLButtonElement>('[data-part]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.part===part&&!erase&&!audienceMode)))
     q('[data-audience]').setAttribute('aria-pressed',String(audienceMode))
@@ -96,7 +99,8 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     if(!pendingDelete)return
     const doomed=design.parts.find(p=>p.id===pendingDelete)
     const count=doomed?design.parts.length-removeStagePart(design,doomed.id).parts.length-1:0
-    q('[data-erase-confirm-text]').textContent=doomed?`${COMPONENTS[doomed.kind].name} entfernen? ${count===1?'1 weiteres Bauteil hängt':`${count} weitere Bauteile hängen`} daran und ${count===1?'wird':'werden'} mit entfernt.`:''
+    const doomedName=doomed?localize(COMPONENTS[doomed.kind].name):''
+    q('[data-erase-confirm-text]').textContent=doomed?plural(count,t`${doomedName} entfernen? ${count} weiteres Bauteil hängt daran und wird mit entfernt.`,t`${doomedName} entfernen? ${count} weitere Bauteile hängen daran und werden mit entfernt.`):''
   }
   function cancelPendingDelete(){if(pendingDelete){pendingDelete=null;refreshDeleteConfirm()}}
   function rebuild(){if(!scene)return;revision++;ghostKey='';if(pickTargets)disposeStageModel(pickTargets);if(model){scene.remove(model);disposeStageModel(model)}model=createStageModel(design,{lightBudget:6})
@@ -176,15 +180,15 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
         if(!audienceCell)return
         const next=structuredClone(design),found=next.audience?.some(c=>c.x===audienceCell!.x&&c.z===audienceCell!.z)
         next.audience=found?(next.audience??[]).filter(c=>c.x!==audienceCell!.x||c.z!==audienceCell!.z):[...(next.audience??[]),{...audienceCell}]
-        const issue=stageDesignIssue(next);if(issue){hint.textContent=issue;return}remember();design=next;rebuild();return
+        const issue=stageDesignIssue(next);if(issue){hint.textContent=localize(issue);return}remember();design=next;rebuild();return
       }
       if(erase){
         if(pendingDelete)return
-        if(!hitId){hint.textContent='Zum Entfernen direkt auf ein Bauteil zeigen.';return}
+        if(!hitId){hint.textContent=t('Zum Entfernen direkt auf ein Bauteil zeigen.');return}
         if(isTruss(design.parts.find(p=>p.id===hitId)?.kind??'')&&design.parts.length-removeStagePart(design,hitId).parts.length>1){pendingDelete=hitId;refreshDeleteConfirm();return}
         remember();design=removeStagePart(design,hitId);rebuild();return
       }
-      if(!candidate||candidateIssue){if(candidateIssue)hint.textContent=candidateIssue;return}
+      if(!candidate||candidateIssue){if(candidateIssue)hint.textContent=localize(candidateIssue);return}
       while(design.parts.some(p=>p.id===`part-${serial+1}`))serial++
       remember();design.parts.push({...candidate,id:`part-${++serial}`});rebuild()
     })
@@ -215,7 +219,7 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
     // and a click lands on nothing (see the placement handler, which needs a candidate).
     if(!kind&&!erase&&!audienceMode){
       candidate=null;candidateIssue=null;hitStep=undefined;audienceCell=null;ghostKey='';clearGhost()
-      hint.textContent=hitPart?COMPONENTS[hitPart.kind].name:'Kein Bauteil gewählt · links eines wählen, um zu bauen'
+      hint.textContent=hitPart?localize(COMPONENTS[hitPart.kind].name):joinParts(t('Kein Bauteil gewählt'),t('links eines wählen, um zu bauen'))
       return
     }
     const canDockOnTruss=!!hitPart&&!!kind&&isTruss(hitPart.kind)&&!GROUND_ONLY_KINDS.includes(kind)
@@ -282,8 +286,17 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
       }
     }
     if(ghost)ghost.visible=true
-    const partLabel=kind?COMPONENTS[kind].name:''
-    hint.textContent=audienceMode?candidateIssue??`Zuschauerfeld ${audienceCell.x+1}, ${audienceCell.z+1} umschalten · Zugang vom Rand freihalten`:erase?(hitPart?`${COMPONENTS[hitPart.kind].name} mit allen getragenen Anbauteilen entfernen`:'Auf ein Bauteil zeigen'):candidateIssue??(candidate?`${partLabel} · ${candidate.attachedTo?`an Traverse andocken (${stepLabel(hitStep??{x:0,y:-1,z:0})})`:'auf dem Boden'} · ${directionLabel(candidate.rotation)} · R dreht`:'')
+    hint.textContent=hoverHint(kind,hitPart,audienceCell)
+  }
+  /** The line under the viewport while the pointer is over the stage: what a click would do, or why it cannot. */
+  function hoverHint(kind:StagePart['kind']|null,hitPart:StagePart|undefined,cell:{x:number;z:number}):string{
+    const issue=candidateIssue===null?null:localize(candidateIssue)
+    if(audienceMode)return issue??joinParts(t`Zuschauerfeld ${String(cell.x+1)}, ${String(cell.z+1)} umschalten`,t('Zugang vom Rand freihalten'))
+    if(erase)return hitPart?t`${localize(COMPONENTS[hitPart.kind].name)} mit allen getragenen Anbauteilen entfernen`:t('Auf ein Bauteil zeigen')
+    if(issue!==null)return issue
+    if(!candidate)return ''
+    const mount=candidate.attachedTo?t`an Traverse andocken (${stepLabel(hitStep??{x:0,y:-1,z:0})})`:t('auf dem Boden')
+    return joinParts(kind?localize(COMPONENTS[kind].name):'',mount,directionLabel(candidate.rotation),t('R dreht'))
   }
   /**
    * The workshop is a build view, not a playback of the show: a pyro fixture would otherwise
@@ -327,31 +340,31 @@ export function mountStageEditor(getGame:()=>GameState,toast:(s:string,error?:bo
       }
       refresh();if(pointer)updateHover(pointer)
     }
-    if(b.dataset.quality){const entryId=b.dataset.qualityPart! as StagePart['kind'];quality[entryId]=b.dataset.quality as StagePart['brand'];part=entryId;hideQuality();const brand=brandOf(entryId,quality[entryId]!);q(`[data-part-brand=${entryId}]`).textContent=`${Math.round(COMPONENTS[entryId].cost*brand.cost)} € · ${brand.name}`;refresh();if(pointer)updateHover(pointer)}
+    if(b.dataset.quality){const entryId=b.dataset.qualityPart! as StagePart['kind'];quality[entryId]=b.dataset.quality as StagePart['brand'];part=entryId;hideQuality();const brand=brandOf(entryId,quality[entryId]!);q(`[data-part-brand=${entryId}]`).textContent=joinParts(formatMoney(Math.round(COMPONENTS[entryId].cost*brand.cost)),localize(brand.name));refresh();if(pointer)updateHover(pointer)}
     if(b.hasAttribute('data-audience')){audienceMode=!audienceMode;erase=false;cancelPendingDelete();hideQuality();refresh();if(pointer)updateHover(pointer)}
     if(b.hasAttribute('data-erase')){erase=!erase;audienceMode=false;cancelPendingDelete();hideQuality();refresh();if(renderer)renderer.domElement.style.cursor=erase?ERASE_CURSOR:'default';if(pointer)updateHover(pointer)}
     if(b.hasAttribute('data-undo')&&history.length){cancelPendingDelete();design=history.pop()!;rebuild()}
     if(b.dataset.phase){phase=Number(b.dataset.phase);refresh()}
     if(b.dataset.deco){design.phases[phaseIndex()].deco=b.dataset.deco as DecoPattern;refresh()}
-    if(b.hasAttribute('data-preview')){preview=!preview;b.textContent=preview?'Vorschau pausieren':'Vorschau abspielen'}
+    if(b.hasAttribute('data-preview')){preview=!preview;b.textContent=preview?t('Vorschau pausieren'):t('Vorschau abspielen')}
     if(b.hasAttribute('data-dj')){djPreview=!djPreview;b.setAttribute('aria-pressed',String(djPreview))}
-    if(b.hasAttribute('data-load')){remember();design=structuredClone(library().find(t=>t.name===q<HTMLSelectElement>('[data-template]').value)??defaultStageDesign());serial+=1000;while(design.parts.some(p=>p.id===`part-${serial+1}`))serial++;rebuild()}
+    if(b.hasAttribute('data-load')){remember();design=structuredClone(library().find(d=>d.name===q<HTMLSelectElement>('[data-template]').value)??defaultStageDesign());serial+=1000;while(design.parts.some(p=>p.id===`part-${serial+1}`))serial++;rebuild()}
     if(b.hasAttribute('data-new')){remember();design=defaultStageDesign();q<HTMLSelectElement>('[data-template]').value='';serial+=1000;while(design.parts.some(p=>p.id===`part-${serial+1}`))serial++;rebuild()}
     const save=b.hasAttribute('data-save'),build=b.hasAttribute('data-build'),apply=b.hasAttribute('data-apply')
     if(save||build||apply){
-      design.name=q<HTMLInputElement>('[data-name]').value.trim()||'Meine Traumbühne'
+      design.name=q<HTMLInputElement>('[data-name]').value.trim()||DEFAULT_STAGE_DESIGN_NAME
       const result=getGame().manageFestival({type:'stageDesign',design:structuredClone(design),stageId:apply?stageId:undefined,saveTemplate:save||build,selectForBuild:build});toast(result.message,!result.ok)
       if(result.ok){
-        if(save||build)try{const saved=library().filter(d=>d.name!==design.name);saved.push(structuredClone(design));localStorage.setItem(templateKey,JSON.stringify(saved.slice(-30)))}catch{hint.textContent='Vorlage im Spielstand gespeichert; lokaler Vorlagenspeicher nicht verfügbar.'}
+        if(save||build)try{const saved=library().filter(d=>d.name!==design.name);saved.push(structuredClone(design));localStorage.setItem(templateKey,JSON.stringify(saved.slice(-30)))}catch{hint.textContent=t('Vorlage im Spielstand gespeichert; lokaler Vorlagenspeicher nicht verfügbar.')}
         refreshTemplates();refresh();if(build){getGame().setTool('stage');close()}}
     }
   })
-  function refreshTemplates(){q<HTMLSelectElement>('[data-template]').innerHTML='<option value="">Neue Bühne</option>'+library().map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('')}
+  function refreshTemplates(){q<HTMLSelectElement>('[data-template]').innerHTML=`<option value="">${t('Neue Bühne')}</option>`+library().map(d=>`<option value="${esc(d.name)}">${esc(localizeName(d.name))}</option>`).join('')}
   panel.addEventListener('change',e=>{
     const input=e.target as HTMLInputElement
-    if(input.matches('[data-tiles-width],[data-tiles-depth],[data-forecourt-depth]')){const tileWidth=Number(q<HTMLInputElement>('[data-tiles-width]').value),tileDepth=Number(q<HTMLInputElement>('[data-tiles-depth]').value),tileHeight=design.tileHeight??STAGE_TILE_HEIGHT,forecourtDepth=Number(q<HTMLInputElement>('[data-forecourt-depth]').value);const next={...design,tileWidth,tileDepth,tileHeight,forecourtDepth,...stageDetailSize(tileWidth,tileDepth,tileHeight)};const issue=stageDesignIssue(next);if(issue){hint.textContent=issue;refresh();return}remember();design=next;rebuild()}
+    if(input.matches('[data-tiles-width],[data-tiles-depth],[data-forecourt-depth]')){const tileWidth=Number(q<HTMLInputElement>('[data-tiles-width]').value),tileDepth=Number(q<HTMLInputElement>('[data-tiles-depth]').value),tileHeight=design.tileHeight??STAGE_TILE_HEIGHT,forecourtDepth=Number(q<HTMLInputElement>('[data-forecourt-depth]').value);const next={...design,tileWidth,tileDepth,tileHeight,forecourtDepth,...stageDetailSize(tileWidth,tileDepth,tileHeight)};const issue=stageDesignIssue(next);if(issue){hint.textContent=localize(issue);refresh();return}remember();design=next;rebuild()}
     if(input.matches('[data-linked]')){remember();design.linked=input.checked;refresh()}
   })
-  panel.addEventListener('input',e=>{const input=e.target as HTMLInputElement;if(input.matches('[data-tiles-width],[data-tiles-depth],[data-forecourt-depth]')&&input.value!==''&&Number.isInteger(Number(input.value))&&Number(input.value)>=Number(input.min)&&Number(input.value)<=Number(input.max)){input.dispatchEvent(new Event('change',{bubbles:true}))}if(input.dataset.slider){const key=input.dataset.slider as 'intensity';design.phases[phaseIndex()][key]=Number(input.value);q(`[data-value=${key}]`).textContent=input.value+' %'}if(input.matches('[data-show-color]'))design.phases[phaseIndex()].color=input.value;if(input.matches('[data-name]'))design.name=input.value})
+  panel.addEventListener('input',e=>{const input=e.target as HTMLInputElement;if(input.matches('[data-tiles-width],[data-tiles-depth],[data-forecourt-depth]')&&input.value!==''&&Number.isInteger(Number(input.value))&&Number(input.value)>=Number(input.min)&&Number(input.value)<=Number(input.max)){input.dispatchEvent(new Event('change',{bubbles:true}))}if(input.dataset.slider){const key=input.dataset.slider as 'intensity';design.phases[phaseIndex()][key]=Number(input.value);q(`[data-value=${key}]`).textContent=formatPercent(Number(input.value))}if(input.matches('[data-show-color]'))design.phases[phaseIndex()].color=input.value;if(input.matches('[data-name]'))design.name=input.value})
   return {isOpen:()=>!panel.hidden,close,open(id?:string){stageId=id;const existing=id?getGame().snapshot.buildings.find(b=>b.id===id)?.stageDesign:undefined;design=structuredClone(existing??defaultStageDesign());history=[];pointer=null;audienceMode=false;erase=false;pendingDelete=null;hideQuality();serial+=1000;while(design.parts.some(p=>p.id===`part-${serial+1}`))serial++;phase=0;panel.hidden=false;q('[data-apply]').hidden=!id;refreshTemplates();if(!renderer)init();rebuild();last=performance.now();cancelAnimationFrame(frame);frame=requestAnimationFrame(animate);syncOpenButton();q<HTMLButtonElement>('[data-close]').focus()}}
 }

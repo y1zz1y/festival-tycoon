@@ -3,9 +3,12 @@
  * achievements are unlocked. Kept in the browser and, for a signed-in player, on the
  * server; both sides merge best-of, so syncing in any order never loses anything.
  *
- * Pure and dependency-free: the server imports it at runtime (Docker ships only
- * `server/` and `dist/`), the client re-exports it from src/game/progress.ts.
+ * Pure and dependency-free apart from the text marker next to it: the server imports
+ * it at runtime (Docker ships only `server/` and `dist/`), the client re-exports it
+ * from src/game/progress.ts. Names and details are canonical German (`de`); the UI
+ * localizes them for display.
  */
+import { de } from './i18nMarker.ts'
 
 export type ScenarioRecord = {
   won: boolean
@@ -26,18 +29,18 @@ export type ProgressRecords = {
 export type AchievementDefinition = { id: string; name: string; detail: string; icon: string }
 
 export const ACHIEVEMENTS: readonly AchievementDefinition[] = [
-  { id: 'firstEdition', name: 'Die erste Ausgabe', detail: 'Eine Festivalausgabe zu Ende gebracht.', icon: '🎪' },
-  { id: 'firstWin', name: 'Erster Sieg', detail: 'Ein Szenario gewonnen.', icon: '🏆' },
-  { id: 'allPresets', name: 'Tourneeprofi', detail: 'Alle eingebauten Szenarien gewonnen.', icon: '🗺️' },
-  { id: 'hardWin', name: 'Harter Hund', detail: 'Ein Szenario auf „Schwer“ gewonnen.', icon: '💪' },
-  { id: 'headliner', name: 'Große Namen', detail: 'Einen Headliner auf die Bühne geholt.', icon: '⭐' },
-  { id: 'allGenres', name: 'Querbeet', detail: 'Alle acht Genres in einer Ausgabe gebucht.', icon: '🎶' },
-  { id: 'crowd1000', name: 'Ausverkauft', detail: '1.000 Anreisen in einer Ausgabe.', icon: '🎟️' },
-  { id: 'happyCrowd', name: 'Wolke sieben', detail: 'Eine Ausgabe mit mindestens 85 % Zufriedenheit.', icon: '😊' },
-  { id: 'bigProfit', name: 'Goldgrube', detail: '25.000 € Gewinn in einer Ausgabe.', icon: '💰' },
-  { id: 'rides', name: 'Rummelplatz', detail: 'Fünf verschiedene Fahrgeschäfte auf einem Gelände.', icon: '🎡' },
-  { id: 'sponsor', name: 'Werbepartner', detail: 'Einen Sponsorvertrag erfüllt.', icon: '🤝' },
-  { id: 'storm', name: 'Sturmfest', detail: 'Ein Unwetter ohne Verletzte überstanden.', icon: '⛈️' },
+  { id: 'firstEdition', name: de('Die erste Ausgabe'), detail: de('Eine Festivalausgabe zu Ende gebracht.'), icon: '🎪' },
+  { id: 'firstWin', name: de('Erster Sieg'), detail: de('Ein Szenario gewonnen.'), icon: '🏆' },
+  { id: 'allPresets', name: de('Tourneeprofi'), detail: de('Alle eingebauten Szenarien gewonnen.'), icon: '🗺️' },
+  { id: 'hardWin', name: de('Harter Hund'), detail: de('Ein Szenario auf „Schwer“ gewonnen.'), icon: '💪' },
+  { id: 'headliner', name: de('Große Namen'), detail: de('Einen Headliner auf die Bühne geholt.'), icon: '⭐' },
+  { id: 'allGenres', name: de('Querbeet'), detail: de('Alle acht Genres in einer Ausgabe gebucht.'), icon: '🎶' },
+  { id: 'crowd1000', name: de('Ausverkauft'), detail: de('1.000 Anreisen in einer Ausgabe.'), icon: '🎟️' },
+  { id: 'happyCrowd', name: de('Wolke sieben'), detail: de('Eine Ausgabe mit mindestens 85 % Zufriedenheit.'), icon: '😊' },
+  { id: 'bigProfit', name: de('Goldgrube'), detail: de('25.000 € Gewinn in einer Ausgabe.'), icon: '💰' },
+  { id: 'rides', name: de('Rummelplatz'), detail: de('Fünf verschiedene Fahrgeschäfte auf einem Gelände.'), icon: '🎡' },
+  { id: 'sponsor', name: de('Werbepartner'), detail: de('Einen Sponsorvertrag erfüllt.'), icon: '🤝' },
+  { id: 'storm', name: de('Sturmfest'), detail: de('Ein Unwetter ohne Verletzte überstanden.'), icon: '⛈️' },
 ]
 
 export const ACHIEVEMENT_IDS: readonly string[] = ACHIEVEMENTS.map((achievement) => achievement.id)

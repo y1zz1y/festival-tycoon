@@ -2,8 +2,32 @@ import { difficultyOf, isDifficulty } from '../game/difficulty'
 import { ENVIRONMENTS, type Environment } from '../game/environments'
 import type { GameState } from '../game/GameState'
 import { SCENARIO_WORLD_SIZES, normalizeScenarioSettings, type ScenarioSettings } from '../game/scenario'
-import { goalName, scenarioSummary as goalTally } from '../game/scenarioGoals'
-import { scenarioPreset } from '../game/scenarioPresets'
+import { goalWithDeadline } from '../game/scenarioGoalText'
+import { scenarioSummary as goalTally } from '../game/scenarioGoals'
+import { SCENARIO_PRESETS, scenarioPreset, type ScenarioPreset } from '../game/scenarioPresets'
+import { formatMoney, formatPercent, joinParts, localize, t, tc } from '../i18n'
+
+/**
+ * Name or briefing of a preset as shown. Built-in presets are canonical German and are
+ * translated; a scenario from a file is shared content and stays as written.
+ */
+export function presetText(preset: ScenarioPreset, text: string): string {
+  return SCENARIO_PRESETS.includes(preset) ? localize(text) : text
+}
+
+/** The running scenario's name as the player sees it. */
+export function scenarioDisplayName(settings: Pick<ScenarioSettings, 'authoring' | 'preset' | 'title'>): string {
+  if (settings.authoring) return t('Szenario-Editor')
+  const preset = scenarioPreset(settings.preset)
+  if (preset) return presetText(preset, preset.name)
+  return settings.title ?? t('Freies Spiel')
+}
+
+function unevennessWord(percent: number): string {
+  if (percent === 0) return t('Flach')
+  if (percent <= 30) return t('Sanft gewellt')
+  return percent <= 65 ? t('Hügelig') : t('Stark hügelig')
+}
 
 export function createScenarioFormController(getGame: () => GameState) {
   const scenarioCarShare = document.querySelector<HTMLInputElement>('#scenario-car-share')!
@@ -86,26 +110,25 @@ export function createScenarioFormController(getGame: () => GameState) {
    */
   function updateSummary(): void {
     const settings = getGame().snapshot.scenario
-    const preset = scenarioPreset(settings.preset)
     const goals = settings.goals
     const rows: [string, string][] = [
-      ['Szenario', settings.authoring ? 'Szenario-Editor' : (preset?.name ?? settings.title ?? 'Freies Spiel')],
-      ['Umgebung', ENVIRONMENTS[settings.environment].name],
-      ['Kartengröße', `${settings.worldSize}×${settings.worldSize}`],
-      ['Unebenheit', `${Math.round(settings.unevenness * 100)} %`],
-      ['Autobesucher', `${Math.round(settings.carArrivalShare * 100)} %`],
-      ['Party-Affinität', `${Math.round(settings.partyAffinity * 100)} %`],
-      ['Schönheits-Affinität', `${Math.round(settings.beautyAffinity * 100)} %`],
-      ['Gewaltbereitschaft', `${Math.round(settings.aggressiveShare * 100)} %`],
-      ['Startkapital', `${settings.startingMoney.toLocaleString('de-DE')} €`],
+      [t('Szenario'), scenarioDisplayName(settings)],
+      [t('Umgebung'), localize(ENVIRONMENTS[settings.environment].name)],
+      [t('Kartengröße'), `${settings.worldSize}×${settings.worldSize}`],
+      [t('Unebenheit'), formatPercent(Math.round(settings.unevenness * 100))],
+      [t('Autobesucher'), formatPercent(Math.round(settings.carArrivalShare * 100))],
+      [t('Party-Affinität'), formatPercent(Math.round(settings.partyAffinity * 100))],
+      [t('Schönheits-Affinität'), formatPercent(Math.round(settings.beautyAffinity * 100))],
+      [t('Gewaltbereitschaft'), formatPercent(Math.round(settings.aggressiveShare * 100))],
+      [t('Startkapital'), formatMoney(settings.startingMoney)],
     ]
-    if (settings.startingLoan > 0) rows.push(['Startdarlehen', `${settings.startingLoan.toLocaleString('de-DE')} €`])
+    if (settings.startingLoan > 0) rows.push([t('Startdarlehen'), formatMoney(settings.startingLoan)])
     if (goals.length) {
       const progress = getGame().snapshot.scenarioProgress
       const outcome = progress.outcome.state
-      rows.push(['Ziele', goals.map((goal) => `${goalName(goal)} bis zur ${goal.edition}. Ausgabe`).join(' · ')])
-      rows.push(['Stand', outcome === 'won' ? 'Geschafft' : outcome === 'lost' ? 'Gescheitert' : `${goalTally(getGame().snapshot).done} von ${goals.length} Zielen erreicht`])
-      if (outcome === 'running' && progress.nextEditionDue !== null) rows.push(['Nächste Ausgabe', `fällig ab Tag ${progress.nextEditionDue}`])
+      rows.push([t('Ziele'), joinParts(...goals.map(goalWithDeadline))])
+      rows.push([tc('status', 'Stand'), outcome === 'won' ? t('Geschafft') : outcome === 'lost' ? t('Gescheitert') : t`${goalTally(getGame().snapshot).done} von ${goals.length} Zielen erreicht`])
+      if (outcome === 'running' && progress.nextEditionDue !== null) rows.push([t('Nächste Ausgabe'), t`fällig ab Tag ${progress.nextEditionDue}`])
     }
     scenarioSummary.innerHTML = rows
       .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
@@ -113,13 +136,14 @@ export function createScenarioFormController(getGame: () => GameState) {
   }
   
   function updateLabels(): void {
-    scenarioGroundDetails.textContent = ENVIRONMENTS[scenarioEnvironment.value as Environment].detail
-    scenarioUnevennessValue.textContent = `${scenarioUnevenness.value} % · ${Number(scenarioUnevenness.value) === 0 ? 'Flach' : Number(scenarioUnevenness.value) <= 30 ? 'Sanft gewellt' : Number(scenarioUnevenness.value) <= 65 ? 'Hügelig' : 'Stark hügelig'}`
+    scenarioGroundDetails.textContent = localize(ENVIRONMENTS[scenarioEnvironment.value as Environment].detail)
+    const unevenness = Number(scenarioUnevenness.value)
+    scenarioUnevennessValue.textContent = joinParts(formatPercent(unevenness), unevennessWord(unevenness))
     scenarioCarValue.textContent = `${scenarioCarShare.value}%`
     scenarioPartyValue.textContent = `${scenarioParty.value}%`
     scenarioBeautyValue.textContent = `${scenarioBeauty.value}%`
     scenarioAggressionValue.textContent = `${scenarioAggression.value}%`
-    scenarioMoneyValue.textContent = `${Number(scenarioMoney.value).toLocaleString('de-DE')} €`
+    scenarioMoneyValue.textContent = formatMoney(Number(scenarioMoney.value))
   }
   
   

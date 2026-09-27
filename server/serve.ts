@@ -10,6 +10,7 @@ import { handleSaveRequest } from './saveSlots.ts'
 import { handleProgressRequest } from './progress.ts'
 import { handleAccountRequest } from './accounts.ts'
 import { handleScenarioRequest } from './scenarios.ts'
+import { de } from './i18nMarker.ts'
 
 const PORT = Number(process.env.PORT || 8080)
 const HOST = process.env.HOST || '0.0.0.0'
@@ -65,7 +66,7 @@ const server = createServer((request, response) => {
       return
     }
     response.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-    response.end(JSON.stringify({ error: 'Spielserver-Fehler' }))
+    response.end(JSON.stringify({ error: de('Spielserver-Fehler') }))
   })
 })
 
@@ -79,7 +80,7 @@ async function serve(request: Parameters<typeof handleSaveRequest>[0], response:
   const fallback = file ?? (await existingFile(join(DIST, 'index.html')))
   if (!fallback) {
     response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
-    response.end('Not found')
+    response.end('Not found') // i18n-ignore: plain HTTP body for a missing file, never shown in the game
     return
   }
   const hashedAsset = /[.-][A-Za-z0-9_-]{8,}\.(js|css)$/.test(fallback)

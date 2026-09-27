@@ -1,16 +1,29 @@
 import type { GameState, GameSnapshot } from './game/GameState'
 import { STAFF_DEFINITIONS, SWEEPER_STAFF_ICON, sweeperStaffName } from './game/staff'
-import { describeRoadVehicleActivity } from './game/logistics'
+import { describeRoadVehicleActivity } from './game/logisticsText'
 import { zoneKey, zonePaintActive } from './game/staffZones'
 import type { WorldView } from './view/WorldView'
 import { makeDraggable, makeResizable } from './dragPanel'
 import { toUiPx } from './ui/uiScale'
+import { formatMoney, joinParts, localize, localizeName, t } from './i18n'
+
+type StaffState = 'patrolling' | 'responding' | 'working' | 'carrying' | 'stationed'
+
+function stateLabel(state: StaffState): string {
+  return { patrolling: t('Kontrollgang'), responding: t('Auf dem Weg zum Einsatz'), working: t('Arbeitet'), carrying: t('Transportiert'), stationed: t('An Sicherheitskontrolle') }[state]
+}
+
+/** `x, z bis x, z` for a drawn rectangle, with the label in front of it. */
+function areaText(label: 'area' | 'work', from: { x: number; z: number }, to: { x: number; z: number }): string {
+  const [x1, z1, x2, z2] = [from.x, from.z, to.x, to.z].map(String)
+  return label === 'area' ? t`Bereich: ${x1}, ${z1} bis ${x2}, ${z2}` : t`Arbeitsbereich: ${x1}, ${z1} bis ${x2}, ${z2}`
+}
 
 export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(message:string,error?:boolean)=>void, release:()=>void) {
   let selected:string|null=null, following=false, drawing=false, zoneEditing=false, grabbing=false, previewMode:'map'|'front'='map'
   let zonePaint: { active: boolean; lastKey: string | null } | null = null
   const panel=document.createElement('aside');panel.className='panel staff-details';panel.hidden=true
-  panel.innerHTML='<div class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 class="panel-header-title" data-name>Personal</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="Personalinfo schließen">×</button></div><nav class="person-preview-modes" aria-label="Ansicht"><button type="button" data-preview-mode="map" aria-pressed="true">Karte</button><button type="button" data-preview-mode="front" aria-pressed="false">Person</button></nav><div class="staff-minimap-row"><div class="staff-minimap"><canvas data-minimap></canvas></div><div class="staff-minimap-controls"><button data-zoom-in aria-label="Ansicht vergrößern">+</button><button data-zoom-out aria-label="Ansicht verkleinern">−</button><button data-grab aria-label="Personal greifen und platzieren">✋</button></div></div><p data-state></p><p data-load></p><p data-area></p><p data-zones hidden></p><button data-follow>Folgen</button><button data-manage-zones>Bereiche verwalten</button><button data-area-draw>Arbeitsbereich ziehen</button><button data-area-clear>Gesamtes Gelände</button><button data-fire-member>Entlassen</button>'
+  panel.innerHTML=`<div class="panel-header"><span class="panel-drag-line" aria-hidden="true"></span><h2 class="panel-header-title" data-name>${t('Personal')}</h2><span class="panel-drag-line" aria-hidden="true"></span><button data-close class="panel-close-button" aria-label="${t('Personalinfo schließen')}">×</button></div><nav class="person-preview-modes" aria-label="${t('Ansicht')}"><button type="button" data-preview-mode="map" aria-pressed="true">${t('Karte')}</button><button type="button" data-preview-mode="front" aria-pressed="false">${t('Person')}</button></nav><div class="staff-minimap-row"><div class="staff-minimap"><canvas data-minimap></canvas></div><div class="staff-minimap-controls"><button data-zoom-in aria-label="${t('Ansicht vergrößern')}">+</button><button data-zoom-out aria-label="${t('Ansicht verkleinern')}">−</button><button data-grab aria-label="${t('Personal greifen und platzieren')}">✋</button></div></div><p data-state></p><p data-load></p><p data-area></p><p data-zones hidden></p><button data-follow>${t('Folgen')}</button><button data-manage-zones>${t('Bereiche verwalten')}</button><button data-area-draw>${t('Arbeitsbereich ziehen')}</button><button data-area-clear>${t('Gesamtes Gelände')}</button><button data-fire-member>${t('Entlassen')}</button>`
   document.querySelector('.game-shell')!.append(panel)
   view.mountMinimap(panel.querySelector<HTMLCanvasElement>('[data-minimap]')!)
   makeDraggable(panel.querySelector<HTMLElement>('.panel-header')!, panel)
@@ -110,7 +123,7 @@ export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(
   panel.querySelector('[data-area-draw]')!.addEventListener('click',()=>{
     release();getGame().setTool('inspect');drawing=true
     view.setGroundAreaTool((from,to,preview)=>{
-      panel.querySelector('[data-area]')!.textContent=`Bereich: ${from.x}, ${from.z} bis ${to.x}, ${to.z}`
+      panel.querySelector('[data-area]')!.textContent=areaText('area',from,to)
       if(!preview){cancel();action(from,to)}
     })
   })
@@ -120,7 +133,7 @@ export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(
     const carrier=s.festival.infrastructure.routes.find(r=>r.id===selected)
     const sweeper=s.logistics.roadVehicles.find(vehicle=>vehicle.id===selected && vehicle.kind==='sweeper')
     const member=s.staff.find(p=>p.id===selected) ?? (sweeper ? {
-      name:sweeperStaffName(sweeper.id),
+      name:localizeName(sweeperStaffName(sweeper.id)),
       role:'cleaner' as const,
       state:'patrolling' as const,
       cellX:sweeper.cell?.x ?? sweeper.position.x,
@@ -128,16 +141,16 @@ export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(
       carryingWaste:sweeper.cargo,
       workZones:sweeper.workZones,
       workArea:undefined,
-    } : (carrier ? {name:'Träger mit Handkarren',role:null,state:'carrying' as const,cellX:carrier.position.x,cellZ:carrier.position.z,carryingWaste:0,workArea:carrier.workArea} : null))
+    } : (carrier ? {name:t('Träger mit Handkarren'),role:null,state:'carrying' as const,cellX:carrier.position.x,cellZ:carrier.position.z,carryingWaste:0,workArea:carrier.workArea} : null))
     if(!member){close();return}
     const isStaff=!!member.role
     const isSweeper=!!sweeper
     view.showStaffArea(isStaff?null:member.workArea??null)
-    panel.querySelector('[data-name]')!.textContent=`${isSweeper ? SWEEPER_STAFF_ICON : member.role ? STAFF_DEFINITIONS[member.role].icon : '📦'} ${member.name}`
-    panel.querySelector('[data-state]')!.textContent=`${isSweeper ? describeRoadVehicleActivity(sweeper) : {patrolling:'Kontrollgang',responding:'Auf dem Weg zum Einsatz',working:'Arbeitet',carrying:'Transportiert',stationed:'An Sicherheitskontrolle'}[member.state]} · Feld ${member.cellX}, ${member.cellZ}`
+    panel.querySelector('[data-name]')!.textContent=`${isSweeper ? SWEEPER_STAFF_ICON : member.role ? STAFF_DEFINITIONS[member.role].icon : '📦'} ${member.role && !isSweeper ? localizeName(member.name) : member.name}`
+    panel.querySelector('[data-state]')!.textContent=joinParts(isSweeper ? describeRoadVehicleActivity(sweeper) : stateLabel(member.state), t`Feld ${String(member.cellX)}, ${String(member.cellZ)}`)
     panel.querySelector('[data-load]')!.textContent=isSweeper
-      ? `Reinigungskraft · Saugroboter · Müllladung ${sweeper.cargo}`
-      : carrier ? `${carrier.status} · Ladung ${carrier.cargo}` : `Müllladung: ${member.carryingWaste} · Lohn ${STAFF_DEFINITIONS[member.role!].hourlyWage} €/h`
+      ? joinParts(t('Reinigungskraft'), t('Saugroboter'), t`Müllladung ${sweeper.cargo}`)
+      : carrier ? joinParts(localize(carrier.status), t`Ladung ${carrier.cargo}`) : joinParts(t`Müllladung: ${member.carryingWaste}`, t`Lohn ${formatMoney(STAFF_DEFINITIONS[member.role!].hourlyWage)}/h`)
     panel.querySelector<HTMLElement>('[data-area]')!.hidden=isStaff
     panel.querySelector<HTMLElement>('[data-area-draw]')!.hidden=isStaff
     panel.querySelector<HTMLElement>('[data-area-clear]')!.hidden=isStaff
@@ -145,14 +158,14 @@ export function mountStaffDetails(getGame:()=>GameState, view:WorldView, toast:(
     panel.querySelector<HTMLElement>('[data-manage-zones]')!.hidden=!isStaff
     panel.querySelector<HTMLElement>('[data-grab]')!.hidden=!isStaff || isSweeper
     panel.querySelector<HTMLElement>('[data-fire-member]')!.hidden=!isStaff
-    panel.querySelector('[data-fire-member]')!.textContent=isSweeper?'Verkaufen':'Entlassen'
+    panel.querySelector('[data-fire-member]')!.textContent=isSweeper?t('Verkaufen'):t('Entlassen')
     if(isStaff){
       const zoneCount=('workZones' in member ? member.workZones?.length : 0)??0
-      panel.querySelector('[data-zones]')!.textContent=zoneCount?`Bereiche: ${zoneCount} zugewiesen`:'Kein Bereich zugewiesen'
-      panel.querySelector('[data-manage-zones]')!.textContent=zoneEditing?'Fertig':'Bereiche verwalten'
+      panel.querySelector('[data-zones]')!.textContent=zoneCount?t`Bereiche: ${zoneCount} zugewiesen`:t('Kein Bereich zugewiesen')
+      panel.querySelector('[data-manage-zones]')!.textContent=zoneEditing?t('Fertig'):t('Bereiche verwalten')
       panel.querySelector('[data-grab]')!.setAttribute('aria-pressed',String(grabbing))
-    } else if(!drawing)panel.querySelector('[data-area]')!.textContent=member.workArea?`Arbeitsbereich: ${member.workArea.minX}, ${member.workArea.minZ} bis ${member.workArea.maxX}, ${member.workArea.maxZ}`:'Arbeitsbereich: gesamtes Gelände'
-    panel.querySelector('[data-follow]')!.textContent=following?'Verfolgen beenden':'Folgen'
+    } else if(!drawing)panel.querySelector('[data-area]')!.textContent=member.workArea?areaText('work',{x:member.workArea.minX,z:member.workArea.minZ},{x:member.workArea.maxX,z:member.workArea.maxZ}):t('Arbeitsbereich: gesamtes Gelände')
+    panel.querySelector('[data-follow]')!.textContent=following?t('Verfolgen beenden'):t('Folgen')
   }
   return {update,open,close}
 }

@@ -1,5 +1,6 @@
 import { listenerFromCamera, type AudioListenerPose } from '../game/audio'
 import { FacadeReveal } from './facadeReveal'
+import { formatMoney } from '../i18n/format'
 import { isDecorationCatalogKind } from '../game/decoration'
 import { createWayStructure, indexWayStructures, wayStructurePlan, type WayStructureCell } from './wayStructures'
 import { pathFurnitureRotation } from '../game/pathFurniture'
@@ -22,9 +23,11 @@ import {
   accessIdFromObject,
   buildingIdFromObject,
   cellFromWorldPoint,
+  instanceOwnerId,
   isVisibleInScene,
   resolvePickedBuilding,
 } from './picking'
+import { CrewInstances } from './crewInstances'
 import { createAttractionAccess } from './attractionAccess'
 import type { AccessKind, AccessTheme } from './attractionAccess'
 import { bindTouchCamera } from './touchCamera'
@@ -37,6 +40,7 @@ import { FestivalLightsView } from './FestivalLightsView'
 import { AccessControlView } from './AccessControlView'
 import { CourseView } from './CourseView'
 import { AttractionView } from './AttractionView'
+import { crowdRiderIds, legacyAttractionIds } from '../game/attractions/dualModel'
 import { createRoadDirectionArrowGeometry } from './roadDirectionArrow'
 import { wayDeckGeometry, wayDeckMaterial } from './wayTextures'
 import { ICON_IDS, iconTexture, type IconId } from './spriteAtlas'
@@ -115,7 +119,7 @@ import {
   type TrackPieceKind,
 } from '../game/coasters'
 import { createBungeeModel, animateBungee, setBungeeJumper } from './bungee'
-import { createNudeAnatomy, createPersonGeometry, PersonDetailsView, personSeed, personStyle } from './pixelPeople'
+import { composeLimb, createNudeAnatomy, createPersonGeometry, PersonDetailsView, personSeed, personStyle } from './pixelPeople'
 import { visitorDancePhase, visitorDancePose } from './visitorDance'
 import { SouvenirPropsView } from './souvenirMeshes'
 import { mascotVariant } from '../game/shopGoods'
@@ -495,7 +499,9 @@ export class WorldView {
   private fireworksView = new FireworksView()
   private crowdingView = new CrowdingView()
   private panicView = new PanicView()
-  private staffView = new StaffView()
+  /** Staff and carriers: one set of instanced batches for both, filled every frame. */
+  private crew = new CrewInstances()
+  private staffView = new StaffView(this.crew)
   private medicalView = new MedicalView()
   private wasteView = new WasteView()
   private incidentView = new IncidentView()
@@ -509,8 +515,10 @@ export class WorldView {
   private logisticsView = new LogisticsView()
   private courseView = new CourseView()
   private attractionView = new AttractionView()
+  /** Rebuilt when the snapshot data changes, read by the per-frame rider set. */
+  private legacyRecordIds: ReadonlySet<string> = new Set()
   private accessControlView = new AccessControlView()
-  private supplyChainView = new SupplyChainView()
+  private supplyChainView = new SupplyChainView(this.crew)
   private logisticsMode = false
   private previousOverlays = [false, false, false]
   setLogisticsMode(enabled: boolean): void {
@@ -538,7 +546,6 @@ export class WorldView {
   private visitorPenisInstances: InstancedMesh | null = null
   private visitorPickMeshes: InstancedMesh[] = []
   private visitorPose = new Object3D()
-  private visitorLimb = new Object3D()
   private visitorMatrix = new Matrix4()
   private visitorHiddenMatrix = new Matrix4().makeScale(0, 0, 0)
   private visitorColor = new Color()
@@ -564,6 +571,16 @@ export class WorldView {
   })
   private visitorLegMaterial = new MeshStandardMaterial({
     color: 0x31445b,
+    roughness: 0.9,
+  })
+  private visitorShirtMaterial = new MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.8,
+  })
+  private visitorPantMaterial = new MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
     roughness: 0.9,
   })
   private handcartBodyGeometry = new BoxGeometry(0.25, 0.13, 0.32)
@@ -904,7 +921,7 @@ export class WorldView {
       this.pathFlowView.group,
       this.pathGraphView.group,
       this.incidentView.group,
-      this.staffView.group,
+      this.crew.group,
       this.forecourtView.group,
       this.backstageView.group,
       this.bandActorView.group,
@@ -1013,6 +1030,10 @@ export class WorldView {
     if (dataChanged) this.wasteView.update(snapshot.wasteDumpCells ?? [], this.wasteBins)
     if (dataChanged) this.pathFlowView.update(snapshot.buildings)
     this.incidentView.update(snapshot.incidents)
+    // Staff and carriers refill the shared crew batches every frame; closed below,
+    // after the carriers, and before the person previews render the scene.
+    this.crew.begin()
+    this.staffView.setVisible(!this.logisticsMode)
     this.staffView.update(snapshot.staff, this.renderAlpha, snapshot.simTick, this.actorTerrainHeight)
     if (dataChanged) this.forecourtView.update(snapshot, snapshot.stageForecourtCells)
     if (dataChanged) {
@@ -1032,14 +1053,8 @@ export class WorldView {
     if (dataChanged) this.logisticsView.setStructurePaths(snapshot.buildings.filter(b => b.kind === 'path').map(b => ({ x:b.x, z:b.z, elevation:b.elevation, slope:b.pathSlope ?? 0, direction:b.pathSlopeDirection ?? 0, road:false })))
     if (dataChanged) this.courseView.update(snapshot.courses ?? [], snapshot.visitors, snapshot.simTick)
     if (dataChanged) {
-      this.attractionView.update(
-        snapshot.attractions,
-        new Set([
-          ...snapshot.coasters.map((coaster) => coaster.id),
-          ...snapshot.courses.map((course) => course.id),
-          ...snapshot.buildings.filter((building) => building.kind === 'ride').map((building) => building.id),
-        ]),
-      )
+      this.legacyRecordIds = legacyAttractionIds(snapshot)
+      this.attractionView.update(snapshot.attractions, this.legacyRecordIds)
     }
     this.logisticsView.update(snapshot.logistics, (x, z) =>
       getTerrainHeight(snapshot.terrain, x, z),
@@ -1048,6 +1063,7 @@ export class WorldView {
       snapshot.speed === 0,
       undefined,
       this.logisticsMode || isRoadBuildTool(snapshot.selectedTool),
+      dataChanged,
     )
     this.accessControlView.update(
       snapshot.accessControls ?? { trafficLights: [], pathBarriers: [] },
@@ -1108,8 +1124,8 @@ export class WorldView {
     if (dataChanged) this.supplyChainView.update(snapshot, this.logisticsMode, this.terrainShape ?? undefined)
     this.supplyChainView.animate(snapshot.speed === 0, undefined, this.actorTerrainHeight)
     this.supplyChainView.faceCamera(this.camera.quaternion)
+    this.crew.finish()
     this.visitors.visible = !this.logisticsMode
-    this.staffView.group.visible = !this.logisticsMode
     this.coasterTrains.visible = !this.logisticsMode
     this.cashEffects.visible = !this.logisticsMode
     if (!this.logisticsMode) {
@@ -1130,7 +1146,7 @@ export class WorldView {
     // compiled, against the scene's lights: a whole-scene compile walks every
     // material and cost ~120 ms each time a vehicle arrived or left at 8×.
     const population: [string, Object3D][] = [
-      [`${snapshot.staff.length}`, this.staffView.group],
+      [`${snapshot.staff.length}`, this.crew.group],
       [`${snapshot.visitors.length > 0}`, this.visitors],
       [`${snapshot.logistics.roadVehicles.length}`, this.logisticsView.getVehiclePickRoot()],
       [`${snapshot.festival.infrastructure.routes.length}`, this.supplyChainView.group],
@@ -1333,6 +1349,8 @@ export class WorldView {
       this.visitorPenisGeometry,
       this.visitorSkinMaterial,
       this.visitorLegMaterial,
+      this.visitorShirtMaterial,
+      this.visitorPantMaterial,
       this.handcartBodyGeometry,
       this.handcartGearGeometry,
       this.handcartWheelGeometry,
@@ -3155,20 +3173,11 @@ export class WorldView {
     for (const vehicle of this.currentSnapshot?.logistics.roadVehicles ?? []) {
       for (const passengerId of vehicle.passengerIds) hiddenPassengers.add(passengerId)
     }
-    const courseRiders = new Set(
-      [
-        ...(this.currentSnapshot?.courses ?? []).flatMap((course) =>
-          course.riders.map((rider) => rider.visitorId),
-        ),
-        ...(this.currentSnapshot?.attractions ?? []).flatMap((attraction) =>
-          attraction.runtime.kind === 'course'
-            ? attraction.runtime.riders.map((rider) => rider.visitorId)
-            : attraction.runtime.kind === 'scriptedRide'
-              ? attraction.runtime.occupantIds
-              : [],
-        ),
-      ],
-    )
+    // Live course riders plus riders of records no live system owns; a
+    // projection record's riders are a stale copy (`crowdRiderIds`).
+    const courseRiders = this.currentSnapshot
+      ? crowdRiderIds(this.currentSnapshot, this.legacyRecordIds)
+      : new Set<string>()
 
     visitors.forEach((visitor, index) => {
       const previous = this.previousVisitorPositions.get(visitor.id)
@@ -3391,15 +3400,8 @@ export class WorldView {
       }
       if (visitor.heldMascot && !streaking) {
         const shoulder = appearance.female ? 0.11 : 0.128
-        this.visitorLimb.position.set(shoulder, 0.485, 0)
-        this.visitorLimb.rotation.set(rightArmX, 0, rightArmZ)
-        this.visitorLimb.scale.set(1, 1, 1)
-        this.visitorLimb.updateMatrix()
-        this.visitorMatrix.multiplyMatrices(this.visitorPose.matrix, this.visitorLimb.matrix)
-        this.visitorLimb.position.set(0, -0.175, 0.03)
-        this.visitorLimb.rotation.set(0, 0, 0)
-        this.visitorLimb.updateMatrix()
-        this.visitorMatrix.multiplyMatrices(this.visitorMatrix, this.visitorLimb.matrix)
+        composeLimb(this.visitorMatrix, this.visitorPose.matrix, shoulder, 0.485, 0, rightArmX, 0, rightArmZ)
+        composeLimb(this.visitorMatrix, this.visitorMatrix, 0, -0.175, 0.03)
         this.souvenirProps.placeMascot(this.visitorMatrix, mascotVariant(seed))
       }
       if (appearance.female) {
@@ -3457,6 +3459,9 @@ export class WorldView {
       mesh.count = used
       mesh.instanceMatrix.needsUpdate = true
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+      // Raycasts compute the bounds lazily and keep them: without this reset a
+      // visitor who walked outside the first click's sphere could not be picked.
+      mesh.boundingSphere = null
     })
     for (const batch of this.emotionInstances.values()) batch.instanceMatrix.needsUpdate = true
     for (let index = cartIndex; index < this.visitorHandcarts.length; index += 1) {
@@ -3476,12 +3481,7 @@ export class WorldView {
     swingZ = 0,
   ): void {
     if (!mesh) return
-    this.visitorLimb.position.set(x, y, z)
-    this.visitorLimb.rotation.set(swingX, swingY, swingZ)
-    this.visitorLimb.scale.set(1, 1, 1)
-    this.visitorLimb.updateMatrix()
-    this.visitorMatrix.multiplyMatrices(this.visitorPose.matrix, this.visitorLimb.matrix)
-    mesh.setMatrixAt(index, this.visitorMatrix)
+    mesh.setMatrixAt(index, composeLimb(this.visitorMatrix, this.visitorPose.matrix, x, y, z, swingX, swingY, swingZ))
     mesh.setColorAt(index, color)
   }
 
@@ -3505,18 +3505,9 @@ export class WorldView {
       this.visitors.add(instanced)
       return instanced
     }
-    const shirtMaterial = new MeshStandardMaterial({
-      color: 0xffffff,
-      vertexColors: true,
-      roughness: 0.8,
-    })
-    shirtMaterial.userData.shared = true
-    const pantMaterial = new MeshStandardMaterial({
-      color: 0xffffff,
-      vertexColors: true,
-      roughness: 0.9,
-    })
-    pantMaterial.userData.shared = true
+    // Growing the crowd reuses the materials; it used to leak two per growth.
+    const shirtMaterial = this.visitorShirtMaterial
+    const pantMaterial = this.visitorPantMaterial
     this.visitorBodyInstances = create(this.visitorBodyGeometry, shirtMaterial)
     this.visitorFemaleBodyInstances = create(this.visitorFemaleBodyGeometry, shirtMaterial)
     this.visitorHeadInstances = create(this.visitorHeadGeometry, this.visitorSkinMaterial)
@@ -3606,9 +3597,11 @@ export class WorldView {
       context.textBaseline = 'middle'
       context.lineWidth = 9
       context.strokeStyle = 'rgba(17, 48, 29, 0.9)'
-      context.strokeText(`+${amount.toLocaleString('de-DE')} €`, 128, 48)
+      // One locale per page load, so the amount-keyed texture cache stays valid.
+      const label = `+${formatMoney(amount)}`
+      context.strokeText(label, 128, 48)
       context.fillStyle = '#75f09a'
-      context.fillText(`+${amount.toLocaleString('de-DE')} €`, 128, 48)
+      context.fillText(label, 128, 48)
     }
     const texture = new CanvasTexture(canvas)
     texture.colorSpace = SRGBColorSpace
@@ -3735,8 +3728,8 @@ export class WorldView {
       if (event.button === 0 && moved < 5 && !this.painting && !(event.pointerType === 'touch' && this.touchPanMode)) {
         this.setRayFromPointer(event)
         const inspecting = this.currentSnapshot?.selectedTool === 'inspect'
-        const staffHit = inspecting ? this.raycaster.intersectObjects([...(this.staffView.group.visible?this.staffView.group.children:[]),...this.supplyChainView.getStaffMeshes()],true)[0] : undefined
-        const staffId = staffHit?.object.userData.staffId
+        // Staff (not written in the logistics view) and porters share the crew batches.
+        const staffId = inspecting ? this.crew.pick(this.raycaster) : undefined
         const visitorId = inspecting ? this.pickVisitor(event) : null
         const vehicleId = inspecting ? this.pickVehicle() : null
         const accessId = inspecting ? this.pickAccessControl() : null
@@ -4007,7 +4000,7 @@ export class WorldView {
     )
     for (const hit of hits) {
       if (hit.object.userData.facade && this.facadeReveal?.isClickThrough(hit.point)) continue
-      if (accessIdFromObject(hit.object)) return cellFromWorldPoint(hit.point.x, hit.point.z)
+      if (accessIdFromObject(hit.object, hit.instanceId)) return cellFromWorldPoint(hit.point.x, hit.point.z)
       const buildingId = buildingIdFromObject(hit.object, hit.instanceId)
       if (buildingId) {
         const picked = resolvePickedBuilding(snapshot.buildings, buildingId, hit.point.x, hit.point.z)
@@ -4027,27 +4020,18 @@ export class WorldView {
       true,
     )
     for (const hit of hits) {
-      // A vehicle housed in its depot or garage is only hidden, and three.js
-      // raycasts hidden objects all the same — without this it would keep
-      // swallowing the clicks meant for the building it is parked in.
+      // three.js raycasts hidden objects all the same. Housed vehicles are not in
+      // the batches at all; this keeps a hidden batch from catching clicks too.
       if (!isVisibleInScene(hit.object)) continue
-      let object: Object3D | null = hit.object
-      while (object) {
-        if (typeof object.userData.vehicleId === 'string') return object.userData.vehicleId
-        object = object.parent
-      }
+      const id = instanceOwnerId(hit.object.userData, 'vehicleIds', hit.instanceId)
+      if (id) return id
     }
     return null
   }
 
   private pickAccessControl(): string | null {
     const hit = this.raycaster.intersectObject(this.accessControlView.getPickRoot(), true)[0]
-    let object: Object3D | null = hit?.object ?? null
-    while (object) {
-      if (typeof object.userData.accessId === 'string') return object.userData.accessId
-      object = object.parent
-    }
-    return null
+    return accessIdFromObject(hit?.object, hit?.instanceId) ?? null
   }
 
   private pickVisitor(event: PointerEvent): string | null {

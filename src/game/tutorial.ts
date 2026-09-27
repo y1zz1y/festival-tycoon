@@ -1,4 +1,6 @@
+// i18n: client-text
 import type { GameSnapshot } from './types/snapshot'
+import { t } from '../i18n'
 
 /**
  * The first-steps scenario (A9): a small flat site and a checklist that ticks itself
@@ -41,32 +43,32 @@ export function tutorialSteps(s: Readonly<GameSnapshot>): TutorialStep[] {
   return [
     {
       id: 'path',
-      title: 'Weg vom Eingang ins Gelände',
-      hint: `Bauen → Wege: vom Eingang am Kartenrand einen Weg ziehen, mindestens ${TUTORIAL_PATH_FIELDS} Felder.`,
+      title: t('Weg vom Eingang ins Gelände'),
+      hint: t`Bauen → Wege: vom Eingang am Kartenrand einen Weg ziehen, mindestens ${TUTORIAL_PATH_FIELDS} Felder.`,
       done: pathFieldsFromEntrance(s) >= TUTORIAL_PATH_FIELDS,
     },
     {
       id: 'stage',
-      title: 'Bühne mit Strom',
-      hint: 'Festival → Festivalbühne setzen und einen Bühnenvorplatz ausweisen; unter Logistik → Strom einen Generator bauen und per Kabel mit der Bühne verbinden.',
+      title: t('Bühne mit Strom'),
+      hint: t('Festival → Festivalbühne setzen und einen Bühnenvorplatz ausweisen; unter Logistik → Strom einen Generator bauen und per Kabel mit der Bühne verbinden.'),
       done: poweredStage,
     },
     {
       id: 'stands',
-      title: 'Imbiss und Toilette',
-      hint: 'Attraktionen → Stände: einen Imbiss und eine Toilette an den Weg stellen.',
+      title: t('Imbiss und Toilette'),
+      hint: t('Attraktionen → Stände: einen Imbiss und eine Toilette an den Weg stellen.'),
       done: kinds.has('food') && kinds.has('toilet'),
     },
     {
       id: 'band',
-      title: 'Eine Band buchen',
-      hint: 'Festivalfenster → Programm: eine Band auf einen freien Zeitblock der Bühne ziehen.',
+      title: t('Eine Band buchen'),
+      hint: t('Festivalfenster → Programm: eine Band auf einen freien Zeitblock der Bühne ziehen.'),
       done: started || s.festival.bookings.length > 0,
     },
     {
       id: 'start',
-      title: 'Festival starten',
-      hint: 'Festivalfenster: „Festival starten“. Ab jetzt kommen Gäste.',
+      title: t('Festival starten'),
+      hint: t('Festivalfenster: „Festival starten“. Ab jetzt kommen Gäste.'),
       done: started,
     },
   ]
