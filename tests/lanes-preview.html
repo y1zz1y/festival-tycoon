@@ -1,0 +1,19 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>Fahrspuren</title><style>body{margin:0;background:#263c39;color:white;font:14px system-ui}canvas{width:100vw;height:100vh;display:block}aside{position:absolute;top:12px;left:12px;background:#18322edc;padding:14px;max-width:340px}h1{font-size:20px;margin:0 0 8px}</style><canvas></canvas><aside><h1>Fahrspuren</h1>Zufahrt 3 + 3 mit Doppellinie · zweispurige Straße mit Ampel und Haltelinie · Kreuzung · Eckblock mit Bogen und Grünkeil · einspurige Einmündung · Platz · Zebrastreifen quer · Fahrplatten mit Fuge<br>Rechtsziehen: Kamera · Mausrad: Zoom</aside><script type="module">
+import {GameState} from '../src/game/GameState.ts';import {WorldView} from '../src/view/WorldView.ts';
+const s=structuredClone(new GameState().snapshot);s.buildings=[];s.visitors=[];s.terrain={heights:{}};s.logistics.roadCells=[];s.logistics.parkingCells=[];s.festival.planning=false;
+const edge=-s.scenario.worldSize/2;const cells=new Map();
+const road=(x,z,extra={})=>cells.set(`${x}:${z}`,{x,z,elevation:0,roadSlope:0,roadSlopeDirection:0,allowedDirections:null,blockedEdges:0,speedLimit:50,crosswalk:false,...extra});
+for(let x=-3;x<=2;x++)road(x,edge);
+for(let z=edge+1;z<=edge+22;z++){road(-1,z);road(0,z)}
+for(let x=-8;x<=8;x++){road(x,edge+11);road(x,edge+12)}
+for(let z=edge+13;z<=edge+20;z++){road(7,z);road(8,z)}
+for(let x=1;x<=5;x++)road(x,edge+17);
+for(let x=-7;x<=-4;x++)for(let z=edge+15;z<=edge+18;z++)road(x,z);
+for(let z=edge+13;z<=edge+18;z++)road(-7,z);
+road(4,edge+11,{crosswalk:true});road(4,edge+12,{crosswalk:true});road(-1,edge+5,{crosswalk:true});road(0,edge+5,{crosswalk:true});
+s.logistics.roadCells=[...cells.values()];
+for(let z=edge+14;z<=edge+20;z++)for(const x of [7,8])s.festival.infrastructure.ground[`${x},${z}`]={...(s.festival.infrastructure.ground[`${x},${z}`]??{}),roadway:'roadPlates'};
+const game=new GameState(s);game.setSpeed(0);game.addDebugMoney();game.placeTrafficLight(-1,edge+10,0);game.placeTrafficLight(1,edge+11,3);
+const noop=()=>{};const view=new WorldView(document.querySelector('canvas'),noop,noop,noop,noop,noop,noop,noop,noop);view.focusWorldPosition(0,edge+11);window.previewView=view;
+function frame(){view.update(game.snapshot,1,game.worldRevision);view.render();requestAnimationFrame(frame)}frame();
+</script></html>

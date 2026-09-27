@@ -108,7 +108,8 @@ import { getFestivalCycleStatus, getOpenWindowHours, isFestivalOfferActive } fro
 import type { DayPlanOffer } from './dayPlan';
 import { createComplaintCounts } from './complaints';
 import type { ComplaintTopic } from './complaints';
-import { cellKey as roadCellKey, chooseParkingDisembarkPath, collectSeatedPassengerIds, createRoadGraph, directionBit, directionFromDelta, isRoadDirectionAllowed, previewBusLineRoute as buildBusLineRoutePreview, oppositeDirection, resolveRoadLayer, roadLayerElevation, roadLayerKey, toRoadPosition } from './logistics';
+import { canSpawnOnRoadCell } from './roadLanes'
+import { cellKey as roadCellKey, chooseParkingDisembarkPath, collectSeatedPassengerIds, createRoadGraph, directionBit, directionFromDelta, previewBusLineRoute as buildBusLineRoutePreview, oppositeDirection, resolveRoadLayer, roadLayerElevation, roadLayerKey, toRoadPosition } from './logistics';
 import { WAY_ELEVATION_EPSILON, WAY_LEVEL_MATCH, canStepPedestrianHeight, canTraverseWayElevation, pedestrianEdgesMeet, wayEdgeHeights, wayOverlapsRoadGrade, waySurfaceY, waySurfaceYAt, packWayElevation, snapWayElevation } from './wayElevation';
 import { snapBuildElevation, stepBuildElevation } from './placementPreview';
 import { VisitorSimulation } from './visitorSimulation';
@@ -176,6 +177,8 @@ type StoredSaveSlot = LocalSaveSlot & { snapshot?: string }
 type Listener = (snapshot: Readonly<GameSnapshot>) => void
 
 const SIMULATION_SPEED_MULTIPLIERS = SIMULATION_CONFIG.time.speedMultipliers
+/** Entry stub tiles in the order arrivals try them: inbound from the centre line out, then the rest. */
+const ENTRY_SPAWN_ORDER = [-1, -2, -3, 0, 1, 2] as const
 /** Fallback band names for placed stages: proper nouns, never translated. */
 export const BAND_NAMES = keep(['Neon Echo', 'Festival Riot', 'Moonlight Avenue', 'Bassgarten'])
 
@@ -748,6 +751,20 @@ export class GameState {
 
   private getRoadEntry(): RoadPosition {
     return createScenarioRoadEntry(this.getWorldSize())
+  }
+
+  /**
+   * Where a vehicle from outside drives in: the inbound entry lane in line with the
+   * road (x −1), else another inbound lane; getRoadEntry (x 0) is an outbound lane.
+   */
+  private getRoadArrivalEntry(): RoadPosition {
+    const lanes = this.getRoadGraph().lanes
+    const edge = -this.getWorldSize() / 2
+    for (const x of ENTRY_SPAWN_ORDER) {
+      const road = this.getRoadCellAt(x, edge)
+      if (road && canSpawnOnRoadCell(lanes, road)) return { x, z: edge }
+    }
+    return this.getRoadEntry()
   }
 
   subscribe(listener: Listener): () => void {
@@ -5926,7 +5943,7 @@ export class GameState {
       if (!editionWasOver && this.state.festival.enabled && this.state.festival.finished) this.recordFinishedEdition()
     })
     this.simulationProfiler.measure('supply', () => {
-      updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, true, undefined, true), (a, b) => this.canCarrierStep(a, b))
+      updateSupplyChain(this.state, (start, goals) => this.findPath(start, goals, false, false, false, false, true, undefined, true), (a, b) => this.canCarrierStep(a, b), this.getRoadGraph())
     })
 
     this.simulationProfiler.measure('spawn', () => this.visitorSpawning.update(minutes))
@@ -7062,15 +7079,18 @@ export class GameState {
       )
     const entries: RoadPosition[] = []
     const seen = new Set<string>()
+    const lanes = this.getRoadGraph().lanes
     const consider = (x: number, z: number) => {
       const key = roadCellKey(x, z)
       if (seen.has(key)) return
       const road = this.getRoadCellAt(x, z)
-      if (!road || !isRoadDirectionAllowed(road, 0) || occupied(x, z)) return
+      if (!road || !canSpawnOnRoadCell(lanes, road) || occupied(x, z)) return
       seen.add(key)
       entries.push({ x, z })
     }
-    for (let x = -3; x <= 2; x += 1) consider(x, northZ)
+    // Stub tiles arrivals may use (the inbound half, or what explicit one-ways
+    // open), the lane in line with the road first.
+    for (const x of ENTRY_SPAWN_ORDER) consider(x, northZ)
     if (!ingressOnly) {
       for (const road of this.state.logistics.roadCells) {
         if (road.z !== northZ) continue
@@ -9131,7 +9151,7 @@ export class GameState {
       this.tourBusReachCache.set(building.id, false)
       return false
     }
-    const entry = this.getRoadEntry()
+    const entry = this.getRoadArrivalEntry()
     const start = this.getRoadCellAt(entry.x, entry.z)
     if (!start) {
       this.tourBusReachCache.set(building.id, false)
@@ -9342,7 +9362,7 @@ export class GameState {
         (vehicle) =>
           vehicle.kind === 'tourBus' && vehicle.reservedParkingId === plan.parkingId,
       )
-      const entry = this.getRoadEntry()
+      const entry = this.getRoadArrivalEntry()
       const start = this.getRoadCellAt(entry.x, entry.z)
       const position = start
         ? { x: start.x, z: start.z, elevation: start.elevation }

@@ -43,6 +43,7 @@ erscheint. Kanonische Kurs- und Scripted-Fahrgäste bleiben sichtbar.
 | Weggraph-Debug | `src/view/PathGraphView.ts` | Eine `LineSegments`-Gruppe, nicht `retroStatic`; nur bei 🐞 → Weggraph |
 | Buslinien-Planerroute | `src/view/LogisticsView.ts` `setPlannerRoute` | Eine `Line` / ein Material für die Stoppfolge plus ein Mesh mit geteiltem Zahlenatlas (1, 2, 3 …) an den Halten; weg beim Schließen des Reiters |
 | Logistik-Modelle | `src/view/logisticsModels.ts` | ModelKit-Gebäude und Fahrzeuge; `createRoadVehicleModel` (Einzelmodell, Besucherautos je Lackfarbe) für Vorschau/Tests/Lieferwagen; `roadVehicleParts` liefert für die Batches je Art eine Geometrie, Besucherautos als weiße Lackhülle (Instanzfarbe) plus gemeinsame Details |
+| Fahrbahnmarkierungen | `src/view/roadMarkings.ts`, `src/view/wayStructures.ts`, `src/view/LogisticsView.ts` | Aus `classifyRoadLanes` (`src/game/roadLanes.ts`) beim statischen Neuaufbau; Mittel-/Randlinien, Eckbögen, Einfahrt und Grünkeil in der gecachten Wegstruktur-Geometrie, Spurpfeile als Bauhilfe-Batch |
 | Straßenfahrzeuge | `src/view/LogisticsView.ts` | ein `InstancedMesh` je Fahrzeuggeometrie (höchstens 10), Instanzfarbe, `userData.vehicleIds`, Posen je ID; `getVehiclePickRoot()` enthält nur die Batches |
 | Instanz-Batches | `src/view/instanceBatch.ts` | `InstanceBatch` (begin/add/finish, Zweierpotenz-Kapazität, `DynamicDrawUsage`, nur benutzter Bereich hochgeladen, `boundingSphere = null` nach jedem Füllen, ID-Array je Instanz), `placementMatrix` |
 | Personal und Träger | `src/view/crewInstances.ts`, `src/view/StaffView.ts`, `src/view/SupplyChainView.ts` | `CrewInstances`: ein fester Satz Batches (Torso m/w, Büste, Kopf, Beine, Arme, 16 Haarvarianten, zwei Mützen, Besen, Müllsack, Warnweste, Karren, Ladung), jedes Bild neu gefüllt; `staffIds` für Picking |
@@ -207,14 +208,67 @@ verkleinert `LinearMipmapLinearFilter` mit Mipmaps wie das Geländeatlas, sonst
 flimmern Wege beim Herauszoomen; Parkfläche 32 px) und liefert mit
 `wayDeckMaterial`/`wayDeckGeometry` die geteilten Wegdecks. Die Beläge: (Bohlen mit Fugen/Nägeln,
 versetztes Pflaster, Kieskörnung, Fahrplatten, Dirt-Spuren und Asphaltkörnung).
-Auch Legacy-Beläge ohne WayType bekommen Textur. Asphaltgeraden erhalten
-Mittellinien; Geschwindigkeits-Farbtönung erscheint nur mit Straßenbauhilfen.
+Auch Legacy-Beläge ohne WayType bekommen Textur. Mittellinien kommen seit 0.3.3
+aus den Fahrspuren (siehe Fahrbahnmarkierungen); einspurige Geraden bleiben
+ohne. Geschwindigkeits-Farbtönung erscheint nur mit Straßenbauhilfen.
 Gebäude-Fingerprint berücksichtigt Straßenlagen und Rampenrichtung, damit
 Unterführungsstützen bei Änderungen neu aufgebaut werden.
 
 Tests: `tests/wayStructures.ts`, visuell `tests/ways-preview.html` im echten
 WorldView. Tests umfassen alle Richtungen/Steigungen, Anschlüsse, Terrain-Höhe,
 freie untere Lagen und 200 gleiche Konstruktionen in einem Instanz-Batch.
+
+## Fahrbahnmarkierungen (0.3.3)
+
+Markierungen folgen den abgeleiteten Fahrspuren (`src/game/roadLanes.ts`,
+Regeln in [`logistics.md`](logistics.md)). `LogisticsView.rebuildStatic`
+klassifiziert die Straßenkacheln des Snapshots einmal je Neuaufbau (nur bei
+Strukturänderung, nie pro Bild; die Weltgröße kommt über `setWorldSize`),
+`roadWayMarks` (`src/view/roadMarkings.ts`) liefert je Kachel reine Daten in
+kachellokalen Koordinaten, und `wayStructurePlan` / `createWayStructure`
+mergen sie in die gecachte Wegstruktur-Geometrie der Kachel (Vertexfarben,
+ein geteiltes Material, Cache-Schlüssel = Plan, gebündelt über
+`batchRetroBuildings`). Kein neuer Materialkonstruktor; `roadMarkings.ts`
+hat keinen.
+
+- Spuren: Mittellinie auf der gemeinsamen Kante, gezeichnet nur von der
+  +Z-/+X-Spur des Paars; gestrichelt auf Geraden, durchgezogen auf der letzten
+  Kachel vor einem Knoten, Platz, Einfahrt oder einer einspurigen Straße;
+  dünne Randlinie außen. Nur auf Asphalt (`wayPaintFor`): Fahrplatten zeigen
+  statt Farbe eine hellere Fuge als Trenner, Schotter und Erde nichts.
+- Knoten: keine Linien. Eckblock (2×2-Knoten mit zwei senkrechten Ausfahrten):
+  Mittellinie als Viertelkreis (Radius 1 um die Innenecke) auf der Innenkachel,
+  äußerer Bordstein als Viertelkreis (Radius 2) mit Grünkeil in der Außenecke;
+  die geraden Bordsteine dieser Außenkanten entfallen (`hideKerbs`). Innenecke
+  bleibt fast spitz. Auf Rampen keine Bögen.
+- Einfahrt: doppelte durchgezogene Linie zwischen x −1 und x 0, gestrichelte
+  Trenner zwischen Spuren gleicher Richtung. Keine Linien, wenn der Stummel
+  `open` ist oder auf einer der beiden Kacheln an der Linie gesetzte Einbahnen
+  liegen (dort wird frei gewechselt).
+- Einspurige Straßen und Plätze: keine Linien (die früheren Striche auf
+  isolierten Geraden sind entfallen).
+- Zebrastreifen: Streifen längs der Fahrtrichtung (`roadTrafficAxis`), also
+  quer über die Spuren; auf Rampen mit gedrehter Kachel entsprechend getauscht.
+- Ampel (`AccessControlView`): Modell rechts vom Fahrer der geregelten
+  Richtung; die Haltelinie ist Teil der Ampelkörper-Geometrie (kein weiterer
+  Batch, weiter höchstens sechs Batches) und liegt quer über der Spur an der
+  Kante, über die der Verkehr ins Ampelfeld einfährt — dort, wo Autos bei Rot
+  halten.
+- Spurpfeile (abgeleitete Fahrtrichtung, nur ohne gesetzte Einbahn) liegen als
+  eigener gebündelter Pfeil-Batch in `laneArrowGroup` und sind nur mit den
+  Straßenbauhilfen sichtbar (`showParkingHelpers`); gesetzte Einbahnen behalten
+  ihre dauerhaften Pfeile.
+- `ModelKit.ground` (flaches Polygon) liefert den Grünkeil.
+
+Zebrastreifen-Kacheln tragen keine Mittel- oder Randlinie.
+
+Tests: `tests/roadLanes.ts` (Markierungsdaten, gleiche Eckstücke auf
+verschiedenen Kacheln teilen die Geometrie, ein Strukturmaterial, keine losen
+Meshes, Zebra-Achse für Straßen entlang X und Z, keine Stummellinie bei `open`
+oder Einbahnen, Ampelseite und Haltelinienlage) und
+`tests/performanceGuards.ts` (Materialdecken unverändert). Visuell:
+`tests/lanes-preview.html` im echten WorldView (Einfahrt, Kreuzung mit Ampeln,
+Eckblock, einspurige Einmündung, Platz, Zebrastreifen, Fahrplatten).
 
 ## Facettiertes Gelände und Stützen (0.1.132)
 

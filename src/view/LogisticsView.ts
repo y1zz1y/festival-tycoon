@@ -36,6 +36,9 @@ import type {
   RoadVehicle,
 } from '../game/logistics'
 import { resolveRoadLayer } from '../game/logistics'
+import { WORLD_SIZE } from '../game/catalog'
+import { classifyRoadLanes, type RoadLaneLayout } from '../game/roadLanes'
+import { laneArrowDirection, roadTrafficAxis, roadWayMarks, wayPaintFor } from './roadMarkings'
 import { disposeObject3D } from './disposeObject3D'
 import {
   createLogisticsFacility,
@@ -246,6 +249,10 @@ function addParkingLetter(parent: Group, y: number, material: MeshStandardMateri
 export class LogisticsView {
   private structurePaths: WayStructureCell[] = []
   setStructurePaths(paths: WayStructureCell[]): void { this.structurePaths = paths }
+  private worldSize = WORLD_SIZE
+  /** The map entry stub (and so its lane markings) sits on the southern edge of the world. */
+  setWorldSize(size: number): void { this.worldSize = size }
+  private laneLayout: RoadLaneLayout | null = null
   private structureRoads = new Map<RoadCell, WayStructureCell>()
   private structureIndex = indexWayStructures([])
   readonly group = new Group()
@@ -280,10 +287,13 @@ export class LogisticsView {
   private getGroundY: (x: number, z: number) => number = () => 0
   private roadsByKey = new Map<string, RoadCell[]>()
   private readonly marksGroup = new Group()
+  /** Derived lane arrows: a build helper, shown with the road tools like the speed tint. */
+  private readonly laneArrowGroup = new Group()
   private facingFactor = 0
 
   constructor() {
-    this.group.add(this.staticGroup, this.vehicleGroup, this.marksGroup)
+    this.laneArrowGroup.visible = false
+    this.group.add(this.staticGroup, this.vehicleGroup, this.marksGroup, this.laneArrowGroup)
     this.vehicleBatchGroup.name = 'vehicles'
     this.vehicleGroup.add(this.vehicleBatchGroup)
     // Up front and empty: the load-time shader compile covers them, and an empty
@@ -360,6 +370,7 @@ export class LogisticsView {
     if (this.showParkingHelpers !== showParkingHelpers) {
       this.showParkingHelpers = showParkingHelpers
       this.staticGroup.traverse(o => { if (o.userData.roadHelper) o.visible = showParkingHelpers })
+      this.laneArrowGroup.visible = showParkingHelpers
       this.parkingHelpers.forEach((helper) => {
         helper.group.visible = showParkingHelpers
       })
@@ -392,7 +403,7 @@ export class LogisticsView {
       ...(logistics.specialDepots ?? []).map((cell) => getGroundY(cell.x, cell.z)),
       ...logistics.busStops.map((cell) => getGroundY(cell.x, cell.z)),
     ].join(',')
-    const fingerprint = `${JSON.stringify(this.structurePaths)}#${structureFingerprint(logistics)}#${heightPart}#${logistics.roadCells.map(c => roadColor(c.x, c.z)).join()}`
+    const fingerprint = `${this.worldSize}#${JSON.stringify(this.structurePaths)}#${structureFingerprint(logistics)}#${heightPart}#${logistics.roadCells.map(c => roadColor(c.x, c.z)).join()}`
     if (fingerprint !== this.staticFingerprint) {
       this.staticFingerprint = fingerprint
       this.rebuildStatic(logistics)
@@ -421,11 +432,16 @@ export class LogisticsView {
       this.staticGroup.remove(child)
       disposeObject3D(child)
     })
-    this.marksGroup.children.slice().forEach((child) => {
-      this.marksGroup.remove(child)
-      disposeObject3D(child)
-    })
-    this.structureRoads = new Map(logistics.roadCells.map(r => [r, {x:r.x, z:r.z, elevation:r.elevation ?? this.groundY(r.x,r.z), slope:r.roadSlope ?? 0, direction:r.roadSlopeDirection ?? 0, road:true, marked:!this.roadSurface(r.x,r.z) || this.roadSurface(r.x,r.z)==='roadAsphalt'}]))
+    for (const group of [this.marksGroup, this.laneArrowGroup]) {
+      group.children.slice().forEach((child) => {
+        group.remove(child)
+        disposeObject3D(child)
+      })
+    }
+    // Same derivation as the simulation's road graph, from the snapshot's road cells.
+    const lanes = classifyRoadLanes(logistics.roadCells, this.worldSize)
+    this.laneLayout = lanes
+    this.structureRoads = new Map(logistics.roadCells.map(r => [r, {x:r.x, z:r.z, elevation:r.elevation ?? this.groundY(r.x,r.z), slope:r.roadSlope ?? 0, direction:r.roadSlopeDirection ?? 0, road:true, marks:roadWayMarks(lanes, r, wayPaintFor(this.roadSurface(r.x,r.z)))}]))
     this.structureIndex = indexWayStructures([...this.structureRoads.values(), ...this.structurePaths])
     logistics.roadCells.forEach((road) => {
       this.staticGroup.add(this.createRoad(road))
@@ -453,6 +469,8 @@ export class LogisticsView {
     })
     this.staticGroup.add(batchRetroBuildings(this.staticGroup))
     this.marksGroup.add(batchRetroBuildings(this.marksGroup))
+    this.laneArrowGroup.add(batchRetroBuildings(this.laneArrowGroup))
+    this.laneArrowGroup.visible = this.showParkingHelpers
   }
 
   private createRoad(road: RoadCell): Group {
@@ -505,9 +523,23 @@ export class LogisticsView {
     deck.add(zone)
 
     if (road.crosswalk) {
+      // Stripes run with the traffic, so the zebra spans across the lanes.
+      const axis = this.laneLayout ? roadTrafficAxis(this.laneLayout, road) : null
+      const turned = slope !== 0 && (road.roadSlopeDirection ?? 0) % 2 === 1
+      const acrossX = (axis === 'x') !== turned
       for (let index = -3; index <= 3; index += 1) {
-        addBox(deck, [0.08, 0.012, 0.68], [index * 0.115, 0.026, 0], 0xf7f7ef)
+        if (acrossX) addBox(deck, [0.68, 0.012, 0.08], [0, 0.026, index * 0.115], 0xf7f7ef)
+        else addBox(deck, [0.08, 0.012, 0.68], [index * 0.115, 0.026, 0], 0xf7f7ef)
       }
+    }
+    const laneArrow = this.laneLayout ? laneArrowDirection(this.laneLayout, road) : null
+    if (laneArrow !== null) {
+      const arrow = new Mesh(roadArrowGeometry, roadArrowMaterial)
+      arrow.userData.retroStatic = true
+      arrow.rotation.y = DIRECTION_ANGLE[laneArrow]
+      arrow.position.set(road.x + 0.5, this.roadY(road) + 0.018, road.z + 0.5)
+      arrow.scale.setScalar(0.5)
+      this.laneArrowGroup.add(arrow)
     }
 
     (road.allowedDirections === null

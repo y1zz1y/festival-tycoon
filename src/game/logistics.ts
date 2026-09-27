@@ -1,9 +1,9 @@
 import { WORLD_SIZE } from './catalog'
 import { de } from '../i18n/marker'
 import { findWeightedPath } from './pathfinding'
+import { canEnterRoadCell, canLeaveRoadCell, classifyRoadLanes, type RoadLaneLayout } from './roadLanes'
 import { SIMULATION_CONFIG } from './simulationConfig'
 import {
-  canTraverseWayElevation,
   elevationsMatch,
   packWayElevation,
   snapWayElevation,
@@ -391,6 +391,8 @@ export type RoadGraph = {
   byKey: ReadonlyMap<string, RoadCell>
   byXZ: ReadonlyMap<string, readonly RoadCell[]>
   neighbors: ReadonlyMap<string, readonly RoadCell[]>
+  /** Derived lane roles (src/game/roadLanes.ts); built with the graph, never per tick. */
+  lanes: RoadLaneLayout
 }
 
 export type FindRoadRouteOptions = {
@@ -529,17 +531,6 @@ export function moveInDirection(
   return { x: position.x + offset.x, z: position.z + offset.z }
 }
 
-export function isRoadDirectionAllowed(
-  cell: RoadCell,
-  direction: Direction,
-): boolean {
-  const bit = directionBit(direction)
-  return (
-    cell.allowedDirections === null ||
-    (cell.allowedDirections & bit) !== 0
-  )
-}
-
 export function createRoadGraph(
   roadCells: readonly RoadCell[],
   worldSize = WORLD_SIZE,
@@ -556,77 +547,34 @@ export function createRoadGraph(
       roadCell,
     )
   }
+  const lanes = classifyRoadLanes(roadCells, worldSize, byXZ)
   const neighbors = new Map<string, RoadCell[]>()
   for (const cell of roadCells) {
     neighbors.set(
       roadLayerKey(cell.x, cell.z, roadLayerElevation(cell)),
-      collectRoadNeighbors(cell, byXZ, worldSize),
+      collectRoadNeighbors(cell, lanes),
     )
   }
-  return { cells: roadCells, byKey, byXZ, neighbors }
+  return { cells: roadCells, byKey, byXZ, neighbors, lanes }
 }
 
-export function getRoadNeighbors(
-  cell: RoadCell,
-  roadCells: readonly RoadCell[],
-  worldSize = WORLD_SIZE,
-): RoadCell[] {
-  const byXZ = new Map<string, RoadCell[]>()
-  for (const roadCell of roadCells) {
-    const xz = cellKey(roadCell.x, roadCell.z)
-    const layers = byXZ.get(xz) ?? []
-    layers.push(roadCell)
-    byXZ.set(xz, layers)
-  }
-  return collectRoadNeighbors(cell, byXZ, worldSize)
-}
-
+/**
+ * Graph edges: the physical links of the lane layout (world, separators, heights)
+ * filtered by who may leave and enter in that direction — explicit one-way bits,
+ * otherwise the derived lane rules.
+ */
 function collectRoadNeighbors(
   cell: RoadCell,
-  roadsByXZ: ReadonlyMap<string, readonly RoadCell[]>,
-  worldSize: number,
+  lanes: RoadLaneLayout,
 ): RoadCell[] {
-  const half = worldSize / 2
-  return DIRECTIONS.flatMap((direction) => {
-    if (
-      !isRoadDirectionAllowed(cell, direction) ||
-      (cell.blockedEdges & directionBit(direction)) !== 0
-    ) {
-      return []
+  const result: RoadCell[] = []
+  for (const direction of DIRECTIONS) {
+    if (!canLeaveRoadCell(lanes, cell, direction)) continue
+    for (const neighbor of lanes.linksOf(cell, direction)) {
+      if (canEnterRoadCell(lanes, neighbor, direction)) result.push(neighbor)
     }
-    const position = moveInDirection(cell, direction)
-    if (
-      position.x < -half ||
-      position.x >= half ||
-      position.z < -half ||
-      position.z >= half
-    ) {
-      return []
-    }
-    const candidates = roadsByXZ.get(cellKey(position.x, position.z)) ?? []
-    return candidates.filter((neighbor) => {
-      if (
-        (neighbor.allowedDirections !== null &&
-          isRoadDirectionAllowed(neighbor, oppositeDirection(direction)) &&
-          !isRoadDirectionAllowed(neighbor, direction)) ||
-        (neighbor.blockedEdges &
-          directionBit(oppositeDirection(direction))) !==
-          0 ||
-        !canTraverseWayElevation(
-          roadLayerElevation(cell),
-          cell.roadSlope ?? 0,
-          cell.roadSlopeDirection,
-          roadLayerElevation(neighbor),
-          neighbor.roadSlope ?? 0,
-          neighbor.roadSlopeDirection,
-          direction,
-        )
-      ) {
-        return false
-      }
-      return true
-    })
-  })
+  }
+  return result
 }
 
 export function findRoadRoute(

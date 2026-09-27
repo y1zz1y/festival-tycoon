@@ -1054,6 +1054,7 @@ export class WorldView {
     )
     if (dataChanged) this.attractivenessView.update(snapshot.attractiveness)
     if (dataChanged) this.partyMoodView.update(snapshot.partyMood)
+    if (dataChanged) this.logisticsView.setWorldSize(snapshot.scenario?.worldSize ?? WORLD_SIZE)
     if (dataChanged) this.logisticsView.setStructurePaths(snapshot.buildings.filter(b => b.kind === 'path').map(b => ({ x:b.x, z:b.z, elevation:b.elevation, slope:b.pathSlope ?? 0, direction:b.pathSlopeDirection ?? 0, road:false })))
     if (dataChanged) this.courseView.update(snapshot.courses ?? [], snapshot.visitors, snapshot.simTick)
     if (dataChanged) {

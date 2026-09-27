@@ -9,6 +9,7 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Aufgabe | Datei | Einstieg |
 | --- | --- | --- |
 | Straßengraph, Fahrzeuge, Ankunft | `src/game/logistics.ts` | `LogisticsSnapshot`, `findRoadRoute`, `RoadVehicle` (`tourBus` + `tourBusParking` target); `RoadCell.elevation` / `roadSlope` |
+| Fahrspuren (zweispurige Straßen) | `src/game/roadLanes.ts` | `classifyRoadLanes` (Rollen `lane`/`knot`/`plaza`/`single`/`entry`, abgeleitet, nie gespeichert), `canLeaveRoadCell`, `canEnterRoadCell`, `isWrongWayOnRoadCell`, `canSpawnOnRoadCell`, `canExitFromRoadCell`, `isPriorityJunction`; liegt als `RoadGraph.lanes` am Straßengraphen |
 | Logistik-Tick und Fahrzeug-Indizes | `src/game/logisticsSimulation.ts`, `src/game/roadVehicleSimulation.ts`, `src/game/GameState.ts` | `updateLogisticsSimulation`, `buildLogisticsTickState`; `RoadVehicleSimulation.processLogisticsVehicles`; `GameState` verdrahtet die schmalen Fach-Callbacks |
 | Straßenfahrzeug-State-Machines | `src/game/roadVehicleSimulation.ts` | Gemeinsame Bewegung, Blockade/Umplanung sowie Dispatch, Rückkehr und Leg-Abschluss für Besucherautos, Krankenwagen, Feuerwehrwagen, Busse, Müll- und Lieferwagen; Head-on-Umplanung mit Sim-RNG-Delay; keine Route über ganztägig rote Ampeln |
 | Aussteigen am Parkplatz | `src/game/logistics.ts`, `src/game/GameState.ts` | `chooseParkingDisembarkPath`, `finishVehicleParking`, `collectSeatedPassengerIds`, `tryBoardDepartureCar`, `canParkedCarDepart` |
@@ -33,7 +34,8 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
 | Ampeln und Wegschranken | `src/game/accessControl.ts` | Slots, Tageszeit, Festivalphase, Tagesplan, Sensoren, Gebiet, `evaluateAccessSignal` |
 | Ampel-/Schranken-Texte | `src/game/accessControlText.ts` (Client-Text) | `ACCESS_SCHEDULE_TIME_LABELS`, `previewLabel`, `areaPreviewText` (`t`, `plural`, `joinParts`) |
 | Trennlinie / Kante sperren | `src/game/GameState.ts` | `toggleRoadSeparator`, `road.blockedEdges` |
-| Ampel-/Schranken-Darstellung | `src/view/AccessControlView.ts` | eine Richtung, Grün/Rot bzw. offen/zu; sechs Instanz-Batches (`accessIds`), Signalwechsel schreibt nur Lampen und Flügel um |
+| Ampel-/Schranken-Darstellung | `src/view/AccessControlView.ts` | eine Richtung, Grün/Rot bzw. offen/zu; sechs Instanz-Batches (`accessIds`), Signalwechsel schreibt nur Lampen und Flügel um; Ampel rechts vom Fahrer der geregelten Richtung, Haltelinie in der Körpergeometrie |
+| Fahrbahnmarkierungen | `src/view/roadMarkings.ts`, `src/view/wayStructures.ts` | `roadWayMarks` (Mittellinie, Randlinie, Eckbogen, Bordsteinbogen, Grünkeil, Einfahrt), `wayPaintFor`, `roadTrafficAxis` (Zebrastreifen quer zu den Spuren), `laneArrowDirection` (Spurpfeile als Bauhilfe) |
 | Fahrzeug-Interpolation | `src/view/transportMotion.ts` | nur Darstellung |
 | Balancing | `src/game/simulationConfig.ts` | `logistics` (`visitorCarCapacity` 6 = max. Anreisegruppe, `groupSizeWeights` 1–6, `busCapacity` 40 = Festivalbus-Fahrgäste, `busStopDwellMinutes` 2, `busBoardingRadiusTiles` 4, `busBoardsPerTick` 40), `waste` |
 
@@ -290,7 +292,8 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   führen, setzt `restoreMissingGarbageTrucks` ihn am Depotanschluss
   wieder ein. Hinter der Kartenkante wartet er die Entladung ab und
   versucht jede freie, befahrbare Einfahrt (nicht nur die erste freie
-  Einstiegskachel). Solange alle Einstiege belegt sind oder kein Weg
+  Einstiegskachel): erst die Stummelkacheln, auf denen Ankommende erscheinen,
+  dann jede Randstraße, auf der er nicht gegen den Verkehr steht (Fahrspuren). Solange alle Einstiege belegt sind oder kein Weg
   zum Depot existiert, bleibt er off-map und versucht es erneut,
   sobald eine Zufahrt frei ist. Nach
   `truckUnloadMinutes + vehicleUnstickMinutes` setzt
@@ -304,8 +307,8 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   (Autos, Bus, Liefer- und Müllwagen) und berechnet die Route neu.
   Einbahnen liegen als weiße StVO-Fahrstreifenpfeile über den Fahrzeugen.
   Das Werkzeug Fahrtrichtung zeigt dieselbe weiße Markierung in der
-  Vorschau (über Autos und Baufeld) und eine kompakte Laufanimation
-  auf gesetzten Einbahnen.
+  Vorschau (über Autos und Baufeld); gesetzte Einbahnen tragen die Pfeile
+  als feste Fahrbahnmarkierung, ohne Animation.
 - Gebäude und Fahrzeuge nutzen gemergte ModelKit-Meshes
   (`logisticsModels.ts`) mit geteilter Geometrie. Gebäude laufen durch
   `batchRetroBuildings`. Straßenfahrzeuge zeichnet `LogisticsView` als
@@ -338,7 +341,10 @@ Mindestbestände und Träger; Lastwagen liefern an Anlieferungsplätze.
   Fahrzeugnasen zeigen lokal nach **+Z** (wie `facing` /
   `atan2(dx, dz)`). Besucherautos wählen die Lackfarbe deterministisch aus
   `VISITOR_CAR_COLORS` über die Fahrzeug-ID.
-- Ampeln stehen rechts an der Fahrbahn und leuchten dem Verkehr entgegen.
+- Ampeln stehen rechts an der Fahrbahn (rechts vom Fahrer der geregelten
+  Richtung, `(direction + 3) % 4`) und leuchten dem Verkehr entgegen; eine
+  durchgezogene Haltelinie liegt quer über der Spur an der Kachelkante davor.
+  Nur Ampeln bekommen Haltelinien, ungeregelte Knoten nicht.
   Sie stehen nur auf Straßen, Wegschranken nur auf normalen
   Personenwegen, jeweils mit gesetzter Baurichtung. Nach dem Bau öffnet
   sich der Info-Dialog.   Vier Modi: zeitgesteuert, Sensor,
@@ -396,6 +402,109 @@ erlaubt. Fahrbewegung, Ausweichen und Rücksetzen prüfen denselben Graphen.
 Alte illegale Routen werden neu geplant; falsch ausgerichtete Fahrzeuge
 werden im Tick korrigiert. Ausparken richtet die Nase beim Einfahren aus.
 
+## Fahrspuren (0.3.3)
+
+Zweispurige Straßen entstehen ohne gespeicherte Spurdaten aus der Lage der
+Straßenkacheln (`src/game/roadLanes.ts`). `createRoadGraph` ruft
+`classifyRoadLanes` beim Graphenbau auf (also bei jeder Straßenänderung über
+`invalidateRoadGraph`, nie pro Tick) und legt das Ergebnis als `RoadGraph.lanes`
+ab. Kein Snapshot-Feld, kein `GameCommand`, keine Snapshot-Version; Clients
+leiten dieselben Rollen aus denselben Straßenkacheln ab.
+
+Richtungen 0..3 = +Z, +X, −Z, −X. Rechtsverkehr: rechts von Fahrtrichtung `d`
+ist `(d + 3) % 4`. Nachbarn zählen wie im Graphen, aber ohne Einbahnbits (in
+der Welt, keine Trennlinie, Höhen passen über `canTraverseWayElevation`);
+jede Straßenlage (Brücke, Unterführung) wird für sich klassifiziert.
+
+- `wx`/`wz` = Länge des geraden Straßenstücks durch die Kachel entlang X/Z.
+- `min(wx, wz) = 1` → `single`: einspurig, in beide Richtungen wie bisher.
+- `wx = 2`, `wz > 2` → `lane` entlang Z: die −X-Kachel fährt +Z, die +X-Kachel
+  −Z. `wz = 2`, `wx > 2` → `lane` entlang X: die +Z-Kachel fährt +X, die
+  −Z-Kachel −X. Beide Kacheln des Paars müssen Spurkandidaten derselben Achse
+  sein und vorne wie hinten gleich weitergehen; sonst (Verengung auf eine Spur,
+  Ausbuchtung, Stummel neben der Straße, Partner auf dem Einfahrtsstummel) wird
+  die Kachel ein kleiner freier `knot`. `end` = Sackgasse: dort darf in die
+  Partnerspur gewendet werden.
+- `wx > 2` und `wz > 2`: zusammenhängende Gruppen bis 2×2 sind `knot`, wenn eine
+  zweispurige Straße beteiligt ist (Kreuzung, Einmündung, Eckblock, einspurige
+  Straße an der Seite einer zweispurigen = 1×2; erkannt an einer Gruppe aus
+  mehreren Kacheln oder einem Nachbarn einer zweispurigen Straße). Treffen oder
+  knicken nur einspurige Straßen (Kurve, T, Kreuz aus Einzelkacheln), bleibt die
+  Kachel `single`. Größere Gruppen sind `plaza` (3+ breite Flächen).
+  `wx = wz = 2` (isolierter 2×2-Block, kurze Stummel) → `plaza`.
+- In einem 2×2-Knoten kreist der Verkehr in einer Richtung, so wie die Spuren
+  hineinführen: auf der Westspalte nach Norden, der Nordreihe nach Osten, der
+  Ostspalte nach Süden, der Südreihe nach Westen; hinaus geht es von jeder
+  Kachel nach außen (sofern die Spur dort hinausführt). Rechts abbiegen ist ein
+  kurzer Weg, links abbiegen und wenden führen einmal um den Block. Dadurch
+  treffen sich zwei Fahrzeuge im Knoten nie frontal. Andere Knoten (1×2) und
+  Plätze sind frei befahrbar.
+- Einfahrtsstummel (`z = −worldSize/2`, x −3..2, unterste Lage) → `entry`,
+  immer außerhalb von Knoten und Spurpaaren: x −3..−1 hinein (Richtung 0), x 0..2
+  hinaus (Richtung 2). Die Stummelreihe ist ein Wendeplatz: seitlich zwischen
+  allen sechs Kacheln in beide Richtungen und weiter zu Randstraßen bei x −4 und
+  x 3, hinein in jede Straße, die das zulässt (die Spuren daneben behalten ihre
+  Richtung). Ein Auto auf der Hinaus-Spur kann so über den Stummel auf die
+  Hinein-Seite wechseln und wieder ins Gelände fahren; auch der erste Abschnitt
+  neben dem Stummel ist von überall erreichbar. Erscheinen nur auf der
+  Hinein-Hälfte, Verlassen nur über die Hinaus-Hälfte (`canSpawnOnRoadCell`,
+  `canExitFromRoadCell`). Gesetzte Einbahnbits auf Stummelkacheln entscheiden
+  selbst: Erscheinen, wo die Kachel nach Norden verlassen werden darf,
+  Verlassen, wo nach Süden. `open` (keine Doppellinie) heißt: die Hinein-Hälfte
+  erreicht im Gelände, ohne die Stummelreihe, keine Straße, die in die
+  Hinaus-Hälfte führt (`stubHalvesJoined`), etwa bei getrennten Straßen an
+  x −3 und x 2 oder einer einzelnen Altstraße bei x 0.
+
+Fahrregeln (`canLeaveRoadCell` / `canEnterRoadCell`, im Graphen und überall,
+wo früher ein Richtungsbit entschied):
+
+- Eine Spur verlässt man nur in Fahrtrichtung, an `end` zusätzlich seitlich in
+  die Partnerspur; befahren wird sie nur in Fahrtrichtung (bzw. von der
+  Partnerspur an `end`). Kein Queren der Mittellinie, kein Rückwärtsfahren
+  gegen die Spur. Gewendet wird im 2×2-Knoten (einmal herum), an
+  Sackgassenenden und auf der Stummelreihe, ohne `allowUTurn`.
+- Gesetzte Einbahnbits (Spieler) gewinnen gegen die abgeleitete Regel.
+- „Rechts vor links“ (`mustYieldToVehicleFromRight`) nur, wenn das Ziel ein
+  Knoten, ein Platz oder eine einspurige Kachel mit mindestens drei
+  Straßennachbarn ist (`isPriorityJunction`), nicht auf Spuren und nicht in
+  einspurigen Kurven. Im 2×2-Knoten hat so der kreisende Verkehr Vorrang.
+- Box-Regel (`mustWaitOutsideFullKnot`, `isKnotNearlyFull`): in einen Knoten ab
+  drei Kacheln fährt nur, wer danach noch eine Kachel frei lässt; Fahrzeuge im
+  Knoten fahren weiter. Das gilt auch beim Ausparken in den Knoten
+  (`startParkedCarDeparture` startet dann nicht, die reservierte Kachel des
+  schon ausparkenden Autos zählt als seine). Wartet ein Fahrzeug
+  `vehicleUnstickMinutes` davor, löst `resolveKnotWait` auf: auf der Straße
+  sucht `detourAroundKnot` einen Weg um den Knoten (sonst beginnt die Wartezeit
+  neu), ein noch in der Bucht stehendes Auto gibt seine Reservierung zurück und
+  parkt wieder (`returnToBay`), bis es regulär ausparken kann. Nichts wartet
+  so für immer auf die eigene Reservierung.
+- Warten auf eine Bucht (`hold`) und Kreuzfahrtziele liegen nie in einem Knoten
+  (`isKnotTile`); freie Buchten am Knoten werden weiter direkt angefahren.
+- Parken: Buchten neben der eigenen Spur (Außenseite, am Ende auch voraus);
+  die Bucht gegenüber liegt neben der Partnerspur und wird über einen Knoten,
+  ein Sackgassenende oder den Stummel erreicht. Ausparken fährt über den
+  Graphen in Spurrichtung weiter.
+- Alte Saves / Umbauten: steht ein Fahrzeug gegen seine Spur
+  (`isWrongWayOnRoadCell`), dreht es im nächsten Tick und plant neu (wie bei
+  Einbahnen). Routen mit nun verbotenem Schritt werden an diesem Schritt über
+  `isLegalRoadStep` verworfen und neu geplant; die bisherigen Stau-,
+  Unstick- und Abbruch-Netze bleiben.
+- Besucherautos erscheinen auf den Stummelkacheln, die `canSpawnOnRoadCell`
+  erlauben (`listFreeRoadEntries`, Reihenfolge x −1, −2, −3, dann 0, 1, 2 — ohne
+  Einbahnbits also nur die Hinein-Hälfte), der Tourbus ebenso
+  (`getRoadArrivalEntry`). Müllwagen kehren über `listFreeRoadEntries(id, false)`
+  zurück: zuerst diese Stummelkacheln, dann jede andere Straße der Randreihe, auf
+  der sie nicht gegen den Verkehr stehen; Lieferwagen erscheinen auf denselben
+  Randkacheln (`updateSupplyChain`, mit dem zwischengespeicherten Graphen aus
+  `GameState.getRoadGraph`). `isVisitorCarOnIngress` meint die Hinein-Hälfte.
+  Verlassen wird die Karte nur dort, wo `canExitFromRoadCell` gilt
+  (`collectMapExitTargets`, `isVisitorCarExit`, `isRoadExitCell`); heimkehrende
+  Lieferwagen zielen auf solche Randkacheln (`mapExitEdges`,
+  `collectDeliveryTruckTargets`), und `getOffMapRoadExit` liegt gerade hinter
+  der Kachel, von der das Fahrzeug die Karte verlässt.
+
+Markierungen: siehe [`rendering.md`](rendering.md) (Fahrbahnmarkierungen).
+
 ## Tests
 
 `tests/carrierModels.ts` (geteilte Gästeteile, Warnweste, Karren).
@@ -434,7 +543,15 @@ angefahrene Gäste bleiben liegen bis zur Aufnahme,
 Debug Autos entfernen löscht Wagen und Belegung).
 `tests/accessControl.ts` (Ampel/Schranke, Slots, Tageszeit, Festivalphase, Zeitplan, Sensor, Halt vor Rot,
 opportunistisches Parken inkl. Einbahn-Nebenbucht, Trennlinie,
-Liefer- und Müllwagen-Umweg bei Dauer-Rot, Gebiet).
+Liefer- und Müllwagen-Umweg bei Dauer-Rot über eine dreispurige Fläche —
+eine zweispurige Straße hat keine legale Parallelspur —, Gebiet).
+`tests/roadLanes.ts` (Klassifikation inkl. einspuriger Kurven/T als `single`,
+Einfahrt 3+3, offener Stummel, gespiegelte Stummel-Einbahnen; Kreisverkehr im
+2×2-Knoten, Wenden am Ende, im Knoten und auf dem Stummel, Erreichbarkeit beider
+Hälften, Krankenwagen mit Garage am ersten Abschnitt; Erscheinen und Verlassen
+spurgerecht; Falschfahrer aus alten Saves; Parken nur über Wendestellen; Bucht
+am vollen Knoten; Markierungen, Zebra-Achse, Ampelseite und Haltelinie; Liste in
+[`testing.md`](testing.md)).
 `tests/wayElevation.ts` (Straßenrampen, Autodach 1.0, Save ohne Höhenfeld, fester Shift-Ausgang,
 Fußweg auf Autostraße, gestapelte Autostraße / Brücke, ein Feld übermalen ohne Nachbarverlust).
 `tests/festivalAdditions.ts` (Müllwagen-Ladung statt Insassen,
@@ -469,7 +586,8 @@ Straßenlage über `undoRoadSegment`; Fußweg/Gebäude bleiben erhalten.
 ## Straßenoberflächen und Brücken (0.1.127)
 
 `LogisticsView` nutzt texturierte volle Straßendecks ohne graue Anschlussflicken,
-Asphalt-Mittellinien auf Geraden und Geschwindigkeitsfarbe nur als Bauhilfe.
+Asphalt-Mittellinien auf Geraden (seit 0.3.3 nur noch auf zweispurigen Straßen,
+siehe Fahrspuren) und Geschwindigkeitsfarbe nur als Bauhilfe.
 `wayStructures.ts` liefert Leitplanken an unverbundenen Brückenkanten sowie
 schlanke Stützen, die unter der lokalen Rampenhöhe enden. Untere Straßen und
 Fußwege werden bei den Stützen ausgespart. Geländer bleiben an legalen

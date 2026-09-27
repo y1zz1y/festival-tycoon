@@ -11,7 +11,8 @@ import { wayInfo } from './wayTypes'
 import { emptySealedContainerStored, isSealedWasteContainer, wasteDumpRemaining, acceptWasteAtDump, garbageTruckHandlingMinutes, wasteTipRemaining, type WasteTipKind } from './waste'
 import { hasTruckHydraulics } from './festivalManagement'
 import { elevationsMatch } from './wayElevation'
-import { cellKey as roadCellKey, collectEligibleBusWaiters, collectSeatedPassengerIds, DIRECTION_OFFSETS, DIRECTIONS, directionFromDelta, findRoadRoute, isPlayerOwnedFleetVehicle, isRoadDirectionAllowed, isVehicleReversing, oppositeDirection, roadLayerElevation, roadLayerKey, toRoadPosition } from './logistics'
+import { cellKey as roadCellKey, collectEligibleBusWaiters, collectSeatedPassengerIds, DIRECTION_OFFSETS, DIRECTIONS, directionFromDelta, findRoadRoute, isPlayerOwnedFleetVehicle, isVehicleReversing, oppositeDirection, roadLayerElevation, roadLayerKey, toRoadPosition } from './logistics'
+import { canExitFromRoadCell, canLeaveRoadCell, canSpawnOnRoadCell, isEntryStubPosition, isPriorityJunction, isWrongWayOnRoadCell } from './roadLanes'
 import type { ArrivalGroup, Direction, FindRoadRouteOptions, ParkingCell, RoadCell, RoadGraph, RoadPosition, RoadVehicle } from './logistics'
 import type { Cell, PlacedBuilding, Visitor } from './types/entities'
 import type { PedestrianNeighborOptions } from './pedestrianNavigation'
@@ -281,10 +282,10 @@ export class RoadVehicleSimulation {
       const currentRoad = vehicle.cell
         ? this.context.getRoadCellAt(vehicle.cell.x, vehicle.cell.z, vehicle.cell.elevation)
         : undefined
-      if (currentRoad?.allowedDirections != null) {
+      if (currentRoad) {
+        // Against a one-way or a lane (old save, reversal): turn around and replan.
         const facing = this.getVehicleDirection(vehicle)
-        if (!isRoadDirectionAllowed(currentRoad, facing) &&
-            isRoadDirectionAllowed(currentRoad, oppositeDirection(facing))) {
+        if (isWrongWayOnRoadCell(this.context.getRoadGraph().lanes, currentRoad, facing)) {
           vehicle.facing = oppositeDirection(facing) * Math.PI / 2
           this.rebuildVehicleRouteFromHere(vehicle)
         }
@@ -378,6 +379,13 @@ export class RoadVehicleSimulation {
         }
         return
       }
+      if (this.mustWaitOutsideFullKnot(vehicle, here, next, occupied)) {
+        vehicle.waitMinutes += minutes
+        if (vehicle.waitMinutes >= SIMULATION_CONFIG.logistics.vehicleUnstickMinutes) {
+          this.resolveKnotWait(vehicle, next, occupied)
+        }
+        return
+      }
       if (
         vehicle.waitMinutes < 2 &&
         this.mustYieldToVehicleFromRight(
@@ -463,9 +471,9 @@ export class RoadVehicleSimulation {
         )
       }
       vehicle.position = { ...next }
-      if (road?.allowedDirections != null) {
+      if (road) {
         const facing = this.getVehicleDirection(vehicle)
-        if (!isRoadDirectionAllowed(road, facing) && isRoadDirectionAllowed(road, oppositeDirection(facing))) {
+        if (isWrongWayOnRoadCell(this.context.getRoadGraph().lanes, road, facing)) {
           vehicle.facing = oppositeDirection(facing) * Math.PI / 2
         }
       }
@@ -508,8 +516,9 @@ export class RoadVehicleSimulation {
     vehiclesById: ReadonlyMap<string, RoadVehicle>,
   ): boolean {
     if (!vehicle.cell) return false
-    const neighbors = this.context.getAdjacentRoadPositions(target)
-    if (neighbors.length < 3) return false
+    const targetRoad = this.context.getRoadCellAt(target.x, target.z, target.elevation)
+    // Only where roads really meet: not on the plain lanes of a two-lane road.
+    if (!targetRoad || !isPriorityJunction(this.context.getRoadGraph().lanes, targetRoad)) return false
     const direction = this.context.getDirectionIndex(
       target.x - vehicle.cell.x,
       target.z - vehicle.cell.z,
@@ -529,6 +538,122 @@ export class RoadVehicleSimulation {
         this.context.roadPositionKey(next) === this.context.roadPositionKey(target) &&
         this.isLegalRoadStep(road, target))
     })
+  }
+
+  /**
+   * Do not block the box: a vehicle drives into a junction box of three or more
+   * tiles only while another tile of it stays free, so the four straight-on flows of
+   * a 2×2 knot (which run in a circle) can never lock each other up.
+   */
+  mustWaitOutsideFullKnot(
+    vehicle: RoadVehicle,
+    here: RoadPosition,
+    next: RoadPosition,
+    occupied: ReadonlyMap<string, string>,
+  ): boolean {
+    const target = this.context.getRoadCellAt(next.x, next.z, next.elevation)
+    if (!target) return false
+    const lanes = this.context.getRoadGraph().lanes
+    const role = lanes.roleOf(target)
+    if (role?.kind !== 'knot' || role.tiles.length < 3) return false
+    const current = vehicle.cell ? this.context.getRoadCellAt(here.x, here.z, here.elevation) : undefined
+    // Backing out of a bay: its reserved tile counts as its own (see resolveKnotWait).
+    if (!current) return this.isKnotNearlyFull(vehicle, target, occupied)
+    const currentRole = lanes.roleOf(current)
+    if (currentRole?.kind === 'knot' && currentRole.tiles === role.tiles) return false
+    return this.isKnotNearlyFull(vehicle, target, occupied)
+  }
+
+  /**
+   * A long wait in front of a full junction box never lasts forever: a car still in
+   * its bay gives its reserved tile back and parks again (it retries the departure,
+   * which obeys the same rule), a car on the road looks for a way around the box.
+   */
+  resolveKnotWait(
+    vehicle: RoadVehicle,
+    next: RoadPosition,
+    occupied: ReadonlyMap<string, string>,
+  ): void {
+    const here = vehicle.cell
+    if (here && !this.context.getRoadCellAt(here.x, here.z, here.elevation)) {
+      this.returnToBay(vehicle, here)
+      return
+    }
+    this.detourAroundKnot(vehicle, next, occupied)
+  }
+
+  /** A departing car that has not left its bay yet parks there again. */
+  returnToBay(vehicle: RoadVehicle, bay: RoadPosition): void {
+    vehicle.waitMinutes = 0
+    const parking = this.context.state.logistics.parkingCells.find(
+      (cell) => cell.x === bay.x && cell.z === bay.z,
+    )
+    if (vehicle.kind !== 'visitorCar' || !parking || (parking.occupiedBy && parking.occupiedBy !== vehicle.id)) return
+    parking.occupiedBy = vehicle.id
+    vehicle.parkingCell = { x: bay.x, z: bay.z }
+    vehicle.position = { x: bay.x, z: bay.z }
+    vehicle.cell = null
+    vehicle.route = []
+    vehicle.state = 'parked'
+  }
+
+  /**
+   * Replans around a knot the vehicle has waited long in front of (its tiles blocked
+   * like occupied cells). Without a detour the wait simply starts over, so the car
+   * keeps retrying; the box itself drains through the ordinary jam handling.
+   */
+  detourAroundKnot(
+    vehicle: RoadVehicle,
+    next: RoadPosition,
+    occupied: ReadonlyMap<string, string>,
+  ): void {
+    const here = vehicle.cell
+    vehicle.waitMinutes = 0
+    if (!here) return
+    const target = this.context.getRoadCellAt(next.x, next.z, next.elevation)
+    const role = target ? this.context.getRoadGraph().lanes.roleOf(target) : undefined
+    if (role?.kind !== 'knot') return
+    const blocked = this.collectRouteBlockedCells(vehicle, occupied)
+    for (const tile of role.tiles) blocked.add(tile)
+    if (vehicle.kind === 'visitorCar' && vehicle.state !== 'returning' && vehicle.state !== 'parking') {
+      const plan = this.findRouteTowardParking(vehicle, blocked) ?? this.findVisitorCarCirculation(vehicle, blocked)
+      if (plan && this.adoptVehicleRoute(vehicle, plan.route, next)) vehicle.target = plan.target
+      return
+    }
+    const targets = this.collectVehicleRouteTargets(vehicle)
+    if (!targets.length) return
+    const route = findRoadRoute({
+      roadCells: this.context.state.logistics.roadCells,
+      graph: this.context.getRoadGraph(),
+      start: here,
+      targets,
+      initialDirection: this.getVehicleDirection(vehicle),
+      blockedCells: blocked,
+      allowUTurn: false,
+    })
+    if (route?.length) this.adoptVehicleRoute(vehicle, route.map(toRoadPosition), next)
+  }
+
+  /** Entering this knot tile would take the knot's last free tile (knots of three or more tiles). */
+  isKnotNearlyFull(
+    vehicle: RoadVehicle,
+    target: RoadCell,
+    occupied: ReadonlyMap<string, string>,
+  ): boolean {
+    const role = this.context.getRoadGraph().lanes.roleOf(target)
+    if (role?.kind !== 'knot' || role.tiles.length < 3) return false
+    let free = 0
+    for (const tile of role.tiles) {
+      const holder = occupied.get(tile)
+      if (!holder || holder === vehicle.id) free += 1
+    }
+    return free < 2
+  }
+
+  /** A tile of a junction box: nobody waits or ends a cruise there. */
+  isKnotTile(position: RoadPosition): boolean {
+    const road = this.context.getRoadCellAt(position.x, position.z, position.elevation)
+    return road ? this.context.getRoadGraph().lanes.roleOf(road)?.kind === 'knot' : false
   }
 
   getVehicleDirection(vehicle: RoadVehicle): Direction {
@@ -651,9 +776,12 @@ export class RoadVehicleSimulation {
     }
   }
 
+  /** On a tile where arrivals appear (the inbound half of the entry stub). */
   isVisitorCarOnIngress(vehicle: RoadVehicle): boolean {
     const cell = vehicle.cell ?? vehicle.position
-    return cell.z === -this.context.getWorldSize() / 2 && cell.x >= -3 && cell.x <= 2
+    const road = this.context.getRoadCellAt(cell.x, cell.z, cell.elevation)
+    return Boolean(road && isEntryStubPosition(cell.x, cell.z, this.context.getWorldSize()) &&
+      canSpawnOnRoadCell(this.context.getRoadGraph().lanes, road))
   }
 
   isVisitorCarHoldingNearParking(vehicle: RoadVehicle): boolean {
@@ -762,7 +890,8 @@ export class RoadVehicleSimulation {
       for (const approach of this.context.getParkingApproachRoads(parking)) {
         const key = roadCellKey(approach.x, approach.z)
         if (approach.x === start.x && approach.z === start.z) continue
-        if (!seenAll.has(key)) {
+        // Waiting for a bay happens beside the road, not in a junction box.
+        if (!seenAll.has(key) && !this.isKnotTile(approach)) {
           seenAll.add(key)
           allApproaches.push(approach)
         }
@@ -916,6 +1045,7 @@ export class RoadVehicleSimulation {
         const key = roadCellKey(approach.x, approach.z)
         if (approach.x === start.x && approach.z === start.z) continue
         if (taken.has(this.context.roadPositionKey(approach)) || taken.has(key) || holdFor.has(key)) continue
+        if (this.isKnotTile(approach)) continue
         holdFor.set(key, { x: parking.x, z: parking.z })
         holds.push(approach)
       }
@@ -952,7 +1082,7 @@ export class RoadVehicleSimulation {
       .filter((cell) => {
         if (cell.x === start.x && cell.z === start.z) return false
         const distance = Math.abs(cell.x - start.x) + Math.abs(cell.z - start.z)
-        return cell.z >= edgeZ + 2 && distance >= 3 && !taken.has(this.context.roadPositionKey(cell)) && !taken.has(roadCellKey(cell.x, cell.z))
+        return cell.z >= edgeZ + 2 && distance >= 3 && !taken.has(this.context.roadPositionKey(cell)) && !taken.has(roadCellKey(cell.x, cell.z)) && !this.isKnotTile(cell)
       })
       .sort(
         (left, right) =>
@@ -1287,14 +1417,20 @@ export class RoadVehicleSimulation {
     })
   }
 
+  /** Edge-row roads a truck may leave the map from; all of them if none leads off. */
+  mapExitEdges(edges: readonly RoadCell[]): RoadCell[] {
+    const lanes = this.context.getRoadGraph().lanes
+    const exits = edges.filter((road) => canExitFromRoadCell(lanes, road))
+    return exits.length ? exits : [...edges]
+  }
+
+  /** The outbound lanes of the map entry stub. */
   collectMapExitTargets(): RoadPosition[] {
-    const edgeZ = -this.context.getWorldSize() / 2
+    const lanes = this.context.getRoadGraph().lanes
     return this.context.state.logistics.roadCells.filter(
       (road) =>
-        road.z === edgeZ &&
-        road.x >= -3 &&
-        road.x <= 2 &&
-        isRoadDirectionAllowed(road, 2),
+        isEntryStubPosition(road.x, road.z, this.context.getWorldSize()) &&
+        canExitFromRoadCell(lanes, road),
     )
   }
 
@@ -1525,7 +1661,7 @@ export class RoadVehicleSimulation {
     if (
       step !== null &&
       here &&
-      !isRoadDirectionAllowed(here, step)
+      !canLeaveRoadCell(this.context.getRoadGraph().lanes, here, step)
     ) {
       vehicle.route = []
     }
@@ -1548,7 +1684,7 @@ export class RoadVehicleSimulation {
     )
     const targets =
       truck.phase === 'return'
-        ? edges
+        ? this.mapExitEdges(edges)
         : depot
           ? this.context.getAdjacentRoadPositions(depot)
           : []
@@ -1802,6 +1938,9 @@ export class RoadVehicleSimulation {
     if (!departure) return 'no-route'
     const { access, exit, initialDirection } = departure
     if (occupied.has(this.context.roadPositionKey(access))) return 'blocked'
+    // Backing out into a junction box obeys the box rule too; the car waits in its bay.
+    const accessRoad = this.context.getRoadCellAt(access.x, access.z, access.elevation)
+    if (accessRoad && this.isKnotNearlyFull(vehicle, accessRoad, occupied)) return 'blocked'
     const parking = this.context.state.logistics.parkingCells.find(
       (cell) =>
         cell.x === vehicle.parkingCell?.x &&
@@ -1902,9 +2041,7 @@ export class RoadVehicleSimulation {
       search(exits) ??
       search(
         this.context.state.logistics.roadCells.filter(
-          (road) =>
-            road.z === -this.context.getWorldSize() / 2 &&
-            isRoadDirectionAllowed(road, 2),
+          (road) => canExitFromRoadCell(this.context.getRoadGraph().lanes, road),
         ),
       )
     if (!route) return null
@@ -2151,11 +2288,8 @@ export class RoadVehicleSimulation {
   collectDeliveryTruckTargets(vehicle: RoadVehicle): RoadPosition[] {
     const truck = this.getDeliveryFreight(vehicle)
     const northZ = -this.context.getWorldSize() / 2
-    const edges = this.context.state.logistics.roadCells.filter(
-      (road) => road.z === northZ,
-    )
     if (vehicle.state === 'returning' || truck?.phase === 'return') {
-      return edges
+      return this.mapExitEdges(this.context.state.logistics.roadCells.filter((road) => road.z === northZ))
     }
     const depot = this.context.state.festival.infrastructure.depots.find(
       (candidate) => candidate.id === truck?.depotId,
@@ -2181,7 +2315,7 @@ export class RoadVehicleSimulation {
     const hereRoad = this.context.getRoadCellAt(start.x, start.z)
     const exits = hereRoad
       ? DIRECTIONS.filter((direction) =>
-          isRoadDirectionAllowed(hereRoad, direction),
+          canLeaveRoadCell(this.context.getRoadGraph().lanes, hereRoad, direction),
         )
       : []
     const graph = this.context.getRoadGraph()
@@ -2328,6 +2462,7 @@ export class RoadVehicleSimulation {
         ),
     )
     const atEdge = edges.some((edge) => edge.x === here.x && edge.z === here.z)
+    const exits = this.mapExitEdges(edges)
     const leaveMap = () => {
       this.context.state.festival.infrastructure.trucks =
         this.context.state.festival.infrastructure.trucks.filter(
@@ -2340,7 +2475,7 @@ export class RoadVehicleSimulation {
         leaveMap()
         return
       }
-      const route = this.findServiceVehicleRoute(vehicle, edges)
+      const route = this.findServiceVehicleRoute(vehicle, exits)
       vehicle.state = 'returning'
       truck.phase = 'return'
       if (route?.length) {
@@ -3297,28 +3432,28 @@ export class RoadVehicleSimulation {
     return -this.context.getWorldSize() / 2
   }
 
+  /** A stub tile vehicles may leave the map from (lane-aware, like the exit targets). */
   isRoadExitCell(position: RoadPosition): boolean {
-    return (
-      position.z === this.getWorldSouthEdge() &&
-      position.x >= -3 &&
-      position.x <= 2
-    )
+    if (!isEntryStubPosition(position.x, position.z, this.context.getWorldSize())) return false
+    const road = this.context.getRoadCellAt(position.x, position.z, position.elevation)
+    return Boolean(road && canExitFromRoadCell(this.context.getRoadGraph().lanes, road))
   }
 
   isVisitorCarExit(position: RoadPosition): boolean {
     if (this.isOffMapRoadExit(position)) return true
     if (position.z !== this.getWorldSouthEdge()) return false
     const road = this.context.getRoadCellAt(position.x, position.z, position.elevation)
-    return Boolean(road && isRoadDirectionAllowed(road, 2))
+    return Boolean(road && canExitFromRoadCell(this.context.getRoadGraph().lanes, road))
   }
 
   isOffMapRoadExit(position: RoadPosition): boolean {
     return position.z < this.getWorldSouthEdge()
   }
 
+  /** Off-map spot straight beyond the tile a vehicle leaves the map from. */
   getOffMapRoadExit(position: RoadPosition): RoadPosition {
     return {
-      x: Math.max(-3, Math.min(2, position.x)),
+      x: position.x,
       z: this.getWorldSouthEdge() - 1,
     }
   }

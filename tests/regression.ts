@@ -34,6 +34,7 @@ import { testStaffZonePaint } from './staffZones'
 // Vorübergehend aus: Marvins tests/staffIdle.ts fehlt im Commit.
 // import { testStaffIdlePerformance } from './staffIdle'
 import { testAccessControl } from './accessControl'
+import { testRoadLanes } from './roadLanes'
 import { CampingView } from '../src/view/CampingView'
 import { Box3, Color, Matrix4, Quaternion, Vector3 } from 'three'
 import { readFileSync } from 'node:fs'
@@ -193,6 +194,9 @@ function fixture(count = 20): GameState {
 
 testPerformanceGuards(fixture)
 testAccessControl(fixture)
+test('two-lane roads: derived lanes, knots, plazas, entry 3+3, movement, parking and markings', () => {
+  testRoadLanes(fixture)
+})
 testScenery(fixture)
 test('hedges, walls and fences block pedestrians; wall doors stay passable', () => {
   testPedestrianBarriers(fixture)

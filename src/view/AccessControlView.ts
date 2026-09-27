@@ -18,11 +18,17 @@ import { houseVariant, shared } from './materials'
 import { composeLimb } from './pixelPeople'
 import { ModelKit } from './retroBuildings'
 
-/** Pole and signal housing of a traffic light, merged; the lamp is separate. */
+/**
+ * Pole and signal housing of a traffic light, merged with its stop line; the lamp is
+ * separate. Local −Z is the controlled travel direction, local +X the driver's right.
+ * The pole stands 0.14 behind the tile centre; a red light closes the edge into the
+ * tile, so the stop line lies across the lane at that entry edge (0.4 left, 0.32 back).
+ */
 function lightBodyGeometry(): BufferGeometry {
   const kit = new ModelKit()
   kit.cylinder(0, 0.36, 0, 0.04, 0.72, 0x3d4148, 0.035, 6)
   kit.box(0, 0.7, 0.04, 0.12, 0.22, 0.1, 0x22262c)
+  kit.box(-0.4, 0.022, 0.32, 0.9, 0.008, 0.07, 0xeee9d7)
   return kit.finish()
 }
 
@@ -61,8 +67,9 @@ const OPEN_SWING = Math.PI * 0.78
 
 /**
  * Traffic lights and pedestrian gates in six instanced batches however many there
- * are: light bodies, gate frames, gate leaves, green lamps, red lamps and the
- * one-way arrows. Moving, adding or removing one (or the ground under it) rewrites
+ * are: light bodies (with their stop lines), gate frames, gate leaves, green lamps,
+ * red lamps and the one-way arrows. A light stands on the driver's right of the
+ * direction it controls. Moving, adding or removing one (or the ground under it) rewrites
  * the layout; a signal change only moves lamps between the green and red batch and
  * swings the leaves. Every batch keeps `userData.accessIds` for picking.
  */
@@ -125,7 +132,8 @@ export class AccessControlView {
   private buildLayout(controls: AccessControlSnapshot, groundY: (x: number, z: number) => number): void {
     this.lightRoots = controls.trafficLights.map((light) => {
       const forward = DIRECTION_OFFSETS[light.direction]
-      const right = DIRECTION_OFFSETS[((light.direction + 1) % 4) as Direction]
+      // Right-hand traffic: the driver's right of travel direction d is (d + 3) % 4.
+      const right = DIRECTION_OFFSETS[((light.direction + 3) % 4) as Direction]
       return placementMatrix(
         new Matrix4(),
         light.x + 0.5 + right.x * 0.4 - forward.x * 0.14,

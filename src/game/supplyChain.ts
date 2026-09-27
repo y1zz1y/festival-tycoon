@@ -9,7 +9,8 @@ import type { ActionResult, GameSnapshot } from './GameState'
 import type { Supply } from './festivalManagement'
 import { SUPPLIES } from './festivalManagement'
 import { shopSupplyKind } from './shopGoods'
-import { cellKey, createRoadGraph, findRoadRoute, type Direction } from './logistics'
+import { cellKey, createRoadGraph, findRoadRoute, type Direction, type RoadGraph } from './logistics'
+import { canSpawnOnRoadCell } from './roadLanes'
 import {
   gateEdgeWorldPosition,
   normalizeStaffGateDirection,
@@ -216,7 +217,8 @@ export function consumeLocal(s: GameSnapshot, targetId: string, kind: Supply): b
 
 export type PedestrianRouter = (start: Point, goals: Point[]) => Point[] | null
 /** Low frequency dispatch; paths are resolved only at departure. Movement is authoritative and saved. */
-export function updateSupplyChain(s: GameSnapshot, routeWalk: PedestrianRouter, canStep: (a: Point, b: Point) => boolean = () => true): void {
+/** `roadGraph`: the caller's cached graph of `s.logistics.roadCells`, so the lanes are not classified again. */
+export function updateSupplyChain(s: GameSnapshot, routeWalk: PedestrianRouter, canStep: (a: Point, b: Point) => boolean = () => true, roadGraph?: RoadGraph): void {
   const f = s.festival, i = f.infrastructure, now = s.day * 1440 + s.minute
   if (i.lastUpdate < 0) { i.lastUpdate = now; return }
   const dt = now - i.lastUpdate
@@ -233,9 +235,10 @@ export function updateSupplyChain(s: GameSnapshot, routeWalk: PedestrianRouter, 
       if (need > 0) { const result = orderGoods(s, kind, Math.max(50, Math.ceil(need)), 0, depot.id); if (!result.ok) i.status = result.message }
     }
   }
-  const graph = createRoadGraph(s.logistics.roadCells, s.scenario.worldSize)
+  const graph = roadGraph ?? createRoadGraph(s.logistics.roadCells, s.scenario.worldSize)
   const northZ = -s.scenario.worldSize / 2
-  const edges = s.logistics.roadCells.filter(p => p.z === northZ)
+  // Trucks arrive on the lanes that lead into the map (inbound entry lanes, not the outbound ones).
+  const edges = s.logistics.roadCells.filter(p => canSpawnOnRoadCell(graph.lanes, p))
   const near = (a: { x: number; z: number; elevation?: number }, b: { x: number; z: number; elevation?: number }) => Math.abs(a.x - b.x) + Math.abs(a.z - b.z) === 1 && Math.abs((a.elevation ?? getTerrainHeight(s.terrain, a.x, a.z)) - (b.elevation ?? getTerrainHeight(s.terrain, b.x, b.z))) < .51
   const roadBeside = (cell: { x: number; z: number }) => s.logistics.roadCells.filter(p => Math.abs(p.x - cell.x) + Math.abs(p.z - cell.z) === 1)
   const occupied = new Set(s.logistics.roadVehicles.filter(v => v.cell && v.state !== 'parked').map(v => groundKey(v.cell!.x, v.cell!.z)))

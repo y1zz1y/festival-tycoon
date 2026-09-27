@@ -400,8 +400,10 @@ export function testAccessControl(fixture: (count?: number) => GameState): void 
   const service = fixture(0)
   const serviceState = service.snapshot as GameSnapshot
   service.addDebugMoney()
+  // Three tiles wide: a two-lane road has no legal parallel column against the lane
+  // (x 1 runs the other way), a wide street does.
   for (let z = -20; z <= -16; z += 1) {
-    for (const x of [0, 1]) {
+    for (const x of [-1, 0, 1]) {
       if (!serviceState.logistics.roadCells.some((cell) => cell.x === x && cell.z === z)) {
         assert.ok(service.designateRoad([{ x, z }]).ok)
       }

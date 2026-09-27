@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, Mesh, Quaternion, SphereGeometry, Shape, ExtrudeGeometry, Vector3, type Material, type Object3D } from 'three'
+import { BoxGeometry, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, Mesh, Quaternion, SphereGeometry, Shape, ShapeGeometry, ExtrudeGeometry, Vector3, type Material, type Object3D } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { BuildingKind } from '../game/catalog'
 import { SCENERY_KINDS } from '../game/scenery'
@@ -45,6 +45,13 @@ export class ModelKit {
     const geometry = new ExtrudeGeometry(shape, { depth, bevelEnabled: false, steps: 1 })
     geometry.setIndex(Array.from({ length: geometry.getAttribute('position').count }, (_, index) => index))
     this.add(geometry, color, 0, 0, -depth / 2)
+  }
+  /** A flat polygon lying at height `y`, points as [x, z] (road paint, a grass wedge). */
+  ground(points: readonly (readonly [number, number])[], y: number, color: number): void {
+    const shape = new Shape()
+    points.forEach(([x, z], i) => i ? shape.lineTo(x, -z) : shape.moveTo(x, -z))
+    shape.closePath()
+    this.add(new ShapeGeometry(shape), color, 0, y, 0, new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2))
   }
   finish(): BufferGeometry {
     const result = mergeGeometries(this.parts)!

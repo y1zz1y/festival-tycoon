@@ -136,11 +136,30 @@ Bodenmarkierungen und Straßenfarben erscheinen nur im Overlay Logistik / Unterg
 gesetzte Fahrtrichtungen liegen als weiße Fahrstreifenpfeile (wie im
 deutschen Straßenverkehr) auf der Straße. Mit dem Werkzeug
 **Fahrtrichtung** erscheint dieselbe weiße Markierung über dem Baufeld
-und über den Fahrzeugen; auf gesetzten Einbahnen laufen kompaktere
-Pfeile weich über die Fahrbahn.
-Die normale Darstellung bleibt frei von der Laufanimation.
+und über den Fahrzeugen.
 Eine nachträglich gesetzte Einbahn dreht alle Straßenfahrzeuge auf dieser
 Kachel — Autos, Busse, Liefer- und Müllwagen — und plant ihre Route neu.
+
+**Zweispurige Straßen:** Zwei nebeneinander gebaute Straßen bilden von selbst
+eine Straße mit zwei Fahrspuren und Rechtsverkehr — jede Kachel ist eine Spur
+mit fester Richtung, dazwischen liegt die Mittellinie. Gewendet wird an
+Kreuzungen, am Ende einer Sackgasse und auf der Zufahrt am Kartenrand; die
+Mittellinie wird nie gequert, auch nicht zum Einparken: Parkplätze auf der
+anderen Straßenseite erreicht man über die nächste Wendemöglichkeit. Wo sich
+zweispurige Straßen treffen, entsteht ein Kreuzungsfeld (2×2, an Ecken mit
+gerundetem Bordstein). Darin kreist der Verkehr wie in einem kleinen Kreisel
+(rechts abbiegen geht direkt, links abbiegen und wenden einmal herum), und es
+gilt **rechts vor links**; ein Auto fährt nur hinein, wenn dahinter noch Platz
+ist. Drei und mehr Kacheln breite Flächen sind Plätze ohne feste Spuren,
+einspurige Straßen (auch ihre Kurven und Einmündungen) bleiben in beide
+Richtungen befahrbar. Die Zufahrt am Kartenrand hat drei Spuren hinein (links
+der doppelten Linie) und drei hinaus; die Zufahrtsreihe selbst ist ein
+Wendeplatz, auf dem Fahrzeuge die Seite wechseln können. Ankommende erscheinen
+nur links, abfahrende verlassen die Karte nur rechts (gesetzte Einbahnen auf der
+Zufahrt entscheiden selbst). Gesetzte Einbahnen gehen den Spuren vor. Die Spurpfeile zeigen
+die Straßenbauhilfen; Zebrastreifen liegen quer über den Spuren, Ampeln
+stehen rechts der geregelten Spur mit Haltelinie davor. Alte Spielstände
+laufen weiter: Fahrzeuge in Gegenrichtung drehen um und planen neu.
 Fahrzeuge anklicken zeigt Status und die geplante Route.
 
 **Ampeln** (120 €) stehen auf einer Straße in genau einer Richtung,
