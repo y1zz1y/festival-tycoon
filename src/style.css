@@ -685,7 +685,8 @@ button {
 .title-submenu [data-title-freeplay-close],
 .title-submenu [data-title-briefing-close],
 .title-submenu [data-title-load-close],
-.title-submenu [data-title-lobby-close] {
+.title-submenu [data-title-lobby-close],
+.title-submenu [data-title-achievements-close] {
   border-style: solid;
   border-color: var(--ts-400) var(--ts-900) var(--ts-900) var(--ts-400);
   border-radius: 0;
@@ -956,7 +957,8 @@ button {
 .title-submenu [data-title-freeplay-close],
 .title-submenu [data-title-briefing-close],
 .title-submenu [data-title-load-close],
-.title-submenu [data-title-lobby-close] {
+.title-submenu [data-title-lobby-close],
+.title-submenu [data-title-achievements-close] {
   align-self: flex-start;
   padding: 9px 22px;
   color: #ffffff;
@@ -972,7 +974,8 @@ button {
 .title-submenu [data-title-freeplay-close]:hover,
 .title-submenu [data-title-briefing-close]:hover,
 .title-submenu [data-title-load-close]:hover,
-.title-submenu [data-title-lobby-close]:hover {
+.title-submenu [data-title-lobby-close]:hover,
+.title-submenu [data-title-achievements-close]:hover {
   background: var(--ts-500);
 }
 

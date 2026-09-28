@@ -280,7 +280,8 @@ Eingang/Ausgang.
   erst nach Bestätigung das Command — keine serverseitige Extra-Prüfung.
   Untergruppen der übrigen Kategorien stehen in `buildMenu.ts`. Info bleibt
   das Standardwerkzeug.
-  Tagesplan und Ticketpreise liegen unter **Festival planen**. Endet das
+  Tagesplan und Ticketpreise liegen unter **Festival planen**; ein Wechsel
+  der Seite (`festivalUI.ts`) beginnt immer oben. Endet das
   Wochenende, liegt automatisch das **HEADLINE Magazin** über der Welt
   (Masthead, Cover, Pro/Kontra, Note) – HTML/CSS, kein 3D-Objekt. Einmal
   pro Ausgabe, außer ihr schlagt es unter Abrechnung & Ruf erneut auf.
@@ -554,7 +555,8 @@ Buslinien-Namensfeld fällt auf `BUS_LINE_DEFAULT_NAME` zurück.
 
 - Titelbildschirm: Menüpunkt **Erfolge** (Übersicht mit Datum), Häkchen und
   Sterne an geschafften Szenarien, „N geschafft“ unter Neues Spiel
-  ([progress.md](progress.md)).
+  ([progress.md](progress.md)). Sein **Zurück** nutzt denselben Stil wie
+  die übrigen Zurück-Knöpfe der Titel-Untermenüs (`style.css`).
 - Schwierigkeit: Auswahl im freien Spiel (`#scenario-difficulty`) und im
   Briefing (`#title-briefing-difficulty`).
 - Erste Schritte: Checkliste oben rechts (`.tutorial-checklist`, z-index 21,

@@ -287,6 +287,8 @@ export function mountFestivalUI(
       panel.querySelectorAll<HTMLElement>('[data-pane]').forEach(pane => pane.hidden = pane.dataset.pane !== button.dataset.tab)
       panel.querySelectorAll('[data-tab]').forEach(tab => tab.setAttribute('aria-pressed', String(tab === button)))
       render(getGame().snapshot, true)
+      // A new tab always starts at its top, not at the scroll position of the last one.
+      panel.scrollTop = 0
       onPane?.(button.dataset.tab)
     }
     if (button.hasAttribute('data-park-toggle')) {
